@@ -234,6 +234,7 @@ public sealed class ConfigurationTests
         Assert.True(configuration.PaperTrading.CopiedTraderPerformanceProjectionEnabled);
         Assert.Equal(30, configuration.PaperTrading.CopiedTraderPerformanceRefreshSeconds);
         Assert.Equal(25, configuration.PaperTrading.CopiedTraderPerformanceWalletBatchSize);
+        Assert.Equal(5, configuration.PaperTrading.CopiedTraderPerformanceReconciliationWalletBatchSize);
         Assert.Equal(100, configuration.PaperTrading.CopiedTraderPerformanceReconciliationSeedWalletBatchSize);
         Assert.True(configuration.PaperTrading.LeaderActivityExitTrackingEnabled);
         Assert.Equal(1_000, configuration.PaperTrading.LeaderActivityExitTrackingPollDelayMilliseconds);
@@ -851,6 +852,7 @@ public sealed class ConfigurationTests
                 SettlementPollIntervalSeconds = 0,
                 CopiedTraderPerformanceRefreshSeconds = 0,
                 CopiedTraderPerformanceWalletBatchSize = 0,
+                CopiedTraderPerformanceReconciliationWalletBatchSize = 0,
                 CopiedTraderPerformanceReconciliationSeedWalletBatchSize = 1_001,
                 LeaderActivityExitTrackingPollDelayMilliseconds = -1,
                 LeaderActivityExitTrackingBatchSize = 0,
@@ -870,6 +872,7 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("PaperTrading.SettlementPollIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PaperTrading.CopiedTraderPerformanceRefreshSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PaperTrading.CopiedTraderPerformanceWalletBatchSize", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("PaperTrading.CopiedTraderPerformanceReconciliationWalletBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PaperTrading.CopiedTraderPerformanceReconciliationSeedWalletBatchSize", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PaperTrading.LeaderActivityExitTrackingPollDelayMilliseconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PaperTrading.LeaderActivityExitTrackingBatchSize", StringComparison.Ordinal));

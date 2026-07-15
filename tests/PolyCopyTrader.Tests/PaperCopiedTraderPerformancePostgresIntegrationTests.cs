@@ -60,7 +60,8 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
             var queueBefore = await CountAllQueuedWalletsAsync(factory);
 
             var bounded = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
-                walletBatchSize: 1,
+                highPriorityWalletBatchSize: 1,
+                reconciliationWalletBatchSize: 1,
                 reconciliationSeedWalletBatchSize: 1);
 
             Assert.True(bounded.LockAcquired);
@@ -180,7 +181,8 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
             await SetControlCursorAsync(factory, cursorWallet);
 
             var seeded = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
-                walletBatchSize: 1,
+                highPriorityWalletBatchSize: 1,
+                reconciliationWalletBatchSize: 1,
                 reconciliationSeedWalletBatchSize: 1);
 
             Assert.True(seeded.LockAcquired);
@@ -194,7 +196,8 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
                 await SetControlCursorToMaximumSourceWalletAsync(factory);
 
                 var processed = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
-                    walletBatchSize: 1,
+                    highPriorityWalletBatchSize: 1,
+                    reconciliationWalletBatchSize: 1,
                     reconciliationSeedWalletBatchSize: 1);
 
                 Assert.True(processed.LockAcquired);
@@ -218,6 +221,135 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
         }
     }
 
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Projection_ReservesIndependentHighAndReconciliationBudgetsWithoutSpill()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var highPriorityWallets = Enumerable.Range(1, 4)
+            .Select(index => $"paper-performance-budget-{suffix}-high-{index}")
+            .ToArray();
+        var reconciliationWallets = Enumerable.Range(1, 5)
+            .Select(index => $"paper-performance-budget-{suffix}-reconciliation-{index}")
+            .ToArray();
+        var wallets = highPriorityWallets.Concat(reconciliationWallets).ToArray();
+        var controlState = await ReadControlStateAsync(factory);
+
+        try
+        {
+            await QueueWalletsAsync(factory, highPriorityWallets, int.MaxValue, "budget_high");
+            await QueueWalletsAsync(factory, reconciliationWallets, 0, "budget_reconciliation");
+
+            var result = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
+                highPriorityWalletBatchSize: 2,
+                reconciliationWalletBatchSize: 2,
+                reconciliationSeedWalletBatchSize: 100);
+
+            Assert.True(result.LockAcquired);
+            Assert.Equal(0, result.WalletsSeeded);
+            Assert.Equal(2, result.HighPriorityWalletsProcessed);
+            Assert.Equal(2, result.ReconciliationWalletsProcessed);
+            Assert.Equal(4, result.WalletsProcessed);
+            Assert.Equal(2, await CountQueuedWalletsAsync(factory, highPriorityWallets));
+            Assert.Equal(3, await CountQueuedWalletsAsync(factory, reconciliationWallets));
+
+            var controlAfter = await ReadControlStateAsync(factory);
+            Assert.Equal(controlState.CursorWallet, controlAfter.CursorWallet);
+            Assert.Equal(controlState.Cycle, controlAfter.Cycle);
+            Assert.Equal(controlState.UpdatedAtUtc, controlAfter.UpdatedAtUtc);
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, wallets, [], []);
+            await RestoreControlStateAsync(factory, controlState);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Projection_SeedsOnlyUnusedReconciliationSlotsAndProcessesThemInSameTransaction()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = await ReadFirstStrategyIdAsync(factory);
+        var previousMaximumWallet = await ReadMaximumSourceWalletAsync(factory) ?? string.Empty;
+        var suffix = Guid.NewGuid().ToString("N");
+        var lexicalStem = $"{previousMaximumWallet}zzzz-paper-performance-capacity-{suffix}-";
+        var cursorWallet = $"{lexicalStem}0";
+        var sourceWallets = Enumerable.Range(1, 4)
+            .Select(index => $"{lexicalStem}{index}")
+            .ToArray();
+        var backlogWallets = new[]
+        {
+            sourceWallets[0],
+            $"paper-performance-capacity-{suffix}-backlog"
+        };
+        var wallets = sourceWallets.Concat(backlogWallets).Distinct(StringComparer.Ordinal).ToArray();
+        var orderIds = Enumerable.Range(0, sourceWallets.Length).Select(_ => Guid.NewGuid()).ToArray();
+        var controlState = await ReadControlStateAsync(factory);
+
+        try
+        {
+            for (var index = 0; index < sourceWallets.Length; index++)
+            {
+                await InsertPaperOrderAsync(
+                    factory,
+                    orderIds[index],
+                    strategyId,
+                    sourceWallets[index],
+                    $"capacity-asset-{suffix}-{index}",
+                    $"capacity-condition-{suffix}-{index}",
+                    DateTimeOffset.UtcNow.AddMinutes(-1).AddSeconds(index));
+                await DeleteQueuedWalletAsync(factory, sourceWallets[index]);
+            }
+
+            await QueueWalletsAsync(factory, backlogWallets, 0, "capacity_backlog");
+            await SetControlCursorAsync(factory, cursorWallet);
+
+            var result = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
+                highPriorityWalletBatchSize: 2,
+                reconciliationWalletBatchSize: 5,
+                reconciliationSeedWalletBatchSize: 100);
+
+            Assert.True(result.LockAcquired);
+            Assert.Equal(0, result.HighPriorityWalletsProcessed);
+            Assert.Equal(3, result.WalletsSeeded);
+            Assert.Equal(5, result.ReconciliationWalletsProcessed);
+            Assert.Equal(5, result.WalletsProcessed);
+            Assert.Equal(8, result.PerformanceRowsWritten);
+            Assert.Equal(0, await CountQueuedWalletsAsync(factory, wallets));
+            Assert.NotEmpty(await ReadProjectionRowsAsync(factory, sourceWallets[0]));
+            Assert.NotEmpty(await ReadProjectionRowsAsync(factory, sourceWallets[1]));
+            Assert.NotEmpty(await ReadProjectionRowsAsync(factory, sourceWallets[2]));
+            Assert.NotEmpty(await ReadProjectionRowsAsync(factory, sourceWallets[3]));
+
+            var controlAfter = await ReadControlStateAsync(factory);
+            Assert.Equal(sourceWallets[3], controlAfter.CursorWallet);
+            Assert.Equal(controlState.Cycle, controlAfter.Cycle);
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, wallets, orderIds, []);
+            await RestoreControlStateAsync(factory, controlState);
+        }
+    }
+
     private static async Task<PaperCopiedTraderPerformanceRefreshResult> RefreshExactWalletAsync(
         PostgresConnectionFactory factory,
         PostgresAppRepository repository,
@@ -226,7 +358,8 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
         await PromoteQueuedWalletsAsync(factory, wallet);
         await SetControlCursorToMaximumSourceWalletAsync(factory);
         var result = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
-            walletBatchSize: 1,
+            highPriorityWalletBatchSize: 1,
+            reconciliationWalletBatchSize: 1,
             reconciliationSeedWalletBatchSize: 1);
         Assert.True(result.LockAcquired);
         return result;
@@ -417,6 +550,32 @@ WHERE copied_trader_wallet = ANY(@Wallets);
             connection);
         command.Parameters.AddWithValue("Priority", int.MaxValue);
         command.Parameters.AddWithValue("RequestedAtUtc", DateTime.SpecifyKind(DateTime.UnixEpoch, DateTimeKind.Utc));
+        command.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
+        Assert.Equal(wallets.Length, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task QueueWalletsAsync(
+        PostgresConnectionFactory factory,
+        string[] wallets,
+        int priority,
+        string sourceKind)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO paper_copied_trader_performance_refresh_queue (
+    copied_trader_wallet, priority, requested_at_utc, source_kind)
+SELECT wallet, @Priority, '-infinity'::timestamptz, @SourceKind
+FROM unnest(@Wallets) wallet
+ON CONFLICT (copied_trader_wallet) DO UPDATE SET
+    priority = EXCLUDED.priority,
+    requested_at_utc = EXCLUDED.requested_at_utc,
+    source_kind = EXCLUDED.source_kind;
+""",
+            connection);
+        command.Parameters.AddWithValue("Priority", priority);
+        command.Parameters.AddWithValue("SourceKind", sourceKind);
         command.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
         Assert.Equal(wallets.Length, await command.ExecuteNonQueryAsync());
     }

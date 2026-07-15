@@ -197,7 +197,8 @@ public sealed class NoOpAppRepository : IAppRepository
     }
 
     public Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
-        int walletBatchSize,
+        int highPriorityWalletBatchSize,
+        int reconciliationWalletBatchSize,
         int reconciliationSeedWalletBatchSize,
         CancellationToken cancellationToken = default)
     {
@@ -207,7 +208,11 @@ public sealed class NoOpAppRepository : IAppRepository
             WalletsProcessed: 0,
             PerformanceRowsWritten: 0,
             QueueRemaining: 0,
-            ReconciliationCycleCompleted: false));
+            ReconciliationCycleCompleted: false,
+            HighPriorityWalletsProcessed: 0,
+            ReconciliationWalletsProcessed: 0,
+            HighPriorityQueueRemaining: 0,
+            ReconciliationQueueRemaining: 0));
     }
 
     public Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)

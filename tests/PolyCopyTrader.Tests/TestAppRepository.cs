@@ -79,7 +79,11 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int LastPaperCopiedTraderPerformanceWalletBatchSize { get; private set; }
 
+    public int LastPaperCopiedTraderPerformanceReconciliationWalletBatchSize { get; private set; }
+
     public int LastPaperCopiedTraderPerformanceReconciliationSeedWalletBatchSize { get; private set; }
+
+    public Func<CancellationToken, Task>? PaperCopiedTraderPerformanceRefreshHook { get; set; }
 
     public List<LeaderTrade> LeaderTrades { get; } = [];
 
@@ -1538,24 +1542,33 @@ internal sealed class TestAppRepository : IAppRepository
             .ToArray());
     }
 
-    public Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
-        int walletBatchSize,
+    public async Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
+        int highPriorityWalletBatchSize,
+        int reconciliationWalletBatchSize,
         int reconciliationSeedWalletBatchSize,
         CancellationToken cancellationToken = default)
     {
         RefreshPaperCopiedTraderPerformanceProjectionCalls++;
-        LastPaperCopiedTraderPerformanceWalletBatchSize = walletBatchSize;
+        LastPaperCopiedTraderPerformanceWalletBatchSize = highPriorityWalletBatchSize;
+        LastPaperCopiedTraderPerformanceReconciliationWalletBatchSize = reconciliationWalletBatchSize;
         LastPaperCopiedTraderPerformanceReconciliationSeedWalletBatchSize = reconciliationSeedWalletBatchSize;
+        if (PaperCopiedTraderPerformanceRefreshHook is not null)
+        {
+            await PaperCopiedTraderPerformanceRefreshHook(cancellationToken);
+        }
+
         PaperCopiedTraderPerformances.Clear();
         var rows = BuildPaperCopiedTraderPerformance();
         PaperCopiedTraderPerformances.AddRange(rows);
-        return Task.FromResult(new PaperCopiedTraderPerformanceRefreshResult(
+        var walletsProcessed = rows.Select(row => row.CopiedTraderWallet).Distinct(StringComparer.Ordinal).Count();
+        return new PaperCopiedTraderPerformanceRefreshResult(
             LockAcquired: true,
             WalletsSeeded: 0,
-            WalletsProcessed: rows.Select(row => row.CopiedTraderWallet).Distinct(StringComparer.Ordinal).Count(),
+            WalletsProcessed: walletsProcessed,
             PerformanceRowsWritten: rows.Count,
             QueueRemaining: 0,
-            ReconciliationCycleCompleted: false));
+            ReconciliationCycleCompleted: false,
+            HighPriorityWalletsProcessed: walletsProcessed);
     }
 
     public Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)

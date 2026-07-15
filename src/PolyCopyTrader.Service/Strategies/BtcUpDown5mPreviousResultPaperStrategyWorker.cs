@@ -37,12 +37,12 @@ public sealed class BtcUpDown5mPreviousResultPaperStrategyWorker(
             paperTradingOptions.RunInLiveMode,
             options.DiffCounterFastPollIntervalMilliseconds);
 
-        while (!stoppingToken.IsCancellationRequested)
+        await FixedRateWorkerLoop.RunAsync(interval, async cancellationToken =>
         {
             try
             {
                 controlState.RecordLoop("BTC5mStrategy previous-result due-entry cycle pending", null);
-                var result = await processor.ProcessPreviousResultFastDueEntriesAsync(stoppingToken);
+                var result = await processor.ProcessPreviousResultFastDueEntriesAsync(cancellationToken);
                 controlState.RecordLoop(
                     $"BTC5mStrategyPreviousResultDue Entries={result.EntriesPlaced}; Skipped={result.RunsSkipped}; Settled={result.RunsSettled}",
                     null);
@@ -57,19 +57,17 @@ public sealed class BtcUpDown5mPreviousResultPaperStrategyWorker(
                         result.RunsSettled);
                 }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                break;
+                return;
             }
             catch (Exception ex)
             {
                 controlState.RecordLoop("BTC Up or Down 5m previous-result due-entry paper strategy cycle failed", ex.Message);
                 logger.LogError(ex, "BTC Up or Down 5m previous-result due-entry paper strategy cycle failed.");
-                await TryRecordApiErrorAsync(ex.Message, stoppingToken);
+                await TryRecordApiErrorAsync(ex.Message, cancellationToken);
             }
-
-            await Task.Delay(interval, stoppingToken);
-        }
+        }, stoppingToken);
 
         logger.LogInformation("BTC Up or Down 5m previous-result due-entry paper strategy worker stopped.");
     }

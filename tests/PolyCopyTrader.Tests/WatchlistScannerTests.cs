@@ -401,7 +401,8 @@ public sealed class WatchlistScannerTests
         }
 
         public Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
-            int walletBatchSize,
+            int highPriorityWalletBatchSize,
+            int reconciliationWalletBatchSize,
             int reconciliationSeedWalletBatchSize,
             CancellationToken cancellationToken = default)
         {

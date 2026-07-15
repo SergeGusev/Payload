@@ -528,6 +528,8 @@ public sealed class PaperTradingOptions
 
     public int CopiedTraderPerformanceWalletBatchSize { get; init; } = 25;
 
+    public int CopiedTraderPerformanceReconciliationWalletBatchSize { get; init; } = 5;
+
     public int CopiedTraderPerformanceReconciliationSeedWalletBatchSize { get; init; } = 100;
 
     public bool LeaderActivityExitTrackingEnabled { get; init; } = true;

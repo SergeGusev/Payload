@@ -941,7 +941,7 @@ public sealed class StorageTests
     [Fact]
     public void PostgresRepository_PaperCopiedTraderPerformance_UsesBoundedWalletProjection()
     {
-        var source = ReadStorageRepositorySource();
+        var source = ReadStorageRepositorySource().Replace("\r\n", "\n", StringComparison.Ordinal);
 
         Assert.Contains("TryAddPaperPositionSettlementAsync", source, StringComparison.Ordinal);
         Assert.Contains("INSERT INTO paper_position_settlements", source, StringComparison.Ordinal);
@@ -949,7 +949,22 @@ public sealed class StorageTests
         Assert.Contains("TryAcquirePaperCopiedTraderPerformanceRefreshLockAsync", source, StringComparison.Ordinal);
         Assert.Contains("pg_try_advisory_xact_lock", source, StringComparison.Ordinal);
         Assert.Contains("FOR UPDATE SKIP LOCKED", source, StringComparison.Ordinal);
+        Assert.Contains("WHERE priority > 0", source, StringComparison.Ordinal);
+        Assert.Contains("WHERE priority <= 0", source, StringComparison.Ordinal);
+        Assert.Contains("Math.Min(reconciliationSeedWalletBatchSize, reconciliationCapacity)", source, StringComparison.Ordinal);
+        Assert.Contains("reconciliationWalletBatchSize - reconciliationWalletsProcessed", source, StringComparison.Ordinal);
+        Assert.Contains("queued_wallet.copied_trader_wallet = paper_order.copied_trader_wallet", source, StringComparison.Ordinal);
+        Assert.Contains("queued_wallet.copied_trader_wallet = paper_position.copied_trader_wallet", source, StringComparison.Ordinal);
+        Assert.Contains("queued_wallet.copied_trader_wallet = paper_settlement.copied_trader_wallet", source, StringComparison.Ordinal);
+        Assert.Contains("queued_wallet.copied_trader_wallet = performance.copied_trader_wallet", source, StringComparison.Ordinal);
+        Assert.Contains("SELECT copied_trader_wallet, 'reconciliation'\n    FROM queued", source, StringComparison.Ordinal);
+        Assert.Contains("(SELECT count(*)::integer FROM selected) AS wallets_selected", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("pickSeededReconciliationCommand", source, StringComparison.Ordinal);
+        Assert.Contains("highPriorityWalletsProcessed + reconciliationWalletsProcessed", source, StringComparison.Ordinal);
+        Assert.Contains("HighPriorityQueueRemaining", source, StringComparison.Ordinal);
+        Assert.Contains("ReconciliationQueueRemaining", source, StringComparison.Ordinal);
         Assert.Contains("temp_paper_copied_trader_performance_wallets", source, StringComparison.Ordinal);
+        Assert.Contains("work_kind text NOT NULL CHECK (work_kind IN ('high_priority', 'reconciliation'))", source, StringComparison.Ordinal);
         Assert.Contains("USING temp_paper_copied_trader_performance_wallets selected", source, StringComparison.Ordinal);
         Assert.DoesNotContain("DELETE FROM paper_copied_trader_performance;", source, StringComparison.Ordinal);
         Assert.Contains("INSERT INTO paper_copied_trader_performance", source, StringComparison.Ordinal);

@@ -540,7 +540,8 @@ public interface IAppRepository
     Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
     Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
-        int walletBatchSize,
+        int highPriorityWalletBatchSize,
+        int reconciliationWalletBatchSize,
         int reconciliationSeedWalletBatchSize,
         CancellationToken cancellationToken = default);
 

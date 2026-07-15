@@ -17,6 +17,7 @@ public sealed class MarketDataWebSocketShardRunner(
     Func<string, string, DateTimeOffset, CancellationToken, Task> processTextMessageAsync,
     Action<MarketDataStatusSnapshot> onStatus)
 {
+    private static readonly object DisconnectDiagnosticDataKey = new();
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
     private readonly object stateGate = new();
     private readonly object assetGate = new();
@@ -33,6 +34,7 @@ public sealed class MarketDataWebSocketShardRunner(
     private int? lastPersistedSubscribedAssetsCount;
     private string? lastPersistedError;
     private int reconnectCount;
+    private int connectionAttemptCount;
 
     public string Component => plan.Component;
 
@@ -119,8 +121,18 @@ public sealed class MarketDataWebSocketShardRunner(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Market WebSocket shard {Component} dynamic subscription update failed; reconnecting shard.", Component);
-            await TryRecordApiErrorAsync("SubscriptionUpdate", ex.Message, CancellationToken.None);
+            var observedAtUtc = DateTimeOffset.UtcNow;
+            var exceptionDiagnostic = BuildCurrentExceptionDiagnostic(
+                "SubscriptionUpdate",
+                connection.Socket,
+                ex,
+                observedAtUtc);
+            logger.LogWarning(
+                "Market WebSocket shard {Component} dynamic subscription update failed; reconnecting shard. " +
+                "Diagnostic: {ExceptionDiagnostic}",
+                Component,
+                exceptionDiagnostic);
+            await TryRecordApiErrorAsync("SubscriptionUpdate", exceptionDiagnostic, CancellationToken.None);
             connection.Socket.Abort();
         }
     }
@@ -157,14 +169,25 @@ public sealed class MarketDataWebSocketShardRunner(
         {
             try
             {
-                await RunConnectionAsync(cancellationToken);
+                var disconnectDiagnostic = await RunConnectionAsync(cancellationToken);
                 if (cancellationToken.IsCancellationRequested)
                 {
                     break;
                 }
 
                 reconnectCount++;
-                await PublishStatusAsync(MarketDataConnectionState.Reconnecting, "Connection closed.", cancellationToken);
+                if (!string.IsNullOrWhiteSpace(disconnectDiagnostic))
+                {
+                    logger.LogWarning(
+                        "Market WebSocket shard {Component} connection closed. {DisconnectDiagnostic}",
+                        Component,
+                        disconnectDiagnostic);
+                }
+
+                await PublishStatusAsync(
+                    MarketDataConnectionState.Reconnecting,
+                    disconnectDiagnostic ?? "Connection closed.",
+                    cancellationToken);
                 await Task.Delay(reconnectDelay, cancellationToken);
                 reconnectDelay = NextReconnectDelay(reconnectDelay);
             }
@@ -174,50 +197,117 @@ public sealed class MarketDataWebSocketShardRunner(
             }
             catch (Exception ex)
             {
+                var reconnectCountBeforeIncrement = reconnectCount;
                 reconnectCount++;
                 SetDisconnectedUtc(DateTimeOffset.UtcNow);
+                var disconnectDiagnostic = TryGetDisconnectDiagnostic(ex) ??
+                    BuildFallbackExceptionDiagnostic(
+                        ex,
+                        DateTimeOffset.UtcNow,
+                        reconnectCountBeforeIncrement);
                 logger.LogWarning(
-                    ex,
-                    "Market WebSocket shard {Component} failed. Reconnecting in {ReconnectDelaySeconds} seconds.",
+                    "Market WebSocket shard {Component} failed. Reconnecting in {ReconnectDelaySeconds} seconds. " +
+                    "Diagnostic: {DisconnectDiagnostic}",
                     Component,
-                    reconnectDelay.TotalSeconds);
-                await TryRecordApiErrorAsync("ConnectionLoop", ex.Message, cancellationToken);
-                await PublishStatusAsync(MarketDataConnectionState.Reconnecting, ex.Message, cancellationToken);
+                    reconnectDelay.TotalSeconds,
+                    disconnectDiagnostic);
+                await TryRecordApiErrorAsync("ConnectionLoop", disconnectDiagnostic, cancellationToken);
+                await PublishStatusAsync(MarketDataConnectionState.Reconnecting, disconnectDiagnostic, cancellationToken);
                 await Task.Delay(reconnectDelay, cancellationToken);
                 reconnectDelay = NextReconnectDelay(reconnectDelay);
             }
         }
     }
 
-    private async Task RunConnectionAsync(CancellationToken cancellationToken)
+    private async Task<string?> RunConnectionAsync(CancellationToken cancellationToken)
     {
         await PublishStatusAsync(MarketDataConnectionState.Connecting, null, cancellationToken);
 
         using var socket = new ClientWebSocket();
         using var sendLock = new SemaphoreSlim(1, 1);
         SetCurrentConnection(socket, sendLock);
-        var endpointUri = new Uri(options.MarketEndpointUrl);
-        ConfigurePinnedCertificateValidation(socket, endpointUri);
+        Uri? endpointUri = null;
+        var connectionAttempt = 0;
+        var phase = "EndpointValidation";
+        DateTimeOffset? connectedAtUtc = null;
+        DateTimeOffset? receiveLoopObservedAtUtc = null;
+        DateTimeOffset? failureObservedAtUtc = null;
 
         try
         {
+            endpointUri = new Uri(options.MarketEndpointUrl);
+            connectionAttempt = Interlocked.Increment(ref connectionAttemptCount);
+            phase = "TlsConfiguration";
+            ConfigurePinnedCertificateValidation(socket, endpointUri);
+            phase = "Connect";
             await socket.ConnectAsync(endpointUri, cancellationToken);
-            SetConnectedUtc(DateTimeOffset.UtcNow);
+            connectedAtUtc = DateTimeOffset.UtcNow;
+            SetConnectedUtc(connectedAtUtc.Value);
+            phase = "InitialSubscription";
             await SendInitialSubscriptionsAsync(socket, sendLock, cancellationToken);
             await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);
 
             using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var heartbeat = HeartbeatLoopAsync(socket, sendLock, connectionCts);
+            MarketWebSocketCloseFrame? closeFrame;
 
             try
             {
-                await ReceiveLoopAsync(socket, connectionCts.Token);
+                phase = "ReceiveLoop";
+                try
+                {
+                    closeFrame = await ReceiveLoopAsync(socket, connectionCts.Token);
+                    receiveLoopObservedAtUtc = closeFrame?.ObservedAtUtc ?? DateTimeOffset.UtcNow;
+                }
+                catch
+                {
+                    failureObservedAtUtc = DateTimeOffset.UtcNow;
+                    throw;
+                }
             }
             finally
             {
                 await connectionCts.CancelAsync();
                 await SafeAwaitAsync(heartbeat);
             }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            return BuildDisconnectDiagnostic(
+                closeFrame is null ? "ReceiveLoopEnded" : "CloseFrame",
+                phase,
+                connectionAttempt,
+                Volatile.Read(ref reconnectCount),
+                endpointUri,
+                socket,
+                connectedAtUtc,
+                closeFrame,
+                exception: null,
+                observedAtUtc: receiveLoopObservedAtUtc ?? DateTimeOffset.UtcNow);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var observedAtUtc = failureObservedAtUtc ?? DateTimeOffset.UtcNow;
+            var diagnostic = BuildDisconnectDiagnostic(
+                "Exception",
+                phase,
+                connectionAttempt,
+                Volatile.Read(ref reconnectCount),
+                endpointUri,
+                socket,
+                connectedAtUtc,
+                closeFrame: null,
+                exception: ex,
+                observedAtUtc: observedAtUtc);
+            TrySetDisconnectDiagnostic(ex, diagnostic);
+            throw;
         }
         finally
         {
@@ -227,24 +317,31 @@ public sealed class MarketDataWebSocketShardRunner(
         }
     }
 
-    private async Task ReceiveLoopAsync(ClientWebSocket socket, CancellationToken cancellationToken)
+    private async Task<MarketWebSocketCloseFrame?> ReceiveLoopAsync(
+        ClientWebSocket socket,
+        CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
         {
-            var message = await ReceiveTextMessageAsync(socket, cancellationToken);
-            if (message is null)
+            var received = await ReceiveTextMessageAsync(socket, cancellationToken);
+            if (received.CloseFrame is not null)
             {
-                break;
+                return received.CloseFrame;
             }
 
+            var message = received.Text ?? string.Empty;
             DateTimeOffset receivedAtUtc = DateTimeOffset.UtcNow;
             SetLastMessageUtc(receivedAtUtc);
             await processTextMessageAsync(Component, message, receivedAtUtc, cancellationToken);
             await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);
         }
+
+        return null;
     }
 
-    private async Task<string?> ReceiveTextMessageAsync(ClientWebSocket socket, CancellationToken cancellationToken)
+    private async Task<MarketWebSocketReceivedMessage> ReceiveTextMessageAsync(
+        ClientWebSocket socket,
+        CancellationToken cancellationToken)
     {
         var buffer = new byte[options.ReceiveBufferBytes];
         using var message = new MemoryStream();
@@ -254,7 +351,12 @@ public sealed class MarketDataWebSocketShardRunner(
             result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
             if (result.MessageType == WebSocketMessageType.Close)
             {
-                return null;
+                return new MarketWebSocketReceivedMessage(
+                    null,
+                    new MarketWebSocketCloseFrame(
+                        result.CloseStatus,
+                        result.CloseStatusDescription,
+                        DateTimeOffset.UtcNow));
             }
 
             if (result.MessageType != WebSocketMessageType.Text)
@@ -266,7 +368,111 @@ public sealed class MarketDataWebSocketShardRunner(
         }
         while (!result.EndOfMessage);
 
-        return Encoding.UTF8.GetString(message.ToArray());
+        return new MarketWebSocketReceivedMessage(Encoding.UTF8.GetString(message.ToArray()), null);
+    }
+
+    private string BuildDisconnectDiagnostic(
+        string reason,
+        string phase,
+        int connectionAttempt,
+        int reconnectCountBeforeIncrement,
+        Uri? endpointUri,
+        ClientWebSocket? socket,
+        DateTimeOffset? connectedAtUtc,
+        MarketWebSocketCloseFrame? closeFrame,
+        Exception? exception,
+        DateTimeOffset observedAtUtc)
+    {
+        var stateSnapshot = GetStateSnapshot();
+        var context = new MarketWebSocketDisconnectContext(
+            reason,
+            Component,
+            endpointUri,
+            phase,
+            connectionAttempt,
+            reconnectCountBeforeIncrement,
+            AssetIds.Count,
+            socket?.State ?? WebSocketState.None,
+            closeFrame?.Status ?? socket?.CloseStatus,
+            closeFrame?.Description ?? socket?.CloseStatusDescription,
+            connectedAtUtc,
+            connectedAtUtc is null ? null : stateSnapshot.LastMessageUtc,
+            observedAtUtc);
+        return MarketWebSocketDisconnectDiagnosticBuilder.Build(context, exception);
+    }
+
+    private string BuildCurrentExceptionDiagnostic(
+        string phase,
+        ClientWebSocket? socket,
+        Exception exception,
+        DateTimeOffset observedAtUtc)
+    {
+        var stateSnapshot = GetStateSnapshot();
+        return BuildDisconnectDiagnostic(
+            "Exception",
+            phase,
+            Volatile.Read(ref connectionAttemptCount),
+            Volatile.Read(ref reconnectCount),
+            GetDiagnosticEndpointUri(),
+            socket,
+            socket is null ? null : stateSnapshot.LastConnectedUtc,
+            closeFrame: null,
+            exception: exception,
+            observedAtUtc: observedAtUtc);
+    }
+
+    private string BuildFallbackExceptionDiagnostic(
+        Exception exception,
+        DateTimeOffset observedAtUtc,
+        int reconnectCountBeforeIncrement)
+    {
+        return BuildDisconnectDiagnostic(
+            "Exception",
+            "ConnectionLoopFallback",
+            Volatile.Read(ref connectionAttemptCount),
+            reconnectCountBeforeIncrement,
+            GetDiagnosticEndpointUri(),
+            socket: null,
+            connectedAtUtc: null,
+            closeFrame: null,
+            exception: exception,
+            observedAtUtc: observedAtUtc);
+    }
+
+    private Uri? GetDiagnosticEndpointUri()
+    {
+        return Uri.TryCreate(options.MarketEndpointUrl, UriKind.Absolute, out var endpointUri)
+            ? endpointUri
+            : null;
+    }
+
+    private string GetDiagnosticEndpointHost()
+    {
+        return GetDiagnosticEndpointUri()?.Host ?? "<invalid>";
+    }
+
+    private static string? TryGetDisconnectDiagnostic(Exception exception)
+    {
+        try
+        {
+            return exception.Data[DisconnectDiagnosticDataKey] as string;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private static void TrySetDisconnectDiagnostic(Exception exception, string diagnostic)
+    {
+        try
+        {
+            exception.Data[DisconnectDiagnosticDataKey] = diagnostic;
+        }
+        catch (Exception)
+        {
+            // A safe fallback is rebuilt by the outer connection loop when Exception.Data is immutable.
+        }
     }
 
     private async Task HeartbeatLoopAsync(
@@ -288,8 +494,17 @@ public sealed class MarketDataWebSocketShardRunner(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Market WebSocket shard {Component} heartbeat failed.", Component);
-                await TryRecordApiErrorAsync("Heartbeat", ex.Message, CancellationToken.None);
+                var observedAtUtc = DateTimeOffset.UtcNow;
+                var exceptionDiagnostic = BuildCurrentExceptionDiagnostic(
+                    "Heartbeat",
+                    socket,
+                    ex,
+                    observedAtUtc);
+                logger.LogWarning(
+                    "Market WebSocket shard {Component} heartbeat failed. Diagnostic: {ExceptionDiagnostic}",
+                    Component,
+                    exceptionDiagnostic);
+                await TryRecordApiErrorAsync("Heartbeat", exceptionDiagnostic, CancellationToken.None);
                 socket.Abort();
                 await connectionCts.CancelAsync();
                 break;
@@ -402,7 +617,7 @@ public sealed class MarketDataWebSocketShardRunner(
         var status = new MarketDataStatusSnapshot(
             Component,
             state,
-            options.MarketEndpointUrl,
+            GetDiagnosticEndpointHost(),
             AssetIds.Count,
             stateSnapshot.LastMessageUtc,
             stateSnapshot.LastConnectedUtc,
@@ -594,4 +809,13 @@ public sealed class MarketDataWebSocketShardRunner(
         DateTimeOffset? LastMessageUtc,
         DateTimeOffset? LastConnectedUtc,
         DateTimeOffset? LastDisconnectedUtc);
+
+    private sealed record MarketWebSocketReceivedMessage(
+        string? Text,
+        MarketWebSocketCloseFrame? CloseFrame);
+
+    private sealed record MarketWebSocketCloseFrame(
+        WebSocketCloseStatus? Status,
+        string? Description,
+        DateTimeOffset ObservedAtUtc);
 }

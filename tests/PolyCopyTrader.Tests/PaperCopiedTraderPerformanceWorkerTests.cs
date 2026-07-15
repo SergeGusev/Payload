@@ -17,6 +17,7 @@ public sealed class PaperCopiedTraderPerformanceWorkerTests
                 CopiedTraderPerformanceProjectionEnabled = true,
                 CopiedTraderPerformanceRefreshSeconds = 60,
                 CopiedTraderPerformanceWalletBatchSize = 17,
+                CopiedTraderPerformanceReconciliationWalletBatchSize = 7,
                 CopiedTraderPerformanceReconciliationSeedWalletBatchSize = 41
             },
             repository);
@@ -35,7 +36,57 @@ public sealed class PaperCopiedTraderPerformanceWorkerTests
 
         Assert.Equal(1, repository.RefreshPaperCopiedTraderPerformanceProjectionCalls);
         Assert.Equal(17, repository.LastPaperCopiedTraderPerformanceWalletBatchSize);
+        Assert.Equal(7, repository.LastPaperCopiedTraderPerformanceReconciliationWalletBatchSize);
         Assert.Equal(41, repository.LastPaperCopiedTraderPerformanceReconciliationSeedWalletBatchSize);
+    }
+
+    [Fact]
+    public async Task Worker_UsesFixedCadenceInsteadOfCycleDurationPlusDelay()
+    {
+        var firstCallEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstCall = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondCallEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var repository = new TestAppRepository();
+        repository.PaperCopiedTraderPerformanceRefreshHook = async cancellationToken =>
+        {
+            if (repository.RefreshPaperCopiedTraderPerformanceProjectionCalls == 1)
+            {
+                firstCallEntered.TrySetResult();
+                await releaseFirstCall.Task.WaitAsync(cancellationToken);
+            }
+            else if (repository.RefreshPaperCopiedTraderPerformanceProjectionCalls == 2)
+            {
+                secondCallEntered.TrySetResult();
+            }
+        };
+        var worker = new PaperCopiedTraderPerformanceWorker(
+            NullLogger<PaperCopiedTraderPerformanceWorker>.Instance,
+            new PaperTradingOptions
+            {
+                CopiedTraderPerformanceProjectionEnabled = true,
+                CopiedTraderPerformanceRefreshSeconds = 1,
+                CopiedTraderPerformanceWalletBatchSize = 1,
+                CopiedTraderPerformanceReconciliationWalletBatchSize = 1,
+                CopiedTraderPerformanceReconciliationSeedWalletBatchSize = 1
+            },
+            repository);
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await firstCallEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(TimeSpan.FromMilliseconds(1_200));
+            releaseFirstCall.TrySetResult();
+
+            await secondCallEntered.Task.WaitAsync(TimeSpan.FromMilliseconds(800));
+        }
+        finally
+        {
+            releaseFirstCall.TrySetResult();
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        Assert.True(repository.RefreshPaperCopiedTraderPerformanceProjectionCalls >= 2);
     }
 
     [Fact]

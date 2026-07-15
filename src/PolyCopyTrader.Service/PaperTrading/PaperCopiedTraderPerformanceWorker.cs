@@ -19,17 +19,22 @@ public sealed class PaperCopiedTraderPerformanceWorker(
 
         var interval = TimeSpan.FromSeconds(options.CopiedTraderPerformanceRefreshSeconds);
         logger.LogInformation(
-            "Paper copied-trader performance projection worker started. RefreshSeconds={RefreshSeconds} WalletBatchSize={WalletBatchSize} ReconciliationSeedWalletBatchSize={ReconciliationSeedWalletBatchSize}",
+            "Paper copied-trader performance projection worker started. RefreshSeconds={RefreshSeconds} HighPriorityWalletBatchSize={HighPriorityWalletBatchSize} ReconciliationWalletBatchSize={ReconciliationWalletBatchSize} ReconciliationSeedWalletBatchSize={ReconciliationSeedWalletBatchSize} MaximumWalletsPerCycle={MaximumWalletsPerCycle}",
             options.CopiedTraderPerformanceRefreshSeconds,
             options.CopiedTraderPerformanceWalletBatchSize,
-            options.CopiedTraderPerformanceReconciliationSeedWalletBatchSize);
+            options.CopiedTraderPerformanceReconciliationWalletBatchSize,
+            options.CopiedTraderPerformanceReconciliationSeedWalletBatchSize,
+            options.CopiedTraderPerformanceWalletBatchSize +
+                options.CopiedTraderPerformanceReconciliationWalletBatchSize);
 
+        using var cadenceTimer = new PeriodicTimer(interval);
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 var result = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
                     options.CopiedTraderPerformanceWalletBatchSize,
+                    options.CopiedTraderPerformanceReconciliationWalletBatchSize,
                     options.CopiedTraderPerformanceReconciliationSeedWalletBatchSize,
                     stoppingToken);
 
@@ -40,15 +45,17 @@ public sealed class PaperCopiedTraderPerformanceWorker(
                 else
                 {
                     logger.LogInformation(
-                        "Paper copied-trader performance projection cycle completed. WalletsSeeded={WalletsSeeded} WalletsProcessed={WalletsProcessed} PerformanceRowsWritten={PerformanceRowsWritten} QueueRemaining={QueueRemaining} ReconciliationCycleCompleted={ReconciliationCycleCompleted}",
+                        "Paper copied-trader performance projection cycle completed. WalletsSeeded={WalletsSeeded} HighPriorityWalletsProcessed={HighPriorityWalletsProcessed} ReconciliationWalletsProcessed={ReconciliationWalletsProcessed} WalletsProcessed={WalletsProcessed} PerformanceRowsWritten={PerformanceRowsWritten} HighPriorityQueueRemaining={HighPriorityQueueRemaining} ReconciliationQueueRemaining={ReconciliationQueueRemaining} QueueRemaining={QueueRemaining} ReconciliationCycleCompleted={ReconciliationCycleCompleted}",
                         result.WalletsSeeded,
+                        result.HighPriorityWalletsProcessed,
+                        result.ReconciliationWalletsProcessed,
                         result.WalletsProcessed,
                         result.PerformanceRowsWritten,
+                        result.HighPriorityQueueRemaining,
+                        result.ReconciliationQueueRemaining,
                         result.QueueRemaining,
                         result.ReconciliationCycleCompleted);
                 }
-
-                await Task.Delay(interval, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -58,10 +65,21 @@ public sealed class PaperCopiedTraderPerformanceWorker(
             {
                 logger.LogError(
                     ex,
-                    "Paper copied-trader performance projection cycle failed. Retrying in {DelaySeconds} seconds.",
+                    "Paper copied-trader performance projection cycle failed. Retrying on the next fixed cadence tick in at most {DelaySeconds} seconds.",
                     interval.TotalSeconds);
                 await TryRecordApiErrorAsync(ex.Message, stoppingToken);
-                await Task.Delay(interval, stoppingToken);
+            }
+
+            try
+            {
+                if (!await cadenceTimer.WaitForNextTickAsync(stoppingToken))
+                {
+                    break;
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
             }
         }
 

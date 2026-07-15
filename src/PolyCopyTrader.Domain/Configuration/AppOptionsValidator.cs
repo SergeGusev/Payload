@@ -246,6 +246,7 @@ public static class AppOptionsValidator
             $"Paper settlement enabled: {configuration.PaperTrading.SettlementEnabled}",
             $"Paper copied trader performance projection enabled: {configuration.PaperTrading.CopiedTraderPerformanceProjectionEnabled}",
             $"Paper copied trader performance wallet batch size: {configuration.PaperTrading.CopiedTraderPerformanceWalletBatchSize}",
+            $"Paper copied trader performance reconciliation wallet batch size: {configuration.PaperTrading.CopiedTraderPerformanceReconciliationWalletBatchSize}",
             $"Paper copied trader performance reconciliation seed wallet batch size: {configuration.PaperTrading.CopiedTraderPerformanceReconciliationSeedWalletBatchSize}",
             $"Paper leader activity exit tracking enabled: {configuration.PaperTrading.LeaderActivityExitTrackingEnabled}",
             $"Paper leader activity exit tracking poll delay milliseconds: {configuration.PaperTrading.LeaderActivityExitTrackingPollDelayMilliseconds}",
@@ -786,6 +787,12 @@ public static class AppOptionsValidator
             options.CopiedTraderPerformanceWalletBatchSize > 250)
         {
             errors.Add("PaperTrading.CopiedTraderPerformanceWalletBatchSize must be between 1 and 250.");
+        }
+
+        if (options.CopiedTraderPerformanceReconciliationWalletBatchSize < 1 ||
+            options.CopiedTraderPerformanceReconciliationWalletBatchSize > 250)
+        {
+            errors.Add("PaperTrading.CopiedTraderPerformanceReconciliationWalletBatchSize must be between 1 and 250.");
         }
 
         if (options.CopiedTraderPerformanceReconciliationSeedWalletBatchSize < 1 ||

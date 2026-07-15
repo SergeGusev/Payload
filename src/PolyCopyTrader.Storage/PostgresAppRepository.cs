@@ -2403,12 +2403,15 @@ LIMIT @Limit;
 	}
 
 	public async Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
-		int walletBatchSize,
+		int highPriorityWalletBatchSize,
+		int reconciliationWalletBatchSize,
 		int reconciliationSeedWalletBatchSize,
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
-		ArgumentOutOfRangeException.ThrowIfLessThan(walletBatchSize, 1);
-		ArgumentOutOfRangeException.ThrowIfGreaterThan(walletBatchSize, 250);
+		ArgumentOutOfRangeException.ThrowIfLessThan(highPriorityWalletBatchSize, 1);
+		ArgumentOutOfRangeException.ThrowIfGreaterThan(highPriorityWalletBatchSize, 250);
+		ArgumentOutOfRangeException.ThrowIfLessThan(reconciliationWalletBatchSize, 1);
+		ArgumentOutOfRangeException.ThrowIfGreaterThan(reconciliationWalletBatchSize, 250);
 		ArgumentOutOfRangeException.ThrowIfLessThan(reconciliationSeedWalletBatchSize, 1);
 		ArgumentOutOfRangeException.ThrowIfGreaterThan(reconciliationSeedWalletBatchSize, 1_000);
 
@@ -2431,48 +2434,124 @@ FOR UPDATE;
 			reconciliationCursor = await cursorCommand.ExecuteScalarAsync(cancellationToken) as string;
 		}
 
+		await using (NpgsqlCommand createTempCommand = CreateCommand(connection, """
+CREATE TEMP TABLE temp_paper_copied_trader_performance_wallets (
+    copied_trader_wallet text PRIMARY KEY,
+    work_kind text NOT NULL CHECK (work_kind IN ('high_priority', 'reconciliation'))
+) ON COMMIT DROP;
+"""))
+		{
+			createTempCommand.Transaction = transaction;
+			await createTempCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		int highPriorityWalletsProcessed;
+		await using (NpgsqlCommand pickHighPriorityCommand = CreateCommand(connection, """
+WITH picked AS (
+    SELECT copied_trader_wallet
+    FROM paper_copied_trader_performance_refresh_queue
+    WHERE priority > 0
+    ORDER BY priority DESC, requested_at_utc, copied_trader_wallet
+    LIMIT @WalletLimit
+    FOR UPDATE SKIP LOCKED
+)
+INSERT INTO temp_paper_copied_trader_performance_wallets (copied_trader_wallet, work_kind)
+SELECT copied_trader_wallet, 'high_priority'
+FROM picked;
+"""))
+		{
+			pickHighPriorityCommand.Transaction = transaction;
+			pickHighPriorityCommand.Parameters.AddWithValue("WalletLimit", highPriorityWalletBatchSize);
+			highPriorityWalletsProcessed = await pickHighPriorityCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		int reconciliationWalletsProcessed;
+		await using (NpgsqlCommand pickQueuedReconciliationCommand = CreateCommand(connection, """
+WITH picked AS (
+    SELECT copied_trader_wallet
+    FROM paper_copied_trader_performance_refresh_queue
+    WHERE priority <= 0
+    ORDER BY requested_at_utc, copied_trader_wallet
+    LIMIT @WalletLimit
+    FOR UPDATE SKIP LOCKED
+)
+INSERT INTO temp_paper_copied_trader_performance_wallets (copied_trader_wallet, work_kind)
+SELECT copied_trader_wallet, 'reconciliation'
+FROM picked;
+"""))
+		{
+			pickQueuedReconciliationCommand.Transaction = transaction;
+			pickQueuedReconciliationCommand.Parameters.AddWithValue("WalletLimit", reconciliationWalletBatchSize);
+			reconciliationWalletsProcessed = await pickQueuedReconciliationCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
 		var walletsSeeded = 0;
-		var seedCandidates = 0;
-		string? lastSeededWallet = null;
-		await using (NpgsqlCommand seedCommand = CreateCommand(connection, """
+		var reconciliationCycleCompleted = false;
+		var reconciliationCapacity = reconciliationWalletBatchSize - reconciliationWalletsProcessed;
+		if (reconciliationCapacity > 0)
+		{
+			var seedCandidates = 0;
+			string? lastSeededWallet = null;
+			var effectiveSeedLimit = Math.Min(reconciliationSeedWalletBatchSize, reconciliationCapacity);
+			await using (NpgsqlCommand seedCommand = CreateCommand(connection, """
 WITH source_wallets AS (
     (
-        SELECT copied_trader_wallet AS wallet
-        FROM paper_orders
-        WHERE btrim(copied_trader_wallet) <> ''
-          AND (@Cursor IS NULL OR copied_trader_wallet > @Cursor)
-        GROUP BY copied_trader_wallet
-        ORDER BY copied_trader_wallet
+        SELECT paper_order.copied_trader_wallet AS wallet
+        FROM paper_orders paper_order
+        WHERE btrim(paper_order.copied_trader_wallet) <> ''
+          AND (@Cursor IS NULL OR paper_order.copied_trader_wallet > @Cursor)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM paper_copied_trader_performance_refresh_queue queued_wallet
+              WHERE queued_wallet.copied_trader_wallet = paper_order.copied_trader_wallet
+          )
+        GROUP BY paper_order.copied_trader_wallet
+        ORDER BY paper_order.copied_trader_wallet
         LIMIT @SeedLimit
     )
     UNION
     (
-        SELECT copied_trader_wallet AS wallet
-        FROM paper_positions
-        WHERE btrim(copied_trader_wallet) <> ''
-          AND (@Cursor IS NULL OR copied_trader_wallet > @Cursor)
-        GROUP BY copied_trader_wallet
-        ORDER BY copied_trader_wallet
+        SELECT paper_position.copied_trader_wallet AS wallet
+        FROM paper_positions paper_position
+        WHERE btrim(paper_position.copied_trader_wallet) <> ''
+          AND (@Cursor IS NULL OR paper_position.copied_trader_wallet > @Cursor)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM paper_copied_trader_performance_refresh_queue queued_wallet
+              WHERE queued_wallet.copied_trader_wallet = paper_position.copied_trader_wallet
+          )
+        GROUP BY paper_position.copied_trader_wallet
+        ORDER BY paper_position.copied_trader_wallet
         LIMIT @SeedLimit
     )
     UNION
     (
-        SELECT copied_trader_wallet AS wallet
-        FROM paper_position_settlements
-        WHERE btrim(copied_trader_wallet) <> ''
-          AND (@Cursor IS NULL OR copied_trader_wallet > @Cursor)
-        GROUP BY copied_trader_wallet
-        ORDER BY copied_trader_wallet
+        SELECT paper_settlement.copied_trader_wallet AS wallet
+        FROM paper_position_settlements paper_settlement
+        WHERE btrim(paper_settlement.copied_trader_wallet) <> ''
+          AND (@Cursor IS NULL OR paper_settlement.copied_trader_wallet > @Cursor)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM paper_copied_trader_performance_refresh_queue queued_wallet
+              WHERE queued_wallet.copied_trader_wallet = paper_settlement.copied_trader_wallet
+          )
+        GROUP BY paper_settlement.copied_trader_wallet
+        ORDER BY paper_settlement.copied_trader_wallet
         LIMIT @SeedLimit
     )
     UNION
     (
-        SELECT copied_trader_wallet AS wallet
-        FROM paper_copied_trader_performance
-        WHERE btrim(copied_trader_wallet) <> ''
-          AND (@Cursor IS NULL OR copied_trader_wallet > @Cursor)
-        GROUP BY copied_trader_wallet
-        ORDER BY copied_trader_wallet
+        SELECT performance.copied_trader_wallet AS wallet
+        FROM paper_copied_trader_performance performance
+        WHERE btrim(performance.copied_trader_wallet) <> ''
+          AND (@Cursor IS NULL OR performance.copied_trader_wallet > @Cursor)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM paper_copied_trader_performance_refresh_queue queued_wallet
+              WHERE queued_wallet.copied_trader_wallet = performance.copied_trader_wallet
+          )
+        GROUP BY performance.copied_trader_wallet
+        ORDER BY performance.copied_trader_wallet
         LIMIT @SeedLimit
     )
 ), candidates AS (
@@ -2490,27 +2569,43 @@ WITH source_wallets AS (
     FROM candidates
     ON CONFLICT (copied_trader_wallet) DO NOTHING
     RETURNING copied_trader_wallet
+), selected AS (
+    INSERT INTO temp_paper_copied_trader_performance_wallets (
+        copied_trader_wallet,
+        work_kind)
+    SELECT copied_trader_wallet, 'reconciliation'
+    FROM queued
+    RETURNING copied_trader_wallet
 )
 SELECT
     (SELECT count(*)::integer FROM queued) AS wallets_seeded,
     (SELECT count(*)::integer FROM candidates) AS seed_candidates,
-    (SELECT max(wallet) FROM candidates) AS last_seeded_wallet;
+    (SELECT max(wallet) FROM candidates) AS last_seeded_wallet,
+    (SELECT count(*)::integer FROM selected) AS wallets_selected;
 """))
-		{
-			seedCommand.Transaction = transaction;
-			seedCommand.Parameters.Add("Cursor", NpgsqlDbType.Text).Value = (object?)reconciliationCursor ?? DBNull.Value;
-			seedCommand.Parameters.AddWithValue("SeedLimit", reconciliationSeedWalletBatchSize);
-			await using NpgsqlDataReader reader = await seedCommand.ExecuteReaderAsync(cancellationToken);
-			if (await reader.ReadAsync(cancellationToken))
 			{
-				walletsSeeded = reader.GetInt32(0);
-				seedCandidates = reader.GetInt32(1);
-				lastSeededWallet = reader.IsDBNull(2) ? null : reader.GetString(2);
-			}
-		}
+				seedCommand.Transaction = transaction;
+				seedCommand.Parameters.Add("Cursor", NpgsqlDbType.Text).Value = (object?)reconciliationCursor ?? DBNull.Value;
+				seedCommand.Parameters.AddWithValue("SeedLimit", effectiveSeedLimit);
+				await using NpgsqlDataReader reader = await seedCommand.ExecuteReaderAsync(cancellationToken);
+				if (await reader.ReadAsync(cancellationToken))
+				{
+					walletsSeeded = reader.GetInt32(0);
+					seedCandidates = reader.GetInt32(1);
+					lastSeededWallet = reader.IsDBNull(2) ? null : reader.GetString(2);
+					var seededWalletsSelected = reader.GetInt32(3);
+					if (seededWalletsSelected != walletsSeeded)
+					{
+						throw new InvalidOperationException(
+							"Every seeded paper copied-trader reconciliation wallet must be selected in the same transaction.");
+					}
 
-		var reconciliationCycleCompleted = seedCandidates == 0;
-		await using (NpgsqlCommand updateCursorCommand = CreateCommand(connection, """
+					reconciliationWalletsProcessed += seededWalletsSelected;
+				}
+			}
+
+			reconciliationCycleCompleted = seedCandidates == 0;
+			await using (NpgsqlCommand updateCursorCommand = CreateCommand(connection, """
 UPDATE paper_copied_trader_performance_projection_control
 SET reconciliation_cursor_wallet = @NextCursor,
     reconciliation_cycle = reconciliation_cycle + CASE WHEN @CycleCompleted THEN 1 ELSE 0 END,
@@ -2518,43 +2613,16 @@ SET reconciliation_cursor_wallet = @NextCursor,
     updated_at_utc = now()
 WHERE singleton_id = 1;
 """))
-		{
-			updateCursorCommand.Transaction = transaction;
-			updateCursorCommand.Parameters.Add("NextCursor", NpgsqlDbType.Text).Value =
-				reconciliationCycleCompleted ? DBNull.Value : lastSeededWallet!;
-			updateCursorCommand.Parameters.AddWithValue("CycleCompleted", reconciliationCycleCompleted);
-			await updateCursorCommand.ExecuteNonQueryAsync(cancellationToken);
+			{
+				updateCursorCommand.Transaction = transaction;
+				updateCursorCommand.Parameters.Add("NextCursor", NpgsqlDbType.Text).Value =
+					reconciliationCycleCompleted ? DBNull.Value : lastSeededWallet!;
+				updateCursorCommand.Parameters.AddWithValue("CycleCompleted", reconciliationCycleCompleted);
+				await updateCursorCommand.ExecuteNonQueryAsync(cancellationToken);
+			}
 		}
 
-		await using (NpgsqlCommand createTempCommand = CreateCommand(connection, """
-CREATE TEMP TABLE temp_paper_copied_trader_performance_wallets (
-    copied_trader_wallet text PRIMARY KEY
-) ON COMMIT DROP;
-"""))
-		{
-			createTempCommand.Transaction = transaction;
-			await createTempCommand.ExecuteNonQueryAsync(cancellationToken);
-		}
-
-		var walletsProcessed = 0;
-		await using (NpgsqlCommand pickCommand = CreateCommand(connection, """
-WITH picked AS (
-    SELECT copied_trader_wallet
-    FROM paper_copied_trader_performance_refresh_queue
-    ORDER BY priority DESC, requested_at_utc, copied_trader_wallet
-    LIMIT @WalletLimit
-    FOR UPDATE SKIP LOCKED
-)
-INSERT INTO temp_paper_copied_trader_performance_wallets (copied_trader_wallet)
-SELECT copied_trader_wallet
-FROM picked;
-"""))
-		{
-			pickCommand.Transaction = transaction;
-			pickCommand.Parameters.AddWithValue("WalletLimit", walletBatchSize);
-			walletsProcessed = await pickCommand.ExecuteNonQueryAsync(cancellationToken);
-		}
-
+		var walletsProcessed = highPriorityWalletsProcessed + reconciliationWalletsProcessed;
 		var performanceRowsWritten = 0;
 		if (walletsProcessed > 0)
 		{
@@ -2784,24 +2852,37 @@ WHERE queue.copied_trader_wallet = selected.copied_trader_wallet;
 			await clearQueueCommand.ExecuteNonQueryAsync(cancellationToken);
 		}
 
-		int queueRemaining;
+		var highPriorityQueueRemaining = 0;
+		var reconciliationQueueRemaining = 0;
 		await using (NpgsqlCommand remainingCommand = CreateCommand(connection, """
-SELECT count(*)::integer
+SELECT
+    count(*) FILTER (WHERE priority > 0)::integer AS high_priority_remaining,
+    count(*) FILTER (WHERE priority <= 0)::integer AS reconciliation_remaining
 FROM paper_copied_trader_performance_refresh_queue;
 """))
 		{
 			remainingCommand.Transaction = transaction;
-			queueRemaining = Convert.ToInt32(await remainingCommand.ExecuteScalarAsync(cancellationToken) ?? 0);
+			await using NpgsqlDataReader reader = await remainingCommand.ExecuteReaderAsync(cancellationToken);
+			if (await reader.ReadAsync(cancellationToken))
+			{
+				highPriorityQueueRemaining = reader.GetInt32(0);
+				reconciliationQueueRemaining = reader.GetInt32(1);
+			}
 		}
 
 		await transaction.CommitAsync(cancellationToken);
+		var queueRemaining = highPriorityQueueRemaining + reconciliationQueueRemaining;
 		return new PaperCopiedTraderPerformanceRefreshResult(
-			true,
-			walletsSeeded,
-			walletsProcessed,
-			performanceRowsWritten,
-			queueRemaining,
-			reconciliationCycleCompleted);
+			LockAcquired: true,
+			WalletsSeeded: walletsSeeded,
+			WalletsProcessed: walletsProcessed,
+			PerformanceRowsWritten: performanceRowsWritten,
+			QueueRemaining: queueRemaining,
+			ReconciliationCycleCompleted: reconciliationCycleCompleted,
+			HighPriorityWalletsProcessed: highPriorityWalletsProcessed,
+			ReconciliationWalletsProcessed: reconciliationWalletsProcessed,
+			HighPriorityQueueRemaining: highPriorityQueueRemaining,
+			ReconciliationQueueRemaining: reconciliationQueueRemaining);
 	}
 
 	public async Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))
