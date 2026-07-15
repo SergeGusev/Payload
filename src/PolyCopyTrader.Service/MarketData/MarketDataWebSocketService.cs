@@ -252,7 +252,11 @@ public sealed class MarketDataWebSocketService(
         return TimeSpan.FromSeconds(Math.Min(delaySeconds, 10));
     }
 
-    private Task ProcessTextMessageAsync(string component, string message, DateTimeOffset receivedAtUtc, CancellationToken cancellationToken)
+    internal Task<bool> ProcessTextMessageAsync(
+        string component,
+        string message,
+        DateTimeOffset receivedAtUtc,
+        CancellationToken cancellationToken)
     {
         IReadOnlyList<MarketDataUpdate> updates;
         try
@@ -270,7 +274,7 @@ public sealed class MarketDataWebSocketService(
                 parseError: ex.Message);
             logger.LogWarning(ex, "Market WebSocket shard {Component} message parsing failed.", component);
             TryQueueApiError(component, "ParseMarketMessage", ex.Message);
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
 
         TryQueueCriticalFrameDiagnostic(
@@ -283,7 +287,7 @@ public sealed class MarketDataWebSocketService(
 
         if (updates.Count == 0)
         {
-            return Task.CompletedTask;
+            return Task.FromResult(false);
         }
 
         var processingStarted = Stopwatch.GetTimestamp();
@@ -377,7 +381,7 @@ public sealed class MarketDataWebSocketService(
                 processingDuration.TotalMilliseconds);
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(queuedUpdates + coalescedUpdates > 0);
     }
 
     private void TryQueueCriticalFrameDiagnostic(

@@ -1268,13 +1268,33 @@ RETURNING id;
 		{
 			return;
 		}
+		var paperOrderIds = batch.PaperOrders.Select(order => order.Id).ToHashSet();
+		if (batch.PaperFills.Any(fill => !paperOrderIds.Contains(fill.PaperOrderId)))
+		{
+			throw new ArgumentException(
+				"Every paper fill in an entry persistence batch must reference an order from the same batch.",
+				nameof(batch));
+		}
+		if (batch.CopiedLeaderPositionActivations.Any(activation =>
+			!paperOrderIds.Contains(activation.EntryPaperOrderId)))
+		{
+			throw new ArgumentException(
+				"Every copied-leader activation in an entry persistence batch must reference an order from the same batch.",
+				nameof(batch));
+		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await LockPaperPositionKeysAsync(
+			connection,
+			transaction,
+			batch.PaperPositions,
+			batch.PaperOrders.Select(order => order.CopiedTraderWallet).ToArray(),
+			cancellationToken);
 		await AddSignalsBatchAsync(connection, transaction, batch.Signals, cancellationToken);
+		await UpsertPaperPositionsBatchAsync(connection, transaction, batch.PaperPositions, cancellationToken);
 		await AddPaperOrdersBatchAsync(connection, transaction, batch.PaperOrders, cancellationToken);
 		await AddPaperFillsBatchAsync(connection, transaction, batch.PaperFills, cancellationToken);
-		await UpsertPaperPositionsBatchAsync(connection, transaction, batch.PaperPositions, cancellationToken);
 		await ActivatePaperCopiedLeaderPositionsBatchAsync(connection, transaction, batch.CopiedLeaderPositionActivations, cancellationToken);
 		await UpdateStrategyMarketPaperRunsBatchAsync(connection, transaction, batch.StrategyRuns, cancellationToken);
 
@@ -1407,7 +1427,11 @@ FROM jsonb_to_recordset(CAST(@PaperOrdersJson AS jsonb)) AS paper_order(
     raw_decision_json text,
     correlation_id uuid,
     execution_source text
-);
+)
+ORDER BY
+    paper_order.copied_trader_wallet COLLATE "C",
+    paper_order.asset_id COLLATE "C",
+    paper_order.id;
 """);
 		command.Transaction = transaction;
 		AddJsonbParameter(command, "PaperOrdersJson", JsonSerializer.Serialize(rows));
@@ -1447,7 +1471,15 @@ FROM jsonb_to_recordset(CAST(@PaperFillsJson AS jsonb)) AS fill(
     filled_at_utc timestamptz,
     evidence text,
     realized_pnl_usd numeric
-);
+)
+ORDER BY
+    (
+        SELECT paper_order.copied_trader_wallet COLLATE "C"
+        FROM paper_orders paper_order
+        WHERE paper_order.id = fill.paper_order_id
+    ),
+    fill.paper_order_id,
+    fill.id;
 """);
 		command.Transaction = transaction;
 		AddJsonbParameter(command, "PaperFillsJson", JsonSerializer.Serialize(rows));
@@ -1499,6 +1531,10 @@ FROM jsonb_to_recordset(CAST(@PaperPositionsJson AS jsonb)) AS position(
     unrealized_pnl_usd numeric,
     updated_at_utc timestamptz
 )
+ORDER BY
+    position.copied_trader_wallet COLLATE "C",
+    position.asset_id COLLATE "C",
+    position.id
 ON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET
     condition_id = excluded.condition_id,
     outcome = excluded.outcome,
@@ -1511,6 +1547,96 @@ ON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET
 		command.Transaction = transaction;
 		AddJsonbParameter(command, "PaperPositionsJson", JsonSerializer.Serialize(rows));
 		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task LockPaperPositionKeysAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperPosition> positions,
+		IReadOnlyCollection<string> additionalWallets,
+		CancellationToken cancellationToken)
+	{
+		if (positions.Count == 0 && additionalWallets.Count == 0)
+		{
+			return;
+		}
+
+		var keys = positions
+			.Select(position => new
+			{
+				copied_trader_wallet = position.CopiedTraderWallet,
+				asset_id = position.AssetId
+			})
+			.Distinct()
+			.ToArray();
+		var wallets = positions
+			.Select(position => position.CopiedTraderWallet)
+			.Concat(additionalWallets)
+			.Distinct(StringComparer.Ordinal)
+			.ToArray();
+		var keysJson = JsonSerializer.Serialize(keys);
+		await LockPaperWalletsAsync(connection, transaction, wallets, cancellationToken);
+		if (positions.Count == 0)
+		{
+			return;
+		}
+
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH requested_position_keys AS (
+    SELECT position_key.copied_trader_wallet, position_key.asset_id
+    FROM jsonb_to_recordset(CAST(@PaperPositionKeysJson AS jsonb)) AS position_key(
+        copied_trader_wallet text,
+        asset_id text
+    )
+)
+SELECT target_position.id
+FROM paper_positions target_position
+INNER JOIN requested_position_keys requested_key
+    ON requested_key.copied_trader_wallet = target_position.copied_trader_wallet
+   AND requested_key.asset_id = target_position.asset_id
+ORDER BY
+    target_position.copied_trader_wallet COLLATE "C",
+    target_position.asset_id COLLATE "C"
+FOR UPDATE OF target_position;
+""");
+		command.Transaction = transaction;
+		AddJsonbParameter(command, "PaperPositionKeysJson", keysJson);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+		}
+	}
+
+	private static async Task LockPaperWalletsAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyCollection<string> wallets,
+		CancellationToken cancellationToken)
+	{
+		if (wallets.Count == 0)
+		{
+			return;
+		}
+
+		await using NpgsqlCommand walletLockCommand = CreateCommand(connection, """
+WITH wallet_lock_keys AS (
+    SELECT DISTINCT hashtextextended(copied_trader_wallet, 4937427318840178337) AS lock_key
+    FROM jsonb_array_elements_text(CAST(@PaperWalletsJson AS jsonb)) AS wallet(copied_trader_wallet)
+)
+SELECT lock_key, pg_advisory_xact_lock(lock_key)
+FROM wallet_lock_keys
+ORDER BY lock_key;
+""");
+		walletLockCommand.Transaction = transaction;
+		AddJsonbParameter(
+			walletLockCommand,
+			"PaperWalletsJson",
+			JsonSerializer.Serialize(wallets.Distinct(StringComparer.Ordinal)));
+		await using NpgsqlDataReader walletLockReader =
+			await walletLockCommand.ExecuteReaderAsync(cancellationToken);
+		while (await walletLockReader.ReadAsync(cancellationToken))
+		{
+		}
 	}
 
 	private static async Task ActivatePaperCopiedLeaderPositionsBatchAsync(
@@ -2054,6 +2180,13 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
 			updated_at_utc = UtcDateTime(update.UpdatedAtUtc)
 		}).ToArray();
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await LockPaperPositionKeysAsync(
+			connection,
+			transaction,
+			updates.Select(update => update.ExpectedPosition).ToArray(),
+			[],
+			cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH mark_updates AS (
     SELECT *
@@ -2110,14 +2243,18 @@ SELECT
 FROM updated_positions
 ORDER BY copied_trader_wallet, asset_id;
 """);
+		command.Transaction = transaction;
 		AddJsonbParameter(command, "PaperPositionMarkUpdatesJson", JsonSerializer.Serialize(rows));
-		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		List<PaperPosition> updatedPositions = [];
-		while (await reader.ReadAsync(cancellationToken))
+		await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
 		{
-			updatedPositions.Add(ReadPaperPosition(reader));
+			while (await reader.ReadAsync(cancellationToken))
+			{
+				updatedPositions.Add(ReadPaperPosition(reader));
+			}
 		}
 
+		await transaction.CommitAsync(cancellationToken);
 		return updatedPositions;
 	}
 
@@ -2132,6 +2269,7 @@ ORDER BY copied_trader_wallet, asset_id;
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await LockPaperPositionKeysAsync(connection, transaction, positions, [], cancellationToken);
 		await UpsertPaperPositionsBatchAsync(connection, transaction, positions, cancellationToken);
 		await transaction.CommitAsync(cancellationToken);
 	}
@@ -2279,18 +2417,34 @@ RETURNING 1;
 		{
 			return 0;
 		}
+		if (writes.Any(write =>
+			!string.Equals(
+				write.Settlement.CopiedTraderWallet,
+				write.SettledPosition.CopiedTraderWallet,
+				StringComparison.Ordinal)
+			|| !string.Equals(
+				write.Settlement.AssetId,
+				write.SettledPosition.AssetId,
+				StringComparison.Ordinal)))
+		{
+			throw new ArgumentException(
+				"Each settlement and settled position must have the same exact wallet and asset key.",
+				nameof(writes));
+		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		var settledPositions = writes.Select(write => write.SettledPosition).ToArray();
+		await LockPaperPositionKeysAsync(connection, transaction, settledPositions, [], cancellationToken);
+		await UpsertPaperPositionsBatchAsync(
+			connection,
+			transaction,
+			settledPositions,
+			cancellationToken);
 		var inserted = await AddPaperPositionSettlementsBatchAsync(
 			connection,
 			transaction,
 			writes.Select(write => write.Settlement).ToArray(),
-			cancellationToken);
-		await UpsertPaperPositionsBatchAsync(
-			connection,
-			transaction,
-			writes.Select(write => write.SettledPosition).ToArray(),
 			cancellationToken);
 		await transaction.CommitAsync(cancellationToken);
 		return inserted;
@@ -2354,6 +2508,10 @@ WITH inserted AS (
         settled_at_utc timestamptz,
         created_at_utc timestamptz
     )
+    ORDER BY
+        settlement.copied_trader_wallet COLLATE "C",
+        settlement.asset_id COLLATE "C",
+        settlement.id
     ON CONFLICT (copied_trader_wallet, asset_id) DO NOTHING
     RETURNING 1
 )
@@ -4757,6 +4915,15 @@ WHERE status = 'Active'
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await LockPaperWalletsAsync(
+			connection,
+			transaction,
+			paperOrders
+				.Select(order => order.CopiedTraderWallet)
+				.Append(activityEvent.CopiedTraderWallet)
+				.Distinct(StringComparer.Ordinal)
+				.ToArray(),
+			cancellationToken);
 		await using (NpgsqlCommand eventCommand = CreateCommand(connection, """
 INSERT INTO paper_copied_leader_activity_events (
     id, dedup_key, copied_trader_wallet, asset_id, condition_id, side, price,
@@ -4790,8 +4957,34 @@ RETURNING 1;
 				return false;
 			}
 		}
+		if (positionUpdates.Count > 0)
+		{
+			var positionIds = positionUpdates
+				.Select(update => update.PositionId)
+				.Distinct()
+				.ToArray();
+			await using NpgsqlCommand validatePositionsCommand = CreateCommand(connection, """
+SELECT count(*) = @PositionCount
+   AND bool_and(lower(copied_trader_wallet) = lower(@CopiedTraderWallet))
+FROM paper_copied_leader_positions
+WHERE id = ANY(@PositionIds);
+""");
+			validatePositionsCommand.Transaction = transaction;
+			validatePositionsCommand.Parameters.AddWithValue("PositionCount", positionIds.Length);
+			validatePositionsCommand.Parameters.AddWithValue(
+				"CopiedTraderWallet",
+				activityEvent.CopiedTraderWallet);
+			validatePositionsCommand.Parameters.Add("PositionIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value =
+				positionIds;
+			if (await validatePositionsCommand.ExecuteScalarAsync(cancellationToken) is not true)
+			{
+				throw new ArgumentException(
+					"Every copied-leader position update must target the activity event wallet.",
+					nameof(positionUpdates));
+			}
+		}
 
-		foreach (PaperCopiedLeaderPositionExitUpdate update in positionUpdates)
+		foreach (PaperCopiedLeaderPositionExitUpdate update in positionUpdates.OrderBy(update => update.PositionId))
 		{
 			await using NpgsqlCommand updateCommand = CreateCommand(connection, """
 UPDATE paper_copied_leader_positions
@@ -4822,7 +5015,10 @@ WHERE id = @PositionId;
 			await signalCommand.ExecuteNonQueryAsync(cancellationToken);
 		}
 
-		foreach (PaperOrder order in paperOrders)
+		foreach (PaperOrder order in paperOrders
+			.OrderBy(order => order.CopiedTraderWallet, StringComparer.Ordinal)
+			.ThenBy(order => order.AssetId, StringComparer.Ordinal)
+			.ThenBy(order => order.Id))
 		{
 			await using NpgsqlCommand orderCommand = CreateCommand(connection, "INSERT INTO paper_orders (\n    id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n    created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json, correlation_id, execution_source\n) VALUES (\n    @Id, @SignalId, @StrategyId, @CopiedTraderWallet, @Status, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares, @NotionalUsd,\n    @CreatedAtUtc, @ExpiresAtUtc, @FilledAtUtc, @CancelledAtUtc, CAST(@RawDecisionJson AS jsonb), @CorrelationId, @ExecutionSource\n);");
 			orderCommand.Transaction = transaction;

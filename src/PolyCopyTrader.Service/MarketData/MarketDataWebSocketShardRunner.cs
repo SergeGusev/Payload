@@ -14,7 +14,7 @@ public sealed class MarketDataWebSocketShardRunner(
     MarketDataWebSocketOptions options,
     PolymarketOptions polymarketOptions,
     IAppRepository repository,
-    Func<string, string, DateTimeOffset, CancellationToken, Task> processTextMessageAsync,
+    Func<string, string, DateTimeOffset, CancellationToken, Task<bool>> processTextMessageAsync,
     Action<MarketDataStatusSnapshot> onStatus)
 {
     private static readonly object DisconnectDiagnosticDataKey = new();
@@ -164,12 +164,14 @@ public sealed class MarketDataWebSocketShardRunner(
 
     private async Task ExecuteAsync(CancellationToken cancellationToken)
     {
-        var reconnectDelay = TimeSpan.FromSeconds(options.ReconnectBaseDelaySeconds);
+        var reconnectBackoff = new MarketDataWebSocketReconnectBackoff(
+            TimeSpan.FromSeconds(options.ReconnectBaseDelaySeconds),
+            TimeSpan.FromSeconds(options.ReconnectMaxDelaySeconds));
         while (!cancellationToken.IsCancellationRequested)
         {
             try
             {
-                var disconnectDiagnostic = await RunConnectionAsync(cancellationToken);
+                var disconnectDiagnostic = await RunConnectionAsync(reconnectBackoff, cancellationToken);
                 if (cancellationToken.IsCancellationRequested)
                 {
                     break;
@@ -188,8 +190,7 @@ public sealed class MarketDataWebSocketShardRunner(
                     MarketDataConnectionState.Reconnecting,
                     disconnectDiagnostic ?? "Connection closed.",
                     cancellationToken);
-                await Task.Delay(reconnectDelay, cancellationToken);
-                reconnectDelay = NextReconnectDelay(reconnectDelay);
+                await reconnectBackoff.DelayAndAdvanceAsync(cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -209,17 +210,18 @@ public sealed class MarketDataWebSocketShardRunner(
                     "Market WebSocket shard {Component} failed. Reconnecting in {ReconnectDelaySeconds} seconds. " +
                     "Diagnostic: {DisconnectDiagnostic}",
                     Component,
-                    reconnectDelay.TotalSeconds,
+                    reconnectBackoff.CurrentDelay.TotalSeconds,
                     disconnectDiagnostic);
                 await TryRecordApiErrorAsync("ConnectionLoop", disconnectDiagnostic, cancellationToken);
                 await PublishStatusAsync(MarketDataConnectionState.Reconnecting, disconnectDiagnostic, cancellationToken);
-                await Task.Delay(reconnectDelay, cancellationToken);
-                reconnectDelay = NextReconnectDelay(reconnectDelay);
+                await reconnectBackoff.DelayAndAdvanceAsync(cancellationToken);
             }
         }
     }
 
-    private async Task<string?> RunConnectionAsync(CancellationToken cancellationToken)
+    private async Task<string?> RunConnectionAsync(
+        MarketDataWebSocketReconnectBackoff reconnectBackoff,
+        CancellationToken cancellationToken)
     {
         await PublishStatusAsync(MarketDataConnectionState.Connecting, null, cancellationToken);
 
@@ -256,7 +258,7 @@ public sealed class MarketDataWebSocketShardRunner(
                 phase = "ReceiveLoop";
                 try
                 {
-                    closeFrame = await ReceiveLoopAsync(socket, connectionCts.Token);
+                    closeFrame = await ReceiveLoopAsync(socket, reconnectBackoff, connectionCts.Token);
                     receiveLoopObservedAtUtc = closeFrame?.ObservedAtUtc ?? DateTimeOffset.UtcNow;
                 }
                 catch
@@ -319,6 +321,7 @@ public sealed class MarketDataWebSocketShardRunner(
 
     private async Task<MarketWebSocketCloseFrame?> ReceiveLoopAsync(
         ClientWebSocket socket,
+        MarketDataWebSocketReconnectBackoff reconnectBackoff,
         CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
@@ -332,11 +335,31 @@ public sealed class MarketDataWebSocketShardRunner(
             var message = received.Text ?? string.Empty;
             DateTimeOffset receivedAtUtc = DateTimeOffset.UtcNow;
             SetLastMessageUtc(receivedAtUtc);
-            await processTextMessageAsync(Component, message, receivedAtUtc, cancellationToken);
+            await ProcessTextMessageAndResetBackoffAsync(
+                processTextMessageAsync,
+                Component,
+                message,
+                receivedAtUtc,
+                reconnectBackoff,
+                cancellationToken);
             await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);
         }
 
         return null;
+    }
+
+    internal static async Task ProcessTextMessageAndResetBackoffAsync(
+        Func<string, string, DateTimeOffset, CancellationToken, Task<bool>> processTextMessageAsync,
+        string component,
+        string message,
+        DateTimeOffset receivedAtUtc,
+        MarketDataWebSocketReconnectBackoff reconnectBackoff,
+        CancellationToken cancellationToken)
+    {
+        if (await processTextMessageAsync(component, message, receivedAtUtc, cancellationToken))
+        {
+            reconnectBackoff.ResetAfterProcessedFrame();
+        }
     }
 
     private async Task<MarketWebSocketReceivedMessage> ReceiveTextMessageAsync(
@@ -715,13 +738,6 @@ public sealed class MarketDataWebSocketShardRunner(
         };
     }
 
-    private TimeSpan NextReconnectDelay(TimeSpan current)
-    {
-        return TimeSpan.FromSeconds(Math.Min(
-            current.TotalSeconds * 2,
-            options.ReconnectMaxDelaySeconds));
-    }
-
     private static bool IsProtocolStale(
         DateTimeOffset? lastMessage,
         DateTimeOffset? lastConnected,
@@ -818,4 +834,51 @@ public sealed class MarketDataWebSocketShardRunner(
         WebSocketCloseStatus? Status,
         string? Description,
         DateTimeOffset ObservedAtUtc);
+}
+
+internal sealed class MarketDataWebSocketReconnectBackoff
+{
+    private readonly TimeSpan baseDelay;
+    private readonly TimeSpan maxDelay;
+
+    public MarketDataWebSocketReconnectBackoff(TimeSpan baseDelay, TimeSpan maxDelay)
+    {
+        if (baseDelay <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(baseDelay), "Reconnect base delay must be positive.");
+        }
+
+        if (maxDelay < baseDelay)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxDelay), "Reconnect maximum delay must not be less than the base delay.");
+        }
+
+        this.baseDelay = baseDelay;
+        this.maxDelay = maxDelay;
+        CurrentDelay = baseDelay;
+    }
+
+    public TimeSpan CurrentDelay { get; private set; }
+
+    public async Task DelayAndAdvanceAsync(CancellationToken cancellationToken)
+    {
+        await DelayAndAdvanceAsync(
+            static (delay, token) => Task.Delay(delay, token),
+            cancellationToken);
+    }
+
+    internal async Task DelayAndAdvanceAsync(
+        Func<TimeSpan, CancellationToken, Task> delayAsync,
+        CancellationToken cancellationToken)
+    {
+        await delayAsync(CurrentDelay, cancellationToken);
+        CurrentDelay = CurrentDelay.Ticks > maxDelay.Ticks / 2
+            ? maxDelay
+            : TimeSpan.FromTicks(CurrentDelay.Ticks * 2);
+    }
+
+    public void ResetAfterProcessedFrame()
+    {
+        CurrentDelay = baseDelay;
+    }
 }

@@ -1076,11 +1076,158 @@ public sealed class StorageTests
         var batchMethod = source[batchStart..batchEnd];
         Assert.Contains("BeginTransactionAsync", batchMethod, StringComparison.Ordinal);
         Assert.Contains("jsonb_to_recordset", batchMethod, StringComparison.Ordinal);
+        Assert.Contains("LockPaperPositionKeysAsync", batchMethod, StringComparison.Ordinal);
         Assert.Contains("UpsertPaperPositionsBatchAsync", batchMethod, StringComparison.Ordinal);
         Assert.Contains("transaction.CommitAsync", batchMethod, StringComparison.Ordinal);
         Assert.True(
-            batchMethod.IndexOf("AddPaperPositionSettlementsBatchAsync", StringComparison.Ordinal) <
+            batchMethod.IndexOf("LockPaperPositionKeysAsync", StringComparison.Ordinal) <
             batchMethod.IndexOf("UpsertPaperPositionsBatchAsync", StringComparison.Ordinal));
+        Assert.True(
+            batchMethod.IndexOf("UpsertPaperPositionsBatchAsync", StringComparison.Ordinal) <
+            batchMethod.IndexOf("AddPaperPositionSettlementsBatchAsync", StringComparison.Ordinal));
+
+        var entryStart = source.IndexOf("AddPaperEntryPersistenceBatchAsync", StringComparison.Ordinal);
+        var entryEnd = source.IndexOf("private static async Task AddSignalsBatchAsync", entryStart, StringComparison.Ordinal);
+        Assert.True(entryStart >= 0);
+        Assert.True(entryEnd > entryStart);
+
+        var entryMethod = source[entryStart..entryEnd];
+        var entryLock = entryMethod.IndexOf("LockPaperPositionKeysAsync", StringComparison.Ordinal);
+        var entrySignal = entryMethod.IndexOf("AddSignalsBatchAsync", StringComparison.Ordinal);
+        var entryPosition = entryMethod.IndexOf("UpsertPaperPositionsBatchAsync", StringComparison.Ordinal);
+        var entryOrder = entryMethod.IndexOf("AddPaperOrdersBatchAsync", StringComparison.Ordinal);
+        var entryFill = entryMethod.IndexOf("AddPaperFillsBatchAsync", StringComparison.Ordinal);
+        Assert.True(entryLock >= 0 && entrySignal > entryLock);
+        Assert.True(entryPosition > entrySignal);
+        Assert.True(entryOrder > entryPosition);
+        Assert.True(entryFill > entryOrder);
+
+        Assert.Contains("target_position.copied_trader_wallet COLLATE \"C\"", source, StringComparison.Ordinal);
+        Assert.Contains("paper_order.copied_trader_wallet COLLATE \"C\"", source, StringComparison.Ordinal);
+        Assert.Contains("settlement.copied_trader_wallet COLLATE \"C\"", source, StringComparison.Ordinal);
+        Assert.Contains("hashtextextended(copied_trader_wallet, 4937427318840178337)", source, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY lock_key", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PaperCopiedTraderPerformancePositionTriggers_OrderWalletQueueLocks()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PaperCopiedTraderPerformanceProjectionSchema.cs");
+
+        Assert.Equal(
+            3,
+            source.Split(
+                "ORDER BY wallets.copied_trader_wallet COLLATE \"C\"",
+                StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public async Task PostgresRepository_SettlementBatchRejectsMismatchedPositionKeyBeforeOpeningConnection()
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        var settlement = new PaperPositionSettlement(
+            Guid.NewGuid(),
+            "settlement-wallet",
+            "settlement-asset",
+            "settlement-condition",
+            "Yes",
+            "settlement-asset",
+            "Yes",
+            "IntegrationTest",
+            2m,
+            0.40m,
+            0.80m,
+            2m,
+            1.20m,
+            true,
+            "IntegrationTest",
+            nowUtc,
+            nowUtc);
+        var mismatchedPosition = new PaperPosition(
+            "different-asset",
+            settlement.ConditionId,
+            settlement.Outcome,
+            0m,
+            0m,
+            0m,
+            0m,
+            nowUtc,
+            settlement.CopiedTraderWallet);
+        var repository = new PostgresAppRepository(new PostgresConnectionFactory(new StorageOptions
+        {
+            ConnectionString = "Host=127.0.0.1;Port=1;Database=unused;Username=unused;Password=unused;Timeout=1"
+        }));
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            repository.PersistPaperPositionSettlementBatchAsync(
+                [new PaperPositionSettlementWrite(settlement, mismatchedPosition)]));
+
+        Assert.Equal("writes", exception.ParamName);
+    }
+
+    [Fact]
+    public async Task PostgresRepository_EntryBatchRejectsFillOutsideBatchBeforeOpeningConnection()
+    {
+        var nowUtc = DateTimeOffset.UtcNow;
+        var repository = CreateUnreachablePostgresRepository();
+        var batch = new PaperEntryPersistenceBatch(
+            [],
+            [],
+            [new PaperFill(Guid.NewGuid(), Guid.NewGuid(), 0.40m, 2m, nowUtc, "contract test")],
+            [],
+            [],
+            []);
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            repository.AddPaperEntryPersistenceBatchAsync(batch));
+
+        Assert.Equal("batch", exception.ParamName);
+    }
+
+    [Fact]
+    public async Task PostgresRepository_EntryBatchRejectsActivationOutsideBatchBeforeOpeningConnection()
+    {
+        var repository = CreateUnreachablePostgresRepository();
+        var batch = new PaperEntryPersistenceBatch(
+            [],
+            [],
+            [],
+            [],
+            [new PaperCopiedLeaderPositionActivation(Guid.NewGuid(), 2m, DateTimeOffset.UtcNow)],
+            []);
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            repository.AddPaperEntryPersistenceBatchAsync(batch));
+
+        Assert.Equal("batch", exception.ParamName);
+    }
+
+    [Fact]
+    public void PostgresRepository_LeaderExitLocksWalletBeforeEventLeaderAndQueueWrites()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("ApplyPaperCopiedLeaderExitAsync", StringComparison.Ordinal);
+        var end = source.IndexOf("AddDryRunOrderAsync", start, StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        var walletLock = method.IndexOf("LockPaperWalletsAsync", StringComparison.Ordinal);
+        var eventInsert = method.IndexOf("INSERT INTO paper_copied_leader_activity_events", StringComparison.Ordinal);
+        var positionValidation = method.IndexOf("Every copied-leader position update", StringComparison.Ordinal);
+        var leaderUpdate = method.IndexOf("UPDATE paper_copied_leader_positions", StringComparison.Ordinal);
+        var queueWrite = method.IndexOf("INSERT INTO paper_orders", StringComparison.Ordinal);
+        Assert.True(walletLock >= 0 && eventInsert > walletLock);
+        Assert.True(positionValidation > eventInsert);
+        Assert.Contains(
+            "bool_and(lower(copied_trader_wallet) = lower(@CopiedTraderWallet))",
+            method,
+            StringComparison.Ordinal);
+        Assert.True(leaderUpdate > positionValidation);
+        Assert.True(queueWrite > leaderUpdate);
     }
 
     [Fact]
@@ -1729,6 +1876,14 @@ CREATE INDEX first_table_id_idx ON first_table(id);
     private static string ReadStorageRepositorySource()
     {
         return ReadRepositorySource("src", "PolyCopyTrader.Storage", "PostgresAppRepository.cs");
+    }
+
+    private static PostgresAppRepository CreateUnreachablePostgresRepository()
+    {
+        return new PostgresAppRepository(new PostgresConnectionFactory(new StorageOptions
+        {
+            ConnectionString = "Host=127.0.0.1;Port=1;Database=unused;Username=unused;Password=unused;Timeout=1"
+        }));
     }
 
     private static string ReadDashboardDataServiceSource()

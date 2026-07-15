@@ -183,6 +183,7 @@ BEGIN
         FROM new_paper_positions position_row
         WHERE btrim(position_row.copied_trader_wallet) <> ''
     ) wallets
+    ORDER BY wallets.copied_trader_wallet COLLATE "C"
     ON CONFLICT (copied_trader_wallet) DO UPDATE SET
         priority = EXCLUDED.priority,
         requested_at_utc = EXCLUDED.requested_at_utc,
@@ -236,6 +237,7 @@ BEGIN
         FROM changed_projection_values changed
         WHERE btrim(changed.copied_trader_wallet) <> ''
     ) wallets
+    ORDER BY wallets.copied_trader_wallet COLLATE "C"
     ON CONFLICT (copied_trader_wallet) DO UPDATE SET
         priority = EXCLUDED.priority,
         requested_at_utc = EXCLUDED.requested_at_utc,
@@ -266,6 +268,7 @@ BEGIN
         FROM old_paper_positions position_row
         WHERE btrim(position_row.copied_trader_wallet) <> ''
     ) wallets
+    ORDER BY wallets.copied_trader_wallet COLLATE "C"
     ON CONFLICT (copied_trader_wallet) DO UPDATE SET
         priority = EXCLUDED.priority,
         requested_at_utc = EXCLUDED.requested_at_utc,

@@ -491,6 +491,625 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task PaperEntryBatch_PositionFirstPersistsDeterministicallyOrderedRows()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = await ReadFirstStrategyIdAsync(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallets = new[]
+        {
+            $"paper-entry-lock-{suffix}-a",
+            $"paper-entry-lock-{suffix}-b"
+        };
+        var nowUtc = DateTimeOffset.UtcNow;
+        var positions = new[]
+        {
+            CreatePosition(wallets[0], $"entry-asset-{suffix}-a", $"entry-condition-{suffix}-a", 2m, 0.40m, nowUtc),
+            CreatePosition(wallets[1], $"entry-asset-{suffix}-b", $"entry-condition-{suffix}-b", 3m, 0.50m, nowUtc)
+        };
+        var orders = positions.Select(position => new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            position.CopiedTraderWallet,
+            PaperOrderStatus.Filled,
+            TradeSide.Buy,
+            position.AssetId,
+            position.ConditionId,
+            position.Outcome,
+            position.AveragePrice,
+            position.SizeShares,
+            position.AveragePrice * position.SizeShares,
+            nowUtc,
+            nowUtc.AddMinutes(5),
+            nowUtc,
+            StrategyId: strategyId)).ToArray();
+        var fills = orders.Select(order => new PaperFill(
+            Guid.NewGuid(),
+            order.Id,
+            order.Price,
+            order.SizeShares,
+            nowUtc,
+            "position-first integration test")).ToArray();
+        var orderIds = orders.Select(order => order.Id).ToArray();
+        var fillIds = fills.Select(fill => fill.Id).ToArray();
+
+        try
+        {
+            await repository.AddPaperEntryPersistenceBatchAsync(new PaperEntryPersistenceBatch(
+                [],
+                orders.Reverse().ToArray(),
+                fills.Reverse().ToArray(),
+                positions.Reverse().ToArray(),
+                [],
+                []));
+
+            Assert.Equal((2, 2), await CountPaperEntryRowsAsync(factory, orderIds, fillIds));
+            Assert.Equal(2, await CountQueuedWalletsAsync(factory, wallets));
+            Assert.All(
+                await Task.WhenAll(positions.Select(position =>
+                    repository.GetPaperPositionAsync(position.CopiedTraderWallet, position.AssetId))),
+                persisted => Assert.True(Assert.IsType<PaperPosition>(persisted).SizeShares > 0m));
+            Assert.All(
+                await Task.WhenAll(wallets.Select(wallet => ReadQueuedWalletSourceKindAsync(factory, wallet))),
+                sourceKind => Assert.Equal("paper_position", sourceKind));
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, wallets, orderIds, fillIds);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task SettlementBatch_PositionFirstLockOrder_AvoidsConcurrentMarkDeadlock()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        var settlementApplicationName = $"paper-lock-settlement-{suffix[..8]}";
+        var markApplicationName = $"paper-lock-mark-{suffix[..8]}";
+        var settlementRepository = new PostgresAppRepository(
+            new PostgresConnectionFactory(
+                new StorageOptions { ConnectionString = connectionString },
+                settlementApplicationName));
+        var markRepository = new PostgresAppRepository(
+            new PostgresConnectionFactory(
+                new StorageOptions { ConnectionString = connectionString },
+                markApplicationName));
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var wallet = $"paper-position-lock-{suffix}";
+        var wallets = new[] { wallet };
+        var nowUtc = DateTimeOffset.UtcNow;
+        var position = CreatePosition(
+            wallet,
+            $"position-lock-asset-{suffix}",
+            $"position-lock-condition-{suffix}",
+            sizeShares: 4m,
+            averagePrice: 0.25m,
+            nowUtc);
+        var controlState = await ReadControlStateAsync(factory);
+        Task<int>? settlementTask = null;
+        Task<bool>? markTask = null;
+        using var operationCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await using var queueBlockerConnection = factory.CreateConnection();
+        await queueBlockerConnection.OpenAsync();
+        var queueBlockerBackendPid = await ReadBackendPidAsync(queueBlockerConnection);
+        await using var queueBlockerTransaction = await queueBlockerConnection.BeginTransactionAsync();
+        var queueBlockerReleased = false;
+
+        try
+        {
+            await repository.UpsertPaperPositionAsync(position);
+            await QueueWalletsAsync(factory, wallets, priority: 0, sourceKind: "position_lock_test");
+            await LockQueuedWalletAsync(
+                queueBlockerConnection,
+                queueBlockerTransaction,
+                wallet);
+
+            settlementTask = settlementRepository.PersistPaperPositionSettlementBatchAsync(
+                [CreateSettlementWrite(position, won: true, nowUtc.AddSeconds(1))],
+                operationCancellation.Token);
+
+            BlockingSession? settlementWait = null;
+            await WaitForAsync(
+                async () =>
+                {
+                    settlementWait = await ReadBlockingSessionAsync(factory, settlementApplicationName);
+                    return settlementWait is not null
+                        && settlementWait.BlockingBackendPids.Contains(queueBlockerBackendPid);
+                },
+                TimeSpan.FromSeconds(5));
+            var settlementBackendPid = Assert.IsType<BlockingSession>(settlementWait).BackendPid;
+            Assert.Contains("INSERT INTO paper_positions", settlementWait.Query, StringComparison.Ordinal);
+
+            markTask = markRepository.TryUpdatePaperPositionMarkAsync(
+                position,
+                estimatedValueUsd: 2m,
+                unrealizedPnlUsd: 1m,
+                updatedAtUtc: nowUtc.AddMilliseconds(500),
+                operationCancellation.Token);
+
+            BlockingSession? markWait = null;
+            await WaitForAsync(
+                async () =>
+                {
+                    markWait = await ReadBlockingSessionAsync(factory, markApplicationName);
+                    return markWait is not null
+                        && markWait.BlockingBackendPids.Contains(settlementBackendPid);
+                },
+                TimeSpan.FromSeconds(5));
+            Assert.Contains(
+                "UPDATE paper_positions",
+                Assert.IsType<BlockingSession>(markWait).Query,
+                StringComparison.Ordinal);
+            Assert.False(settlementTask.IsCompleted);
+            Assert.False(markTask.IsCompleted);
+
+            await queueBlockerTransaction.CommitAsync();
+            queueBlockerReleased = true;
+
+            Assert.Equal(1, await settlementTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.False(await markTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.Equal(1, await CountQueuedWalletsAsync(factory, wallets));
+            Assert.Equal("paper_position", await ReadQueuedWalletSourceKindAsync(factory, wallet));
+            Assert.Equal(0m, (await repository.GetPaperPositionAsync(wallet, position.AssetId))?.SizeShares);
+
+            var projected = await RefreshExactWalletAsync(factory, repository, wallet);
+            Assert.Equal(1, projected.HighPriorityWalletsProcessed);
+            var overall = Assert.IsType<OverallProjection>(await ReadOverallProjectionAsync(factory, wallet));
+            Assert.Equal(0, overall.OpenPositionsCount);
+            Assert.Equal(1, overall.SettledPositionsCount);
+            Assert.Equal(3m, overall.RealizedPnlUsd);
+            Assert.Equal(0, await CountQueuedWalletsAsync(factory, wallets));
+            Assert.Equal(0, await CountInflightWalletsAsync(factory, wallets));
+        }
+        finally
+        {
+            if (!queueBlockerReleased)
+            {
+                try
+                {
+                    await queueBlockerTransaction.RollbackAsync();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            operationCancellation.Cancel();
+            if (settlementTask is not null)
+            {
+                try
+                {
+                    await settlementTask.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception) when (operationCancellation.IsCancellationRequested)
+                {
+                }
+            }
+
+            if (markTask is not null)
+            {
+                try
+                {
+                    await markTask.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception) when (operationCancellation.IsCancellationRequested)
+                {
+                }
+            }
+
+            await DeleteTestRowsAsync(factory, wallets, [], []);
+            await RestoreControlStateAsync(factory, controlState);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task MixedPositionBatches_AcquireWalletAdvisoryLocksBeforeRowAndQueueLocks()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var firstApplicationName = $"paper-wallet-lock-first-{suffix[..8]}";
+        var secondApplicationName = $"paper-wallet-lock-second-{suffix[..8]}";
+        var firstRepository = new PostgresAppRepository(new PostgresConnectionFactory(
+            new StorageOptions { ConnectionString = connectionString },
+            firstApplicationName));
+        var secondRepository = new PostgresAppRepository(new PostgresConnectionFactory(
+            new StorageOptions { ConnectionString = connectionString },
+            secondApplicationName));
+        var wallets = new[]
+        {
+            $"mixed-wallet-lock-{suffix}-a",
+            $"mixed-wallet-lock-{suffix}-b"
+        };
+        var nowUtc = DateTimeOffset.UtcNow;
+        var firstExisting = CreatePosition(
+            wallets[0],
+            $"mixed-existing-{suffix}-a",
+            $"mixed-condition-{suffix}-a",
+            2m,
+            0.25m,
+            nowUtc);
+        var secondExisting = CreatePosition(
+            wallets[1],
+            $"mixed-existing-{suffix}-b",
+            $"mixed-condition-{suffix}-b",
+            3m,
+            0.30m,
+            nowUtc);
+        var firstNew = CreatePosition(
+            wallets[0],
+            $"mixed-new-{suffix}-a",
+            $"mixed-new-condition-{suffix}-a",
+            4m,
+            0.35m,
+            nowUtc.AddSeconds(1));
+        var secondNew = CreatePosition(
+            wallets[1],
+            $"mixed-new-{suffix}-b",
+            $"mixed-new-condition-{suffix}-b",
+            5m,
+            0.40m,
+            nowUtc.AddSeconds(1));
+        var firstExistingUpdate = secondExisting with
+        {
+            SizeShares = 13m,
+            EstimatedValueUsd = 3.90m,
+            UpdatedAtUtc = nowUtc.AddSeconds(1)
+        };
+        var secondExistingUpdate = firstExisting with
+        {
+            SizeShares = 12m,
+            EstimatedValueUsd = 3m,
+            UpdatedAtUtc = nowUtc.AddSeconds(2)
+        };
+        Task? firstTask = null;
+        Task? secondTask = null;
+        using var operationCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await using var rowBlockerConnection = factory.CreateConnection();
+        await rowBlockerConnection.OpenAsync();
+        var rowBlockerBackendPid = await ReadBackendPidAsync(rowBlockerConnection);
+        await using var rowBlockerTransaction = await rowBlockerConnection.BeginTransactionAsync();
+        var rowBlockerReleased = false;
+
+        try
+        {
+            await repository.UpsertPaperPositionsAsync([firstExisting, secondExisting]);
+            await DeleteQueuedWalletAsync(factory, wallets[0]);
+            await DeleteQueuedWalletAsync(factory, wallets[1]);
+            await LockPaperPositionAsync(
+                rowBlockerConnection,
+                rowBlockerTransaction,
+                secondExisting.CopiedTraderWallet,
+                secondExisting.AssetId);
+
+            firstTask = firstRepository.UpsertPaperPositionsAsync(
+                [firstNew, firstExistingUpdate],
+                operationCancellation.Token);
+
+            BlockingSession? firstWait = null;
+            await WaitForAsync(
+                async () =>
+                {
+                    firstWait = await ReadBlockingSessionAsync(factory, firstApplicationName);
+                    return firstWait is not null
+                        && firstWait.BlockingBackendPids.Contains(rowBlockerBackendPid);
+                },
+                TimeSpan.FromSeconds(5));
+            var firstBackendPid = Assert.IsType<BlockingSession>(firstWait).BackendPid;
+            Assert.Contains("FOR UPDATE OF target_position", firstWait.Query, StringComparison.Ordinal);
+            Assert.Equal(
+                await CountExpectedWalletAdvisoryLockKeysAsync(factory, wallets),
+                await CountGrantedAdvisoryLocksAsync(factory, firstBackendPid));
+
+            secondTask = secondRepository.UpsertPaperPositionsAsync(
+                [secondExistingUpdate, secondNew],
+                operationCancellation.Token);
+
+            BlockingSession? secondWait = null;
+            await WaitForAsync(
+                async () =>
+                {
+                    secondWait = await ReadBlockingSessionAsync(factory, secondApplicationName);
+                    return secondWait is not null
+                        && secondWait.BlockingBackendPids.Contains(firstBackendPid);
+                },
+                TimeSpan.FromSeconds(5));
+            Assert.Contains(
+                "pg_advisory_xact_lock",
+                Assert.IsType<BlockingSession>(secondWait).Query,
+                StringComparison.Ordinal);
+            Assert.Equal(0, await CountQueuedWalletsAsync(factory, wallets));
+
+            await rowBlockerTransaction.CommitAsync();
+            rowBlockerReleased = true;
+
+            await firstTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await secondTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(2, await CountQueuedWalletsAsync(factory, wallets));
+            Assert.Equal(
+                firstNew.SizeShares,
+                (await repository.GetPaperPositionAsync(wallets[0], firstNew.AssetId))?.SizeShares);
+            Assert.Equal(
+                firstExistingUpdate.SizeShares,
+                (await repository.GetPaperPositionAsync(wallets[1], secondExisting.AssetId))?.SizeShares);
+            Assert.Equal(
+                secondExistingUpdate.SizeShares,
+                (await repository.GetPaperPositionAsync(wallets[0], firstExisting.AssetId))?.SizeShares);
+            Assert.Equal(
+                secondNew.SizeShares,
+                (await repository.GetPaperPositionAsync(wallets[1], secondNew.AssetId))?.SizeShares);
+        }
+        finally
+        {
+            if (!rowBlockerReleased)
+            {
+                try
+                {
+                    await rowBlockerTransaction.RollbackAsync();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            operationCancellation.Cancel();
+            foreach (var task in new[] { firstTask, secondTask })
+            {
+                if (task is null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await task.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception) when (operationCancellation.IsCancellationRequested)
+                {
+                }
+            }
+
+            await DeleteTestRowsAsync(factory, wallets, [], []);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task EntryAndLeaderExit_SerializeWalletBeforeQueueAndLeaderRowLocks()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var suffix = Guid.NewGuid().ToString("N");
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = await ReadFirstStrategyIdAsync(factory);
+        var exitApplicationName = $"paper-leader-exit-{suffix[..8]}";
+        var entryApplicationName = $"paper-leader-entry-{suffix[..8]}";
+        var exitRepository = new PostgresAppRepository(new PostgresConnectionFactory(
+            new StorageOptions { ConnectionString = connectionString },
+            exitApplicationName));
+        var entryRepository = new PostgresAppRepository(new PostgresConnectionFactory(
+            new StorageOptions { ConnectionString = connectionString },
+            entryApplicationName));
+        var wallet = $"leader-wallet-lock-{suffix}";
+        var wallets = new[] { wallet };
+        var assetId = $"leader-wallet-lock-asset-{suffix}";
+        var conditionId = $"leader-wallet-lock-condition-{suffix}";
+        var leaderPositionId = Guid.NewGuid();
+        var entryOrderId = Guid.NewGuid();
+        var exitOrderId = Guid.NewGuid();
+        var activityEventId = Guid.NewGuid();
+        var orderIds = new[] { entryOrderId, exitOrderId };
+        var nowUtc = DateTimeOffset.UtcNow;
+        var entryOrder = new PaperOrder(
+            entryOrderId,
+            Guid.NewGuid(),
+            wallet,
+            PaperOrderStatus.Filled,
+            TradeSide.Buy,
+            assetId,
+            conditionId,
+            "Yes",
+            0.40m,
+            2m,
+            0.80m,
+            nowUtc,
+            nowUtc.AddMinutes(5),
+            nowUtc,
+            StrategyId: strategyId);
+        var exitOrder = new PaperOrder(
+            exitOrderId,
+            Guid.NewGuid(),
+            wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Sell,
+            assetId,
+            conditionId,
+            "Yes",
+            0.50m,
+            1m,
+            0.50m,
+            nowUtc.AddSeconds(1),
+            nowUtc.AddMinutes(5),
+            StrategyId: strategyId);
+        var activityEvent = new PaperCopiedLeaderActivityEvent(
+            activityEventId,
+            $"leader-wallet-lock-event-{suffix}",
+            wallet.ToUpperInvariant(),
+            assetId,
+            conditionId,
+            TradeSide.Sell,
+            0.50m,
+            1m,
+            0.50m,
+            $"leader-wallet-lock-tx-{suffix}",
+            nowUtc.AddSeconds(1),
+            "{}",
+            nowUtc.AddSeconds(1));
+        var exitUpdate = new PaperCopiedLeaderPositionExitUpdate(
+            leaderPositionId,
+            1m,
+            1m,
+            PaperCopiedLeaderPositionStatus.Active,
+            nowUtc.AddSeconds(1),
+            activityEvent.TransactionHash,
+            nowUtc.AddSeconds(1));
+        Task<bool>? exitTask = null;
+        Task? entryTask = null;
+        using var operationCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await using var leaderRowBlockerConnection = factory.CreateConnection();
+        await leaderRowBlockerConnection.OpenAsync();
+        var leaderRowBlockerBackendPid = await ReadBackendPidAsync(leaderRowBlockerConnection);
+        await using var leaderRowBlockerTransaction = await leaderRowBlockerConnection.BeginTransactionAsync();
+        var leaderRowBlockerReleased = false;
+
+        try
+        {
+            await InsertPaperCopiedLeaderPositionAsync(
+                factory,
+                leaderPositionId,
+                entryOrderId,
+                wallet,
+                assetId,
+                conditionId,
+                nowUtc);
+            await LockPaperCopiedLeaderPositionAsync(
+                leaderRowBlockerConnection,
+                leaderRowBlockerTransaction,
+                leaderPositionId);
+
+            exitTask = exitRepository.ApplyPaperCopiedLeaderExitAsync(
+                activityEvent,
+                [exitUpdate],
+                [],
+                [exitOrder],
+                operationCancellation.Token);
+
+            BlockingSession? exitWait = null;
+            await WaitForAsync(
+                async () =>
+                {
+                    exitWait = await ReadBlockingSessionAsync(factory, exitApplicationName);
+                    return exitWait is not null
+                        && exitWait.BlockingBackendPids.Contains(leaderRowBlockerBackendPid);
+                },
+                TimeSpan.FromSeconds(5));
+            var exitBackendPid = Assert.IsType<BlockingSession>(exitWait).BackendPid;
+            Assert.Contains("UPDATE paper_copied_leader_positions", exitWait.Query, StringComparison.Ordinal);
+            Assert.Equal(
+                await CountExpectedWalletAdvisoryLockKeysAsync(
+                    factory,
+                    [wallet, activityEvent.CopiedTraderWallet]),
+                await CountGrantedAdvisoryLocksAsync(factory, exitBackendPid));
+
+            entryTask = entryRepository.AddPaperEntryPersistenceBatchAsync(
+                new PaperEntryPersistenceBatch(
+                    [],
+                    [entryOrder],
+                    [],
+                    [],
+                    [new PaperCopiedLeaderPositionActivation(entryOrderId, 2m, nowUtc)],
+                    []),
+                operationCancellation.Token);
+
+            BlockingSession? entryWait = null;
+            await WaitForAsync(
+                async () =>
+                {
+                    entryWait = await ReadBlockingSessionAsync(factory, entryApplicationName);
+                    return entryWait is not null
+                        && entryWait.BlockingBackendPids.Contains(exitBackendPid);
+                },
+                TimeSpan.FromSeconds(5));
+            Assert.Contains(
+                "pg_advisory_xact_lock",
+                Assert.IsType<BlockingSession>(entryWait).Query,
+                StringComparison.Ordinal);
+            Assert.Equal(0, await CountQueuedWalletsAsync(factory, wallets));
+
+            await leaderRowBlockerTransaction.CommitAsync();
+            leaderRowBlockerReleased = true;
+
+            Assert.True(await exitTask.WaitAsync(TimeSpan.FromSeconds(5)));
+            await entryTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal((2, 0), await CountPaperEntryRowsAsync(factory, orderIds, []));
+            Assert.Equal(1, await CountQueuedWalletsAsync(factory, wallets));
+            var leaderState = await ReadPaperCopiedLeaderPositionStateAsync(factory, leaderPositionId);
+            Assert.Equal("Active", leaderState.Status);
+            Assert.Equal(2m, leaderState.CopiedInitialSizeShares);
+            Assert.Equal(1m, leaderState.LeaderSoldSizeShares);
+            Assert.Equal(1m, leaderState.CopiedExitRequestedSizeShares);
+        }
+        finally
+        {
+            if (!leaderRowBlockerReleased)
+            {
+                try
+                {
+                    await leaderRowBlockerTransaction.RollbackAsync();
+                }
+                catch (InvalidOperationException)
+                {
+                }
+            }
+
+            operationCancellation.Cancel();
+            foreach (var task in new Task?[] { exitTask, entryTask })
+            {
+                if (task is null)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    await task.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception) when (operationCancellation.IsCancellationRequested)
+                {
+                }
+            }
+
+            await DeletePaperCopiedLeaderLockTestRowsAsync(
+                factory,
+                leaderPositionId,
+                activityEventId,
+                wallets,
+                orderIds);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task Projection_RecoversDurableInflightWalletAfterInterruptedCycle()
     {
         var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
@@ -704,6 +1323,88 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
             ?? throw new InvalidOperationException("PostgreSQL integration database has no strategy row."));
     }
 
+    private static async Task<(int Orders, int Fills)> CountPaperEntryRowsAsync(
+        PostgresConnectionFactory factory,
+        Guid[] orderIds,
+        Guid[] fillIds)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    (SELECT count(*)::integer FROM paper_orders WHERE id = ANY(@OrderIds)),
+    (SELECT count(*)::integer FROM paper_fills WHERE id = ANY(@FillIds));
+""",
+            connection);
+        command.Parameters.Add("OrderIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = orderIds;
+        command.Parameters.Add("FillIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = fillIds;
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return (reader.GetInt32(0), reader.GetInt32(1));
+    }
+
+    private static async Task InsertPaperCopiedLeaderPositionAsync(
+        PostgresConnectionFactory factory,
+        Guid positionId,
+        Guid entryOrderId,
+        string wallet,
+        string assetId,
+        string conditionId,
+        DateTimeOffset nowUtc)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO paper_copied_leader_positions (
+    id, entry_signal_id, entry_paper_order_id, copied_trader_wallet, asset_id,
+    condition_id, outcome, entry_timestamp_utc, leader_entry_price,
+    leader_initial_size_shares, copied_initial_size_shares, leader_sold_size_shares,
+    copied_exit_requested_size_shares, status, next_activity_sync_at_utc,
+    created_at_utc, updated_at_utc)
+VALUES (
+    @Id, @EntrySignalId, @EntryOrderId, @Wallet, @AssetId,
+    @ConditionId, 'Yes', @NowUtc, 0.40,
+    4, 0, 0,
+    0, 'PendingEntry', @NowUtc,
+    @NowUtc, @NowUtc);
+""",
+            connection);
+        command.Parameters.AddWithValue("Id", positionId);
+        command.Parameters.AddWithValue("EntrySignalId", Guid.NewGuid());
+        command.Parameters.AddWithValue("EntryOrderId", entryOrderId);
+        command.Parameters.AddWithValue("Wallet", wallet);
+        command.Parameters.AddWithValue("AssetId", assetId);
+        command.Parameters.AddWithValue("ConditionId", conditionId);
+        command.Parameters.AddWithValue("NowUtc", nowUtc.UtcDateTime);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task<PaperCopiedLeaderPositionState> ReadPaperCopiedLeaderPositionStateAsync(
+        PostgresConnectionFactory factory,
+        Guid positionId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT status, copied_initial_size_shares, leader_sold_size_shares,
+       copied_exit_requested_size_shares
+FROM paper_copied_leader_positions
+WHERE id = @Id;
+""",
+            connection);
+        command.Parameters.AddWithValue("Id", positionId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new PaperCopiedLeaderPositionState(
+            reader.GetString(0),
+            reader.GetDecimal(1),
+            reader.GetDecimal(2),
+            reader.GetDecimal(3));
+    }
+
     private static async Task InsertPaperOrderAsync(
         PostgresConnectionFactory factory,
         Guid orderId,
@@ -892,6 +1593,126 @@ FOR UPDATE;
     {
         await using var command = new NpgsqlCommand("SELECT pg_backend_pid();", connection);
         return (int)(await command.ExecuteScalarAsync() ?? 0);
+    }
+
+    private static async Task LockQueuedWalletAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string wallet)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT copied_trader_wallet
+FROM paper_copied_trader_performance_refresh_queue
+WHERE copied_trader_wallet = @Wallet
+FOR UPDATE;
+""",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("Wallet", wallet);
+        Assert.Equal(wallet, Assert.IsType<string>(await command.ExecuteScalarAsync()));
+    }
+
+    private static async Task LockPaperPositionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string wallet,
+        string assetId)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT id
+FROM paper_positions
+WHERE copied_trader_wallet = @Wallet
+  AND asset_id = @AssetId
+FOR UPDATE;
+""",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("Wallet", wallet);
+        command.Parameters.AddWithValue("AssetId", assetId);
+        Assert.IsType<Guid>(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task LockPaperCopiedLeaderPositionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid positionId)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT id
+FROM paper_copied_leader_positions
+WHERE id = @Id
+FOR UPDATE;
+""",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("Id", positionId);
+        Assert.Equal(positionId, Assert.IsType<Guid>(await command.ExecuteScalarAsync()));
+    }
+
+    private static async Task<int> CountExpectedWalletAdvisoryLockKeysAsync(
+        PostgresConnectionFactory factory,
+        string[] wallets)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT count(DISTINCT hashtextextended(wallet, 4937427318840178337))::integer
+FROM unnest(@Wallets) wallet;
+""",
+            connection);
+        command.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
+        return (int)(await command.ExecuteScalarAsync() ?? 0);
+    }
+
+    private static async Task<int> CountGrantedAdvisoryLocksAsync(
+        PostgresConnectionFactory factory,
+        int backendPid)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT count(*)::integer
+FROM pg_locks
+WHERE pid = @BackendPid
+  AND locktype = 'advisory'
+  AND granted;
+""",
+            connection);
+        command.Parameters.AddWithValue("BackendPid", backendPid);
+        return (int)(await command.ExecuteScalarAsync() ?? 0);
+    }
+
+    private static async Task<BlockingSession?> ReadBlockingSessionAsync(
+        PostgresConnectionFactory factory,
+        string applicationName)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT activity.pid, activity.query, pg_blocking_pids(activity.pid)
+FROM pg_stat_activity activity
+WHERE activity.datname = current_database()
+  AND activity.application_name = @ApplicationName
+  AND activity.state = 'active'
+  AND activity.wait_event_type = 'Lock'
+ORDER BY activity.backend_start DESC
+LIMIT 1;
+""",
+            connection);
+        command.Parameters.AddWithValue("ApplicationName", applicationName);
+        await using var reader = await command.ExecuteReaderAsync();
+        return await reader.ReadAsync()
+            ? new BlockingSession(
+                reader.GetInt32(0),
+                reader.GetString(1),
+                reader.GetFieldValue<int[]>(2))
+            : null;
     }
 
     private static async Task<bool> IsProjectionBlockedByAsync(
@@ -1198,6 +2019,38 @@ WHERE (source_kind = 'PaperOrder' AND source_id = ANY(@OrderIds))
         await transaction.CommitAsync();
     }
 
+    private static async Task DeletePaperCopiedLeaderLockTestRowsAsync(
+        PostgresConnectionFactory factory,
+        Guid leaderPositionId,
+        Guid activityEventId,
+        string[] wallets,
+        Guid[] orderIds)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand(
+            """
+DELETE FROM paper_copied_leader_activity_events WHERE id = @ActivityEventId;
+DELETE FROM paper_copied_leader_positions WHERE id = @LeaderPositionId;
+DELETE FROM paper_orders WHERE id = ANY(@OrderIds);
+DELETE FROM paper_copied_trader_performance_refresh_queue WHERE copied_trader_wallet = ANY(@Wallets);
+DELETE FROM paper_copied_trader_performance_refresh_inflight WHERE copied_trader_wallet = ANY(@Wallets);
+DELETE FROM paper_copied_trader_performance WHERE copied_trader_wallet = ANY(@Wallets);
+DELETE FROM dashboard_projection_events
+WHERE source_kind = 'PaperOrder'
+  AND source_id = ANY(@OrderIds);
+""",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("ActivityEventId", activityEventId);
+        command.Parameters.AddWithValue("LeaderPositionId", leaderPositionId);
+        command.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
+        command.Parameters.Add("OrderIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = orderIds;
+        await command.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+    }
+
     private static async Task WaitForAsync(
         Func<Task<bool>> condition,
         TimeSpan timeout)
@@ -1245,6 +2098,17 @@ SELECT max(wallet) FROM source_wallets;
         long Cycle,
         DateTime? LastCycleCompletedAtUtc,
         DateTime UpdatedAtUtc);
+
+    private sealed record BlockingSession(
+        int BackendPid,
+        string Query,
+        int[] BlockingBackendPids);
+
+    private sealed record PaperCopiedLeaderPositionState(
+        string Status,
+        decimal CopiedInitialSizeShares,
+        decimal LeaderSoldSizeShares,
+        decimal CopiedExitRequestedSizeShares);
 }
 
 [CollectionDefinition(Name, DisableParallelization = true)]

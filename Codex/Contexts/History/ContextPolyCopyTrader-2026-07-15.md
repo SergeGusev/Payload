@@ -96,3 +96,10 @@ Request:
 
 Result:
 Created one cumulative settled Paper PnL chart for the same six BTC/ETH/SOL Child and Child ROI strategies selected in the refreshed Excel report, using its frozen `2026-07-15T18:47:05.887967Z` source exports. Recomputed exact settlement-time series from 3,803 selected rows, matched every strategy's count, stake, and final PnL to the report, and independently confirmed combined final PnL `$1,508.43229126`. The `1800x1080` PNG uses six distinct solid lines and collision-separated endpoint labels; it was visually inspected and hashed. No production or product state changed.
+
+## 2026-07-15T20:26:03.3275578Z
+Request:
+Ок, приступай к доработкам
+
+Result:
+Implemented the verified Paper lock-order and market-WebSocket recovery fixes. Mixed Paper mutations now acquire deterministic transaction-scoped wallet locks before position, copied-performance queue, or copied-leader-position locks; entry/settlement write positions first, malformed batch relationships fail before database access, and copied-leader dedup/mixed-case behavior is preserved. WebSocket reconnect backoff now remains escalated across empty, malformed, PING/PONG, rejected, failed, or cancelled frames and resets only after an accepted market update. Focused tests passed 99/99; real disposable-PostgreSQL blocker-graph tests passed 12/12 with verified database removal; Release built with zero errors and 120 unchanged warnings; the final full suite was 760 passed / 112 known failures / 872 total with an exact failure-name match to baseline. No production state or deployment changed.
