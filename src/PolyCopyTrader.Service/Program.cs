@@ -417,6 +417,7 @@ builder.Services.AddHostedService<DashboardStrategyProjectionReconciliationWorke
 builder.Services.AddHostedService<DateDependentStrategyHourlyPaperPnlWorker>();
 builder.Services.AddHostedService<ExposureSnapshotCacheWarmupService>();
 builder.Services.AddHostedService<PaperTradingWorker>();
+builder.Services.AddHostedService<PaperCopiedTraderPerformanceWorker>();
 builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();
 builder.Services.AddHostedService<PolymarketAutoRedeemWorker>();
 builder.Services.AddHostedService<LocalControlServer>();

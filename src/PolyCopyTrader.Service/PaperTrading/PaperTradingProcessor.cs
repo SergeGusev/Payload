@@ -631,20 +631,23 @@ public sealed class PaperTradingProcessor(
                     continue;
                 }
 
-                await repository.UpsertPaperPositionAsync(
-                    position with
-                    {
-                        EstimatedValueUsd = estimatedValue,
-                        UnrealizedPnlUsd = unrealizedPnl,
-                        UpdatedAtUtc = DateTimeOffset.UtcNow
-                    },
-                    cancellationToken);
-                exposureCache.ApplyPaperPosition(position with
+                var updatedPosition = position with
                 {
                     EstimatedValueUsd = estimatedValue,
                     UnrealizedPnlUsd = unrealizedPnl,
                     UpdatedAtUtc = DateTimeOffset.UtcNow
-                });
+                };
+                if (!await repository.TryUpdatePaperPositionMarkAsync(
+                        position,
+                        updatedPosition.EstimatedValueUsd,
+                        updatedPosition.UnrealizedPnlUsd,
+                        updatedPosition.UpdatedAtUtc,
+                        cancellationToken))
+                {
+                    continue;
+                }
+
+                exposureCache.ApplyPaperPosition(updatedPosition);
                 updated++;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

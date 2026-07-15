@@ -151,6 +151,23 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task<bool> TryUpdatePaperPositionMarkAsync(
+        PaperPosition expectedPosition,
+        decimal estimatedValueUsd,
+        decimal unrealizedPnlUsd,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
+    public Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(
+        IReadOnlyList<PaperPositionMarkUpdate> updates,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
+    }
+
     public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
@@ -179,9 +196,18 @@ public sealed class NoOpAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<PaperPositionSettlement>>([]);
     }
 
-    public Task<int> RefreshPaperCopiedTraderPerformanceAsync(CancellationToken cancellationToken = default)
+    public Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
+        int walletBatchSize,
+        int reconciliationSeedWalletBatchSize,
+        CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(0);
+        return Task.FromResult(new PaperCopiedTraderPerformanceRefreshResult(
+            LockAcquired: true,
+            WalletsSeeded: 0,
+            WalletsProcessed: 0,
+            PerformanceRowsWritten: 0,
+            QueueRemaining: 0,
+            ReconciliationCycleCompleted: false));
     }
 
     public Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)

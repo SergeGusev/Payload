@@ -3661,6 +3661,14 @@ public sealed record PaperCopiedTraderPerformance(
     DateTimeOffset? LastOrderUtc,
     DateTimeOffset RefreshedAtUtc);
 
+public sealed record PaperCopiedTraderPerformanceRefreshResult(
+    bool LockAcquired,
+    int WalletsSeeded,
+    int WalletsProcessed,
+    int PerformanceRowsWritten,
+    int QueueRemaining,
+    bool ReconciliationCycleCompleted);
+
 public static class StrategyMarketPaperRunStatuses
 {
     public const string Observed = "Observed";

@@ -1,0 +1,72 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.PaperTrading;
+
+namespace PolyCopyTrader.Tests;
+
+public sealed class PaperCopiedTraderPerformanceWorkerTests
+{
+    [Fact]
+    public async Task Worker_ForwardsBoundedProjectionOptions()
+    {
+        var repository = new TestAppRepository();
+        var worker = new PaperCopiedTraderPerformanceWorker(
+            NullLogger<PaperCopiedTraderPerformanceWorker>.Instance,
+            new PaperTradingOptions
+            {
+                CopiedTraderPerformanceProjectionEnabled = true,
+                CopiedTraderPerformanceRefreshSeconds = 60,
+                CopiedTraderPerformanceWalletBatchSize = 17,
+                CopiedTraderPerformanceReconciliationSeedWalletBatchSize = 41
+            },
+            repository);
+
+        await worker.StartAsync(CancellationToken.None);
+        try
+        {
+            await WaitForAsync(
+                () => repository.RefreshPaperCopiedTraderPerformanceProjectionCalls > 0,
+                TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+        }
+
+        Assert.Equal(1, repository.RefreshPaperCopiedTraderPerformanceProjectionCalls);
+        Assert.Equal(17, repository.LastPaperCopiedTraderPerformanceWalletBatchSize);
+        Assert.Equal(41, repository.LastPaperCopiedTraderPerformanceReconciliationSeedWalletBatchSize);
+    }
+
+    [Fact]
+    public async Task Worker_DoesNotRefreshWhenProjectionIsDisabled()
+    {
+        var repository = new TestAppRepository();
+        var worker = new PaperCopiedTraderPerformanceWorker(
+            NullLogger<PaperCopiedTraderPerformanceWorker>.Instance,
+            new PaperTradingOptions
+            {
+                CopiedTraderPerformanceProjectionEnabled = false
+            },
+            repository);
+
+        await worker.StartAsync(CancellationToken.None);
+        await worker.StopAsync(CancellationToken.None);
+
+        Assert.Equal(0, repository.RefreshPaperCopiedTraderPerformanceProjectionCalls);
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTimeOffset.UtcNow + timeout;
+        while (!condition())
+        {
+            if (DateTimeOffset.UtcNow >= deadline)
+            {
+                throw new TimeoutException("The projection worker did not run within the test timeout.");
+            }
+
+            await Task.Delay(10);
+        }
+    }
+}

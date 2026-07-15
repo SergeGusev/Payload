@@ -16,8 +16,7 @@ public sealed class PaperSettlementProcessor(
         var positions = (await repository.GetOpenPaperPositionsAsync(cancellationToken)).ToArray();
         if (positions.Length == 0)
         {
-            var refreshed = await repository.RefreshPaperCopiedTraderPerformanceAsync(cancellationToken);
-            return new PaperSettlementProcessingResult(0, 0, 0, refreshed);
+            return new PaperSettlementProcessingResult(0, 0, 0, 0);
         }
 
         var checkedPositions = 0;
@@ -75,8 +74,7 @@ public sealed class PaperSettlementProcessor(
             }
         }
 
-        var performanceRows = await repository.RefreshPaperCopiedTraderPerformanceAsync(cancellationToken);
-        return new PaperSettlementProcessingResult(checkedPositions, settledPositions, insertedSettlements, performanceRows);
+        return new PaperSettlementProcessingResult(checkedPositions, settledPositions, insertedSettlements, 0);
     }
 
     public async Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(

@@ -14,36 +14,26 @@ public sealed class PaperAccountingWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            "Paper accounting worker started. SettlementEnabled={SettlementEnabled} SettlementPollIntervalSeconds={SettlementPollIntervalSeconds} PerformanceRefreshSeconds={PerformanceRefreshSeconds}",
+            "Paper accounting worker started. SettlementEnabled={SettlementEnabled} SettlementPollIntervalSeconds={SettlementPollIntervalSeconds}",
             paperTradingOptions.SettlementEnabled,
-            paperTradingOptions.SettlementPollIntervalSeconds,
-            paperTradingOptions.CopiedTraderPerformanceRefreshSeconds);
+            paperTradingOptions.SettlementPollIntervalSeconds);
 
-        var nextSettlementUtc = DateTimeOffset.MinValue;
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
                 if (RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions) &&
-                    paperTradingOptions.SettlementEnabled &&
-                    DateTimeOffset.UtcNow >= nextSettlementUtc)
+                    paperTradingOptions.SettlementEnabled)
                 {
                     var result = await settlementProcessor.ProcessOpenPositionsAsync(stoppingToken);
-                    nextSettlementUtc = DateTimeOffset.UtcNow.AddSeconds(paperTradingOptions.SettlementPollIntervalSeconds);
                     if (result.PositionsChecked > 0 || result.SettlementsInserted > 0)
                     {
                         logger.LogInformation(
-                            "Paper settlement cycle completed. PositionsChecked={PositionsChecked} PositionsSettled={PositionsSettled} SettlementsInserted={SettlementsInserted} PerformanceRows={PerformanceRows}",
+                            "Paper settlement cycle completed. PositionsChecked={PositionsChecked} PositionsSettled={PositionsSettled} SettlementsInserted={SettlementsInserted}",
                             result.PositionsChecked,
                             result.PositionsSettled,
-                            result.SettlementsInserted,
-                            result.PerformanceRowsRefreshed);
+                            result.SettlementsInserted);
                     }
-                }
-                else
-                {
-                    var rows = await repository.RefreshPaperCopiedTraderPerformanceAsync(stoppingToken);
-                    logger.LogDebug("Paper copied-trader performance refreshed. Rows={Rows}", rows);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -56,7 +46,7 @@ public sealed class PaperAccountingWorker(
                 await TryRecordApiErrorAsync(ex.Message, stoppingToken);
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(paperTradingOptions.CopiedTraderPerformanceRefreshSeconds), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(paperTradingOptions.SettlementPollIntervalSeconds), stoppingToken);
         }
     }
 

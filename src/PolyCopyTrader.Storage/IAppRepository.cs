@@ -457,6 +457,17 @@ public interface IAppRepository
 
     Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default);
 
+    Task<bool> TryUpdatePaperPositionMarkAsync(
+        PaperPosition expectedPosition,
+        decimal estimatedValueUsd,
+        decimal unrealizedPnlUsd,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(
+        IReadOnlyList<PaperPositionMarkUpdate> updates,
+        CancellationToken cancellationToken = default);
+
     async Task UpsertPaperPositionsAsync(
         IReadOnlyList<PaperPosition> positions,
         CancellationToken cancellationToken = default)
@@ -528,7 +539,10 @@ public interface IAppRepository
 
     Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
-    Task<int> RefreshPaperCopiedTraderPerformanceAsync(CancellationToken cancellationToken = default);
+    Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
+        int walletBatchSize,
+        int reconciliationSeedWalletBatchSize,
+        CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default);
 
@@ -1319,3 +1333,9 @@ public sealed record PaperCopiedLeaderPositionActivation(
 public sealed record PaperPositionSettlementWrite(
     PaperPositionSettlement Settlement,
     PaperPosition SettledPosition);
+
+public sealed record PaperPositionMarkUpdate(
+    PaperPosition ExpectedPosition,
+    decimal EstimatedValueUsd,
+    decimal UnrealizedPnlUsd,
+    DateTimeOffset UpdatedAtUtc);

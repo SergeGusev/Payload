@@ -1990,6 +1990,136 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
+	public async Task<bool> TryUpdatePaperPositionMarkAsync(
+		PaperPosition expectedPosition,
+		decimal estimatedValueUsd,
+		decimal unrealizedPnlUsd,
+		DateTimeOffset updatedAtUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+UPDATE paper_positions
+SET estimated_value_usd = @EstimatedValueUsd,
+    unrealized_pnl_usd = @UnrealizedPnlUsd,
+    updated_at_utc = @UpdatedAtUtc
+WHERE copied_trader_wallet = @CopiedTraderWallet
+  AND asset_id = @AssetId
+  AND condition_id = @ExpectedConditionId
+  AND outcome = @ExpectedOutcome
+  AND size_shares = @ExpectedSizeShares
+  AND average_price = @ExpectedAveragePrice
+  AND estimated_value_usd = @ExpectedEstimatedValueUsd
+  AND unrealized_pnl_usd = @ExpectedUnrealizedPnlUsd
+  AND updated_at_utc = @ExpectedUpdatedAtUtc;
+""");
+		command.Parameters.AddWithValue("CopiedTraderWallet", expectedPosition.CopiedTraderWallet);
+		command.Parameters.AddWithValue("AssetId", expectedPosition.AssetId);
+		command.Parameters.AddWithValue("ExpectedConditionId", expectedPosition.ConditionId);
+		command.Parameters.AddWithValue("ExpectedOutcome", expectedPosition.Outcome);
+		command.Parameters.AddWithValue("ExpectedSizeShares", expectedPosition.SizeShares);
+		command.Parameters.AddWithValue("ExpectedAveragePrice", expectedPosition.AveragePrice);
+		command.Parameters.AddWithValue("ExpectedEstimatedValueUsd", expectedPosition.EstimatedValueUsd);
+		command.Parameters.AddWithValue("ExpectedUnrealizedPnlUsd", expectedPosition.UnrealizedPnlUsd);
+		command.Parameters.AddWithValue("ExpectedUpdatedAtUtc", UtcDateTime(expectedPosition.UpdatedAtUtc));
+		command.Parameters.AddWithValue("EstimatedValueUsd", estimatedValueUsd);
+		command.Parameters.AddWithValue("UnrealizedPnlUsd", unrealizedPnlUsd);
+		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
+		return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+	}
+
+	public async Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(
+		IReadOnlyList<PaperPositionMarkUpdate> updates,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (updates.Count == 0)
+		{
+			return [];
+		}
+
+		var rows = updates.Select(update => new
+		{
+			copied_trader_wallet = update.ExpectedPosition.CopiedTraderWallet,
+			asset_id = update.ExpectedPosition.AssetId,
+			expected_condition_id = update.ExpectedPosition.ConditionId,
+			expected_outcome = update.ExpectedPosition.Outcome,
+			expected_size_shares = update.ExpectedPosition.SizeShares,
+			expected_average_price = update.ExpectedPosition.AveragePrice,
+			expected_estimated_value_usd = update.ExpectedPosition.EstimatedValueUsd,
+			expected_unrealized_pnl_usd = update.ExpectedPosition.UnrealizedPnlUsd,
+			expected_updated_at_utc = UtcDateTime(update.ExpectedPosition.UpdatedAtUtc),
+			estimated_value_usd = update.EstimatedValueUsd,
+			unrealized_pnl_usd = update.UnrealizedPnlUsd,
+			updated_at_utc = UtcDateTime(update.UpdatedAtUtc)
+		}).ToArray();
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, """
+WITH mark_updates AS (
+    SELECT *
+    FROM jsonb_to_recordset(CAST(@PaperPositionMarkUpdatesJson AS jsonb)) AS mark_update(
+        copied_trader_wallet text,
+        asset_id text,
+        expected_condition_id text,
+        expected_outcome text,
+        expected_size_shares numeric,
+        expected_average_price numeric,
+        expected_estimated_value_usd numeric,
+        expected_unrealized_pnl_usd numeric,
+        expected_updated_at_utc timestamptz,
+        estimated_value_usd numeric,
+        unrealized_pnl_usd numeric,
+        updated_at_utc timestamptz
+    )
+), updated_positions AS (
+    UPDATE paper_positions AS target_position
+    SET estimated_value_usd = mark_update.estimated_value_usd,
+        unrealized_pnl_usd = mark_update.unrealized_pnl_usd,
+        updated_at_utc = mark_update.updated_at_utc
+    FROM mark_updates AS mark_update
+    WHERE target_position.copied_trader_wallet = mark_update.copied_trader_wallet
+      AND target_position.asset_id = mark_update.asset_id
+      AND target_position.condition_id = mark_update.expected_condition_id
+      AND target_position.outcome = mark_update.expected_outcome
+      AND target_position.size_shares = mark_update.expected_size_shares
+      AND target_position.average_price = mark_update.expected_average_price
+      AND target_position.estimated_value_usd = mark_update.expected_estimated_value_usd
+      AND target_position.unrealized_pnl_usd = mark_update.expected_unrealized_pnl_usd
+      AND target_position.updated_at_utc = mark_update.expected_updated_at_utc
+    RETURNING
+        target_position.asset_id,
+        target_position.condition_id,
+        target_position.outcome,
+        target_position.size_shares,
+        target_position.average_price,
+        target_position.estimated_value_usd,
+        target_position.unrealized_pnl_usd,
+        target_position.updated_at_utc,
+        target_position.copied_trader_wallet
+)
+SELECT
+    asset_id,
+    condition_id,
+    outcome,
+    size_shares,
+    average_price,
+    estimated_value_usd,
+    unrealized_pnl_usd,
+    updated_at_utc,
+    copied_trader_wallet
+FROM updated_positions
+ORDER BY copied_trader_wallet, asset_id;
+""");
+		AddJsonbParameter(command, "PaperPositionMarkUpdatesJson", JsonSerializer.Serialize(rows));
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<PaperPosition> updatedPositions = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			updatedPositions.Add(ReadPaperPosition(reader));
+		}
+
+		return updatedPositions;
+	}
+
 	public async Task UpsertPaperPositionsAsync(
 		IReadOnlyList<PaperPosition> positions,
 		CancellationToken cancellationToken = default(CancellationToken))
@@ -2272,17 +2402,173 @@ LIMIT @Limit;
 		return results;
 	}
 
-	public async Task<int> RefreshPaperCopiedTraderPerformanceAsync(CancellationToken cancellationToken = default(CancellationToken))
+	public async Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
+		int walletBatchSize,
+		int reconciliationSeedWalletBatchSize,
+		CancellationToken cancellationToken = default(CancellationToken))
 	{
+		ArgumentOutOfRangeException.ThrowIfLessThan(walletBatchSize, 1);
+		ArgumentOutOfRangeException.ThrowIfGreaterThan(walletBatchSize, 250);
+		ArgumentOutOfRangeException.ThrowIfLessThan(reconciliationSeedWalletBatchSize, 1);
+		ArgumentOutOfRangeException.ThrowIfGreaterThan(reconciliationSeedWalletBatchSize, 1_000);
+
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
-		await AcquirePaperCopiedTraderPerformanceRefreshLockAsync(connection, transaction, cancellationToken);
-		await using (NpgsqlCommand deleteCommand = CreateCommand(connection, "DELETE FROM paper_copied_trader_performance;"))
+		if (!await TryAcquirePaperCopiedTraderPerformanceRefreshLockAsync(connection, transaction, cancellationToken))
 		{
-			deleteCommand.Transaction = transaction;
-			await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+			return new PaperCopiedTraderPerformanceRefreshResult(false, 0, 0, 0, 0, false);
 		}
-		await using NpgsqlCommand command = CreateCommand(connection, """
+
+		string? reconciliationCursor;
+		await using (NpgsqlCommand cursorCommand = CreateCommand(connection, """
+SELECT reconciliation_cursor_wallet
+FROM paper_copied_trader_performance_projection_control
+WHERE singleton_id = 1
+FOR UPDATE;
+"""))
+		{
+			cursorCommand.Transaction = transaction;
+			reconciliationCursor = await cursorCommand.ExecuteScalarAsync(cancellationToken) as string;
+		}
+
+		var walletsSeeded = 0;
+		var seedCandidates = 0;
+		string? lastSeededWallet = null;
+		await using (NpgsqlCommand seedCommand = CreateCommand(connection, """
+WITH source_wallets AS (
+    (
+        SELECT copied_trader_wallet AS wallet
+        FROM paper_orders
+        WHERE btrim(copied_trader_wallet) <> ''
+          AND (@Cursor IS NULL OR copied_trader_wallet > @Cursor)
+        GROUP BY copied_trader_wallet
+        ORDER BY copied_trader_wallet
+        LIMIT @SeedLimit
+    )
+    UNION
+    (
+        SELECT copied_trader_wallet AS wallet
+        FROM paper_positions
+        WHERE btrim(copied_trader_wallet) <> ''
+          AND (@Cursor IS NULL OR copied_trader_wallet > @Cursor)
+        GROUP BY copied_trader_wallet
+        ORDER BY copied_trader_wallet
+        LIMIT @SeedLimit
+    )
+    UNION
+    (
+        SELECT copied_trader_wallet AS wallet
+        FROM paper_position_settlements
+        WHERE btrim(copied_trader_wallet) <> ''
+          AND (@Cursor IS NULL OR copied_trader_wallet > @Cursor)
+        GROUP BY copied_trader_wallet
+        ORDER BY copied_trader_wallet
+        LIMIT @SeedLimit
+    )
+    UNION
+    (
+        SELECT copied_trader_wallet AS wallet
+        FROM paper_copied_trader_performance
+        WHERE btrim(copied_trader_wallet) <> ''
+          AND (@Cursor IS NULL OR copied_trader_wallet > @Cursor)
+        GROUP BY copied_trader_wallet
+        ORDER BY copied_trader_wallet
+        LIMIT @SeedLimit
+    )
+), candidates AS (
+    SELECT wallet
+    FROM source_wallets
+    ORDER BY wallet
+    LIMIT @SeedLimit
+), queued AS (
+    INSERT INTO paper_copied_trader_performance_refresh_queue (
+        copied_trader_wallet,
+        priority,
+        requested_at_utc,
+        source_kind)
+    SELECT wallet, 0, now(), 'reconciliation'
+    FROM candidates
+    ON CONFLICT (copied_trader_wallet) DO NOTHING
+    RETURNING copied_trader_wallet
+)
+SELECT
+    (SELECT count(*)::integer FROM queued) AS wallets_seeded,
+    (SELECT count(*)::integer FROM candidates) AS seed_candidates,
+    (SELECT max(wallet) FROM candidates) AS last_seeded_wallet;
+"""))
+		{
+			seedCommand.Transaction = transaction;
+			seedCommand.Parameters.Add("Cursor", NpgsqlDbType.Text).Value = (object?)reconciliationCursor ?? DBNull.Value;
+			seedCommand.Parameters.AddWithValue("SeedLimit", reconciliationSeedWalletBatchSize);
+			await using NpgsqlDataReader reader = await seedCommand.ExecuteReaderAsync(cancellationToken);
+			if (await reader.ReadAsync(cancellationToken))
+			{
+				walletsSeeded = reader.GetInt32(0);
+				seedCandidates = reader.GetInt32(1);
+				lastSeededWallet = reader.IsDBNull(2) ? null : reader.GetString(2);
+			}
+		}
+
+		var reconciliationCycleCompleted = seedCandidates == 0;
+		await using (NpgsqlCommand updateCursorCommand = CreateCommand(connection, """
+UPDATE paper_copied_trader_performance_projection_control
+SET reconciliation_cursor_wallet = @NextCursor,
+    reconciliation_cycle = reconciliation_cycle + CASE WHEN @CycleCompleted THEN 1 ELSE 0 END,
+    last_cycle_completed_at_utc = CASE WHEN @CycleCompleted THEN now() ELSE last_cycle_completed_at_utc END,
+    updated_at_utc = now()
+WHERE singleton_id = 1;
+"""))
+		{
+			updateCursorCommand.Transaction = transaction;
+			updateCursorCommand.Parameters.Add("NextCursor", NpgsqlDbType.Text).Value =
+				reconciliationCycleCompleted ? DBNull.Value : lastSeededWallet!;
+			updateCursorCommand.Parameters.AddWithValue("CycleCompleted", reconciliationCycleCompleted);
+			await updateCursorCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		await using (NpgsqlCommand createTempCommand = CreateCommand(connection, """
+CREATE TEMP TABLE temp_paper_copied_trader_performance_wallets (
+    copied_trader_wallet text PRIMARY KEY
+) ON COMMIT DROP;
+"""))
+		{
+			createTempCommand.Transaction = transaction;
+			await createTempCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		var walletsProcessed = 0;
+		await using (NpgsqlCommand pickCommand = CreateCommand(connection, """
+WITH picked AS (
+    SELECT copied_trader_wallet
+    FROM paper_copied_trader_performance_refresh_queue
+    ORDER BY priority DESC, requested_at_utc, copied_trader_wallet
+    LIMIT @WalletLimit
+    FOR UPDATE SKIP LOCKED
+)
+INSERT INTO temp_paper_copied_trader_performance_wallets (copied_trader_wallet)
+SELECT copied_trader_wallet
+FROM picked;
+"""))
+		{
+			pickCommand.Transaction = transaction;
+			pickCommand.Parameters.AddWithValue("WalletLimit", walletBatchSize);
+			walletsProcessed = await pickCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		var performanceRowsWritten = 0;
+		if (walletsProcessed > 0)
+		{
+			await using (NpgsqlCommand deleteCommand = CreateCommand(connection, """
+DELETE FROM paper_copied_trader_performance performance
+USING temp_paper_copied_trader_performance_wallets selected
+WHERE performance.copied_trader_wallet = selected.copied_trader_wallet;
+"""))
+			{
+				deleteCommand.Transaction = transaction;
+				await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+			}
+
+			await using NpgsqlCommand command = CreateCommand(connection, """
 WITH event_rows AS (
     SELECT
         po.copied_trader_wallet,
@@ -2303,7 +2589,15 @@ WITH event_rows AS (
         po.created_at_utc AS first_order_utc,
         po.created_at_utc AS last_order_utc
     FROM paper_orders po
-    LEFT JOIN polymarket_gamma_markets gm ON gm.condition_id = po.condition_id
+    JOIN temp_paper_copied_trader_performance_wallets selected
+      ON selected.copied_trader_wallet = po.copied_trader_wallet
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE market.condition_id = po.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) gm ON true
     WHERE po.copied_trader_wallet <> ''
 
     UNION ALL
@@ -2324,7 +2618,15 @@ WITH event_rows AS (
         po.created_at_utc
     FROM paper_fills pf
     JOIN paper_orders po ON po.id = pf.paper_order_id
-    LEFT JOIN polymarket_gamma_markets gm ON gm.condition_id = po.condition_id
+    JOIN temp_paper_copied_trader_performance_wallets selected
+      ON selected.copied_trader_wallet = po.copied_trader_wallet
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE market.condition_id = po.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) gm ON true
     WHERE po.copied_trader_wallet <> ''
 
     UNION ALL
@@ -2340,7 +2642,15 @@ WITH event_rows AS (
         NULL::timestamptz,
         NULL::timestamptz
     FROM paper_positions pp
-    LEFT JOIN polymarket_gamma_markets gm ON gm.condition_id = pp.condition_id
+    JOIN temp_paper_copied_trader_performance_wallets selected
+      ON selected.copied_trader_wallet = pp.copied_trader_wallet
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE market.condition_id = pp.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) gm ON true
     WHERE pp.copied_trader_wallet <> ''
 
     UNION ALL
@@ -2359,7 +2669,15 @@ WITH event_rows AS (
         NULL::timestamptz,
         NULL::timestamptz
     FROM paper_position_settlements ps
-    LEFT JOIN polymarket_gamma_markets gm ON gm.condition_id = ps.condition_id
+    JOIN temp_paper_copied_trader_performance_wallets selected
+      ON selected.copied_trader_wallet = ps.copied_trader_wallet
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE market.condition_id = ps.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) gm ON true
     WHERE ps.copied_trader_wallet <> ''
 ),
 grouped AS (
@@ -2454,10 +2772,36 @@ inserted AS (
 )
 SELECT count(*)::integer FROM inserted;
 """);
-		command.Transaction = transaction;
-		int rows = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken) ?? 0);
+			command.Transaction = transaction;
+			performanceRowsWritten = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken) ?? 0);
+
+			await using NpgsqlCommand clearQueueCommand = CreateCommand(connection, """
+DELETE FROM paper_copied_trader_performance_refresh_queue queue
+USING temp_paper_copied_trader_performance_wallets selected
+WHERE queue.copied_trader_wallet = selected.copied_trader_wallet;
+""");
+			clearQueueCommand.Transaction = transaction;
+			await clearQueueCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		int queueRemaining;
+		await using (NpgsqlCommand remainingCommand = CreateCommand(connection, """
+SELECT count(*)::integer
+FROM paper_copied_trader_performance_refresh_queue;
+"""))
+		{
+			remainingCommand.Transaction = transaction;
+			queueRemaining = Convert.ToInt32(await remainingCommand.ExecuteScalarAsync(cancellationToken) ?? 0);
+		}
+
 		await transaction.CommitAsync(cancellationToken);
-		return rows;
+		return new PaperCopiedTraderPerformanceRefreshResult(
+			true,
+			walletsSeeded,
+			walletsProcessed,
+			performanceRowsWritten,
+			queueRemaining,
+			reconciliationCycleCompleted);
 	}
 
 	public async Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))
@@ -8118,13 +8462,16 @@ LIMIT @Limit;
 		return result2;
 	}
 
-	private static async Task AcquirePaperCopiedTraderPerformanceRefreshLockAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+	private static async Task<bool> TryAcquirePaperCopiedTraderPerformanceRefreshLockAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		CancellationToken cancellationToken)
 	{
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT pg_advisory_xact_lock(@LockKey1, @LockKey2);");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT pg_try_advisory_xact_lock(@LockKey1, @LockKey2);");
 		command.Transaction = transaction;
 		command.Parameters.AddWithValue("LockKey1", PaperCopiedTraderPerformanceRefreshLockKey1);
 		command.Parameters.AddWithValue("LockKey2", PaperCopiedTraderPerformanceRefreshLockKey2);
-		await command.ExecuteNonQueryAsync(cancellationToken);
+		return await command.ExecuteScalarAsync(cancellationToken) is true;
 	}
 
 	private static DateTime UtcDateTime(DateTimeOffset timestamp)

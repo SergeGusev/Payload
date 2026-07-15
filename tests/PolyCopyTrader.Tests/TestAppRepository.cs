@@ -69,9 +69,17 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int UpsertPaperPositionsBatchCalls { get; private set; }
 
+    public int TryUpdatePaperPositionMarkCalls { get; private set; }
+
+    public int TryUpdatePaperPositionMarksBatchCalls { get; private set; }
+
     public int PaperPositionSettlementBatchCalls { get; private set; }
 
-    public int RefreshPaperCopiedTraderPerformanceCalls { get; private set; }
+    public int RefreshPaperCopiedTraderPerformanceProjectionCalls { get; private set; }
+
+    public int LastPaperCopiedTraderPerformanceWalletBatchSize { get; private set; }
+
+    public int LastPaperCopiedTraderPerformanceReconciliationSeedWalletBatchSize { get; private set; }
 
     public List<LeaderTrade> LeaderTrades { get; } = [];
 
@@ -258,6 +266,8 @@ internal sealed class TestAppRepository : IAppRepository
     public bool ThrowOnAddApiError { get; set; }
 
     public bool ThrowOnUpsertPaperPosition { get; set; }
+
+    public Func<Task>? BeforeTryUpdatePaperPositionMarksAsync { get; set; }
 
     public bool ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets { get; set; }
 
@@ -1331,6 +1341,81 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task<bool> TryUpdatePaperPositionMarkAsync(
+        PaperPosition expectedPosition,
+        decimal estimatedValueUsd,
+        decimal unrealizedPnlUsd,
+        DateTimeOffset updatedAtUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnUpsertPaperPosition)
+        {
+            throw new InvalidOperationException("simulated paper position mark update failure");
+        }
+
+        lock (sync)
+        {
+            TryUpdatePaperPositionMarkCalls++;
+            var index = PaperPositions.FindIndex(position =>
+                string.Equals(position.CopiedTraderWallet, expectedPosition.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(position.AssetId, expectedPosition.AssetId, StringComparison.OrdinalIgnoreCase));
+            if (index < 0 || PaperPositions[index] != expectedPosition)
+            {
+                return Task.FromResult(false);
+            }
+
+            PaperPositions[index] = expectedPosition with
+            {
+                EstimatedValueUsd = estimatedValueUsd,
+                UnrealizedPnlUsd = unrealizedPnlUsd,
+                UpdatedAtUtc = updatedAtUtc
+            };
+            return Task.FromResult(true);
+        }
+    }
+
+    public async Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(
+        IReadOnlyList<PaperPositionMarkUpdate> updates,
+        CancellationToken cancellationToken = default)
+    {
+        if (ThrowOnUpsertPaperPosition)
+        {
+            throw new InvalidOperationException("simulated paper position mark update failure");
+        }
+
+        if (BeforeTryUpdatePaperPositionMarksAsync is { } beforeUpdate)
+        {
+            await beforeUpdate();
+        }
+
+        lock (sync)
+        {
+            TryUpdatePaperPositionMarksBatchCalls++;
+            var updatedPositions = new List<PaperPosition>();
+            foreach (var update in updates)
+            {
+                var index = PaperPositions.FindIndex(position =>
+                    string.Equals(position.CopiedTraderWallet, update.ExpectedPosition.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(position.AssetId, update.ExpectedPosition.AssetId, StringComparison.OrdinalIgnoreCase));
+                if (index < 0 || PaperPositions[index] != update.ExpectedPosition)
+                {
+                    continue;
+                }
+
+                var updatedPosition = update.ExpectedPosition with
+                {
+                    EstimatedValueUsd = update.EstimatedValueUsd,
+                    UnrealizedPnlUsd = update.UnrealizedPnlUsd,
+                    UpdatedAtUtc = update.UpdatedAtUtc
+                };
+                PaperPositions[index] = updatedPosition;
+                updatedPositions.Add(updatedPosition);
+            }
+
+            return updatedPositions;
+        }
+    }
+
     public Task UpsertPaperPositionsAsync(
         IReadOnlyList<PaperPosition> positions,
         CancellationToken cancellationToken = default)
@@ -1453,13 +1538,24 @@ internal sealed class TestAppRepository : IAppRepository
             .ToArray());
     }
 
-    public Task<int> RefreshPaperCopiedTraderPerformanceAsync(CancellationToken cancellationToken = default)
+    public Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
+        int walletBatchSize,
+        int reconciliationSeedWalletBatchSize,
+        CancellationToken cancellationToken = default)
     {
-        RefreshPaperCopiedTraderPerformanceCalls++;
+        RefreshPaperCopiedTraderPerformanceProjectionCalls++;
+        LastPaperCopiedTraderPerformanceWalletBatchSize = walletBatchSize;
+        LastPaperCopiedTraderPerformanceReconciliationSeedWalletBatchSize = reconciliationSeedWalletBatchSize;
         PaperCopiedTraderPerformances.Clear();
         var rows = BuildPaperCopiedTraderPerformance();
         PaperCopiedTraderPerformances.AddRange(rows);
-        return Task.FromResult(rows.Count);
+        return Task.FromResult(new PaperCopiedTraderPerformanceRefreshResult(
+            LockAcquired: true,
+            WalletsSeeded: 0,
+            WalletsProcessed: rows.Select(row => row.CopiedTraderWallet).Distinct(StringComparer.Ordinal).Count(),
+            PerformanceRowsWritten: rows.Count,
+            QueueRemaining: 0,
+            ReconciliationCycleCompleted: false));
     }
 
     public Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)

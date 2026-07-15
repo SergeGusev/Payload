@@ -51,7 +51,7 @@ public sealed class PaperSettlementProcessorTests
         Assert.Equal(1, repository.GetOpenPaperPositionsForMarketCalls);
         Assert.Equal(0, repository.GetOpenPaperPositionsCalls);
         Assert.Equal(1, repository.PaperPositionSettlementBatchCalls);
-        Assert.Equal(0, repository.RefreshPaperCopiedTraderPerformanceCalls);
+        Assert.Equal(0, repository.RefreshPaperCopiedTraderPerformanceProjectionCalls);
         Assert.Equal(0, result.PerformanceRowsRefreshed);
         Assert.All(repository.PaperPositions, position => Assert.Equal(0m, position.SizeShares));
         var yes = Assert.Single(repository.PaperPositionSettlements, item => item.AssetId == "asset-yes");
@@ -65,7 +65,7 @@ public sealed class PaperSettlementProcessorTests
     }
 
     [Fact]
-    public async Task ProcessOpenPositionsAsync_UsesClosedGammaMetadataAndRefreshesCopiedTraderPerformance()
+    public async Task ProcessOpenPositionsAsync_UsesClosedGammaMetadataWithoutInlinePerformanceRefresh()
     {
         var repository = new TestAppRepository();
         repository.PaperOrders.Add(new PaperOrder(
@@ -116,13 +116,9 @@ public sealed class PaperSettlementProcessorTests
 
         Assert.Equal(1, result.SettlementsInserted);
         Assert.Equal(1, repository.PaperPositionSettlementBatchCalls);
-        Assert.Equal(1, repository.RefreshPaperCopiedTraderPerformanceCalls);
-        var performance = Assert.Single(repository.PaperCopiedTraderPerformances, row => row.Category == "OVERALL");
-        Assert.Equal("0xleader", performance.CopiedTraderWallet);
-        Assert.Equal(1, performance.SettledPositionsCount);
-        Assert.Equal(1, performance.WonPositionsCount);
-        Assert.Equal(3m, performance.TotalPnlUsd);
-        Assert.Equal(150m, performance.RoiPct);
+        Assert.Equal(0, repository.RefreshPaperCopiedTraderPerformanceProjectionCalls);
+        Assert.Equal(0, result.PerformanceRowsRefreshed);
+        Assert.Empty(repository.PaperCopiedTraderPerformances);
     }
 
     private static PolymarketOnChainTokenMetadata TokenMetadata(

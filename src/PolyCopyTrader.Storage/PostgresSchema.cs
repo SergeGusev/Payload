@@ -39,6 +39,8 @@ public static class PostgresSchema
         "paper_positions",
         "paper_position_settlements",
         "paper_copied_trader_performance",
+        "paper_copied_trader_performance_refresh_queue",
+        "paper_copied_trader_performance_projection_control",
         "btc_usd_reference_correlation_samples",
         "crypto_reference_price_ticks",
         "btc_order_book_lag_diagnostic_events",
@@ -2510,6 +2512,16 @@ INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd,
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_updated_cover
 ON paper_positions(updated_at_utc DESC, copied_trader_wallet, asset_id)
+INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd)
+WHERE size_shares > 0;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_condition_lookup
+ON paper_positions(lower(condition_id), updated_at_utc DESC, copied_trader_wallet, asset_id)
+INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd)
+WHERE size_shares > 0;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_asset_lookup
+ON paper_positions(lower(asset_id), updated_at_utc DESC, copied_trader_wallet, asset_id)
 INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd)
 WHERE size_shares > 0;
 
@@ -6999,5 +7011,7 @@ END $$;
     public static string SchemaSql { get; } = string.Concat(
         BaseSchemaSql,
         Environment.NewLine,
-        DashboardProjectionSchema.SchemaSql);
+        DashboardProjectionSchema.SchemaSql,
+        Environment.NewLine,
+        PaperCopiedTraderPerformanceProjectionSchema.SchemaSql);
 }

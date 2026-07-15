@@ -10,6 +10,89 @@ public sealed class PaperSettlementPostgresIntegrationTests
 {
     [Fact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task ConditionalMarkUpdates_DoNotRestoreSettledPositions()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallet = $"conditional-mark-{suffix}";
+        var wallets = new[] { wallet };
+        var initialUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+
+        try
+        {
+            var initialPositions = new[]
+            {
+                Position(wallet, $"asset-{suffix}-single", $"condition-{suffix}", "Yes", 4m, 0.25m, initialUtc),
+                Position(wallet, $"asset-{suffix}-batch", $"condition-{suffix}", "No", 3m, 0.40m, initialUtc)
+            };
+            await repository.UpsertPaperPositionsAsync(initialPositions);
+            var expectedSingle = Assert.IsType<PaperPosition>(
+                await repository.GetPaperPositionAsync(wallet, initialPositions[0].AssetId));
+            var expectedBatch = Assert.IsType<PaperPosition>(
+                await repository.GetPaperPositionAsync(wallet, initialPositions[1].AssetId));
+
+            Assert.True(await repository.TryUpdatePaperPositionMarkAsync(
+                expectedSingle,
+                estimatedValueUsd: 3m,
+                unrealizedPnlUsd: 2m,
+                updatedAtUtc: initialUtc.AddMilliseconds(100)));
+            expectedSingle = Assert.IsType<PaperPosition>(
+                await repository.GetPaperPositionAsync(wallet, initialPositions[0].AssetId));
+            var successfulBatch = await repository.TryUpdatePaperPositionMarksAsync(
+            [
+                new PaperPositionMarkUpdate(
+                    expectedBatch,
+                    EstimatedValueUsd: 2m,
+                    UnrealizedPnlUsd: 0.8m,
+                    UpdatedAtUtc: initialUtc.AddMilliseconds(100))
+            ]);
+            Assert.Single(successfulBatch);
+            expectedBatch = Assert.IsType<PaperPosition>(
+                await repository.GetPaperPositionAsync(wallet, initialPositions[1].AssetId));
+
+            var settledUtc = initialUtc.AddSeconds(1);
+            var writes = new[]
+            {
+                SettlementWrite(expectedSingle, won: true, settledUtc),
+                SettlementWrite(expectedBatch, won: false, settledUtc)
+            };
+            Assert.Equal(2, await repository.PersistPaperPositionSettlementBatchAsync(writes));
+
+            var singleUpdated = await repository.TryUpdatePaperPositionMarkAsync(
+                expectedSingle,
+                estimatedValueUsd: 3m,
+                unrealizedPnlUsd: 2m,
+                updatedAtUtc: settledUtc.AddSeconds(1));
+            var batchUpdated = await repository.TryUpdatePaperPositionMarksAsync(
+            [
+                new PaperPositionMarkUpdate(
+                    expectedBatch,
+                    EstimatedValueUsd: 2m,
+                    UnrealizedPnlUsd: 0.8m,
+                    UpdatedAtUtc: settledUtc.AddSeconds(1))
+            ]);
+
+            Assert.False(singleUpdated);
+            Assert.Empty(batchUpdated);
+            Assert.Equal(0m, (await repository.GetPaperPositionAsync(wallet, expectedSingle.AssetId))?.SizeShares);
+            Assert.Equal(0m, (await repository.GetPaperPositionAsync(wallet, expectedBatch.AssetId))?.SizeShares);
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, wallets);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task SettlementBatch_FiltersMarketAndRollsBackBothTablesOnFailure()
     {
         var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
@@ -19,7 +102,7 @@ public sealed class PaperSettlementPostgresIntegrationTests
         }
 
         var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
-        await EnsurePaperTablesAsync(factory);
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
         var repository = new PostgresAppRepository(factory);
         var suffix = Guid.NewGuid().ToString("N");
         var conditionId = $"Condition-{suffix}";
@@ -156,53 +239,6 @@ public sealed class PaperSettlementPostgresIntegrationTests
             });
     }
 
-    private static async Task EnsurePaperTablesAsync(PostgresConnectionFactory factory)
-    {
-        await using var connection = factory.CreateConnection();
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            """
-CREATE TABLE IF NOT EXISTS paper_positions (
-    id uuid PRIMARY KEY,
-    copied_trader_wallet text NOT NULL DEFAULT '',
-    asset_id text NOT NULL,
-    condition_id text NOT NULL,
-    outcome text NOT NULL,
-    size_shares numeric(28,8) NOT NULL,
-    average_price numeric(18,8) NOT NULL,
-    estimated_value_usd numeric(28,8) NOT NULL,
-    unrealized_pnl_usd numeric(28,8) NOT NULL,
-    updated_at_utc timestamptz NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_paper_positions_wallet_asset
-ON paper_positions(copied_trader_wallet, asset_id);
-
-CREATE TABLE IF NOT EXISTS paper_position_settlements (
-    id uuid PRIMARY KEY,
-    copied_trader_wallet text NOT NULL,
-    asset_id text NOT NULL,
-    condition_id text NOT NULL,
-    outcome text NOT NULL,
-    winning_asset_id text NULL,
-    winning_outcome text NOT NULL,
-    category text NULL,
-    settled_size_shares numeric(28,8) NOT NULL,
-    average_price numeric(18,8) NOT NULL,
-    cost_basis_usd numeric(28,8) NOT NULL,
-    settlement_value_usd numeric(28,8) NOT NULL,
-    realized_pnl_usd numeric(28,8) NOT NULL,
-    won boolean NOT NULL,
-    settlement_source text NOT NULL,
-    settled_at_utc timestamptz NOT NULL,
-    created_at_utc timestamptz NOT NULL
-);
-CREATE UNIQUE INDEX IF NOT EXISTS ux_paper_position_settlements_wallet_asset
-ON paper_position_settlements(copied_trader_wallet, asset_id);
-""",
-            connection);
-        await command.ExecuteNonQueryAsync();
-    }
-
     private static async Task<int> CountSettlementsAsync(
         PostgresConnectionFactory factory,
         string[] wallets)
@@ -226,6 +262,8 @@ ON paper_position_settlements(copied_trader_wallet, asset_id);
             """
 DELETE FROM paper_position_settlements WHERE copied_trader_wallet = ANY(@Wallets);
 DELETE FROM paper_positions WHERE copied_trader_wallet = ANY(@Wallets);
+DELETE FROM paper_copied_trader_performance WHERE copied_trader_wallet = ANY(@Wallets);
+DELETE FROM paper_copied_trader_performance_refresh_queue WHERE copied_trader_wallet = ANY(@Wallets);
 """,
             connection);
         command.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;

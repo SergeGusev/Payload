@@ -939,20 +939,27 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void PostgresRepository_PaperCopiedTraderPerformance_UsesSettlementsAndDedicatedTable()
+    public void PostgresRepository_PaperCopiedTraderPerformance_UsesBoundedWalletProjection()
     {
         var source = ReadStorageRepositorySource();
 
         Assert.Contains("TryAddPaperPositionSettlementAsync", source, StringComparison.Ordinal);
         Assert.Contains("INSERT INTO paper_position_settlements", source, StringComparison.Ordinal);
-        Assert.Contains("RefreshPaperCopiedTraderPerformanceAsync", source, StringComparison.Ordinal);
-        Assert.Contains("AcquirePaperCopiedTraderPerformanceRefreshLockAsync", source, StringComparison.Ordinal);
-        Assert.Contains("DELETE FROM paper_copied_trader_performance;", source, StringComparison.Ordinal);
+        Assert.Contains("RefreshPaperCopiedTraderPerformanceProjectionAsync", source, StringComparison.Ordinal);
+        Assert.Contains("TryAcquirePaperCopiedTraderPerformanceRefreshLockAsync", source, StringComparison.Ordinal);
+        Assert.Contains("pg_try_advisory_xact_lock", source, StringComparison.Ordinal);
+        Assert.Contains("FOR UPDATE SKIP LOCKED", source, StringComparison.Ordinal);
+        Assert.Contains("temp_paper_copied_trader_performance_wallets", source, StringComparison.Ordinal);
+        Assert.Contains("USING temp_paper_copied_trader_performance_wallets selected", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DELETE FROM paper_copied_trader_performance;", source, StringComparison.Ordinal);
         Assert.Contains("INSERT INTO paper_copied_trader_performance", source, StringComparison.Ordinal);
         Assert.Contains("Task<PaperCopiedTraderPerformance?> GetPaperCopiedTraderPerformanceAsync", source, StringComparison.Ordinal);
         Assert.Contains("greatest(0, least(100", source, StringComparison.Ordinal);
         Assert.DoesNotContain("WITH deleted AS", source, StringComparison.Ordinal);
         Assert.Contains("FROM paper_position_settlements ps", source, StringComparison.Ordinal);
+        Assert.Contains("JOIN temp_paper_copied_trader_performance_wallets selected", source, StringComparison.Ordinal);
+        Assert.Contains("LEFT JOIN LATERAL", source, StringComparison.Ordinal);
+        Assert.Contains("ORDER BY market.fetched_at_utc DESC, market.market_id", source, StringComparison.Ordinal);
         Assert.Contains("COALESCE((SELECT sum(ps.realized_pnl_usd) FROM paper_position_settlements ps), 0) AS paper_pnl", source, StringComparison.Ordinal);
     }
 
@@ -1053,6 +1060,67 @@ public sealed class StorageTests
         Assert.Contains("WHERE status IN ('Pending', 'PartiallyFilled')", source, StringComparison.Ordinal);
         Assert.Contains("ix_paper_positions_open_updated_cover", source, StringComparison.Ordinal);
         Assert.Contains("WHERE size_shares > 0", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresSchema_HasCaseInsensitiveOpenPositionSettlementLookupIndexes()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var conditionIndex = Assert.Single(statements, statement =>
+            statement.StartsWith(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_condition_lookup",
+                StringComparison.Ordinal));
+        var assetIndex = Assert.Single(statements, statement =>
+            statement.StartsWith(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_asset_lookup",
+                StringComparison.Ordinal));
+
+        Assert.Contains(
+            "ON paper_positions(lower(condition_id), updated_at_utc DESC, copied_trader_wallet, asset_id)",
+            conditionIndex,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ON paper_positions(lower(asset_id), updated_at_utc DESC, copied_trader_wallet, asset_id)",
+            assetIndex,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd)",
+            conditionIndex,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "INCLUDE (condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd)",
+            assetIndex,
+            StringComparison.Ordinal);
+        Assert.Contains("WHERE size_shares > 0", conditionIndex, StringComparison.Ordinal);
+        Assert.Contains("WHERE size_shares > 0", assetIndex, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresSchema_HasIncrementalPaperCopiedTraderPerformanceProjectionContract()
+    {
+        var source = PaperCopiedTraderPerformanceProjectionSchema.SchemaSql;
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(source);
+
+        Assert.Contains("CREATE TABLE IF NOT EXISTS paper_copied_trader_performance_refresh_queue", source, StringComparison.Ordinal);
+        Assert.Contains("CHECK (btrim(copied_trader_wallet) <> '')", source, StringComparison.Ordinal);
+        Assert.Contains("CREATE TABLE IF NOT EXISTS paper_copied_trader_performance_projection_control", source, StringComparison.Ordinal);
+        Assert.Contains("reconciliation_cursor_wallet text NULL", source, StringComparison.Ordinal);
+        Assert.Contains("priority = EXCLUDED.priority", source, StringComparison.Ordinal);
+        Assert.Contains("WHERE paper_copied_trader_performance_refresh_queue.priority < EXCLUDED.priority", source, StringComparison.Ordinal);
+        Assert.Contains("REFERENCING NEW TABLE AS new_paper_positions", source, StringComparison.Ordinal);
+        Assert.Contains("REFERENCING OLD TABLE AS old_paper_positions NEW TABLE AS new_paper_positions", source, StringComparison.Ordinal);
+        Assert.Contains("SELECT DISTINCT changed.copied_trader_wallet", source, StringComparison.Ordinal);
+        Assert.Contains("id,", source, StringComparison.Ordinal);
+        Assert.Contains(statements, statement => statement.Contains(
+            "AFTER INSERT OR UPDATE OR DELETE ON public.paper_orders",
+            StringComparison.Ordinal));
+        Assert.Contains(statements, statement => statement.Contains(
+            "AFTER INSERT OR UPDATE OR DELETE ON public.paper_fills",
+            StringComparison.Ordinal));
+        Assert.Contains(statements, statement => statement.Contains(
+            "AFTER INSERT OR UPDATE OR DELETE ON public.paper_position_settlements",
+            StringComparison.Ordinal));
+        Assert.DoesNotContain("SELECT DISTINCT\n        position_row.copied_trader_wallet,\n        100,\n        clock_timestamp()", source, StringComparison.Ordinal);
     }
 
     [Fact]

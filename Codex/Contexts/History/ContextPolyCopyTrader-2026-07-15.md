@@ -31,3 +31,10 @@ Request:
 
 Result:
 Verified the new production deployment strictly read-only. The running service reports exact commit `602d921d` and matching Release MVID prefix, remains live, and actively created fully reconciled Paper orders/fills/runs with zero enabled Up/Down 5m entries over the 3-second target; no new Live order occurred because no qualifying Live signal was produced. The settlement fix reduced equal-window queue delay from old p50/max `31.740/91.273s` with six errors to `1.801/8.233s` with zero errors. Four boundaries produced `1,399` matching settlements and zero positions in the final snapshot, but one boundary exposed a stale mark-write race that temporarily restored `233` settled positions for `174..214s`. Remaining work is to guard mark updates against settlement, add missing functional lookup indexes, implement an incremental copied-trader performance projector because the current table is empty and its worker is disabled, investigate two recovered critical-WebSocket closes, and separately repair the unchanged `234`-position legacy backlog. No production or product state changed.
+
+## 2026-07-15T07:55:31.2624584Z
+Request:
+Ок, приступай к доработкам
+
+Result:
+Implemented the three verified code fixes: conditional single/batch mark-only writes that cannot restore a settled position, partial covering functional settlement lookup indexes, and a bounded dirty-wallet copied-performance projector outside the settlement path. Added transactional queue/control triggers, a registered 25-wallet worker with 100-wallet lexical reconciliation seeding, configuration/docs, deterministic race tests, and real disposable-PostgreSQL coverage. Release solution build passed with zero errors and one pre-existing warning from an unchanged test file; focused tests passed 124/124; PostgreSQL integration passed 4/4; the full suite remained at the exact saved baseline failure set (720 passed, 112 known failures, zero new or missing failure names). The exact disposable database was dropped and verified absent. No production state or deployment was changed.

@@ -368,6 +368,23 @@ public sealed class WatchlistScannerTests
             return Task.CompletedTask;
         }
 
+        public Task<bool> TryUpdatePaperPositionMarkAsync(
+            PaperPosition expectedPosition,
+            decimal estimatedValueUsd,
+            decimal unrealizedPnlUsd,
+            DateTimeOffset updatedAtUtc,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(false);
+        }
+
+        public Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(
+            IReadOnlyList<PaperPositionMarkUpdate> updates,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
+        }
+
         public Task<IReadOnlyList<PaperPosition>> GetPaperPositionsAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult<IReadOnlyList<PaperPosition>>([]);
@@ -383,9 +400,12 @@ public sealed class WatchlistScannerTests
             return Task.FromResult<IReadOnlyList<PaperPositionSettlement>>([]);
         }
 
-        public Task<int> RefreshPaperCopiedTraderPerformanceAsync(CancellationToken cancellationToken = default)
+        public Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
+            int walletBatchSize,
+            int reconciliationSeedWalletBatchSize,
+            CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(0);
+            return Task.FromResult(new PaperCopiedTraderPerformanceRefreshResult(true, 0, 0, 0, 0, false));
         }
 
         public Task<IReadOnlyList<PaperCopiedTraderPerformance>> GetPaperCopiedTraderPerformanceAsync(int limit = 100, CancellationToken cancellationToken = default)

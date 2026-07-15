@@ -522,7 +522,13 @@ public sealed class PaperTradingOptions
 
     public int SettlementPollIntervalSeconds { get; init; } = 60;
 
+    public bool CopiedTraderPerformanceProjectionEnabled { get; init; } = true;
+
     public int CopiedTraderPerformanceRefreshSeconds { get; init; } = 30;
+
+    public int CopiedTraderPerformanceWalletBatchSize { get; init; } = 25;
+
+    public int CopiedTraderPerformanceReconciliationSeedWalletBatchSize { get; init; } = 100;
 
     public bool LeaderActivityExitTrackingEnabled { get; init; } = true;
 

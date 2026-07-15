@@ -3,6 +3,7 @@ using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
+using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Tests;
@@ -95,8 +96,8 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         Assert.Equal("ApplyUpdate/UpdatePositionMarks", apiError.Operation);
         Assert.Contains("AssetId=asset-1", apiError.Message, StringComparison.Ordinal);
         Assert.Contains("EventType=Book", apiError.Message, StringComparison.Ordinal);
-        Assert.Contains("Operation=IAppRepository.UpsertPaperPositions", apiError.Message, StringComparison.Ordinal);
-        Assert.Contains("simulated paper position upsert failure", apiError.Message, StringComparison.Ordinal);
+        Assert.Contains("Operation=IAppRepository.TryUpdatePaperPositionMarks", apiError.Message, StringComparison.Ordinal);
+        Assert.Contains("simulated paper position mark update failure", apiError.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -141,7 +142,8 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
             new HashSet<Guid>(),
             CancellationToken.None);
 
-        Assert.Equal(1, repository.UpsertPaperPositionsBatchCalls);
+        Assert.Equal(1, repository.TryUpdatePaperPositionMarksBatchCalls);
+        Assert.Equal(0, repository.UpsertPaperPositionsBatchCalls);
         Assert.Collection(
             repository.PaperPositions.OrderBy(position => position.CopiedTraderWallet),
             position =>
@@ -154,6 +156,87 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
                 Assert.Equal(2m, position.EstimatedValueUsd);
                 Assert.Equal(0.5m, position.UnrealizedPnlUsd);
             });
+    }
+
+    [Fact]
+    public async Task ApplyUpdateAsync_DoesNotRestorePositionSettledBeforeConditionalMarkBatchWrites()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = new DateTimeOffset(2026, 7, 15, 7, 15, 0, TimeSpan.Zero);
+        var position = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            receivedAtUtc.AddMinutes(-1),
+            "0xleader");
+        repository.PaperPositions.Add(position);
+        var exposureCache = new ExposureSnapshotCache(repository);
+        await exposureCache.RefreshAsync();
+        var markUpdateStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowMarkUpdate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.BeforeTryUpdatePaperPositionMarksAsync = async () =>
+        {
+            markUpdateStarted.TrySetResult(true);
+            await allowMarkUpdate.Task;
+        };
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            exposureCache,
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        var applyingUpdate = updater.ApplyUpdateAsync(
+            BookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid>(),
+            CancellationToken.None);
+        await markUpdateStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var settledAtUtc = receivedAtUtc.AddSeconds(1);
+        var settledPosition = position with
+        {
+            SizeShares = 0m,
+            AveragePrice = 0m,
+            EstimatedValueUsd = 0m,
+            UnrealizedPnlUsd = 0m,
+            UpdatedAtUtc = settledAtUtc
+        };
+        var settlement = new PaperPositionSettlement(
+            Guid.NewGuid(),
+            position.CopiedTraderWallet,
+            position.AssetId,
+            position.ConditionId,
+            position.Outcome,
+            position.AssetId,
+            position.Outcome,
+            "Crypto",
+            position.SizeShares,
+            position.AveragePrice,
+            position.SizeShares * position.AveragePrice,
+            position.SizeShares,
+            position.SizeShares - position.SizeShares * position.AveragePrice,
+            true,
+            "TestResolution",
+            settledAtUtc,
+            settledAtUtc);
+        await repository.PersistPaperPositionSettlementBatchAsync(
+            [new PaperPositionSettlementWrite(settlement, settledPosition)]);
+        exposureCache.ApplyPaperPosition(settledPosition);
+
+        allowMarkUpdate.TrySetResult(true);
+        await applyingUpdate.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, repository.TryUpdatePaperPositionMarksBatchCalls);
+        Assert.Equal(0, repository.UpsertPaperPositionsBatchCalls);
+        Assert.Equal(settledPosition, Assert.Single(repository.PaperPositions));
+        Assert.Single(repository.PaperPositionSettlements);
+        Assert.Null(exposureCache.GetPaperPosition(position.CopiedTraderWallet, position.AssetId));
     }
 
     private static MarketDataUpdate BookUpdate(DateTimeOffset timestamp)

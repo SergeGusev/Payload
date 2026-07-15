@@ -193,6 +193,137 @@ public sealed class ResilienceTests
     }
 
     [Fact]
+    public async Task PaperTradingProcessor_DoesNotRestorePositionSettledWhileMarkPriceIsLoading()
+    {
+        var repository = new TestAppRepository();
+        var initialUpdatedAtUtc = new DateTimeOffset(2026, 7, 15, 7, 10, 0, TimeSpan.Zero);
+        var position = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            initialUpdatedAtUtc,
+            "0xleader");
+        await repository.UpsertPaperPositionAsync(position);
+        var exposureCache = new ExposureSnapshotCache(repository);
+        await exposureCache.RefreshAsync();
+        var clobClient = new BlockingOrderBookClobClient();
+        var processor = new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            clobClient,
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            exposureCache,
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        var processing = processor.ProcessOpenOrdersAsync();
+        await clobClient.OrderBookRequested.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var settledAtUtc = initialUpdatedAtUtc.AddSeconds(1);
+        var settledPosition = position with
+        {
+            SizeShares = 0m,
+            AveragePrice = 0m,
+            EstimatedValueUsd = 0m,
+            UnrealizedPnlUsd = 0m,
+            UpdatedAtUtc = settledAtUtc
+        };
+        var settlement = new PaperPositionSettlement(
+            Guid.NewGuid(),
+            position.CopiedTraderWallet,
+            position.AssetId,
+            position.ConditionId,
+            position.Outcome,
+            position.AssetId,
+            position.Outcome,
+            "Crypto",
+            position.SizeShares,
+            position.AveragePrice,
+            position.SizeShares * position.AveragePrice,
+            position.SizeShares,
+            position.SizeShares - position.SizeShares * position.AveragePrice,
+            true,
+            "TestResolution",
+            settledAtUtc,
+            settledAtUtc);
+        await repository.PersistPaperPositionSettlementBatchAsync(
+            [new PaperPositionSettlementWrite(settlement, settledPosition)]);
+        exposureCache.ApplyPaperPosition(settledPosition);
+
+        clobClient.Complete(new OrderBookSnapshot(
+            position.AssetId,
+            [new OrderBookLevel(0.75m, 100m)],
+            [new OrderBookLevel(0.76m, 100m)],
+            settledAtUtc,
+            position.ConditionId));
+        var result = await processing.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, result.PositionsUpdated);
+        Assert.Equal(1, repository.TryUpdatePaperPositionMarkCalls);
+        Assert.Equal(settledPosition, Assert.Single(repository.PaperPositions));
+        Assert.Single(repository.PaperPositionSettlements);
+        Assert.Null(exposureCache.GetPaperPosition(position.CopiedTraderWallet, position.AssetId));
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_UpdatesMarkWhenExpectedPositionIsStillCurrent()
+    {
+        var repository = new TestAppRepository();
+        var initialUpdatedAtUtc = new DateTimeOffset(2026, 7, 15, 7, 10, 0, TimeSpan.Zero);
+        var position = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            initialUpdatedAtUtc,
+            "0xleader");
+        await repository.UpsertPaperPositionAsync(position);
+        var exposureCache = new ExposureSnapshotCache(repository);
+        await exposureCache.RefreshAsync();
+        var clobClient = new BlockingOrderBookClobClient();
+        clobClient.Complete(new OrderBookSnapshot(
+            position.AssetId,
+            [new OrderBookLevel(0.75m, 100m)],
+            [new OrderBookLevel(0.76m, 100m)],
+            initialUpdatedAtUtc.AddSeconds(1),
+            position.ConditionId));
+        var processor = new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            clobClient,
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            exposureCache,
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.PositionsUpdated);
+        Assert.Equal(1, repository.TryUpdatePaperPositionMarkCalls);
+        var updatedPosition = Assert.Single(repository.PaperPositions);
+        Assert.Equal(position.AssetId, updatedPosition.AssetId);
+        Assert.Equal(position.ConditionId, updatedPosition.ConditionId);
+        Assert.Equal(position.Outcome, updatedPosition.Outcome);
+        Assert.Equal(position.SizeShares, updatedPosition.SizeShares);
+        Assert.Equal(position.AveragePrice, updatedPosition.AveragePrice);
+        Assert.Equal(7.50m, updatedPosition.EstimatedValueUsd);
+        Assert.Equal(2.50m, updatedPosition.UnrealizedPnlUsd);
+        Assert.True(updatedPosition.UpdatedAtUtc > position.UpdatedAtUtc);
+        Assert.Equal(updatedPosition, exposureCache.GetPaperPosition(position.CopiedTraderWallet, position.AssetId));
+    }
+
+    [Fact]
     public void MarketDataCache_RejectsStaleSnapshotsAfterDisconnectWindow()
     {
         var cache = new MarketDataCache(new MarketDataWebSocketOptions());
@@ -745,6 +876,51 @@ public sealed class ResilienceTests
         }
 
         public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("market by token unavailable");
+        }
+    }
+
+    private sealed class BlockingOrderBookClobClient : IPolymarketClobPublicClient
+    {
+        private readonly TaskCompletionSource<bool> orderBookRequested =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<OrderBookSnapshot?> orderBook =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task OrderBookRequested => orderBookRequested.Task;
+
+        public void Complete(OrderBookSnapshot snapshot)
+        {
+            orderBook.TrySetResult(snapshot);
+        }
+
+        public Task<OrderBookSnapshot?> GetOrderBookAsync(
+            string assetId,
+            CancellationToken cancellationToken = default)
+        {
+            orderBookRequested.TrySetResult(true);
+            return orderBook.Task.WaitAsync(cancellationToken);
+        }
+
+        public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("server time unavailable");
+        }
+
+        public Task<decimal?> GetMidpointAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("midpoint unavailable");
+        }
+
+        public Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("spread unavailable");
+        }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(
+            string tokenId,
+            CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("market by token unavailable");
         }

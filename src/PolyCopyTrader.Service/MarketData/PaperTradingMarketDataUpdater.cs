@@ -191,7 +191,7 @@ public sealed class PaperTradingMarketDataUpdater(
             {
                 paperOrderId = null;
                 phase = "UpdatePositionMarks";
-                operation = "IAppRepository.UpsertPaperPositions";
+                operation = "IAppRepository.TryUpdatePaperPositionMarks";
                 await UpdatePositionMarksAsync(
                     positions,
                     update.AssetId,
@@ -236,7 +236,7 @@ public sealed class PaperTradingMarketDataUpdater(
         DateTimeOffset? receivedAtUtc,
         CancellationToken cancellationToken)
     {
-        var updatedPositions = new List<PaperPosition>();
+        var markUpdates = new List<PaperPositionMarkUpdate>();
         foreach (var position in positions.Where(position => string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase)))
         {
             if (receivedAtUtc is { } receivedAt && position.UpdatedAtUtc > receivedAt)
@@ -251,21 +251,19 @@ public sealed class PaperTradingMarketDataUpdater(
                 continue;
             }
 
-            var updatedPosition = position with
-            {
-                EstimatedValueUsd = estimatedValue,
-                UnrealizedPnlUsd = unrealizedPnl,
-                UpdatedAtUtc = now
-            };
-            updatedPositions.Add(updatedPosition);
+            markUpdates.Add(new PaperPositionMarkUpdate(
+                position,
+                estimatedValue,
+                unrealizedPnl,
+                now));
         }
 
-        if (updatedPositions.Count == 0)
+        if (markUpdates.Count == 0)
         {
             return;
         }
 
-        await repository.UpsertPaperPositionsAsync(updatedPositions, cancellationToken);
+        var updatedPositions = await repository.TryUpdatePaperPositionMarksAsync(markUpdates, cancellationToken);
         foreach (var updatedPosition in updatedPositions)
         {
             exposureCache.ApplyPaperPosition(updatedPosition);

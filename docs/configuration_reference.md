@@ -564,7 +564,10 @@ It is diagnostic only and does not change any setting or submit live orders.
 - `UseMinimumMarketOrderSize`: when true, accepted paper entry signals use the current order book `min_order_size` as the proposed order size instead of bankroll-sized test orders.
 - `SettlementEnabled`: when true while Paper runtime is enabled, the accounting worker checks open paper positions against resolved Gamma markets and writes final settlement PnL.
 - `SettlementPollIntervalSeconds`: interval between resolved-market settlement scans; default `60`.
-- `CopiedTraderPerformanceRefreshSeconds`: interval for rebuilding the local copied-trader paper performance table; default `30`. The table stores an `OVERALL` row and category rows per copied wallet. Its score is a bounded 0-100 local rating based on our Paper PnL, ROI, win rate, settled sample size, lost positions, and open-position penalty.
+- `CopiedTraderPerformanceProjectionEnabled`: enables the incremental local copied-trader Paper performance worker; default `true`. Order, fill, position, and settlement changes enqueue only the affected copied wallets. A low-priority lexical reconciliation sweep also revisits historical wallets so category metadata changes and missed events are repaired without a full-table rebuild in the settlement path.
+- `CopiedTraderPerformanceRefreshSeconds`: delay between incremental projection cycles; default `30`. The projection stores an `OVERALL` row and category rows per copied wallet. Its score is a bounded 0-100 local rating based on our Paper PnL, ROI, win rate, settled sample size, lost positions, and open-position penalty.
+- `CopiedTraderPerformanceWalletBatchSize`: maximum dirty copied wallets recomputed in one projection transaction; default `25`, allowed range `1` to `250`.
+- `CopiedTraderPerformanceReconciliationSeedWalletBatchSize`: maximum historical wallets added by each lexical reconciliation step; default `100`, allowed range `1` to `1000`.
 - `LeaderActivityExitTrackingEnabled`: when true, runs the background worker that tracks copied leader exits from Data API `/activity`; default `true`.
 - `LeaderActivityExitTrackingPollDelayMilliseconds`: pause after a successful exit-tracking cycle; default `1000`.
 - `LeaderActivityExitTrackingBatchSize`: maximum active copied leader position links selected per cycle; default `100`.

@@ -244,6 +244,9 @@ public static class AppOptionsValidator
             $"Paper bankroll USD: {configuration.PaperTrading.InitialBankrollUsd}",
             $"Paper uses minimum market order size: {configuration.PaperTrading.UseMinimumMarketOrderSize}",
             $"Paper settlement enabled: {configuration.PaperTrading.SettlementEnabled}",
+            $"Paper copied trader performance projection enabled: {configuration.PaperTrading.CopiedTraderPerformanceProjectionEnabled}",
+            $"Paper copied trader performance wallet batch size: {configuration.PaperTrading.CopiedTraderPerformanceWalletBatchSize}",
+            $"Paper copied trader performance reconciliation seed wallet batch size: {configuration.PaperTrading.CopiedTraderPerformanceReconciliationSeedWalletBatchSize}",
             $"Paper leader activity exit tracking enabled: {configuration.PaperTrading.LeaderActivityExitTrackingEnabled}",
             $"Paper leader activity exit tracking poll delay milliseconds: {configuration.PaperTrading.LeaderActivityExitTrackingPollDelayMilliseconds}",
             $"Paper copied trader performance refresh seconds: {configuration.PaperTrading.CopiedTraderPerformanceRefreshSeconds}");
@@ -777,6 +780,18 @@ public static class AppOptionsValidator
         if (options.CopiedTraderPerformanceRefreshSeconds <= 0)
         {
             errors.Add("PaperTrading.CopiedTraderPerformanceRefreshSeconds must be greater than zero.");
+        }
+
+        if (options.CopiedTraderPerformanceWalletBatchSize < 1 ||
+            options.CopiedTraderPerformanceWalletBatchSize > 250)
+        {
+            errors.Add("PaperTrading.CopiedTraderPerformanceWalletBatchSize must be between 1 and 250.");
+        }
+
+        if (options.CopiedTraderPerformanceReconciliationSeedWalletBatchSize < 1 ||
+            options.CopiedTraderPerformanceReconciliationSeedWalletBatchSize > 1_000)
+        {
+            errors.Add("PaperTrading.CopiedTraderPerformanceReconciliationSeedWalletBatchSize must be between 1 and 1000.");
         }
 
         if (options.LeaderActivityExitTrackingPollDelayMilliseconds < 0)
