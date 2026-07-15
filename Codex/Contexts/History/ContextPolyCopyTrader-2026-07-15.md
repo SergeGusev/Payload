@@ -59,3 +59,10 @@ Request:
 
 Result:
 Verified exact production deployment `e7bff261f9b95e4e1dafb9da2d49c92023f546d6` strictly read-only. The service remained healthy; `578` actual Paper entries reconciled exactly and all stayed below the `3s` gate (max `1.542s`). No Live order was attempted because the sole Live-enabled strategy hit the same verified pre-signal business skip at all three observed boundaries. The projector cadence improved to about `59.182` queue wallets/min versus the prior `34.302`, and high-priority backlog/age fell, but repeated runtime lock graphs proved its `11..14s` transaction holds queue rows and blocks Paper-position writes for up to at least `11.243s`; this is the next code target. All `460` checked settlements ended at zero without relevant errors. One critical WebSocket premature close exercised the safe diagnostic, recovered in `2.333s`, and was followed by `2,112` frames with zero parse failures. No production state or product code changed; only this required audit record was added.
+
+## 2026-07-15T12:28:02.5267852Z
+Request:
+Ок, действуй
+
+Result:
+Implemented the copied-performance queue-lock fix with a short durable pending-to-inflight claim transaction and a separate long aggregation transaction under one session advisory lock. New events no longer wait on the projector's queue-row lock, interrupted work is recovered before fresh work, and seed/cursor/projection/inflight acknowledgement remain atomic. Added deterministic PostgreSQL blocker-graph, concurrent settlement, cancellation/recovery, quota-precedence, and cleanup coverage; updated README and configuration documentation with downgrade handling. Disposable PostgreSQL tests passed `6/6` with verified database cleanup, focused tests passed, Release build completed with zero errors, and the final full suite retained the exact known `112`-failure baseline (`736` passed, zero new/missing failure names). No production state or deployment was changed.

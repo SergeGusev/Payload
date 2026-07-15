@@ -40,6 +40,7 @@ public static class PostgresSchema
         "paper_position_settlements",
         "paper_copied_trader_performance",
         "paper_copied_trader_performance_refresh_queue",
+        "paper_copied_trader_performance_refresh_inflight",
         "paper_copied_trader_performance_projection_control",
         "btc_usd_reference_correlation_samples",
         "crypto_reference_price_ticks",

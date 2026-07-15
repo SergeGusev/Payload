@@ -15,6 +15,24 @@ CREATE TABLE IF NOT EXISTS paper_copied_trader_performance_refresh_queue (
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_copied_trader_performance_refresh_queue_pick
 ON paper_copied_trader_performance_refresh_queue (priority DESC, requested_at_utc, copied_trader_wallet);
 
+CREATE TABLE IF NOT EXISTS paper_copied_trader_performance_refresh_inflight (
+    copied_trader_wallet text PRIMARY KEY,
+    priority integer NOT NULL,
+    requested_at_utc timestamptz NOT NULL,
+    source_kind text NOT NULL,
+    work_kind text NOT NULL,
+    claimed_at_utc timestamptz NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT ck_paper_copied_trader_performance_refresh_inflight_wallet
+        CHECK (btrim(copied_trader_wallet) <> ''),
+    CONSTRAINT ck_paper_copied_trader_performance_refresh_inflight_work_kind
+        CHECK (work_kind IN ('high_priority', 'reconciliation')),
+    CONSTRAINT ck_paper_copied_trader_performance_refresh_inflight_priority
+        CHECK (
+            (work_kind = 'high_priority' AND priority > 0)
+            OR (work_kind = 'reconciliation' AND priority <= 0)
+        )
+);
+
 CREATE TABLE IF NOT EXISTS paper_copied_trader_performance_projection_control (
     singleton_id smallint PRIMARY KEY DEFAULT 1,
     reconciliation_cursor_wallet text NULL,
