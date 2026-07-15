@@ -52,3 +52,10 @@ Request:
 
 Result:
 Implemented three evidence-backed improvements: the copied-trader projector now reserves separate `25` high-priority and `5` reconciliation slots and runs on a fixed cadence; all three due-entry workers use a serial fixed-rate loop without completion-plus-delay drift; and critical-WebSocket disconnects now retain safe structured diagnostics without raw endpoint query, exception, or close-description text. Read-only production evidence showed that prerequisite-result availability and later decision work can still dominate the `3s` entry gate, so no latency guarantee is claimed before deployment measurement. Focused tests passed `133/133`, disposable PostgreSQL tests passed `4/4` with verified database cleanup, the Release solution built with zero warnings/errors, and the full suite retained the exact known `112`-failure baseline with `734` passing tests and no new failure names. No production state or deployment was changed.
+
+## 2026-07-15T11:56:02.2175186Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified exact production deployment `e7bff261f9b95e4e1dafb9da2d49c92023f546d6` strictly read-only. The service remained healthy; `578` actual Paper entries reconciled exactly and all stayed below the `3s` gate (max `1.542s`). No Live order was attempted because the sole Live-enabled strategy hit the same verified pre-signal business skip at all three observed boundaries. The projector cadence improved to about `59.182` queue wallets/min versus the prior `34.302`, and high-priority backlog/age fell, but repeated runtime lock graphs proved its `11..14s` transaction holds queue rows and blocks Paper-position writes for up to at least `11.243s`; this is the next code target. All `460` checked settlements ended at zero without relevant errors. One critical WebSocket premature close exercised the safe diagnostic, recovered in `2.333s`, and was followed by `2,112` frames with zero parse failures. No production state or product code changed; only this required audit record was added.
