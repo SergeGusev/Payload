@@ -1,3 +1,17 @@
+## Active Update 2026-07-15 Production Service Recheck
+Goal: Recheck whether the server-side `PolyCopyTrader.Service` is currently operating and reconcile the result with the previous stale-service observation.
+Status: Completed
+Done:
+- Confirmed TCP connectivity from local `192.168.0.100` to production PostgreSQL `192.168.0.101:5432`.
+- Ran the repository's read-only entry-latency diagnostic against the production host. At database time `2026-07-15 09:15:09.920677 Europe/Sofia`, `PolyCopyTrader.Service` reported `Running`/`Live`, heartbeat age `42.657s`, `last_error` empty, start time `2026-07-14 22:12:15.825457 Europe/Sofia`, and build `c37a54a467549547620f8e7a9a68241292a23b4a` / MVID `f2e07a2b6f86`.
+- Independently confirmed active strategy work in the preceding ten-minute window: `3,434` entered rows across `1,756` strategies, with zero enabled Up/Down 5m entries exceeding the `3s` target.
+- Took two lightweight production snapshots. The persisted heartbeat advanced from `09:16:27.023887` to `09:17:27.044019 Europe/Sofia`; BTC/ETH/SOL sampled ticks advanced from approximately `09:16:59` to approximately `09:17:49`, and were `4.772..4.818s` old in the final snapshot.
+- Independently observed `30` then `26` PostgreSQL sessions attributed to `application_name='PolyCopyTrader.Service'`; the final snapshot had one active session.
+- Reconciled the prior result by timestamps: the previous check ended at `2026-07-14 19:07:56 UTC`, while the currently running service started at `2026-07-14 19:12:15.825457 UTC`, approximately four minutes later. The earlier stale observation and the current healthy observation therefore describe different service runs.
+Next: None.
+Notes: All production checks were read-only. Two initial combined historical-aggregate diagnostics hit their intentional `10s` and `15s` statement timeouts; indexed/lightweight checks then completed. No database row, service process, order, strategy, deployment, source file, configuration, or runtime setting changed. Product build/tests were not required because application code was unchanged.
+Blockers: None for operational liveness. The remote Windows Service Control Manager state was not queried, but fresh advancing heartbeat, new strategy activity, advancing price ticks, and attributed DB sessions independently prove the application is operating.
+
 ## Active Update 2026-07-15 Local Dashboard ExecutionEngineException Check
 Goal: Determine whether the reported `System.ExecutionEngineException` reflects a current Dashboard failure and identify its cause from available evidence.
 Status: Completed
