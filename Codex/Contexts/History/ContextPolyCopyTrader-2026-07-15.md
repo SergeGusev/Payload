@@ -82,3 +82,10 @@ Request:
 
 Result:
 Created a refreshed one-sheet Excel report from a production `REPEATABLE READ, READ ONLY` snapshot at `2026-07-15T18:47:05.887967Z`. Evaluated 87,451 settled Paper rows across all 144 non-Progress BTC/ETH/SOL Child and Child ROI candidates, independently matched all aggregates, six winners, and daily values against server SQL, and sorted the six selected columns by total PnL ascending. Excel verified one sheet, exact formula-driven daily/category/grand totals (`$1,508.43229126`), 63 numeric financial cells, 9 red-on-white explicit-minus negative cells, zero formula errors, and frozen first row/column. The final workbook was visually inspected and saved in the ignored output directory; production and product code were unchanged.
+
+## 2026-07-15T18:55:33.4673652Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified exact production deployment `1d71e907717e712f889e7ea05d5351129ce8c699` strictly read-only. Paper betting remained active and exactly reconciled in both the initial and final fixed windows; the final 15-minute cohort contained `823` orders/fills/runs with zero mismatches and zero entries over `3s`. Four actual Live fills were independently matched to the official Polymarket Data API. The durable-inflight projector fix worked in the observed scope: across `250` high-frequency samples it blocked service sessions `0` times, pending work coexisted with in-flight work, cadence remained `30s`, and the queue was net draining, although its oldest high-priority item remained about `502s` old. Two repeatable Paper mark/settlement deadlocks exposed an opposite lock order that needs a deterministic position-before-queue fix and PostgreSQL interleaving coverage. The critical WebSocket also retained a `60s` backoff across successful reconnects, producing `94` closes and mostly one-minute recoveries; reset-after-success plus reconnect/flap tests are required. The service recovered from all observed incidents and remained active. No production or product state changed; only this required audit record was added.
