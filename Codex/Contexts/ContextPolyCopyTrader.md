@@ -1,3 +1,19 @@
+## Active Update 2026-07-16 Best Child And Child ROI Daily Paper PnL Excel Report Refresh
+Goal: Create a fresh one-sheet UTC daily Paper PnL Excel report for the highest-all-history-PnL strategy in each BTC/ETH/SOL Child and Child ROI Dashboard category.
+Status: Completed
+Done:
+- Reverified the current code and catalog contract: six non-Progress Dashboard categories (`BTC/ETH/SOL` x `Child/Child ROI`), each containing `N=1..24`, for exactly `144` candidate strategies.
+- Captured one production PostgreSQL `REPEATABLE READ, READ ONLY` snapshot from exact endpoint `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-16T19:39:45.325231Z` and evaluated `103,399` settled Paper rows over nine continuous UTC dates (`2026-07-08` through partial `2026-07-16`).
+- Independently reconciled local raw-row aggregates against server SQL for all `144` candidates, matched the six local winners against a separate server ranking, matched every selected strategy/date value against server daily aggregation, and repeated a separate local raw-CSV calculation over the `4,365` selected rows.
+- Selected and sorted the unique category winners by total Paper PnL ascending: BTC `N=12` Child `+$127.28819816`; SOL `N=21` Child ROI `+$144.62906420`; BTC `N=5` Child ROI `+$188.26446113`; SOL `N=10` Child `+$236.30467794`; ETH `N=2` Child `+$268.21664916`; ETH `N=6` Child ROI `+$289.23186609`.
+- Created `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-16/reports/child-child-roi-best-daily-paper-pnl-2026-07-16.xlsx` with one `Daily PnL` sheet, nine UTC date rows, formula-driven daily totals, formula-driven strategy totals, and formula-driven grand total `$1,253.93491668`.
+- Applied red text on a white background with an explicit minus sign to negative values and independently verified all `15` negative financial cells through Excel `DisplayFormat`.
+- Verified through Excel that the workbook has one `11x8` used range, `70` numeric financial cells, `16` exact total formulas, zero formula-error cells, exact source values/totals, and frozen first row/column (`FreezePanes=True`, `SplitRow=1`, `SplitColumn=1`). OpenXML independently confirmed `xSplit=1`, `ySplit=1`, `topLeftCell=B2`, and `state=frozen`.
+- Rendered the final workbook through Excel and visually verified legible headers, dates, values, negative signs/colors, daily totals, category totals, and grand total. Final SHA-256 is `AAF874E566DD61B0D47E7377E8192F7239FF46A1FF012A321D97377F7A848DC3`.
+Next: None.
+Notes: The `2026-07-16` row is partial through the exact UTC cutoff. Production access was read-only; no database row, strategy setting, order, service process, deployment, product code, or configuration changed. Reproducible source exports, independent aggregate evidence, workbook builder, verification scripts, inspection output, and QA renders are in the ignored output directory. Product tests were not required because product code was unchanged.
+Blockers: None.
+
 ## Active Update 2026-07-16 Atomic Paper Live-Shadow Fill Reconciliation
 Goal: Eliminate the verified Paper/Live-shadow fill race so Paper accounting is derived exactly once from persisted Live execution data without mixed simulated fills or duplicate position cost.
 Status: Completed

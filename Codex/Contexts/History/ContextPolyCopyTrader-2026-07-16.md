@@ -27,3 +27,19 @@ Request:
 
 Result:
 Implemented authoritative atomic Paper/Live-shadow fill reconciliation and excluded shadow orders from simulated market-data fills. Both immediate and maintenance paths now share one idempotent reconciler; mixed fills are replaced by one canonical Live fill and aggregate position cost is corrected in one PostgreSQL transaction. Added terminal-partial timestamp handling and kept real Live balance settlement independent from already settled Paper projections. Focused tests passed `98/98`, the exact concurrency test passed `1/1` on a fresh PostgreSQL 17 cluster, Release solution build passed with zero warnings/errors, and the full suite retained the exact known baseline of `112` failures (`771/883` passed). No production state or historical row was changed. Changes were committed locally, but the execution environment rejected `git push origin master` pending explicit user approval to send two commits to the external default branch.
+
+## 2026-07-16T20:14:54.0992525Z
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Created a fresh one-sheet Excel report from a production `REPEATABLE READ, READ ONLY` snapshot at `2026-07-16T19:39:45.325231Z`. Evaluated `103,399` settled Paper rows across all `144` non-Progress BTC/ETH/SOL Child and Child ROI candidates, independently matched all aggregates, six winners, and daily values against server SQL, and repeated a separate local calculation over the `4,365` selected rows. The six columns are sorted by total PnL ascending. Excel and OpenXML verified one `11x8` sheet, `16` exact total formulas, grand total `$1,253.93491668`, `15` red-on-white explicit-minus negative cells, zero formula errors, and frozen first row/column at `B2`. The final workbook was visually inspected and saved in the ignored output directory; production and product code were unchanged.
