@@ -11,3 +11,12 @@ Request:
 
 Result:
 Implemented a grace-bounded fresh retry for exact `crypto_reference_fetch_failed` decisions and extended the deterministic Paper wallet-lock transaction contract to single-row position upsert and conditional mark methods. Added two SOL batch/grace regressions, source-contract checks, and real PostgreSQL blocker/CAS tests. Focused tests passed `65/65`; affected PostgreSQL classes passed `14/14` on a disposable database that was dropped and confirmed absent; Release build passed with zero warnings/errors. Full regression produced `765 passed / 112 known failed / 877 total`, with the exact same 112 failure names as the saved baseline. Updated README and active context. No production state or deployment changed.
+
+## 2026-07-16T08:57:08.7529703Z
+Request:
+Выложил, проверяй
+
+То есть нам нужно что-то дорабатывать или нет?
+
+Result:
+Verified exact production deployment `b2cd28e4e1028088a02b44116a268181f741d962` / MVID `fc7a54db1f38` strictly read-only. Service health, `9,523` linked Paper entries/orders, four independently confirmed Live fills, `10,050` exact zero post-settlement positions, settlement math, and wallet-lock/deadlock checks passed. Generic acceleration is not justified: p99 was `2.992s`, and all `68/9,499` steady-state entries over `3s` were explained by previous-market prerequisite readiness or Live/CLOB response time rather than a repeating internal bottleneck. The new crypto-reference retry was not exercised because no qualifying runtime lookup failure occurred. Found one required follow-up: three Live-shadow Paper orders mixed a simulated `0.99` fill with a later actual-price delta, inflating their Paper cost bases and lowering settled Paper-shadow PnL by an independently reproduced total `$5.44175703`; real Live accounting was correct. No production or product mutation was performed.
