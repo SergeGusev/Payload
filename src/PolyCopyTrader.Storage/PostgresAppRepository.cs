@@ -2100,6 +2100,351 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		return result;
 	}
 
+	public async Task<PaperLiveShadowFillReconciliationResult> ReconcilePaperLiveShadowFillAsync(
+		PaperLiveShadowFillReconciliationRequest request,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (request.PaperOrderId == Guid.Empty || request.LiveOrderId == Guid.Empty)
+		{
+			throw new ArgumentException("Paper and Live order identifiers are required for shadow reconciliation.", nameof(request));
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		var initialOrder = await ReadPaperOrderForReconciliationAsync(
+			connection,
+			transaction: null,
+			request.PaperOrderId,
+			forUpdate: false,
+			cancellationToken);
+		if (initialOrder is null)
+		{
+			throw new InvalidOperationException($"Paper shadow order {request.PaperOrderId:D} was not found.");
+		}
+
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await LockPaperWalletsAsync(connection, transaction, [initialOrder.CopiedTraderWallet], cancellationToken);
+		var currentPosition = await ReadPaperPositionForReconciliationAsync(
+			connection,
+			transaction,
+			initialOrder.CopiedTraderWallet,
+			initialOrder.AssetId,
+			cancellationToken);
+		var currentOrder = await ReadPaperOrderForReconciliationAsync(
+			connection,
+			transaction,
+			request.PaperOrderId,
+			forUpdate: true,
+			cancellationToken);
+		if (currentOrder is null)
+		{
+			throw new InvalidOperationException($"Paper shadow order {request.PaperOrderId:D} disappeared during reconciliation.");
+		}
+
+		if (!string.Equals(currentOrder.CopiedTraderWallet, initialOrder.CopiedTraderWallet, StringComparison.Ordinal) ||
+			!string.Equals(currentOrder.AssetId, initialOrder.AssetId, StringComparison.OrdinalIgnoreCase))
+		{
+			throw new InvalidOperationException("Paper shadow wallet or asset changed while reconciliation locks were being acquired.");
+		}
+
+		var liveOrder = await ReadLiveOrderForReconciliationAsync(
+			connection,
+			transaction,
+			request.LiveOrderId,
+			cancellationToken);
+		if (liveOrder is null)
+		{
+			throw new InvalidOperationException($"Live shadow order {request.LiveOrderId:D} was not found.");
+		}
+
+		var existingFills = await ReadPaperFillsForReconciliationAsync(
+			connection,
+			transaction,
+			request.PaperOrderId,
+			cancellationToken);
+		await EnsurePaperShadowNotSettledAsync(
+			connection,
+			transaction,
+			currentOrder.CopiedTraderWallet,
+			currentOrder.AssetId,
+			cancellationToken);
+		var copiedLeaderPosition = await ReadPaperCopiedLeaderPositionForReconciliationAsync(
+			connection,
+			transaction,
+			currentOrder.Id,
+			cancellationToken);
+		if (copiedLeaderPosition is not null &&
+			(copiedLeaderPosition.Status == PaperCopiedLeaderPositionStatus.Closed ||
+			 copiedLeaderPosition.LeaderSoldSizeShares > 0m ||
+			 copiedLeaderPosition.CopiedExitRequestedSizeShares > 0m))
+		{
+			throw new InvalidOperationException("Paper copied-leader exits already started; shadow fill reconciliation was refused.");
+		}
+
+		var canonical = PaperLiveShadowFillAccounting.CreateCanonicalState(
+			currentOrder,
+			liveOrder,
+			existingFills,
+			currentPosition,
+			request.ReconciledAtUtc);
+
+		await UpsertPaperPositionsBatchAsync(connection, transaction, [canonical.PaperPosition], cancellationToken);
+		await UpdatePaperOrderForReconciliationAsync(connection, transaction, canonical.PaperOrder, cancellationToken);
+		await ReplacePaperFillsForReconciliationAsync(
+			connection,
+			transaction,
+			canonical.PaperFill,
+			existingFills,
+			cancellationToken);
+		await SetPaperCopiedLeaderPositionFillForReconciliationAsync(
+			connection,
+			transaction,
+			canonical.PaperFill,
+			cancellationToken);
+
+		await transaction.CommitAsync(cancellationToken);
+		return new PaperLiveShadowFillReconciliationResult(
+			canonical.PaperOrder,
+			canonical.PaperFill,
+			canonical.PaperPosition);
+	}
+
+	private static async Task<PaperOrder?> ReadPaperOrderForReconciliationAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction? transaction,
+		Guid paperOrderId,
+		bool forUpdate,
+		CancellationToken cancellationToken)
+	{
+		await using NpgsqlCommand command = CreateCommand(
+			connection,
+			"SELECT " + PaperOrderSelectColumns + "\nFROM paper_orders\nWHERE id = @Id\nLIMIT 1" + (forUpdate ? "\nFOR UPDATE" : string.Empty) + ";");
+		command.Transaction = transaction;
+		command.Parameters.AddWithValue("Id", paperOrderId);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		return await reader.ReadAsync(cancellationToken) ? ReadPaperOrder(reader) : null;
+	}
+
+	private static async Task<PaperPosition?> ReadPaperPositionForReconciliationAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		string copiedTraderWallet,
+		string assetId,
+		CancellationToken cancellationToken)
+	{
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd,
+       unrealized_pnl_usd, updated_at_utc, copied_trader_wallet
+FROM paper_positions
+WHERE copied_trader_wallet = @CopiedTraderWallet
+  AND asset_id = @AssetId
+LIMIT 1
+FOR UPDATE;
+""");
+		command.Transaction = transaction;
+		command.Parameters.AddWithValue("CopiedTraderWallet", copiedTraderWallet);
+		command.Parameters.AddWithValue("AssetId", assetId);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		return await reader.ReadAsync(cancellationToken) ? ReadPaperPosition(reader) : null;
+	}
+
+	private static async Task<LiveOrder?> ReadLiveOrderForReconciliationAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		Guid liveOrderId,
+		CancellationToken cancellationToken)
+	{
+		await using NpgsqlCommand command = CreateCommand(
+			connection,
+			"SELECT " + LiveOrderSelectColumns + "\nFROM live_orders\nWHERE id = @Id\nLIMIT 1\nFOR UPDATE;");
+		command.Transaction = transaction;
+		command.Parameters.AddWithValue("Id", liveOrderId);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		var orders = await ReadLiveOrdersAsync(reader, cancellationToken);
+		return orders.SingleOrDefault();
+	}
+
+	private static async Task<IReadOnlyList<PaperFill>> ReadPaperFillsForReconciliationAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		Guid paperOrderId,
+		CancellationToken cancellationToken)
+	{
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd
+FROM paper_fills
+WHERE paper_order_id = @PaperOrderId
+ORDER BY filled_at_utc, id
+FOR UPDATE;
+""");
+		command.Transaction = transaction;
+		command.Parameters.AddWithValue("PaperOrderId", paperOrderId);
+		List<PaperFill> fills = [];
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			fills.Add(ReadPaperFill(reader));
+		}
+
+		return fills;
+	}
+
+	private static async Task EnsurePaperShadowNotSettledAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		string copiedTraderWallet,
+		string assetId,
+		CancellationToken cancellationToken)
+	{
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT EXISTS (
+    SELECT 1
+    FROM paper_position_settlements
+    WHERE copied_trader_wallet = @CopiedTraderWallet
+      AND asset_id = @AssetId
+);
+""");
+		command.Transaction = transaction;
+		command.Parameters.AddWithValue("CopiedTraderWallet", copiedTraderWallet);
+		command.Parameters.AddWithValue("AssetId", assetId);
+		if ((bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false))
+		{
+			throw new InvalidOperationException("Paper shadow position was already settled; reconciliation was refused.");
+		}
+	}
+
+	private static async Task<PaperCopiedLeaderPosition?> ReadPaperCopiedLeaderPositionForReconciliationAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		Guid paperOrderId,
+		CancellationToken cancellationToken)
+	{
+		await using NpgsqlCommand command = CreateCommand(connection, """
+SELECT id, entry_signal_id, entry_paper_order_id, copied_trader_wallet, asset_id,
+       condition_id, outcome, entry_transaction_hash, entry_timestamp_utc,
+       leader_entry_price, leader_initial_size_shares, copied_initial_size_shares,
+       leader_sold_size_shares, copied_exit_requested_size_shares, status,
+       last_activity_timestamp_utc, last_activity_transaction_hash,
+       last_activity_sync_at_utc, next_activity_sync_at_utc, created_at_utc, updated_at_utc
+FROM paper_copied_leader_positions
+WHERE entry_paper_order_id = @PaperOrderId
+LIMIT 1
+FOR UPDATE;
+""");
+		command.Transaction = transaction;
+		command.Parameters.AddWithValue("PaperOrderId", paperOrderId);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		return await reader.ReadAsync(cancellationToken) ? ReadPaperCopiedLeaderPosition(reader) : null;
+	}
+
+	private static async Task UpdatePaperOrderForReconciliationAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		PaperOrder order,
+		CancellationToken cancellationToken)
+	{
+		await using NpgsqlCommand command = CreateCommand(connection, """
+UPDATE paper_orders
+SET status = @Status,
+    strategy_id = @StrategyId,
+    filled_at_utc = @FilledAtUtc,
+    cancelled_at_utc = @CancelledAtUtc,
+    price = @Price,
+    size_shares = @SizeShares,
+    notional_usd = @NotionalUsd,
+    raw_decision_json = CAST(@RawDecisionJson AS jsonb),
+    correlation_id = @CorrelationId,
+    execution_source = @ExecutionSource
+WHERE id = @Id;
+""");
+		command.Transaction = transaction;
+		command.Parameters.AddWithValue("Id", order.Id);
+		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(order.StrategyId));
+		command.Parameters.AddWithValue("Status", order.Status.ToString());
+		command.Parameters.AddWithValue("Price", order.Price);
+		command.Parameters.AddWithValue("SizeShares", order.SizeShares);
+		command.Parameters.AddWithValue("NotionalUsd", order.NotionalUsd);
+		command.Parameters.AddWithValue("FilledAtUtc", order.FilledAtUtc.HasValue ? UtcDateTime(order.FilledAtUtc.Value) : (object)DBNull.Value);
+		command.Parameters.AddWithValue("CancelledAtUtc", order.CancelledAtUtc.HasValue ? UtcDateTime(order.CancelledAtUtc.Value) : (object)DBNull.Value);
+		command.Parameters.AddWithValue("RawDecisionJson", BuildPaperOrderRawDecisionJson(order));
+		command.Parameters.AddWithValue("CorrelationId", order.CorrelationId.HasValue ? order.CorrelationId.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("ExecutionSource", order.ExecutionSource ?? string.Empty);
+		if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+		{
+			throw new InvalidOperationException("Paper shadow order update did not affect exactly one row.");
+		}
+	}
+
+	private static async Task ReplacePaperFillsForReconciliationAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		PaperFill canonicalFill,
+		IReadOnlyList<PaperFill> existingFills,
+		CancellationToken cancellationToken)
+	{
+		if (existingFills.Count == 0)
+		{
+			await using NpgsqlCommand insertCommand = CreateCommand(connection, """
+INSERT INTO paper_fills (id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd)
+VALUES (@Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence, @RealizedPnlUsd);
+""");
+			insertCommand.Transaction = transaction;
+			AddPaperFillParameters(insertCommand, canonicalFill);
+			await insertCommand.ExecuteNonQueryAsync(cancellationToken);
+			return;
+		}
+
+		await using (NpgsqlCommand updateCommand = CreateCommand(connection, """
+UPDATE paper_fills
+SET price = @Price,
+    size_shares = @SizeShares,
+    filled_at_utc = @FilledAtUtc,
+    evidence = @Evidence,
+    realized_pnl_usd = @RealizedPnlUsd
+WHERE id = @Id
+  AND paper_order_id = @PaperOrderId;
+"""))
+		{
+			updateCommand.Transaction = transaction;
+			AddPaperFillParameters(updateCommand, canonicalFill);
+			if (await updateCommand.ExecuteNonQueryAsync(cancellationToken) != 1)
+			{
+				throw new InvalidOperationException("Canonical Paper shadow fill update did not affect exactly one row.");
+			}
+		}
+
+		await using NpgsqlCommand deleteCommand = CreateCommand(connection, """
+DELETE FROM paper_fills
+WHERE paper_order_id = @PaperOrderId
+  AND id <> @CanonicalFillId;
+""");
+		deleteCommand.Transaction = transaction;
+		deleteCommand.Parameters.AddWithValue("PaperOrderId", canonicalFill.PaperOrderId);
+		deleteCommand.Parameters.AddWithValue("CanonicalFillId", canonicalFill.Id);
+		await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+	}
+
+	private static async Task SetPaperCopiedLeaderPositionFillForReconciliationAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		PaperFill canonicalFill,
+		CancellationToken cancellationToken)
+	{
+		await using NpgsqlCommand command = CreateCommand(connection, """
+UPDATE paper_copied_leader_positions
+SET status = 'Active',
+    copied_initial_size_shares = @CopiedInitialSizeShares,
+    next_activity_sync_at_utc = LEAST(next_activity_sync_at_utc, @FilledAtUtc),
+    updated_at_utc = @FilledAtUtc
+WHERE entry_paper_order_id = @EntryPaperOrderId
+  AND status IN ('PendingEntry', 'Active');
+""");
+		command.Transaction = transaction;
+		command.Parameters.AddWithValue("EntryPaperOrderId", canonicalFill.PaperOrderId);
+		command.Parameters.AddWithValue("CopiedInitialSizeShares", canonicalFill.SizeShares);
+		command.Parameters.AddWithValue("FilledAtUtc", UtcDateTime(canonicalFill.FilledAtUtc));
+		await command.ExecuteNonQueryAsync(cancellationToken);
+	}
+
 	public async Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);

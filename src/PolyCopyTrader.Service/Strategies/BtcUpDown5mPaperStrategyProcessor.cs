@@ -43,15 +43,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     IStrategyStateProvider strategyStateProvider,
     IAppRepository repository,
     TimeProvider? timeProvider = null,
-    IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null) : IBtcUpDown5mPaperStrategyProcessor
+    IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null,
+    IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null) : IBtcUpDown5mPaperStrategyProcessor
 {
     private const string GammaOutcomePriceSource = "gamma_outcome_price";
     private const string WebSocketCacheSource = "websocket_cache";
     private const string ClobBookSource = "clob_book";
     private const string CloseBookSnapshotSource = "order_book_snapshot";
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
-    private const string PaperLiveShadowActualFillExecutionSource = "paper_live_shadow_actual_fill";
-    private const string PaperLiveShadowActualFillModel = "live_order_actual_fill_v1";
     private const string BtcGtdLimitExecutionSource = "btc_updown5m_gtd_limit";
     private const string BtcPreOpenSellExitExecutionSource = "btc_preopen_sell_exit";
     private const string BtcMakerExecutionSource = "btc_updown5m_maker_post_only";
@@ -156,6 +155,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly ConcurrentDictionary<StrategyMarketRunCacheKey, DateTimeOffset> observedRunCache = new();
     private readonly object observedRunCacheCleanupSync = new();
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+    private readonly IPaperLiveShadowFillReconciler shadowFillReconciler =
+        paperLiveShadowFillReconciler ?? new PaperLiveShadowFillReconciler(repository, exposureCache);
     private LiveStrategyPrioritySnapshot liveStrategyPrioritySnapshot = LiveStrategyPrioritySnapshot.Empty;
     private ObservationMarketSnapshot observationMarketSnapshot = ObservationMarketSnapshot.Empty;
     private DateTimeOffset nextObservedRunCacheCleanupUtc = DateTimeOffset.MinValue;
@@ -16445,48 +16446,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return root.ToJsonString();
     }
 
-    private static string AttachPaperLiveShadowActualFillJson(
-        string? rawDecisionJson,
-        LiveOrder liveOrder,
-        decimal fillPrice,
-        decimal fillSize,
-        decimal fillNotional)
-    {
-        JsonObject root;
-        try
-        {
-            root = string.IsNullOrWhiteSpace(rawDecisionJson)
-                ? new JsonObject()
-                : JsonNode.Parse(rawDecisionJson)?.AsObject() ?? new JsonObject();
-        }
-        catch (JsonException)
-        {
-            root = new JsonObject();
-        }
-
-        root["source"] = PaperLiveShadowActualFillExecutionSource;
-        root["paper_live_shadow_test"] = true;
-        root["paper_live_shadow_actual_fill"] = true;
-        root["paper_fill_model"] = PaperLiveShadowActualFillModel;
-        root["paper_fill_source"] = PaperLiveShadowActualFillModel;
-        root["live_order_id"] = liveOrder.Id.ToString();
-        root["live_order_status"] = liveOrder.Status.ToString();
-        root["live_order_response_status"] = liveOrder.ResponseStatus;
-        root["live_clob_order_id"] = liveOrder.OrderId;
-        root["live_order_price"] = liveOrder.Price;
-        root["live_order_notional_usd"] = liveOrder.NotionalUsd;
-        root["live_order_size_shares"] = liveOrder.SizeShares;
-        root["live_filled_size"] = liveOrder.FilledSize;
-        root["live_filled_notional_usd"] = liveOrder.FilledNotionalUsd;
-        root["live_cost_basis_usd"] = liveOrder.CostBasisUsd;
-        root["live_average_fill_price"] = liveOrder.AverageFillPrice;
-        root["actual_fill_price"] = fillPrice;
-        root["actual_fill_size_shares"] = fillSize;
-        root["actual_fill_notional_usd"] = fillNotional;
-        root["actual_fill_copied_at_utc"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-        return root.ToJsonString();
-    }
-
     private static string AttachFixedOpeningLimitPricingJson(
         string rawDecisionJson,
         decimal limitPrice)
@@ -20839,76 +20798,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return false;
         }
 
-        var filledAtUtc = liveOrder.SubmittedAtUtc ?? liveOrder.UpdatedAtUtc;
-        var rawDecisionJson = AttachPaperLiveShadowActualFillJson(
-            paperOrder.RawDecisionJson,
-            liveOrder,
-            fillPrice,
-            fillSize,
-            fillNotional);
-        var actualPaperOrder = paperOrder with
-        {
-            Status = PaperOrderStatus.Filled,
-            Price = fillPrice,
-            SizeShares = fillSize,
-            NotionalUsd = fillNotional,
-            FilledAtUtc = filledAtUtc,
-            CancelledAtUtc = null,
-            RawDecisionJson = rawDecisionJson,
-            ExecutionSource = PaperLiveShadowActualFillExecutionSource
-        };
-
-        var existingFills = await repository.GetPaperFillsForOrderAsync(paperOrder.Id, cancellationToken);
-        if (existingFills.Count == 0)
-        {
-            var paperFill = new PaperFill(
-                Guid.NewGuid(),
-                paperOrder.Id,
-                fillPrice,
-                fillSize,
-                filledAtUtc,
-                string.Concat(
-                    "Paper live-shadow copied actual Live fill. LiveOrderId=",
-                    liveOrder.Id.ToString("D"),
-                    " Status=",
-                    liveOrder.Status.ToString(),
-                    " AvgFillPrice=",
-                    fillPrice.ToString("0.########", CultureInfo.InvariantCulture),
-                    " FilledSize=",
-                    fillSize.ToString("0.########", CultureInfo.InvariantCulture),
-                    " FilledNotionalUsd=",
-                    fillNotional.ToString("0.########", CultureInfo.InvariantCulture),
-                    "."));
-            await repository.AddPaperFillAsync(paperFill, cancellationToken);
-
-            var currentPosition = await repository.GetPaperPositionAsync(
-                actualPaperOrder.CopiedTraderWallet,
-                actualPaperOrder.AssetId,
-                cancellationToken);
-            var updatedPosition = paperTradingEngine.ApplyBuyFill(
-                currentPosition,
-                actualPaperOrder,
-                paperFill,
-                fillPrice,
-                filledAtUtc);
-            await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
-            exposureCache.ApplyPaperPosition(updatedPosition);
-            await repository.ActivatePaperCopiedLeaderPositionAsync(
-                actualPaperOrder.Id,
-                paperFill.SizeShares,
-                paperFill.FilledAtUtc,
-                cancellationToken);
-        }
-
-        await repository.UpdatePaperOrderAsync(actualPaperOrder, cancellationToken);
-        exposureCache.ApplyPaperOrder(actualPaperOrder);
+        var reconciliation = await shadowFillReconciler.ReconcileAsync(
+            paperOrder.Id,
+            liveOrder.Id,
+            cancellationToken);
+        var actualPaperOrder = reconciliation.PaperOrder;
+        var filledAtUtc = actualPaperOrder.FilledAtUtc ?? liveOrder.SubmittedAtUtc ?? liveOrder.UpdatedAtUtc;
         await repository.UpdateStrategyMarketPaperRunAsync(
             run with
             {
                 Status = StrategyMarketPaperRunStatuses.Entered,
-                EntryPrice = fillPrice,
-                StakeUsd = fillNotional,
-                SizeShares = fillSize,
+                EntryPrice = actualPaperOrder.Price,
+                StakeUsd = actualPaperOrder.NotionalUsd,
+                SizeShares = actualPaperOrder.SizeShares,
                 EnteredAtUtc = filledAtUtc,
                 SkipReason = null,
                 SkipDiagnosticsJson = null,

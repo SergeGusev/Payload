@@ -21,13 +21,25 @@ public sealed class LiveTradingProcessor(
     IPaperTradingEngine paperTradingEngine,
     ServiceControlState controlState,
     IPolymarketDataApiClient? dataApiClient = null,
-    PolymarketAuthOptions? authOptions = null) : ILiveTradingProcessor
+    PolymarketAuthOptions? authOptions = null,
+    IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null) : ILiveTradingProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const string DataApiPositionObservationMarker = "Data API aggregate position observed; exact per-order fill not applied.";
     private const decimal ShadowPriceTolerance = 0.000001m;
     private const decimal ExpectedFakWorstPrice = 0.99m;
     private const decimal FillSizeTolerance = 0.000001m;
+    private readonly IPaperLiveShadowFillReconciler shadowFillReconciler =
+        paperLiveShadowFillReconciler ?? CreateShadowFillReconciler(repository, exposureCache, paperTradingEngine);
+
+    private static IPaperLiveShadowFillReconciler CreateShadowFillReconciler(
+        IAppRepository appRepository,
+        IExposureSnapshotCache snapshotCache,
+        IPaperTradingEngine engine)
+    {
+        ArgumentNullException.ThrowIfNull(engine);
+        return new PaperLiveShadowFillReconciler(appRepository, snapshotCache);
+    }
 
     public async Task<LiveTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
@@ -247,7 +259,7 @@ public sealed class LiveTradingProcessor(
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                await SyncPaperShadowAsync(order, cancellationToken);
+                await TrySyncPaperShadowBeforeLiveSettlementAsync(order, cancellationToken);
 
                 var metadata = await GetResolvedMetadataAsync(order, cancellationToken);
                 if (metadata.Count == 0)
@@ -321,6 +333,35 @@ public sealed class LiveTradingProcessor(
         }
 
         return applied;
+    }
+
+    private async Task TrySyncPaperShadowBeforeLiveSettlementAsync(
+        LiveOrder order,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await SyncPaperShadowAsync(order, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Paper shadow synchronization failed before Live settlement for {LiveOrderId}; Live settlement will continue independently.",
+                order.Id);
+            await repository.AddLiveTradingEventAsync(
+                new LiveTradingEvent(
+                    Guid.NewGuid(),
+                    "PaperLiveShadowSettlementSync",
+                    "Error",
+                    $"LiveOrderId={order.Id:D}; {ex.Message}",
+                    DateTimeOffset.UtcNow),
+                cancellationToken);
+        }
     }
 
     private async Task UpdateStrategyLiveLostCounterAfterSettlementAsync(
@@ -521,42 +562,15 @@ public sealed class LiveTradingProcessor(
                 cancellationToken);
         }
 
-        var existingFills = await repository.GetPaperFillsForOrderAsync(paperOrder.Id, cancellationToken);
-        var previouslyFilledShares = existingFills.Sum(fill => fill.SizeShares);
         var targetFilledShares = Math.Min(liveOrder.FilledSize, paperOrder.SizeShares);
-        var deltaShares = targetFilledShares - previouslyFilledShares;
-
-        if (deltaShares > 0.000001m)
+        if (targetFilledShares > FillSizeTolerance)
         {
-            var fillPrice = liveOrder.AverageFillPrice ?? liveOrder.Price;
-            var fill = new PaperFill(
-                Guid.NewGuid(),
+            var reconciliation = await shadowFillReconciler.ReconcileAsync(
                 paperOrder.Id,
-                fillPrice,
-                deltaShares,
-                now,
-                JsonSerializer.Serialize(new
-                {
-                    source = PaperLiveShadowTestSource,
-                    live_order_id = liveOrder.Id,
-                    live_exchange_order_id = liveOrder.OrderId,
-                    correlation_id = liveOrder.CorrelationId,
-                    live_status = liveOrder.Status.ToString(),
-                    live_response_status = liveOrder.ResponseStatus
-                }));
-            var filledOrder = paperTradingEngine.ApplyFillStatus(paperOrder, fill, previouslyFilledShares);
-            await repository.AddPaperFillAsync(fill, cancellationToken);
-            await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
-            exposureCache.ApplyPaperOrder(filledOrder);
-
-            var currentPosition = await repository.GetPaperPositionAsync(
-                paperOrder.CopiedTraderWallet,
-                paperOrder.AssetId,
+                liveOrder.Id,
                 cancellationToken);
-            var updatedPosition = paperTradingEngine.ApplyBuyFill(currentPosition, paperOrder, fill, fillPrice, now);
-            await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
-            exposureCache.ApplyPaperPosition(updatedPosition);
-            paperOrder = filledOrder;
+            paperOrder = reconciliation.PaperOrder;
+            targetFilledShares = reconciliation.PaperFill.SizeShares;
         }
 
         if (liveOrder.Status is LiveOrderStatus.Cancelled or LiveOrderStatus.CancelFailed or LiveOrderStatus.Rejected or LiveOrderStatus.Error &&

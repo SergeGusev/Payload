@@ -14,6 +14,7 @@ public sealed class PaperTradingMarketDataUpdater(
     ConservativePaperGtdFillEstimator conservativeGtdFillEstimator,
     IAppRepository repository) : IPaperTradingMarketDataUpdater
 {
+    private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private readonly SemaphoreSlim sync = new(1, 1);
 
     public async Task ApplyUpdateAsync(
@@ -68,6 +69,7 @@ public sealed class PaperTradingMarketDataUpdater(
             var matchingOrders = exposure.OpenPaperOrders
                 .Where(order =>
                     string.Equals(order.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(order.ExecutionSource, PaperLiveShadowTestSource, StringComparison.OrdinalIgnoreCase) &&
                     (eligiblePaperOrderIds is null || eligiblePaperOrderIds.Contains(order.Id)))
                 .ToArray();
             var positions = exposure.PaperPositions

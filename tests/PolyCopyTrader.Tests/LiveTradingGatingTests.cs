@@ -10,6 +10,7 @@ using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
 using PolyCopyTrader.Service.Startup;
 using PolyCopyTrader.Service.Strategies;
+using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Tests;
@@ -523,6 +524,318 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
+    public async Task LiveProcessorFinalizesCancelledPartialShadowFill()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = Guid.NewGuid();
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
+        await repository.AddPaperOrderAsync(new PaperOrder(
+            paperOrderId,
+            signalId,
+            StrategyIds.BtcUpDown5mUpSimpleCode,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0.40m,
+            5m,
+            2m,
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test"));
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            signalId,
+            LiveOrderStatus.Live,
+            "0xpartial-cancel",
+            TradeSide.Buy,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0.99m,
+            5m,
+            4.95m,
+            "FAK",
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            now.AddMinutes(-1),
+            "live",
+            0m,
+            5m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddMinutes(-1),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test",
+            PostOnly: false,
+            PaperOrderId: paperOrderId));
+        var firstTradingClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult(
+                "0xpartial-cancel",
+                "LIVE",
+                "5000000",
+                "3000000",
+                "0.40",
+                "{}")
+        };
+        var firstProcessor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([]),
+            firstTradingClient,
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var firstResult = await firstProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, firstResult.OrdersPolled);
+        Assert.Equal(
+            PaperOrderStatus.PartiallyFilled,
+            Assert.Single(repository.PaperOrders).Status);
+        var firstFilledAtUtc = Assert.Single(repository.PaperFills).FilledAtUtc;
+        var tradingClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult(
+                "0xpartial-cancel",
+                "CANCELED",
+                "5000000",
+                "3000000",
+                "0.40",
+                "{}")
+        };
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([]),
+            tradingClient,
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersPolled);
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.Equal(LiveOrderStatus.Cancelled, liveOrder.Status);
+        Assert.Equal(3m, liveOrder.FilledSize);
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, paperOrder.Status);
+        Assert.Equal("paper_live_shadow_actual_fill", paperOrder.ExecutionSource);
+        Assert.Equal(liveOrder.UpdatedAtUtc, paperOrder.CancelledAtUtc);
+        var paperFill = Assert.Single(repository.PaperFills);
+        Assert.Equal(3m, paperFill.SizeShares);
+        Assert.Equal(0.40m, paperFill.Price);
+        Assert.Equal(firstFilledAtUtc, paperFill.FilledAtUtc);
+        Assert.Equal(3m, Assert.Single(repository.PaperPositions).SizeShares);
+    }
+
+    [Fact]
+    public async Task LiveProcessorReconcilesMixedShadowFillsToCanonicalLiveAccounting()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = Guid.NewGuid();
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var liveOrderId = Guid.NewGuid();
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
+        repository.PaperOrders.Add(new PaperOrder(
+            paperOrderId,
+            signalId,
+            StrategyIds.BtcUpDown5mUpSimpleCode,
+            PaperOrderStatus.Filled,
+            TradeSide.Buy,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0.50m,
+            4m,
+            2m,
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            FilledAtUtc: now.AddSeconds(-10),
+            StrategyId: strategyId,
+            RawDecisionJson: "{\"paper_live_shadow_test\":true}",
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_actual_fill"));
+        repository.PaperFills.AddRange(
+        [
+            new PaperFill(Guid.NewGuid(), paperOrderId, 0.99m, 2m, now.AddSeconds(-20), "BalancedGtcDepth"),
+            new PaperFill(Guid.NewGuid(), paperOrderId, 0.50m, 2m, now.AddSeconds(-10), "live delta")
+        ]);
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            4m,
+            0.745m,
+            2m,
+            -0.98m,
+            now.AddSeconds(-10),
+            StrategyIds.BtcUpDown5mUpSimpleCode));
+        repository.LiveOrders.Add(new LiveOrder(
+            liveOrderId,
+            signalId,
+            LiveOrderStatus.Matched,
+            "0xmatched",
+            TradeSide.Buy,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0.99m,
+            4m,
+            3.96m,
+            "FAK",
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            now.AddSeconds(-15),
+            "matched",
+            4m,
+            0m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddSeconds(-10),
+            StrategyId: strategyId,
+            AverageFillPrice: 0.50m,
+            FilledNotionalUsd: 2m,
+            CostBasisUsd: 2m,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test",
+            PostOnly: false,
+            PaperOrderId: paperOrderId));
+        var exposureCache = new ExposureSnapshotCache(repository);
+        await exposureCache.RefreshAsync();
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([]),
+            new CapturingTradingClient(),
+            repository,
+            exposureCache,
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        await processor.ProcessOpenOrdersAsync();
+
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
+        Assert.Equal("paper_live_shadow_actual_fill", paperOrder.ExecutionSource);
+        Assert.Equal(0.50m, paperOrder.Price);
+        Assert.Equal(4m, paperOrder.SizeShares);
+        Assert.Equal(2m, paperOrder.NotionalUsd);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(0.50m, fill.Price);
+        Assert.Equal(4m, fill.SizeShares);
+        Assert.Equal(2m, fill.Price * fill.SizeShares);
+        var position = Assert.Single(repository.PaperPositions);
+        Assert.Equal(4m, position.SizeShares);
+        Assert.Equal(0.50m, position.AveragePrice);
+        Assert.Equal(2m, position.SizeShares * position.AveragePrice);
+        Assert.Equal(position, exposureCache.GetPaperPosition(position.CopiedTraderWallet, position.AssetId));
+    }
+
+    [Fact]
+    public async Task AtomicShadowReconciliationIsIdempotentUnderConcurrentCalls()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = Guid.NewGuid();
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var liveOrderId = Guid.NewGuid();
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
+        repository.PaperOrders.Add(new PaperOrder(
+            paperOrderId,
+            signalId,
+            StrategyIds.BtcUpDown5mUpSimpleCode,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-concurrent",
+            "condition-concurrent",
+            "Yes",
+            0.40m,
+            5m,
+            2m,
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test"));
+        repository.LiveOrders.Add(new LiveOrder(
+            liveOrderId,
+            signalId,
+            LiveOrderStatus.Matched,
+            "0xconcurrent",
+            TradeSide.Buy,
+            "asset-concurrent",
+            "condition-concurrent",
+            "Yes",
+            0.99m,
+            5m,
+            4.95m,
+            "FAK",
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            now.AddSeconds(-5),
+            "matched",
+            5m,
+            0m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now,
+            StrategyId: strategyId,
+            AverageFillPrice: 0.40m,
+            FilledNotionalUsd: 2m,
+            CostBasisUsd: 2m,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test",
+            PostOnly: false,
+            PaperOrderId: paperOrderId));
+        var arrivals = 0;
+        var bothArrived = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.BeforePaperLiveShadowFillReconciliationAsync = async () =>
+        {
+            if (Interlocked.Increment(ref arrivals) == 2)
+            {
+                bothArrived.TrySetResult(true);
+            }
+
+            await bothArrived.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        };
+        var request = new PaperLiveShadowFillReconciliationRequest(paperOrderId, liveOrderId, now);
+
+        await Task.WhenAll(
+            repository.ReconcilePaperLiveShadowFillAsync(request),
+            repository.ReconcilePaperLiveShadowFillAsync(request)).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, repository.PaperLiveShadowFillReconciliationCalls);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(5m, fill.SizeShares);
+        Assert.Equal(0.40m, fill.Price);
+        var position = Assert.Single(repository.PaperPositions);
+        Assert.Equal(5m, position.SizeShares);
+        Assert.Equal(0.40m, position.AveragePrice);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(repository.PaperOrders).Status);
+    }
+
+    [Fact]
     public async Task LiveProcessorAllowsShadowFakWhenPaperDecisionExpectsNonPostOnly()
     {
         var repository = new TestAppRepository();
@@ -963,6 +1276,136 @@ public sealed class LiveTradingGatingTests
 
         Assert.Equal(0, secondResult.DataApiPositionObservations);
         Assert.Single(repository.LiveTradingEvents, item => item.Action == "LiveDataApiPositionObservation");
+    }
+
+    [Fact]
+    public async Task LiveProcessorSettlesMatchedShadowWhenPaperPositionWasAlreadySettled()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            LiveStakes = true,
+            LiveAvailableBalance = 10m,
+            LiveLostCoeff = 2m
+        };
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var liveOrderId = Guid.NewGuid();
+        var correlationId = Guid.NewGuid();
+        var wallet = StrategyIds.BtcUpDown5mUpSimpleCode;
+        repository.PaperOrders.Add(new PaperOrder(
+            paperOrderId,
+            signalId,
+            wallet,
+            PaperOrderStatus.Filled,
+            TradeSide.Buy,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0.50m,
+            4m,
+            2m,
+            now.AddMinutes(-10),
+            now.AddMinutes(-5),
+            FilledAtUtc: now.AddMinutes(-9),
+            StrategyId: strategyId,
+            RawDecisionJson: "{\"paper_live_shadow_test\":true}",
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_actual_fill"));
+        repository.PaperFills.Add(new PaperFill(
+            Guid.NewGuid(),
+            paperOrderId,
+            0.50m,
+            4m,
+            now.AddMinutes(-9),
+            "live actual fill"));
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0m,
+            0m,
+            0m,
+            0m,
+            now.AddMinutes(-1),
+            wallet));
+        repository.PaperPositionSettlements.Add(new PaperPositionSettlement(
+            Guid.NewGuid(),
+            wallet,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            "asset-yes",
+            "Yes",
+            "Politics",
+            4m,
+            0.50m,
+            2m,
+            4m,
+            2m,
+            true,
+            "UnitTest",
+            now.AddMinutes(-1),
+            now.AddMinutes(-1)));
+        repository.LiveOrders.Add(new LiveOrder(
+            liveOrderId,
+            signalId,
+            LiveOrderStatus.Matched,
+            "0xsettled-shadow",
+            TradeSide.Buy,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0.99m,
+            4m,
+            3.96m,
+            "FAK",
+            now.AddMinutes(-10),
+            now.AddMinutes(-5),
+            now.AddMinutes(-10),
+            "matched",
+            4m,
+            0m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddMinutes(-5),
+            StrategyId: strategyId,
+            AverageFillPrice: 0.50m,
+            FilledNotionalUsd: 2m,
+            CostBasisUsd: 2m,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test",
+            PostOnly: false,
+            PaperOrderId: paperOrderId));
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([
+                TokenMetadata("asset-yes", "Yes", "Yes"),
+                TokenMetadata("asset-no", "No", "Yes")
+            ]),
+            new CapturingTradingClient(),
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.BalanceSettlementsApplied);
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        Assert.True(liveOrder.BalanceEffectApplied);
+        Assert.Equal(4m, liveOrder.SettlementValueUsd);
+        Assert.Equal(2m, liveOrder.RealizedPnlUsd);
+        Assert.Single(
+            repository.LiveTradingEvents,
+            item => item.Action == "PaperLiveShadowSettlementSync" && item.Status == "Error");
+        Assert.Single(repository.PaperFills);
+        Assert.Equal(0m, Assert.Single(repository.PaperPositions).SizeShares);
     }
 
     [Fact]

@@ -60,6 +60,46 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
     }
 
     [Fact]
+    public async Task ApplyUpdateAsync_SkipsPaperLiveShadowOrderEvenWhenExecutable()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "0xleader",
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-1",
+            "condition-1",
+            "Yes",
+            0.99m,
+            10m,
+            9.90m,
+            now.AddMinutes(-1),
+            now.AddMinutes(1),
+            ExecutionSource: "PAPER_LIVE_SHADOW_TEST");
+        repository.PaperOrders.Add(order);
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        await updater.ApplyUpdateAsync(
+            BookUpdate(now),
+            now,
+            new HashSet<Guid> { order.Id },
+            CancellationToken.None);
+
+        Assert.Empty(repository.PaperFills);
+        Assert.Empty(repository.PaperPositions);
+        Assert.Equal(order, Assert.Single(repository.PaperOrders));
+    }
+
+    [Fact]
     public async Task ApplyUpdateAsync_RecordsAssetEventAndExactFailurePhase()
     {
         var repository = new TestAppRepository();

@@ -73,6 +73,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int TryUpdatePaperPositionMarksBatchCalls { get; private set; }
 
+    public int PaperLiveShadowFillReconciliationCalls { get; private set; }
+
     public int PaperPositionSettlementBatchCalls { get; private set; }
 
     public int RefreshPaperCopiedTraderPerformanceProjectionCalls { get; private set; }
@@ -272,6 +274,8 @@ internal sealed class TestAppRepository : IAppRepository
     public bool ThrowOnUpsertPaperPosition { get; set; }
 
     public Func<Task>? BeforeTryUpdatePaperPositionMarksAsync { get; set; }
+
+    public Func<Task>? BeforePaperLiveShadowFillReconciliationAsync { get; set; }
 
     public bool ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets { get; set; }
 
@@ -1325,6 +1329,83 @@ internal sealed class TestAppRepository : IAppRepository
                 .OrderBy(item => item.FilledAtUtc)
                 .ThenBy(item => item.Id)
                 .ToArray());
+        }
+    }
+
+    public async Task<PaperLiveShadowFillReconciliationResult> ReconcilePaperLiveShadowFillAsync(
+        PaperLiveShadowFillReconciliationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (BeforePaperLiveShadowFillReconciliationAsync is { } beforeReconciliation)
+        {
+            await beforeReconciliation();
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            PaperLiveShadowFillReconciliationCalls++;
+            var paperOrder = PaperOrders.SingleOrDefault(order => order.Id == request.PaperOrderId)
+                ?? throw new InvalidOperationException($"Paper shadow order {request.PaperOrderId:D} was not found.");
+            var liveOrder = LiveOrders.SingleOrDefault(order => order.Id == request.LiveOrderId)
+                ?? throw new InvalidOperationException($"Live shadow order {request.LiveOrderId:D} was not found.");
+            var fills = PaperFills
+                .Where(fill => fill.PaperOrderId == request.PaperOrderId)
+                .OrderBy(fill => fill.FilledAtUtc)
+                .ThenBy(fill => fill.Id)
+                .ToArray();
+            var position = PaperPositions.SingleOrDefault(item =>
+                string.Equals(item.CopiedTraderWallet, paperOrder.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.AssetId, paperOrder.AssetId, StringComparison.OrdinalIgnoreCase));
+            if (PaperPositionSettlements.Any(item =>
+                string.Equals(item.CopiedTraderWallet, paperOrder.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.AssetId, paperOrder.AssetId, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException("Paper shadow position was already settled; reconciliation was refused.");
+            }
+
+            var copiedLeaderPosition = PaperCopiedLeaderPositions.SingleOrDefault(item =>
+                item.EntryPaperOrderId == paperOrder.Id);
+            if (copiedLeaderPosition is not null &&
+                (copiedLeaderPosition.Status == PaperCopiedLeaderPositionStatus.Closed ||
+                 copiedLeaderPosition.LeaderSoldSizeShares > 0m ||
+                 copiedLeaderPosition.CopiedExitRequestedSizeShares > 0m))
+            {
+                throw new InvalidOperationException("Paper copied-leader exits already started; shadow fill reconciliation was refused.");
+            }
+
+            var canonical = PaperLiveShadowFillAccounting.CreateCanonicalState(
+                paperOrder,
+                liveOrder,
+                fills,
+                position,
+                request.ReconciledAtUtc);
+            PaperOrders.RemoveAll(item => item.Id == paperOrder.Id);
+            PaperOrders.Add(canonical.PaperOrder);
+            PaperFills.RemoveAll(item => item.PaperOrderId == paperOrder.Id);
+            PaperFills.Add(canonical.PaperFill);
+            PaperPositions.RemoveAll(item =>
+                string.Equals(item.CopiedTraderWallet, paperOrder.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.AssetId, paperOrder.AssetId, StringComparison.OrdinalIgnoreCase));
+            PaperPositions.Add(canonical.PaperPosition);
+            if (copiedLeaderPosition is not null)
+            {
+                PaperCopiedLeaderPositions.Remove(copiedLeaderPosition);
+                PaperCopiedLeaderPositions.Add(copiedLeaderPosition with
+                {
+                    Status = PaperCopiedLeaderPositionStatus.Active,
+                    CopiedInitialSizeShares = canonical.PaperFill.SizeShares,
+                    NextActivitySyncAtUtc = copiedLeaderPosition.NextActivitySyncAtUtc < canonical.PaperFill.FilledAtUtc
+                        ? copiedLeaderPosition.NextActivitySyncAtUtc
+                        : canonical.PaperFill.FilledAtUtc,
+                    UpdatedAtUtc = canonical.PaperFill.FilledAtUtc
+                });
+            }
+
+            return new PaperLiveShadowFillReconciliationResult(
+                canonical.PaperOrder,
+                canonical.PaperFill,
+                canonical.PaperPosition);
         }
     }
 

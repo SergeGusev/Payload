@@ -455,6 +455,13 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<PaperFill>>([]);
     }
 
+    Task<PaperLiveShadowFillReconciliationResult> ReconcilePaperLiveShadowFillAsync(
+        PaperLiveShadowFillReconciliationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Atomic Paper/Live shadow fill reconciliation is not supported by this repository.");
+    }
+
     Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default);
 
     Task<bool> TryUpdatePaperPositionMarkAsync(
@@ -1340,3 +1347,13 @@ public sealed record PaperPositionMarkUpdate(
     decimal EstimatedValueUsd,
     decimal UnrealizedPnlUsd,
     DateTimeOffset UpdatedAtUtc);
+
+public sealed record PaperLiveShadowFillReconciliationRequest(
+    Guid PaperOrderId,
+    Guid LiveOrderId,
+    DateTimeOffset ReconciledAtUtc);
+
+public sealed record PaperLiveShadowFillReconciliationResult(
+    PaperOrder PaperOrder,
+    PaperFill PaperFill,
+    PaperPosition PaperPosition);

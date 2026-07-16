@@ -384,6 +384,7 @@ builder.Services.AddSingleton<ConservativePaperGtdFillEstimator>();
 builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
 builder.Services.AddSingleton<IPaperSettlementProcessor, PaperSettlementProcessor>();
 builder.Services.AddSingleton<ILeaderActivityExitProcessor, LeaderActivityExitProcessor>();
+builder.Services.AddSingleton<IPaperLiveShadowFillReconciler, PaperLiveShadowFillReconciler>();
 builder.Services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
 builder.Services.AddSingleton<IPolymarketAutoRedeemProcessor, PolymarketAutoRedeemProcessor>();
 builder.Services.AddSingleton<ITraderDiscoveryProcessor, TraderDiscoveryProcessor>();

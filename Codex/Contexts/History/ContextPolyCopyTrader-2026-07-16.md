@@ -20,3 +20,10 @@ Request:
 
 Result:
 Verified exact production deployment `b2cd28e4e1028088a02b44116a268181f741d962` / MVID `fc7a54db1f38` strictly read-only. Service health, `9,523` linked Paper entries/orders, four independently confirmed Live fills, `10,050` exact zero post-settlement positions, settlement math, and wallet-lock/deadlock checks passed. Generic acceleration is not justified: p99 was `2.992s`, and all `68/9,499` steady-state entries over `3s` were explained by previous-market prerequisite readiness or Live/CLOB response time rather than a repeating internal bottleneck. The new crypto-reference retry was not exercised because no qualifying runtime lookup failure occurred. Found one required follow-up: three Live-shadow Paper orders mixed a simulated `0.99` fill with a later actual-price delta, inflating their Paper cost bases and lowering settled Paper-shadow PnL by an independently reproduced total `$5.44175703`; real Live accounting was correct. No production or product mutation was performed.
+
+## 2026-07-16T14:39:12.1108928+00:00
+Request:
+Продолжай
+
+Result:
+Implemented authoritative atomic Paper/Live-shadow fill reconciliation and excluded shadow orders from simulated market-data fills. Both immediate and maintenance paths now share one idempotent reconciler; mixed fills are replaced by one canonical Live fill and aggregate position cost is corrected in one PostgreSQL transaction. Added terminal-partial timestamp handling and kept real Live balance settlement independent from already settled Paper projections. Focused tests passed `98/98`, the exact concurrency test passed `1/1` on a fresh PostgreSQL 17 cluster, Release solution build passed with zero warnings/errors, and the full suite retained the exact known baseline of `112` failures (`771/883` passed). No production state or historical row was changed. Changes were committed locally, but the execution environment rejected `git push origin master` pending explicit user approval to send two commits to the external default branch.
