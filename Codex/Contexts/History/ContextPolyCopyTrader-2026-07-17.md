@@ -96,3 +96,10 @@ Request:
 
 Result:
 Clarified from the current implementation that the configured `24h/12h/6h/3h/90m/45m/20m/10m` average windows are not being called wrong and are not proposed for replacement. `selected_window=3h` only means the 3-hour average was the highest full average for that particular decision. The suggested experiment keeps all eight averages, maximum-average selection, the 3 bps trigger, and the Up order unchanged, then adds a Paper-only gate that skips when the selected window is not 3h. Using the 3h average unconditionally or removing/adding windows would be different untested strategies requiring a new replay. No production or product state changed.
+
+## 2026-07-17T19:34:01.2532512Z
+Request:
+Всё равно не понял. Объясни ещё раз, как ребёнку
+
+Result:
+Restated the recommendation with a simple eight-card analogy: each existing average window writes down one average ETH price, the strategy chooses the highest card, and `selected_window` is the winner's label. The proposed Paper variant changes none of the eight cards or their calculations; it bets only when the 3h card wins and skips otherwise. No production or product state changed.

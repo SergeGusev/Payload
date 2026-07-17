@@ -1,3 +1,14 @@
+## Active Update 2026-07-17 Selected Window 3h Child-Level Explanation
+Goal: Restate the `selected_window=3h` proposal in the simplest possible terms.
+Status: Completed
+Done:
+- Reduced the explanation to one concrete model: eight existing average windows each produce one number; the strategy selects the window whose number is highest, and `selected_window` records the winner's label.
+- Clarified that the proposed Paper gate does not change or remove any average window. It only permits a bet when the existing eight-way comparison is won by `3h`; otherwise that experimental variant skips the bet.
+- Repeated that an unconditional 3h comparison or a changed window list would be a separate strategy that was not tested by the current analysis.
+Next: None unless the user requests a parallel Paper implementation.
+Notes: Explanation only; no production query, data, code, configuration, strategy, service, or deployment changed. Product tests were not required.
+Blockers: None. Remote push remains outside scope because `master` contains a broader stack of earlier unpushed commits.
+
 ## Active Update 2026-07-17 Selected Window 3h Recommendation Clarification
 Goal: Clarify whether the proposed `selected_window=3h` Paper experiment implies that the configured reference-average windows are wrong or should be changed.
 Status: Completed
