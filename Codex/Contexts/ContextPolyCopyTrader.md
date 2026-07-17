@@ -1,3 +1,17 @@
+## Active Update 2026-07-17 ETH Down 3 Bps Inline Visualization Sandbox Fix
+Goal: Replace the timed-out ETH Down 3 bps inline visualization with a sandbox-safe version.
+Status: Completed
+Done:
+- Superseded the failed `eth-down3-pnl-factors.html` inline attempt with the new cache-safe fragment `eth-down3-pnl-factors-v2.html` in the thread visualization directory.
+- Removed all runtime JavaScript, dynamic DOM construction, network access, KPI/card chrome, and narrative text from the inline fragment. The replacement is `13,400` bytes of literal markup with one uniquely identified root and four static, accessible SVG plots.
+- Preserved the verified data and solid-line contract: aligned ETH/PnL history, selected-average-window ROI, 15-minute ETH range ROI, and early-versus-late maximum-step ROI.
+- Read the fragment back and verified: fragment-only HTML, zero scripts, zero network-call patterns, one root ID, four SVG titles/descriptions, no escaped markup, and no dashed/dotted line styles.
+- Wrapped the fragment with the visualization skill's sandbox renderer, rendered it headlessly, and visually inspected the resulting `900x1000` PNG. Confirmed all lines, annotations, factor labels, bars, and negative signs are visible without overlap or clipping at the target conversation width.
+- Final fragment SHA-256 is `1BF84718B24215F5F85199D53EE3DBFE94DA9B587658EA7E9A8AC767C1DBB4D8`; QA PNG SHA-256 is `FD24E4880B8DC3A60FE68A7D41FFE6E01D41F17D1593DF4CDCD8FF5052A8C368`.
+Next: None.
+Notes: The visualization skill drove the static SVG, fragment-only, theme-variable, sandbox-rendered replacement. No production query, database row, strategy setting, order, service, deployment, product code, or configuration changed. Product tests were not required because only the conversation visualization and project context changed.
+Blockers: None. Remote push remains outside scope because `master` contains a broader stack of earlier unpushed commits.
+
 ## Active Update 2026-07-17 BTC 12 Child Parent PnL Excel Report
 Goal: Create an Excel report showing which exact parent strategies generated profit or loss for `BTC Up or Down 5m 12 Child`.
 Status: Completed

@@ -82,3 +82,10 @@ Request:
 
 Result:
 Created and fully verified a four-sheet Excel report from an exact `2026-07-17T19:05:39.903345Z` read-only production snapshot. Direct `raw_decision_json` attribution covered all `908` settled Child bets across `54` parents and `354` assignment rows; raw totals matched an independent all-settled query and every per-parent aggregate matched separate server SQL. Total PnL is `+$56.93333228` on `$5,456.44440025` stake (`+1.0434145%` ROI): `21` profitable parents contributed `+$461.17927795`, while `33` losing parents contributed `-$404.24594567`. The workbook is sorted worst-to-best, contains full assignment and bet detail, filters, frozen headers, red-on-white losses, and a checks sheet. Excel verified all source rows and zero formula errors; all sheets were visually inspected. Three directly attributed rows have a `7.1-33.1s` assignment-end timing warning, but their assignment IDs and parent identities match, so financial attribution is unchanged. No production or product state changed.
+
+## 2026-07-17T19:26:36.1577585Z
+Request:
+Fix the inline visualization in eth-down3-pnl-factors.html. It failed with TimeoutError: MCP sandbox RPC timed out.
+
+Result:
+Replaced the failed cached inline attempt with `eth-down3-pnl-factors-v2.html`, a `13,400`-byte literal fragment containing four static accessible SVG plots and no JavaScript, dynamic DOM work, network calls, or external resources. Preserved the verified ETH/PnL and factor data, used only solid chart lines and theme variables, and verified fragment structure, one unique root, accessibility titles/descriptions, and zero script/network patterns. Rendered the fragment through the visualization sandbox wrapper, inspected the resulting `900x1000` PNG, and confirmed readable, unclipped plots and labels. No production or product state changed.
