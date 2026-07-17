@@ -1,3 +1,15 @@
+## Active Update 2026-07-17 Selected Window 3h Recommendation Clarification
+Goal: Clarify whether the proposed `selected_window=3h` Paper experiment implies that the configured reference-average windows are wrong or should be changed.
+Status: Completed
+Done:
+- Reverified the current implementation and configuration. The average cache is configured with the unchanged eight windows `24h/12h/6h/3h/90m/45m/20m/10m`; the strategy keeps only full positive averages, sorts them by average price descending, and uses the first row as `selectedAverage`.
+- Clarified that `selected_window=3h` means the 3-hour arithmetic average happened to be the highest of all eight full averages for that particular decision. It is an observed regime label, not evidence that the other configured windows are incorrect.
+- Clarified the proposed experiment: preserve all eight averages, the maximum-average selection rule, the 3 bps threshold, and the Up order path; add only a Paper gate that enters when the already selected window equals `3h` and skips otherwise.
+- Distinguished two different, untested changes: comparing against the 3h average unconditionally, or removing/adding configured average windows. Either would change the selected reference, trigger set, and trade population and cannot be justified from the existing selected-window group totals without a new causal replay.
+Next: If authorized, implement only a parallel Paper variant with the `selected_window=3h` gate and leave the baseline strategy unchanged; otherwise no change is recommended.
+Notes: This was a read-only code/report clarification. No production query, database row, strategy setting, service, deployment, product code, or configuration changed. Product tests were not required.
+Blockers: None. Remote push remains outside scope because `master` contains a broader stack of earlier unpushed commits.
+
 ## Active Update 2026-07-17 ETH Down 3 Bps Inline Visualization Sandbox Fix
 Goal: Replace the timed-out ETH Down 3 bps inline visualization with a sandbox-safe version.
 Status: Completed

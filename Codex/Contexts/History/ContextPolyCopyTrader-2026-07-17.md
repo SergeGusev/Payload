@@ -89,3 +89,10 @@ Fix the inline visualization in eth-down3-pnl-factors.html. It failed with Timeo
 
 Result:
 Replaced the failed cached inline attempt with `eth-down3-pnl-factors-v2.html`, a `13,400`-byte literal fragment containing four static accessible SVG plots and no JavaScript, dynamic DOM work, network calls, or external resources. Preserved the verified ETH/PnL and factor data, used only solid chart lines and theme variables, and verified fragment structure, one unique root, accessibility titles/descriptions, and zero script/network patterns. Rendered the fragment through the visualization sandbox wrapper, inspected the resulting `900x1000` PNG, and confirmed readable, unclipped plots and labels. No production or product state changed.
+
+## 2026-07-17T19:29:54.1510697Z
+Request:
+Поясни про "Ставить только при selected_window = 3h". Я правильно понял, что у меня выбраны неправильные диапазоны для average и ты предлагаешь их изменить?
+
+Result:
+Clarified from the current implementation that the configured `24h/12h/6h/3h/90m/45m/20m/10m` average windows are not being called wrong and are not proposed for replacement. `selected_window=3h` only means the 3-hour average was the highest full average for that particular decision. The suggested experiment keeps all eight averages, maximum-average selection, the 3 bps trigger, and the Up order unchanged, then adds a Paper-only gate that skips when the selected window is not 3h. Using the 3h average unconditionally or removing/adding windows would be different untested strategies requiring a new replay. No production or product state changed.
