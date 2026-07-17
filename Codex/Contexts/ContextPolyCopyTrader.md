@@ -1,3 +1,17 @@
+## Active Update 2026-07-18 Overnight ETH Optimized Watch
+Goal: Continue supervising the production ETH Optimized experiment overnight and deliver a morning summary while keeping all actions read-only.
+Status: In Progress
+Done:
+- Created and verified active Codex heartbeat automation `eth-optimized` (`Ночная вахта ETH Optimized`) in the current task. It runs every 15 minutes, treats 08:00 Europe/Sofia as the end of the watch, then must stop itself and report the full-night summary.
+- Constrained every pass to production PostgreSQL `192.168.0.101:5432/polycopytrader` with forced read-only sessions, bounded/indexed queries, and no service, strategy, order, configuration, or database mutations. The monitor may report anomalies but may not repair or restart anything without new user authorization.
+- Defined exact alarms for stale/failed heartbeat, unexpected restart or build, any mismatch in the 84-row catalog, invalid `3h` entry/gate diagnostics, any Optimized Live/shadow/Child propagation, missing 5m runtime cycles, stale ETH data, or a WebSocket disconnect without recovery.
+- Captured a fresh independent baseline at `2026-07-17T22:16:32.390495Z`: service `Running`, expected build `d301b62da3dfbb2619c3455295815c34973d8a1c`, unchanged start time, heartbeat age `19.192s`, and `last_error=NULL`; catalog remained exact 84/84 with zero identity or flag mismatches.
+- Since deployment, the 84 strategies had produced 840 runs across 10 markets: 672 skipped and 168 still observed future runs, with zero `selected_window=3h`, zero Paper orders, zero diagnostic anomalies, and zero gate violations. The two latest completed due cycles each processed 84/84 strategies and correctly selected `90m`, so all decisions skipped.
+- Reconfirmed zero Optimized Live orders and shadow decisions all-time, zero active Child-parent assignments, and zero Child mirror orders since deployment. Aggregate/critical/shard WebSockets were connected and non-stale; the latest aggregate reconnect recovered in `2.191s`. The latest ETH tick was `3.521s` old and the 15-minute stream had no explicit stoppage.
+Next: Let the 15-minute heartbeat continue through 08:00 Europe/Sofia, immediately report any evidence-backed alarm, independently validate the first eligible `3h` Paper entry if it occurs, and produce the morning uptime/cycle/order/PnL/network summary.
+Notes: Product code, production state, and Git configuration were not changed. The automation is an external Codex app object, not a repository file. Product tests were not required for this monitoring setup. Remote push remains withheld because `master` contains the broader existing local commit stack.
+Blockers: None. A production-eligible `3h` Paper order has still not occurred; the watch remains active.
+
 ## Active Update 2026-07-18 ETH Optimized Deployment Verification
 Goal: Verify the deployed 84 ETH Optimized Average Premarket strategies against the exact catalog and observe their first production Paper decisions without changing production state.
 Status: Completed
