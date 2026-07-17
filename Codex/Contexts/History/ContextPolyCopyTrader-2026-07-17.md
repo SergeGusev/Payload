@@ -54,3 +54,10 @@ Request:
 
 Result:
 Created and fully verified a fresh one-sheet Excel report from one exact read-only production snapshot at `2026-07-17T18:12:52.834089Z`. It contains the unique maximum-PnL strategy for each BTC/ETH/SOL Child and Child ROI group, sorted by total PnL ascending, with ten UTC date rows, formula-driven daily/category/grand totals, red negative values on white with an explicit minus sign, and frozen first row/column. Independent raw CSV and server SQL calculations matched all six winners, all `60` daily cells, and grand total `$1,194.44284199`. Excel/artifact/OpenXML checks found one `12x8` sheet, `77` numeric cells, `15` verified negative cells, zero formula errors, and frozen pane `B2`. No production or product state was changed.
+
+## 2026-07-17T18:36:24.0190705Z
+Request:
+Сделай Pnl график по Child и Child ROI стратегиям по всем трём валютам. Выбирай самые прибыльные стратегии в каждой валюте. Всего должно быть 6 графиков на одном листе.
+
+Result:
+Created and visually verified one `2400x2000` PNG sheet with six separate cumulative settled Paper PnL panels arranged as BTC/ETH/SOL rows and Child/Child ROI columns. Reused the exact frozen `2026-07-17T18:12:52.834089Z` report snapshot, rebuilt all six series from `4,697` exact selected rows, and independently matched run counts, stakes, final PnL endpoints, and combined PnL `$1,194.44284199`. Every chart line, axis, grid, zero line, and separator is solid. No production or product state changed.

@@ -1,3 +1,17 @@
+## Active Update 2026-07-17 Six-Panel Child And Child ROI Paper PnL Chart
+Goal: Plot one cumulative settled Paper PnL panel for the highest-all-history-PnL Child and Child ROI strategy in each of BTC, ETH, and SOL on a single sheet.
+Status: Completed
+Done:
+- Reused the exact independently verified frozen report snapshot at cutoff `2026-07-17T18:12:52.834089Z`; no second production query was required. The source contains `111,307` settled Paper rows and the six unique winners previously matched against independent server ranking SQL.
+- Used the exact winners by currency and family: BTC `N=12` Child `+$51.63100874`; BTC `N=5` Child ROI `+$162.14905070`; ETH `N=8` Child `+$280.82691857`; ETH `N=6` Child ROI `+$337.31981444`; SOL `N=9` Child `+$221.89985670`; SOL `N=21` Child ROI `+$140.61619284`.
+- Re-read the full exported CSV, filtered `4,697` rows by the six exact strategy GUIDs, rebuilt cumulative PnL at exact settlement timestamps, and matched every strategy's run count, stake, and final PnL to both `selected-strategies.csv` and `report-data.json`. A separate second aggregation independently confirmed all six endpoints and combined final PnL `$1,194.44284199`.
+- Rendered `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-17/charts/child-child-roi-six-panel-cumulative-paper-pnl.png` at `2400x2000` as a `3x2` sheet: BTC/ETH/SOL rows and Child/Child ROI columns. Panels share one UTC time range and use independent labeled USD scales.
+- Used solid lines for every PnL series, axis, grid, zero line, and separator. Visually inspected the original PNG and confirmed that all six panels, exact titles, metrics, axes, dates, endpoint markers, and footer are legible and non-overlapping.
+- Verified a nonblank `2400x2000` raster, `192,987` bytes, and SHA-256 `4C864EC9BFB84F973BFC00100753D4B10D14232155EAB3C395EE3A6011078486`.
+Next: None.
+Notes: Selection is in-sample by final all-history settled Paper PnL at the frozen cutoff. Production was not queried or changed in this chart task; no database row, strategy setting, order, service process, deployment, product code, or configuration changed. Renderer, exact series CSV, and verification evidence are in the ignored output directory. Repository context/history are committed locally; remote push remains outside scope because `master` contains earlier unpushed product commits.
+Blockers: None for the chart. Remote push requires explicit approval for the broader local commit stack.
+
 ## Active Update 2026-07-17 Best Child And Child ROI Daily Paper PnL Excel Report
 Goal: Create one fresh Excel sheet with daily Paper PnL for the highest-all-history-PnL strategy in every BTC/ETH/SOL Child and Child ROI category.
 Status: Completed
