@@ -1,3 +1,17 @@
+## Active Update 2026-07-18 ETH Optimized Deployment Verification
+Goal: Verify the deployed 84 ETH Optimized Average Premarket strategies against the exact catalog and observe their first production Paper decisions without changing production state.
+Status: Completed
+Done:
+- Verified the exact server database `192.168.0.101:5432/polycopytrader` under read-only transactions. The service restarted at `2026-07-17T21:52:12.772957Z`, remained `Running`, advanced its heartbeat, kept `last_error=NULL`, and reported build `d301b62da3dfbb2619c3455295815c34973d8a1c` with MVID prefix `20a1308611dc`; both matched the local commit/Release assembly evidence.
+- Reconciled the production catalog to an independently generated expected set: exactly 84/84 rows, 28 each in groups `8209/8210/8211`, exact threshold grid `1..10` then `15..100` step `5`, and zero missing, extra, duplicate, ID/code/name collision, or operational-setting mismatch. All 84 are enabled and unpaused with `live_stakes=false` and `$1` Paper stake.
+- Observed two complete due cycles for all 84 strategies. At `2026-07-17T21:54:30Z`, 68 decisions stopped at the ordinary N-bps threshold and 16 passed the threshold but were rejected by the Optimized gate. At `2026-07-17T21:59:30Z`, the corresponding counts were 74 and 10. In both cycles the ordinary selector chose `45m`, not required `3h`, so all skips and zero Paper orders were correct for the experiment.
+- Reconciled every second-cycle strategy decision: 84/84 thresholds extracted from code matched diagnostics, directions matched the Up/Down/neutral family contract, run and JSON skip reasons matched, and Optimized enablement, `paper_only=true`, `required_window=3h`, selected `45m`, and `match=false` were all consistent. Gate violations and invalid entries were zero.
+- Verified strict absence for the Optimized set: zero Live orders and zero Paper/Live-shadow decisions all-time, plus zero parent/child assignments and zero Child/Child ROI copied orders after restart.
+- Confirmed independent post-restart activity through advancing strategy runs and ETH Binance reference ticks. Short network warnings were recorded after restart, including transient ETH tick staleness just above the 5-second warning threshold and premature Polymarket WebSocket closures; the second due cycle used ETH source data only `0.794..0.808s` old. The Polymarket critical/aggregate socket interruption at `2026-07-17T21:59:56.068612Z` reconnected about `2.156s` later, and a later critical frame parsed successfully. No causal link to this deployment was established.
+Next: Keep these strategies Paper-only and verify the first real Paper order when a future eligible decision actually selects `3h`; production has not yet supplied such a case. Monitor the recurring WebSocket/tick warnings separately if they persist.
+Notes: Production was not changed. One broad diagnostic aggregate reached its 15-second statement timeout; narrower indexed read-only checks and independent reconciliations succeeded. Product tests were not rerun because this task changed no product code or configuration.
+Blockers: None for the deployment smoke check. A production end-to-end eligible Paper entry remains unobserved until `3h` wins the ordinary selector.
+
 ## Active Update 2026-07-18 ETH 3h Optimized Average Paper Strategies
 Goal: Add all 84 requested ETH Up/Down 5m Optimized Average Premarket strategies as parallel Paper-only experiments gated by the ordinary selector choosing `3h`.
 Status: Completed
