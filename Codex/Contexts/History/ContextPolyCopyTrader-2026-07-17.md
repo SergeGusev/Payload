@@ -61,3 +61,10 @@ Request:
 
 Result:
 Created and visually verified one `2400x2000` PNG sheet with six separate cumulative settled Paper PnL panels arranged as BTC/ETH/SOL rows and Child/Child ROI columns. Reused the exact frozen `2026-07-17T18:12:52.834089Z` report snapshot, rebuilt all six series from `4,697` exact selected rows, and independently matched run counts, stakes, final PnL endpoints, and combined PnL `$1,194.44284199`. Every chart line, axis, grid, zero line, and separator is solid. No production or product state changed.
+
+## 2026-07-17T18:44:40.2241606Z
+Request:
+Ты меня неправильно понял. Нужен один график с шестью линиями.
+
+Result:
+Corrected the deliverable to one common `1800x1080` cumulative settled Paper PnL plot with six solid strategy lines and shared UTC/USD axes. Reused the exact frozen `2026-07-17T18:12:52.834089Z` snapshot, independently re-aggregated all `4,697` selected rows, matched every strategy endpoint, and confirmed combined PnL `$1,194.44284199`. The original PNG was visually inspected with no clipped or overlapping labels and no dashed/dotted styles. The prior `3x2` panel image is withdrawn as the response to this corrected requirement; no production or product state changed.

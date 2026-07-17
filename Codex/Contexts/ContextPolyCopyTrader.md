@@ -1,3 +1,16 @@
+## Active Update 2026-07-17 Corrected Six-Line Child And Child ROI Paper PnL Chart
+Goal: Replace the rejected six-panel layout with one common cumulative Paper PnL plot containing six strategy lines.
+Status: Completed
+Done:
+- Withdrew the prior `3x2` panel image as the deliverable for this request; its underlying strategy selection and verified data remain valid.
+- Reused the exact independently verified read-only production snapshot at cutoff `2026-07-17T18:12:52.834089Z` and rebuilt all six cumulative settlement-time series from the exact `4,697` selected rows.
+- Rendered `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-17/charts/child-child-roi-six-strategies-cumulative-paper-pnl.png` as one `1800x1080` coordinate plot with common UTC and USD axes, six distinct solid lines, a legend, and collision-separated endpoint labels.
+- Re-read all `111,307` exported rows independently and exactly matched each strategy's run count, stake, and final PnL to the frozen selection; the six endpoints sum to `$1,194.44284199`.
+- Visually inspected the original PNG and confirmed one plot, six legible lines, readable labels, no clipping or overlap, and no dashed/dotted styles. Verified SHA-256 `FF62DDBB2380900443540608B2440F5568ABE031603B158592E90C0C86D7367A`.
+Next: None.
+Notes: No production query or mutation was performed for this correction. No database row, strategy, order, service, deployment, product code, or configuration changed. The renderer and verification artifacts are in the ignored output directory. Repository context/history are committed locally; remote push remains outside scope because `master` contains earlier unpushed product commits.
+Blockers: None for the chart. Remote push requires explicit approval for the broader local commit stack.
+
 ## Active Update 2026-07-17 Six-Panel Child And Child ROI Paper PnL Chart
 Goal: Plot one cumulative settled Paper PnL panel for the highest-all-history-PnL Child and Child ROI strategy in each of BTC, ETH, and SOL on a single sheet.
 Status: Completed
