@@ -1,3 +1,15 @@
+## Active Update 2026-07-17 Production Server Connectivity Check
+Goal: Verify whether the production server at `192.168.0.101` is currently reachable from the workspace machine.
+Status: Completed
+Done:
+- Confirmed the workspace Wi-Fi interface is active at `192.168.0.100/24` with a direct alive route to `192.168.0.0/24`.
+- Independently confirmed the local network path is working: gateway `192.168.0.1` answered three ICMP probes in `2-6 ms` and has a reachable ARP neighbor entry.
+- The target `192.168.0.101` failed the initial ICMP and PostgreSQL `5432` checks, then failed three additional ICMP/TCP attempts. ICMP returned `TimedOut` or `DestinationHostUnreachable`; every TCP attempt timed out after about three seconds.
+- Windows neighbor state for `192.168.0.101` is `Unreachable`, its link-layer address remains `00-00-00-00-00-00`, and `arp -a 192.168.0.101` found no entry. A PostgreSQL read-only query could therefore not be opened.
+Next: Check that the server is powered on, connected to the same LAN, and still owns `192.168.0.101`; after network reachability returns, repeat the PostgreSQL connection/query check.
+Notes: This was a read-only network diagnostic. No server, database, service, configuration, or product file was changed. The observations prove current unreachability from this machine but do not identify whether the cause is server power, network connection, or an IP-address change. Repository context/history were committed locally; the remote was not updated because `master` includes earlier unpushed product commits outside this diagnostic's scope.
+Blockers: The target host must become reachable before database or service health can be verified. Remote push separately requires explicit approval for the broader local commit stack.
+
 ## Active Update 2026-07-17 UTC Hour Top-12 Paper Strategy Walk-Forward Backtest
 Goal: Test on the production server database whether dynamically allowing only the prior top 12 UTC hours by PnL or ROI improves each Paper strategy, without changing the database.
 Status: Completed
