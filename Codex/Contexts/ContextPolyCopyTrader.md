@@ -1,3 +1,19 @@
+## Active Update 2026-07-17 BTC 12 Child Parent PnL Excel Report
+Goal: Create an Excel report showing which exact parent strategies generated profit or loss for `BTC Up or Down 5m 12 Child`.
+Status: Completed
+Done:
+- Verified the implementation path before analysis: every copied Child Paper order records exact `parent_strategy_id`, parent code/name, `assignment_id`, and `parent_run_id` in `paper_orders.raw_decision_json`; the report uses these durable row-level fields and does not infer parentage from timestamps or names.
+- Captured one production PostgreSQL `REPEATABLE READ, READ ONLY` snapshot from exact endpoint `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-17T19:05:39.903345Z` for exact target ID `b7c50005-0000-4000-8185-000000000012`.
+- Exported and attributed all `908` settled Paper bets across `54` parents and `354` assignment-history rows. Total stake is `$5,456.44440025`, PnL `+$56.93333228`, ROI `+1.0434145%`, with `468` wins and `440` losses.
+- Found `21` profitable parents contributing `+$461.17927795` and `33` losing parents contributing `-$404.24594567`. Best was `BTC Up or Down 5m 1 bps Reference Average Premarket` at `+$111.18674974`; worst was `BTC Up or Down 5m Up 1 bps Instant` at `-$45.15365004`.
+- Independently matched attributed raw count/stake/PnL to an all-settled target query, and matched every local per-parent aggregate to a separate server `GROUP BY` query. All `908` rows reference a stored assignment and have parent identities matching that assignment.
+- Preserved one explicit timing warning: three directly attributed orders were copied `7.1-33.1s` after their assignment row's `ended_at_utc`; their stored assignment IDs and parent identities still match, so this does not change financial attribution or grouping.
+- Created `outputs/btc-12-child-parent-pnl-report-2026-07-17/reports/btc-12-child-parent-pnl.xlsx` with `Parents`, `Assignments`, `Settled Bets`, and `Checks` sheets. Parent rows are sorted from lowest to highest PnL; negative values are red on white, tables have filters, and headers are frozen.
+- Excel independently verified all `54` parent rows, `354` assignments, and `908` bets, all totals, conditional formatting, filters/freeze panes, and zero formula errors. Artifact-tool re-imported and rendered every sheet for final visual QA. Workbook SHA-256 is `BBCE3718205B7352FCC5620627A7C3CCA92250459DC96907C14B761882A40F82`.
+Next: None.
+Notes: No database row, strategy setting, order, service, deployment, product code, or configuration changed. Reproducible exporter, raw CSV/JSON evidence, workbook builder, verification output, and QA renders are in the ignored output directory. Repository context/history are committed locally; remote push remains outside scope because `master` contains a broader stack of earlier unpushed commits.
+Blockers: None for the report. Remote push requires explicit approval for the broader local commit stack.
+
 ## Active Update 2026-07-17 ETH Down 3 Bps PnL Versus ETH Factor Analysis
 Goal: Compare the Paper PnL curve of `ETH Up or Down 5m Down 3 bps Reference Average Premarket` with ETH/USDT and identify pre-entry market factors associated with PnL.
 Status: Completed
