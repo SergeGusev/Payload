@@ -1,3 +1,14 @@
+## Active Update 2026-07-17 Production Server Connectivity Restored
+Goal: Recheck whether production server `192.168.0.101` became reachable after the earlier outage.
+Status: Completed
+Done:
+- At `2026-07-17T14:08:35Z` the first repeat still timed out, but by `14:08:57Z` two TCP connections to PostgreSQL `5432` succeeded in `6-15 ms`.
+- Opened two independent PostgreSQL sessions and completed read-only transactions. The server identified itself as `192.168.0.101:5432/polycopytrader`, PostgreSQL `18.3`, with `pg_is_in_recovery() = false`; the second probe returned server UTC time `2026-07-17 14:09:33.447933+00` and value `1`.
+- The Windows neighbor entry changed from `Unreachable` with no MAC to `Reachable` with a concrete link-layer address. ICMP remained blocked/timed out, but this does not prevent PostgreSQL access.
+Next: The server is reachable again; continue with the requested read-only server checks or analysis.
+Notes: No database row, service, configuration, deployment, or product file was changed. Repository context/history were committed locally; the remote was not updated because the branch includes earlier unpushed product commits beyond this diagnostic's scope.
+Blockers: None for server/database access. Remote push separately requires explicit approval for the broader local commit stack.
+
 ## Active Update 2026-07-17 Production Server Connectivity Check
 Goal: Verify whether the production server at `192.168.0.101` is currently reachable from the workspace machine.
 Status: Completed
