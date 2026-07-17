@@ -68,3 +68,10 @@ Request:
 
 Result:
 Corrected the deliverable to one common `1800x1080` cumulative settled Paper PnL plot with six solid strategy lines and shared UTC/USD axes. Reused the exact frozen `2026-07-17T18:12:52.834089Z` snapshot, independently re-aggregated all `4,697` selected rows, matched every strategy endpoint, and confirmed combined PnL `$1,194.44284199`. The original PNG was visually inspected with no clipped or overlapping labels and no dashed/dotted styles. The prior `3x2` panel image is withdrawn as the response to this corrected requirement; no production or product state changed.
+
+## 2026-07-17T19:08:42.2478916Z
+Request:
+Проанализируй график Pnl ETH Up or Down 5m Down 3 bps Reference Average Premarket и сравни его с курсом ETH. Попробуй найти факторы, которые влияют на pnl. Например, курс слишком скакнул. Или, наоборот, слишком ровный
+
+Result:
+Completed a reproducible read-only production analysis for the exact ETH Down 3 bps Reference Average Premarket strategy on a frozen `2026-07-17T18:40:04.791073Z` snapshot: `3,001` settled Paper bets and `122,903` ETH ticks. Overall PnL is `+$415.84088893` and ROI `+2.3059070%`. The strongest outcome explanation is that every bet buys Up: the following five-minute Binance ETH direction agrees with PnL sign in `92.65%` of complete markets, while the largest economically aligned drawdown `$260.11452902` coincides with an ETH decline of about `5.755%`. The hypothesis that a sharp move is uniformly harmful is not supported: a fixed high single-step group reverses from `-2.11%` ROI earlier to `+16.84%` later. The most promising pre-entry candidates are a wider 15-minute high-low range (later fixed-threshold ROI `+7.33%` above `25.8054 bps` versus `-5.16%` below) and `selected_window=3h` (`+20.18%` full-sample ROI), but both remain exploratory; the 3h later sample has only two active days. Recommended no production/Live filter, only predeclared Paper forward variants. Delivered a detailed report plus a visually inspected aligned ETH/PnL and factor visualization. No database, service, strategy setting, order, deployment, product code, or configuration changed.
