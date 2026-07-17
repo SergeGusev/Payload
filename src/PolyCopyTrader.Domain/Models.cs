@@ -1697,6 +1697,25 @@ public static class StrategyIds
                     thresholdBps));
             }
 
+            if (string.Equals(asset.Symbol, "ETH", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var thresholdBps in CreateReferenceAverageBpsThresholdValues())
+                {
+                    variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+                        GetOptimizedReferenceAverageBpsPremarketIdGroup(BtcUpDownFixedOutcome.Up),
+                        thresholdBps,
+                        BtcUpDownFixedOutcome.Up));
+                    variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+                        GetOptimizedReferenceAverageBpsPremarketIdGroup(BtcUpDownFixedOutcome.Down),
+                        thresholdBps,
+                        BtcUpDownFixedOutcome.Down));
+                    variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+                        GetOptimizedReferenceAverageBpsPremarketIdGroup(triggerOutcome: null),
+                        thresholdBps,
+                        triggerOutcome: null));
+                }
+            }
+
             variants.AddRange(CreateAbsoluteBpsThresholdPremarketVariants(asset.Symbol));
 
             variants.AddRange(CreateFuturesBasisBpsThresholdPremarketVariants(asset.Symbol));
@@ -2626,6 +2645,47 @@ public static class StrategyIds
             Category: $"{normalizedAsset} Up/Down 5m Bps Reference Average Premarket");
     }
 
+    private static BtcUpDown5mStrategyVariant CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+        int idGroup,
+        int thresholdBps,
+        BtcUpDownFixedOutcome? triggerOutcome,
+        int entryDelaySeconds = -30)
+    {
+        const string normalizedAsset = "ETH";
+        const string assetCode = "eth";
+        const string requiredWindow = "3h";
+        var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
+        var thresholdName = thresholdBps.ToString(CultureInfo.InvariantCulture);
+        var triggerCode = triggerOutcome?.ToString().ToLowerInvariant();
+        var triggerName = triggerOutcome?.ToString();
+        var targetOutcome = triggerOutcome is { } configuredTrigger
+            ? GetOppositeFixedOutcome(configuredTrigger)
+            : (BtcUpDownFixedOutcome?)null;
+        var codeTriggerPart = triggerCode is null ? string.Empty : triggerCode + "_";
+        var nameTriggerPart = triggerName is null ? string.Empty : triggerName + " ";
+        var categoryTriggerPart = triggerName is null ? string.Empty : triggerName + " ";
+        var signalDescription = triggerOutcome is { } fixedTrigger
+            ? $"If the current price moves {fixedTrigger} by at least {thresholdName} bps from that maximum average, BUY {targetOutcome}."
+            : $"If the current price is above that maximum average by at least {thresholdName} bps, BUY Down; if it is below that maximum average by at least {thresholdName} bps, BUY Up.";
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
+            $"{assetCode}_up_down_5m_{codeTriggerPart}optimized_average_bps_{thresholdName}_fak_premarket",
+            $"{normalizedAsset} Up or Down 5m {nameTriggerPart}{thresholdName} bps Optimized Average Premarket",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, compare the latest Binance {normalizedAsset}/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. {signalDescription} Enter only when the ordinary maximum-average selector chose the {requiredWindow} window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            entryDelaySeconds,
+            BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket,
+            thresholdBps,
+            thresholdBps,
+            ReferenceAssetSymbol: normalizedAsset,
+            FixedOutcome: targetOutcome,
+            Category: $"{normalizedAsset} Up/Down 5m {categoryTriggerPart}Bps Optimized Average Premarket",
+            DiffCounterTriggerOutcome: triggerOutcome,
+            RequiredReferenceAverageWindow: requiredWindow,
+            PaperOnly: true);
+    }
+
     private static int GetReferenceAverageBpsPremarketIdGroup(string assetSymbol, bool isUpTrigger)
     {
         var normalizedAsset = assetSymbol.ToUpperInvariant();
@@ -2645,6 +2705,17 @@ public static class StrategyIds
             "ETH" => 8179,
             "SOL" => 8180,
             _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported neutral reference-average Premarket asset.")
+        };
+    }
+
+    private static int GetOptimizedReferenceAverageBpsPremarketIdGroup(BtcUpDownFixedOutcome? triggerOutcome)
+    {
+        return triggerOutcome switch
+        {
+            BtcUpDownFixedOutcome.Up => 8209,
+            BtcUpDownFixedOutcome.Down => 8210,
+            null => 8211,
+            _ => throw new ArgumentOutOfRangeException(nameof(triggerOutcome), triggerOutcome, "Unsupported Optimized Average trigger outcome.")
         };
     }
 
@@ -3182,7 +3253,8 @@ public enum BtcUpDown5mStrategyBehavior
     DiffReferenceAveragePremarket,
     BpsConfirmedAveragePremarket,
     DiffConfirmedAveragePremarket,
-    AbsoluteBpsThresholdFakPremarket
+    AbsoluteBpsThresholdFakPremarket,
+    OptimizedReferenceAverageBpsThresholdFakPremarket
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
@@ -3205,7 +3277,9 @@ public sealed record BtcUpDown5mStrategyVariant(
     int ShiftDiffCount = 0,
     BtcUpDownFixedOutcome? DiffCounterTriggerOutcome = null,
     Guid? BaseSignalStrategyId = null,
-    Guid? ConfirmationSignalStrategyId = null)
+    Guid? ConfirmationSignalStrategyId = null,
+    string? RequiredReferenceAverageWindow = null,
+    bool PaperOnly = false)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }

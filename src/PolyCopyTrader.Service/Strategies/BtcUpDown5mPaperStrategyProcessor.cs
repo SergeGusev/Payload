@@ -194,10 +194,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var liveEntryVariants = entryVariants
-            .Where(variant => GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
+            .Where(variant => HasEffectiveLiveStakes(variant, GetStrategySettings(strategySettings, variant.Id)))
             .ToArray();
         var nonLiveEntryVariants = entryVariants
-            .Where(variant => !GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
+            .Where(variant => !HasEffectiveLiveStakes(variant, GetStrategySettings(strategySettings, variant.Id)))
             .ToArray();
 
         var liveFlow = await TrackStrategyStageAsync(
@@ -305,10 +305,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var liveEntryVariants = entryVariants
-            .Where(variant => GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
+            .Where(variant => HasEffectiveLiveStakes(variant, GetStrategySettings(strategySettings, variant.Id)))
             .ToArray();
         var nonLiveEntryVariants = entryVariants
-            .Where(variant => !GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
+            .Where(variant => !HasEffectiveLiveStakes(variant, GetStrategySettings(strategySettings, variant.Id)))
             .ToArray();
 
         var liveFlow = await TrackStrategyStageAsync(
@@ -817,10 +817,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var liveEntryVariants = entryVariants
-            .Where(variant => GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
+            .Where(variant => HasEffectiveLiveStakes(variant, GetStrategySettings(strategySettings, variant.Id)))
             .ToArray();
         var nonLiveEntryVariants = entryVariants
-            .Where(variant => !GetStrategySettings(strategySettings, variant.Id).EffectiveLiveStakes)
+            .Where(variant => !HasEffectiveLiveStakes(variant, GetStrategySettings(strategySettings, variant.Id)))
             .ToArray();
 
         var liveFlow = await TrackStrategyStageAsync(
@@ -984,7 +984,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             .Select((variant, index) =>
             {
                 var settings = GetStrategySettings(strategySettings, variant.Id);
-                var effectiveLiveStakes = settings.EffectiveLiveStakes;
+                var effectiveLiveStakes = HasEffectiveLiveStakes(variant, settings);
                 return new
                 {
                     Variant = variant,
@@ -1018,7 +1018,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             {
                 var strategyId = StrategyIds.Normalize(run.StrategyId);
                 var settings = GetStrategySettings(strategySettings, strategyId);
-                var effectiveLiveStakes = settings.EffectiveLiveStakes && variantsById.ContainsKey(strategyId);
+                var effectiveLiveStakes = variantsById.TryGetValue(strategyId, out var variant) &&
+                    HasEffectiveLiveStakes(variant, settings);
                 return new
                 {
                     Run = run,
@@ -1053,8 +1054,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         var nowUtc = GetUtcNow();
         var liveStrategyIds = variants
+            .Where(variant => HasEffectiveLiveStakes(variant, GetStrategySettings(strategySettings, variant.Id)))
             .Select(variant => StrategyIds.Normalize(variant.Id))
-            .Where(strategyId => GetStrategySettings(strategySettings, strategyId).EffectiveLiveStakes)
             .Distinct()
             .ToArray();
         if (nowUtc - liveStrategyPrioritySnapshot.RefreshedAtUtc < LiveStrategyPriorityRefreshInterval &&
@@ -1777,7 +1778,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return BtcMakerOrderResult.SkippedResult;
         }
 
-        var isPaperLiveShadowTest = ShouldRunPaperLiveShadowTest(settings);
+        var isPaperLiveShadowTest = ShouldRunPaperLiveShadowTest(variant, settings);
         PaperLiveShadowOrderBookSnapshotResult? shadowSnapshot = null;
         TakerOrderBookLookupResult? shadowFakLookup = null;
         BtcMinimumStakeSizing? shadowFakSizing = null;
@@ -4361,6 +4362,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var parentVariants = configuredVariants
             .Where(variant => !IsChildMirrorStrategy(variant))
             .Where(variant => !IsFuturesChildParentCandidate(variant))
+            .Where(variant => !IsPaperOnlyVariant(variant))
             .Where(variant => variant.MarketInterval == BtcUpDownMarketInterval.FiveMinutes)
             .Where(variant => IsStrategyActiveForChildSelection(variant, strategySettings, nowUtc))
             .ToArray();
@@ -4471,7 +4473,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             .Select(run => StrategyIds.Normalize(run.StrategyId))
             .Where(strategyId =>
                 variantsById.TryGetValue(strategyId, out var variant) &&
-                !IsFuturesChildParentCandidate(variant))
+                !IsFuturesChildParentCandidate(variant) &&
+                !IsPaperOnlyVariant(variant))
             .ToHashSet();
         if (parentIds.Count == 0)
         {
@@ -5008,7 +5011,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                     var stakeMultiplier = settings.PaperStakeAmount;
                     var isPaperLiveShadowTest = UsesOpeningLimitEntry(variant) &&
-                        ShouldRunPaperLiveShadowTest(settings);
+                        ShouldRunPaperLiveShadowTest(variant, settings);
                     var paperLostCounterAdjustment = ApplyPaperLostCounterStakeAdjustment(
                         variant,
                         settings,
@@ -5907,7 +5910,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         gtdSizing,
                         gtdExpiration,
                         paperLostCounterAdjustment);
-                    var shouldSubmitLegacyLiveOrder = settings.EffectiveLiveStakes &&
+                    var shouldSubmitLegacyLiveOrder = HasEffectiveLiveStakes(variant, settings) &&
                         botOptions.Mode == BotMode.Live &&
                         !UsesGammaOutcomeSelection(variant) &&
                         !UsesOpeningLimitEntry(variant) &&
@@ -6618,6 +6621,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFak or
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
@@ -6704,8 +6708,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool IsReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket;
+    }
+
+    private static bool IsOptimizedReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket;
     }
 
     private static bool IsFilteredReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
@@ -7122,9 +7132,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             nowUtc >= startUtc;
     }
 
-    private static bool ShouldRunPaperLiveShadowTest(StrategyRuntimeSettings settings)
+    private static bool IsPaperOnlyVariant(BtcUpDown5mStrategyVariant variant)
     {
-        return settings.EffectiveLiveStakes;
+        return variant.PaperOnly ||
+            variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket;
+    }
+
+    private static bool HasEffectiveLiveStakes(
+        BtcUpDown5mStrategyVariant variant,
+        StrategyRuntimeSettings settings)
+    {
+        return settings.EffectiveLiveStakes && !IsPaperOnlyVariant(variant);
+    }
+
+    private static bool ShouldRunPaperLiveShadowTest(
+        BtcUpDown5mStrategyVariant variant,
+        StrategyRuntimeSettings settings)
+    {
+        return HasEffectiveLiveStakes(variant, settings);
     }
 
     private static bool CanSubmitLegacyBtcLiveOrder(BtcUpDown5mStrategyVariant variant)
@@ -7173,6 +7198,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     skipBpsStreakMoveSignalTasks,
                     cancellationToken),
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                middleReferenceCurrentPrices,
+                cancellationToken),
+            BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
                 market,
                 variant,
                 stakeUsd,
@@ -12730,6 +12762,27 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var selectedAverage = averages[0];
+        if (IsOptimizedReferenceAverageBpsFakPremarketEntry(variant) &&
+            string.IsNullOrWhiteSpace(variant.RequiredReferenceAverageWindow))
+        {
+            const string reason = "optimized_average_required_window_missing";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildReferenceAverageBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice: null,
+                    averages,
+                    selectedAverage,
+                    triggerDirection: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveFromAverageBps: null,
+                    reason));
+        }
+
         var currentPriceLookup = IsBtcReferenceVariant(variant)
             ? await GetBtcCurrentPriceAsync(market, currentPrices, cancellationToken)
             : await GetCryptoCurrentPriceAsync(market, variant, currentPrices, cancellationToken);
@@ -12795,6 +12848,30 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         if (!thresholdMet)
         {
             const string reason = "reference_average_move_below_bps_threshold";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildReferenceAverageBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice,
+                    averages,
+                    selectedAverage,
+                    triggerDirection,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveFromAverageBps,
+                    reason));
+        }
+
+        if (IsOptimizedReferenceAverageBpsFakPremarketEntry(variant) &&
+            !string.Equals(
+                selectedAverage.WindowLabel,
+                variant.RequiredReferenceAverageWindow,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            const string reason = "optimized_average_required_window_not_selected";
             return BtcOpeningLimitDecision.Reject(
                 reason,
                 BuildReferenceAverageBpsRawDecisionJson(
@@ -17460,6 +17537,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             crypto_reference_average_move_from_middle_bps = isBtcReference ? null : moveFromAverageBps,
             crypto_reference_average_abs_move_from_middle_bps = !isBtcReference && moveFromAverageBps is { } cryptoMove ? Math.Abs(cryptoMove) : (decimal?)null,
             crypto_reference_average_min_move_from_middle_bps = isBtcReference ? (decimal?)null : GetReferenceAverageMinMoveBps(variant),
+            optimized_average_enabled = IsOptimizedReferenceAverageBpsFakPremarketEntry(variant),
+            optimized_average_required_window = IsOptimizedReferenceAverageBpsFakPremarketEntry(variant)
+                ? variant.RequiredReferenceAverageWindow
+                : null,
+            optimized_average_selected_window_matches = IsOptimizedReferenceAverageBpsFakPremarketEntry(variant) &&
+                selectedAverage is not null &&
+                !string.IsNullOrWhiteSpace(variant.RequiredReferenceAverageWindow)
+                    ? string.Equals(
+                        selectedAverage.WindowLabel,
+                        variant.RequiredReferenceAverageWindow,
+                        StringComparison.OrdinalIgnoreCase)
+                    : (bool?)null,
+            paper_only = IsPaperOnlyVariant(variant),
             reference_average_filtered_enabled = IsFilteredReferenceAverageBpsFakPremarketEntry(variant),
             reference_average_filtered_skipped_windows = IsFilteredReferenceAverageBpsFakPremarketEntry(variant)
                 ? new[] { "6h", "12h" }
@@ -19840,6 +19930,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         CancellationToken cancellationToken,
         bool postOnly = false)
     {
+        if (IsPaperOnlyVariant(variant))
+        {
+            return PaperLiveShadowPlacementResult.LiveSkippedKeepPaper();
+        }
+
         var isFakOrder = true;
         var liveOrderType = FakOrderType;
         price = ResolveFakGuaranteedWorstPrice();
@@ -20238,6 +20333,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
+        if (IsPaperOnlyVariant(variant))
+        {
+            return false;
+        }
+
         price = ResolveFakGuaranteedWorstPrice();
         var validation = new List<string>();
         if (botOptions.Mode != BotMode.Live)
