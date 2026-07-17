@@ -38,3 +38,19 @@ Request:
 
 Result:
 The investigation proved an abrupt host/process interruption rather than a simple network outage: crypto reference activity stopped at `2026-07-17T12:15:47Z`, PostgreSQL freshly started at `14:01:46Z`, the app at `14:03:45Z`, and PostgreSQL reported that it was not properly shut down and performed automatic WAL recovery. No bounded Dashboard service command was recorded. The exact initiating trigger (power loss, hard reset, Windows crash/BSOD, or forced restart) remains unresolved because Windows System Event Log requires authenticated server access; WinRM is open but current implicit authentication fails, RPC/SMB are unavailable, and direct `System.evtx` file read is denied. No production state was changed. The next evidence is a server-local read-only Windows boot/event query for `12:05Z..14:10Z`.
+
+## 2026-07-17T18:18:04.9106865Z
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Created and fully verified a fresh one-sheet Excel report from one exact read-only production snapshot at `2026-07-17T18:12:52.834089Z`. It contains the unique maximum-PnL strategy for each BTC/ETH/SOL Child and Child ROI group, sorted by total PnL ascending, with ten UTC date rows, formula-driven daily/category/grand totals, red negative values on white with an explicit minus sign, and frozen first row/column. Independent raw CSV and server SQL calculations matched all six winners, all `60` daily cells, and grand total `$1,194.44284199`. Excel/artifact/OpenXML checks found one `12x8` sheet, `77` numeric cells, `15` verified negative cells, zero formula errors, and frozen pane `B2`. No production or product state was changed.

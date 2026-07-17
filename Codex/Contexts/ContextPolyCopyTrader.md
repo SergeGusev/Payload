@@ -1,3 +1,18 @@
+## Active Update 2026-07-17 Best Child And Child ROI Daily Paper PnL Excel Report
+Goal: Create one fresh Excel sheet with daily Paper PnL for the highest-all-history-PnL strategy in every BTC/ETH/SOL Child and Child ROI category.
+Status: Completed
+Done:
+- Captured one exact production PostgreSQL `REPEATABLE READ, READ ONLY` snapshot from `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-17T18:12:52.834089Z`: `111,307` settled Paper rows, `144` candidate strategies, and ten continuous UTC dates (`2026-07-08` through partial `2026-07-17`).
+- Independently reconciled raw-row aggregates against server SQL for all `144` candidates, matched the six winners against separate server ranking SQL, matched every winner/date value against server daily SQL, and repeated a separate offline CSV calculation for all six winners and all `60` report cells.
+- Selected and sorted the unique category winners by total Paper PnL ascending: BTC `N=12` Child `+$51.63100874`; SOL `N=21` Child ROI `+$140.61619284`; BTC `N=5` Child ROI `+$162.14905070`; SOL `N=9` Child `+$221.89985670`; ETH `N=8` Child `+$280.82691857`; ETH `N=6` Child ROI `+$337.31981444`.
+- Created `outputs/child-child-roi-best-daily-paper-pnl-report-2026-07-17/reports/child-child-roi-best-daily-paper-pnl-2026-07-17.xlsx` with one `Daily PnL` sheet, ten UTC date rows, formula-driven daily totals, formula-driven strategy totals, and formula-driven grand total `$1,194.44284199`.
+- Applied red text on a white background with an explicit minus sign to negative values; Excel independently verified all `15` negative financial cells.
+- Verified through Excel and artifact-tool that the workbook has one `12x8` used range, `77` numeric financial cells, zero formula-error cells, exact source values/totals, and frozen first row/column (`FreezePanes=True`, `SplitRow=1`, `SplitColumn=1`). OpenXML independently confirmed frozen pane `B2`.
+- Rendered the final workbook through Excel and visually verified legible headers, dates, values, negative signs/colors, daily totals, category totals, and grand total. Final SHA-256 is `5981C165DB603B6F7A0673DCF3FF4AD24CA2298E75F5BAC72C9E13D5AC937D06`.
+Next: None.
+Notes: The report uses all available settled Paper history through the exact UTC cutoff; the `2026-07-17` row is partial. Production access was read-only and no database row, strategy setting, order, service process, deployment, product code, or configuration changed. Reproducible source exports, verification evidence, workbook builder inputs, and QA renders are in the ignored output directory. Product tests were not required because product code was unchanged. Repository context/history were committed locally; the remote was not updated because `master` includes earlier unpushed product commits outside this reporting task.
+Blockers: None for the workbook. Remote push requires explicit approval for exporting the broader local commit stack.
+
 ## Active Update 2026-07-17 Production Abrupt Shutdown Cause Investigation
 Goal: Determine why production host `192.168.0.101` became unreachable and later restarted.
 Status: In Progress
