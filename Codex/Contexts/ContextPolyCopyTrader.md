@@ -1,3 +1,20 @@
+## Active Update 2026-07-17 ETH Down 3h Selected-Window Full-History Replay
+Goal: Replay the proposed `selected_reference_average_window=3h` gate over the full server Paper history and compare it with the observed strategy result.
+Status: Completed
+Done:
+- Captured one production PostgreSQL `REPEATABLE READ, READ ONLY` snapshot from exact endpoint `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-17T19:51:31.026708Z` for exact strategy ID `b7c50005-0000-4000-8140-000000000103`.
+- Replayed the proposed gate by retaining only settled source Paper bets whose contemporaneous `paper_orders.raw_decision_json.selected_reference_average_window` equals `3h`; reused each retained bet's actual stake, fill cost, and outcome, with no scaling or database writes.
+- Compared `3,011` observed bets (`+$426.80509494`, `+2.3588451%` ROI) with `302` retained `3h` bets (`+$366.13224056`, `+20.1757368%` ROI). The filter retains `10.03%` of bets/stake and `85.78%` of PnL, raises ROI by `17.8169 pp`, but lowers absolute PnL by `$60.67285438` because excluded non-`3h` bets earned that amount.
+- Correctly calculated market-end-sequence maximum drawdown and independently reconciled it in server SQL: baseline `$260.11452902`, `3h` `$37.86202360`, an `85.44%` reduction.
+- Independently matched every local window and UTC-day aggregate to separate server SQL, reconstructed every run PnL from aggregated fills, verified the stored selected window against the embedded full-positive-average argmax/tie-break contract, and found zero parse, contract, accounting, duplicate, partition, daily, window, or drawdown mismatches.
+- Verified every historical decision records Paper lost coefficient `1` and counter coefficient `0`, so skipping non-`3h` outcomes does not alter later retained sizing through loss-counter. Actual run stake preserves partial FAK executions.
+- Checked time robustness: `3h` is profitable on 10 of 11 active UTC outcome days and remains positive in all 11 leave-one-active-day-out cases. A 20,000-resample UTC-day block bootstrap gives descriptive `3h` ROI 95% interval `12.46%..29.88%` and ROI improvement `11.22..26.56 pp`.
+- Established that no `3h` decision occurred after the discovery cutoff `2026-07-17T18:40:04.791073Z`; therefore the strong result remains in-sample/data-mined and is not new forward validation.
+- Created reproducible ignored artifacts under `outputs/eth-down3-selected-3h-replay-2026-07-17`: C# replay, full JSON/CSV evidence, verification output, and `report.md` (SHA-256 `8D7E6B9ADA9145AC4D5C05F3BE6E4B68DA20E971530495A3FFCC5A5F802B4665`).
+Next: If pursued, add a parallel Paper-only `selected_reference_average_window == 3h` variant while preserving the baseline, then judge only a predeclared future period; do not replace the baseline or enable Live filtering from this in-sample replay.
+Notes: The analysis project built with zero warnings/errors and ran successfully. The server-side and local aggregate checks, fill accounting, argmax check, partition identity, and independent SQL drawdown all passed. Product code/configuration were unchanged, so product regression tests were not required. No database row, strategy setting, service, order, deployment, or configuration changed. Remote push remains outside scope because `master` contains a broader stack of earlier unpushed commits.
+Blockers: None for the completed analysis.
+
 ## Active Update 2026-07-17 Selected Window 3h Child-Level Explanation
 Goal: Restate the `selected_window=3h` proposal in the simplest possible terms.
 Status: Completed

@@ -103,3 +103,10 @@ Request:
 
 Result:
 Restated the recommendation with a simple eight-card analogy: each existing average window writes down one average ETH price, the strategy chooses the highest card, and `selected_window` is the winner's label. The proposed Paper variant changes none of the eight cards or their calculations; it bets only when the 3h card wins and skips otherwise. No production or product state changed.
+
+## 2026-07-17T19:54:33.0694660Z
+Request:
+Ты можешь сейчас пройти по всей истории стратегии и эмулировать стратегию по твоему предложению? И сравнить эмуляцию с реальным результатом?
+
+Result:
+Completed a full-history read-only production replay for exact strategy `b7c50005-0000-4000-8140-000000000103` at cutoff `2026-07-17T19:51:31.026708Z`. The observed `3,011` settled Paper bets earned `+$426.80509494` at `+2.3588451%` ROI; retaining only the `302` bets whose stored decision selected `3h` earned `+$366.13224056` at `+20.1757368%` ROI. The filter kept about `10.03%` of bets/stake and `85.78%` of PnL, improved ROI by `17.8169 pp`, and reduced maximum drawdown from `$260.11452902` to `$37.86202360`, but lowered absolute PnL by `$60.67285438` because excluded bets were profitable. Independent server window/day aggregates, fill-based PnL reconstruction, embedded-average argmax checks, partition identity, and SQL drawdown reconciliation all passed with zero mismatches. The `3h` subset was profitable on 10 of 11 active UTC days and in every leave-one-day-out case, but there were zero new `3h` decisions after the discovery cutoff, so this remains in-sample evidence. Recommended only a parallel forward Paper variant, not replacing the baseline or enabling Live. No production or product state changed.
