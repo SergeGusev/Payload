@@ -31,3 +31,10 @@ Request:
 
 Result:
 Connectivity recovered during the repeat check. After one initial timeout, two TCP connections to `192.168.0.101:5432` succeeded in `6-15 ms`, two independent read-only PostgreSQL transactions completed against exact primary `polycopytrader`, PostgreSQL `18.3`, and the neighbor state became `Reachable`. ICMP still timed out, but database access is working. No server or database state was changed.
+
+## 2026-07-17T14:54:41.5492264Z
+Request:
+А у тебя получится определить, почему сервер вдруг выключился?
+
+Result:
+The investigation proved an abrupt host/process interruption rather than a simple network outage: crypto reference activity stopped at `2026-07-17T12:15:47Z`, PostgreSQL freshly started at `14:01:46Z`, the app at `14:03:45Z`, and PostgreSQL reported that it was not properly shut down and performed automatic WAL recovery. No bounded Dashboard service command was recorded. The exact initiating trigger (power loss, hard reset, Windows crash/BSOD, or forced restart) remains unresolved because Windows System Event Log requires authenticated server access; WinRM is open but current implicit authentication fails, RPC/SMB are unavailable, and direct `System.evtx` file read is denied. No production state was changed. The next evidence is a server-local read-only Windows boot/event query for `12:05Z..14:10Z`.

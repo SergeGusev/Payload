@@ -1,3 +1,17 @@
+## Active Update 2026-07-17 Production Abrupt Shutdown Cause Investigation
+Goal: Determine why production host `192.168.0.101` became unreachable and later restarted.
+Status: In Progress
+Done:
+- Proved this was not only a client/LAN reachability problem: PostgreSQL current postmaster started at `2026-07-17T14:01:46.198273Z` and `PolyCopyTrader.Service` started at `14:03:45.820918Z`, both inside the observed outage/recovery window.
+- Read the allowlisted PostgreSQL lifecycle logs through read-only server-file functions. The previous log ends without a clean shutdown sequence; the new log states `database system was interrupted`, `database system was not properly shut down; automatic recovery in progress`, performs WAL redo, and completes an end-of-recovery checkpoint. No `received fast shutdown request` or `database system is shut down` lifecycle line was present at the boundary.
+- Independently found the non-backfilled crypto reference ticks stop for BTC/ETH/SOL at `2026-07-17T12:15:47Z` and resume at `14:03:52..14:04:02Z`, a gap of about `1:48`. The host had no ARP response and was `Unreachable` during the gap. There were zero `service_command_audit` rows in the bounded window.
+- Derived from those verified facts: the machine or PostgreSQL process suffered an abrupt interruption, followed by fresh PostgreSQL and service starts. Ordinary network loss and a normal sleep/resume cannot explain the new postmaster plus crash recovery. Exact differentiation among power loss, hard reset, Windows crash/BSOD, or a forced restart still requires Windows events.
+- Confirmed WinRM `5985` is open and the host is in TrustedHosts, but current implicit Negotiate authentication fails. RPC/SMB ports are unavailable, direct read of `System.evtx` through the PostgreSQL service account is denied, and no safe authenticated Windows log path is currently available.
+- Rechecked the prior `2026-06-30` incident: ASUS Optimization and Event `187` proved sleep then, but ASUS SCI was subsequently removed and AC sleep disabled. That prior cause is only a lead, not evidence for this different unclean-recovery event.
+Next: Run the prepared read-only `Get-CimInstance`/`Get-WinEvent` block directly on the server for `2026-07-17T12:05Z..14:10Z` and inspect IDs `12/13/41/42/107/187/6005/6006/6008/1074` plus BugCheck/WHEA events; then classify the exact trigger.
+Notes: All production database work used bounded `REPEATABLE READ, READ ONLY` transactions. No database row, Windows setting, service, deployment, configuration, or product file was changed. Repository context/history were committed locally; the remote was not updated because the branch includes earlier unpushed product commits outside this diagnosis.
+Blockers: Exact initiating cause needs authenticated Windows System Event Log output from the server. Do not send a password in chat; run the read-only block locally/RDP or authorize an existing secure remoting session. Remote Git push separately requires explicit approval for the broader commit stack.
+
 ## Active Update 2026-07-17 Production Server Connectivity Restored
 Goal: Recheck whether production server `192.168.0.101` became reachable after the earlier outage.
 Status: Completed
