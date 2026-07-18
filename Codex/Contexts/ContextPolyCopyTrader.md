@@ -1,3 +1,17 @@
+## Active Update 2026-07-18 Repeatable Child/Child ROI Excel Pipeline
+Goal: Turn the recurring six-strategy Child / Child ROI daily Paper PnL workbook into one bounded command, prove a fresh report completes within three minutes, and persist the user's requirement to report unexpected delays immediately.
+Status: Completed
+Done:
+- Added the permanent `scripts/child-child-roi-daily-report` tool: a C# read-only production exporter with independent server reconciliation, the artifact-tool workbook builder, OpenXML freeze-pane enforcement, Excel COM verification, final import/render verification, and a single `run-report.ps1` entry point.
+- Added explicit per-stage and 180-second total timeouts, targeted child-process termination, stage stdout/stderr logs, and `run-summary.json` so a failure identifies the exact stage instead of waiting silently.
+- Completed a clean one-command run in 96.871 seconds: production snapshot/reconciliation 63.583s, workbook build 15.992s, freeze panes 0.578s, Excel verification 3.864s, and final import/render verification 12.809s.
+- Proved the failure path with a forced 10-second database-stage limit: the process tree stopped in 10.53 seconds, returned exit code 1, persisted `Status=FAILED`, and reported the exact `STAGE_TIMEOUT` plus stdout/stderr log paths.
+- Generated the fresh workbook from a read-only production cutoff `2026-07-18T18:54:14.0896720Z`: 144 candidate strategies, 126,427 settled Paper rows, six independently matched winners, 11 UTC dates, and grand Paper PnL `$1,316.97582706`.
+- Verified one worksheet, 13x8 used range, six strategies, 11 dates, 84 numeric cells, 20 negative red-on-white cells, frozen first row/column, zero formula errors, exact grand-total reconciliation, and a complete visual pass. Workbook SHA-256 is `E9D2BEFD4561C1D828836C3108B9E83556CDB499086C2744637D856E25BAA9EC`.
+- Added `node_modules/` to `.gitignore` and persisted the user-interaction rule in `AGENTS.md`: immediately report the exact unexpected obstacle, impact, and bounded workaround; do not retry silently.
+Next: Use the one-command runner for subsequent refreshes; investigate the Codex desktop Windows ACL sandbox helper separately if it continues failing in new tasks.
+Notes: The control run only read production PostgreSQL `192.168.0.101/polycopytrader`; no service, strategy, order, configuration, or database row was changed. During setup, the Codex Windows sandbox repeatedly failed with `helper_unknown_error: apply deny-read ACLs`; scoped escalated commands were used and every repository diff was checked. Windows PowerShell 5.1 also returned a null `ExitCode` from `Start-Process -PassThru`; the runner now uses the independently tested direct `System.Diagnostics.Process` API. The wide PNG preview exceeded the nested shell's 40,000-character output cap and was visually inspected in smaller unchanged-scale fragments. `master` was already 25 commits ahead of `origin/master`, so pushing the broader local stack remains withheld.
+Blockers: None for generating reports. The external Codex desktop filesystem sandbox defect remains reproducible but is bypassed by the bounded one-command runner.
 ## Active Update 2026-07-18 BTC Optimized Deployment Verification
 Goal: Verify the deployed 10 BTC Down N=1..10 Optimized Average Premarket strategies, their first production Paper decisions, and strict Live/Child isolation without changing production.
 Status: Completed

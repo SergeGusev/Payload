@@ -46,3 +46,10 @@ Request:
 
 Result:
 Verified the deployed BTC Optimized build `ae9a4a97...` against exact production PostgreSQL in forced read-only sessions. The service was Running with a fresh heartbeat, unchanged start time, and no error; the catalog was exactly 10/10 N1..10 Paper-only rows with zero mismatches. Fully reconciled 950 decisions across 95 continuous five-minute cycles with zero selector, threshold, 3h-gate, linkage, or missing-entry violations. Exactly 22 qualifying Paper entries occurred only when 3h was selected; all filled and settled, producing 17 wins / 5 losses, independently calculated stake `$132.2045999544`, PnL `+$30.0333720456`, and ROI `+22.7173427%`. Live, shadow, parent/child, and Child-copy counts were zero. BTC and critical/aggregate WebSocket data were fresh; only unrelated transient SOL staleness warnings were observed. Production was not changed.
+
+## 2026-07-18T19:01:32.0344785Z
+Request:
+Ок, давай сделаем это. И соберём потом отчет за 3 минуты. И вообще всегда говори мне про какие-то странные препятствия, из-за которых мы зависаем на почаса, чтобы мы их решали
+
+Result:
+Added a permanent one-command Child / Child ROI daily Paper PnL Excel pipeline with explicit stage and total timeouts, durable stage logs, and immediate obstacle reporting rules. A fresh read-only production report completed in 96.871 seconds and passed independent data, Excel, formula, freeze-pane, formatting, hash, and visual verification. A forced timeout self-test stopped the process tree in 10.53 seconds and persisted the exact failed stage and log paths.

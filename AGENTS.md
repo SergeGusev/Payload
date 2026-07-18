@@ -16,6 +16,7 @@ This repository contains **PolyCopyTrader**, a Windows/.NET C# application for m
 ## User interaction rules
 
 - When the user asks to inspect a picture/image/screenshot, assume the image is in the Windows clipboard unless the user explicitly provides another source. First try to extract the clipboard bitmap to a temporary image file and inspect it.
+- Immediately report unexpected tooling, permission, environment, or runtime obstacles that block or materially delay the task. Name the exact stage and error, state whether user systems or data are affected, and describe the bounded workaround. Do not repeat a failing operation silently or leave the user waiting through unexplained retries.
 - Never use dashed, dotted, or dash-dot lines in charts. Distinguish series with solid colors, direct labels, and markers instead.
 
 ## Core principle
