@@ -39,3 +39,10 @@ Request:
 
 Result:
 Implemented exactly 10 BTC Down N=1..10 Optimized Average Premarket variants, gated after the ordinary threshold on the existing selector choosing `3h`, targeting Up and hard-enforced as Paper-only. Added exact catalog IDs/codes/names, an idempotent seed that preserves runtime settings on conflict, Dashboard category/documentation, and regression coverage for all thresholds, all non-3h windows, tie-breaks, threshold order, BTC price diagnostics, Live/shadow refusal, and all four Child modes. Production collision checks and exact INSERT planning ran only in forced read-only transactions and found/generated the expected 10 unique rows with zero collisions or mismatches; production was not changed. Focused tests passed 136/136, Release build passed with 0 warnings/errors, and the full suite retained the exact same 112 known failures as clean HEAD while adding 26 passing tests. Three independent reviews ended PASS. Deployment was not performed.
+
+## 2026-07-18T18:17:20.930246Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified the deployed BTC Optimized build `ae9a4a97...` against exact production PostgreSQL in forced read-only sessions. The service was Running with a fresh heartbeat, unchanged start time, and no error; the catalog was exactly 10/10 N1..10 Paper-only rows with zero mismatches. Fully reconciled 950 decisions across 95 continuous five-minute cycles with zero selector, threshold, 3h-gate, linkage, or missing-entry violations. Exactly 22 qualifying Paper entries occurred only when 3h was selected; all filled and settled, producing 17 wins / 5 losses, independently calculated stake `$132.2045999544`, PnL `+$30.0333720456`, and ROI `+22.7173427%`. Live, shadow, parent/child, and Child-copy counts were zero. BTC and critical/aggregate WebSocket data were fresh; only unrelated transient SOL staleness warnings were observed. Production was not changed.
