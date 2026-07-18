@@ -53,3 +53,10 @@ Request:
 
 Result:
 Added a permanent one-command Child / Child ROI daily Paper PnL Excel pipeline with explicit stage and total timeouts, durable stage logs, and immediate obstacle reporting rules. A fresh read-only production report completed in 96.871 seconds and passed independent data, Excel, formula, freeze-pane, formatting, hash, and visual verification. A forced timeout self-test stopped the process tree in 10.53 seconds and persisted the exact failed stage and log paths.
+
+## 2026-07-18T19:19:22.2692016Z
+Request:
+Объясни мне ситуацию с BTC Up or Down 5m Down 1 bps Optimized Average Premarket. Я привык, что за 30 минут до начала рынка ставки колеблятся в диапазоне 0.5. А здесь ставки по 0.64, 0.71 и т.д. Почему так?
+
+Result:
+Verified current code and two exact read-only production snapshots for strategy UUID `b7c50005-0000-4000-8212-000000000101`. Its Down condition buys Up 30 seconds before market start through fresh FAK executable ask depth with a 0.99 worst-price cap and no 0.50/token-price/spread filter. All seven entries occurred 28.476..29.198 seconds before start from websocket-cache quotes at most 432.031ms old, with zero run/fill/diagnostic price mismatches. The 0.71 fill matched a 0.70/0.71 book; the 0.64 fill matched a 0.56/0.64 book. No production or product state changed.

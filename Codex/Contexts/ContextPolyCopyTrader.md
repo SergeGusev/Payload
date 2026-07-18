@@ -1,3 +1,16 @@
+## Active Update 2026-07-18 BTC Optimized High Entry Price Explanation
+Goal: Explain why `BTC Up or Down 5m Down 1 bps Optimized Average Premarket` recorded Paper entry prices such as 0.64 and 0.71 instead of remaining near 0.50.
+Status: Completed
+Done:
+- Resolved the exact strategy as UUID `b7c50005-0000-4000-8212-000000000101`, code `btc_up_down_5m_down_optimized_average_bps_1_fak_premarket`: the configured Down move is the trigger, the fixed purchased outcome is Up, the required selected average window is 3h, and the scheduled offset is -30 seconds.
+- Verified the current implementation uses fresh executable ask depth for Paper FAK, permits asks through the guaranteed worst-price cap 0.99, and stores the resulting ask-depth VWAP as the signal, order, fill, and run entry price. It does not constrain the token price to 0.50 or use the midpoint.
+- Captured exact production PostgreSQL `192.168.0.101:5432/polycopytrader` in forced `REPEATABLE READ, READ ONLY` snapshots at `2026-07-18T19:17:24.201121Z` and `2026-07-18T19:18:34.874511Z`. All seven all-time entries were Up, due exactly 30 seconds before market start, actually entered 28.476..29.198 seconds before start, and used websocket-cache quotes no older than 432.031ms.
+- Independently reconciled run entry price, Paper fill VWAP, and diagnostic fill price for 7/7 entries with zero mismatches. Five prices were at least 0.60: 0.64, 0.71, 0.65, 0.67438879, and 0.69.
+- For the 0.71 entry, the fresh Up book was 0.70 bid / 0.71 ask and the one-level fill was 0.71. For the 0.64 entry, the fresh book was 0.56 bid / 0.64 ask and the one-level fill was 0.64. The 0.67438879 entry consumed two ask levels from a 0.67 best ask, demonstrating the guaranteed-stack VWAP behavior.
+- Concluded that the high recorded prices are actual aggressive Polymarket ask executions allowed by the FAK contract, not a late entry, stale quote, 0.99 bookkeeping artifact, or fill-recording error. The strategy's BTC-average signal has no token-price or spread filter, so it can buy an expensive Up probability and accept asymmetric payoff.
+Next: Make no strategy change from this explanation alone. If price/spread protection is desired, replay explicit maximum-entry-price and maximum-spread filters before adding a new Paper variant.
+Notes: Production access was read-only; no strategy, order, service, configuration, database row, or product code changed. The persistent Codex Windows ACL sandbox defect was bypassed with scoped approved commands.
+Blockers: None.
 ## Active Update 2026-07-18 Repeatable Child/Child ROI Excel Pipeline
 Goal: Turn the recurring six-strategy Child / Child ROI daily Paper PnL workbook into one bounded command, prove a fresh report completes within three minutes, and persist the user's requirement to report unexpected delays immediately.
 Status: Completed
