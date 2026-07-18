@@ -60,3 +60,10 @@ Request:
 
 Result:
 Verified current code and two exact read-only production snapshots for strategy UUID `b7c50005-0000-4000-8212-000000000101`. Its Down condition buys Up 30 seconds before market start through fresh FAK executable ask depth with a 0.99 worst-price cap and no 0.50/token-price/spread filter. All seven entries occurred 28.476..29.198 seconds before start from websocket-cache quotes at most 432.031ms old, with zero run/fill/diagnostic price mismatches. The 0.71 fill matched a 0.70/0.71 book; the 0.64 fill matched a 0.56/0.64 book. No production or product state changed.
+
+## 2026-07-18T19:35:52.9167857Z
+Request:
+Насколько часто за 30 секунд до рынка такие большие ставки?
+
+Result:
+Compared the exact Optimized N=1 strategy with its canonical Down N=1 Reference Average counterpart under identical -30s Up-buy FAK filters in forced read-only production snapshots. Across 3,393 unique baseline markets, entry price was at least 0.60 in 70 (2.0631%), at least 0.64 in 30 (0.8842%), at least 0.65 in 24 (0.7073%), and at least 0.70 in 4 (0.1179%); median was 0.51 and p99 0.63. Today was unusual at 25/139 (17.9856%) for at least 0.60. Optimized had 5/7 at least 0.60, and every price exactly matched the baseline on the same market. Before these seven markets, the comparable 3h subset had only 3/305 at least 0.60, proving this was a concentrated current episode rather than normal 3h behavior. A local PowerShell decimal-literal error caused a 37-second diagnostic timeout, was reported, and the corrected independent raw-row calculation completed in 4.4 seconds. Production was unchanged.

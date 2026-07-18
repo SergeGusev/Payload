@@ -1,3 +1,18 @@
+## Active Update 2026-07-18 BTC Premarket High-Price Frequency
+Goal: Quantify how often BTC 5m FAK Paper entries made 30 seconds before market start have token prices comparable to 0.64 and 0.71.
+Status: Completed
+Done:
+- Used exact comparable strategy UUID `b7c50005-0000-4000-8136-000000000101` (`BTC Up or Down 5m Down 1 bps Reference Average Premarket`): like the Optimized N=1 strategy, it triggers Down, buys Up through the same FAK executable-ask model, and is due exactly 30 seconds before market start; it differs only by not requiring selected window 3h.
+- Captured exact production PostgreSQL `192.168.0.101:5432/polycopytrader` in forced `REPEATABLE READ, READ ONLY` snapshots through `2026-07-18T19:33:09.977426Z`. Filters required actual pre-start Up entries, exact -30s due offset, execution source `btc_updown5m_fak_taker_paper`, and fill model `fak_taker_executable_snapshot_v2`.
+- Across 3,393 unique baseline markets since `2026-07-03T06:34:42.600426Z`, prices were at least 0.60 in 70 cases (2.0631%), at least 0.64 in 30 (0.8842%), at least 0.65 in 24 (0.7073%), and at least 0.70 in 4 (0.1179%). Median was 0.51, p95 0.55, p99 0.63, and maximum 0.71.
+- Today UTC was materially unusual: 25/139 baseline entries were at least 0.60 (17.9856%), 19/139 at least 0.64 (13.6691%), 18/139 at least 0.65 (12.9496%), and 4/139 at least 0.70 (2.8777%).
+- The exact Optimized strategy had only seven all-time entries: 5/7 at least 0.60 and 0.64 (71.4286%), 4/7 at least 0.65 (57.1429%), and 1/7 at least 0.70 (14.2857%). All seven prices exactly matched the canonical baseline strategy on the same seven markets, proving the Optimized processor did not create the prices.
+- In the historical canonical subset where `selected_reference_average_window=3h`, 8/312 entries were at least 0.60. Excluding the exact seven current Optimized markets, the prior sample was 3/305 at least 0.60 (0.9836%), 1/305 at least 0.64/0.65 (0.3279%), and 0/305 at least 0.70. The current five expensive entries are therefore a concentrated market episode, not normal 3h-gate behavior.
+- Independently re-exported 3,400 raw rows and reproduced all threshold counts in PowerShell. The first local aggregation used invalid C#-style decimal suffix `0.60m`, emitted one conversion error per row, and hit the 37-second outer timeout; the read-only server query had completed and production was unaffected. The corrected explicit `[decimal]` calculation completed in 4.4 seconds.
+Next: If expensive entries are undesirable, test maximum token-price and spread filters against the historical canonical 3h subset and a separate forward period before changing the Paper strategy.
+Notes: No strategy, order, service, configuration, database row, or product code changed. Counts are per unique market because the comparator is one exact strategy with at most one entry per market.
+Blockers: None.
+
 ## Active Update 2026-07-18 BTC Optimized High Entry Price Explanation
 Goal: Explain why `BTC Up or Down 5m Down 1 bps Optimized Average Premarket` recorded Paper entry prices such as 0.64 and 0.71 instead of remaining near 0.50.
 Status: Completed
