@@ -1368,6 +1368,15 @@ public static class StrategyIds
                 thresholdBps));
         }
 
+        for (var thresholdBps = 1; thresholdBps <= 10; thresholdBps++)
+        {
+            variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+                "BTC",
+                GetOptimizedReferenceAverageBpsPremarketIdGroup("BTC", BtcUpDownFixedOutcome.Down),
+                thresholdBps,
+                BtcUpDownFixedOutcome.Down));
+        }
+
         variants.AddRange(CreateAbsoluteBpsThresholdPremarketVariants("BTC"));
 
         variants.AddRange(CreateFuturesBasisBpsThresholdPremarketVariants("BTC"));
@@ -1702,15 +1711,18 @@ public static class StrategyIds
                 foreach (var thresholdBps in CreateReferenceAverageBpsThresholdValues())
                 {
                     variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
-                        GetOptimizedReferenceAverageBpsPremarketIdGroup(BtcUpDownFixedOutcome.Up),
+                        asset.Symbol,
+                        GetOptimizedReferenceAverageBpsPremarketIdGroup(asset.Symbol, BtcUpDownFixedOutcome.Up),
                         thresholdBps,
                         BtcUpDownFixedOutcome.Up));
                     variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
-                        GetOptimizedReferenceAverageBpsPremarketIdGroup(BtcUpDownFixedOutcome.Down),
+                        asset.Symbol,
+                        GetOptimizedReferenceAverageBpsPremarketIdGroup(asset.Symbol, BtcUpDownFixedOutcome.Down),
                         thresholdBps,
                         BtcUpDownFixedOutcome.Down));
                     variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
-                        GetOptimizedReferenceAverageBpsPremarketIdGroup(triggerOutcome: null),
+                        asset.Symbol,
+                        GetOptimizedReferenceAverageBpsPremarketIdGroup(asset.Symbol, triggerOutcome: null),
                         thresholdBps,
                         triggerOutcome: null));
                 }
@@ -2646,13 +2658,14 @@ public static class StrategyIds
     }
 
     private static BtcUpDown5mStrategyVariant CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+        string assetSymbol,
         int idGroup,
         int thresholdBps,
         BtcUpDownFixedOutcome? triggerOutcome,
         int entryDelaySeconds = -30)
     {
-        const string normalizedAsset = "ETH";
-        const string assetCode = "eth";
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
         const string requiredWindow = "3h";
         var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
         var thresholdName = thresholdBps.ToString(CultureInfo.InvariantCulture);
@@ -2708,14 +2721,20 @@ public static class StrategyIds
         };
     }
 
-    private static int GetOptimizedReferenceAverageBpsPremarketIdGroup(BtcUpDownFixedOutcome? triggerOutcome)
+    private static int GetOptimizedReferenceAverageBpsPremarketIdGroup(
+        string assetSymbol,
+        BtcUpDownFixedOutcome? triggerOutcome)
     {
-        return triggerOutcome switch
+        return (assetSymbol.ToUpperInvariant(), triggerOutcome) switch
         {
-            BtcUpDownFixedOutcome.Up => 8209,
-            BtcUpDownFixedOutcome.Down => 8210,
-            null => 8211,
-            _ => throw new ArgumentOutOfRangeException(nameof(triggerOutcome), triggerOutcome, "Unsupported Optimized Average trigger outcome.")
+            ("BTC", BtcUpDownFixedOutcome.Down) => 8212,
+            ("ETH", BtcUpDownFixedOutcome.Up) => 8209,
+            ("ETH", BtcUpDownFixedOutcome.Down) => 8210,
+            ("ETH", null) => 8211,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(triggerOutcome),
+                triggerOutcome,
+                $"Unsupported {assetSymbol} Optimized Average trigger outcome.")
         };
     }
 

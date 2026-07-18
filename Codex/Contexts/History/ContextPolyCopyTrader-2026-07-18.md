@@ -32,3 +32,10 @@ Request:
 
 Result:
 Replayed all eight selected-average windows for the exact 84 BTC and 84 SOL canonical Reference Average strategies from forced read-only production snapshots, covering 104,929 BTC and 132,228 SOL settled rows. Catalog, selector argmax/tie-break, decision contract, fill accounting, and independent server aggregates reconciled with zero mismatches. BTC Down N=1..10 gated on `3h` formed a coherent Paper candidate: the overlapping ten-strategy diagnostic total changed from 29,175 rows / `-$1,623.35` / `-0.93%` ROI to 2,765 gated rows / `+$1,709.52` / `+10.29%`, and every N passed deterministic time/LOO/MDD/all-eight checks. SOL had no fully supported candidate; Neutral N=1..4 at `20m` and Down N=1..4 at `90m` remain fixed hypotheses with only 26..32 all-eight rows per N. A joint 10,000-sample max-T audit across 1,344 BTC+SOL cells left zero positive simultaneous lower bounds under two seeds. Recommended a 10-strategy BTC Paper-only forward pilot, no broad 84/168 rollout, no SOL implementation yet, and no Live. Wrote the reproducible ignored report and artifacts; production was unchanged.
+
+## 2026-07-18T07:23:24.1895602Z
+Request:
+Ок, давай сделаем эти 10 BTC варианты
+
+Result:
+Implemented exactly 10 BTC Down N=1..10 Optimized Average Premarket variants, gated after the ordinary threshold on the existing selector choosing `3h`, targeting Up and hard-enforced as Paper-only. Added exact catalog IDs/codes/names, an idempotent seed that preserves runtime settings on conflict, Dashboard category/documentation, and regression coverage for all thresholds, all non-3h windows, tie-breaks, threshold order, BTC price diagnostics, Live/shadow refusal, and all four Child modes. Production collision checks and exact INSERT planning ran only in forced read-only transactions and found/generated the expected 10 unique rows with zero collisions or mismatches; production was not changed. Focused tests passed 136/136, Release build passed with 0 warnings/errors, and the full suite retained the exact same 112 known failures as clean HEAD while adding 26 passing tests. Three independent reviews ended PASS. Deployment was not performed.

@@ -528,7 +528,7 @@ public sealed class StorageTests
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
         var statement = Assert.Single(statements, item =>
-            item.Contains("optimized_average_bps_", StringComparison.Ordinal));
+            item.Contains("'eth_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_'", StringComparison.Ordinal));
         var normalizedStatement = statement.Replace("\r\n", "\n", StringComparison.Ordinal);
 
         Assert.Contains("('8209', 'up_', 'Up ', 'Up', 'Down')", statement, StringComparison.Ordinal);
@@ -545,6 +545,42 @@ public sealed class StorageTests
             "'ETH Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket'",
             statement,
             StringComparison.Ordinal);
+        Assert.Contains("ordinary maximum-average selector chose the 3h window", statement, StringComparison.Ordinal);
+        Assert.Contains("Live execution is not supported for this optimized Paper experiment", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "true,\n    false,\n    1.00,\n    1.00,\n    100.00,\n    false,",
+            normalizedStatement,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("enabled = excluded.enabled", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stakes = excluded.live_stakes", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_stake_amount = excluded.paper_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stake_amount = excluded.live_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paused = excluded.paused", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_lost_counter = excluded.paper_lost_counter", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_lost_counter = excluded.live_lost_counter", statement, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresSchema_SeedsExactBtcDownOptimizedAveragePremarketGridLiveDisabledByDefault()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var statement = Assert.Single(statements, item =>
+            item.Contains("'btc_up_down_5m_down_optimized_average_bps_'", StringComparison.Ordinal));
+        var normalizedStatement = statement.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("generate_series(1, 10)", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("generate_series(15, 100, 5)", statement, StringComparison.Ordinal);
+        Assert.Contains("b7c50005-0000-4000-8212-", statement, StringComparison.Ordinal);
+        Assert.Contains("lpad((100 + threshold_value)::text, 12, '0')", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "'btc_up_down_5m_down_optimized_average_bps_' || threshold_value::text || '_fak_premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'BTC Up or Down 5m Down ' || threshold_value::text || ' bps Optimized Average Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains("latest Binance BTC/USDT reference price", statement, StringComparison.Ordinal);
         Assert.Contains("ordinary maximum-average selector chose the 3h window", statement, StringComparison.Ordinal);
         Assert.Contains("Live execution is not supported for this optimized Paper experiment", statement, StringComparison.Ordinal);
         Assert.Contains(
