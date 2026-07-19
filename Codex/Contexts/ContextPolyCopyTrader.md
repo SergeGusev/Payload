@@ -1,3 +1,17 @@
+## Active Update 2026-07-19 Child / Child ROI Excel Report Refresh
+Goal: Generate one-sheet daily Paper PnL Excel report for the best Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Ran the existing bounded report pipeline against production PostgreSQL `192.168.0.101/polycopytrader` in `REPEATABLE READ, READ ONLY` mode with database cutoff `2026-07-19T06:11:56.001399Z`.
+- Evaluated 144 candidate strategies and 132,875 settled Paper rows, then independently reconciled the six all-history PnL winners and their daily UTC totals.
+- Generated one worksheet with 12 UTC dates, six strategy columns sorted by all-history PnL ascending, formula-driven daily/category/grand totals, 23 negative red-on-white cells, and frozen first row and first column.
+- Excel and artifact-tool verification both passed: one 14x8 used range, 91 numeric cells, zero formula errors, and grand Total `$1,472.18538762` exactly reconciled.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/child-child-roi-best-daily-paper-pnl-2026-07-19.xlsx`, SHA-256 `A0A2BCEF8F119042FFA993E92AC610A7C13A5804C53647EE6F6CABCE2DFAC3BA`.
+- The full bounded pipeline completed in 100.673 seconds. An extra manual JSON projection used stale field names and returned blanks after the pipeline was already successful; this unnecessary verification delayed final delivery. The user also reported a Codex App exit. A read-only scan of all 70 Windows Application events from the preceding three hours found zero Codex/OpenAI records from `Application Error`, `.NET Runtime`, or `Windows Error Reporting`, so its cause and any relation to model/app version remain unknown.
+Next: Reuse the bounded one-command pipeline and deliver its already-verified workbook immediately after `REPORT_OK`; investigate Codex App crashes only from an actual crash log rather than speculation.
+Notes: Production access was read-only. No service, strategy, order, database row, product code, or configuration changed. The report pipeline's own Excel COM and final import/render checks passed before delivery.
+Blockers: None for the report. Root cause of the user-observed Codex App exit is unknown without an application crash log.
+
 ## Active Update 2026-07-18 BTC Premarket High-Price Frequency
 Goal: Quantify how often BTC 5m FAK Paper entries made 30 seconds before market start have token prices comparable to 0.64 and 0.71.
 Status: Completed
