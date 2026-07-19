@@ -1,3 +1,17 @@
+## Active Update 2026-07-19 ETH Down 3 bps Reference Average PnL Chart
+Goal: Generate a fresh cumulative Paper PnL chart for `ETH Up or Down 5m Down 3 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved the exact strategy as UUID `b7c50005-0000-4000-8140-000000000103` and code `eth_up_down_5m_down_reference_average_bps_3_fak_premarket`.
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` in separate forced `REPEATABLE READ, READ ONLY` snapshots through cutoff `2026-07-19T07:13:50.7206657Z`.
+- Exported 3,225 settled Paper rows from `2026-07-03T06:50:21.501842Z` through `2026-07-19T06:59:02.417243Z`: 1,706 wins, 1,519 losses, stake `$19,379.80648363`, realized PnL `+$570.25984336`, and ROI `+2.94254663%`.
+- Independently reconciled local decimal totals, cumulative path, extrema, and maximum drawdown against server SQL; maximum drawdown was `$260.11452902` from row 2,578 to 2,980.
+- Rendered and visually inspected a 1600x820 settlement-time step chart with only solid lines; corrected the inherited dashed zero line locally without another database request.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/eth-down3-bps-reference-average-paper-pnl-2026-07-19.png`, SHA-256 `21F8CA515C26188AB4FD10CE48C6B57663B26E55A84EA072D0E38429B2AFFB85`.
+Next: None.
+Notes: Production access was read-only. No service, strategy, order, database row, product code, or configuration changed. One broad historical artifact search timed out after 24 seconds and was replaced with a bounded directory lookup; one local regex search was mangled by PowerShell variable expansion and replaced with fixed-string search.
+Blockers: None.
+
 ## Active Update 2026-07-19 Six Separate Child / Child ROI PnL Panels
 Goal: Repeat the six-strategy cumulative Paper PnL view as six separate charts.
 Status: Completed

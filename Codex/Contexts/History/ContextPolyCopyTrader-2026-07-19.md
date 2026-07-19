@@ -1,3 +1,10 @@
+## 2026-07-19T07:15:47.5751630+00:00
+Request:
+Сделай pnl график стратегии ETH Up or Down 5m Down 3 bps Reference Average Premarket
+
+Result:
+Generated and visually verified the exact strategy's cumulative settlement-time Paper PnL chart from a forced read-only production cutoff at `2026-07-19T07:13:50.7206657Z`. Across 3,225 settled rows, realized PnL was `+$570.25984336`, ROI `+2.94254663%`, and maximum drawdown `$260.11452902`; local calculations exactly matched an independent server aggregate. All chart lines are solid. Delivered PNG SHA-256: `21F8CA515C26188AB4FD10CE48C6B57663B26E55A84EA072D0E38429B2AFFB85`.
+
 ## 2026-07-19T06:57:22.4478635+00:00
 Request:
 Повтори в виде шести отдельных графиков
