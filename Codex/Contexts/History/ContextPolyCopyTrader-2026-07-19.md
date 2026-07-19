@@ -1,3 +1,10 @@
+## 2026-07-19T06:52:00.2584745+00:00
+Request:
+Сделай Pnl график шести стратегий из этого графике
+
+Result:
+Generated and visually verified one cumulative settlement-time Paper PnL chart for the exact six strategies from the current Child / Child ROI report. A fresh read-only production selection confirmed the same six winners; 5,278 selected settlements were plotted through `2026-07-19T06:49:49.651317Z`, with independently reconciled endpoints and only solid lines. Delivered PNG SHA-256: `2658C37D3AFD32C6AF94F02630C484A8416F4220544A73C5A873D98E007D2C01`.
+
 ## 2026-07-19T06:43:08.2894411+00:00
 Request:
 Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.

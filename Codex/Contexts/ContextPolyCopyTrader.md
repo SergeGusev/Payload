@@ -1,3 +1,16 @@
+## Active Update 2026-07-19 Six Child / Child ROI PnL Lines
+Goal: Plot cumulative Paper PnL for the six winning Child and Child ROI strategies from the current Excel report on one chart.
+Status: Completed
+Done:
+- Reused the exact six BTC/ETH/SOL x Child/Child ROI winners and confirmed a fresh production selection still returned the same six strategy IDs.
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` read-only at cutoff `2026-07-19T06:49:49.651317Z`; exported 133,120 settled candidate rows and plotted 5,278 selected rows from `2026-07-08T21:00:23.232827Z` onward.
+- Independently reconciled each plotted endpoint to the selected-strategy aggregate: BTC 4 Child `$3.70682488`, BTC 21 Child ROI `$97.72360445`, SOL 11 Child ROI `$153.55991428`, ETH 8 Child ROI `$394.91477426`, ETH 8 Child `$400.90588009`, SOL 9 Child `$425.86944984`.
+- Generated one 1800x1080 settlement-time step chart with six solid lines, solid axes/connectors, direct endpoint labels, and no dashed or dotted lines.
+- Visually inspected and delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/child-child-roi-six-strategies-cumulative-paper-pnl-2026-07-19.png`, SHA-256 `2658C37D3AFD32C6AF94F02630C484A8416F4220544A73C5A873D98E007D2C01`.
+Next: None.
+Notes: Production access was read-only. No service, strategy, order, database row, product code, or configuration changed.
+Blockers: None.
+
 ## Active Update 2026-07-19 Child / Child ROI Excel Report Refresh
 Goal: Generate one-sheet daily Paper PnL Excel report for the best Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed
