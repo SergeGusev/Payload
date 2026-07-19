@@ -1,3 +1,16 @@
+## Active Update 2026-07-19 Six Separate Child / Child ROI PnL Panels
+Goal: Repeat the six-strategy cumulative Paper PnL view as six separate charts.
+Status: Completed
+Done:
+- Confirmed the same six BTC/ETH/SOL x Child/Child ROI winners in a fresh forced read-only production export at cutoff `2026-07-19T06:55:38.332512Z`.
+- Reconciled 5,280 plotted settlements against the selected-strategy aggregates from 133,186 candidate settled Paper rows; combined endpoint PnL was `$1,488.42910161`.
+- Rendered six separate panels in a 3x2 layout, arranged by BTC/ETH/SOL rows and Child/Child ROI columns, with a common UTC time axis and independent Y-axis scales.
+- Used only solid strategy lines, axes, grids, separators, and endpoint markers; visually inspected all panels for clipping and overlap.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/child-child-roi-six-panel-cumulative-paper-pnl-2026-07-19.png`, SHA-256 `162F106E65F64CC841C88F028B9B60963501442934F2AFA15345C342BB1FD9F0`.
+Next: None.
+Notes: Production access was read-only. No service, strategy, order, database row, product code, or configuration changed.
+Blockers: None.
+
 ## Active Update 2026-07-19 Six Child / Child ROI PnL Lines
 Goal: Plot cumulative Paper PnL for the six winning Child and Child ROI strategies from the current Excel report on one chart.
 Status: Completed
