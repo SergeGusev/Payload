@@ -1,3 +1,17 @@
+## Active Update 2026-07-20 ETH 3 bps Reference Average PnL Chart
+Goal: Generate a fresh cumulative Paper PnL chart for `ETH Up or Down 5m 3 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved the exact production strategy as UUID `b7c50005-0000-4000-8179-000000000103` and code `eth_up_down_5m_reference_average_bps_3_fak_premarket`; this is the neutral 3 bps variant, not the similarly named Up or Down directional variants.
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` in a forced `REPEATABLE READ, READ ONLY` transaction through cutoff `2026-07-20T07:19:23.544143Z`.
+- Exported 3,790 settled Paper rows from `2026-07-04T14:37:36.524614Z` through `2026-07-20T07:17:42.027954Z`: 2,027 wins, 1,763 losses, stake `$22,775.24700125`, realized PnL `+$742.29278491`, and ROI `+3.25920849%`.
+- Independently reconciled raw-row calculations against server SQL for count, stake, PnL, outcomes, maximum stake, and maximum drawdown. Maximum drawdown was `$252.71687047`, from record 2,797 to 3,205.
+- Rendered and visually inspected a 1600x820 settlement-time step chart with only solid lines; labels, endpoint, axes, and the maximum-drawdown band are legible and do not overlap.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/eth-3bps-reference-average-paper-pnl-2026-07-20-101603.png`, SHA-256 `8569B9535A7A9CED60E5701AEBF545AEEBAEAA332A5F854B638E25D603F35077`.
+Next: None.
+Notes: Production access was read-only. No service, strategy, order, configuration, database row, or product code changed.
+Blockers: None.
+
 ## Active Update 2026-07-20 Child / Child ROI Excel Report Refresh
 Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the best Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed
