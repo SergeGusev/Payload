@@ -1,3 +1,17 @@
+## Active Update 2026-07-20 Child / Child ROI Excel Report Refresh 18:37 UTC
+Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Captured exact production PostgreSQL `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-20T18:37:21.798425Z` in one `REPEATABLE READ, READ ONLY` transaction. The scope contained exactly 144 current non-Progress Child/Child ROI strategies and 159,441 settled Paper rows over 13 UTC dates.
+- Independently reconciled all candidate aggregates, the six unique group winners, and every winner/date total. A separate bounded SQL audit at `2026-07-20T18:36:46.425384Z` independently matched the same six IDs and PnLs from 6,146 winner rows with zero unmatched rows or aggregate mismatches.
+- Ordered the six columns by all-history PnL ascending: BTC 16 Child ROI `$70.27705151`, BTC 4 Child `$82.68473551`, SOL 21 Child ROI `$172.34418333`, SOL 8 Child `$384.50476938`, ETH 8 Child ROI `$417.05715618`, and ETH 8 Child `$541.87574598`. Every group winner was unique; tie count was one.
+- Generated one `Daily PnL` worksheet with UTC dates in rows, formula-driven daily/category/grand totals, red text on a white background with an explicit minus for negative values, and frozen first row plus first column at `B2`.
+- Excel COM and artifact-tool verification passed: one 15x8 used range, 98 numeric cells, 24 negative cells, zero formula errors, and grand Total `$1,668.74364189`. The final render was visually inspected with no clipped headers, values, or totals.
+- Delivered `outputs/019f80cc-b3fa-7391-807d-7adeedb736a5/child-child-roi-best-daily-paper-pnl-2026-07-20-213721.xlsx`, SHA-256 `138300D5DAC2C24992D626D1D57DDB6A3EA4CA026D7125366EE6476887BBC346`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. A broad historical-output search timed out and was replaced with bounded context/source searches. The first temp-isolated build required one bounded restore after `NETSDK1004`. The first exporter attempt exceeded the 110-second outer limit without completing; its exact read-only process ended, and one retry with the exporter-aligned 180-second budget completed in 71.3 seconds. All temporary build/report/QA artifacts stayed in the marked `D:\CodexTemp` session, which was removed after stopping its exact `VBCSCompiler` process and rerunning protected cleanup. Remote push is withheld because `master` was already 35 commits ahead of `origin/master`; pushing this journal update would also publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-20 ETH 3 bps Reference Average PnL Chart
 Goal: Generate a fresh cumulative Paper PnL chart for `ETH Up or Down 5m 3 bps Reference Average Premarket`.
 Status: Completed
