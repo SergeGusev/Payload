@@ -1,3 +1,17 @@
+## Active Update 2026-07-20 Child / Child ROI Excel Report Refresh
+Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the best Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Ran the bounded report pipeline against production PostgreSQL `192.168.0.101/polycopytrader` in `REPEATABLE READ, READ ONLY` mode with database cutoff `2026-07-20T06:04:04.793757Z`.
+- Evaluated 144 candidate strategies and 150,610 settled Paper rows, then selected the unique all-history PnL winner in each of the six BTC/ETH/SOL x Child/Child ROI groups.
+- Ordered the six columns by total PnL ascending: BTC 4 Child `-$5.63207839`, BTC 16 Child ROI `$73.33765676`, SOL 21 Child ROI `$160.14517693`, SOL 8 Child `$368.83095671`, ETH 8 Child ROI `$414.09205418`, and ETH 8 Child `$429.12307266`.
+- Generated one worksheet with 13 UTC dates, red-on-white negative values, daily/category/grand totals, and frozen first row and first column.
+- Excel and final artifact verification passed: one 15x8 used range, 98 numeric cells, 24 negative cells, zero formula errors, and grand Total `$1,439.89683885` exactly reconciled.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/child-child-roi-best-daily-paper-pnl-2026-07-20-090349.xlsx`, SHA-256 `15E6AB81D94994F7B42D240253BAAB8738965C1EC82E3960F8C73D3A152AEE29`.
+Next: None.
+Notes: The full bounded pipeline completed in 125.460 seconds. Production access was read-only; no service, strategy, order, configuration, database row, or product code changed.
+Blockers: None.
+
 ## Active Update 2026-07-19 Child / Child ROI Excel Report Refresh
 Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the best Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed
