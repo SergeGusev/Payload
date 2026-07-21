@@ -84,3 +84,10 @@ Request:
 
 Result:
 Generated a fresh 1800x920 cumulative settlement-time Paper PnL plus ETHUSDT reference-price chart through `2026-07-21T19:40:53.533848Z`. The exact strategy had 4,149 settled Paper rows, PnL `+$820.45110987`, ROI `+3.29067799%`, and maximum drawdown `$252.71687047`; 24,579 independently reconciled ETH minute-last samples showed a `+8.79607907%` price change. The chart uses only solid lines, passed visual inspection, and has SHA-256 `A4FA8DC65DDDB7F39DD1EF456B16C7ACAAABCA8BB2E7ECD7BE5A1F4C94CD12D3`. Production was read-only and the marked temp run was removed.
+
+## 2026-07-21T19:57:52.0786546+00:00
+Request:
+Объясни мне, почему график ETH Up or Down 5m 3 bps Reference Average Premarket практически повторяет график ETH и растёт вместе с ним. А график BTC Up or Down 5m 3 bps Reference Average Premarket при росте BTC наоборот, полетел вниз? Ведь у них одинаковый принцип
+
+Result:
+Verified from current code and all 8,222 persisted runtime decisions that both strategies use the same contrarian auto-direction mechanism. A read-only, independently reconciled same-period comparison showed the divergence comes from different conditional five-minute outcomes, not different logic: BTC won `50.61%` versus a `51.19%` descriptive break-even rate and lost `-$394.30`, while ETH won `53.50%` versus `51.69%` and earned `+$815.33`. On 3,712 paired market starts they selected the same direction `94.72%` of the time, but result signs differed `20.20%`; ETH-win/BTC-loss cases exceeded the reverse 420 to 330. ETH's visual level correlation was strong, but hourly return/PnL correlation was positive for both assets; BTC actually earned in rising-price hours and lost more in falling-price hours, so a general inverse BTC relationship was disproved. Exact SQL, methodology, raw rows, and hourly series were preserved under the comparison output folder; production was not changed.
