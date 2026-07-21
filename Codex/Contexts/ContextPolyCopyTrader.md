@@ -1,3 +1,18 @@
+## Active Update 2026-07-21 BTC Down 3 bps Optimized Average PnL Chart
+Goal: Generate a fresh cumulative Paper PnL chart for `BTC Up or Down 5m Down 3 bps Optimized Average Premarket`.
+Status: Completed
+Done:
+- Resolved the exact production strategy by its full name as UUID `b7c50005-0000-4000-8212-000000000103` and code `btc_up_down_5m_down_optimized_average_bps_3_fak_premarket`.
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` in one forced `REPEATABLE READ, READ ONLY` transaction through cutoff `2026-07-21T09:26:26.712155Z`.
+- Exported 47 settled Paper rows from `2026-07-18T09:32:09.559865Z` through `2026-07-21T02:57:54.038327Z`: 27 wins, 20 losses, stake `$282.43710003`, realized PnL `+$26.99080565`, and ROI `+9.55639526%`.
+- Independently reconciled raw-row calculations against server SQL for count, stake, PnL, outcomes, maximum stake, and maximum drawdown. Maximum drawdown was `$26.28905098`, from record 10 to record 28 (`2026-07-20T02:39:41.713863Z` to `2026-07-20T14:56:53.678392Z`).
+- Replaced the first visually inspected continuous-line rendering with a settlement-time step line so sparse bets do not imply PnL movement between settlements; no second database query was needed.
+- Visually inspected the final 1600x820 chart: only solid lines are present, labels and endpoint are legible, and the maximum-drawdown band is correctly framed.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/btc-down3-optimized-average-paper-pnl-2026-07-21-122352.png`, SHA-256 `C2849C7F7F17EB2BE07D4EF905E83D3F83828C65BB14374C96779856E9DA4025`.
+Next: None.
+Notes: Production access was read-only. No service, strategy, order, configuration, database row, or product code changed. Remote push is withheld because `master` was already 39 commits ahead of `origin/master`; pushing this journal update would also publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-21 Explain OKX Fixed-Expiry Selection
 Goal: Clarify why the BTC Futures Basis strategies repeatedly reference `BTC-USD_UM-260731` even though a new Polymarket market is processed every five minutes.
 Status: Completed

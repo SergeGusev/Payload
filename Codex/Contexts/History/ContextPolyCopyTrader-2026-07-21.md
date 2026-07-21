@@ -27,3 +27,10 @@ Request:
 
 Result:
 Clarified from the deployed selection path that every five-minute decision does recalculate the reference set, but it selects the three nearest calendar fixed-expiry OKX contracts after the Polymarket market end, not a new five-minute futures contract. The current set is July 24, July 31, and September 25; `BTC-USD_UM-260731` is the second confirmation reference and still has no bid/ask. The set remains unchanged across five-minute markets until an expiry boundary or live-instrument change. No production state changed.
+
+## 2026-07-21T09:27:30.4588971+00:00
+Request:
+Сделай pnl график стратегии BTC Up or Down 5m Down 3 bps Optimized Average Premarket
+
+Result:
+Resolved the exact production strategy and generated a fresh cumulative settlement-time Paper PnL chart through `2026-07-21T09:26:26.712155Z`. The 47 settled rows produced PnL `+$26.99080565`, ROI `+9.55639526%`, and maximum drawdown `$26.28905098`; raw-row calculations exactly matched independent server SQL. After visual inspection, the line was changed to a solid step curve without another database query. The final 1600x820 PNG has SHA-256 `C2849C7F7F17EB2BE07D4EF905E83D3F83828C65BB14374C96779856E9DA4025`.
