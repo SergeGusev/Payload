@@ -1,3 +1,18 @@
+## Active Update 2026-07-21 Correct BTC Final-Tail Interpretation
+Goal: Recheck the user's observation that BTC rose while the neutral 3 bps strategy PnL fell at the end of the chart and correct the prior explanation's scope.
+Status: Completed
+Done:
+- Visually re-inspected the exact BTC PnL-plus-price PNG and recalculated its tail from the preserved minute-price and raw settled-run exports.
+- Confirmed the user is correct locally. From `2026-07-20T10:00:00Z` through the chart cutoff, BTC rose from `$64,203.19` to `$66,427.37` (`+3.46428269%`) while Paper PnL fell `-$24.52091866` over 332 settlements.
+- Identified the mechanism in that final rally: 83 contrarian Down entries produced `-$50.37504186`, while 249 Up entries produced `+$25.85412320`. BTC remained strong often enough after moving above the selected average that the expected Down reversion failed.
+- Confirmed a sharper visible subsegment from `2026-07-21T10:00:00Z` through `14:00:00Z`: BTC rose `+0.70043217%`, while 38 settlements lost `-$37.83435106`; 17 Down entries alone lost `-$43.49845036` with only five wins.
+- Recomputed exact trailing windows ending at the chart cutoff: 12h BTC `+0.6274%` / PnL `-$25.06`; 24h `+2.0986%` / `-$4.57`; 48h `+3.1067%` / `-$5.66`; 72h `+3.0041%` / `-$66.08`.
+- Corrected the prior conclusion: the whole-period data still does not support a permanent inverse BTC relationship, but the final chart segment clearly is a local inverse regime. The earlier blanket wording is withdrawn.
+- Preserved the exact boundary rules and calculations in `outputs/019f1397-6f46-7a11-8166-522543cac173/btc-eth-3bps-reference-average-comparison-20260721-225148/btc-tail-correction.md`.
+Next: If desired, test whether fast BTC upward momentum can be used as an out-of-sample filter specifically for contrarian Down entries.
+Notes: This correction used the already independently reconciled graph exports and did not query or mutate production. PnL totals were calculated independently from raw settlements and matched differences in the hourly cumulative series. No product code changed. Remote push is withheld because `master` was already 46 commits ahead of `origin/master`; pushing this journal update would publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-21 Explain BTC / ETH Neutral 3 bps Divergence
 Goal: Explain from verified implementation and production results why the ETH neutral 3 bps Reference Average PnL rose with ETH while the equivalent BTC strategy lost money during an overall BTC rise.
 Status: Completed

@@ -91,3 +91,12 @@ Request:
 
 Result:
 Verified from current code and all 8,222 persisted runtime decisions that both strategies use the same contrarian auto-direction mechanism. A read-only, independently reconciled same-period comparison showed the divergence comes from different conditional five-minute outcomes, not different logic: BTC won `50.61%` versus a `51.19%` descriptive break-even rate and lost `-$394.30`, while ETH won `53.50%` versus `51.69%` and earned `+$815.33`. On 3,712 paired market starts they selected the same direction `94.72%` of the time, but result signs differed `20.20%`; ETH-win/BTC-loss cases exceeded the reverse 420 to 330. ETH's visual level correlation was strong, but hourly return/PnL correlation was positive for both assets; BTC actually earned in rising-price hours and lost more in falling-price hours, so a general inverse BTC relationship was disproved. Exact SQL, methodology, raw rows, and hourly series were preserved under the comparison output folder; production was not changed.
+
+## 2026-07-21T20:07:38.8917813+00:00
+Request:
+Ты написал: Общее утверждение «BTC рос, а стратегия из-за этого падала» данные не подтверждают:
+
+Но посмотри на график, который ты составил. В самом конце явно видно, что BTC пошёл вверх,  а Pnl вниз
+
+Result:
+Re-inspected the exact chart and confirmed the user's local observation. From `2026-07-20T10:00:00Z` to the cutoff, BTC rose `+3.4643%` while strategy PnL fell `-$24.52`; the sharp `2026-07-21 10:00-14:00 UTC` segment had BTC `+0.7004%` and PnL `-$37.83`. The loss was driven by contrarian Down entries (`-$50.38` over the full final rally and `-$43.50` in the sharp subsegment) while BTC continued upward instead of reverting. The previous whole-period conclusion remains valid only at aggregate scope; its blanket wording was withdrawn because the final tail clearly is a local inverse regime. No production query or mutation was performed.
