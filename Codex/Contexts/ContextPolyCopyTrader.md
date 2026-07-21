@@ -1,3 +1,17 @@
+## Active Update 2026-07-21 Child / Child ROI Excel Report Refresh
+Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Captured exact production PostgreSQL `192.168.0.101:5432/polycopytrader` at cutoff `2026-07-21T05:16:05.818012Z` in one `REPEATABLE READ, READ ONLY` transaction. The exact non-Progress scope contained 144 Child/Child ROI strategies and 166,352 settled Paper rows over 14 UTC dates.
+- Reconciled raw-row aggregates against independent server SQL for all 144 candidates, matched the six unique maximum-PnL winners against an independent server ranking, and matched every selected strategy/date total against a separate server daily aggregation.
+- Ordered the six columns by all-history PnL ascending: BTC 4 Child `$40.82477723`, BTC 16 Child ROI `$64.06039394`, SOL 21 Child ROI `$160.84549479`, SOL 8 Child `$369.37211186`, ETH 8 Child ROI `$404.31230242`, and ETH 8 Child `$548.65519869`.
+- Generated one `Daily PnL` worksheet with typed UTC dates, formula-driven daily/category/grand totals, red text on a white background with an explicit minus for negative values, and frozen first row plus first column at `B2`.
+- Excel COM and artifact-tool verification passed: one 16x8 used range, 105 numeric cells, 29 negative cells, zero formula errors, and grand Total `$1,588.07027893`. The final render was visually inspected with no clipped headers, values, or totals.
+- Delivered `outputs/019f80cc-b3fa-7391-807d-7adeedb736a5/child-child-roi-best-daily-paper-pnl-2026-07-21-081605.xlsx`, SHA-256 `7FBAB3FFFA00C481B760F942AED78D5ECDC8179F6CF50037FF19547FE38FBDA9`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. An optional additional agent-side SQL audit did not return within the expected bounded wait and was interrupted rather than delaying delivery; no conclusion depends on it because the production exporter completed its own raw-row/server-aggregate, winner-ranking, and daily-total reconciliations. All temporary build, export, and QA artifacts were removed through the marked `D:\CodexTemp` lifecycle. Remote push is withheld because `master` was already 36 commits ahead of `origin/master`; pushing this journal update would also publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-20 Child / Child ROI Excel Report Refresh 18:37 UTC
 Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed
