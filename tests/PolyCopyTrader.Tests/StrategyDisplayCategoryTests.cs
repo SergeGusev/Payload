@@ -85,6 +85,24 @@ public sealed class StrategyDisplayCategoryTests
     }
 
     [Fact]
+    public void LowEnterAveragePremarketStrategiesHaveAssetDisplayCategories()
+    {
+        var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket)
+            .ToArray();
+
+        Assert.Equal(84, variants.Length);
+        var categoryCounts = variants
+            .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(28, categoryCounts["BTC Up or Down 5m Bps LowEnter Average Premarket"]);
+        Assert.Equal(28, categoryCounts["ETH Up or Down 5m Bps LowEnter Average Premarket"]);
+        Assert.Equal(28, categoryCounts["SOL Up or Down 5m Bps LowEnter Average Premarket"]);
+        Assert.Equal(3, categoryCounts.Count);
+    }
+
+    [Fact]
     public void FuturesBasisPremarketStrategiesHaveDedicatedDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
@@ -350,6 +368,7 @@ public sealed class StrategyDisplayCategoryTests
     [InlineData("ETH Up or Down 5m Down 9 bps Optimized Average Premarket", "ETH Up or Down 5m Down Bps Optimized Average Premarket")]
     [InlineData("ETH Up or Down 5m 9 bps Optimized Average Premarket", "ETH Up or Down 5m Bps Optimized Average Premarket")]
     [InlineData("BTC Up or Down 5m Down 9 bps Optimized Average Premarket", "BTC Up or Down 5m Down Bps Optimized Average Premarket")]
+    [InlineData("BTC Up or Down 5m 9 bps LowEnter Average Premarket", "BTC Up or Down 5m Bps LowEnter Average Premarket")]
     [InlineData("SOL Up or Down 5m Up 15 bps Reference Average Premarket", "SOL Up or Down 5m Up Bps Reference Average Premarket")]
     [InlineData("SOL Up or Down 5m Down 15 bps Reference Average Premarket", "SOL Up or Down 5m Down Bps Reference Average Premarket")]
     [InlineData("SOL Up or Down 5m 15 bps Reference Average Premarket", "SOL Up or Down 5m Bps Reference Average Premarket")]

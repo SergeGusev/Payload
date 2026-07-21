@@ -203,6 +203,11 @@ public sealed class StorageTests
         Assert.Contains("('BTC', '8178')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('ETH', '8179')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('SOL', '8180')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('BTC', '8213')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8214')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8215')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("lower(asset_symbol) || '_up_down_5m_low_enter_average_bps_' || threshold_value::text || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps LowEnter Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('BTC', '8182', '8191')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('ETH', '8183', '8192')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("('SOL', '8184', '8193')", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -594,6 +599,41 @@ public sealed class StorageTests
         Assert.DoesNotContain("paused = excluded.paused", statement, StringComparison.Ordinal);
         Assert.DoesNotContain("paper_lost_counter = excluded.paper_lost_counter", statement, StringComparison.Ordinal);
         Assert.DoesNotContain("live_lost_counter = excluded.live_lost_counter", statement, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresSchema_SeedsLowEnterAveragePremarketGridForEveryAssetPaperOnly()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var statement = Assert.Single(statements, item =>
+            item.Contains("'_up_down_5m_low_enter_average_bps_'", StringComparison.Ordinal));
+        var normalizedStatement = statement.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("('BTC', '8213')", statement, StringComparison.Ordinal);
+        Assert.Contains("('ETH', '8214')", statement, StringComparison.Ordinal);
+        Assert.Contains("('SOL', '8215')", statement, StringComparison.Ordinal);
+        Assert.Contains("generate_series(1, 10)", statement, StringComparison.Ordinal);
+        Assert.Contains("generate_series(15, 100, 5)", statement, StringComparison.Ordinal);
+        Assert.Contains("lpad((100 + threshold_value)::text, 12, '0')", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "lower(asset_symbol) || '_up_down_5m_low_enter_average_bps_' || threshold_value::text || '_fak_premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps LowEnter Average Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains("actual average fill price is at most 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains("Live execution is not supported for this Paper experiment", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "true,\n    false,\n    1.00,\n    1.00,\n    100.00,\n    false,",
+            normalizedStatement,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("enabled = excluded.enabled", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stakes = excluded.live_stakes", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_stake_amount = excluded.paper_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stake_amount = excluded.live_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paused = excluded.paused", statement, StringComparison.Ordinal);
     }
 
     [Fact]

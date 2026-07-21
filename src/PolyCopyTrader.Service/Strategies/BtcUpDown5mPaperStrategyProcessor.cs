@@ -5166,7 +5166,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                         limitSizing,
                                         null,
                                         paperFakLookup.RejectionReason,
-                                        nowUtc));
+                                        nowUtc,
+                                        variant.PaperFakMaximumAverageFillPrice));
                                 runsSkipped++;
                                 continue;
                             }
@@ -5186,7 +5187,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                         limitSizing,
                                         null,
                                         "paper_fak_orderbook_missing",
-                                        nowUtc));
+                                        nowUtc,
+                                        variant.PaperFakMaximumAverageFillPrice));
                                 runsSkipped++;
                                 continue;
                             }
@@ -5219,7 +5221,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                         paperFakSizing,
                                         null,
                                         paperFakSizing.RejectionReason ?? "paper_fak_stake_sizing_rejected",
-                                        nowUtc));
+                                        nowUtc,
+                                        variant.PaperFakMaximumAverageFillPrice));
                                 runsSkipped++;
                                 continue;
                             }
@@ -5229,19 +5232,41 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 fakOrderBook,
                                 paperFakStakeUsd,
                                 orderPrice);
+                            var paperFakEntryPriceCapExceeded =
+                                fakEstimate.Filled &&
+                                variant.PaperFakMaximumAverageFillPrice is { } paperFakMaximumAverageFillPrice &&
+                                fakEstimate.AverageFillPrice > paperFakMaximumAverageFillPrice;
+                            var paperFakRejectionReason = paperFakEntryPriceCapExceeded
+                                ? SignalReasonCodes.ExecutionPriceAboveStrategyCap
+                                : fakEstimate.RejectionReason;
                             var fakRawDecisionJson = AttachFakPaperFillSimulationJson(
                                 paperFakRawDecisionJson,
                                 paperFakLookup,
                                 paperFakSizing,
                                 fakEstimate,
-                                fakEstimate.RejectionReason,
-                                nowUtc);
+                                paperFakRejectionReason,
+                                nowUtc,
+                                variant.PaperFakMaximumAverageFillPrice);
                             if (!fakEstimate.Filled)
                             {
                                 await RecordEntryRunSkippedAsync(
                                     run,
                                     variant,
                                     fakEstimate.RejectionReason ?? "paper_fak_no_immediate_fill",
+                                    nowUtc,
+                                    deferredPersistence,
+                                    cancellationToken,
+                                    fakRawDecisionJson);
+                                runsSkipped++;
+                                continue;
+                            }
+
+                            if (paperFakEntryPriceCapExceeded)
+                            {
+                                await RecordEntryRunSkippedAsync(
+                                    run,
+                                    variant,
+                                    SignalReasonCodes.ExecutionPriceAboveStrategyCap,
                                     nowUtc,
                                     deferredPersistence,
                                     cancellationToken,
@@ -6622,6 +6647,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
@@ -6709,6 +6735,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket;
     }
@@ -6716,6 +6743,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static bool IsOptimizedReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket;
+    }
+
+    private static bool IsLowEnterReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket;
     }
 
     private static bool IsFilteredReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
@@ -7205,6 +7237,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 middleReferenceCurrentPrices,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                middleReferenceCurrentPrices,
+                cancellationToken),
+            BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
                 market,
                 variant,
                 stakeUsd,
@@ -16771,7 +16810,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcMinimumStakeSizing sizing,
         TakerBuyFillEstimate? estimate,
         string? rejectionReason,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        decimal? maximumAverageFillPrice = null)
     {
         JsonObject root;
         try
@@ -16806,6 +16846,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["paper_fak_requested_size_shares_at_cap"] = sizing.TargetSizeShares;
         root["paper_fak_worst_price"] = estimate?.MaxAllowedPrice ?? sizing.ReferencePrice;
         root["paper_fak_average_fill_price"] = estimate?.Filled == true ? estimate.AverageFillPrice : null;
+        root["paper_fak_maximum_average_fill_price"] = maximumAverageFillPrice;
+        root["paper_fak_entry_price_cap_exceeded"] = estimate?.Filled == true && maximumAverageFillPrice is { } cap
+            ? estimate.AverageFillPrice > cap
+            : null;
         root["paper_fak_filled_size_shares"] = estimate?.Filled == true ? estimate.SizeShares : 0m;
         root["paper_fak_filled_notional_usd"] = estimate?.Filled == true ? estimate.NotionalUsd : 0m;
         root["paper_fak_target_size_shares"] = estimate?.TargetSizeShares;
@@ -17549,6 +17593,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         variant.RequiredReferenceAverageWindow,
                         StringComparison.OrdinalIgnoreCase)
                     : (bool?)null,
+            low_enter_average_enabled = IsLowEnterReferenceAverageBpsFakPremarketEntry(variant),
+            paper_fak_maximum_average_fill_price = variant.PaperFakMaximumAverageFillPrice,
             paper_only = IsPaperOnlyVariant(variant),
             reference_average_filtered_enabled = IsFilteredReferenceAverageBpsFakPremarketEntry(variant),
             reference_average_filtered_skipped_windows = IsFilteredReferenceAverageBpsFakPremarketEntry(variant)

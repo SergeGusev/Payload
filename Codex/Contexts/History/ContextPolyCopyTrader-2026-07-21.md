@@ -142,3 +142,10 @@ Request:
 
 Result:
 Recalculated the exact BTC and ETH neutral 3 bps strategies on fresh settled production Paper rows through `2026-07-21T21:37:47.488107Z`, retaining `entry_price <= 0.50` without reallocating skipped stake. BTC changed from 4,100 bets / `-$407.64482613` / `-1.65452827%` ROI to 1,148 bets / `+$57.29215281` / `+0.83048036%`; the excluded expensive BTC subset lost `-$464.93697894`. ETH changed from 4,173 bets / `+$818.06567781` / `+3.26223995%` to 1,009 bets / `+$481.68692342` / `+7.94419333%`; the excluded expensive ETH subset still earned `+$336.37875439`. Combined PnL increased by `$128.55822455` and combined ROI rose from `0.82554834%` to `4.15812820%` on much lower stake. All 8,273 rows had matched opening fills; independent SQL, local C#, and PowerShell aggregates agreed. Production was not changed.
+
+## 2026-07-21T22:02:02.337Z
+Request:
+Ок, сделай клоны Currency Up or Down 5m N bps LowEnter Average Premarket для всех трёх валют, посмотрим.
+
+Result:
+Added 84 neutral BTC/ETH/SOL LowEnter Average Premarket Paper strategies over the existing 28-threshold grid. They preserve the ordinary Reference Average signal and `-30s` timing, allow an actual Paper FAK ask-depth VWAP of exactly `0.50`, and skip only values above `0.50` with explicit diagnostics before any order is persisted. The variants use GUID groups `8213..8215`, seed enabled with Live disabled, are hard Paper-only, and have separate per-asset Dashboard categories. The full solution built with zero warnings/errors and the final focused verification passed 81/81 tests across two runs. The change was committed locally; push was withheld because `master` was already 53 commits ahead of `origin/master` and would publish that broader stack.

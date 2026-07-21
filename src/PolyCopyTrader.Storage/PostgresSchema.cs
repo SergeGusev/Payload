@@ -1263,6 +1263,71 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
+WITH assets(asset_symbol, id_group) AS (
+    VALUES
+        ('BTC', '8213'),
+        ('ETH', '8214'),
+        ('SOL', '8215')
+),
+thresholds(threshold_value) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+    UNION ALL
+    SELECT value
+    FROM generate_series(15, 100, 5) AS generated(value)
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_low_enter_average_bps_' || threshold_value::text || '_fak_premarket',
+    asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps LowEnter Average Premarket',
+    '30 seconds before ' || asset_symbol || ' 5m market open, apply the neutral Reference Average signal: above the largest full in-memory reference average by at least ' || threshold_value::text || ' bps buys Down, while below it by at least ' || threshold_value::text || ' bps buys Up. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most 0.50. Live execution is not supported for this Paper experiment.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM assets
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
 WITH families(id_group, code_trigger_prefix, name_trigger_prefix, trigger_name, target_outcome) AS (
     VALUES
         ('8209', 'up_', 'Up ', 'Up', 'Down'),

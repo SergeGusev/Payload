@@ -1366,6 +1366,10 @@ public static class StrategyIds
                 "BTC",
                 GetReferenceAverageBpsNeutralPremarketIdGroup("BTC"),
                 thresholdBps));
+            variants.Add(CreateLowEnterReferenceAverageBpsThresholdFakPremarketVariant(
+                "BTC",
+                GetLowEnterReferenceAverageBpsPremarketIdGroup("BTC"),
+                thresholdBps));
         }
 
         for (var thresholdBps = 1; thresholdBps <= 10; thresholdBps++)
@@ -1703,6 +1707,10 @@ public static class StrategyIds
                 variants.Add(CreateReferenceAverageBpsThresholdNeutralFakPremarketVariant(
                     asset.Symbol,
                     GetReferenceAverageBpsNeutralPremarketIdGroup(asset.Symbol),
+                    thresholdBps));
+                variants.Add(CreateLowEnterReferenceAverageBpsThresholdFakPremarketVariant(
+                    asset.Symbol,
+                    GetLowEnterReferenceAverageBpsPremarketIdGroup(asset.Symbol),
                     thresholdBps));
             }
 
@@ -2657,6 +2665,34 @@ public static class StrategyIds
             Category: $"{normalizedAsset} Up/Down 5m Bps Reference Average Premarket");
     }
 
+    private static BtcUpDown5mStrategyVariant CreateLowEnterReferenceAverageBpsThresholdFakPremarketVariant(
+        string assetSymbol,
+        int idGroup,
+        int thresholdBps,
+        int entryDelaySeconds = -30)
+    {
+        const decimal maximumPaperEntryPrice = 0.50m;
+        var normalizedAsset = assetSymbol.ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+        var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
+        var thresholdName = thresholdBps.ToString(CultureInfo.InvariantCulture);
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
+            $"{assetCode}_up_down_5m_low_enter_average_bps_{thresholdName}_fak_premarket",
+            $"{normalizedAsset} Up or Down 5m {thresholdName} bps LowEnter Average Premarket",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, apply the neutral Reference Average signal: above the largest full in-memory reference average by at least {thresholdName} bps buys Down, while below it by at least {thresholdName} bps buys Up. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most {maximumPaperEntryPrice.ToString("0.00", CultureInfo.InvariantCulture)}. Live execution is not supported for this Paper experiment.",
+            BtcUpDown5mStrategyDirection.Dynamic,
+            entryDelaySeconds,
+            BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket,
+            thresholdBps,
+            thresholdBps,
+            ReferenceAssetSymbol: normalizedAsset,
+            Category: $"{normalizedAsset} Up/Down 5m Bps LowEnter Average Premarket",
+            PaperOnly: true,
+            PaperFakMaximumAverageFillPrice: maximumPaperEntryPrice);
+    }
+
     private static BtcUpDown5mStrategyVariant CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
         string assetSymbol,
         int idGroup,
@@ -2735,6 +2771,17 @@ public static class StrategyIds
                 nameof(triggerOutcome),
                 triggerOutcome,
                 $"Unsupported {assetSymbol} Optimized Average trigger outcome.")
+        };
+    }
+
+    private static int GetLowEnterReferenceAverageBpsPremarketIdGroup(string assetSymbol)
+    {
+        return assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => 8213,
+            "ETH" => 8214,
+            "SOL" => 8215,
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, "Unsupported LowEnter Average Premarket asset.")
         };
     }
 
@@ -3273,7 +3320,8 @@ public enum BtcUpDown5mStrategyBehavior
     BpsConfirmedAveragePremarket,
     DiffConfirmedAveragePremarket,
     AbsoluteBpsThresholdFakPremarket,
-    OptimizedReferenceAverageBpsThresholdFakPremarket
+    OptimizedReferenceAverageBpsThresholdFakPremarket,
+    LowEnterReferenceAverageBpsThresholdFakPremarket
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
@@ -3298,7 +3346,8 @@ public sealed record BtcUpDown5mStrategyVariant(
     Guid? BaseSignalStrategyId = null,
     Guid? ConfirmationSignalStrategyId = null,
     string? RequiredReferenceAverageWindow = null,
-    bool PaperOnly = false)
+    bool PaperOnly = false,
+    decimal? PaperFakMaximumAverageFillPrice = null)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }

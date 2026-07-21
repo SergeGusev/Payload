@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 LowEnter Average Premarket Strategies
+Goal: Add neutral `Currency Up or Down 5m N bps LowEnter Average Premarket` Paper clones for BTC, ETH, and SOL.
+Status: Completed
+Done:
+- Registered 84 strategies: 28 thresholds per asset (`1..10`, then `15..100` in steps of `5`) under GUID groups `8213` for BTC, `8214` for ETH, and `8215` for SOL.
+- Preserved the exact neutral Reference Average signal and `-30s` Premarket timing, then added an inclusive Paper FAK average-fill cap: VWAP `<= 0.50` enters and VWAP `> 0.50` skips before any signal, Paper order, or fill is persisted.
+- Persisted the real skip reason `execution_price_above_strategy_cap` plus evaluated VWAP, cap, and exceeded flag in run diagnostics.
+- Enforced every LowEnter variant as `PaperOnly`; a focused Live-mode test confirmed that manually enabling `Live` still creates no live order or paper/live shadow decision.
+- Added idempotent PostgreSQL seed rows with `Enabled=true`, `Live=false`, a separate per-asset `Bps LowEnter Average Premarket` Dashboard category, registry/category/schema tests, execution-boundary tests, and README documentation.
+Next: Deploy the service/schema and verify that all 84 rows and their first prospective Paper runs appear on the server.
+Notes: `dotnet build PolyCopyTrader.sln` completed with 0 warnings and 0 errors. The final focused verification passed 81/81 tests across two runs, including exact `0.50` acceptance, `0.51` rejection, Paper-only Live suppression, IDs, grids, categories, seed shape, and the aggregate schema contract. An earlier broad diagnostic filter passed every new LowEnter test but also exposed existing unrelated test debt: 39 source-reading tests cannot locate the repository when binaries are deliberately emitted under `D:\CodexTemp`, and 74 processor tests request removed Standard variants while the same suite asserts that no Standard variants are registered. The documented temp start parameter was stale (`-ProjectPath`); the installed `-WorkingDirectory` parameter worked. Startup cleanup left an unrelated legacy Excel temp marker without `schemaVersion` untouched. Final cleanup was initially blocked by orphaned `VBCSCompiler` PID `6896`; its parent no longer existed, so only that exact process was stopped and protected cleanup then removed the marked run successfully. The change was committed locally; remote push is withheld because `master` was already 53 commits ahead of `origin/master`, so pushing this task would publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-22 BTC / ETH Paper Price-Cap 0.50 Counterfactual
 Goal: Recalculate actual settled Paper results for the exact BTC and ETH neutral 3 bps Reference Average strategies after excluding every entry above `0.50`.
 Status: Completed
