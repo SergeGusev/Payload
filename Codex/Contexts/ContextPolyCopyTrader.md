@@ -1,3 +1,19 @@
+## Active Update 2026-07-21 ETH Neutral 3 Reference Average PnL And ETH Chart
+Goal: Generate a fresh cumulative Paper PnL chart for `ETH Up or Down 5m 3 bps Reference Average Premarket` with the ETH reference price overlaid.
+Status: Completed
+Done:
+- Reused the verified PnL-plus-price chart template and changed only the exact strategy, asset, persisted price source, and output identity.
+- Resolved the exact production strategy as UUID `b7c50005-0000-4000-8179-000000000103` and code `eth_up_down_5m_reference_average_bps_3_fak_premarket`.
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-21T19:40:53.533848Z` in one `REPEATABLE READ, READ ONLY` transaction.
+- Exported 4,149 settled Paper rows: 2,220 wins, 1,929 losses, stake `$24,932.58570131`, PnL `+$820.45110987`, ROI `+3.29067799%`, and maximum drawdown `$252.71687047` from row 2,797 to row 3,205.
+- Exported and independently reconciled 24,579 of 24,784 expected ETHUSDT UTC minute-last samples from `BinanceCryptoTradeWebSocket`; coverage was `99.172853%`. ETH moved from `$1,768.97` to `$1,924.57`, or `+8.79607907%`, over the chart period.
+- Independently reconciled locally aggregated raw Paper rows against a separate server aggregate query and the exported ETH minute-price series against a separately repeated server minute-series aggregate.
+- Rendered and visually inspected the final 1800x920 PNG with a settlement-time PnL step line, continuous ETH minute-price line, shared UTC x-axis, independent y-axes, legible labels, and only solid lines.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/eth-3-reference-average-pnl-vs-eth-20260721-223850/eth-3-reference-average-pnl-vs-eth.png`, SHA-256 `A4FA8DC65DDDB7F39DD1EF456B16C7ACAAABCA8BB2E7ECD7BE5A1F4C94CD12D3`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The marked temp run was removed successfully. Two local command-version mismatches (`Get-Date -AsUTC` and the cleanup script parameter name) were corrected from the installed tool signatures without requerying production or affecting user systems. Remote push is withheld because `master` was already 44 commits ahead of `origin/master`; pushing this journal update would also publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-21 BTC Neutral 3 Reference Average PnL And BTC Chart
 Goal: Repeat the cumulative Paper PnL plus BTC reference-price chart for `BTC Up or Down 5m 3 bps Reference Average Premarket`.
 Status: Completed

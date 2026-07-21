@@ -77,3 +77,10 @@ Request:
 
 Result:
 Reused the verified chart template and generated a fresh 1800x920 cumulative settlement-time Paper PnL plus BTCUSDT reference-price chart through `2026-07-21T19:33:33.603184Z`. The exact strategy had 4,076 settled Paper rows, PnL `-$394.29911976`, ROI `-1.60978452%`, and maximum drawdown `$520.48090255`; 24,579 independently reconciled BTC minute-last samples showed a `+6.01630861%` price change. The chart uses only solid lines, passed visual inspection, and has SHA-256 `F946A2F3623C53372904EA881945A9D971D785F68BA1A3A182E1B382247F84D5`. Production was read-only.
+
+## 2026-07-21T19:41:57.9039636+00:00
+Request:
+А теперь сделай график стратегии ETH Up or Down 5m 3 bps Reference Average Premarket с наложенным курсом ETH
+
+Result:
+Generated a fresh 1800x920 cumulative settlement-time Paper PnL plus ETHUSDT reference-price chart through `2026-07-21T19:40:53.533848Z`. The exact strategy had 4,149 settled Paper rows, PnL `+$820.45110987`, ROI `+3.29067799%`, and maximum drawdown `$252.71687047`; 24,579 independently reconciled ETH minute-last samples showed a `+8.79607907%` price change. The chart uses only solid lines, passed visual inspection, and has SHA-256 `A4FA8DC65DDDB7F39DD1EF456B16C7ACAAABCA8BB2E7ECD7BE5A1F4C94CD12D3`. Production was read-only and the marked temp run was removed.
