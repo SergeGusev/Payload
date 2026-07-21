@@ -1,3 +1,20 @@
+## Active Update 2026-07-22 BTC / ETH Paper Price-Cap 0.50 Counterfactual
+Goal: Recalculate actual settled Paper results for the exact BTC and ETH neutral 3 bps Reference Average strategies after excluding every entry above `0.50`.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-21T21:37:47.488107Z` in one `REPEATABLE READ, READ ONLY` transaction using the exact BTC and ETH strategy UUID allowlist.
+- Fixed the counterfactual before calculation: retain persisted opening entries with `entry_price <= 0.50`, including exactly `0.50`; exclude `entry_price > 0.50`; preserve each retained row's actual stake and `realized_pnl_usd`; do not reallocate skipped capital or replay portfolio/risk interactions.
+- BTC original: 4,100 bets, stake `$24,638.13000113`, PnL `-$407.64482613`, ROI `-1.65452827%`. Filtered: 1,148 bets, stake `$6,898.67640022`, PnL `+$57.29215281`, ROI `+0.83048036%`. The cap retains exactly `28.0000%` of bets and improves accounting PnL by `$464.93697894`.
+- BTC retained direction split: Up 1,065 bets, PnL `+$116.24308918`, ROI `+1.81632537%`; Down 83 bets, PnL `-$58.95093637`, ROI `-11.81921764%`.
+- ETH original: 4,173 bets, stake `$25,076.80890130`, PnL `+$818.06567781`, ROI `+3.26223995%`. Filtered: 1,009 bets, stake `$6,063.38370073`, PnL `+$481.68692342`, ROI `+7.94419333%`. The cap retains `24.1792%` of bets and raises ROI, but lowers total PnL by `$336.37875439` because the excluded expensive ETH entries remained profitable.
+- ETH retained direction split: Up 980 bets, PnL `+$439.27654586`, ROI `+7.45912791%`; Down 29 bets, PnL `+$42.41037756`, ROI `+24.33605932%`.
+- Combined original PnL was `+$410.42085168`; filtered PnL was `+$538.97907623`, an accounting improvement of `+$128.55822455`. Combined ROI rose from `0.82554834%` to `4.15812820%` on a much smaller retained stake.
+- Verified all `8,273/8,273` rows were opening `Buy` orders with persisted fills and per-run fill-average price matching `entry_price` within `1e-8`. Local raw-row aggregation matched an independent direct SQL aggregate for ten scopes, and a separate PowerShell implementation reproduced Original, Retained, and Excluded counts, wins/losses, stake, PnL, and ROI.
+- Preserved raw rows, aggregates, methodology, report, verification, summary, and checksums under `outputs/019f1397-6f46-7a11-8166-522543cac173/btc-eth-3bps-paper-price-cap-050-20260721-213453/`; summary SHA-256 is `8DFBD88D58637B8D254E1113613B21EF523E475E7FB778F69E78B4FD570492B1`.
+Next: If a production cap is considered, validate it prospectively in a separate Paper strategy because this is an in-sample accounting exclusion, not a full event-by-event replay.
+Notes: The temporary .NET audit built with zero warnings/errors. Two verifier defects correctly prevented accepting partial results: overly strict comparison of PostgreSQL-rounded ROI at `2.55e-17`, followed by integer division in the independent SQL hit-rate expression. The first tolerance was relaxed only for derived percentages and the second was fixed with explicit numeric division; the entire read-only snapshot and all checks then passed. Production was never mutated. Protected lifecycle cleanup removed the marked temp run. Remote push is withheld because `master` was already 52 commits ahead of `origin/master`; pushing this journal update would publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-22 BTC / ETH Neutral 3 bps Paper Entry Prices
 Goal: Measure the actual average Paper entry price for the exact BTC and ETH neutral 3 bps Reference Average Premarket strategies.
 Status: Completed

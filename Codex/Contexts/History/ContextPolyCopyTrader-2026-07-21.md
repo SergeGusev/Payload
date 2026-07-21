@@ -135,3 +135,10 @@ Request:
 
 Result:
 Queried the exact BTC and ETH neutral 3 bps Reference Average Premarket strategies on production PostgreSQL through `2026-07-21T21:28:03.777741Z` in a `REPEATABLE READ, READ ONLY` transaction. Across all successful Paper entries, BTC had 4,100 runs with arithmetic mean `0.51366174` and economically relevant share/fill-weighted mean `0.51189476`; ETH had 4,172 runs with arithmetic mean `0.51796859` and share/fill-weighted mean `0.51679200`. Both medians were `0.51`. Direction-weighted means were BTC Up `0.50999300`, BTC Down `0.52569380`, ETH Up `0.51306058`, and ETH Down `0.53869610`. All 8,272 entries had persisted fills; independent server SQL, local raw-row aggregation, and a separate PowerShell calculation matched. Production was not changed.
+
+## 2026-07-21T21:39:21.8425303+00:00
+Request:
+А ты можешь пересчитать, какие были бы Paper итоги обоих стратегий (то есть не исторические данные за полгода), если убрать из подсчётов все входы дороже 0.5 ?
+
+Result:
+Recalculated the exact BTC and ETH neutral 3 bps strategies on fresh settled production Paper rows through `2026-07-21T21:37:47.488107Z`, retaining `entry_price <= 0.50` without reallocating skipped stake. BTC changed from 4,100 bets / `-$407.64482613` / `-1.65452827%` ROI to 1,148 bets / `+$57.29215281` / `+0.83048036%`; the excluded expensive BTC subset lost `-$464.93697894`. ETH changed from 4,173 bets / `+$818.06567781` / `+3.26223995%` to 1,009 bets / `+$481.68692342` / `+7.94419333%`; the excluded expensive ETH subset still earned `+$336.37875439`. Combined PnL increased by `$128.55822455` and combined ROI rose from `0.82554834%` to `4.15812820%` on much lower stake. All 8,273 rows had matched opening fills; independent SQL, local C#, and PowerShell aggregates agreed. Production was not changed.
