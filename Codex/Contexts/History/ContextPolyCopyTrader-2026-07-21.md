@@ -20,3 +20,10 @@ Request:
 
 Result:
 Production was audited through forced read-only transactions. The core path is healthy: 84,565 Paper bets in 24h reconciled one-to-one across runs, orders, and fills with no backlog or linkage defects; entry latency was p50 0.554s and p95 2.193s, all six recent Live bets settled normally, the service and market feeds were current, and all 90,950 measured strategy stages succeeded. Two required improvements were proved: all 16 BTC Futures Basis strategies have been blocked since 2026-07-19 by an unquoted OKX expiry contract, and ten enabled ETH Down legacy thresholds 55..100 are absent from the processor registry and never run. Secondary monitoring/index/cleanup and rare SOL tail-latency work were also identified; production was not changed.
+
+## 2026-07-21T07:31:47.2082054+00:00
+Request:
+Поясни, что такое "выбранный OKX-контракт BTC-USD_UM-260731". Я думал, мы каждые 5 минут подбираем новый контракт
+
+Result:
+Clarified from the deployed selection path that every five-minute decision does recalculate the reference set, but it selects the three nearest calendar fixed-expiry OKX contracts after the Polymarket market end, not a new five-minute futures contract. The current set is July 24, July 31, and September 25; `BTC-USD_UM-260731` is the second confirmation reference and still has no bid/ask. The set remains unchanged across five-minute markets until an expiry boundary or live-instrument change. No production state changed.

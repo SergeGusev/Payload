@@ -1,3 +1,16 @@
+## Active Update 2026-07-21 Explain OKX Fixed-Expiry Selection
+Goal: Clarify why the BTC Futures Basis strategies repeatedly reference `BTC-USD_UM-260731` even though a new Polymarket market is processed every five minutes.
+Status: Completed
+Done:
+- Rechecked the exact deployed selection path and confirmed it is byte-identical to current source: every decision recalculates the three nearest distinct live OKX fixed-expiry contracts whose expiry is at or after the current Polymarket market end.
+- Clarified that `BTC-USD_UM-260731` is not the five-minute Polymarket bet and is not the only selected contract. At `2026-07-21T07:31:47.2082054Z`, the three selected reference expiries were `260724`, `260731`, and `260925`; the July 31 contract was the second confirmation contract.
+- Explained that advancing the target market end by five minutes normally leaves the same calendar expiries selected. The set changes only when the target crosses an expiry boundary or OKX changes the live instrument list.
+- Reconfirmed current OKX data directly: July 24 and September 25 had two-sided quotes, July 31 still had empty bid/ask, and December 25 was quoted. Because the current contract requires all three selected references, the missing July 31 quote invalidates the complete signal.
+- Verified deployed cadence: instrument metadata refreshes every 300 seconds, tickers refresh every 1 second, and reference data older than 5 seconds is rejected.
+Next: If requested, replay the alternative rule “three nearest live contracts with fresh two-sided quotes” before deciding whether substituting December 25 for the unquoted July 31 contract is acceptable.
+Notes: This was a read-only explanation and direct public OKX verification; no service, strategy, order, configuration, database row, or product code changed. Remote push is withheld because `master` was already 38 commits ahead of `origin/master` before this journal update.
+Blockers: Automatically substituting a farther quoted expiry changes the strategy's confirmation horizon and must not be enabled without an explicit decision and replay evidence.
+
 ## Active Update 2026-07-21 Production Betting Health Audit
 Goal: Verify whether current production Paper/Live bets are being placed and settled normally, quantify delays, and identify required improvements.
 Status: Completed
