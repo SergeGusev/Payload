@@ -34,3 +34,25 @@ Request:
 
 Result:
 Resolved the exact production strategy and generated a fresh cumulative settlement-time Paper PnL chart through `2026-07-21T09:26:26.712155Z`. The 47 settled rows produced PnL `+$26.99080565`, ROI `+9.55639526%`, and maximum drawdown `$26.28905098`; raw-row calculations exactly matched independent server SQL. After visual inspection, the line was changed to a solid step curve without another database query. The final 1600x820 PNG has SHA-256 `C2849C7F7F17EB2BE07D4EF905E83D3F83828C65BB14374C96779856E9DA4025`.
+## 2026-07-21T17:08:30.1712251Z
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Blocked before report creation. The existing bounded Child/Child ROI report runner stopped at `Production snapshot and reconciliation` because `Npgsql` timed out opening production PostgreSQL `192.168.0.101:5432/polycopytrader`; separate `Test-NetConnection` and `Test-Connection` checks from the Codex machine also timed out. No workbook was produced and production was not changed.
+
+## 2026-07-21T17:13:32.9808634Z
+Request:
+Restart the Child / Child ROI Excel report from the beginning.
+
+Result:
+After production PostgreSQL connectivity recovered, generated and fully verified a fresh one-sheet workbook through cutoff `2026-07-21T17:11:43.353517Z`. It contains the six independently reconciled BTC/ETH/SOL x Child/Child ROI maximum-PnL strategies sorted by total PnL ascending, 14 UTC dates, red-on-white negative values with minus signs, formula-driven daily/category/grand totals, and frozen first row plus first column. Excel and artifact-tool checks found zero formula errors and reconciled grand Total to `$1,592.28898370`; SHA-256 is `73A5A211EBBCADAF5E0164AAA330BD1C96E9B25C2082124D6C1AF1050DEDC03A`. Production was read-only and the fresh marked temp run was removed.

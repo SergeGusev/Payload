@@ -1,3 +1,18 @@
+## Active Update 2026-07-21 Child / Child ROI Excel Report Refresh 17:11 UTC
+Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Rechecked production connectivity before the retry; TCP `192.168.0.101:5432` was reachable.
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-21T17:11:43.353517Z` in one `REPEATABLE READ, READ ONLY` transaction. The exact non-Progress scope contained 144 Child/Child ROI strategies and 174,651 settled Paper rows over 14 UTC dates.
+- Reconciled raw-row aggregates against independent server SQL for all 144 candidates, matched the six unique maximum-PnL selections against an independent server ranking, and matched every selected strategy/date PnL against a separate server daily aggregation.
+- Ordered the six strategy columns by all-history PnL ascending: BTC 4 Child `$80.72309468`, BTC 21 Child ROI `$90.31066570`, SOL 21 Child ROI `$218.69094480`, ETH 10 Child ROI `$358.06207195`, SOL 8 Child `$370.50874729`, and ETH 8 Child `$473.99345928`.
+- Generated one `Daily PnL` worksheet with typed UTC dates, formula-driven daily/category/grand totals, red text on a white background with an explicit minus for negative values, and frozen first row plus first column.
+- Excel COM and artifact-tool verification passed: one 16x8 used range, 105 numeric cells, 30 negative cells, zero formula errors, and grand Total `$1,592.28898370`. The final render was visually inspected with no clipped headers, values, or totals.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/child-child-roi-best-daily-paper-pnl-report-20260721-201136/reports/child-child-roi-best-daily-paper-pnl-2026-07-21.xlsx`, SHA-256 `73A5A211EBBCADAF5E0164AAA330BD1C96E9B25C2082124D6C1AF1050DEDC03A`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The fresh marked temp session was removed successfully. The older failed-run temp directory remains because its legacy marker lacks `schemaVersion` and the protected lifecycle script refused to delete it. A one-off wrapper reported a false nonzero shell status after all report stages completed because it tested an empty PowerShell `$LASTEXITCODE`; the report's own run summary and all five stage checks are `OK`.
+Blockers: None.
+
 ## Active Update 2026-07-21 BTC Down 3 bps Optimized Average PnL Chart
 Goal: Generate a fresh cumulative Paper PnL chart for `BTC Up or Down 5m Down 3 bps Optimized Average Premarket`.
 Status: Completed
