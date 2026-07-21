@@ -1,3 +1,18 @@
+## Active Update 2026-07-21 Six-Month Binance BTC / ETH Replay
+Goal: Run the frozen Binance-only six-month validation for the neutral BTC and ETH 3 bps Reference Average Premarket strategies.
+Status: Completed
+Done:
+- Replayed the exact current contrarian Reference Average decision path over `2026-01-02T00:00:00Z` through `2026-07-02T00:00:00Z` exclusive, with a 24-hour warm-up, 52,128 UTC-aligned five-minute intervals per asset, the production window set, highest-full-window selection, and a decision time 30 seconds before each interval.
+- Downloaded the required official Binance `BTCUSDT` and `ETHUSDT` one-second spot-kline archives. All `18/18` Binance SHA-256 checksums matched; each asset supplied 15,811,260 rows with no missing seconds, duplicates, or forward-filled points.
+- Obtained 46,769 resolved BTC bets with hit rate `50.7003%` and 47,759 resolved ETH bets with hit rate `51.2888%`. At synthetic fixed `$6` / even-odds scoring this is BTC `+$3,930` (`+1.4005%`) and ETH `+$7,386` (`+2.5775%`); these are explicitly not historical Polymarket Paper PnL.
+- Measured an ETH-minus-BTC hit-rate difference of `+0.5885 pp`; a 200,000-iteration UTC-day block bootstrap produced a 95% interval of `+0.1586..+1.0201 pp`. On 44,235 paired signals the difference was `+0.4815 pp`, exact McNemar `p=0.02314625`.
+- Split the effect by direction. Up was BTC `50.4328%` versus ETH `50.8159%`, difference `+0.3831 pp`, bootstrap interval `-0.0390..+0.8012`; Down was BTC `53.2233%` versus ETH `55.7726%`, difference `+2.5493 pp`, interval `+0.9962..+4.1383`. The resolved ETH advantage is concentrated in Down signals.
+- Confirmed ETH had the higher hit rate in all six predeclared month-long `2nd-to-2nd` blocks, although the difference ranged from approximately `+0.10` to `+1.50 pp`. The paired advantage weakened from `+0.7276 pp` in the first half (`p=0.0159955`) to `+0.2290 pp` in the second (`p=0.449169`).
+- Preserved methodology, every interval decision, summaries, source manifest, checksums, verification evidence, and conclusion under `outputs/019f1397-6f46-7a11-8166-522543cac173/binance-3bps-six-month-validation-20260721-205427/`.
+Next: Do not infer a permanent BTC/ETH law or change production from this result alone; use a future untouched period if a trading rule is proposed.
+Notes: The temporary C# replay and post-analysis builds completed with zero warnings/errors. An independent slow reconstruction matched `384/384` sampled averages, independent CSV reaggregation passed, and a second PowerShell implementation reproduced all principal totals and time-block/direction differences. Protected temp cleanup was initially blocked by one orphaned `VBCSCompiler.exe` whose parent no longer existed; only that exact PID was stopped, and lifecycle cleanup then removed the marked run. No production service, database, strategy, order, or configuration was accessed or changed. Remote push is withheld because `master` was already 49 commits ahead of `origin/master`; pushing this journal update would publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-21 Binance-Only Historical Pattern Validation
 Goal: Clarify whether six months of Binance history are sufficient to test the BTC-versus-ETH Reference Average pattern without Polymarket data.
 Status: Completed

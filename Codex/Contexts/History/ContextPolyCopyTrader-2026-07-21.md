@@ -114,3 +114,10 @@ Request:
 
 Result:
 Confirmed the user's distinction. Binance history alone is sufficient to reconstruct the Reference Average signal, selected Up/Down direction, subsequent five-minute Binance outcome, wins, losses, and paired BTC-versus-ETH hit-rate statistics. Polymarket data is needed only to reproduce the actual ask price, executable depth, FAK fill, shares, and therefore exact historical Paper PnL. Verified the configured ten-second/approximately-60-bucket average mechanics and confirmed official monthly BTCUSDT and ETHUSDT one-second Binance archives for January through June 2026 are reachable. No backtest or production change was performed.
+
+## 2026-07-21T21:00:10.2044817+00:00
+Request:
+Ок, считай
+
+Result:
+Completed the frozen Binance-only replay for neutral BTC and ETH 3 bps Reference Average Premarket over `2026-01-02` through `2026-07-02` UTC. Official checksums matched `18/18`; 52,128 intervals per asset were evaluated and independent replay/reaggregation checks passed. BTC resolved 46,769 bets at `50.7003%`; ETH resolved 47,759 at `51.2888%`. ETH's advantage was `+0.5885 pp` with UTC-day bootstrap 95% interval `+0.1586..+1.0201 pp`, was positive in all six month-long blocks, and was concentrated in Down signals (`+2.5493 pp`, interval `+0.9962..+4.1383`); Up alone was unresolved from zero. The result supports a modest historical ETH advantage under these semantics, not a permanent causal law. No production system was accessed or changed; exact Polymarket PnL was not claimed. Protected cleanup removed the marked temp run after one orphaned Roslyn compiler process was identified and stopped by exact PID.
