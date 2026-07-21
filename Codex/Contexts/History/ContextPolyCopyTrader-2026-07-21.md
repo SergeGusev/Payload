@@ -107,3 +107,10 @@ Request:
 
 Result:
 Completed an independently reconciled read-only pattern audit over the fixed 18-date common period and all 28 configured neutral thresholds per asset. The final rally alone is compatible with chance: BTC and ETH had 83/82 Down rows and 39/45 wins, Fisher `p≈0.352`. The broader sample contains a stable in-sample ETH advantage: ETH beat BTC on 14/18 dates (`p=0.0309`), paired day-block bootstrap 95% intervals for ETH-minus-BTC ROI were positive overall (`+1.76..+8.17 pp`) and for Down (`+0.96..+16.36 pp`), both chronological halves favored ETH, every leave-one-day-out result remained positive, and ETH ROI was higher at 27/28 correlated thresholds. BTC's observed Down loss pocket was prior 15-minute rises of `0..20 bps`; stronger rises were profitable for both, so a generic fast-rise filter is unsupported. Classified the result as a provisional asset/regime pattern, stronger than simple tail luck in-sample but not a durable law without an untouched out-of-sample test. Production was not changed.
+
+## 2026-07-21T20:29:59.7451959+00:00
+Request:
+А зачем Polymarket? Ты же будешь знать курсы, значит, будешь знать, что мы поставили и что в итоге сработало - Up или Down
+
+Result:
+Confirmed the user's distinction. Binance history alone is sufficient to reconstruct the Reference Average signal, selected Up/Down direction, subsequent five-minute Binance outcome, wins, losses, and paired BTC-versus-ETH hit-rate statistics. Polymarket data is needed only to reproduce the actual ask price, executable depth, FAK fill, shares, and therefore exact historical Paper PnL. Verified the configured ten-second/approximately-60-bucket average mechanics and confirmed official monthly BTCUSDT and ETHUSDT one-second Binance archives for January through June 2026 are reachable. No backtest or production change was performed.

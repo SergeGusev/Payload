@@ -1,3 +1,16 @@
+## Active Update 2026-07-21 Binance-Only Historical Pattern Validation
+Goal: Clarify whether six months of Binance history are sufficient to test the BTC-versus-ETH Reference Average pattern without Polymarket data.
+Status: Completed
+Done:
+- Confirmed that Binance prices alone are sufficient for the core directional test: reconstruct each Reference Average signal at 30 seconds before a five-minute interval, derive the selected Up/Down direction, and compare the Binance price at interval start with the Binance price at interval end.
+- Separated prediction quality from execution economics. The Binance-only replay can produce exact replay-defined signals, wins, losses, hit rates, direction splits, and a fixed-price synthetic score; it cannot reproduce the existing Paper dollar PnL because that depends on the historical Polymarket ask price, executable depth, spread gate, partial FAK fill, and shares purchased.
+- Verified the current implementation selects the highest full rolling average and then takes the contrarian direction. The configured history uses ten-second source samples and approximately 60 time buckets per 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m window.
+- Verified from official Binance documentation that public one-second klines and aggregate trades are available without authentication through the market-data API/archive. Direct HEAD checks returned HTTP 200 for every BTCUSDT and ETHUSDT monthly one-second kline archive from January through June 2026.
+- Recommended treating hit rate/excess over 50% and paired BTC-versus-ETH outcomes as the primary six-month result. A fixed 0.50 entry can be shown only as explicitly synthetic PnL, not as historical Paper PnL.
+Next: If requested, implement and run the frozen Binance-only six-month replay on a period preceding the already inspected July sample, with a 24-hour warm-up and sampling-phase sensitivity checks.
+Notes: No backtest was run in this clarification task. No service, strategy, order, database row, configuration, or product code changed. Remote push is withheld because `master` was already 48 commits ahead of `origin/master`; pushing this journal update would publish that broader existing stack.
+Blockers: None for the directional validation. Historical Polymarket execution data would be required only for exact Paper PnL reconstruction.
+
 ## Active Update 2026-07-21 BTC Versus ETH Pattern Audit
 Goal: Determine whether the BTC/ETH neutral 3 bps divergence is simple luck or a repeatable conditional pattern.
 Status: Completed
