@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 Interpret BTC Strategy Prospects
+Goal: Determine whether the positive six-month BTC Binance replay justifies expecting future profitability from the neutral 3 bps Reference Average strategy.
+Status: Completed
+Done:
+- Confirmed the BTC directional result is stronger than a merely positive endpoint: 46,769 resolved signals produced a `50.7003%` hit rate, all six predeclared month-long blocks were positive, and the 200,000-iteration UTC-day bootstrap interval for the edge over 50% was `+0.2418..+1.1664 pp`.
+- Separated directional edge from execution profitability. The point estimate breaks even only when the effective binary-share entry price is below approximately `0.5070`; the conservative lower bootstrap bound implies approximately `0.5024`, before any additional execution costs.
+- Noted that a fixed `0.50` replay gives synthetic ROI `+1.4005%`, while the same point-estimate hit rate at entry `0.51` implies approximately `-0.5877%` expected ROI. Therefore the Binance-only plus does not establish live or Paper profitability at actual Polymarket asks.
+- Cross-checked this limitation against the independently reconciled July production sample: BTC hit `50.61%` against a descriptive break-even rate of `51.19%` and lost `-$394.30` despite the historical directional edge.
+- Classified the strategy as promising enough to retain in Paper and monitor, but not validated for live scaling. The strongest historical component was Down (`53.2233%` over 4,483 bets); changing the strategy to exploit that split would require a new untouched validation because the split was discovered in-sample.
+Next: Evaluate prospective Paper results by effective entry-price buckets and require directional hit rate to exceed actual break-even price before considering live use.
+Notes: This interpretation used the already verified six-month replay and July production audit. No production query, service, database, strategy, order, configuration, or code changed. Remote push is withheld because `master` was already 50 commits ahead of `origin/master`; pushing this journal update would publish that broader existing stack.
+Blockers: Exact future profitability remains unknown until prospective fills and prices are observed.
+
 ## Active Update 2026-07-21 Six-Month Binance BTC / ETH Replay
 Goal: Run the frozen Binance-only six-month validation for the neutral BTC and ETH 3 bps Reference Average Premarket strategies.
 Status: Completed

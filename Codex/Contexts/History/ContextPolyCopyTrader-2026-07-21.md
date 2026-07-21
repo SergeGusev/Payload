@@ -121,3 +121,10 @@ Request:
 
 Result:
 Completed the frozen Binance-only replay for neutral BTC and ETH 3 bps Reference Average Premarket over `2026-01-02` through `2026-07-02` UTC. Official checksums matched `18/18`; 52,128 intervals per asset were evaluated and independent replay/reaggregation checks passed. BTC resolved 46,769 bets at `50.7003%`; ETH resolved 47,759 at `51.2888%`. ETH's advantage was `+0.5885 pp` with UTC-day bootstrap 95% interval `+0.1586..+1.0201 pp`, was positive in all six month-long blocks, and was concentrated in Down signals (`+2.5493 pp`, interval `+0.9962..+4.1383`); Up alone was unresolved from zero. The result supports a modest historical ETH advantage under these semantics, not a permanent causal law. No production system was accessed or changed; exact Polymarket PnL was not claimed. Protected cleanup removed the marked temp run after one orphaned Roslyn compiler process was identified and stopped by exact PID.
+
+## 2026-07-21T21:19:49.4178675+00:00
+Request:
+Но BTC оказался тоже в плюсе, то есть можно рассчитывать на перспективы этой стратегии?
+
+Result:
+Confirmed that BTC has a statistically resolved but small directional edge in the six-month Binance replay: hit rate `50.7003%`, positive results in all six predeclared month blocks, and a UTC-day bootstrap 95% interval of `+0.2418..+1.1664 pp` above 50%. Clarified that this supports continued Paper evaluation, not expected live profit: the point estimate requires effective entry below about `0.5070`, while the conservative lower bound is about `0.5024`; at entry `0.51` the point estimate implies approximately `-0.5877%` ROI. The independently reconciled July sample demonstrated this distinction by losing `-$394.30` at hit rate `50.61%` versus break-even `51.19%`. No production system or code changed.
