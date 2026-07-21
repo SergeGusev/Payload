@@ -56,3 +56,10 @@ Restart the Child / Child ROI Excel report from the beginning.
 
 Result:
 After production PostgreSQL connectivity recovered, generated and fully verified a fresh one-sheet workbook through cutoff `2026-07-21T17:11:43.353517Z`. It contains the six independently reconciled BTC/ETH/SOL x Child/Child ROI maximum-PnL strategies sorted by total PnL ascending, 14 UTC dates, red-on-white negative values with minus signs, formula-driven daily/category/grand totals, and frozen first row plus first column. Excel and artifact-tool checks found zero formula errors and reconciled grand Total to `$1,592.28898370`; SHA-256 is `73A5A211EBBCADAF5E0164AAA330BD1C96E9B25C2082124D6C1AF1050DEDC03A`. Production was read-only and the fresh marked temp run was removed.
+
+## 2026-07-21T19:22:32.1058964+00:00
+Request:
+Сделай pnl график стратегии BTC Up or Down 5m Down 40 bps Reference Average Premarket с наложенным на него графиком BTC
+
+Result:
+Resolved the exact production strategy and generated a fresh 1800x920 cumulative settlement-time Paper PnL plus BTCUSDT reference-price chart through `2026-07-21T19:21:28.766228Z`. The 1,444 settled Paper rows produced PnL `+$90.76586694`, ROI `+1.04599951%`, and maximum drawdown `$196.41044578`; 25,979 persisted BTC minute-last samples showed a `+7.33034706%` price change. Raw Paper and minute-price series were independently reconciled against separate server aggregates. The chart uses only solid lines, passed visual inspection, and has SHA-256 `19B1AECCEA0D8CF6E4848E55E8106970FBC20A72288A286E0D2F4F72609576AE`. Production was read-only.

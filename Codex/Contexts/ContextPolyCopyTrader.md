@@ -1,3 +1,19 @@
+## Active Update 2026-07-21 BTC Down 40 Reference Average PnL And BTC Chart
+Goal: Generate a fresh cumulative Paper PnL chart for `BTC Up or Down 5m Down 40 bps Reference Average Premarket` with the BTC reference price overlaid.
+Status: Completed
+Done:
+- Resolved the exact production strategy as UUID `b7c50005-0000-4000-8136-000000000140` and code `btc_up_down_5m_down_bps_40_fak_premarket`.
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-21T19:21:28.766228Z` in one `REPEATABLE READ, READ ONLY` transaction.
+- Exported 1,444 settled Paper rows: 751 wins, 693 losses, stake `$8,677.42920032`, PnL `+$90.76586694`, ROI `+1.04599951%`, and maximum drawdown `$196.41044578` from row 696 to row 901.
+- Exported 25,979 persisted BTCUSDT UTC minute-last samples from `crypto_reference_price_ticks` using the verified production source `BinanceTradeWebSocket`; coverage was `99.080854%`. BTC moved from `$61,813.99` to `$66,345.17`, or `+7.33034706%`, over the chart period.
+- Independently reconciled locally aggregated raw Paper rows against a separate server aggregate query and reconciled the exported minute-price series against a separately repeated server minute-series aggregate.
+- Rendered the PnL as a settlement-time step line and BTC as a continuous minute-price line on a shared UTC x-axis with independent y-axes. All chart, grid, axis, and annotation lines are solid.
+- Visually inspected the final 1800x920 PNG: series, scales, drawdown interval, endpoint labels, and timestamps are legible and unclipped.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/btc-down40-reference-average-pnl-vs-btc-20260721-221614/btc-down40-reference-average-pnl-vs-btc.png`, SHA-256 `19B1AECCEA0D8CF6E4848E55E8106970FBC20A72288A286E0D2F4F72609576AE`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, or database row changed. The first price export used the ETH-style source identifier `BinanceCryptoTradeWebSocket` and correctly stopped with no chart; a diagnostic read-only query proved that BTC uses `BinanceTradeWebSocket` with 155,071 ticks in the period. One final image-dimension check initially lacked the local `System.Drawing` assembly and passed immediately after loading it explicitly; no data was requeried. Protected temp cleanup initially found a locked Roslyn analyzer DLL; the single orphaned `VBCSCompiler.exe` with a terminated parent was stopped by exact PID, after which lifecycle cleanup removed the current marked run successfully. Remote push is withheld because `master` was already 41 commits ahead of `origin/master`; pushing this journal update would also publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-21 Child / Child ROI Excel Report Refresh 17:11 UTC
 Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed
