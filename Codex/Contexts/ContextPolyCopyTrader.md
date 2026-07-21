@@ -1,3 +1,19 @@
+## Active Update 2026-07-22 BTC / ETH Neutral 3 bps Paper Entry Prices
+Goal: Measure the actual average Paper entry price for the exact BTC and ETH neutral 3 bps Reference Average Premarket strategies.
+Status: Completed
+Done:
+- Resolved and revalidated the exact production strategies: BTC UUID `b7c50005-0000-4000-8178-000000000103` / code `btc_up_down_5m_reference_average_bps_3_fak_premarket`, and ETH UUID `b7c50005-0000-4000-8179-000000000103` / code `eth_up_down_5m_reference_average_bps_3_fak_premarket`.
+- Captured PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-21T21:28:03.777741Z` in one `REPEATABLE READ, READ ONLY` transaction. Scope covered every successful `Entered` or `Settled` Paper entry from `2026-07-04T14:29:33Z` through `2026-07-21T21:24:32Z`.
+- BTC had 4,100 entries. Arithmetic mean entry price was `0.51366174`; share-weighted and independently fill-weighted actual mean was `0.51189476`; median was `0.51`, P10 `0.49`, and P90 `0.54`.
+- ETH had 4,172 entries. Arithmetic mean entry price was `0.51796859`; share-weighted and independently fill-weighted actual mean was `0.51679200`; median was `0.51`, P10 `0.49`, and P90 `0.55`.
+- Direction split by share-weighted price: BTC Up `0.50999300`, BTC Down `0.52569380`, ETH Up `0.51306058`, ETH Down `0.53869610`.
+- Settled-only prices were effectively unchanged: BTC `0.51189569` over 4,098 rows and ETH `0.51679530` over 4,170 rows. BTC settled hit rate was `50.5857%` with PnL `-$407.40916731`; ETH was `53.4772%` with PnL `+$812.52769545`.
+- Verified all `8,272/8,272` runs against persisted `paper_fills`; none were unfilled and every opening Paper order was `Buy`. Local raw-row aggregation matched an independent direct server SQL aggregate for all eight asset/scope combinations, and a separate PowerShell implementation reproduced both strategies' counts and averages.
+- Preserved the raw rows, aggregates, methodology, report, verification, summary, and checksums under `outputs/019f1397-6f46-7a11-8166-522543cac173/btc-eth-3bps-paper-entry-price-20260721-212553/`; summary SHA-256 is `C30A49596A87273B90ED61088E6D87A0F06CEC89EC762A3642FEC8D511666BC9`.
+Next: None.
+Notes: The temporary .NET audit built with zero warnings/errors. The production query completed in 39.5 seconds within the 60-second statement limit; no write lock or mutation was used. Protected lifecycle cleanup removed the marked temp run. The unrelated legacy Excel temp marker without `schemaVersion` remained untouched. No service, strategy, order, database row, configuration, or product code changed. Remote push is withheld because `master` was already 51 commits ahead of `origin/master`; pushing this journal update would publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-22 Interpret BTC Strategy Prospects
 Goal: Determine whether the positive six-month BTC Binance replay justifies expecting future profitability from the neutral 3 bps Reference Average strategy.
 Status: Completed

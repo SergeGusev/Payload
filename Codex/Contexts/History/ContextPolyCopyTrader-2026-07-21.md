@@ -128,3 +128,10 @@ Request:
 
 Result:
 Confirmed that BTC has a statistically resolved but small directional edge in the six-month Binance replay: hit rate `50.7003%`, positive results in all six predeclared month blocks, and a UTC-day bootstrap 95% interval of `+0.2418..+1.1664 pp` above 50%. Clarified that this supports continued Paper evaluation, not expected live profit: the point estimate requires effective entry below about `0.5070`, while the conservative lower bound is about `0.5024`; at entry `0.51` the point estimate implies approximately `-0.5877%` ROI. The independently reconciled July sample demonstrated this distinction by losing `-$394.30` at hit rate `50.61%` versus break-even `51.19%`. No production system or code changed.
+
+## 2026-07-21T21:29:52.1111904+00:00
+Request:
+А проверь на реальных Paper ставках для обоих стратегий - по какой средней ставки заходим в обоих валютах?
+
+Result:
+Queried the exact BTC and ETH neutral 3 bps Reference Average Premarket strategies on production PostgreSQL through `2026-07-21T21:28:03.777741Z` in a `REPEATABLE READ, READ ONLY` transaction. Across all successful Paper entries, BTC had 4,100 runs with arithmetic mean `0.51366174` and economically relevant share/fill-weighted mean `0.51189476`; ETH had 4,172 runs with arithmetic mean `0.51796859` and share/fill-weighted mean `0.51679200`. Both medians were `0.51`. Direction-weighted means were BTC Up `0.50999300`, BTC Down `0.52569380`, ETH Up `0.51306058`, and ETH Down `0.53869610`. All 8,272 entries had persisted fills; independent server SQL, local raw-row aggregation, and a separate PowerShell calculation matched. Production was not changed.
