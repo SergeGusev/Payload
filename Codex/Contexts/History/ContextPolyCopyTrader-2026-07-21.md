@@ -70,3 +70,10 @@ Request:
 
 Result:
 Clarified that Codex can and did query production PostgreSQL directly through the project's configured `Npgsql` connection. The failed `psql` attempt was an agent-side connection-string parsing mistake, not a PostgreSQL restriction. The read-only snapshot, endpoint verification, timeouts, exact strategy resolution, and independent financial reconciliation are justified production safeguards; generating and compiling a one-off exporter and initially assuming the wrong BTC price-source identifier were avoidable overhead. Recommended replacing that overhead with one reusable prebuilt direct PostgreSQL chart command.
+
+## 2026-07-21T19:35:58.5735069+00:00
+Request:
+Повтори тот же график со стратегией BTC Up or Down 5m 3 bps Reference Average Premarket
+
+Result:
+Reused the verified chart template and generated a fresh 1800x920 cumulative settlement-time Paper PnL plus BTCUSDT reference-price chart through `2026-07-21T19:33:33.603184Z`. The exact strategy had 4,076 settled Paper rows, PnL `-$394.29911976`, ROI `-1.60978452%`, and maximum drawdown `$520.48090255`; 24,579 independently reconciled BTC minute-last samples showed a `+6.01630861%` price change. The chart uses only solid lines, passed visual inspection, and has SHA-256 `F946A2F3623C53372904EA881945A9D971D785F68BA1A3A182E1B382247F84D5`. Production was read-only.

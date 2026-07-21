@@ -1,3 +1,19 @@
+## Active Update 2026-07-21 BTC Neutral 3 Reference Average PnL And BTC Chart
+Goal: Repeat the cumulative Paper PnL plus BTC reference-price chart for `BTC Up or Down 5m 3 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Reused the verified BTC PnL-plus-price chart template and changed only the exact strategy identity and output name.
+- Resolved the exact production strategy as UUID `b7c50005-0000-4000-8178-000000000103` and code `btc_up_down_5m_reference_average_bps_3_fak_premarket`.
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-21T19:33:33.603184Z` in one `REPEATABLE READ, READ ONLY` transaction.
+- Exported 4,076 settled Paper rows: 2,063 wins, 2,013 losses, stake `$24,493.90680111`, PnL `-$394.29911976`, ROI `-1.60978452%`, and maximum drawdown `$520.48090255` from row 1,917 to row 4,065.
+- Exported and independently reconciled 24,579 persisted BTCUSDT UTC minute-last samples from the verified `BinanceTradeWebSocket` source; coverage was `99.212884%`. BTC moved from `$62,657.69` to `$66,427.37`, or `+6.01630861%`, over the chart period.
+- Independently reconciled locally aggregated raw Paper rows against a separate server aggregate query and the exported BTC minute-price series against a separately repeated server minute-series aggregate.
+- Rendered and visually inspected the final 1800x920 PNG with a settlement-time PnL step line, continuous BTC minute-price line, shared UTC x-axis, independent y-axes, legible labels, and only solid lines.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/btc-3-reference-average-pnl-vs-btc-20260721-223253/btc-3-reference-average-pnl-vs-btc.png`, SHA-256 `F946A2F3623C53372904EA881945A9D971D785F68BA1A3A182E1B382247F84D5`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. Protected temp cleanup initially found the Roslyn analyzer DLL locked by one `VBCSCompiler.exe` whose parent process had already terminated; that exact compiler PID was stopped and lifecycle cleanup then removed the marked temp run. Remote push is withheld because `master` was already 43 commits ahead of `origin/master`; pushing this journal update would also publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-21 Explain Direct PostgreSQL Access And Reporting Overhead
 Goal: Explain whether Codex can query production PostgreSQL directly and why the recent chart task used a multi-stage process.
 Status: Completed
