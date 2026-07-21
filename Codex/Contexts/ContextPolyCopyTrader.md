@@ -1,3 +1,15 @@
+## Active Update 2026-07-21 Explain Direct PostgreSQL Access And Reporting Overhead
+Goal: Explain whether Codex can query production PostgreSQL directly and why the recent chart task used a multi-stage process.
+Status: Completed
+Done:
+- Confirmed from the completed chart evidence that production data was queried directly through `Npgsql` against `192.168.0.101/polycopytrader`; there is no PostgreSQL access limitation.
+- Identified the failed `psql` attempt as an agent-side credential-parsing mistake: a generic connection-string parser returned no username, so `psql` consumed `--command` as the username before any SQL ran. This was not a database or permission problem.
+- Separated justified controls from avoidable overhead. The forced endpoint/database check, `REPEATABLE READ, READ ONLY` transaction, timeouts, exact strategy resolution, and independent financial reconciliation are intentional production safeguards. Creating a one-off exporter, restoring/building it, and probing an assumed ETH-style BTC source identifier were avoidable costs.
+- Recommended consolidating future chart work into one reusable prebuilt C#/.NET reporting command that accepts strategy name and optional asset overlay, queries PostgreSQL directly through the existing configured `Npgsql` connection, performs the same bounded verification, and renders the requested artifact without generating or compiling a new project each time.
+Next: Implement the reusable direct PostgreSQL chart command if explicitly requested.
+Notes: This was an evidence-based explanation only. No production query, service, strategy, order, configuration, database row, or product code changed. Remote push is withheld because `master` was already 42 commits ahead of `origin/master`; pushing this journal update would also publish that broader existing stack.
+Blockers: None.
+
 ## Active Update 2026-07-21 BTC Down 40 Reference Average PnL And BTC Chart
 Goal: Generate a fresh cumulative Paper PnL chart for `BTC Up or Down 5m Down 40 bps Reference Average Premarket` with the BTC reference price overlaid.
 Status: Completed
