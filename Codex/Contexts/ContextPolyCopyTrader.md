@@ -1,3 +1,19 @@
+## Active Update 2026-07-21 BTC Versus ETH Pattern Audit
+Goal: Determine whether the BTC/ETH neutral 3 bps divergence is simple luck or a repeatable conditional pattern.
+Status: Completed
+Done:
+- Audited the fixed common UTC period `2026-07-04T14:40:00Z` through `2026-07-21T19:33:33.603184Z` across 18 UTC dates. Queried all 56 exact BTC/ETH neutral Reference Average threshold strategies in one production `REPEATABLE READ, READ ONLY` transaction; locally aggregated 124,720 raw rows matched a separate server aggregate for every strategy.
+- Separated the final tail from the broader history. In the final rally BTC and ETH both rose about `3.3%`, with 83 versus 82 Down rows; BTC won 39 and ETH 45. Fisher's exact two-sided p-value was about `0.352`, so that tail difference alone is compatible with chance.
+- Found stable in-sample evidence beyond the tail: ETH beat BTC daily PnL on 14 of 18 dates (exact two-sided sign-test `p=0.03088379`). A paired UTC-day block bootstrap with 200,000 resamples put the ETH-minus-BTC overall ROI difference at `+4.8823 pp`, 95% interval `+1.7618..+8.1653 pp`; Down-only difference was `+9.3796 pp`, interval `+0.9607..+16.3645 pp`.
+- Confirmed chronological stability. First nine dates: BTC `+$22.51`, ETH `+$326.17`; second nine: BTC `-$416.81`, ETH `+$489.16`. Removing any single date kept the overall ROI difference positive (`+4.1657..+5.5642 pp`) and the Down-only difference positive (`+6.7468..+11.3799 pp`).
+- Confirmed threshold robustness without treating thresholds as independent: ETH ROI exceeded BTC at 27 of 28 thresholds; ETH was profitable while BTC was negative at 20. Median ETH-minus-BTC ROI difference was `+3.4696 pp`; threshold 100 was the only reversal.
+- Located the observed BTC loss pocket. BTC Down after prior 15-minute rises of `0..10 bps` lost `-$51.66`, and after `10..20 bps` lost `-$132.51`; equivalent ETH buckets earned `+$41.45` and `+$52.80`. Down after stronger `>=20 bps` rises was profitable for both, so a blanket fast-rise skip rule is contradicted by this sample.
+- Classified the result as a provisional asset/regime pattern: stronger than simple one-tail luck within the observed sample, but not a proven durable law because only 18 dates exist and no untouched out-of-sample period remains.
+- Preserved report, raw aggregate grid, daily blocks, momentum buckets, methodology, SQL, and conclusion under `outputs/019f1397-6f46-7a11-8166-522543cac173/btc-eth-3bps-pattern-audit-20260721-231108/`; report SHA-256 is `4FFDB1515070AAFBBF6C9F8BE5F4D085EA587019A82532A223DE5FF9F7E1733A`.
+Next: Freeze the hypothesis and test it on an untouched later period or a historical period not used to define the rule before making any production change.
+Notes: No service, strategy, order, configuration, database row, or product code changed. The temporary .NET audit built with zero warnings/errors, threshold aggregates reconciled independently, key CSV totals were independently recalculated, and the marked temp run was removed. The lifecycle startup again left the unrelated legacy Excel temp folder untouched because its obsolete marker lacks `schemaVersion`. Remote push is withheld because `master` was already 47 commits ahead of `origin/master`; pushing this journal update would publish that broader existing stack.
+Blockers: No untouched validation period has yet been evaluated.
+
 ## Active Update 2026-07-21 Correct BTC Final-Tail Interpretation
 Goal: Recheck the user's observation that BTC rose while the neutral 3 bps strategy PnL fell at the end of the chart and correct the prior explanation's scope.
 Status: Completed

@@ -100,3 +100,10 @@ Request:
 
 Result:
 Re-inspected the exact chart and confirmed the user's local observation. From `2026-07-20T10:00:00Z` to the cutoff, BTC rose `+3.4643%` while strategy PnL fell `-$24.52`; the sharp `2026-07-21 10:00-14:00 UTC` segment had BTC `+0.7004%` and PnL `-$37.83`. The loss was driven by contrarian Down entries (`-$50.38` over the full final rally and `-$43.50` in the sharp subsegment) while BTC continued upward instead of reverting. The previous whole-period conclusion remains valid only at aggregate scope; its blanket wording was withdrawn because the final tail clearly is a local inverse regime. No production query or mutation was performed.
+
+## 2026-07-21T20:19:34.1101904+00:00
+Request:
+Вот это я и хочу понять. Почему с BTC такое происходит, а с ETH - нет? Простое везение или есть закономерность?
+
+Result:
+Completed an independently reconciled read-only pattern audit over the fixed 18-date common period and all 28 configured neutral thresholds per asset. The final rally alone is compatible with chance: BTC and ETH had 83/82 Down rows and 39/45 wins, Fisher `p≈0.352`. The broader sample contains a stable in-sample ETH advantage: ETH beat BTC on 14/18 dates (`p=0.0309`), paired day-block bootstrap 95% intervals for ETH-minus-BTC ROI were positive overall (`+1.76..+8.17 pp`) and for Down (`+0.96..+16.36 pp`), both chronological halves favored ETH, every leave-one-day-out result remained positive, and ETH ROI was higher at 27/28 correlated thresholds. BTC's observed Down loss pocket was prior 15-minute rises of `0..20 bps`; stronger rises were profitable for both, so a generic fast-rise filter is unsupported. Classified the result as a provisional asset/regime pattern, stronger than simple tail luck in-sample but not a durable law without an untouched out-of-sample test. Production was not changed.
