@@ -176,3 +176,10 @@ Request:
 
 Result:
 Generated a fresh one-sheet daily Paper PnL workbook from a production `REPEATABLE READ, READ ONLY` cutoff at `2026-07-22T16:54:04.767706Z`. All 144 BTC/ETH/SOL Child and Child ROI candidates, 185,751 settled Paper rows, six unique group winners, and every selected daily total were independently reconciled. The six strategy columns are sorted by all-history PnL ascending; negative values render red on white with an explicit minus; daily, category, and grand totals are formula-driven; row 1 and column A are frozen. Excel COM and artifact-tool checks found zero formula errors and a grand Total of `$1,554.67202960`; the final render was visually inspected and the marked temporary run was removed.
+
+## 2026-07-22T17:54:39.6504196Z
+Request:
+Ок, сделай это. Цель, я думаю, тебе ясна - делать прогноз на следующий рынок по стакану. Надо понять, реально это или нет.
+
+Result:
+Implemented and pushed commit `aa18b658` with a disabled-by-default, read-only prospective BTC order-book prediction study. It captures public Binance BTCUSDT trade/top-of-book events with monotonic receive time and integrity-checked atomic segments, constructs strict pre-open book-only features at the default `S-30s` cutoff, fetches exact final Gamma labels with provenance, and evaluates a purged chronological train/validation/untouched-test split under fail-closed data gates. All 20 focused study/SBE tests and the service build passed; a final public smoke independently reconciled 880/880 persisted events and both hashes with zero decode errors or reconnects. The full pre-existing test assembly remains red at 793/960 because 167 unrelated tracked strategy/schema tests already fail; an isolated example cannot resolve the tracked `More/60` strategy variant before reaching new code. Published the exact commit and started a 72-hour public JSON run at `2026-07-22T17:53:53.3088653Z`, PID `5552`, under `outputs/btc-orderbook-prediction/runs/btc-orderbook-prediction-20260722-175358-10fb483e`. No predictive or tradable edge is claimed before the prospective sample completes.

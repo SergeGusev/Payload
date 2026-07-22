@@ -1,3 +1,18 @@
+## Active Update 2026-07-22 Prospective BTC Order-Book Prediction Study
+Goal: Determine prospectively whether Binance BTCUSDT top-of-book information available before a five-minute Polymarket BTC market opens predicts that next market's official Up/Down outcome.
+Status: In Progress
+Done:
+- Added a disabled-by-default read-only command that captures the official public Binance BTCUSDT `trade + bookTicker` combined stream, or the exact optional SBE `trade + bestBidAsk` endpoint using only an API key id. Exact endpoint allowlists prevent credential exfiltration; no database, strategy, private key, or order-placement path is used.
+- Added a loss-aware bounded collector and crash-bounded gzip event store with monotonic receive timestamps, reconnect/quality markers, five-minute atomic segment checkpoints, per-segment SHA-256/count/bounds validation, and final index hashing.
+- Added strict prospective feature construction for one decision lead per run. The default target is `btc-updown-5m-<S>` at cutoff `S-30s`; events at or after the cutoff are excluded. L1 imbalance, time-weighted imbalance, microprice, slope, and observed valid-quote L1 OFI are book features; trade flow and price momentum remain descriptive baselines.
+- Added exact final Gamma `gamma_closed` Up/Down labels with raw response provenance, conflict rejection, chronological 60/20/20 train/validation/test, purge covering feature window plus lead, untouched-test isolation, and fail-closed gates of 500 common-valid markets, three UTC days, and 100 markets per class.
+- Kept all positive statuses explicitly exploratory point estimates. The first gate cannot establish statistical persistence, incremental book information, or tradability; those require paired/block inference, an incremental model, economic replay, and another prospective period.
+- Added 18 study tests plus two existing SBE decoder tests; all 20 focused tests passed. The service build passed with zero errors and 119 pre-existing nullable warnings. A final public 10-second smoke captured and independently reconciled 880/880 events (851 book, 25 trades, 4 controls), with matching index/segment hashes, zero decode errors, and zero reconnects.
+- Committed and pushed implementation commit `aa18b658`. Published that exact revision to `outputs/btc-orderbook-prediction/runner-aa18b658` and started a 72-hour public JSON capture as PID `5552` at `2026-07-22T17:53:53.3088653Z`; expected collection end is `2026-07-25T17:53:53.3088653Z`. Run data is under `outputs/btc-orderbook-prediction/runs/btc-orderbook-prediction-20260722-175358-10fb483e`.
+Next: Let the prospective capture complete, verify all segment/index hashes and official labels, then evaluate the untouched common-valid test subset. Treat any point-estimate lift only as a trigger for paired UTC-day block intervals, momentum-only versus momentum-plus-book validation, economic execution replay, and a second prospective Paper/shadow period.
+Notes: The full existing test assembly ran 960 tests: 793 passed and 167 failed in unrelated pre-existing strategy/schema/source-contract tests. An isolated representative failure occurs before the new code because `StrategyIds.GetBtcUpDown5mVariant(More, 60)` has no matching tracked variant at `Models.cs:1331`; neither that file nor the failing tests were modified. The live collector is public/read-only, has empty stderr, and `run.json` reports `in_progress`, duration 259200 seconds, decision lead 30 seconds, and build `aa18b658`.
+Blockers: None.
+
 ## Active Update 2026-07-22 Child / Child ROI Excel Report Refresh 16:54 UTC
 Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed
