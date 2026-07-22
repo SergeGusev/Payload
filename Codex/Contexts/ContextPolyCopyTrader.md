@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 Binance Order Book To Price Lag Feasibility
+Goal: Assess whether the lead/lag between Binance BTCUSDT order-book changes and price changes can be measured reliably, and determine what the current repository already supports.
+Status: Completed
+Done:
+- Distinguished delivery latency, apparent cross-stream ordering, and predictive order-book lead. A book change has no single deterministic delay to the Last Price: it can precede a later trade, be part of the same matching event as a trade/book update, or never cause a price-changing trade; midpoint changes directly with best bid/ask by definition.
+- Verified current official Binance JSON and SBE stream contracts. SBE exposes real-time `trade` and `bestBidAsk` events with microsecond timestamps on one combined connection; `bestBidAsk` can auto-cull obsolete queued quote events, while SBE incremental depth is published at 20 ms and top-20 snapshots at 50 ms.
+- Audited the current local implementation. The disabled-by-default lag diagnostic captures every JSON trade but polls Binance REST `bookTicker` at roughly one-second intervals without an exchange timestamp, so it cannot establish sub-second quote-to-trade ordering. The comparison CSV samples latest SBE/JSON quotes at 100 ms minimum and contains no Binance trade stream, so it also cannot answer this question.
+- Verified that the existing SBE decoder and smoke command already support a combined `btcusdt@trade/btcusdt@bestBidAsk` session with trade/event timestamps, trade id/price/quantity/maker flag, book update id, and best bid/ask prices and quantities. The missing component is a loss-aware event-level writer with monotonic receive timestamps and subsequent out-of-sample analysis.
+- Defined the minimum valid read-only experiment: preserve every quote/trade event and reconnect/drop/gap marker; distinguish exchange-time and local-arrival-time measurements; predefine the exact price target and horizons; test imbalance, microprice, queue depletion, and order-flow features chronologically; and evaluate any apparent signal after spread, fees, slippage, and execution latency.
+Next: None.
+Notes: No lag magnitude or tradable edge was claimed because no dedicated event-level dataset was captured or analyzed. This was read-only source and documentation research; no product code, configuration, runtime, production system, order, strategy, or database row changed, and implementation tests were not required.
+Blockers: None.
+
 ## Active Update 2026-07-22 LowerEnter Future Stake Audit
 Goal: Determine whether new autonomous LowEnter/LowerEnter Paper entries use about `$3` after the parent-history backfill produced predominantly `$6` entries.
 Status: Completed

@@ -135,3 +135,10 @@ Request:
 
 Result:
 Verified that new autonomous LowEnter/LowerEnter entries are not `$3`. All exact 388 production strategies currently have `paper_stake_amount=1`, but FAK sizing uses worst price `0.99`, minimum order size `5`, and safety multiplier `1.10`: the base raw target is `$5.445` and share-adjusted notional is about `$6.0093`. Production already contained 513 autonomous entries after the final backfill audit: 491 used the base multiplier and about `$6.0093`, while 22 inherited progression multipliers and used `$11.0088..$44.0055`; no `$3` entry existed. The backfill copied source financial fields, but that copying does not determine future stake size. Production was queried read-only and was not changed.
+
+## 2026-07-22T14:33:40.0428200Z
+Request:
+Насколько реально поднять таг между изменениями в стакане и изменениями курса?
+
+Result:
+Explained that a measurable order-book/price relationship is realistic, but it is not one fixed lag: delivery latency, feed ordering around the same matching event, and predictive lead are different quantities. Verified from current official Binance documentation that SBE can deliver combined real-time `trade` and `bestBidAsk` events with microsecond timestamps, while best-bid/ask auto-culling and full-depth stream semantics must be accounted for. Audited the local code: the existing lag diagnostic uses roughly one-second REST `bookTicker` polling, and the source-comparison CSV samples quotes without the Binance trade stream, so neither can establish the requested sub-second relationship. The existing SBE decoder and smoke command already provide most protocol plumbing; a loss-aware event-level recorder with monotonic receive timestamps and out-of-sample analysis is still required. No measured lag or tradable edge was claimed, and no product or production state changed.
