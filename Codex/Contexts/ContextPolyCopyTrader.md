@@ -1,3 +1,15 @@
+## Active Update 2026-07-22 Clarify Covered Versus Uncovered BTC Premarket Scope
+Goal: Clarify whether the reported BTC LowEnter counterfactual included only BTC strategies not already represented by current LowEnter clones.
+Status: Completed
+Done:
+- Confirmed that the reported BTC total `-$13,408.27 / -0.8558%` to `+$16,327.72 / +3.3560%` covered all 332 current non-LowEnter BTC Premarket source strategies, not only the unserved strategies; the existing LowEnter strategy rows themselves were excluded.
+- Proved an exact 28-to-28 threshold mapping between current BTC LowEnter clones and their neutral `BTC Up or Down 5m N bps Reference Average Premarket` source strategies for thresholds `1..10`, then `15..100` in steps of `5`.
+- Isolated the already-covered 28-source subset: 60,990 original bets, PnL `-$5,442.28`, ROI `-1.4849%`; the `<=0.50` accounting subset retained 15,567 bets, PnL `+$3,918.76`, ROI `+4.1891%`, an improvement of `$9,361.04`.
+- Isolated the remaining 304 currently unserved BTC Premarket strategies: 147,033 original bets, stake `$1,200,255.45`, PnL `-$7,965.99`, ROI `-0.6637%`; the `<=0.50` subset retained 47,234 bets, stake `$392,974.03`, PnL `+$12,408.96`, ROI `+3.1577%`. Their PnL improvement was `$20,374.95`, or `68.5195%` of the total BTC improvement.
+Next: If extension is requested, split the 304 unserved BTC strategies by Dashboard category and sequence sensitivity before choosing Paper clones; do not mass-clone solely from the aggregate.
+Notes: This clarification used the already verified fixed-cutoff report and did not query or mutate production. Covered plus unserved counts, stakes, and PnL reconciled exactly to the saved BTC aggregate, and the source/LowEnter threshold grids matched exactly.
+Blockers: The unserved aggregate remains an accounting subset; stateful Progress/Diff categories still require sequential replay before implementation conclusions.
+
 ## Active Update 2026-07-22 All Premarket LowEnter Counterfactual
 Goal: Calculate current Paper PnL and ROI for every current non-LowEnter Premarket strategy under the fixed LowEnter opening-price rule `entry_price <= 0.50`, then decide whether the rule should be extended.
 Status: Completed

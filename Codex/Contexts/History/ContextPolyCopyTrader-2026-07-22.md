@@ -29,3 +29,14 @@ Request:
 
 Result:
 Audited all 1,109 current non-LowEnter Premarket source strategies at production cutoff `2026-07-22T06:40:05.297661Z`. Across 755,960 settled Paper rows, the inclusive `entry_price <= 0.50` accounting subset retained 201,449 bets: overall ROI rose from `0.2244%` to `0.5358%`, but PnL fell from `+$14,398.27` to `+$9,104.49`. BTC improved sharply, while ETH and SOL changed from positive to negative; non-Reference-Average behaviors and Progress behaviors materially worsened, and first/second-period results changed sign. Concluded that a universal rollout is unsupported; only narrowly selected Paper clones merit further testing, and stateful variants require a true sequential replay. Preserved a reproducible report and independent verification under `outputs/019f1397-6f46-7a11-8166-522543cac173/all-premarket-lowenter-050-counterfactual-20260722-064001/`. No production data, strategy, service, configuration, or product code changed.
+
+## 2026-07-22T06:56:44.5320886Z
+Request:
+Мне вот это очень понравилось:
+
+BTC-$13 408.27 / -0.8558%**+$16 327.72 / +3.3560%**
+
+Это только по неохваченным BTC стратегиям?
+
+Result:
+Clarified that the BTC headline included all 332 current non-LowEnter BTC Premarket source strategies, including the 28 neutral Reference Average sources that already have matching LowEnter clones. Exact subtraction showed that the remaining 304 unserved BTC strategies alone changed from `-$7,965.99 / -0.6637%` to `+$12,408.96 / +3.1577%`, a PnL improvement of `$20,374.95` and `68.5195%` of the total BTC improvement. The 28 already-covered sources changed from `-$5,442.28 / -1.4849%` to `+$3,918.76 / +4.1891%`. Covered plus unserved aggregates and exact threshold grids were independently reconciled; production was not accessed or changed.
