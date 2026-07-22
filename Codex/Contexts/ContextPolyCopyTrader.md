@@ -1,3 +1,19 @@
+## Active Update 2026-07-22 All LowEnter History Backfill Threshold Decision
+Goal: Backfill every LowEnter/LowerEnter Paper strategy from its exact source history without creating a second bet for any strategy/market pair.
+Status: Blocked
+Done:
+- Restored and independently verified production connectivity to `192.168.0.101:5432/polycopytrader`; the service heartbeat, runs, orders, fills, and Dashboard projection were fresh and healthy during the final preview.
+- Reconciled the exact local registry against production: 388 unique child/source mappings, comprising 304 BTC `LowerEnter` strategies and 84 earlier `LowEnter Average` strategies (28 each BTC/ETH/SOL). All 776 child/source rows matched GUID, code, and name; all were enabled, had `live_stakes=false`, and were unpaused; no unexpected LowEnter/LowerEnter marker strategy existed.
+- Captured one `REPEATABLE READ, READ ONLY` snapshot through `2026-07-22T10:25:48.137367Z`. Loaded 16,048 existing child runs and excluded every source market having any existing child run, regardless of child status, so independent child activity cannot be duplicated or overwritten.
+- Found 93,233 unique duplicate-safe source candidates at the implemented inclusive cap: 42,801 have `entry_price < 0.50`, while 50,432 have `entry_price = 0.50`. The strict subset has stake `$311,728.09350769` and PnL `+$10,271.98084746`; exact-cap rows add stake `$357,739.3731` and PnL `+$16,494.2985`.
+- Verified all 93,233 candidate source chains: every signal exists and is accepted; every order exists, belongs to the source strategy, is a `Filled` Buy, and matches signal/asset/condition/outcome; every run has one fill with matching size and VWAP; deterministic signal/order/run/fill UUIDs have zero collisions.
+- Investigated all 4,031 apparent notional discrepancies. They are bounded rounding differences of `$0.00000002..$0.00000239`; `run.stake_usd` matches `entry_price * size`, and there are no differences above `$0.0001`, so they do not indicate broken source rows.
+- Independently reread the candidate CSV with PowerShell 7 and confirmed 93,233 rows, 42,801 strict rows, 50,432 exact-cap rows, 93,233 unique child/market keys, and SHA-256 `F1FDA57CABE9EA09030A32F56B97E32F71CC7528D1CECE38BE507AA0E0B9C78C`.
+- Preserved preview evidence, the exact inclusive candidate manifest, diagnostics, verification script, and reproducible C# source under `outputs/019f1397-6f46-7a11-8166-522543cac173/lower-enter-history-backfill-preview-20260722-102548/`.
+Next: After the user chooses strict `<0.50` or implemented `<=0.50`, create an exact rollback manifest and execute the selected rows in small idempotent transactions, then reconcile raw history and Dashboard projections.
+Notes: Production was never mutated. Initial broad read-only aggregates hit their bounded timeout; a terminated shell left one child `dotnet` process, which was identified by exact command line, stopped, and verified absent from production. One diagnostic script briefly inspected local `127.0.0.1` instead of the pinned server; all conclusions from that local result were explicitly withdrawn and the corrected production check was pinned to `192.168.0.101`.
+Blockers: The user said “меньше 0.5” (strict `<0.50`), while both current LowEnter implementations accept `0.50` (`<=0.50`). The 50,432 exact-cap candidates are material, so mutation cannot proceed without an explicit threshold choice.
+
 ## Active Update 2026-07-22 All LowEnter History Backfill Production Connectivity Blocker
 Goal: Backfill every LowEnter/LowerEnter Paper strategy from its exact source history without creating a second bet for any strategy/market pair.
 Status: Blocked

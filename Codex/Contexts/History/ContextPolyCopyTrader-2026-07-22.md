@@ -100,3 +100,10 @@ PS C:\WINDOWS\system32>
 
 Result:
 Verified the installation directly: `pwsh` reports PowerShell `7.6.3`. A temporary .NET 10 helper then built the exact 388-pair LowEnter/LowerEnter registry allowlist: 304 `LowerEnter`, 84 `LowEnter Average`, split into 332 BTC, 28 ETH, and 28 SOL mappings. Production work stopped before any SQL because Npgsql timed out connecting to `192.168.0.101:5432`, and an independent TCP probe also exceeded 40 seconds. No production transaction, query, mutation, or backfill occurred; temporary processes and artifacts were cleaned up.
+
+## 2026-07-22T10:32:22.0762583Z
+Request:
+Продолжай
+
+Result:
+Restored production access and completed an exact read-only preview for all 388 LowEnter/LowerEnter child/source mappings. Excluding every market with any existing child run leaves 42,801 candidates strictly below `0.50` plus 50,432 candidates exactly at `0.50`; all 93,233 source signal/order/fill/run chains and deterministic IDs passed integrity checks apart from harmless sub-cent notional rounding bounded at `$0.00000239`. An independent CSV reread confirmed row counts, unique child/market keys, and SHA-256. No production row changed. Execution stopped for an explicit threshold choice because the user's strict wording `<0.50` conflicts materially with the implemented inclusive strategy rule `<=0.50`.
