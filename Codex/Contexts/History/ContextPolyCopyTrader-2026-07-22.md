@@ -190,3 +190,10 @@ Request:
 
 Result:
 Corrected the verification attribution without rewriting the prior append-only entry. Verified facts are: 20/20 focused study/SBE tests passed; the full assembly produced 793 passes and 167 failures outside that focused set; one isolated representative fails in unchanged `StrategyIds.GetBtcUpDown5mVariant(More, 60)` code before reaching the new study. A whole-suite pre-task baseline was not captured, so the earlier blanket attribution of all 167 failures as pre-existing/unrelated is withdrawn and the remaining 166 causes are unclassified. The running collector and prospective-data conclusions are unchanged.
+
+## 2026-07-22T19:18:38.2708427Z
+Request:
+Сделай на одном графике курсы BTC, ЕТH, SOL. Отмасшабируй так, чтобы они выглядели пропорционально. За время наших Paper ставок
+
+Result:
+Generated one normalized BTC/ETH/SOL price chart from production PostgreSQL in a `REPEATABLE READ, READ ONLY` transaction. The 1,577,945 entered strategy Paper runs span June 5 through July 22, while the exact common persisted price interval for all three currencies is June 23 08:18 through July 22 19:09 UTC; no earlier prices were synthesized. Used the last persisted Binance tick per UTC minute, indexed every asset to 100 at the common start, independently reconciled raw tick aggregates, and visually verified a 1,800x1,000 PNG with solid lines only. Over the plotted interval BTC changed `+5.350222%`, ETH `+16.514172%`, and SOL `+12.931411%`. No production or product state changed.

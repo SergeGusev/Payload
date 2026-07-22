@@ -1,3 +1,17 @@
+## Active Update 2026-07-22 BTC / ETH / SOL Normalized Price Chart For Paper Period
+Goal: Plot BTC, ETH, and SOL prices together over the available Paper-betting period with proportional scaling.
+Status: Completed
+Done:
+- Read production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-22T19:12:39.506158Z` in one `REPEATABLE READ, READ ONLY` transaction. Independently reconciled 1,577,945 entered strategy Paper runs and their linked `paper_orders`; the full Paper-entry period is `2026-06-05T11:20:34.821771Z` through `2026-07-22T19:10:03.376753Z`.
+- Confirmed the persisted sources directly from `crypto_reference_price_ticks`: BTC uses `BTCUSDT` / `BinanceTradeWebSocket`; ETH and SOL use `ETHUSDT` and `SOLUSDT` / `BinanceCryptoTradeWebSocket`.
+- Used the last persisted tick per UTC minute and the exact common available interval `2026-06-23T08:18Z` through `2026-07-22T19:09Z`. Each currency is indexed to `100` at the same starting minute, so equal vertical movement means equal percentage movement.
+- Independently reconciled each exported raw tick set against server-side count/time/price aggregates. Minute coverage was `97.375743%` for BTC, `97.371027%` for ETH, and `97.356880%` for SOL.
+- Rendered and visually inspected one 1,800x1,000 PNG with solid lines only. Over the plotted common interval BTC moved `$62,458.34 -> $65,800.00` (`+5.350222%`), ETH `$1,653.61 -> $1,926.69` (`+16.514172%`), and SOL `$68.67 -> $77.55` (`+12.931411%`).
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/btc-eth-sol-normalized-paper-period-20260722-190622/btc-eth-sol-normalized-paper-period.png`, SHA-256 `8D0FE60FC6912AD87EB8BA8FE5249DE5E8CA36FD9A057380B204228BC95AE7B1`, together with per-asset CSV and verification summaries.
+Next: None.
+Notes: The chart does not extend back to the first Paper entry because a common persisted BTC/ETH/SOL price series begins only on June 23; no missing history was synthesized. Price gaps longer than 30 minutes are left disconnected. The first export attempt exposed a verified source-name mismatch for BTC and wrote no result; the corrected read-only export completed without production mutation. No service, strategy, order, configuration, database row, or product source changed.
+Blockers: None.
+
 ## Active Update 2026-07-22 Prospective BTC Order-Book Prediction Study
 Goal: Determine prospectively whether Binance BTCUSDT top-of-book information available before a five-minute Polymarket BTC market opens predicts that next market's official Up/Down outcome.
 Status: In Progress
