@@ -47,6 +47,30 @@ if (args.Contains("--binance-sbe-smoke", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
+if (args.Contains(BtcOrderBookPredictionStudyCommand.CommandFlag, StringComparer.OrdinalIgnoreCase))
+{
+    using var predictionStudyCts = new CancellationTokenSource();
+    ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
+    {
+        eventArgs.Cancel = true;
+        predictionStudyCts.Cancel();
+    };
+    Console.CancelKeyPress += cancelHandler;
+    try
+    {
+        Environment.ExitCode = await BtcOrderBookPredictionStudyCommand.ExecuteAsync(
+            args,
+            Console.Out,
+            predictionStudyCts.Token);
+    }
+    finally
+    {
+        Console.CancelKeyPress -= cancelHandler;
+    }
+
+    return;
+}
+
 if (args.Contains("--btc-source-comparison-csv", StringComparer.OrdinalIgnoreCase))
 {
     Environment.ExitCode = await BtcSourceComparisonCsvCommand.ExecuteAsync(

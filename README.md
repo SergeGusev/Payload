@@ -344,6 +344,80 @@ Binance SBE requires the API key id in `POLYCOPYTRADER_BINANCE_SBE_API_KEY`,
 `--binance-sbe-api-key`, or `--binance-sbe-api-key-file`; the Ed25519 private
 key file alone is not sent and is not enough for the WebSocket header.
 
+### Prospective BTC Order-Book Prediction Study
+
+`--btc-orderbook-prediction-study` runs a separate read-only experiment for the
+question: can Binance BTCUSDT top-of-book state available before a market opens
+predict the official outcome of the next Polymarket BTC 5-minute market? For a
+market starting at UTC/Unix boundary `S`, the default decision time is
+`S - 30 seconds`; every feature uses only messages whose local monotonic receive
+time is strictly before that cutoff. The target is the final Gamma `Up`/`Down`
+outcome for `btc-updown-5m-<S unix seconds>`. Binance start/end direction is kept
+only as a diagnostic proxy and is never the canonical label.
+
+Example 72-hour prospective capture using the public JSON stream and no API key:
+
+```powershell
+$studyRoot = 'D:\PolyCopyTraderResearch\btc-orderbook'
+.\PolyCopyTrader.Service.exe `
+  --btc-orderbook-prediction-study `
+  --btc-orderbook-study-mode collect `
+  --btc-orderbook-study-source json `
+  --btc-orderbook-study-output-dir $studyRoot `
+  --btc-orderbook-study-duration-minutes 4320
+```
+
+The output directory must be absolute. The collector writes atomically finalized
+and SHA-256-verified gzip segments, with a five-minute rotation by default, plus
+`events.index.json` checkpoints. A crash can therefore lose the current partial
+segment, not all prior hours. `run.json` records the exact endpoints, build,
+cutoffs, feature windows, quality gates, stopwatch anchor, counters, and final
+index hash. Analysis also writes the raw Gamma market JSON and request URL in
+`gamma-labels.json`, feature rows in `windows.csv`, untouched-test predictions,
+`analysis.json`, and `report.md`. An interrupted run can be re-read from its
+finalized index snapshot:
+
+```powershell
+.\PolyCopyTrader.Service.exe `
+  --btc-orderbook-prediction-study `
+  --btc-orderbook-study-mode analyze `
+  --btc-orderbook-study-input-dir 'D:\PolyCopyTraderResearch\btc-orderbook\<run-id>'
+```
+
+The default public source is the official Binance Vision combined
+`BTCUSDT trade + bookTicker` stream. JSON `bookTicker` has no exchange event
+timestamp, so availability is based on the local receive stopwatch. Optional SBE
+uses the official `trade + bestBidAsk` stream and accepts only the API key id from
+`POLYCOPYTRADER_BINANCE_SBE_API_KEY` or a one-line
+`--binance-sbe-api-key-file`; it never reads the Ed25519 private key. Both modes
+are restricted to their exact official hosts and reject any non-`BTCUSDT`
+message. No database or order-placement path is used.
+
+The primary model is book-only: L1 imbalance, time-weighted imbalance,
+microprice offset, imbalance slope, and observed L1 order-flow change. Trade flow
+and premarket return are separate diagnostics/baselines. Evaluation uses a
+chronological train/validation/test split with an embargo; thresholds are fitted
+on train, selected on validation, and scored once on the untouched test segment.
+Each run accepts exactly one decision lead so that an earlier-cutoff sample is
+never selected using the future availability of a later cutoff. The embargo
+covers both the longest feature window and the decision lead, leaving the prior
+split's final market resolved before the next split's first feature window.
+Defaults require at least 500 commonly valid labeled markets, three UTC days,
+and 100 markets of each class before scoring. Missing features or either class in
+any split fail closed as `InsufficientData`.
+
+`ExploratoryPointEstimateLiftVsBothBaselines` means that the common-valid subset
+of one untouched chronological segment showed higher point accuracy and balanced
+accuracy than both the train-majority and descriptive price-momentum rules. It
+does not prove statistical persistence or that the book contributes information
+beyond momentum. `ExploratoryPointEstimateLiftVsMajorityOnly` means the book rule
+beat majority but not a complete momentum rule on both point metrics, and
+`NoObservedPointEstimateLift` means it did not beat majority. This first gate is
+L1-only and does not model Polymarket execution, fees, depth, slippage, or fill
+probability. Any positive result permits only a longer Paper/shadow study with
+paired block confidence intervals, an incremental-feature model, and an economic
+replay; it never enables Live trading.
+
 ### Certificate Pinning
 
 `Polymarket:CertificatePins` can be configured in development or production for the Polymarket HTTP clients and the market WebSocket. Pins are keyed by endpoint host and use `sha256/<base64 SPKI SHA-256>` format. If a host has no configured pin, normal .NET TLS validation is used. If a host has pins, the certificate must match one of them; arbitrary invalid certificates are still rejected.
