@@ -54,3 +54,10 @@ Request:
 
 Result:
 Added exactly 304 deterministic BTC 5-minute Premarket `LowerEnter` Paper clones for the previously unserved source allowlist: 298 Regular and 6 Progress. Each clone preserves its source logic and independent state, accepts only an actual guaranteed-depth FAK average fill at or below `0.50`, is hard-blocked from Live/Live-shadow execution, and cannot become a Child or Child ROI parent. Added exact PostgreSQL seeds, dedicated Dashboard categories, tests, README documentation, and baseline comparison proving that the change introduced no new full-suite failures.
+
+## 2026-07-22T08:27:20.3608546Z
+Request:
+Выложено, проверяй. И, главное - проверь, умещаемся ли мы сейчас во временные рамки постановки ставок. Количество стратегий увеличилось, нужно понять, всё ли успеваем
+
+Result:
+Verified deployed commit `1fd89d96` and all exact 304 enabled, Paper-only LowerEnter rows. Six complete post-restart Premarket batches contained 304/304 terminal LowerEnter decisions each; all enabled Up/Down 5m batches contained 1,500-1,519 decisions, none exceeded 3 seconds, and the worst decision delay was 1.590 seconds. The only Live-enabled Up/Down 5m run also completed its condition check in 0.698 seconds, then correctly skipped without a Live submission. A prospective database monitor independently found that all 304 LowerEnter rows became visible only by `+9.453s`, despite application event timestamps ending at `+1.531s`; this was still about 20.5 seconds before market open but fails a 3-second persistence target. The copied-trader performance queue separately contained 503 stale synthetic `strategy:*` wallets and a long-running projection query, which is a verified optimization target but not a proven cause of that commit visibility lag. No production data or configuration was changed.
