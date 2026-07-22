@@ -55,6 +55,24 @@ Request:
 Result:
 Added exactly 304 deterministic BTC 5-minute Premarket `LowerEnter` Paper clones for the previously unserved source allowlist: 298 Regular and 6 Progress. Each clone preserves its source logic and independent state, accepts only an actual guaranteed-depth FAK average fill at or below `0.50`, is hard-blocked from Live/Live-shadow execution, and cannot become a Child or Child ROI parent. Added exact PostgreSQL seeds, dedicated Dashboard categories, tests, README documentation, and baseline comparison proving that the change introduced no new full-suite failures.
 
+## 2026-07-22T07:25:07.4039996Z
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Продолжай
+
+Result:
+Generated a fresh one-sheet daily Paper PnL workbook from a production `REPEATABLE READ, READ ONLY` cutoff at `2026-07-22T07:21:18.194570Z`. All 144 BTC/ETH/SOL Child and Child ROI candidates, 182,491 settled Paper rows, six unique group winners, and every selected daily total were independently reconciled. The six strategy columns are sorted by all-history PnL ascending; negative values render red on white with an explicit minus; daily, category, and grand totals are formula-driven; row 1 and column A are frozen. Excel COM and artifact-tool checks found zero formula errors and a grand Total of `$1,516.52388382`; the final render was visually inspected and the marked temporary run was removed.
+
 ## 2026-07-22T08:27:20.3608546Z
 Request:
 Выложено, проверяй. И, главное - проверь, умещаемся ли мы сейчас во временные рамки постановки ставок. Количество стратегий увеличилось, нужно понять, всё ли успеваем
@@ -142,3 +160,19 @@ Request:
 
 Result:
 Explained that a measurable order-book/price relationship is realistic, but it is not one fixed lag: delivery latency, feed ordering around the same matching event, and predictive lead are different quantities. Verified from current official Binance documentation that SBE can deliver combined real-time `trade` and `bestBidAsk` events with microsecond timestamps, while best-bid/ask auto-culling and full-depth stream semantics must be accounted for. Audited the local code: the existing lag diagnostic uses roughly one-second REST `bookTicker` polling, and the source-comparison CSV samples quotes without the Binance trade stream, so neither can establish the requested sub-second relationship. The existing SBE decoder and smoke command already provide most protocol plumbing; a loss-aware event-level recorder with monotonic receive timestamps and out-of-sample analysis is still required. No measured lag or tradable edge was claimed, and no product or production state changed.
+
+## 2026-07-22T16:59:09.5980902Z
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Generated a fresh one-sheet daily Paper PnL workbook from a production `REPEATABLE READ, READ ONLY` cutoff at `2026-07-22T16:54:04.767706Z`. All 144 BTC/ETH/SOL Child and Child ROI candidates, 185,751 settled Paper rows, six unique group winners, and every selected daily total were independently reconciled. The six strategy columns are sorted by all-history PnL ascending; negative values render red on white with an explicit minus; daily, category, and grand totals are formula-driven; row 1 and column A are frozen. Excel COM and artifact-tool checks found zero formula errors and a grand Total of `$1,554.67202960`; the final render was visually inspected and the marked temporary run was removed.

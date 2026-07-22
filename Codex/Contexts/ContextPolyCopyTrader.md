@@ -1,3 +1,17 @@
+## Active Update 2026-07-22 Child / Child ROI Excel Report Refresh 16:54 UTC
+Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-22T16:54:04.767706Z` in one `REPEATABLE READ, READ ONLY` transaction. The exact non-Progress scope contained 144 Child/Child ROI strategies and 185,751 settled Paper rows over 15 UTC dates.
+- Reconciled raw-row aggregates against independent server SQL for all 144 candidates, matched the six unique maximum-PnL selections against an independent server ranking, and matched every selected strategy/date PnL against a separate server daily aggregation.
+- Ordered the six strategy columns by all-history PnL ascending: BTC 4 Child `$3.78015288`, BTC 16 Child ROI `$83.25101345`, SOL 21 Child ROI `$212.21328860`, ETH 10 Child ROI `$414.91443461`, SOL 8 Child `$419.40726154`, and ETH 7 Child `$421.10587852`.
+- Generated one `Daily PnL` worksheet with typed UTC dates, formula-driven daily/category/grand totals, red text on a white background with an explicit minus for negative values, and frozen first row plus first column at `B2`.
+- Excel COM and artifact-tool verification passed: one 17x8 used range, 112 numeric cells, 33 negative cells, zero formula errors, and grand Total `$1,554.67202960`. The final render was visually inspected with no clipped headers, values, or totals.
+- Delivered `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260722-195310/reports/child-child-roi-best-daily-paper-pnl-2026-07-22-195310.xlsx`, SHA-256 `352ECCD6CD61F2CDF7C1873F6F468004B570D9EDD2D017D0F120C481B16AF5A0`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The bounded runner completed the production snapshot, workbook build, and pane freeze. Excel verification wrote a complete `OK` result and saved the workbook, but the 30-second outer stage timer expired while the COM process was shutting down; no Excel process remained. Final artifact-tool import/render verification then completed against the same frozen snapshot without re-querying production. Protected temp cleanup initially found a Roslyn analyzer lock held by the exact build compiler PID `52072`; its parent PID `41344` no longer existed, so only that orphan was stopped and the marked run was removed successfully. The older July 21 legacy temp marker remains untouched.
+Blockers: None.
+
 ## Active Update 2026-07-22 Binance Order Book To Price Lag Feasibility
 Goal: Assess whether the lead/lag between Binance BTCUSDT order-book changes and price changes can be measured reliably, and determine what the current repository already supports.
 Status: Completed
@@ -117,6 +131,20 @@ Done:
 Next: Treat exclusion of synthetic `strategy:*` wallets and queue commit-latency telemetry as independent background-capacity work; no persistence gate is required for the three-second bet-placement SLA.
 Notes: Exact evidence came from one `REPEATABLE READ, READ ONLY` registry/run snapshot, bounded index-driven SQL at exact due timestamps, persisted stage timings, and one prospective 250 ms polling observation. The stock `check-strategy-entry-latency.ps1` query timed out at the imposed 15-second bound and only measures application event timestamps, not asynchronous commit visibility. `track_commit_timestamp` is off, so the prospective monitor bounds rather than an exact transaction commit timestamp are reported. Local PowerShell 5.1 could not load the .NET 10 registry assembly and rejected one PowerShell 7 operator; a temporary .NET 10 helper supplied the exact allowlist. Two broad diagnostic SQL attempts were canceled by their statement timeouts. None of these local/read-only diagnostic failures changed production data or interrupted the service.
 Blockers: Actual current-deployment Live submission timing remains unobserved. The only Live-enabled Up/Down 5m run at `2026-07-22T08:30:00Z` completed its condition check in 0.698 seconds but correctly skipped with `btc_previous_market_move_below_bps_threshold`, so no network Live order was submitted. The 304 new LowerEnter strategies are Paper-only.
+
+## Active Update 2026-07-22 Child / Child ROI Excel Report Refresh 07:21 UTC
+Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-22T07:21:18.194570Z` in one `REPEATABLE READ, READ ONLY` transaction. The exact non-Progress scope contained 144 Child/Child ROI strategies and 182,491 settled Paper rows over 15 UTC dates.
+- Reconciled raw-row aggregates against independent server SQL for all 144 candidates, matched the six unique maximum-PnL selections against an independent server ranking, and matched every selected strategy/date PnL against a separate server daily aggregation.
+- Ordered the six strategy columns by all-history PnL ascending: BTC 4 Child `$11.82885468`, BTC 16 Child ROI `$71.85678651`, SOL 21 Child ROI `$226.67700915`, ETH 10 Child ROI `$387.90305349`, SOL 8 Child `$398.76981040`, and ETH 8 Child `$419.48836959`.
+- Generated one `Daily PnL` worksheet with typed UTC dates, formula-driven daily/category/grand totals, red text on a white background with an explicit minus for negative values, and frozen first row plus first column at `B2`.
+- Excel COM and artifact-tool verification passed: one 17x8 used range, 112 numeric cells, 34 negative cells, zero formula errors, and grand Total `$1,516.52388382`. The final render was visually inspected with no clipped headers, values, or totals.
+- Delivered `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260722-102015/reports/child-child-roi-best-daily-paper-pnl-2026-07-22-102015.xlsx`, SHA-256 `0AAEC413BE67FB2136453B3B782EF690E1B0D77E49E86D11E47406DB0F7E9ADF`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The first temp-isolated run stopped before database access with `NETSDK1004` because the fresh copy lacked `project.assets.json`; one bounded restore fixed it, and the complete retry passed all five stages in 147.461 seconds. The current marked `D:\CodexTemp` run was removed successfully. An older July 21 temp directory remains untouched because its legacy marker lacks `schemaVersion` and protected cleanup correctly refused to delete it. Commit/push was not attempted because the active context, daily history, and nine product/documentation files already contained unrelated concurrent LowerEnter changes; staging the shared files would mix task scopes.
+Blockers: None.
 
 ## Active Update 2026-07-22 BTC LowerEnter Premarket Clones
 Goal: Add a `LowerEnter` Paper clone with an inclusive `0.50` maximum entry price for every currently unserved BTC 5-minute Premarket strategy.
