@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 ETH Neutral 3 Reference Average PnL And ETH Chart Refresh
+Goal: Generate a fresh cumulative Paper PnL chart for `ETH Up or Down 5m 3 bps Reference Average Premarket` with the persisted ETHUSDT reference price overlaid.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-22T13:23:28.706609Z` in one `REPEATABLE READ, READ ONLY` transaction and resolved exactly one strategy: `b7c50005-0000-4000-8179-000000000103` / `eth_up_down_5m_reference_average_bps_3_fak_premarket`.
+- Exported and independently reconciled 4,348 exact-strategy `Settled` Paper rows from `2026-07-04T14:37:36.524614Z` through `2026-07-22T13:20:03.447903Z`: stake `$26,128.43640133`, PnL `+$734.64737917`, ROI `+2.81167755%`, and maximum drawdown `$252.71687047`.
+- Exported the last persisted `BinanceCryptoTradeWebSocket` ETHUSDT tick per UTC minute over the same period and independently reconciled the repeated server minute series: 25,642 of 25,847 expected minutes (`99.206871%` coverage), from `$1,768.97` to `$1,920.20` (`+8.54904266%`).
+- Rendered and visually inspected a 1,800x920 dual-axis PNG with a shared UTC time axis, cumulative settlement-time PnL steps on the left, ETHUSDT on the right, and only solid lines. No labels, axes, or series are clipped or overlapping.
+- Delivered `outputs/019f1397-6f46-7a11-8166-522543cac173/eth-3-reference-average-pnl-vs-eth-20260722-132304/eth-3-reference-average-pnl-vs-eth.png`, SHA-256 `20D12D2B8F34102B00BBF8151338537914A6C83E839AA43D9E7B51954292C0B0`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The expected machine-wide PowerShell 7 path was absent, but the verified WindowsApps alias reports PowerShell `7.6.3` and rendered the chart successfully. Protected stale cleanup also reported one unrelated legacy Excel temp marker without `schemaVersion`; it was not deleted or modified.
+Blockers: None.
+
 ## Active Update 2026-07-22 All LowEnter History Backfill Production Apply
 Goal: Backfill every LowEnter/LowerEnter Paper strategy from its exact parent history at the confirmed inclusive `entry_price <= 0.50` cap without duplicating a child strategy/market bet.
 Status: Completed

@@ -114,3 +114,10 @@ Request:
 
 Result:
 Applied the confirmed inclusive LowEnter/LowerEnter parent-history backfill to production. Cloned 93,233 complete signal/order/fill/run chains (42,801 below `0.50`, 50,432 exactly `0.50`) for 262 target strategies, with zero partial chains, mismatches, existing-child-market overlaps, or resulting duplicate strategy/market pairs. Independent SQL confirmed all four tables and aggregate stake `$669,467.46660769` / PnL `+$26,766.27934746`. Reconciled Dashboard through its production projection path; the final read-only audit across all 388 targets found zero raw/state/snapshot contract mismatches and empty projection/reconciliation queues while the service and projection remained `Running` without errors. Preserved an exact deterministic rollback plan and checksummed evidence under `outputs/019f1397-6f46-7a11-8166-522543cac173/lower-enter-history-backfill-preview-20260722-102548/`.
+
+## 2026-07-22T13:25:10.3633564Z
+Request:
+Сделай pnl график стратегии ETH Up or Down 5m 3 bps Reference Average Premarket с наложенным курсом ETH
+
+Result:
+Generated a fresh 1,800x920 dual-axis PNG from production through `2026-07-22T13:23:28.706609Z` in a `REPEATABLE READ, READ ONLY` transaction. The exact strategy resolved to `b7c50005-0000-4000-8179-000000000103`; 4,348 settled Paper rows independently reconciled to PnL `+$734.64737917`, ROI `+2.81167755%`, and maximum drawdown `$252.71687047`. The independently reconciled ETHUSDT minute-last series contains 25,642 samples with `99.206871%` minute coverage and changed from `$1,768.97` to `$1,920.20`. The final image uses only solid lines and passed visual inspection; production was not modified.
