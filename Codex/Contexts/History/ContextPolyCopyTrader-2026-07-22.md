@@ -107,3 +107,10 @@ Request:
 
 Result:
 Restored production access and completed an exact read-only preview for all 388 LowEnter/LowerEnter child/source mappings. Excluding every market with any existing child run leaves 42,801 candidates strictly below `0.50` plus 50,432 candidates exactly at `0.50`; all 93,233 source signal/order/fill/run chains and deterministic IDs passed integrity checks apart from harmless sub-cent notional rounding bounded at `$0.00000239`. An independent CSV reread confirmed row counts, unique child/market keys, and SHA-256. No production row changed. Execution stopped for an explicit threshold choice because the user's strict wording `<0.50` conflicts materially with the implemented inclusive strategy rule `<=0.50`.
+
+## 2026-07-22T13:09:52.7341332Z
+Request:
+<= 0.50
+
+Result:
+Applied the confirmed inclusive LowEnter/LowerEnter parent-history backfill to production. Cloned 93,233 complete signal/order/fill/run chains (42,801 below `0.50`, 50,432 exactly `0.50`) for 262 target strategies, with zero partial chains, mismatches, existing-child-market overlaps, or resulting duplicate strategy/market pairs. Independent SQL confirmed all four tables and aggregate stake `$669,467.46660769` / PnL `+$26,766.27934746`. Reconciled Dashboard through its production projection path; the final read-only audit across all 388 targets found zero raw/state/snapshot contract mismatches and empty projection/reconciliation queues while the service and projection remained `Running` without errors. Preserved an exact deterministic rollback plan and checksummed evidence under `outputs/019f1397-6f46-7a11-8166-522543cac173/lower-enter-history-backfill-preview-20260722-102548/`.
