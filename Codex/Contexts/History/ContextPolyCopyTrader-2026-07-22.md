@@ -75,3 +75,10 @@ Request:
 
 Result:
 Stopped the LowEnter/LowerEnter history-backfill task before production access after verifying that only Windows PowerShell `5.1.26100.8875` is installed and `pwsh`/PowerShell 7 is absent. Confirmed that `winget` is available for installing `Microsoft.PowerShell`. Recorded the corrected candidate scope of 304 BTC `LowerEnter` clones plus 84 earlier BTC/ETH/SOL `LowEnter` strategies; production enumeration and all database mutation remain unstarted pending user confirmation to install PowerShell 7.
+
+## 2026-07-22T09:03:46.5745254Z
+Request:
+Подтверждаю, устанавливай
+
+Result:
+Attempted the confirmed PowerShell 7 installation through `winget` with a five-minute bound. The process retained active source-network connections but emitted no output, never launched `msiexec`, and timed out with code `124`; `pwsh` remains absent. The exact surviving `winget` process was terminated and its marked temporary directory was removed. No production database connection, mutation, or backfill occurred. Work stopped pending confirmation to use the official signed x64 MSI directly from Microsoft/PowerShell GitHub Releases.

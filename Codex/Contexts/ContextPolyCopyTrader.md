@@ -4,10 +4,11 @@ Status: Blocked
 Done:
 - Corrected the preliminary scope: current source code contains 304 BTC `LowerEnter` clones with explicit `LowerEnterSourceStrategyId` mappings plus 84 earlier `LowEnter Average Premarket` strategies, 28 each for BTC, ETH, and SOL.
 - Stopped before production enumeration, preview, backup, or mutation after confirming that the current shell is Windows PowerShell `5.1.26100.8875` and `pwsh`/PowerShell 7 is absent.
-- Confirmed `winget` is available, so PowerShell 7 can be installed through the standard `Microsoft.PowerShell` package.
-Next: Install PowerShell 7 after user confirmation, then enumerate the exact production allowlist and mappings and produce a read-only duplicate-safe backfill preview.
-Notes: No production database connection or mutation was made, no backfill process was started, and the temporary run directory was removed successfully.
-Blockers: PowerShell 7 installation is awaiting explicit user confirmation under the requested stop-and-report workflow.
+- Attempted the confirmed `winget install --id Microsoft.PowerShell` installation with agreements accepted, silent mode, and a five-minute bound. `winget` maintained active source-network connections but produced no output, never launched `msiexec`, and timed out with exit code `124`; PowerShell 7 remains absent.
+- Terminated only the surviving expected `winget.exe` PID `29332` after verifying its exact command line, confirmed that no installer or `pwsh` process remained, and removed the marked temporary run successfully.
+Next: After user confirmation, download the official x64 PowerShell MSI directly from Microsoft/PowerShell GitHub Releases, verify its Microsoft Authenticode signature, install it, and verify `pwsh --version` before resuming the database preview.
+Notes: No production database connection or mutation was made and no backfill process was started. The failed installation changed neither the project service nor PostgreSQL.
+Blockers: The standard `winget` installation path stalled before the installer stage; direct signed-MSI installation awaits user confirmation under the requested stop-and-report workflow.
 
 ## Active Update 2026-07-22 Entry Latency SLA Clarification
 Goal: Correct the prior production-audit interpretation by applying the three-second requirement only to bet placement, not asynchronous PostgreSQL persistence.
