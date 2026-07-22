@@ -13,3 +13,10 @@ Request:
 
 Result:
 Revalidated that the reported `53.4772%` was `2,230` positive-PnL settled ETH runs divided by all `4,170` settled runs; losses were `1,940` and flat runs were zero. Verified that current code already maintains this metric incrementally through PostgreSQL projection events and a service worker. At the production cutoff, the direct aggregate and persisted Dashboard snapshot independently matched at `2,276 / 4,266 = 53.35208626%`; projection status was healthy with no pending events. The backend normally updates within seconds, while the visible Dashboard uses a 60-second strategy refresh/cache interval.
+
+## 2026-07-22T06:16:00.0585130Z
+Request:
+То есть мы можем в LowEntered стратегиях делать максимальную ставку не 0.5, а WinRate - 0.01 и стратегия все равно будет прибыльной по матожиданию?
+
+Result:
+Explained that `price = true conditional win probability - 0.01` has positive no-fee expectation algebraically, but substituting an observed lifetime win rate does not guarantee profit. The current ETH point estimate would imply naive Paper cap `0.52352086`, while its sampling interval already includes probabilities below that cap; fee-enabled crypto FAK execution would also charge about `0.01746/share` at that price, exceeding the one-cent margin. Production LowEnter history was checked read-only: 20 settled losses were only one shared BTC market copied across 20 `N` variants, and each strategy had at most one settlement, so no usable LowEnter probability estimate exists yet. No strategy or code was changed.
