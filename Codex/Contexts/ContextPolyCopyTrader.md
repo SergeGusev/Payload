@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 BTC LowerEnter Premarket Clones
+Goal: Add a `LowerEnter` Paper clone with an inclusive `0.50` maximum entry price for every currently unserved BTC 5-minute Premarket strategy.
+Status: Completed
+Done:
+- Registered exactly 304 deterministic BTC clones: 298 Regular and 6 Progress. The existing 28 neutral BTC `LowEnter Average Premarket` source mappings were excluded, so no already-covered source was duplicated.
+- Preserved each source strategy's behavior, threshold, direction, timing, linked signal IDs, progression rules, stake calculation, and BUY FAK dispatch. Every clone has its own stable strategy ID and independent persisted progression state, plus an explicit source-strategy mapping.
+- Applied the existing guaranteed-depth Paper FAK cap to the actual average fill: `0.50` is accepted and any value above `0.50` is rejected as `ExecutionPriceAboveStrategyCap`.
+- Enforced all clones as `PaperOnly`, which prevents Live and Live-shadow submissions and excludes them from Child and Child ROI parent selection even if a database Live flag is enabled manually.
+- Added exact idempotent PostgreSQL seed rows, 13 dedicated `LowerEnter` Dashboard categories, registry/schema/category tests, inclusive-cap runtime tests, and all-BTC-Child exclusion coverage.
+Next: Deploy and verify the exact 304-row allowlist and first due-cycle behavior on the server.
+Notes: The solution builds successfully. Focused affected coverage passed 107/107. The full changed tree passed 831/943; a clean detached `master` baseline passed 826/938, and both runs had the identical set of 112 pre-existing failing test names, proving no new full-suite failure. `git diff --check` passed. Two external-artifacts test runs initially exposed source-path assumptions; bounded junctions inside the marked `D:\CodexTemp` session supplied each run's own source tree for the final comparison and did not affect repository or production data.
+Blockers: None.
+
 ## Active Update 2026-07-22 Unserved BTC Progress Versus Regular LowEnter Split
 Goal: Split the 304 currently unserved BTC Premarket strategies into Dashboard-equivalent Progress and Regular groups under the saved `entry_price <= 0.50` counterfactual.
 Status: Completed

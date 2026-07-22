@@ -107,6 +107,7 @@ public sealed class OkxExpiryFuturesReferenceTests
     public void StrategyIds_KeepExistingFuturesBasisVariantsWithThreeExpiryConfirmationDescription()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(item => item.LowerEnterSourceStrategyId is null)
             .Where(item => item.Behavior is BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
                 BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarketRevert)
             .ToArray();

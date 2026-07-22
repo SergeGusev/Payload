@@ -1235,6 +1235,7 @@ public sealed record BtcUpDown5mMarketResult(
 
 public static class StrategyIds
 {
+    public const decimal LowerEnterMaximumPaperAverageFillPrice = 0.50m;
     public const string FollowLeaderIdValue = "f0110a0d-1ead-4c00-8b01-000000000001";
     public const string FollowLeaderCode = "follow_leader";
     public const string FollowLeaderName = "Follow leader";
@@ -1287,10 +1288,12 @@ public static class StrategyIds
 
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcUpDown5mVariants =
         CreateBtcUpDown5mVariants();
+    public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcLowerEnterPremarketVariants =
+        CreateLowerEnterPremarketVariants(BtcUpDown5mVariants);
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> CryptoUpDown5mVariants =
         CreateCryptoUpDown5mVariants();
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> UpDown5mStrategyVariants =
-        [.. BtcUpDown5mVariants, .. CryptoUpDown5mVariants];
+        [.. BtcUpDown5mVariants, .. BtcLowerEnterPremarketVariants, .. CryptoUpDown5mVariants];
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> DateDependentStrategyVariants =
         CreateDateDependentStrategyVariants();
 
@@ -1753,6 +1756,131 @@ public static class StrategyIds
         }
 
         return ExcludeRetiredProgressVariants(variants);
+    }
+
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateLowerEnterPremarketVariants(
+        IReadOnlyList<BtcUpDown5mStrategyVariant> sourceVariants)
+    {
+        return sourceVariants
+            .Where(IsUnservedBtcPremarketSourceVariant)
+            .Select(CreateLowerEnterPremarketVariant)
+            .ToArray();
+    }
+
+    private static bool IsUnservedBtcPremarketSourceVariant(BtcUpDown5mStrategyVariant variant)
+    {
+        if (variant.LowerEnterSourceStrategyId is not null ||
+            variant.MarketInterval != BtcUpDownMarketInterval.FiveMinutes ||
+            !string.Equals(variant.ReferenceAssetSymbol, "BTC", StringComparison.OrdinalIgnoreCase) ||
+            !ContainsExactWord(variant.Name, "Premarket") ||
+            !ContainsExactCodeToken(variant.Code, "premarket"))
+        {
+            return false;
+        }
+
+        if (variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket &&
+            variant.DiffCounterTriggerOutcome is null)
+        {
+            return false;
+        }
+
+        return variant.Behavior is
+            BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarketRevert or
+            BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket or
+            BtcUpDown5mStrategyBehavior.DiffShiftProgress or
+            BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket or
+            BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket or
+            BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket or
+            BtcUpDown5mStrategyBehavior.DiffConfirmedAveragePremarket;
+    }
+
+    private static BtcUpDown5mStrategyVariant CreateLowerEnterPremarketVariant(
+        BtcUpDown5mStrategyVariant sourceVariant)
+    {
+        var lowerEnterName = InsertBeforeExactWord(sourceVariant.Name, "Premarket", "LowerEnter");
+        var lowerEnterCategory = ContainsExactWord(sourceVariant.Category, "Premarket")
+            ? InsertBeforeExactWord(sourceVariant.Category, "Premarket", "LowerEnter")
+            : sourceVariant.Category.Trim() + " LowerEnter";
+
+        return sourceVariant with
+        {
+            Id = CreateLowerEnterPremarketVariantId(sourceVariant.Id),
+            Code = InsertBeforeExactCodeToken(sourceVariant.Code, "premarket", "lower_enter"),
+            Name = lowerEnterName,
+            Description =
+                $"Paper-only LowerEnter clone of {sourceVariant.Name}. It preserves the source signal, direction, timing, progression, stake, and FAK liquidity rules, but enters only when the simulated actual average fill price is at most {LowerEnterMaximumPaperAverageFillPrice.ToString("0.00", CultureInfo.InvariantCulture)}. Live execution is disabled.",
+            Category = lowerEnterCategory,
+            PaperOnly = true,
+            PaperFakMaximumAverageFillPrice = LowerEnterMaximumPaperAverageFillPrice,
+            LowerEnterSourceStrategyId = sourceVariant.Id
+        };
+    }
+
+    private static Guid CreateLowerEnterPremarketVariantId(Guid sourceStrategyId)
+    {
+        var sourceId = sourceStrategyId.ToString("D", CultureInfo.InvariantCulture);
+        const string expectedPrefix = "b7c50005-0000-4000-";
+        if (!sourceId.StartsWith(expectedPrefix, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Cannot derive a stable LowerEnter strategy ID from source ID '{sourceId}'.");
+        }
+
+        return Guid.ParseExact(sourceId[..9] + "0001" + sourceId[13..], "D");
+    }
+
+    private static string InsertBeforeExactWord(string value, string targetWord, string insertedWord)
+    {
+        var words = value.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var matchingIndexes = words
+            .Select((word, index) => new { Word = word, Index = index })
+            .Where(item => string.Equals(item.Word, targetWord, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.Index)
+            .ToArray();
+        if (matchingIndexes.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Expected exactly one '{targetWord}' word in strategy text '{value}'.");
+        }
+
+        words.Insert(matchingIndexes[0], insertedWord);
+        return string.Join(' ', words);
+    }
+
+    private static string InsertBeforeExactCodeToken(string value, string targetToken, string insertedToken)
+    {
+        var tokens = value.Split('_', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var matchingIndexes = tokens
+            .Select((token, index) => new { Token = token, Index = index })
+            .Where(item => string.Equals(item.Token, targetToken, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.Index)
+            .ToArray();
+        if (matchingIndexes.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Expected exactly one '{targetToken}' token in strategy code '{value}'.");
+        }
+
+        tokens.Insert(matchingIndexes[0], insertedToken);
+        return string.Join('_', tokens);
+    }
+
+    private static bool ContainsExactWord(string value, string word)
+    {
+        return value
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Any(item => string.Equals(item, word, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ContainsExactCodeToken(string value, string token)
+    {
+        return value
+            .Split('_', StringSplitOptions.RemoveEmptyEntries)
+            .Any(item => string.Equals(item, token, StringComparison.OrdinalIgnoreCase));
     }
 
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> ExcludeRetiredProgressVariants(
@@ -3347,7 +3475,8 @@ public sealed record BtcUpDown5mStrategyVariant(
     Guid? ConfirmationSignalStrategyId = null,
     string? RequiredReferenceAverageWindow = null,
     bool PaperOnly = false,
-    decimal? PaperFakMaximumAverageFillPrice = null)
+    decimal? PaperFakMaximumAverageFillPrice = null,
+    Guid? LowerEnterSourceStrategyId = null)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }

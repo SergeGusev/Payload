@@ -10,6 +10,7 @@ public sealed class AbsolutePremarketStrategyTests
     public void StrategyIds_ContainCompleteAbsolutePremarketGrid()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket)
             .ToArray();
 
@@ -53,6 +54,7 @@ public sealed class AbsolutePremarketStrategyTests
     public void StrategyDisplayCategories_CreateOneAbsoluteCategoryPerAsset()
     {
         var categories = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket)
             .Select(variant => StrategyDisplayCategories.GetCategory(variant.Name))
             .Distinct(StringComparer.Ordinal)

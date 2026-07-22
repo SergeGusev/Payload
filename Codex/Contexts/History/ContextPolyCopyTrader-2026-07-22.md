@@ -47,3 +47,10 @@ Request:
 
 Result:
 Split the 304 currently unserved BTC Premarket source strategies using the Dashboard `Progress` name filter. Six Progress strategies changed from `+$3,494.89 / +0.7586%` to `+$10,368.28 / +6.4693%`; 298 Regular strategies changed from `-$11,460.88 / -1.5497%` to `+$2,040.68 / +0.8769%`. The two groups reconciled exactly to the prior unserved BTC aggregate. Also clarified that including the 28 already-covered neutral Reference Average sources in Regular produces an all-BTC Regular result of `-$16,903.16 / -1.5282%` to `+$5,959.44 / +1.8266%`. No production query or mutation occurred; the Progress result remains an accounting subset rather than a sequential replay.
+
+## 2026-07-22T07:23:45.9398944Z
+Request:
+Ок, давай сделаем LowerEnter версию по всем пока неохваченным BTC Premarket стратегиям. Вся логика повторяется, но вход не дороже 0.5
+
+Result:
+Added exactly 304 deterministic BTC 5-minute Premarket `LowerEnter` Paper clones for the previously unserved source allowlist: 298 Regular and 6 Progress. Each clone preserves its source logic and independent state, accepts only an actual guaranteed-depth FAK average fill at or below `0.50`, is hard-blocked from Live/Live-shadow execution, and cannot become a Child or Child ROI parent. Added exact PostgreSQL seeds, dedicated Dashboard categories, tests, README documentation, and baseline comparison proving that the change introduced no new full-suite failures.

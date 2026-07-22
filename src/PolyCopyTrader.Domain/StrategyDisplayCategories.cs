@@ -27,6 +27,14 @@ public static class StrategyDisplayCategories
         }
 
         var name = strategyName.Trim();
+        if (ContainsStrategyWord(name, "LowerEnter"))
+        {
+            var sourceCategory = GetCategory(RemoveStrategyWord(name, "LowerEnter"));
+            return string.Equals(sourceCategory, "Other", StringComparison.OrdinalIgnoreCase)
+                ? sourceCategory
+                : AddLowerEnterCategoryMarker(sourceCategory);
+        }
+
         var upDownPrefix = UpDownAssetSymbols
             .Select(asset => asset + " Up or Down ")
             .FirstOrDefault(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
@@ -306,6 +314,32 @@ public static class StrategyDisplayCategories
         return value
             .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
             .Any(item => string.Equals(item, word, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string RemoveStrategyWord(string value, string word)
+    {
+        return string.Join(
+            ' ',
+            value
+                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(item => !string.Equals(item, word, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static string AddLowerEnterCategoryMarker(string category)
+    {
+        var words = category.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+        var premarketIndex = words.FindLastIndex(word =>
+            string.Equals(word, "Premarket", StringComparison.OrdinalIgnoreCase));
+        if (premarketIndex >= 0)
+        {
+            words.Insert(premarketIndex, "LowerEnter");
+        }
+        else
+        {
+            words.Add("LowerEnter");
+        }
+
+        return string.Join(' ', words);
     }
 
     private static bool StartsWithBpsThreshold(string value, string word)

@@ -637,6 +637,34 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresSchema_SeedsExactBtcLowerEnterPremarketCloneAllowlistPaperOnly()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var statement = Assert.Single(statements, item =>
+            item.Contains("_lower_enter_premarket", StringComparison.Ordinal));
+
+        Assert.Equal(304, StrategyIds.BtcLowerEnterPremarketVariants.Count);
+        Assert.Equal(
+            304,
+            statement.Split("b7c50005-0001-4000-", StringSplitOptions.None).Length - 1);
+        foreach (var variant in StrategyIds.BtcLowerEnterPremarketVariants)
+        {
+            Assert.Contains(
+                $"'{variant.Id:D}', '{variant.Code}', '{variant.Name}'",
+                statement,
+                StringComparison.Ordinal);
+        }
+
+        Assert.Contains("true, false, 1.00, 1.00, 100.00, false", statement, StringComparison.Ordinal);
+        Assert.Contains("actual average fill price is at most 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains("Live execution is disabled", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("enabled = excluded.enabled", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stakes = excluded.live_stakes", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_stake_amount = excluded.paper_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paused = excluded.paused", statement, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresRepository_OnChainPaperSignalCandidateQuery_LimitsPendingBeforeMetadataJoins()
     {
         var source = ReadStorageRepositorySource();

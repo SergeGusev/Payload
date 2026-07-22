@@ -1,3 +1,6 @@
+using System.Text;
+using PolyCopyTrader.Domain;
+
 namespace PolyCopyTrader.Storage;
 
 public static class PostgresSchema
@@ -7202,8 +7205,70 @@ BEGIN
 END $$;
 """;
 
+    private static string BuildLowerEnterPremarketStrategySeedSql()
+    {
+        var variants = StrategyIds.BtcLowerEnterPremarketVariants;
+        var sql = new StringBuilder(variants.Count * 640);
+        sql.AppendLine("""
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+VALUES
+""");
+
+        for (var index = 0; index < variants.Count; index++)
+        {
+            var variant = variants[index];
+            sql.Append("    (")
+                .Append(ToSqlLiteral(variant.Id.ToString("D")))
+                .Append(", ")
+                .Append(ToSqlLiteral(variant.Code))
+                .Append(", ")
+                .Append(ToSqlLiteral(variant.Name))
+                .Append(", ")
+                .Append(ToSqlLiteral(variant.Description))
+                .Append(", true, false, 1.00, 1.00, 100.00, false, NULL, false, NULL, NULL, NULL, 1.00, 1.00, 0, 0, now(), now())")
+                .AppendLine(index == variants.Count - 1 ? string.Empty : ",");
+        }
+
+        sql.AppendLine("""
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+""");
+        return sql.ToString();
+    }
+
+    private static string ToSqlLiteral(string value)
+    {
+        return "'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+    }
+
     public static string SchemaSql { get; } = string.Concat(
         BaseSchemaSql,
+        Environment.NewLine,
+        BuildLowerEnterPremarketStrategySeedSql(),
         Environment.NewLine,
         DashboardProjectionSchema.SchemaSql,
         Environment.NewLine,

@@ -58,6 +58,7 @@ public sealed class StrategyDisplayCategoryTests
     public void ReferenceAverageFakPremarketStrategiesHaveDedicatedDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket)
             .ToArray();
 
@@ -103,9 +104,35 @@ public sealed class StrategyDisplayCategoryTests
     }
 
     [Fact]
+    public void BtcLowerEnterPremarketClonesHaveDedicatedDisplayCategories()
+    {
+        var categoryCounts = StrategyIds.BtcLowerEnterPremarketVariants
+            .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(304, StrategyIds.BtcLowerEnterPremarketVariants.Count);
+        Assert.Equal(28, categoryCounts["BTC Up or Down 5m Up Bps Reference Average LowerEnter Premarket"]);
+        Assert.Equal(28, categoryCounts["BTC Up or Down 5m Down Bps Reference Average LowerEnter Premarket"]);
+        Assert.Equal(10, categoryCounts["BTC Up or Down 5m Down Bps Optimized Average LowerEnter Premarket"]);
+        Assert.Equal(120, categoryCounts["BTC Up or Down 5m Absolute LowerEnter Premarket"]);
+        Assert.Equal(8, categoryCounts["BTC Up or Down 5m Bps Futures Basis LowerEnter Premarket"]);
+        Assert.Equal(8, categoryCounts["BTC Up or Down 5m Bps Futures Basis Revert LowerEnter Premarket"]);
+        Assert.Equal(10, categoryCounts["BTC Up or Down 5m Diff Up LowerEnter Premarket"]);
+        Assert.Equal(30, categoryCounts["BTC Up or Down 5m Diff Down LowerEnter Premarket"]);
+        Assert.Equal(1, categoryCounts["BTC Up or Down 5m Diff Shift Progress LowerEnter Premarket"]);
+        Assert.Equal(5, categoryCounts["BTC Up or Down 5m Diff Real Limit Progress LowerEnter"]);
+        Assert.Equal(14, categoryCounts["BTC Up or Down 5m Diff Reference Average LowerEnter Premarket"]);
+        Assert.Equal(28, categoryCounts["BTC Up or Down 5m Bps Confirmed Average LowerEnter Premarket"]);
+        Assert.Equal(14, categoryCounts["BTC Up or Down 5m Diff Confirmed Average LowerEnter Premarket"]);
+        Assert.Equal(13, categoryCounts.Count);
+        Assert.All(categoryCounts.Keys, category => Assert.Contains("LowerEnter", category, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void FuturesBasisPremarketStrategiesHaveDedicatedDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior is BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
                 BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarketRevert)
             .ToArray();
@@ -155,6 +182,7 @@ public sealed class StrategyDisplayCategoryTests
     public void DiffCounterTrendFakPremarketStrategiesHaveDedicatedDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffCounterTrendFakPremarket)
             .ToArray();
 
@@ -207,6 +235,7 @@ public sealed class StrategyDisplayCategoryTests
     public void DiffShiftProgressStrategiesUseAssetDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffShiftProgress)
             .ToArray();
 
@@ -247,6 +276,7 @@ public sealed class StrategyDisplayCategoryTests
     public void DiffRealLimitProgressPremarketStrategiesUseAssetDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffRealLimitProgressPremarket)
             .ToArray();
 
@@ -266,6 +296,7 @@ public sealed class StrategyDisplayCategoryTests
     public void DiffReferenceAveragePremarketStrategiesUseAssetDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffReferenceAveragePremarket)
             .ToArray();
 
@@ -285,6 +316,7 @@ public sealed class StrategyDisplayCategoryTests
     public void BpsConfirmedAveragePremarketStrategiesUseAssetDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket)
             .ToArray();
 
@@ -304,6 +336,7 @@ public sealed class StrategyDisplayCategoryTests
     public void DiffConfirmedAveragePremarketStrategiesUseAssetDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is null)
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.DiffConfirmedAveragePremarket)
             .ToArray();
 
