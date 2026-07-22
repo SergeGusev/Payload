@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 Strategy Win Rate Definition And Freshness
+Goal: Explain the previously reported ETH win rate and determine whether it can remain current without full-history rescans.
+Status: Completed
+Done:
+- Revalidated the preserved ETH 3 bps audit at cutoff `2026-07-21T21:28:03.777741Z`: 4,170 settled runs consisted of 2,230 positive-PnL wins, 1,940 negative-PnL losses, and zero flat runs; `2,230 / 4,170 * 100 = 53.4772182254%`, reported as `53.4772%`.
+- Verified the product definition: a Paper run is a win only when `status=Settled` and `realized_pnl_usd > 0`; a loss uses `< 0`; a zero-PnL settled run is neither a win nor a loss but remains in the denominator. The lifetime formula is `won settled runs / all settled runs * 100`; it is not stake-weighted.
+- Verified that current code already maintains the metric incrementally. PostgreSQL triggers enqueue every strategy-run insert/update/delete, and `DashboardStrategyPerformanceSnapshotWorker` applies event batches to persisted counts and `win_rate_pct` with a one-second idle cadence rather than rescanning all history.
+- Cross-checked production at `2026-07-22T06:07:11.751016Z`: a direct exact-strategy aggregate returned 2,276 wins, 1,990 losses, zero flat, 4,266 settled, and `53.3520862635%`; `dashboard_strategy_performance_snapshots` independently contained the same counts and `53.35208626%`. Projection status was `Running`, `last_error=NULL`, with zero pending events and zero reconciliation rows.
+- Confirmed the display latency boundary: the backend projection normally consumes new events within about a second when there is no backlog, while Dashboard strategy rows are polled/cached on the configured 60-second interval. Therefore the stored metric is continuously maintained, but the visible screen may trail it by roughly one refresh interval.
+Next: None; lower Dashboard `RefreshIntervalSeconds` and `StrategyRefreshIntervalSeconds` only if a sub-minute visible refresh is required.
+Notes: Production PostgreSQL was queried once in a forced `REPEATABLE READ, READ ONLY` transaction with exact strategy UUID and bounded timeouts. A separate PowerShell aggregation of the preserved raw audit CSV reproduced the prior 2,230/4,170 result. No service, database row, configuration, strategy, order, or product code changed.
+Blockers: None.
+
 ## Active Update 2026-07-22 LowEnter Production Deployment Check
 Goal: Verify the server deployment and first production behavior of the 84 LowEnter Average Premarket Paper strategies.
 Status: Completed
