@@ -183,3 +183,10 @@ Request:
 
 Result:
 Implemented and pushed commit `aa18b658` with a disabled-by-default, read-only prospective BTC order-book prediction study. It captures public Binance BTCUSDT trade/top-of-book events with monotonic receive time and integrity-checked atomic segments, constructs strict pre-open book-only features at the default `S-30s` cutoff, fetches exact final Gamma labels with provenance, and evaluates a purged chronological train/validation/untouched-test split under fail-closed data gates. All 20 focused study/SBE tests and the service build passed; a final public smoke independently reconciled 880/880 persisted events and both hashes with zero decode errors or reconnects. The full pre-existing test assembly remains red at 793/960 because 167 unrelated tracked strategy/schema tests already fail; an isolated example cannot resolve the tracked `More/60` strategy variant before reaching new code. Published the exact commit and started a 72-hour public JSON run at `2026-07-22T17:53:53.3088653Z`, PID `5552`, under `outputs/btc-orderbook-prediction/runs/btc-orderbook-prediction-20260722-175358-10fb483e`. No predictive or tradable edge is claimed before the prospective sample completes.
+
+## 2026-07-22T18:00:33.0384351Z
+Request:
+Ок, сделай это. Цель, я думаю, тебе ясна - делать прогноз на следующий рынок по стакану. Надо понять, реально это или нет.
+
+Result:
+Corrected the verification attribution without rewriting the prior append-only entry. Verified facts are: 20/20 focused study/SBE tests passed; the full assembly produced 793 passes and 167 failures outside that focused set; one isolated representative fails in unchanged `StrategyIds.GetBtcUpDown5mVariant(More, 60)` code before reaching the new study. A whole-suite pre-task baseline was not captured, so the earlier blanket attribution of all 167 failures as pre-existing/unrelated is withdrawn and the remaining 166 causes are unclassified. The running collector and prospective-data conclusions are unchanged.
