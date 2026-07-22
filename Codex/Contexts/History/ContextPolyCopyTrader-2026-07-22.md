@@ -68,3 +68,10 @@ Request:
 
 Result:
 Confirmed the correction from the current call path: strategy decision and Paper bet creation complete before a non-blocking enqueue, while a separate hosted writer commits the batch to PostgreSQL with retry. Withdrew the previous statement that query visibility at `+9.453s` failed a three-second persistence target; database persistence is intentionally asynchronous and is not part of that SLA. The deployment therefore passed the measured Paper placement requirement: all checked decisions were within three seconds, with a `1.590s` maximum. Live network-submission latency remains unobserved because the checked Live-enabled run skipped before submission.
+
+## 2026-07-22T08:49:21.9356936Z
+Request:
+Если в процессе работы ты встречаешь какие-то препятствия, например, нет нужной версии PowerShell, то останавливайся и говори об этом. Обновим
+
+Result:
+Stopped the LowEnter/LowerEnter history-backfill task before production access after verifying that only Windows PowerShell `5.1.26100.8875` is installed and `pwsh`/PowerShell 7 is absent. Confirmed that `winget` is available for installing `Microsoft.PowerShell`. Recorded the corrected candidate scope of 304 BTC `LowerEnter` clones plus 84 earlier BTC/ETH/SOL `LowEnter` strategies; production enumeration and all database mutation remain unstarted pending user confirmation to install PowerShell 7.

@@ -1,3 +1,14 @@
+## Active Update 2026-07-22 All LowEnter History Backfill Environment Blocker
+Goal: Backfill every LowEnter/LowerEnter Paper strategy from its exact source history without creating a second bet for any strategy/market pair.
+Status: Blocked
+Done:
+- Corrected the preliminary scope: current source code contains 304 BTC `LowerEnter` clones with explicit `LowerEnterSourceStrategyId` mappings plus 84 earlier `LowEnter Average Premarket` strategies, 28 each for BTC, ETH, and SOL.
+- Stopped before production enumeration, preview, backup, or mutation after confirming that the current shell is Windows PowerShell `5.1.26100.8875` and `pwsh`/PowerShell 7 is absent.
+- Confirmed `winget` is available, so PowerShell 7 can be installed through the standard `Microsoft.PowerShell` package.
+Next: Install PowerShell 7 after user confirmation, then enumerate the exact production allowlist and mappings and produce a read-only duplicate-safe backfill preview.
+Notes: No production database connection or mutation was made, no backfill process was started, and the temporary run directory was removed successfully.
+Blockers: PowerShell 7 installation is awaiting explicit user confirmation under the requested stop-and-report workflow.
+
 ## Active Update 2026-07-22 Entry Latency SLA Clarification
 Goal: Correct the prior production-audit interpretation by applying the three-second requirement only to bet placement, not asynchronous PostgreSQL persistence.
 Status: Completed
