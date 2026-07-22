@@ -1,14 +1,15 @@
-## Active Update 2026-07-22 All LowEnter History Backfill Environment Blocker
+## Active Update 2026-07-22 All LowEnter History Backfill Production Connectivity Blocker
 Goal: Backfill every LowEnter/LowerEnter Paper strategy from its exact source history without creating a second bet for any strategy/market pair.
 Status: Blocked
 Done:
 - Corrected the preliminary scope: current source code contains 304 BTC `LowerEnter` clones with explicit `LowerEnterSourceStrategyId` mappings plus 84 earlier `LowEnter Average Premarket` strategies, 28 each for BTC, ETH, and SOL.
-- Stopped before production enumeration, preview, backup, or mutation after confirming that the current shell is Windows PowerShell `5.1.26100.8875` and `pwsh`/PowerShell 7 is absent.
-- Attempted the confirmed `winget install --id Microsoft.PowerShell` installation with agreements accepted, silent mode, and a five-minute bound. `winget` maintained active source-network connections but produced no output, never launched `msiexec`, and timed out with exit code `124`; PowerShell 7 remains absent.
-- Terminated only the surviving expected `winget.exe` PID `29332` after verifying its exact command line, confirmed that no installer or `pwsh` process remained, and removed the marked temporary run successfully.
-Next: After user confirmation, download the official x64 PowerShell MSI directly from Microsoft/PowerShell GitHub Releases, verify its Microsoft Authenticode signature, install it, and verify `pwsh --version` before resuming the database preview.
-Notes: No production database connection or mutation was made and no backfill process was started. The failed installation changed neither the project service nor PostgreSQL.
-Blockers: The standard `winget` installation path stalled before the installer stage; direct signed-MSI installation awaits user confirmation under the requested stop-and-report workflow.
+- Verified the user's successful installation directly: `pwsh.exe` is now available and reports PowerShell `7.6.3`.
+- Built and ran a temporary .NET 10 registry helper with zero warnings/errors. It established 388 unique exact mappings: 304 `LowerEnter`, 84 `LowEnter Average`, split as 332 BTC, 28 ETH, and 28 SOL; every child has one source and no child maps to itself.
+- Stopped before production enumeration because Npgsql could not connect to `192.168.0.101:5432` within five seconds. An independent `Test-NetConnection` probe also failed to finish within its 40-second bound, confirming that the obstacle occurs before PostgreSQL authentication.
+- Verified that no diagnostic process remained and removed the marked temporary run successfully.
+Next: Restore TCP access to `192.168.0.101:5432`, then rerun the exact read-only mapping reconciliation and duplicate-safe preview before designing or executing any mutation.
+Notes: No production transaction began, no SQL query reached the server, no database row changed, and no backfill process was started.
+Blockers: Production PostgreSQL at `192.168.0.101:5432` is currently unreachable from this workstation.
 
 ## Active Update 2026-07-22 Entry Latency SLA Clarification
 Goal: Correct the prior production-audit interpretation by applying the three-second requirement only to bet placement, not asynchronous PostgreSQL persistence.

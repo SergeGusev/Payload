@@ -82,3 +82,21 @@ Request:
 
 Result:
 Attempted the confirmed PowerShell 7 installation through `winget` with a five-minute bound. The process retained active source-network connections but emitted no output, never launched `msiexec`, and timed out with code `124`; `pwsh` remains absent. The exact surviving `winget` process was terminated and its marked temporary directory was removed. No production database connection, mutation, or backfill occurred. Work stopped pending confirmation to use the official signed x64 MSI directly from Microsoft/PowerShell GitHub Releases.
+
+## 2026-07-22T09:59:42.7360481Z
+Request:
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\WINDOWS\system32> winget install --id Microsoft.PowerShell --source winget
+Found PowerShell [Microsoft.PowerShell] Version 7.6.3.0
+This application is licensed to you by its owner.
+Microsoft is not responsible for, nor does it grant any licenses to, third-party packages.
+Successfully verified installer hash
+Starting package install...
+  ██████████████████████████████  100%
+Successfully installed
+PS C:\WINDOWS\system32>
+
+Result:
+Verified the installation directly: `pwsh` reports PowerShell `7.6.3`. A temporary .NET 10 helper then built the exact 388-pair LowEnter/LowerEnter registry allowlist: 304 `LowerEnter`, 84 `LowEnter Average`, split into 332 BTC, 28 ETH, and 28 SOL mappings. Production work stopped before any SQL because Npgsql timed out connecting to `192.168.0.101:5432`, and an independent TCP probe also exceeded 40 seconds. No production transaction, query, mutation, or backfill occurred; temporary processes and artifacts were cleaned up.
