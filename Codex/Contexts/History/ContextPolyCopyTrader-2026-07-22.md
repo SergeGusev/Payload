@@ -61,3 +61,10 @@ Request:
 
 Result:
 Verified deployed commit `1fd89d96` and all exact 304 enabled, Paper-only LowerEnter rows. Six complete post-restart Premarket batches contained 304/304 terminal LowerEnter decisions each; all enabled Up/Down 5m batches contained 1,500-1,519 decisions, none exceeded 3 seconds, and the worst decision delay was 1.590 seconds. The only Live-enabled Up/Down 5m run also completed its condition check in 0.698 seconds, then correctly skipped without a Live submission. A prospective database monitor independently found that all 304 LowerEnter rows became visible only by `+9.453s`, despite application event timestamps ending at `+1.531s`; this was still about 20.5 seconds before market open but fails a 3-second persistence target. The copied-trader performance queue separately contained 503 stale synthetic `strategy:*` wallets and a long-running projection query, which is a verified optimization target but not a proven cause of that commit visibility lag. No production data or configuration was changed.
+
+## 2026-07-22T08:38:59.6144371Z
+Request:
+Давай уточним - требование в 3 секунды относится именно к постановке ставки, а не к записи в базу. У нас же сделаны эти процессы асинхронными специально.
+
+Result:
+Confirmed the correction from the current call path: strategy decision and Paper bet creation complete before a non-blocking enqueue, while a separate hosted writer commits the batch to PostgreSQL with retry. Withdrew the previous statement that query visibility at `+9.453s` failed a three-second persistence target; database persistence is intentionally asynchronous and is not part of that SLA. The deployment therefore passed the measured Paper placement requirement: all checked decisions were within three seconds, with a `1.590s` maximum. Live network-submission latency remains unobserved because the checked Live-enabled run skipped before submission.
