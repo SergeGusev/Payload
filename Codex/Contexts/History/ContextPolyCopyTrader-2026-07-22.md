@@ -197,3 +197,9 @@ Request:
 
 Result:
 Generated one normalized BTC/ETH/SOL price chart from production PostgreSQL in a `REPEATABLE READ, READ ONLY` transaction. The 1,577,945 entered strategy Paper runs span June 5 through July 22, while the exact common persisted price interval for all three currencies is June 23 08:18 through July 22 19:09 UTC; no earlier prices were synthesized. Used the last persisted Binance tick per UTC minute, indexed every asset to 100 at the common start, independently reconciled raw tick aggregates, and visually verified a 1,800x1,000 PNG with solid lines only. Over the plotted interval BTC changed `+5.350222%`, ETH `+16.514172%`, and SOL `+12.931411%`. No production or product state changed.
+## 2026-07-22T20:45:30.0000000Z
+Request:
+Сделай pnl график по стратегии ETH Up or Down 5m 2 bps LowEnter Average Premarket
+
+Result:
+Generated and visually inspected `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-lowenter-average-pnl-vs-eth-20260722-234240/eth-2-lowenter-average-pnl-vs-eth.png` from a read-only production PostgreSQL snapshot through `2026-07-22T20:43:43.973467Z`. The exact strategy had 1,157 settled Paper rows, PnL `+$550.40399927`, ROI `+7.91633813%`; independent Paper and ETHUSDT minute-series aggregate checks passed.

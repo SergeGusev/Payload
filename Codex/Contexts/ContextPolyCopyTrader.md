@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 ETH 2 bps LowEnter Average PnL Chart
+Goal: Generate a PnL graph for `ETH Up or Down 5m 2 bps LowEnter Average Premarket`.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-22T20:43:43.973467Z` in one `REPEATABLE READ, READ ONLY` transaction and resolved exactly one strategy: `b7c50005-0000-4000-8214-000000000102` / `eth_up_down_5m_low_enter_average_bps_2_fak_premarket`.
+- Exported and independently reconciled 1,157 exact-strategy `Settled` Paper rows from `2026-07-04T14:59Z` through `2026-07-22T20:43Z`: stake `$6,952.76010079`, PnL `+$550.40399927`, ROI `+7.91633813%`, and maximum drawdown `$117.65113473`.
+- Exported the last persisted `BinanceCryptoTradeWebSocket` ETHUSDT tick per UTC minute over the same chart period and independently reconciled the repeated server minute series: 26,060 of 26,265 expected minutes (`99.219494%` coverage), from `$1,772.23` to `$1,927.76` (`+8.77594895%`).
+- Rendered and visually inspected a 1,800x920 dual-axis PNG with a shared UTC time axis, cumulative settlement-time Paper PnL steps on the left, ETHUSDT on the right, and only solid lines.
+- Delivered `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-lowenter-average-pnl-vs-eth-20260722-234240/eth-2-lowenter-average-pnl-vs-eth.png`, SHA-256 `F0A1CC5759621C6ED7DA96B9104875FA553F7F05DD9F7EE168478C04FED1CC48`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The first render invocation failed before writing because this PowerShell shell did not populate `$PSScriptRoot` in parameter defaults; rerunning with explicit absolute paths completed successfully. The output folder is ignored by git status, so only context/history files were committed.
+Blockers: None.
+
 ## Active Update 2026-07-22 BTC / ETH / SOL Normalized Price Chart For Paper Period
 Goal: Plot BTC, ETH, and SOL prices together over the available Paper-betting period with proportional scaling.
 Status: Completed
