@@ -1,3 +1,17 @@
+## Active Update 2026-07-22 LowEnter Production Deployment Check
+Goal: Verify the server deployment and first production behavior of the 84 LowEnter Average Premarket Paper strategies.
+Status: Completed
+Done:
+- Verified production PostgreSQL `192.168.0.101:5432/polycopytrader` over forced read-only sessions. The service reported `Running` / overall mode `Live`, `last_error=NULL`, and exact deployed build `25aeb5871149e573fbab6d4430bcc61c6c3b26a1`; fresh heartbeat samples advanced through `2026-07-22T05:25:14.972281Z`.
+- Verified exactly 84 expected strategy rows and no unexpected LowEnter marker rows: 28 each for BTC, ETH, and SOL; all 84 were enabled, `live_stakes=false`, unpaused, not auto-live-paused, and had the exact UUID/code/name allowlist.
+- Verified fresh runtime coverage for all 84 strategies. At the final cutoff `2026-07-22T05:25:16.624248Z`, the service had created 672 runs across eight market starts and completed three post-start due cycles covering all 84 strategies each.
+- Verified the first two post-start due cycles completed in `0.908..0.943s`; the third completed in `1.073..1.109s`; no checked LowEnter due decision exceeded 3 seconds.
+- Verified the cap mechanism from persisted production diagnostics: the first two cycles produced 84 `execution_price_above_strategy_cap` skips with evaluated VWAP `0.51..0.5508336470626749`, and every row had cap `0.50`, exceeded=true, LowEnter=true, Paper-only=true, and the exact skip reason. The third cycle added 59 cap skips and 25 threshold skips.
+- Verified zero LowEnter Paper orders/fills and zero LowEnter Live orders at the cutoff. No successful `<=0.50` production entry had occurred yet, so the deployed acceptance branch was not runtime-observed; the absence of orders was fully accounted for by the bps-threshold and price-cap skips.
+Next: Observe a future due cycle whose executable FAK VWAP is `<=0.50` to verify the first successful production Paper entry and its persisted fill VWAP.
+Notes: TCP `192.168.0.101:5432` connected successfully. The existing deployment/latency check also saw 1,854 general strategy events after restart and matched the expected commit. All database sessions forced `default_transaction_read_only=on`, bounded statement/lock/connect timeouts, and made no service, strategy, order, configuration, or database mutation. `Test-NetConnection` timed out locally, one PowerShell 5.1-incompatible expression and one over-escaped SQL probe failed before useful execution, and two broad runs-table probes hit the intentionally bounded 10-second statement timeout; the final exact-UUID `LATERAL` probes completed in about 0.5 seconds.
+Blockers: None.
+
 ## Active Update 2026-07-22 LowEnter Average Premarket Strategies
 Goal: Add neutral `Currency Up or Down 5m N bps LowEnter Average Premarket` Paper clones for BTC, ETH, and SOL.
 Status: Completed
