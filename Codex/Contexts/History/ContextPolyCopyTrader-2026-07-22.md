@@ -121,3 +121,10 @@ Request:
 
 Result:
 Generated a fresh 1,800x920 dual-axis PNG from production through `2026-07-22T13:23:28.706609Z` in a `REPEATABLE READ, READ ONLY` transaction. The exact strategy resolved to `b7c50005-0000-4000-8179-000000000103`; 4,348 settled Paper rows independently reconciled to PnL `+$734.64737917`, ROI `+2.81167755%`, and maximum drawdown `$252.71687047`. The independently reconciled ETHUSDT minute-last series contains 25,642 samples with `99.206871%` minute coverage and changed from `$1,768.97` to `$1,920.20`. The final image uses only solid lines and passed visual inspection; production was not modified.
+
+## 2026-07-22T13:56:21.1855803Z
+Request:
+Объясни подробно, как формируется курс BTC на Binance ? Я так понимаю, что приходят заявки на покупку и продажу и они формируют курс?
+
+Result:
+Explained the Binance BTCUSDT Spot price-formation mechanism using current official Binance documentation and a numerical order-book example. Distinguished resting bids/asks from completed trades, last price from best bid/ask and midpoint, market/limit orders, spread, liquidity, slippage, candles, cross-exchange arbitrage, and Futures Index/Mark Price. Verified separately that the current local PolyCopyTrader implementation consumes the Binance Spot `btcusdt@trade` field `p`, i.e. the latest executed trade price rather than book quotes or a Futures mark price. No product or production state changed.

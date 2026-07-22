@@ -1,3 +1,14 @@
+## Active Update 2026-07-22 Binance BTC Price Formation Explanation
+Goal: Explain how the BTC price is formed on Binance and distinguish the order book, executed trades, displayed prices, and Futures reference prices.
+Status: Completed
+Done:
+- Verified the current Binance Spot documentation for the order book, raw trade stream, best bid/ask stream, market-order matching, spread, slippage, and cross-exchange arbitrage.
+- Explained with a reproducible numerical BTCUSDT order-book example that resting orders form available liquidity, while completed trades update the last-traded price; also separated last price, best bid/ask, midpoint, average fill price, Index Price, and Mark Price.
+- Verified the current local PolyCopyTrader path: its operational Binance BTC reference connects to the Spot `btcusdt@trade` stream and parses field `p`, so it uses the latest executed BTCUSDT Spot trade rather than `bookTicker`, midpoint, or a Futures mark price.
+Next: None.
+Notes: Read-only research and source inspection only. No product code, configuration, runtime, production system, order, strategy, or database row changed; implementation tests were not required because behavior was not modified.
+Blockers: None.
+
 ## Active Update 2026-07-22 ETH Neutral 3 Reference Average PnL And ETH Chart Refresh
 Goal: Generate a fresh cumulative Paper PnL chart for `ETH Up or Down 5m 3 bps Reference Average Premarket` with the persisted ETHUSDT reference price overlaid.
 Status: Completed
