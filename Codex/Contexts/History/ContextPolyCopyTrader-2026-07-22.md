@@ -128,3 +128,10 @@ Request:
 
 Result:
 Explained the Binance BTCUSDT Spot price-formation mechanism using current official Binance documentation and a numerical order-book example. Distinguished resting bids/asks from completed trades, last price from best bid/ask and midpoint, market/limit orders, spread, liquidity, slippage, candles, cross-exchange arbitrage, and Futures Index/Mark Price. Verified separately that the current local PolyCopyTrader implementation consumes the Binance Spot `btcusdt@trade` field `p`, i.e. the latest executed trade price rather than book quotes or a Futures mark price. No product or production state changed.
+
+## 2026-07-22T14:27:43.7247364Z
+Request:
+Когда ты формировал историю по LowerEntry стратегиям, ты брал ставки из родителя. Там они все по 6 получились. А когда будут новые ставки по этим стратегиям, будут получаться по 3 ?
+
+Result:
+Verified that new autonomous LowEnter/LowerEnter entries are not `$3`. All exact 388 production strategies currently have `paper_stake_amount=1`, but FAK sizing uses worst price `0.99`, minimum order size `5`, and safety multiplier `1.10`: the base raw target is `$5.445` and share-adjusted notional is about `$6.0093`. Production already contained 513 autonomous entries after the final backfill audit: 491 used the base multiplier and about `$6.0093`, while 22 inherited progression multipliers and used `$11.0088..$44.0055`; no `$3` entry existed. The backfill copied source financial fields, but that copying does not determine future stake size. Production was queried read-only and was not changed.

@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 LowerEnter Future Stake Audit
+Goal: Determine whether new autonomous LowEnter/LowerEnter Paper entries use about `$3` after the parent-history backfill produced predominantly `$6` entries.
+Status: Completed
+Done:
+- Verified the exact current sizing path: every new FAK entry starts from the strategy's own `paper_stake_amount`; it does not copy the parent's current stake. The FAK minimum sizing uses guaranteed worst price `0.99`, minimum order size, safety multiplier `1.10`, the strategy/progression multiplier, upward whole-dollar notional rounding, and upward share rounding.
+- Reconciled the exact local 388-strategy allowlist against production `192.168.0.101/polycopytrader`: 304 `LowerEnter` and 84 `LowEnter Average` rows matched exact GUID/code/name. Every row currently has `paper_stake_amount=1`, `paper_lost_coeff=1`, `paper_lost_counter=0`, Paper enabled, Live disabled, and no pause.
+- Read production through cutoff `2026-07-22T14:25:12.533071Z` in one `REPEATABLE READ, READ ONLY` transaction. The deployed service `1fd89d96ff1c2eead2037614bd6d98d7fd68ba03` was `Running` with a fresh heartbeat and `last_error=NULL`.
+- Found 513 autonomous entries after the final backfill audit cutoff. Runtime order diagnostics independently confirm the base calculation `5 * 0.99 * 1.10 * 1 = 5.445`, rounded and share-adjusted to `$6.0093`: 491 entries used the base multiplier and about `$6.0093`; the remaining 22 used inherited progression multipliers `2..8` and stakes from `$11.0088` through `$44.0055`. There were no `$3` entries.
+- Verified a latest concrete row at `2026-07-22T14:19:30.745520Z`: `BTC Up or Down 5m 1 Diff Reference Average LowerEnter Premarket`, entry price `0.50`, stake/order notional `$6.0093`, multiplier `1`, minimum order size `5`, safety multiplier `1.10`, and raw target `$5.445`.
+Next: None.
+Notes: The backfill SQL copied each source run's historical financial fields exactly. The predominance of `$6.0093` in copied history is consistent with, but does not cause, the same size in new autonomous entries. A `$3` base would require a separate sizing change that uses the LowEnter cap/accepted VWAP rather than the guaranteed FAK worst price. The first two local helper attempts stopped before database access because of a nullable output type and an incomplete local catalog selection; the corrected helper built without warnings and completed read-only. No production row or product source changed.
+Blockers: None.
+
 ## Active Update 2026-07-22 Binance BTC Price Formation Explanation
 Goal: Explain how the BTC price is formed on Binance and distinguish the order book, executed trades, displayed prices, and Futures reference prices.
 Status: Completed
