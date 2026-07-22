@@ -1,3 +1,16 @@
+## Active Update 2026-07-22 Unserved BTC Progress Versus Regular LowEnter Split
+Goal: Split the 304 currently unserved BTC Premarket strategies into Dashboard-equivalent Progress and Regular groups under the saved `entry_price <= 0.50` counterfactual.
+Status: Completed
+Done:
+- Applied the Dashboard rule directly: a strategy is Progress when its name contains `Progress` case-insensitively; Regular contains every remaining unserved BTC Premarket source strategy.
+- Identified 6 Progress strategies, all with history: 23,961 original bets, stake `$460,679.10`, PnL `+$3,494.89`, ROI `+0.7586%`; the LowEnter subset retained 8,510 bets, stake `$160,269.92`, PnL `+$10,368.28`, ROI `+6.4693%`. PnL improved by `$6,873.39` and ROI by `5.7106 pp`.
+- Identified 298 Regular strategies, 291 with history: 123,072 original bets, stake `$739,576.36`, PnL `-$11,460.88`, ROI `-1.5497%`; the LowEnter subset retained 38,724 bets, stake `$232,704.11`, PnL `+$2,040.68`, ROI `+0.8769%`. PnL improved by `$13,501.56` and ROI by `2.4266 pp`.
+- Reconciled Progress plus Regular exactly to the prior 304-strategy unserved BTC total: 147,033 original bets and `-$7,965.99`, versus 47,234 retained bets and `+$12,408.96`.
+- Calculated the alternate all-332-BTC view for clarity: because the 28 already-covered neutral Reference Average sources are Regular, all-BTC Regular changes from `-$16,903.16 / -1.5282%` to `+$5,959.44 / +1.8266%`; Progress is unchanged.
+Next: Before creating Progress LowEnter clones, perform a sequential replay that recomputes pending state and stake multipliers after every skipped entry; category-level selection for Regular can be evaluated separately.
+Notes: Used only the preserved fixed-cutoff report. Strategy-level and independently grouped Dashboard-category aggregates matched exactly; production was not queried or changed.
+Blockers: The reported Progress PnL is not a true strategy replay because the actual subsequent Progress state and stakes are retained after hypothetical skips.
+
 ## Active Update 2026-07-22 Clarify Covered Versus Uncovered BTC Premarket Scope
 Goal: Clarify whether the reported BTC LowEnter counterfactual included only BTC strategies not already represented by current LowEnter clones.
 Status: Completed

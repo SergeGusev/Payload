@@ -40,3 +40,10 @@ BTC-$13 408.27 / -0.8558%**+$16 327.72 / +3.3560%**
 
 Result:
 Clarified that the BTC headline included all 332 current non-LowEnter BTC Premarket source strategies, including the 28 neutral Reference Average sources that already have matching LowEnter clones. Exact subtraction showed that the remaining 304 unserved BTC strategies alone changed from `-$7,965.99 / -0.6637%` to `+$12,408.96 / +3.1577%`, a PnL improvement of `$20,374.95` and `68.5195%` of the total BTC improvement. The 28 already-covered sources changed from `-$5,442.28 / -1.4849%` to `+$3,918.76 / +4.1891%`. Covered plus unserved aggregates and exact threshold grids were independently reconciled; production was not accessed or changed.
+
+## 2026-07-22T07:00:40.4540933Z
+Request:
+Дай отдельно по Progress и нормальным по BTC
+
+Result:
+Split the 304 currently unserved BTC Premarket source strategies using the Dashboard `Progress` name filter. Six Progress strategies changed from `+$3,494.89 / +0.7586%` to `+$10,368.28 / +6.4693%`; 298 Regular strategies changed from `-$11,460.88 / -1.5497%` to `+$2,040.68 / +0.8769%`. The two groups reconciled exactly to the prior unserved BTC aggregate. Also clarified that including the 28 already-covered neutral Reference Average sources in Regular produces an all-BTC Regular result of `-$16,903.16 / -1.5282%` to `+$5,959.44 / +1.8266%`. No production query or mutation occurred; the Progress result remains an accounting subset rather than a sequential replay.
