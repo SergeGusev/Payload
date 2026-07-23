@@ -23,3 +23,10 @@ Request:
 
 Result:
 Accepted the decision to leave every BTC LowerEnter/LowEnter entry cap unchanged at `0.50`. The proposed `0.56` Paper A/B clone will not be created, and no strategy, configuration, service, order, or database row was changed.
+
+## 2026-07-23T12:36:50.4032818Z
+Request:
+Проследи текущий статус ставок - всё ли успеваем ставить вовремя?
+
+Result:
+Completed a read-only current production timing audit through `2026-07-23T12:32:59Z`. Repeated run/order snapshots found `6,205/6,205` linked Paper entries over 120 minutes, p95 recorded delay `1.811s`, max `4.567s`, zero delays over five seconds, zero overdue Observed runs, and zero timing/window skips over six hours. Independent batch-stage evidence showed all 24 premarket waves completed before open with at least `25.306s` remaining. The single active Live strategy had `8/8` matched orders in 24 hours but no qualifying signal in the latest two hours, so fresh exchange-submission latency could not be retested. Separately identified 48 recent input-data skips and a `420 pending + 25 inflight` copied-performance projection backlog; neither showed an observed entry-timing impact, and no production state was changed.
