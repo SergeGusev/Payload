@@ -1,3 +1,17 @@
+## Active Update 2026-07-24 Child / Child ROI Excel Report Refresh 21:01 UTC
+Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-23T21:01:33.389850Z` in the report's read-only snapshot. The exact non-Progress scope contained 144 Child/Child ROI strategies and 202,795 settled Paper rows over 16 UTC dates (`2026-07-08..2026-07-23`).
+- Reconciled raw-row aggregates against independent server SQL for all 144 candidates, matched the six unique maximum-PnL selections against an independent server ranking, and matched every selected strategy/date PnL against a separate server daily aggregation.
+- Ordered the six strategy columns by all-history PnL ascending: BTC 4 Child `-$15.21744049`, BTC 16 Child ROI `$52.87377392`, SOL 21 Child ROI `$152.52667124`, SOL 8 Child `$307.11576889`, ETH 10 Child ROI `$398.91880589`, and ETH 17 Child `$412.71509454`.
+- Generated one `Daily PnL` worksheet with typed UTC dates, formula-driven daily/category/grand totals, red text on a white background with an explicit minus for negative values, and frozen first row plus first column at `B2`.
+- Excel COM and artifact-tool verification passed: one 18x8 used range, 119 numeric cells, 45 negative cells, zero formula errors, and grand Total `$1,308.93267399`. The final render was visually inspected with no clipped headers, values, or totals.
+- Delivered `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260724-000123/reports/child-child-roi-best-daily-paper-pnl-2026-07-24-000123.xlsx`, SHA-256 `EAC9BE060D4BBD758923BFFE3BFCF23EBA4E540D1D73AC7D60F0DD3CA1C59EBB`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. Protected temp cleanup initially found a locked analyzer DLL held by exact Roslyn `VBCSCompiler.exe` PID `48992`; its parent PID `20844` no longer existed, so only that verified orphan compiler was stopped and the marked run was removed successfully (3 files / 82,272 bytes).
+Blockers: None.
+
 ## Active Update 2026-07-23 Child / Child ROI Excel Report Refresh 19:50 UTC
 Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed
