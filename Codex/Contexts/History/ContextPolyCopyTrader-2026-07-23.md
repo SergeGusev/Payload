@@ -51,3 +51,9 @@ Request:
 
 Result:
 Generated and visually inspected `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-lowenter-average-pnl-vs-eth-20260723-1748/eth-2-lowenter-average-pnl-vs-eth.png` from a read-only production PostgreSQL snapshot through `2026-07-23T17:27:28.937974Z`. The exact strategy had 1,216 settled Paper rows, PnL `+$616.97816874`, ROI `+8.44330225%`; independent Paper and ETHUSDT minute-series aggregate checks passed.
+## 2026-07-23T18:20:40.0000000Z
+Request:
+Сделай Pnl график стратегии BTC Up or Down 5m Down 20 bps Reference Average LowerEnter Premarket
+
+Result:
+Generated and visually inspected `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/btc-down20-lowerenter-reference-average-pnl-vs-btc-20260723/btc-down20-lowerenter-reference-average-pnl-vs-btc.png` from a read-only production PostgreSQL snapshot through `2026-07-23T18:19:36.697829Z`. The exact strategy had 644 settled Paper rows, PnL `+$339.58791854`, ROI `+8.77490610%`; independent Paper and BTCUSDT minute-series aggregate checks passed.

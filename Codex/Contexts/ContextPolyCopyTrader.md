@@ -1,3 +1,16 @@
+## Active Update 2026-07-23 BTC Down 20 bps LowerEnter PnL Chart
+Goal: Generate a fresh PnL graph for `BTC Up or Down 5m Down 20 bps Reference Average LowerEnter Premarket`.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-23T18:19:36.697829Z` in one `REPEATABLE READ, READ ONLY` transaction and resolved exactly one strategy: `b7c50005-0001-4000-8136-000000000120` / `btc_up_down_5m_down_bps_20_fak_lower_enter_premarket`.
+- Exported and independently reconciled 644 exact-strategy `Settled` Paper rows from `2026-07-03T14:30Z` through `2026-07-23T18:19Z`: stake `$3,869.98920017`, PnL `+$339.58791854`, ROI `+8.77490610%`, and maximum drawdown `$110.56042553`.
+- Exported the last persisted `BinanceTradeWebSocket` BTCUSDT tick per UTC minute over the same chart period and independently reconciled the repeated server minute series: 28,789 of 29,030 expected minutes (`99.169824%` coverage), from `$61,887.49` to `$64,717.68` (`+4.57312132%`).
+- Rendered and visually inspected a 1,800x920 dual-axis PNG with a shared UTC time axis, cumulative settlement-time Paper PnL steps on the left, BTCUSDT on the right, and only solid lines.
+- Delivered `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/btc-down20-lowerenter-reference-average-pnl-vs-btc-20260723/btc-down20-lowerenter-reference-average-pnl-vs-btc.png`, SHA-256 `4D6417F256B9EC47FFFF37C8F67AC02C9BE439BF1BAE15EC021B38930FD9C2ED`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The generator was copied from the prior BTC PnL+price artifact, with only the exact strategy name/application id/output file name adapted; all CSV/JSON/PNG outputs were regenerated from the fresh production snapshot.
+Blockers: None.
+
 ## Active Update 2026-07-23 ETH 2 bps LowEnter Average PnL Chart Refresh
 Goal: Generate a fresh PnL graph for `ETH Up or Down 5m 2 bps LowEnter Average Premarket`.
 Status: Completed
