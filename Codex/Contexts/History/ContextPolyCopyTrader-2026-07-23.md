@@ -30,3 +30,18 @@ Request:
 
 Result:
 Completed a read-only current production timing audit through `2026-07-23T12:32:59Z`. Repeated run/order snapshots found `6,205/6,205` linked Paper entries over 120 minutes, p95 recorded delay `1.811s`, max `4.567s`, zero delays over five seconds, zero overdue Observed runs, and zero timing/window skips over six hours. Independent batch-stage evidence showed all 24 premarket waves completed before open with at least `25.306s` remaining. The single active Live strategy had `8/8` matched orders in 24 hours but no qualifying signal in the latest two hours, so fresh exchange-submission latency could not be retested. Separately identified 48 recent input-data skips and a `420 pending + 25 inflight` copied-performance projection backlog; neither showed an observed entry-timing impact, and no production state was changed.
+## 2026-07-23T17:23:20.0000000Z
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Generated `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260723-202005/reports/child-child-roi-best-daily-paper-pnl-2026-07-23-202005.xlsx` from a read-only production PostgreSQL snapshot through `2026-07-23T17:20:11.197503Z`. The report covers 144 candidate Child/Child ROI strategies, 199,912 settled Paper rows, 16 UTC dates, and six independently reconciled winners sorted by total PnL ascending. Excel verification passed one 18x8 sheet, frozen panes at `B2`, 41 negative red-on-white cells, zero formula errors, and grand Total `$1,356.26214780`.
