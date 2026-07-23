@@ -16,3 +16,10 @@ Request:
 
 Result:
 Completed a production read-only inclusive cap sweep from `0.50` through `0.99` over 223,286 Settled parent Paper rows for the exact 304 BTC LowerEnter mappings and separately reported 28 BTC LowEnter Average mappings. A blanket increase failed immediately: the 304-LowerEnter aggregate moved from `+$14,586.69` at `0.50` to `-$4,532.93` at `0.51`. One strategy passed the predeclared two-block discovery plus untouched-third-block gate: `BTC Up or Down 5m Up 7 bps Reference Average LowerEnter Premarket`, proposed only as a separate Paper A/B at `0.56`; its added `(0.50,0.56]` band had 233 bets and `+$60.23`, including 63 held-out bets and `+$6.79`. The held-out uncertainty remains wide, all 28 LowEnter Average mappings stayed at `Hold050`, and no production configuration or data was changed. Full reproducible evidence is under `outputs/019f8e16-c4ff-7fd0-bc37-5cd585bc4d03/btc-lowerentry-cap-sweep-20260723`.
+
+## 2026-07-23T12:14:54.0744226Z
+Request:
+Смысла нет из-за одной стратегии париться, оставляем как есть
+
+Result:
+Accepted the decision to leave every BTC LowerEnter/LowEnter entry cap unchanged at `0.50`. The proposed `0.56` Paper A/B clone will not be created, and no strategy, configuration, service, order, or database row was changed.
