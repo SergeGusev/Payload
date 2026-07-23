@@ -57,3 +57,18 @@ Request:
 
 Result:
 Generated and visually inspected `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/btc-down20-lowerenter-reference-average-pnl-vs-btc-20260723/btc-down20-lowerenter-reference-average-pnl-vs-btc.png` from a read-only production PostgreSQL snapshot through `2026-07-23T18:19:36.697829Z`. The exact strategy had 644 settled Paper rows, PnL `+$339.58791854`, ROI `+8.77490610%`; independent Paper and BTCUSDT minute-series aggregate checks passed.
+## 2026-07-23T19:52:31.4652736Z
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Generated `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260723-225009/reports/child-child-roi-best-daily-paper-pnl-2026-07-23-225009.xlsx` from a read-only production PostgreSQL snapshot through `2026-07-23T19:50:20.090719Z`. The report covers 144 candidate Child/Child ROI strategies, 201,800 settled Paper rows, 16 UTC dates, and six independently reconciled winners sorted by total PnL ascending. Excel verification passed one 18x8 sheet, frozen panes at `B2`, 43 negative red-on-white cells, zero formula errors, and grand Total `$1,396.79448923`.

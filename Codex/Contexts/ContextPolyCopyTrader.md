@@ -1,3 +1,17 @@
+## Active Update 2026-07-23 Child / Child ROI Excel Report Refresh 19:50 UTC
+Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-23T19:50:20.090719Z` in the report's read-only snapshot. The exact non-Progress scope contained 144 Child/Child ROI strategies and 201,800 settled Paper rows over 16 UTC dates (`2026-07-08..2026-07-23`).
+- Reconciled raw-row aggregates against independent server SQL for all 144 candidates, matched the six unique maximum-PnL selections against an independent server ranking, and matched every selected strategy/date PnL against a separate server daily aggregation.
+- Ordered the six strategy columns by all-history PnL ascending: BTC 4 Child `$14.82905951`, BTC 16 Child ROI `$85.08756244`, SOL 21 Child ROI `$152.52667124`, SOL 8 Child `$344.88739063`, ETH 17 Child `$397.73392646`, and ETH 10 Child ROI `$401.72987895`.
+- Generated one `Daily PnL` worksheet with typed UTC dates, formula-driven daily/category/grand totals, red text on a white background with an explicit minus for negative values, and frozen first row plus first column at `B2`.
+- Excel COM and artifact-tool verification passed: one 18x8 used range, 119 numeric cells, 43 negative cells, zero formula errors, and grand Total `$1,396.79448923`. The final render was visually inspected with no clipped headers, values, or totals.
+- Delivered `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260723-225009/reports/child-child-roi-best-daily-paper-pnl-2026-07-23-225009.xlsx`, SHA-256 `EF8357CDD6DB3A081D37DCC3834D83A17920470451D27273E0626ADF94F12325`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The first wrapper attempt stopped before report execution because the temp lifecycle script returned JSON instead of the older `RunPath=...` format; the existing marked temp session was reused for the successful report run. Protected temp cleanup initially found a locked analyzer DLL held by exact Roslyn `VBCSCompiler.exe` PID `15444`; its parent PID `45216` no longer existed, so only that verified orphan compiler was stopped and the marked run was removed successfully (3 files / 82,272 bytes).
+Blockers: None.
+
 ## Active Update 2026-07-23 BTC Down 20 bps LowerEnter PnL Chart
 Goal: Generate a fresh PnL graph for `BTC Up or Down 5m Down 20 bps Reference Average LowerEnter Premarket`.
 Status: Completed
