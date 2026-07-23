@@ -1,3 +1,16 @@
+## Active Update 2026-07-23 ETH 2 bps LowEnter Average PnL Chart Refresh
+Goal: Generate a fresh PnL graph for `ETH Up or Down 5m 2 bps LowEnter Average Premarket`.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-23T17:27:28.937974Z` in one `REPEATABLE READ, READ ONLY` transaction and resolved exactly one strategy: `b7c50005-0000-4000-8214-000000000102` / `eth_up_down_5m_low_enter_average_bps_2_fak_premarket`.
+- Exported and independently reconciled 1,216 exact-strategy `Settled` Paper rows from `2026-07-04T14:59Z` through `2026-07-23T17:27Z`: stake `$7,307.30880087`, PnL `+$616.97816874`, ROI `+8.44330225%`, and maximum drawdown `$117.65113473`.
+- Exported the last persisted `BinanceCryptoTradeWebSocket` ETHUSDT tick per UTC minute over the same chart period and independently reconciled the repeated server minute series: 27,304 of 27,509 expected minutes (`99.254789%` coverage), from `$1,772.23` to `$1,891.86` (`+6.75025251%`).
+- Rendered and visually inspected a 1,800x920 dual-axis PNG with a shared UTC time axis, cumulative settlement-time Paper PnL steps on the left, ETHUSDT on the right, and only solid lines.
+- Delivered `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-lowenter-average-pnl-vs-eth-20260723-1748/eth-2-lowenter-average-pnl-vs-eth.png`, SHA-256 `397BAF5704A254815CF0953B2BE6F1F79B221F99790631A6903C73FC04477156`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. The chart generator was copied from the prior exact-strategy artifact, but all CSV/JSON/PNG outputs were regenerated from a fresh production snapshot.
+Blockers: None.
+
 ## Active Update 2026-07-23 Child / Child ROI Excel Report Refresh 17:20 UTC
 Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed

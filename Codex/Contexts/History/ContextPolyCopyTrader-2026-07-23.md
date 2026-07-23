@@ -45,3 +45,9 @@ Request:
 
 Result:
 Generated `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260723-202005/reports/child-child-roi-best-daily-paper-pnl-2026-07-23-202005.xlsx` from a read-only production PostgreSQL snapshot through `2026-07-23T17:20:11.197503Z`. The report covers 144 candidate Child/Child ROI strategies, 199,912 settled Paper rows, 16 UTC dates, and six independently reconciled winners sorted by total PnL ascending. Excel verification passed one 18x8 sheet, frozen panes at `B2`, 41 negative red-on-white cells, zero formula errors, and grand Total `$1,356.26214780`.
+## 2026-07-23T17:28:20.0000000Z
+Request:
+Сделай pnl график по стратегии ETH Up or Down 5m 2 bps LowEnter Average Premarket
+
+Result:
+Generated and visually inspected `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-lowenter-average-pnl-vs-eth-20260723-1748/eth-2-lowenter-average-pnl-vs-eth.png` from a read-only production PostgreSQL snapshot through `2026-07-23T17:27:28.937974Z`. The exact strategy had 1,216 settled Paper rows, PnL `+$616.97816874`, ROI `+8.44330225%`; independent Paper and ETHUSDT minute-series aggregate checks passed.
