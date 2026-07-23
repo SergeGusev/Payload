@@ -1,22 +1,13 @@
+using PolyCopyTrader.Service.Analytics;
+
 namespace PolyCopyTrader.Service.ExternalPrices;
 
 public static class BinanceOrderBookPredictionEndpointPolicy
 {
-    private static readonly HashSet<string> JsonStreams = new(StringComparer.Ordinal)
-    {
-        "btcusdt@trade",
-        "btcusdt@bookTicker"
-    };
-
-    private static readonly HashSet<string> SbeStreams = new(StringComparer.Ordinal)
-    {
-        "btcusdt@trade",
-        "btcusdt@bestBidAsk"
-    };
-
     public static Uri Validate(
         BinanceOrderBookPredictionSource source,
-        string streamUrl)
+        string streamUrl,
+        CryptoOrderBookPredictionAsset asset)
     {
         if (!Uri.TryCreate(streamUrl, UriKind.Absolute, out Uri? uri) ||
             !string.Equals(uri.Scheme, "wss", StringComparison.OrdinalIgnoreCase))
@@ -32,19 +23,30 @@ public static class BinanceOrderBookPredictionEndpointPolicy
 
         string expectedHost;
         int expectedPort;
-        HashSet<string> expectedStreams;
+        string topOfBookStream;
         if (source == BinanceOrderBookPredictionSource.Sbe)
         {
             expectedHost = "stream-sbe.binance.com";
             expectedPort = 9443;
-            expectedStreams = SbeStreams;
+            topOfBookStream = "bestBidAsk";
         }
-        else
+        else if (source == BinanceOrderBookPredictionSource.Json)
         {
             expectedHost = "data-stream.binance.vision";
             expectedPort = 443;
-            expectedStreams = JsonStreams;
+            topOfBookStream = "bookTicker";
         }
+        else
+        {
+            throw new ArgumentOutOfRangeException(nameof(source), source, null);
+        }
+
+        string streamSymbol = asset.ToBinanceStreamSymbol();
+        var expectedStreams = new HashSet<string>(StringComparer.Ordinal)
+        {
+            streamSymbol + "@trade",
+            streamSymbol + "@" + topOfBookStream
+        };
 
         if (!string.Equals(uri.IdnHost, expectedHost, StringComparison.OrdinalIgnoreCase) ||
             uri.Port != expectedPort)
@@ -64,7 +66,7 @@ public static class BinanceOrderBookPredictionEndpointPolicy
         if (streams.Length != expectedStreams.Count || !expectedStreams.SetEquals(streams))
         {
             throw new ArgumentException(
-                "Binance stream URL must contain exactly the BTCUSDT trade and matching top-of-book streams.",
+                $"Binance stream URL must contain exactly the {asset.ToBinanceSymbol()} trade and matching top-of-book streams.",
                 nameof(streamUrl));
         }
 

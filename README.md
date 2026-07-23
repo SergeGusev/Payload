@@ -344,54 +344,94 @@ Binance SBE requires the API key id in `POLYCOPYTRADER_BINANCE_SBE_API_KEY`,
 `--binance-sbe-api-key`, or `--binance-sbe-api-key-file`; the Ed25519 private
 key file alone is not sent and is not enough for the WebSocket header.
 
-### Prospective BTC Order-Book Prediction Study
+### Prospective BTC, ETH, and SOL Order-Book Prediction Study
 
-`--btc-orderbook-prediction-study` runs a separate read-only experiment for the
-question: can Binance BTCUSDT top-of-book state available before a market opens
-predict the official outcome of the next Polymarket BTC 5-minute market? For a
-market starting at UTC/Unix boundary `S`, the default decision time is
-`S - 30 seconds`; every feature uses only messages whose local monotonic receive
-time is strictly before that cutoff. The target is the final Gamma `Up`/`Down`
-outcome for `btc-updown-5m-<S unix seconds>`. Binance start/end direction is kept
-only as a diagnostic proxy and is never the canonical label.
+`--crypto-orderbook-prediction-study` runs a separate read-only experiment for
+the question: can Binance top-of-book state available before a market opens
+predict the official outcome of the next Polymarket five-minute BTC, ETH, or SOL
+market? Select exactly one asset per process with
+`--crypto-orderbook-study-asset btc|eth|sol`. For a market starting at UTC/Unix
+boundary `S`, the default decision time is `S - 30 seconds`; every feature uses
+only messages whose local monotonic receive time is strictly before that cutoff.
+The targets are the final Gamma `Up`/`Down` outcomes for
+`btc-updown-5m-<S>`, `eth-updown-5m-<S>`, or `sol-updown-5m-<S>`. Binance
+start/end direction is only a diagnostic proxy and is never the canonical label.
 
-Example 72-hour prospective capture using the public JSON stream and no API key:
+Run each asset in its own process and output root. Example 72-hour prospective
+ETH and SOL captures using the public JSON stream and no API key:
 
 ```powershell
-$studyRoot = 'D:\PolyCopyTraderResearch\btc-orderbook'
 .\PolyCopyTrader.Service.exe `
-  --btc-orderbook-prediction-study `
-  --btc-orderbook-study-mode collect `
-  --btc-orderbook-study-source json `
-  --btc-orderbook-study-output-dir $studyRoot `
-  --btc-orderbook-study-duration-minutes 4320
+  --crypto-orderbook-prediction-study `
+  --crypto-orderbook-study-mode collect `
+  --crypto-orderbook-study-asset eth `
+  --crypto-orderbook-study-source json `
+  --crypto-orderbook-study-output-dir 'D:\PolyCopyTraderResearch\crypto-orderbook\eth' `
+  --crypto-orderbook-study-duration-minutes 4320
+
+.\PolyCopyTrader.Service.exe `
+  --crypto-orderbook-prediction-study `
+  --crypto-orderbook-study-mode collect `
+  --crypto-orderbook-study-asset sol `
+  --crypto-orderbook-study-source json `
+  --crypto-orderbook-study-output-dir 'D:\PolyCopyTraderResearch\crypto-orderbook\sol' `
+  --crypto-orderbook-study-duration-minutes 4320
 ```
+
+For one aligned BTC/ETH/SOL cohort, use the supervisor script. It still launches
+one isolated service process and run directory per asset:
+
+```powershell
+.\scripts\run-crypto-orderbook-study-cohort.ps1 `
+  -ServiceExecutable 'D:\PolyCopyTraderResearch\runner\PolyCopyTrader.Service.exe' `
+  -OutputRoot 'D:\PolyCopyTraderResearch\crypto-orderbook' `
+  -DurationSeconds 259200
+```
+
+If any child returns a nonzero code, the supervisor stops only the two exact
+sibling PIDs and itself returns nonzero so an external supervisor such as Windows
+Task Scheduler can restart the complete three-asset cohort. A restart always
+creates a new isolated cohort and new runs; interrupted fragments are preserved
+and are never silently resumed, merged, or presented as one continuous 72-hour
+sample.
 
 The output directory must be absolute. The collector writes atomically finalized
 and SHA-256-verified gzip segments, with a five-minute rotation by default, plus
 `events.index.json` checkpoints. A crash can therefore lose the current partial
 segment, not all prior hours. `run.json` records the exact endpoints, build,
-cutoffs, feature windows, quality gates, stopwatch anchor, counters, and final
-index hash. Analysis also writes the raw Gamma market JSON and request URL in
+asset, cutoffs, feature windows, quality gates, stopwatch anchor, counters, and
+final index hash. The event index independently binds the same run id and asset,
+and analysis rejects manifest/index/raw-event identity mismatches. Analysis also
+writes the raw Gamma market JSON and request URL in
 `gamma-labels.json`, feature rows in `windows.csv`, untouched-test predictions,
 `analysis.json`, and `report.md`. An interrupted run can be re-read from its
 finalized index snapshot:
 
 ```powershell
 .\PolyCopyTrader.Service.exe `
-  --btc-orderbook-prediction-study `
-  --btc-orderbook-study-mode analyze `
-  --btc-orderbook-study-input-dir 'D:\PolyCopyTraderResearch\btc-orderbook\<run-id>'
+  --crypto-orderbook-prediction-study `
+  --crypto-orderbook-study-mode analyze `
+  --crypto-orderbook-study-input-dir 'D:\PolyCopyTraderResearch\crypto-orderbook\eth\<run-id>'
 ```
 
 The default public source is the official Binance Vision combined
-`BTCUSDT trade + bookTicker` stream. JSON `bookTicker` has no exchange event
+`<ASSET>USDT trade + bookTicker` stream. JSON `bookTicker` has no exchange event
 timestamp, so availability is based on the local receive stopwatch. Optional SBE
 uses the official `trade + bestBidAsk` stream and accepts only the API key id from
 `POLYCOPYTRADER_BINANCE_SBE_API_KEY` or a one-line
 `--binance-sbe-api-key-file`; it never reads the Ed25519 private key. Both modes
-are restricted to their exact official hosts and reject any non-`BTCUSDT`
-message. No database or order-placement path is used.
+are restricted to their exact official hosts and reject every wrapper stream or
+payload symbol that does not exactly match the selected asset. The legacy
+`--btc-orderbook-prediction-study` and `--btc-orderbook-study-*` aliases remain
+available for BTC-compatible automation. No database or order-placement path is
+used.
+
+Polymarket resolves these contracts from the corresponding Chainlink USD feed,
+not Binance Spot. Therefore BTC, ETH, and SOL must be analyzed as three separate
+samples with independent quality gates and chronological splits; their rows must
+not be pooled into one train/test result. Identical initial settings make the
+coverage and point estimates comparable, but different collection periods remain
+a limitation.
 
 The primary model is book-only: L1 imbalance, time-weighted imbalance,
 microprice offset, imbalance slope, and observed L1 order-flow change. Trade flow

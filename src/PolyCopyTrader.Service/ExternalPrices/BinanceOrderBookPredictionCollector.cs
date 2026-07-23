@@ -16,6 +16,7 @@ public enum BinanceOrderBookPredictionSource
 
 public sealed record BinanceOrderBookPredictionCollectorOptions(
     BinanceOrderBookPredictionSource Source,
+    CryptoOrderBookPredictionAsset Asset,
     string StreamUrl,
     string? SbeApiKey,
     TimeSpan Duration,
@@ -55,7 +56,7 @@ public sealed class BinanceOrderBookPredictionCollector
         this.eventStore = eventStore ?? throw new ArgumentNullException(nameof(eventStore));
         this.runId = string.IsNullOrWhiteSpace(runId) ? throw new ArgumentException("Run id is required.", nameof(runId)) : runId;
         this.options = options ?? throw new ArgumentNullException(nameof(options));
-        streamUri = BinanceOrderBookPredictionEndpointPolicy.Validate(options.Source, options.StreamUrl);
+        streamUri = BinanceOrderBookPredictionEndpointPolicy.Validate(options.Source, options.StreamUrl, options.Asset);
         if (options.Source == BinanceOrderBookPredictionSource.Sbe && string.IsNullOrWhiteSpace(options.SbeApiKey))
         {
             throw new ArgumentException("Binance SBE API key id is required for SBE collection.", nameof(options));
@@ -203,6 +204,7 @@ public sealed class BinanceOrderBookPredictionCollector
 
     public static IReadOnlyList<BtcOrderBookPredictionRawEvent> DecodeJsonFrame(
         ReadOnlyMemory<byte> payload,
+        CryptoOrderBookPredictionAsset asset,
         string runId,
         int connectionId,
         long receiveSequence,
@@ -252,7 +254,8 @@ public sealed class BinanceOrderBookPredictionCollector
 
         if (string.Equals(eventType, "trade", StringComparison.OrdinalIgnoreCase) || root.TryGetProperty("t", out _))
         {
-            ValidateJsonIdentity(root, wrapperStream, "btcusdt@trade");
+            string streamSymbol = asset.ToBinanceStreamSymbol();
+            ValidateJsonIdentity(root, wrapperStream, asset.ToBinanceSymbol(), streamSymbol + "@trade");
             long tradeId = ReadInt64(root, "t") ?? throw new JsonException("Binance trade has no trade id.");
             decimal price = ReadDecimal(root, "p") ?? throw new JsonException("Binance trade has no price.");
             decimal quantity = ReadDecimal(root, "q") ?? throw new JsonException("Binance trade has no quantity.");
@@ -291,7 +294,12 @@ public sealed class BinanceOrderBookPredictionCollector
             ];
         }
 
-        ValidateJsonIdentity(root, wrapperStream, "btcusdt@bookTicker");
+        string expectedStreamSymbol = asset.ToBinanceStreamSymbol();
+        ValidateJsonIdentity(
+            root,
+            wrapperStream,
+            asset.ToBinanceSymbol(),
+            expectedStreamSymbol + "@bookTicker");
         long bookUpdateId = ReadInt64(root, "u") ?? throw new JsonException("Binance bookTicker has no update id.");
         decimal bid = ReadDecimal(root, "b") ?? throw new JsonException("Binance bookTicker has no bid.");
         decimal bidQty = ReadDecimal(root, "B") ?? throw new JsonException("Binance bookTicker has no bid quantity.");
@@ -331,6 +339,7 @@ public sealed class BinanceOrderBookPredictionCollector
 
     public static IReadOnlyList<BtcOrderBookPredictionRawEvent> FlattenSbeEvent(
         BinanceSbeMarketDataEvent decoded,
+        CryptoOrderBookPredictionAsset asset,
         string runId,
         int connectionId,
         long receiveSequence,
@@ -339,9 +348,11 @@ public sealed class BinanceOrderBookPredictionCollector
         ref long? previousBookId,
         ref long? previousTradeId)
     {
-        if (!string.Equals(decoded.Symbol, "BTCUSDT", StringComparison.Ordinal))
+        string expectedSymbol = asset.ToBinanceSymbol();
+        if (!string.Equals(decoded.Symbol, expectedSymbol, StringComparison.Ordinal))
         {
-            throw new InvalidDataException("Binance SBE symbol mismatch: expected BTCUSDT but received " + decoded.Symbol + ".");
+            throw new InvalidDataException(
+                "Binance SBE symbol mismatch: expected " + expectedSymbol + " but received " + decoded.Symbol + ".");
         }
 
         if (decoded is BinanceSbeBestBidAskEvent book)
@@ -505,6 +516,7 @@ public sealed class BinanceOrderBookPredictionCollector
 
                     decodedEvents = DecodeJsonFrame(
                         message.ToArray(),
+                        options.Asset,
                         runId,
                         connectionId,
                         frameSequence,
@@ -548,6 +560,7 @@ public sealed class BinanceOrderBookPredictionCollector
 
                     decodedEvents = FlattenSbeEvent(
                         decoded,
+                        options.Asset,
                         runId,
                         connectionId,
                         frameSequence,
@@ -704,12 +717,13 @@ public sealed class BinanceOrderBookPredictionCollector
     private static void ValidateJsonIdentity(
         JsonElement root,
         string? wrapperStream,
+        string expectedSymbol,
         string expectedStream)
     {
         string? symbol = ReadString(root, "s");
-        if (!string.Equals(symbol, "BTCUSDT", StringComparison.Ordinal))
+        if (!string.Equals(symbol, expectedSymbol, StringComparison.Ordinal))
         {
-            throw new JsonException("Binance JSON symbol mismatch: expected BTCUSDT.");
+            throw new JsonException("Binance JSON symbol mismatch: expected " + expectedSymbol + ".");
         }
 
         if (!string.Equals(wrapperStream, expectedStream, StringComparison.Ordinal))

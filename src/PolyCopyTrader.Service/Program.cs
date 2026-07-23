@@ -47,7 +47,8 @@ if (args.Contains("--binance-sbe-smoke", StringComparer.OrdinalIgnoreCase))
     return;
 }
 
-if (args.Contains(BtcOrderBookPredictionStudyCommand.CommandFlag, StringComparer.OrdinalIgnoreCase))
+if (args.Contains(BtcOrderBookPredictionStudyCommand.CommandFlag, StringComparer.OrdinalIgnoreCase) ||
+    args.Contains(BtcOrderBookPredictionStudyCommand.GenericCommandFlag, StringComparer.OrdinalIgnoreCase))
 {
     using var predictionStudyCts = new CancellationTokenSource();
     ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>

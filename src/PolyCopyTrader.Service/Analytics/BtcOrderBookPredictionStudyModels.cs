@@ -79,7 +79,9 @@ public sealed record BtcOrderBookPredictionEventIndex(
     int SegmentDurationSeconds,
     long TotalEvents,
     DateTimeOffset UpdatedAtUtc,
-    IReadOnlyList<BtcOrderBookPredictionEventSegment> Segments);
+    IReadOnlyList<BtcOrderBookPredictionEventSegment> Segments,
+    string? RunId,
+    string? AssetSymbol);
 
 public sealed record BtcOrderBookPredictionFeatureRow(
     DateTimeOffset MarketStartUtc,
@@ -185,7 +187,8 @@ public sealed record BtcOrderBookPredictionAnalysisResult(
     decimal? GammaBinanceAgreement,
     IReadOnlyList<string> ExclusionReasons,
     IReadOnlyList<BtcOrderBookPredictionMarketPrediction> TestPredictions,
-    string Conclusion);
+    string Conclusion,
+    string? AssetSymbol = null);
 
 public sealed record BtcOrderBookPredictionRunManifest(
     int SchemaVersion,
@@ -223,7 +226,8 @@ public sealed record BtcOrderBookPredictionRunManifest(
     long DecodeErrors,
     long Reconnects,
     int QueueHighWaterMark,
-    string? FailureReason)
+    string? FailureReason,
+    string? AssetSymbol)
 {
     [JsonIgnore]
     public bool IsComplete => string.Equals(Status, "completed", StringComparison.OrdinalIgnoreCase) ||

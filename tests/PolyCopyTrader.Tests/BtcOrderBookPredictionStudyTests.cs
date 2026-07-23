@@ -1,7 +1,10 @@
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Diagnostics;
 using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Service.ExternalPrices;
+using PolyCopyTrader.Service.Startup;
 
 namespace PolyCopyTrader.Tests;
 
@@ -43,7 +46,10 @@ public sealed class BtcOrderBookPredictionStudyTests
                 "connection_error",
                 "comma, newline\nUnicode: тест");
 
-            await using (var store = new BtcOrderBookPredictionEventStore(directory))
+            await using (var store = new BtcOrderBookPredictionEventStore(
+                directory,
+                "run-1",
+                CryptoOrderBookPredictionAsset.Btc))
             {
                 await store.WriteAsync(expected);
                 eventPath = await store.CompleteAsync();
@@ -59,6 +65,9 @@ public sealed class BtcOrderBookPredictionStudyTests
             Assert.Equal("completed", index.Status);
             Assert.Single(index.Segments);
             Assert.Equal(1, index.TotalEvents);
+            Assert.Equal(BtcOrderBookPredictionEventStore.CurrentIndexSchemaVersion, index.SchemaVersion);
+            Assert.Equal("run-1", index.RunId);
+            Assert.Equal("BTC", index.AssetSymbol);
             Assert.Equal(64, BtcOrderBookPredictionEventStore.ComputeSha256(eventPath).Length);
         }
         finally
@@ -96,7 +105,11 @@ public sealed class BtcOrderBookPredictionStudyTests
                 ReceivedStopwatchTicks = 10_000 + Stopwatch.Frequency * 2
             };
             string indexPath;
-            await using (var store = new BtcOrderBookPredictionEventStore(directory, TimeSpan.FromSeconds(1)))
+            await using (var store = new BtcOrderBookPredictionEventStore(
+                directory,
+                "test-run",
+                CryptoOrderBookPredictionAsset.Btc,
+                TimeSpan.FromSeconds(1)))
             {
                 await store.WriteAsync(first);
                 await store.WriteAsync(second);
@@ -122,6 +135,43 @@ public sealed class BtcOrderBookPredictionStudyTests
     }
 
     [Fact]
+    public async Task EventStore_ReadsLegacyIndexWithoutIdentityFields()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "btc-orderbook-legacy-index-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, BtcOrderBookPredictionEventStore.IndexFileName);
+        try
+        {
+            await File.WriteAllTextAsync(path, JsonSerializer.Serialize(new
+            {
+                SchemaVersion = BtcOrderBookPredictionEventStore.LegacyIndexSchemaVersion,
+                Status = "completed",
+                SegmentDurationSeconds = 300,
+                TotalEvents = 0,
+                UpdatedAtUtc = DateTimeOffset.Parse("2026-07-22T21:24:39Z"),
+                Segments = Array.Empty<object>()
+            }));
+
+            BtcOrderBookPredictionEventIndex index = BtcOrderBookPredictionEventStore.ReadIndex(path);
+
+            Assert.Equal(BtcOrderBookPredictionEventStore.LegacyIndexSchemaVersion, index.SchemaVersion);
+            Assert.Null(index.RunId);
+            Assert.Null(index.AssetSymbol);
+        }
+        finally
+        {
+            foreach (string file in Directory.EnumerateFiles(directory).ToArray())
+            {
+                File.Delete(file);
+            }
+
+            Directory.Delete(directory, recursive: false);
+        }
+    }
+
+    [Fact]
     public void DecodeJsonFrame_DecodesBookAndTradeWithReceiveOrdering()
     {
         long logicalSequence = 0;
@@ -133,6 +183,7 @@ public sealed class BtcOrderBookPredictionStudyTests
 
         var book = Assert.Single(BinanceOrderBookPredictionCollector.DecodeJsonFrame(
             bookPayload,
+            CryptoOrderBookPredictionAsset.Btc,
             "run",
             7,
             10,
@@ -154,6 +205,7 @@ public sealed class BtcOrderBookPredictionStudyTests
             "{\"stream\":\"btcusdt@trade\",\"data\":{\"e\":\"trade\",\"E\":1784723696000,\"T\":1784723695999,\"s\":\"BTCUSDT\",\"t\":201,\"p\":\"70001.25\",\"q\":\"0.01\",\"m\":true}}");
         var trade = Assert.Single(BinanceOrderBookPredictionCollector.DecodeJsonFrame(
             tradePayload,
+            CryptoOrderBookPredictionAsset.Btc,
             "run",
             7,
             11,
@@ -177,12 +229,14 @@ public sealed class BtcOrderBookPredictionStudyTests
     {
         Uri validated = BinanceOrderBookPredictionEndpointPolicy.Validate(
             BinanceOrderBookPredictionSource.Sbe,
-            "wss://stream-sbe.binance.com:9443/stream?streams=btcusdt@bestBidAsk/btcusdt@trade");
+            "wss://stream-sbe.binance.com:9443/stream?streams=btcusdt@bestBidAsk/btcusdt@trade",
+            CryptoOrderBookPredictionAsset.Btc);
 
         Assert.Equal("stream-sbe.binance.com", validated.Host);
         Assert.Throws<ArgumentException>(() => BinanceOrderBookPredictionEndpointPolicy.Validate(
             BinanceOrderBookPredictionSource.Sbe,
-            "wss://attacker.example:9443/stream?streams=btcusdt@trade/btcusdt@bestBidAsk"));
+            "wss://attacker.example:9443/stream?streams=btcusdt@trade/btcusdt@bestBidAsk",
+            CryptoOrderBookPredictionAsset.Btc));
     }
 
     [Fact]
@@ -197,6 +251,7 @@ public sealed class BtcOrderBookPredictionStudyTests
         Assert.Throws<System.Text.Json.JsonException>(() =>
             BinanceOrderBookPredictionCollector.DecodeJsonFrame(
                 payload,
+                CryptoOrderBookPredictionAsset.Btc,
                 "run",
                 1,
                 1,
@@ -205,6 +260,334 @@ public sealed class BtcOrderBookPredictionStudyTests
                 1,
                 ref previousBookId,
                 ref previousTradeId));
+    }
+
+    [Theory]
+    [InlineData(CryptoOrderBookPredictionAsset.Btc, "BTC", "BTCUSDT", "btcusdt", "btc-updown-5m-")]
+    [InlineData(CryptoOrderBookPredictionAsset.Eth, "ETH", "ETHUSDT", "ethusdt", "eth-updown-5m-")]
+    [InlineData(CryptoOrderBookPredictionAsset.Sol, "SOL", "SOLUSDT", "solusdt", "sol-updown-5m-")]
+    public void AssetCatalog_MapsExactContracts(
+        CryptoOrderBookPredictionAsset asset,
+        string displaySymbol,
+        string binanceSymbol,
+        string streamSymbol,
+        string slugPrefix)
+    {
+        DateTimeOffset marketStartUtc = DateTimeOffset.FromUnixTimeSeconds(1_784_788_200);
+
+        Assert.Equal(displaySymbol, asset.ToDisplaySymbol());
+        Assert.Equal(binanceSymbol, asset.ToBinanceSymbol());
+        Assert.Equal(streamSymbol, asset.ToBinanceStreamSymbol());
+        Assert.Equal(slugPrefix, asset.ToMarketSlugPrefix());
+        Assert.Equal(slugPrefix + "1784788200", asset.ToMarketSlug(marketStartUtc));
+        Assert.Equal(marketStartUtc, asset.TryParseMarketStartUtc(slugPrefix + "1784788200"));
+        Assert.Null(asset.TryParseMarketStartUtc(slugPrefix + "9223372036854775800"));
+    }
+
+    [Theory]
+    [InlineData("{\"outcomes\":[\"Up\",\"Down\"]}", true)]
+    [InlineData("{\"outcomes\":\"[\\\"Down\\\",\\\"Up\\\"]\"}", true)]
+    [InlineData("{\"outcomes\":[\"Up\",\"Other\"]}", false)]
+    [InlineData("{\"outcomes\":[\"Up\",\"Down\",\"Other\"]}", false)]
+    [InlineData("{\"outcomes\":[\"Up\",\"Up\"]}", false)]
+    [InlineData("{\"outcomes\":null}", false)]
+    public void GammaOutcomeContract_RequiresExactlyUpAndDown(string rawJson, bool expected)
+    {
+        Assert.Equal(expected, BtcOrderBookPredictionStudyCommand.HasExactUpDownOutcomes(rawJson));
+    }
+
+    [Theory]
+    [InlineData(CryptoOrderBookPredictionAsset.Btc, BinanceOrderBookPredictionSource.Json,
+        "wss://data-stream.binance.vision:443/stream?streams=btcusdt@trade/btcusdt@bookTicker")]
+    [InlineData(CryptoOrderBookPredictionAsset.Eth, BinanceOrderBookPredictionSource.Json,
+        "wss://data-stream.binance.vision:443/stream?streams=ethusdt@bookTicker/ethusdt@trade")]
+    [InlineData(CryptoOrderBookPredictionAsset.Sol, BinanceOrderBookPredictionSource.Json,
+        "wss://data-stream.binance.vision:443/stream?streams=solusdt@trade/solusdt@bookTicker")]
+    [InlineData(CryptoOrderBookPredictionAsset.Btc, BinanceOrderBookPredictionSource.Sbe,
+        "wss://stream-sbe.binance.com:9443/stream?streams=btcusdt@trade/btcusdt@bestBidAsk")]
+    [InlineData(CryptoOrderBookPredictionAsset.Eth, BinanceOrderBookPredictionSource.Sbe,
+        "wss://stream-sbe.binance.com:9443/stream?streams=ethusdt@bestBidAsk/ethusdt@trade")]
+    [InlineData(CryptoOrderBookPredictionAsset.Sol, BinanceOrderBookPredictionSource.Sbe,
+        "wss://stream-sbe.binance.com:9443/stream?streams=solusdt@trade/solusdt@bestBidAsk")]
+    public void EndpointPolicy_AcceptsOnlySelectedAssetStreams(
+        CryptoOrderBookPredictionAsset asset,
+        BinanceOrderBookPredictionSource source,
+        string url)
+    {
+        Uri result = BinanceOrderBookPredictionEndpointPolicy.Validate(source, url, asset);
+
+        Assert.Equal("wss", result.Scheme);
+    }
+
+    [Fact]
+    public void EndpointPolicy_RejectsMixedAssetStreams()
+    {
+        Assert.Throws<ArgumentException>(() => BinanceOrderBookPredictionEndpointPolicy.Validate(
+            BinanceOrderBookPredictionSource.Json,
+            "wss://data-stream.binance.vision:443/stream?streams=ethusdt@trade/solusdt@bookTicker",
+            CryptoOrderBookPredictionAsset.Eth));
+    }
+
+    [Theory]
+    [InlineData(CryptoOrderBookPredictionAsset.Eth, "ethusdt", "ETHUSDT")]
+    [InlineData(CryptoOrderBookPredictionAsset.Sol, "solusdt", "SOLUSDT")]
+    public void DecodeJsonFrame_AcceptsSelectedEthAndSolInstrument(
+        CryptoOrderBookPredictionAsset asset,
+        string streamSymbol,
+        string payloadSymbol)
+    {
+        long logicalSequence = 0;
+        long? previousBookId = null;
+        long? previousTradeId = null;
+        byte[] payload = Encoding.UTF8.GetBytes(
+            $"{{\"stream\":\"{streamSymbol}@bookTicker\",\"data\":{{\"u\":100,\"s\":\"{payloadSymbol}\",\"b\":\"100\",\"B\":\"1\",\"a\":\"101\",\"A\":\"2\"}}}}");
+
+        BtcOrderBookPredictionRawEvent decoded = Assert.Single(
+            BinanceOrderBookPredictionCollector.DecodeJsonFrame(
+                payload,
+                asset,
+                "run",
+                1,
+                1,
+                ref logicalSequence,
+                DateTimeOffset.UtcNow,
+                1,
+                ref previousBookId,
+                ref previousTradeId));
+
+        Assert.Equal(BtcOrderBookPredictionEventType.Book, decoded.EventType);
+        Assert.Equal(100m, decoded.Bid);
+        Assert.Equal(2m, decoded.AskQty);
+    }
+
+    [Theory]
+    [InlineData(CryptoOrderBookPredictionAsset.Eth, "ETHUSDT")]
+    [InlineData(CryptoOrderBookPredictionAsset.Sol, "SOLUSDT")]
+    public void FlattenSbeEvent_AcceptsSelectedEthAndSolInstrument(
+        CryptoOrderBookPredictionAsset asset,
+        string symbol)
+    {
+        long logicalSequence = 0;
+        long? previousBookId = null;
+        long? previousTradeId = null;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var decoded = new BinanceSbeBestBidAskEvent(symbol, 7, 100m, 1m, 101m, 2m, now, now);
+
+        BtcOrderBookPredictionRawEvent item = Assert.Single(
+            BinanceOrderBookPredictionCollector.FlattenSbeEvent(
+                decoded,
+                asset,
+                "run",
+                1,
+                1,
+                ref logicalSequence,
+                1,
+                ref previousBookId,
+                ref previousTradeId));
+
+        Assert.Equal(BtcOrderBookPredictionEventType.Book, item.EventType);
+        Assert.Equal(7, item.BookUpdateId);
+    }
+
+    [Fact]
+    public void FlattenSbeEvent_RejectsAssetMismatch()
+    {
+        long logicalSequence = 0;
+        long? previousBookId = null;
+        long? previousTradeId = null;
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var decoded = new BinanceSbeBestBidAskEvent("SOLUSDT", 7, 100m, 1m, 101m, 2m, now, now);
+
+        Assert.Throws<InvalidDataException>(() =>
+            BinanceOrderBookPredictionCollector.FlattenSbeEvent(
+                decoded,
+                CryptoOrderBookPredictionAsset.Eth,
+                "run",
+                1,
+                1,
+                ref logicalSequence,
+                1,
+                ref previousBookId,
+                ref previousTradeId));
+    }
+
+    [Fact]
+    public async Task EventStore_RejectsRawEventFromAnotherRun()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "crypto-orderbook-run-identity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            await using var store = new BtcOrderBookPredictionEventStore(
+                directory,
+                "expected-run",
+                CryptoOrderBookPredictionAsset.Eth);
+            BtcOrderBookPredictionRawEvent wrongRun = Book(
+                1,
+                DateTimeOffset.Parse("2026-07-23T06:30:00Z"),
+                100m,
+                1m,
+                101m,
+                1m);
+
+            await Assert.ThrowsAsync<InvalidDataException>(() => store.WriteAsync(wrongRun).AsTask());
+        }
+        finally
+        {
+            foreach (string file in Directory.EnumerateFiles(directory).ToArray())
+            {
+                File.Delete(file);
+            }
+
+            Directory.Delete(directory, recursive: false);
+        }
+    }
+
+    [Fact]
+    public async Task Command_GenericAssetAliasRejectsCrossAssetStream()
+    {
+        using var output = new StringWriter();
+
+        int exitCode = await BtcOrderBookPredictionStudyCommand.ExecuteAsync(
+            [
+                BtcOrderBookPredictionStudyCommand.GenericCommandFlag,
+                "--crypto-orderbook-study-mode", "collect",
+                "--crypto-orderbook-study-asset", "eth",
+                "--crypto-orderbook-study-output-dir", Path.GetFullPath(Path.GetTempPath()),
+                "--crypto-orderbook-study-stream-url",
+                "wss://data-stream.binance.vision:443/stream?streams=solusdt@trade/solusdt@bookTicker"
+            ],
+            output,
+            CancellationToken.None);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("ETHUSDT", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(2, null, 3)]
+    [InlineData(1, "ETH", 3)]
+    [InlineData(1, null, 2)]
+    public async Task AnalyzeManifest_AcceptsLegacyOnlyAsBtc(
+        int schemaVersion,
+        string? assetSymbol,
+        int expectedExitCode)
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "crypto-orderbook-manifest-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            BtcOrderBookPredictionRunManifest manifest = Manifest(
+                schemaVersion,
+                "btc-orderbook-prediction-legacy",
+                assetSymbol,
+                CryptoOrderBookPredictionAsset.Btc,
+                BtcOrderBookPredictionEventStore.IndexFileName,
+                eventsSha256: null);
+            await File.WriteAllTextAsync(
+                Path.Combine(directory, "run.json"),
+                JsonSerializer.Serialize(manifest, new JsonSerializerOptions
+                {
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                }));
+            using var output = new StringWriter();
+
+            int exitCode = await BtcOrderBookPredictionStudyCommand.ExecuteAsync(
+                [
+                    BtcOrderBookPredictionStudyCommand.GenericCommandFlag,
+                    "--crypto-orderbook-study-mode", "analyze",
+                    "--crypto-orderbook-study-input-dir", directory
+                ],
+                output,
+                CancellationToken.None);
+
+            Assert.Equal(expectedExitCode, exitCode);
+            if (expectedExitCode == 3)
+            {
+                Assert.Contains("invalid or missing asset", output.ToString(), StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                Assert.Contains("event file was not found", output.ToString(), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        finally
+        {
+            foreach (string file in Directory.EnumerateFiles(directory).ToArray())
+            {
+                File.Delete(file);
+            }
+
+            Directory.Delete(directory, recursive: false);
+        }
+    }
+
+    [Fact]
+    public async Task AnalyzeManifest_RejectsIndexFromAnotherRun()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "crypto-orderbook-index-identity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            const string actualRunId = "eth-orderbook-prediction-actual";
+            string indexPath;
+            await using (var store = new BtcOrderBookPredictionEventStore(
+                directory,
+                actualRunId,
+                CryptoOrderBookPredictionAsset.Eth))
+            {
+                await store.WriteAsync(Book(
+                    1,
+                    DateTimeOffset.Parse("2026-07-23T06:30:00Z"),
+                    100m,
+                    1m,
+                    101m,
+                    1m) with
+                {
+                    RunId = actualRunId
+                });
+                indexPath = await store.CompleteAsync();
+            }
+
+            BtcOrderBookPredictionRunManifest manifest = Manifest(
+                2,
+                "eth-orderbook-prediction-declared",
+                "ETH",
+                CryptoOrderBookPredictionAsset.Eth,
+                Path.GetFileName(indexPath),
+                BtcOrderBookPredictionEventStore.ComputeSha256(indexPath));
+            await File.WriteAllTextAsync(
+                Path.Combine(directory, "run.json"),
+                JsonSerializer.Serialize(manifest));
+            using var output = new StringWriter();
+
+            int exitCode = await BtcOrderBookPredictionStudyCommand.ExecuteAsync(
+                [
+                    BtcOrderBookPredictionStudyCommand.GenericCommandFlag,
+                    "--crypto-orderbook-study-mode", "analyze",
+                    "--crypto-orderbook-study-input-dir", directory
+                ],
+                output,
+                CancellationToken.None);
+
+            Assert.Equal(3, exitCode);
+            Assert.Contains("Index run id does not match", output.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            foreach (string file in Directory.EnumerateFiles(directory).ToArray())
+            {
+                File.Delete(file);
+            }
+
+            Directory.Delete(directory, recursive: false);
+        }
     }
 
     [Fact]
@@ -572,6 +955,56 @@ public sealed class BtcOrderBookPredictionStudyTests
             trainFraction: 0.60m,
             validationFraction: 0.20m,
             testFraction: 0.20m);
+    }
+
+    private static BtcOrderBookPredictionRunManifest Manifest(
+        int schemaVersion,
+        string runId,
+        string? assetSymbol,
+        CryptoOrderBookPredictionAsset asset,
+        string eventsFile,
+        string? eventsSha256)
+    {
+        DateTimeOffset startedAtUtc = DateTimeOffset.Parse("2026-07-23T06:00:00Z");
+        return new BtcOrderBookPredictionRunManifest(
+            SchemaVersion: schemaVersion,
+            RunId: runId,
+            CommandMode: "collect",
+            Source: BinanceOrderBookPredictionSource.Json.ToString(),
+            StreamUrl:
+                $"wss://data-stream.binance.vision:443/stream?streams={asset.ToBinanceStreamSymbol()}@trade/{asset.ToBinanceStreamSymbol()}@bookTicker",
+            GammaBaseUrl: "https://gamma-api.polymarket.com",
+            StudyBuildVersion: "test",
+            Status: "completed",
+            StartedAtUtc: startedAtUtc,
+            CompletedAtUtc: startedAtUtc.AddMinutes(1),
+            OutputDirectory: "ignored",
+            DurationSeconds: 60,
+            SegmentDurationSeconds: 60,
+            DecisionLeadSeconds: [30],
+            FeatureWindowSeconds: [1, 5],
+            MaximumQuoteAgeMilliseconds: 2_000,
+            MinimumQuoteCoverageRatio: 0.90m,
+            MinimumLabeledMarkets: 20,
+            MinimumDistinctUtcDays: 1,
+            MinimumMarketsPerClass: 5,
+            TrainFraction: 0.60m,
+            ValidationFraction: 0.20m,
+            TestFraction: 0.20m,
+            StopwatchFrequency: Stopwatch.Frequency,
+            StopwatchAnchorUtc: startedAtUtc,
+            StopwatchAnchorTicks: 1,
+            ApiKeySource: null,
+            EventsFile: eventsFile,
+            EventsSha256: eventsSha256,
+            BookEvents: 0,
+            TradeEvents: 0,
+            ControlEvents: 0,
+            DecodeErrors: 0,
+            Reconnects: 0,
+            QueueHighWaterMark: 0,
+            FailureReason: null,
+            AssetSymbol: assetSymbol);
     }
 
     private static BtcOrderBookPredictionRawEvent Book(

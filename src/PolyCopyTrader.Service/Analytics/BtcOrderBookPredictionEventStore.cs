@@ -10,13 +10,16 @@ namespace PolyCopyTrader.Service.Analytics;
 public sealed class BtcOrderBookPredictionEventStore : IAsyncDisposable
 {
     public const string IndexFileName = "events.index.json";
-    private const int IndexSchemaVersion = 1;
+    public const int LegacyIndexSchemaVersion = 1;
+    public const int CurrentIndexSchemaVersion = 2;
     private const string Header =
         "schema_version,run_id,connection_id,receive_sequence,logical_sequence,event_type,exchange_event_utc,transact_utc,received_utc,received_stopwatch_ticks," +
         "book_update_id,trade_id,trade_index,bid,bid_qty,ask,ask_qty,trade_price,trade_qty,is_buyer_maker,previous_id,id_delta,status,detail_base64";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private readonly string outputDirectory;
+    private readonly string runId;
+    private readonly string assetSymbol;
     private readonly TimeSpan segmentDuration;
     private readonly List<BtcOrderBookPredictionEventSegment> segments = [];
     private FileStream? fileStream;
@@ -32,10 +35,17 @@ public sealed class BtcOrderBookPredictionEventStore : IAsyncDisposable
     private bool disposed;
     private bool completed;
 
-    public BtcOrderBookPredictionEventStore(string outputDirectory, TimeSpan? segmentDuration = null)
+    public BtcOrderBookPredictionEventStore(
+        string outputDirectory,
+        string runId,
+        CryptoOrderBookPredictionAsset asset,
+        TimeSpan? segmentDuration = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(runId);
         this.outputDirectory = Path.GetFullPath(outputDirectory);
+        this.runId = runId;
+        assetSymbol = asset.ToDisplaySymbol();
         this.segmentDuration = segmentDuration ?? TimeSpan.FromMinutes(5);
         if (this.segmentDuration <= TimeSpan.Zero)
         {
@@ -62,6 +72,11 @@ public sealed class BtcOrderBookPredictionEventStore : IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
+        if (!string.Equals(item.RunId, runId, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("Raw event run id does not match the event store run id.");
+        }
+
         if (writer is not null && currentFirstStopwatchTicks is { } firstTicks &&
             Stopwatch.GetElapsedTime(firstTicks, item.ReceivedStopwatchTicks) >= segmentDuration)
         {
@@ -120,9 +135,10 @@ public sealed class BtcOrderBookPredictionEventStore : IAsyncDisposable
         string json = File.ReadAllText(path, Encoding.UTF8);
         BtcOrderBookPredictionEventIndex? index =
             JsonSerializer.Deserialize<BtcOrderBookPredictionEventIndex>(json, JsonOptions);
-        if (index is null || index.SchemaVersion != IndexSchemaVersion)
+        if (index is null ||
+            index.SchemaVersion is not (LegacyIndexSchemaVersion or CurrentIndexSchemaVersion))
         {
-            throw new InvalidDataException("Unsupported BTC order-book prediction event index.");
+            throw new InvalidDataException("Unsupported crypto order-book prediction event index.");
         }
 
         ValidateIndex(index);
@@ -373,12 +389,14 @@ public sealed class BtcOrderBookPredictionEventStore : IAsyncDisposable
     private async Task WriteIndexAtomicAsync(string status, CancellationToken cancellationToken)
     {
         var index = new BtcOrderBookPredictionEventIndex(
-            IndexSchemaVersion,
+            CurrentIndexSchemaVersion,
             status,
             checked((int)Math.Ceiling(segmentDuration.TotalSeconds)),
             segments.Sum(item => item.EventCount),
             DateTimeOffset.UtcNow,
-            segments.ToArray());
+            segments.ToArray(),
+            runId,
+            assetSymbol);
         string partialPath = IndexPath + ".partial";
         await using (var stream = new FileStream(
             partialPath,
@@ -403,7 +421,7 @@ public sealed class BtcOrderBookPredictionEventStore : IAsyncDisposable
         string? header = reader.ReadLine();
         if (!string.Equals(header, Header, StringComparison.Ordinal))
         {
-            throw new InvalidDataException("Unsupported BTC order-book prediction event header.");
+            throw new InvalidDataException("Unsupported crypto order-book prediction event header.");
         }
 
         string? line;
@@ -418,7 +436,7 @@ public sealed class BtcOrderBookPredictionEventStore : IAsyncDisposable
 
             if (!TryParse(line, out var item, out string? error) || item is null)
             {
-                throw new InvalidDataException($"Invalid BTC order-book prediction event at line {lineNumber}: {error}");
+                throw new InvalidDataException($"Invalid crypto order-book prediction event at line {lineNumber}: {error}");
             }
 
             yield return item;
@@ -427,6 +445,19 @@ public sealed class BtcOrderBookPredictionEventStore : IAsyncDisposable
 
     private static void ValidateIndex(BtcOrderBookPredictionEventIndex index)
     {
+        if (index.SchemaVersion == CurrentIndexSchemaVersion &&
+            (string.IsNullOrWhiteSpace(index.RunId) ||
+             !CryptoOrderBookPredictionAssetCatalog.TryParse(index.AssetSymbol, out _)))
+        {
+            throw new InvalidDataException("Event index has invalid run or asset identity.");
+        }
+
+        if (index.SchemaVersion == LegacyIndexSchemaVersion &&
+            (!string.IsNullOrWhiteSpace(index.RunId) || !string.IsNullOrWhiteSpace(index.AssetSymbol)))
+        {
+            throw new InvalidDataException("Legacy event index contains unsupported identity fields.");
+        }
+
         if (index.SegmentDurationSeconds <= 0 || index.TotalEvents < 0)
         {
             throw new InvalidDataException("Event index contains invalid aggregate values.");
