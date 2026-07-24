@@ -4,6 +4,21 @@ Request:
 
 Result:
 Generated `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260724-000123/reports/child-child-roi-best-daily-paper-pnl-2026-07-24-000123.xlsx` from a read-only production PostgreSQL snapshot through `2026-07-23T21:01:33.389850Z`. The report covers 144 candidate Child/Child ROI strategies, 202,795 settled Paper rows, 16 UTC dates, and six independently reconciled winners sorted by total PnL ascending. Excel verification passed one 18x8 sheet, frozen panes at `B2`, 45 negative red-on-white cells, zero formula errors, and grand Total `$1,308.93267399`.
+## 2026-07-24T18:38:15.8850945Z
+Request:
+Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
+
+Столбцы - стратегии с самым высоким Pnl в рамках валюты и типа, всего получится шесть стратегий, в отчете их нужно сгруппировать от самого низкого Pnl к самому высокому.
+
+В строках - даты
+В ячейках - Paper Pnl за эту дату. Отрицательные значения выделяются красным на белом фоне со знаком минус.
+
+Последний столбец - сумма по дню, последняя строчка - сумма по категории. На их пересечении - общий Total
+
+Первую строчку и первый столбец закрепи, чтобы не пропадали при скролллинге
+
+Result:
+Generated `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/child-child-roi-best-daily-paper-pnl-report-20260724-213444/reports/child-child-roi-best-daily-paper-pnl-2026-07-24-213444.xlsx` from a read-only production PostgreSQL snapshot through `2026-07-24T18:35:00.617709Z`. The report covers 144 candidate Child/Child ROI strategies, 211,301 settled Paper rows, 17 UTC dates, and six independently reconciled winners sorted by total PnL ascending. Excel verification passed one 19x8 sheet, frozen panes at `B2`, 47 negative red-on-white cells, zero formula errors, and grand Total `$1,341.85344560`.
 
 ## 2026-07-24T07:09:53.1825855Z
 Request:
