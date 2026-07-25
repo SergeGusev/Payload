@@ -1,3 +1,16 @@
+## Active Update 2026-07-25 ETH 3 bps Reference Average PnL Chart
+Goal: Generate a fresh PnL graph for `ETH Up or Down 5m 3 bps Reference Average Premarket` with overlaid ETHUSDT.
+Status: Completed
+Done:
+- Captured production PostgreSQL `192.168.0.101/polycopytrader` through cutoff `2026-07-25T07:19:05.061799Z` in one `REPEATABLE READ, READ ONLY` transaction and resolved exactly one strategy: `b7c50005-0000-4000-8179-000000000103` / `eth_up_down_5m_reference_average_bps_3_fak_premarket`.
+- Exported and independently reconciled 5,112 exact-strategy `Settled` Paper rows from `2026-07-04T14:37:36Z` through `2026-07-25T07:14:55Z`: stake `$30,719.54160071`, PnL `+$533.28540032`, ROI `+1.73598098%`, wins/losses/flat `2,692/2,420/0`, and maximum drawdown `$365.08433567`.
+- Exported the last persisted `BinanceCryptoTradeWebSocket` ETHUSDT tick per UTC minute over the same chart period and independently reconciled the repeated server minute series: 29,597 of 29,802 expected minutes (`99.312127%` coverage), from `$1,768.97` to `$1,856.92` (`+4.97181976%`), min `$1,714.24`, max `$1,955.39`.
+- Rendered and visually inspected a 1,800x920 dual-axis PNG with a shared UTC time axis, cumulative settlement-time Paper PnL on the left, ETHUSDT on the right, and only solid lines.
+- Delivered `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-3-reference-average-pnl-vs-eth-20260725-101831/eth-3-reference-average-pnl-vs-eth.png`, SHA-256 `B489A5CC6AB3B337E0048D88711C142F66A9C4E1CE86B639056131E325ECADE8`.
+Next: None.
+Notes: Production access was read-only; no service, strategy, order, configuration, database row, or product code changed. Build passed with zero warnings/errors. Protected temp cleanup removed the marked run successfully (34 files / 2,284,751 bytes).
+Blockers: None.
+
 ## Active Update 2026-07-24 Child / Child ROI Excel Report Refresh 18:35 UTC
 Goal: Generate a fresh one-sheet daily Paper PnL Excel report for the highest-PnL Child and Child ROI strategy in each BTC/ETH/SOL group.
 Status: Completed
