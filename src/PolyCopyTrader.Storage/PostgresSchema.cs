@@ -1331,6 +1331,70 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
+WITH families(id_group, code_marker, name_marker, description_suffix) AS (
+    VALUES
+        ('8216', '3hour_average', '3Hour Average', 'Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.'),
+        ('8217', '3hour_low_enter_average', '3Hour LowEnter Average', 'Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most 0.50. Live execution is not supported for this Paper experiment.')
+),
+thresholds(threshold_value) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+    UNION ALL
+    SELECT value
+    FROM generate_series(15, 100, 5) AS generated(value)
+)
+SELECT
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
+    'eth_up_down_5m_' || code_marker || '_bps_' || threshold_value::text || '_fak_premarket',
+    'ETH Up or Down 5m ' || threshold_value::text || ' bps ' || name_marker || ' Premarket',
+    '30 seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the full in-memory 3h reference average only. If the current price is above that 3h average by at least ' || threshold_value::text || ' bps, BUY Down; if it is below that 3h average by at least ' || threshold_value::text || ' bps, BUY Up. Otherwise skip. ' || description_suffix,
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM families
+CROSS JOIN thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
 WITH families(id_group, code_trigger_prefix, name_trigger_prefix, trigger_name, target_outcome) AS (
     VALUES
         ('8209', 'up_', 'Up ', 'Up', 'Down'),

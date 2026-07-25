@@ -234,6 +234,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(84, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(10, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(28, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(120, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket));
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysUp));
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.AlwaysDown));
@@ -577,6 +579,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(84, StrategyIds.UpDown5mStrategyVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(28, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(28, StrategyIds.UpDown5mStrategyVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(28, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(28, StrategyIds.UpDown5mStrategyVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(240, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket));
         Assert.Equal(0, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
@@ -1173,6 +1183,78 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         Assert.Empty(variants.Select(item => item.Id).Intersect(baselineVariants.Select(item => item.Id)));
         Assert.Empty(variants.Select(item => item.Code).Intersect(baselineVariants.Select(item => item.Code), StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void StrategyIds_IncludeEthThreeHourAveragePremarketGrids()
+    {
+        var standardVariants = StrategyIds.UpDown5mStrategyVariants
+            .Where(item => item.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket)
+            .OrderBy(item => item.DecisionThresholdBps.GetValueOrDefault())
+            .ToArray();
+        var lowEnterVariants = StrategyIds.UpDown5mStrategyVariants
+            .Where(item => item.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket)
+            .OrderBy(item => item.DecisionThresholdBps.GetValueOrDefault())
+            .ToArray();
+
+        Assert.Equal(28, standardVariants.Length);
+        Assert.Equal(28, lowEnterVariants.Length);
+        Assert.Equal(
+            ExpectedReferenceAverageBpsThresholds(),
+            standardVariants.Select(item => item.DecisionThresholdBps.GetValueOrDefault()).ToArray());
+        Assert.Equal(
+            ExpectedReferenceAverageBpsThresholds(),
+            lowEnterVariants.Select(item => item.DecisionThresholdBps.GetValueOrDefault()).ToArray());
+
+        foreach (var (variants, idGroup, codeMarker, nameMarker, category, displayCategory, paperOnly, maxAverageFillPrice) in new[]
+        {
+            (
+                Variants: standardVariants,
+                IdGroup: 8216,
+                CodeMarker: "3hour_average",
+                NameMarker: "3Hour Average",
+                Category: "ETH Up/Down 5m Bps 3Hour Average Premarket",
+                DisplayCategory: "ETH Up or Down 5m Bps 3Hour Average Premarket",
+                PaperOnly: false,
+                MaxAverageFillPrice: (decimal?)null),
+            (
+                Variants: lowEnterVariants,
+                IdGroup: 8217,
+                CodeMarker: "3hour_low_enter_average",
+                NameMarker: "3Hour LowEnter Average",
+                Category: "ETH Up/Down 5m Bps 3Hour LowEnter Average Premarket",
+                DisplayCategory: "ETH Up or Down 5m Bps 3Hour LowEnter Average Premarket",
+                PaperOnly: true,
+                MaxAverageFillPrice: (decimal?)0.50m)
+        })
+        {
+            Assert.All(variants, item =>
+            {
+                var threshold = decimal.ToInt32(item.DecisionThresholdBps.GetValueOrDefault());
+
+                Assert.Equal(
+                    Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + threshold:000000000000}"),
+                    item.Id);
+                Assert.Equal($"eth_up_down_5m_{codeMarker}_bps_{threshold}_fak_premarket", item.Code);
+                Assert.Equal($"ETH Up or Down 5m {threshold} bps {nameMarker} Premarket", item.Name);
+                Assert.Equal(category, item.Category);
+                Assert.Equal("ETH", item.ReferenceAssetSymbol);
+                Assert.Equal(BtcUpDown5mStrategyDirection.Dynamic, item.Direction);
+                Assert.Equal(-30, item.EntryDelaySeconds);
+                Assert.Equal(threshold, item.DecisionDepth);
+                Assert.Equal(threshold, item.DecisionThresholdBps);
+                Assert.Equal("3h", item.RequiredReferenceAverageWindow);
+                Assert.Equal(paperOnly, item.PaperOnly);
+                Assert.Equal(maxAverageFillPrice, item.PaperFakMaximumAverageFillPrice);
+                Assert.Null(item.FixedOutcome);
+                Assert.Null(item.DiffCounterTriggerOutcome);
+                Assert.Equal(displayCategory, StrategyDisplayCategories.GetCategory(item.Name));
+                Assert.Equal(item.Id, StrategyIds.TryGetStrategyIdByCode(item.Code));
+            });
+        }
+
+        Assert.Empty(standardVariants.Select(item => item.Id).Intersect(lowEnterVariants.Select(item => item.Id)));
+        Assert.Empty(standardVariants.Select(item => item.Code).Intersect(lowEnterVariants.Select(item => item.Code), StringComparer.Ordinal));
     }
 
     [Fact]
@@ -8628,6 +8710,54 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
         Assert.Equal("optimized_average_required_window_not_selected", run.SkipReason);
         Assert.Contains("\"selected_reference_average_window\":\"24h\"", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EthThreeHourAveragePremarketForcesThreeHourWindow()
+    {
+        var scenario = await RunOptimizedAverageScenarioAsync(
+            "eth_up_down_5m_3hour_average_bps_9_fak_premarket",
+            3_196m,
+            [3_150m, 3_200m, 3_175m, 3_180m, 3_170m, 3_160m, 3_155m, 3_152m],
+            upEntryPrice: 0.60m,
+            downEntryPrice: 0.41m);
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(0, scenario.Result.RunsSkipped);
+        var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
+        Assert.Equal("Down", run.SelectedOutcome);
+        Assert.Equal("eth-optimized-down", run.SelectedAssetId);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Filled, order.Status);
+        Assert.Equal("Down", order.Outcome);
+        Assert.Contains("\"selected_reference_average_price_usd\":3180", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_reference_average_window\":\"3h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_trigger_direction\":\"Up\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_target_direction\":\"Down\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_single_window_enabled\":true", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_required_window\":\"3h\"", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EthThreeHourLowEnterAveragePremarketRejectsFillAboveHalf()
+    {
+        var scenario = await RunOptimizedAverageScenarioAsync(
+            "eth_up_down_5m_3hour_low_enter_average_bps_9_fak_premarket",
+            3_196m,
+            [3_150m, 3_200m, 3_175m, 3_180m, 3_170m, 3_160m, 3_155m, 3_152m],
+            upEntryPrice: 0.60m,
+            downEntryPrice: 0.51m);
+
+        Assert.Equal(0, scenario.Result.EntriesPlaced);
+        Assert.Equal(1, scenario.Result.RunsSkipped);
+        Assert.Empty(scenario.Repository.PaperOrders);
+        var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal(SignalReasonCodes.ExecutionPriceAboveStrategyCap, run.SkipReason);
+        Assert.Contains("\"selected_reference_average_window\":\"3h\"", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_maximum_average_fill_price\":0.50", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_entry_price_cap_exceeded\":true", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]

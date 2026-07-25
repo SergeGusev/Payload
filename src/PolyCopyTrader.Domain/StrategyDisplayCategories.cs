@@ -175,6 +175,13 @@ public static class StrategyDisplayCategories
 
         if (IsPremarketBpsThreshold(suffix))
         {
+            if (HasThreeHourAverageMarker(suffix))
+            {
+                return HasLowEnterAverageMarker(suffix)
+                    ? categoryPrefix + "Bps 3Hour LowEnter Average Premarket"
+                    : categoryPrefix + "Bps 3Hour Average Premarket";
+            }
+
             if (HasLowEnterAverageMarker(suffix))
             {
                 return categoryPrefix + "Bps LowEnter Average Premarket";
@@ -358,7 +365,8 @@ public static class StrategyDisplayCategories
                 (StartsWithNeutralBpsThreshold(value) &&
                     (HasReferenceAverageMarker(value) ||
                         HasOptimizedAverageMarker(value) ||
-                        HasLowEnterAverageMarker(value)))) &&
+                        HasLowEnterAverageMarker(value) ||
+                        HasThreeHourAverageMarker(value)))) &&
             ContainsStrategyWord(value, "Premarket") &&
             !HasPremarketTimingSuffix(value);
     }
@@ -402,6 +410,12 @@ public static class StrategyDisplayCategories
     private static bool HasLowEnterAverageMarker(string value)
     {
         return ContainsStrategyWord(value, "LowEnter") &&
+            ContainsStrategyWord(value, "Average");
+    }
+
+    private static bool HasThreeHourAverageMarker(string value)
+    {
+        return ContainsStrategyWord(value, "3Hour") &&
             ContainsStrategyWord(value, "Average");
     }
 

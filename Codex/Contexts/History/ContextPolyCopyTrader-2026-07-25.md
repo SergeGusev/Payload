@@ -51,3 +51,10 @@ Request:
 
 Result:
 Established from User Profile Service events, task identity, supervisor code, and artifact state that Windows logged off the exact `serge` interactive session 2 at `2026-07-23T15:01:51.986Z`; the collector task used `InteractiveToken`, so its supervisor/process tree was externally terminated before cleanup and Task Scheduler recorded `0xC000013A`. A new logon later used session 3. `winlogon.exe` requested sleep immediately after the logoff, but the upstream actor that requested logoff/sleep remains unknown because Task Scheduler Operational/diagnostic logs were disabled and Security audit policy was unavailable without elevation. No runtime or production state was changed.
+
+## 2026-07-25T08:21:29.9299420Z
+Request:
+Сделай для ETH две новые категории стратегий: `ETH Up or Down 5m N bps 3Hour Average Premarket` как Reference Average только на трёхчасовом окне, и `ETH Up or Down 5m N bps 3Hour LowEnter Average Premarket` как первая, но с входом по цене не выше 0.5.
+
+Result:
+Added 56 ETH-only strategy variants: 28 thresholds for `3Hour Average` and 28 for `3Hour LowEnter Average`, using thresholds `1..10` and `15..100` step `5`. The new code patterns are `eth_up_down_5m_3hour_average_bps_N_fak_premarket` and `eth_up_down_5m_3hour_low_enter_average_bps_N_fak_premarket`; id groups are `8216` and `8217`. Runtime logic now forces `RequiredReferenceAverageWindow = "3h"` before selecting the reference average for these families. The LowEnter family is Paper-only and reuses the existing inclusive FAK average fill cap `0.50`. Added display categories, PostgreSQL seed SQL that preserves existing runtime settings on conflict, and tests for registry/counts, SQL seed shape, forced 3h selection, and LowEnter cap rejection. Verification passed: 10 targeted tests, `dotnet build PolyCopyTrader.sln --no-restore`, and `git diff --check`. Production database rows were not changed. Temp cleanup removed the verified marked run; after a locked Roslyn analyzer DLL was found, exact orphan `VBCSCompiler.exe` PID `20508` with absent parent PID `19880` was stopped and final residual removal cleared 7 files / 1,270,200 bytes.

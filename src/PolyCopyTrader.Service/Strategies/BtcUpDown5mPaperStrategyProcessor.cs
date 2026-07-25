@@ -6648,6 +6648,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.AbsoluteBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FuturesBasisBpsThresholdFakPremarket or
@@ -6736,6 +6738,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return variant.Behavior is BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket;
     }
@@ -6747,7 +6751,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private static bool IsLowEnterReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
-        return variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket;
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket;
+    }
+
+    private static bool IsSingleWindowReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior is BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket;
     }
 
     private static bool IsFilteredReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
@@ -7244,6 +7255,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 middleReferenceCurrentPrices,
                 cancellationToken),
             BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                middleReferenceCurrentPrices,
+                cancellationToken),
+            BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
+                market,
+                variant,
+                stakeUsd,
+                nowUtc,
+                middleReferenceCurrentPrices,
+                cancellationToken),
+            BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
                 market,
                 variant,
                 stakeUsd,
@@ -12774,15 +12799,47 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         CancellationToken cancellationToken)
     {
         var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
-        var averages = cryptoReferencePriceAverageProvider
+        if (IsSingleWindowReferenceAverageBpsFakPremarketEntry(variant) &&
+            string.IsNullOrWhiteSpace(variant.RequiredReferenceAverageWindow))
+        {
+            const string reason = "reference_average_required_window_not_configured";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildReferenceAverageBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice: null,
+                    averages: [],
+                    selectedAverage: null,
+                    triggerDirection: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveFromAverageBps: null,
+                    reason));
+        }
+
+        var allAverages = cryptoReferencePriceAverageProvider
             .GetAssetAverages(referenceAssetSymbol)
             .Where(average => average.IsFullWindow && average.AveragePriceUsd is > 0m)
-            .OrderByDescending(average => average.AveragePriceUsd.GetValueOrDefault())
-            .ThenByDescending(average => average.WindowSeconds)
             .ToArray();
+        var averages = IsSingleWindowReferenceAverageBpsFakPremarketEntry(variant)
+            ? allAverages
+                .Where(average => string.Equals(
+                    average.WindowLabel,
+                    variant.RequiredReferenceAverageWindow,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray()
+            : allAverages
+                .OrderByDescending(average => average.AveragePriceUsd.GetValueOrDefault())
+                .ThenByDescending(average => average.WindowSeconds)
+                .ToArray();
         if (averages.Length == 0)
         {
-            const string reason = "reference_average_full_window_missing";
+            var reason = IsSingleWindowReferenceAverageBpsFakPremarketEntry(variant)
+                ? "reference_average_required_window_missing"
+                : "reference_average_full_window_missing";
             return BtcOpeningLimitDecision.Reject(
                 reason,
                 BuildReferenceAverageBpsRawDecisionJson(
@@ -17593,6 +17650,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         variant.RequiredReferenceAverageWindow,
                         StringComparison.OrdinalIgnoreCase)
                     : (bool?)null,
+            reference_average_single_window_enabled = IsSingleWindowReferenceAverageBpsFakPremarketEntry(variant),
+            reference_average_required_window = IsSingleWindowReferenceAverageBpsFakPremarketEntry(variant)
+                ? variant.RequiredReferenceAverageWindow
+                : null,
             low_enter_average_enabled = IsLowEnterReferenceAverageBpsFakPremarketEntry(variant),
             paper_fak_maximum_average_fill_price = variant.PaperFakMaximumAverageFillPrice,
             paper_only = IsPaperOnlyVariant(variant),

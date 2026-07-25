@@ -637,6 +637,40 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresSchema_SeedsEthThreeHourAveragePremarketGrids()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var statement = Assert.Single(statements, item =>
+            item.Contains("'eth_up_down_5m_' || code_marker || '_bps_'", StringComparison.Ordinal));
+        var normalizedStatement = statement.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("('8216', '3hour_average', '3Hour Average'", statement, StringComparison.Ordinal);
+        Assert.Contains("('8217', '3hour_low_enter_average', '3Hour LowEnter Average'", statement, StringComparison.Ordinal);
+        Assert.Contains("generate_series(1, 10)", statement, StringComparison.Ordinal);
+        Assert.Contains("generate_series(15, 100, 5)", statement, StringComparison.Ordinal);
+        Assert.Contains("lpad((100 + threshold_value)::text, 12, '0')", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "'eth_up_down_5m_' || code_marker || '_bps_' || threshold_value::text || '_fak_premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'ETH Up or Down 5m ' || threshold_value::text || ' bps ' || name_marker || ' Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains("full in-memory 3h reference average only", statement, StringComparison.Ordinal);
+        Assert.Contains("actual average fill price is at most 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "true,\n    false,\n    1.00,\n    1.00,\n    100.00,\n    false,",
+            normalizedStatement,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("enabled = excluded.enabled", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stakes = excluded.live_stakes", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_stake_amount = excluded.paper_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stake_amount = excluded.live_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paused = excluded.paused", statement, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresSchema_SeedsExactBtcLowerEnterPremarketCloneAllowlistPaperOnly()
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);

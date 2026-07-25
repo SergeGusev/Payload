@@ -1,3 +1,22 @@
+## Active Update 2026-07-25 ETH 3Hour Average Strategy Families
+Goal: Add two ETH-only strategy categories: `ETH Up or Down 5m N bps 3Hour Average Premarket` and `ETH Up or Down 5m N bps 3Hour LowEnter Average Premarket`.
+Status: Completed
+Done:
+- Added 56 ETH strategy variants: 28 thresholds for `3Hour Average` and 28 thresholds for `3Hour LowEnter Average`, using thresholds `1..10` and `15..100` step `5`.
+- Added deterministic IDs/codes/names/categories for the two families: id groups `8216` and `8217`, codes `eth_up_down_5m_3hour_average_bps_N_fak_premarket` and `eth_up_down_5m_3hour_low_enter_average_bps_N_fak_premarket`.
+- Implemented runtime dispatch so both new families use the existing Reference Average entry logic, but force `RequiredReferenceAverageWindow = "3h"` before selecting an average. The standard 3Hour family remains eligible for Live-shadow behavior like Reference Average; the LowEnter family is Paper-only.
+- Extended LowEnter FAK cap handling to the new `3Hour LowEnter` family with inclusive maximum average fill price `0.50`.
+- Added display-category classification for `ETH Up or Down 5m Bps 3Hour Average Premarket` and `ETH Up or Down 5m Bps 3Hour LowEnter Average Premarket`.
+- Added PostgreSQL seed SQL for both ETH families. Existing user runtime settings are preserved on conflict; the seed updates only code, name, description, and updated timestamp.
+- Added tests covering variant registry/counts, SQL seed shape, forced 3h runtime selection when another average window is higher, and LowEnter rejection above `0.50`.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~ProcessAsync_EthThreeHourAveragePremarketForcesThreeHourWindow|FullyQualifiedName~ProcessAsync_EthThreeHourLowEnterAveragePremarketRejectsFillAboveHalf|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~StrategyIds_IncludeReferenceAverageFakPremarketVariants|FullyQualifiedName~StrategyIds_IncludeLowEnterAveragePremarketGridForEveryAsset|FullyQualifiedName~StrategyIds_IncludeEthOptimizedAveragePremarketGrid|FullyQualifiedName~StrategyIds_IncludeEthThreeHourAveragePremarketGrids|FullyQualifiedName~PostgresSchema_SeedsEthOptimizedAveragePremarketGridLiveDisabledByDefault|FullyQualifiedName~PostgresSchema_SeedsLowEnterAveragePremarketGridForEveryAssetPaperOnly|FullyQualifiedName~PostgresSchema_SeedsEthThreeHourAveragePremarketGrids" --no-restore` passed: 10/10.
+- `dotnet build PolyCopyTrader.sln --no-restore` passed with 0 errors. Warnings were NU1900 because NuGet vulnerability data index was unavailable.
+- `git diff --check` passed.
+Next: Deploy/restart/apply schema initialization in the target environment when these variants should appear in the running database. This task changed source and seed SQL only; it did not mutate production database rows.
+Notes: Protected temp session `019f88ae-b840-74e1-9392-4f7b2ef076c0-eth-3hour-strategies-20260725` was used for build/test artifacts. The configured cleanup script path was unavailable, so cleanup used the verified marked run path directly. Initial deletion hit a locked Roslyn analyzer DLL; exact orphan `VBCSCompiler.exe` PID `20508` had absent parent PID `19880`, so only that orphan compiler was stopped. The marked run directory was then removed successfully; final residual removal cleared 7 files / 1,270,200 bytes and the run path no longer exists.
+Blockers: None.
+
 ## Active Update 2026-07-25 ETH 3 bps Reference Average Fixed 0.5 Single-Window Backtest
 Goal: Recalculate `ETH Up or Down 5m 3 bps Reference Average Premarket` as true single-window variants with fixed entry price `0.5`.
 Status: Completed

@@ -1721,6 +1721,16 @@ public static class StrategyIds
             {
                 foreach (var thresholdBps in CreateReferenceAverageBpsThresholdValues())
                 {
+                    variants.Add(CreateThreeHourReferenceAverageBpsThresholdFakPremarketVariant(
+                        thresholdBps,
+                        lowEnter: false));
+                    variants.Add(CreateThreeHourReferenceAverageBpsThresholdFakPremarketVariant(
+                        thresholdBps,
+                        lowEnter: true));
+                }
+
+                foreach (var thresholdBps in CreateReferenceAverageBpsThresholdValues())
+                {
                     variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
                         asset.Symbol,
                         GetOptimizedReferenceAverageBpsPremarketIdGroup(asset.Symbol, BtcUpDownFixedOutcome.Up),
@@ -2863,6 +2873,44 @@ public static class StrategyIds
             PaperOnly: true);
     }
 
+    private static BtcUpDown5mStrategyVariant CreateThreeHourReferenceAverageBpsThresholdFakPremarketVariant(
+        int thresholdBps,
+        bool lowEnter,
+        int entryDelaySeconds = -30)
+    {
+        const string normalizedAsset = "ETH";
+        const string assetCode = "eth";
+        const string requiredWindow = "3h";
+        const decimal maximumPaperEntryPrice = 0.50m;
+        var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
+        var thresholdName = thresholdBps.ToString(CultureInfo.InvariantCulture);
+        var idGroup = lowEnter ? 8217 : 8216;
+        var codeMarker = lowEnter ? "3hour_low_enter_average" : "3hour_average";
+        var nameMarker = lowEnter ? "3Hour LowEnter Average" : "3Hour Average";
+        var behavior = lowEnter
+            ? BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket
+            : BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket;
+        var description = lowEnter
+            ? $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the full in-memory 3h reference average only. If the current price is above that 3h average by at least {thresholdName} bps, BUY Down; if it is below that 3h average by at least {thresholdName} bps, BUY Up. Otherwise skip. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most {maximumPaperEntryPrice.ToString("0.00", CultureInfo.InvariantCulture)}. Live execution is not supported for this Paper experiment."
+            : $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the full in-memory 3h reference average only. If the current price is above that 3h average by at least {thresholdName} bps, BUY Down; if it is below that 3h average by at least {thresholdName} bps, BUY Up. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.";
+
+        return new BtcUpDown5mStrategyVariant(
+            Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
+            $"{assetCode}_up_down_5m_{codeMarker}_bps_{thresholdName}_fak_premarket",
+            $"{normalizedAsset} Up or Down 5m {thresholdName} bps {nameMarker} Premarket",
+            description,
+            BtcUpDown5mStrategyDirection.Dynamic,
+            entryDelaySeconds,
+            behavior,
+            thresholdBps,
+            thresholdBps,
+            ReferenceAssetSymbol: normalizedAsset,
+            Category: $"{normalizedAsset} Up/Down 5m Bps {nameMarker} Premarket",
+            RequiredReferenceAverageWindow: requiredWindow,
+            PaperOnly: lowEnter,
+            PaperFakMaximumAverageFillPrice: lowEnter ? maximumPaperEntryPrice : null);
+    }
+
     private static int GetReferenceAverageBpsPremarketIdGroup(string assetSymbol, bool isUpTrigger)
     {
         var normalizedAsset = assetSymbol.ToUpperInvariant();
@@ -3449,7 +3497,9 @@ public enum BtcUpDown5mStrategyBehavior
     DiffConfirmedAveragePremarket,
     AbsoluteBpsThresholdFakPremarket,
     OptimizedReferenceAverageBpsThresholdFakPremarket,
-    LowEnterReferenceAverageBpsThresholdFakPremarket
+    LowEnterReferenceAverageBpsThresholdFakPremarket,
+    ThreeHourReferenceAverageBpsThresholdFakPremarket,
+    ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
