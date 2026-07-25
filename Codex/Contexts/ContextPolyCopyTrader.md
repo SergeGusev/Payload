@@ -1,3 +1,15 @@
+## Active Update 2026-07-25 SOL Optimized LowerEnter Absence Explanation
+Goal: Explain why there is no SOL analogue of `BTC Up or Down 5m Down N bps Optimized Average LowerEnter Premarket`.
+Status: Completed
+Done:
+- Verified source catalog generation in `src/PolyCopyTrader.Domain/Models.cs`: BTC creates only `Down` Optimized Average variants for thresholds `1..10`, and then `BtcLowerEnterPremarketVariants = CreateLowerEnterPremarketVariants(BtcUpDown5mVariants)` clones qualifying BTC premarket variants into LowerEnter variants.
+- Verified crypto generation: ETH/SOL base Reference Average and LowEnter Average variants are created for all crypto assets, but Optimized Average variants are inside an `if ETH` block. SOL never creates base Optimized Average variants.
+- Verified LowerEnter clone filter `IsUnservedBtcPremarketSourceVariant`: it requires `ReferenceAssetSymbol == "BTC"`, so LowerEnter clones are intentionally BTC-only and cannot clone SOL variants even if SOL Optimized existed.
+- Verified id-group support: `GetOptimizedReferenceAverageBpsPremarketIdGroup` has BTC Down and ETH Up/Down/neutral mappings, but no SOL mapping. `GetLowEnterReferenceAverageBpsPremarketIdGroup` supports SOL only for the separate neutral LowEnter Average family, not Optimized LowerEnter clones.
+- Verified text search found no `sol_up_down_5m_*optimized*` and no `sol_up_down_5m_*lower_enter*` codes in source/tests.
+Next: If SOL Optimized LowerEnter should exist, first choose exact semantics: likely SOL 3h optimized/Paper-only candidates from the window analysis, then add SOL Optimized base variants plus a generalized non-BTC LowerEnter clone path or explicit SOL LowEnter-Optimized factory.
+Notes: Read-only source inspection only. No source, strategy, service, order, configuration, or database row changed. Existing unrelated working-tree changes in `README.md` and order-book study scripts were not touched.
+Blockers: None.
 ## Active Update 2026-07-25 BTC/SOL Reference Average Window Analysis
 Goal: Check whether BTC and SOL should get analogous single-window Reference Average / LowEnter strategy families, and identify the best window before implementation.
 Status: Completed
