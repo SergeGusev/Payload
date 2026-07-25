@@ -1,3 +1,15 @@
+## Active Update 2026-07-25 ETH 3 bps Reference Average PnL / ETH Direction Check
+Goal: Check whether `ETH Up or Down 5m 3 bps Reference Average Premarket` grows only when ETH rises.
+Status: Completed
+Done:
+- Reused the previously generated exact-strategy CSV artifacts from `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-3-reference-average-pnl-vs-eth-20260725-101831`, whose production cutoff is `2026-07-25T07:19:05.061799Z`.
+- Grouped the 5,112 settled Paper rows and ETHUSDT minute-last prices by UTC day over 22 chart days. Daily ETH percent change vs daily Paper PnL correlation was `0.7239`.
+- ETH rose on 13 days; the strategy was PnL-positive on 12 of those days and made `+$1,012.05202710` across them. ETH fell on 9 days; the strategy was PnL-negative on 7 of those days and made `-$478.76662678` across them.
+- Counterexamples prevent an absolute claim: `2026-07-11` and `2026-07-25` had ETH down but positive PnL, while `2026-07-22` had ETH up but negative PnL.
+Next: If needed, run a per-market or rolling-window regression to separate ETH trend exposure from the strategy's actual signal quality.
+Notes: This was a read-only local analysis of already exported verified CSV files; no production system, database row, strategy, order, configuration, or source code changed.
+Blockers: None.
+
 ## Active Update 2026-07-25 ETH 3 bps Reference Average PnL Chart
 Goal: Generate a fresh PnL graph for `ETH Up or Down 5m 3 bps Reference Average Premarket` with overlaid ETHUSDT.
 Status: Completed
