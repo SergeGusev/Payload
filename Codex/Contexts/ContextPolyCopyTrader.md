@@ -1,3 +1,14 @@
+## Active Update 2026-07-25 ETH 3 bps Reference Average Up/Down Bias Explanation
+Goal: Explain why the neutral `ETH Up or Down 5m 3 bps Reference Average Premarket` strategy's PnL tracks ETH growth despite being able to buy both Up and Down.
+Status: Completed
+Done:
+- Verified implementation in `src/PolyCopyTrader.Domain/Models.cs`: the neutral Reference Average strategy buys `Down` when current ETH is above the largest full reference average by at least the threshold, and buys `Up` when current ETH is below that largest reference average by at least the threshold.
+- Queried production read-only for the exact strategy through the same chart cutoff `2026-07-25T07:19:05.061799Z`. Of 5,112 settled Paper rows, `Up` accounted for 4,432 rows (`86.70%`) and PnL `+$267.53745395`; `Down` accounted for 680 rows (`13.30%`) and PnL `+$265.74794637`.
+- Combined with the prior daily check: daily ETH change vs daily PnL correlation was `0.7239`; ETH-up days produced `+$1,012.05202710`, ETH-down days produced `-$478.76662678`.
+Next: If needed, run a per-market decomposition using entry-time ETH-vs-reference-average gap, selected outcome, and subsequent five-minute official outcome to quantify whether the edge is trend continuation or pullback recovery.
+Notes: Explanation is based on verified implementation plus production outcome/PnL aggregates. No production system, database row, strategy, order, configuration, or source code changed. Temp cleanup removed the marked run successfully (34 files / 2,099,202 bytes).
+Blockers: None.
+
 ## Active Update 2026-07-25 ETH 3 bps Reference Average PnL / ETH Direction Check
 Goal: Check whether `ETH Up or Down 5m 3 bps Reference Average Premarket` grows only when ETH rises.
 Status: Completed
