@@ -100,3 +100,17 @@ Request:
 
 Result:
 Filled production PostgreSQL history for the 84 ETH Optimized Average LowerEnter strategies from parent optimized rows with entry/order price `<= 0.50`. Inserted 650 complete settled paper chains with stake `3906.04499952` and Paper PnL `+711.12927008`; verified no missing signal/order/fill links, no entry cap violations, no duplicate strategy-market pairs, and dashboard reconciliation queue `0`. No live orders were placed or cancelled.
+
+## 2026-07-25T13:20:51.6730598Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified production `192.168.0.101/polycopytrader` strictly read-only. All 84 exact ETH Optimized Average LowerEnter strategy rows are present, enabled for Paper, and have `live_stakes=false`; 650 historical settled backfill rows exist with zero missing signal/order/fill links, cap violations, or duplicate strategy/market pairs in two durable independent verification reports, and no Live orders exist for the new IDs. Deployment activation is incomplete: two advancing service heartbeats still report parent build `66c77a5e`, not new commit `41286ec6`. After the rows appeared at `2026-07-25T13:05:12.763811Z`, all 84 base strategies created prospective rows while the new LowerEnter set created zero, confirming the running process does not yet execute the new catalog. The production Windows Service must be restarted from `41286ec6` or newer, then heartbeat/version and first prospective LowerEnter rows must be rechecked. No production state, order, service, or database row was changed by this verification.
+
+## 2026-07-25T13:38:57.6605902Z
+Request:
+Выложил, проверяй
+
+Result:
+Rechecked production `192.168.0.101/polycopytrader` read-only after the later redeploy. `PolyCopyTrader.Service` is now `Running` / `Live`, started `2026-07-25T13:35:29.853192Z`, heartbeat `2026-07-25T13:38:29.991668Z`, `last_error` empty, version `info=1.0.0+49ca260e41a15a6742b42424a6e140612900e7c6`. All 84 ETH Optimized Average LowerEnter strategies are present/enabled/Paper-only/unpaused, and forward runtime processing is active: after service start they created 420 run rows across all 84 strategies, including 168 `Observed` future-due rows and 252 catch-up skips with `entry_due_already_passed`. No production writes, live orders, service actions, or strategy flag changes were performed by this verification.

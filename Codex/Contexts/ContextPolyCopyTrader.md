@@ -1,3 +1,19 @@
+## Active Update 2026-07-25 ETH Optimized LowerEnter Redeploy Recheck
+Goal: Recheck production after the user reported publishing/restarting the ETH Optimized Average LowerEnter build.
+Status: Completed
+Done:
+- Verified production PostgreSQL `192.168.0.101/polycopytrader` read-only after the redeploy.
+- Production `PolyCopyTrader.Service` is now `Running` / `Live`, started at `2026-07-25T13:35:29.853192Z`, with advancing heartbeat through `2026-07-25T13:47:30.131048Z`, empty `last_error`, and version `info=1.0.0+49ca260e41a15a6742b42424a6e140612900e7c6; assembly=1.0.0.0; mvid=3bb501c78c10`; `49ca260e` is a direct descendant of required feature commit `41286ec6`.
+- Confirmed the 84 ETH Optimized Average LowerEnter strategy rows are present, enabled, Paper-only (`live_stakes=false`), unpaused, and not auto-live-paused.
+- Confirmed forward runtime processing is active: after service start the new LowerEnter strategies created 588 `strategy_market_paper_runs` across all 84 strategies. Exactly 252 pre-restart catch-up rows were separately identified as `entry_due_already_passed` and excluded from prospective proof.
+- Strictly prospective rows with `entry_due_at_utc >= started_at_utc` total 336 across all 84 LowerEnter strategies: 168 processed `Skipped` rows and 168 future `Observed` rows, exactly matching the corresponding base strategy totals.
+- Independently verified two fresh due slots after restart. At `2026-07-25T13:44:30Z`, all 84 LowerEnter rows were processed by `13:44:31.729625Z`: 24 skipped because the required `3h` window was not selected and 60 because the move was below threshold; the exact base strategies produced the identical 24/60 split.
+- Verified twice through independent tables that these Paper-only IDs have zero `live_orders` (total, post-start, and open) and zero `paper_live_shadow_decisions`.
+- Post-start service checks found no failed `polymarket_http_logs`; `api_errors` since start were limited to initial Binance reference tick warmup/staleness rows: BTC 1, ETH 1, SOL 2.
+Next: Let the service continue collecting forward Paper results; deployment activation and prospective scheduling are verified.
+Notes: No production row, service state, source file, order, or strategy flag was changed during this verification. Every production SQL session forced `default_transaction_read_only=on`, UTC, bounded statement/lock timeouts, and `REPEATABLE READ READ ONLY`. One initial combined aggregate reached the 15-second statement timeout and was cancelled before being replaced with indexed exact-allowlist slices. Evidence was saved under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-optimized-lowerenter-deploy-verify-20260725`.
+Blockers: None.
+
 ## Active Update 2026-07-25 ETH Optimized Average LowerEnter History Backfill
 Goal: Fill production PostgreSQL history for the new `ETH Up or Down 5m N bps Optimized Average LowerEnter Premarket` strategies from their parent optimized strategies.
 Status: Completed
@@ -19,6 +35,34 @@ Verification:
 Next: Deploy/restart the production service on commit `41286ec6` or newer before relying on forward autonomous recognition of the new ETH optimized LowerEnter source catalog; the observed service heartbeat during this task still reported older build `1.0.0+66c77a5e91d5ca24747a52f6172455fec406fc8c`.
 Notes: No live orders were placed or cancelled. Existing unrelated dirty files `README.md`, `scripts/run-crypto-orderbook-study-cohort.ps1`, `scripts/install-crypto-orderbook-study-system-task.ps1`, and `scripts/watch-crypto-orderbook-study-task.ps1` were not changed by this task.
 Blockers: None for the requested historical backfill.
+
+## Active Update 2026-07-25 Production ETH Optimized LowerEnter Deployment Verification
+Goal: Verify the production rollout after the user reported publishing the ETH Optimized Average LowerEnter change.
+Status: Completed
+Done:
+- Queried only `192.168.0.101/polycopytrader` with PostgreSQL `REPEATABLE READ, READ ONLY`, forced `default_transaction_read_only=on`, UTC, and bounded statement/lock timeouts; no production state was changed.
+- Reconciled the production catalog against an independently generated exact allowlist for commit `41286ec6`: all 84 ETH Optimized Average LowerEnter IDs/codes exist, with no missing, mismatched, or unexpected rows. All 84 are enabled for Paper, while `live_stakes=false`, `paused=false`, and `auto_live_paused=false` for every row.
+- Verified two advancing heartbeat observations. The service is `Running` / `Live` with no heartbeat `last_error`, but the active build remains `info=1.0.0+66c77a5e91d5ca24747a52f6172455fec406fc8c`, started at `2026-07-25T12:37:25.047667Z`; it is not commit `41286ec6` containing the 84 new runtime variants.
+- The 84 rows were created at `2026-07-25T13:05:12.763811Z`. They have 650 historical `Settled` runs on 37 strategies and zero Live orders. Durable independent backfill evidence reports stake `3906.04499952`, PnL `+711.12927008`, and zero missing signals, missing orders, runs without fills, fills above the inclusive `0.50` cap, or duplicate strategy/market pairs.
+- Verified the active-runtime mismatch behaviorally: after the new rows appeared, the 84 corresponding base strategies created 336 prospective runs across all 84 strategies, while the 84 new LowerEnter strategies created zero prospective runs. Their latest due time remains historical (`2026-07-24T10:39:30Z`), whereas the base catalog already had runs due through `2026-07-25T13:24:30Z`.
+- Independently reviewed commit `41286ec6`: exactly 84 unique variants were added relative to parent `66c77a5e`, existing variant properties were unchanged, and the new variants are Paper-only with cap `0.50` and required `3h` window. Targeted tests passed 110/110; a comparative full run introduced no new failing tests.
+Next: Restart the production Windows Service from commit `41286ec6` or newer, then recheck heartbeat version and confirm the first prospective LowerEnter run rows appear. Copying/seeding alone is not enough to activate the new runtime catalog.
+Notes: Backfill evidence is under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-optimized-lowerenter-history-backfill-20260725-115500`; `final-target-runs-verify.txt` SHA-256 is `06FA9060E378A0173B070750F0A5212BF47859873F35E4F1610C4ED9FFB21026` and `final-independent-verify.txt` SHA-256 is `13816FD708646B7A22B2DC1133349C81B1F9063510EBB9A67387E12E33B1A189`. One broad read-only comparison query reached the 15-second statement timeout and was cancelled; indexed allowlist queries supplied the final evidence. The existing full test suite remains red only from previously known unrelated catalog-test failures.
+Blockers: The active production process is still the parent build `66c77a5e`; user-side service restart/deployment activation is required before forward processing can be verified.
+
+## Active Update 2026-07-25 Unattended BTC ETH SOL Order-Book Collector Hardening
+Goal: Replace the logon-bound BTC/ETH/SOL order-book collector with a collection setup that survives user logoff and automatically recovers from failures.
+Status: In Progress
+Done:
+- Reconfirmed the exact legacy failure: task `PolyCopyTrader-CryptoOrderBook-Cohort-f98b8bda-20260723` used `InteractiveToken`, the `serge` session logged off at `2026-07-23T15:01:51.986Z`, and Task Scheduler retained result `0xC000013A`; no collector process has run since then.
+- Hardened `scripts/run-crypto-orderbook-study-cohort.ps1` with a singleton campaign lock, Windows Job Object kill-on-close, system-awake request, isolated retry cohorts, atomic state, strict checkpoint/completion/hash validation, and bounded Event Log heartbeats.
+- Added `scripts/watch-crypto-orderbook-study-task.ps1`: a `SYSTEM` watchdog that reads only a dedicated protected Windows Event Log and Task Scheduler state, never traverses the lower-privilege control/output trees, restarts stale/failed collection, and disables both tasks only after a fresh validated terminal heartbeat.
+- Added `scripts/install-crypto-orderbook-study-system-task.ps1`: a fail-closed elevated installer for a content-addressed ACL-protected runtime, `LOCAL SERVICE` main task, `SYSTEM` watchdog, 64-MB protected custom event log, startup evidence gate, exact rollback snapshots, and optional exact legacy-task disablement.
+- Validation-only installation passed under Windows PowerShell 5.1 with 65 pinned runner files and verified that task XML, log settings, and all destination paths were byte-for-byte unchanged. PowerShell 5.1/7 parser checks passed, watchdog semantic scenarios passed 5/5, and a real PS 5.1 collector launch verified command-line attestation after accounting for `Start-Process` trailing whitespace.
+- Current machine state remains unchanged: both new tasks, the custom event log, protected runtime/control/data roots, and all collector processes are absent; the legacy task remains `Ready` with `0xC000013A` and its latest archive write remains `2026-07-23T15:01:44.6401354Z`.
+Next: Finish the remaining installer review and repository verification, commit/push the scripts, then—with explicit UAC authorization—run `-StartAfterInstall -DisableLegacyTask` and verify fresh BTC/ETH/SOL checkpoints plus watchdog recovery evidence.
+Notes: No elevated install or system mutation has been performed. The validation-only campaign fingerprint after the latest source changes is `crypto-orderbook-89e83da39a5c-e88f9250-6afdf3cd-259200`.
+Blockers: The collector is still stopped. Completing the machine installation requires an explicit elevated UAC run and a little over five minutes for three first finalized checkpoints.
 
 ## Active Update 2026-07-25 ETH Optimized Average LowerEnter Variants
 Goal: Add LowerEnter variants for `ETH Up or Down 5m N bps Optimized Average Premarket` strategies.
