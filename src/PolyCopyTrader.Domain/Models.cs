@@ -1648,6 +1648,8 @@ public static class StrategyIds
         var variants = new List<BtcUpDown5mStrategyVariant>(assets.Length * 4815 + 64);
         foreach (var asset in assets)
         {
+            var terminalLowerEnterVariants = new List<BtcUpDown5mStrategyVariant>();
+
             for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
             {
                 var minMoveBps = (decimal)thresholdTenths;
@@ -1731,21 +1733,28 @@ public static class StrategyIds
 
                 foreach (var thresholdBps in CreateReferenceAverageBpsThresholdValues())
                 {
-                    variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+                    var upOptimizedVariant = CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
                         asset.Symbol,
                         GetOptimizedReferenceAverageBpsPremarketIdGroup(asset.Symbol, BtcUpDownFixedOutcome.Up),
                         thresholdBps,
-                        BtcUpDownFixedOutcome.Up));
-                    variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+                        BtcUpDownFixedOutcome.Up);
+                    var downOptimizedVariant = CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
                         asset.Symbol,
                         GetOptimizedReferenceAverageBpsPremarketIdGroup(asset.Symbol, BtcUpDownFixedOutcome.Down),
                         thresholdBps,
-                        BtcUpDownFixedOutcome.Down));
-                    variants.Add(CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+                        BtcUpDownFixedOutcome.Down);
+                    var neutralOptimizedVariant = CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
                         asset.Symbol,
                         GetOptimizedReferenceAverageBpsPremarketIdGroup(asset.Symbol, triggerOutcome: null),
                         thresholdBps,
-                        triggerOutcome: null));
+                        triggerOutcome: null);
+
+                    variants.Add(upOptimizedVariant);
+                    terminalLowerEnterVariants.Add(CreateLowerEnterPremarketVariant(upOptimizedVariant));
+                    variants.Add(downOptimizedVariant);
+                    terminalLowerEnterVariants.Add(CreateLowerEnterPremarketVariant(downOptimizedVariant));
+                    variants.Add(neutralOptimizedVariant);
+                    terminalLowerEnterVariants.Add(CreateLowerEnterPremarketVariant(neutralOptimizedVariant));
                 }
             }
             else if (string.Equals(asset.Symbol, "SOL", StringComparison.OrdinalIgnoreCase))
@@ -1758,7 +1767,7 @@ public static class StrategyIds
                         thresholdBps,
                         BtcUpDownFixedOutcome.Down);
                     variants.Add(optimizedVariant);
-                    variants.Add(CreateLowerEnterPremarketVariant(optimizedVariant));
+                    terminalLowerEnterVariants.Add(CreateLowerEnterPremarketVariant(optimizedVariant));
                 }
             }
 
@@ -1776,6 +1785,7 @@ public static class StrategyIds
             variants.AddRange(CreateBpsConfirmedAveragePremarketVariants(asset.Symbol, variants));
             variants.AddRange(CreateDiffConfirmedAveragePremarketVariants(asset.Symbol, variants));
             variants.AddRange(CreateChildMirrorVariants(asset.Symbol));
+            variants.AddRange(terminalLowerEnterVariants);
         }
 
         return ExcludeRetiredProgressVariants(variants);

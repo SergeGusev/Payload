@@ -1,3 +1,10 @@
+## 2026-07-25T11:35:00.0000000Z
+Request:
+Сделай LowerEnter стратегии для стратегий ETH Up or Down 5m N bps Optimized Average Premarket
+
+Result:
+Added 84 ETH Optimized Average LowerEnter clones for all existing ETH optimized families: Up-trigger, Down-trigger, and neutral optimized variants over thresholds `N = 1..10` and `15..100` step `5`. Clone IDs are derived from source optimized IDs by replacing the stable `0000` namespace segment with `0001` for id groups `8209`, `8210`, and `8211`; codes insert `_lower_enter` before `_premarket`. Clones preserve source optimized behavior, direction, target outcome, trigger outcome, required `3h` optimized-average gate, and Paper FAK entry path, while setting `PaperOnly = true`, `LowerEnterSourceStrategyId`, and max average fill price `0.50`. Kept ETH/SOL optimized LowerEnter clones as terminal catalog variants so they do not become sources for confirmed/child-derived factories. Updated tests and seed expectations: total lower-enter clones are now 398. Verification passed: targeted catalog/storage/runtime tests 8/8, StrategyDisplayCategoryTests 102/102, `dotnet build PolyCopyTrader.sln --no-restore` with 0 errors, and `git diff --check`. The build emitted NU1900 warnings because the NuGet vulnerability index could not be loaded. No production database rows or history were mutated.
+
 ## 2026-07-25T11:09:00.8615580Z
 Request:
 Заполни сразу историю по этим стратегиям, как мы делали раньше для других стратегий на основании родительских стратегий

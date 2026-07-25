@@ -526,8 +526,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_ExcludeCryptoBinanceBpsVariants()
     {
-        Assert.Equal(1571, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(2953, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(1731, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(3113, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(304, StrategyIds.BtcLowerEnterPremarketVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
@@ -535,9 +535,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct().Count());
-        Assert.Equal(844, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(984, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(727, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(747, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(0, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.CryptoBinanceStartRelativeBpsThreshold));
@@ -571,9 +571,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFakPremarket));
         Assert.Equal(168, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket));
-        Assert.Equal(104, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(188, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket));
-        Assert.Equal(124, StrategyIds.UpDown5mStrategyVariants.Count(variant =>
+        Assert.Equal(208, StrategyIds.UpDown5mStrategyVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(56, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket));
@@ -1114,7 +1114,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var variants = StrategyIds.UpDown5mStrategyVariants
             .Where(item =>
                 item.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket &&
-                string.Equals(item.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase))
+                string.Equals(item.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase) &&
+                item.LowerEnterSourceStrategyId is null)
+            .ToArray();
+        var lowerEnterVariants = StrategyIds.UpDown5mStrategyVariants
+            .Where(item =>
+                item.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket &&
+                string.Equals(item.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase) &&
+                item.LowerEnterSourceStrategyId is not null)
             .ToArray();
         var baselineVariants = StrategyIds.UpDown5mStrategyVariants
             .Where(item => item.LowerEnterSourceStrategyId is null)
@@ -1128,6 +1135,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         };
 
         Assert.Equal(84, variants.Length);
+        Assert.Equal(84, lowerEnterVariants.Length);
         Assert.Equal(252, baselineVariants.Length);
         Assert.All(variants, item =>
         {
@@ -1181,8 +1189,39 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             });
         }
 
+        foreach (var clone in lowerEnterVariants)
+        {
+            var sourceId = Assert.IsType<Guid>(clone.LowerEnterSourceStrategyId);
+            var source = Assert.Single(variants, item => item.Id == sourceId);
+            var sourceIdText = source.Id.ToString("D", CultureInfo.InvariantCulture);
+            var expectedId = Guid.ParseExact(sourceIdText[..9] + "0001" + sourceIdText[13..], "D");
+
+            Assert.Equal(expectedId, clone.Id);
+            Assert.Equal(
+                source.Code.Replace("_premarket", "_lower_enter_premarket", StringComparison.Ordinal),
+                clone.Code);
+            Assert.Equal(
+                source.Name.Replace(" Premarket", " LowerEnter Premarket", StringComparison.Ordinal),
+                clone.Name);
+            Assert.Equal(
+                source.Category.Replace(" Premarket", " LowerEnter Premarket", StringComparison.Ordinal),
+                clone.Category);
+            Assert.Equal(
+                StrategyDisplayCategories.GetCategory(source.Name).Replace(" Premarket", " LowerEnter Premarket", StringComparison.Ordinal),
+                StrategyDisplayCategories.GetCategory(clone.Name));
+            Assert.Equal(source.Behavior, clone.Behavior);
+            Assert.Equal(source.FixedOutcome, clone.FixedOutcome);
+            Assert.Equal(source.DiffCounterTriggerOutcome, clone.DiffCounterTriggerOutcome);
+            Assert.Equal(source.RequiredReferenceAverageWindow, clone.RequiredReferenceAverageWindow);
+            Assert.True(clone.PaperOnly);
+            Assert.Equal(StrategyIds.LowerEnterMaximumPaperAverageFillPrice, clone.PaperFakMaximumAverageFillPrice);
+            Assert.Equal(clone.Id, StrategyIds.TryGetStrategyIdByCode(clone.Code));
+        }
+
         Assert.Empty(variants.Select(item => item.Id).Intersect(baselineVariants.Select(item => item.Id)));
         Assert.Empty(variants.Select(item => item.Code).Intersect(baselineVariants.Select(item => item.Code), StringComparer.Ordinal));
+        Assert.Empty(variants.Select(item => item.Id).Intersect(lowerEnterVariants.Select(item => item.Id)));
+        Assert.Empty(variants.Select(item => item.Code).Intersect(lowerEnterVariants.Select(item => item.Code), StringComparer.Ordinal));
     }
 
     [Fact]
@@ -9806,13 +9845,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Theory]
-    [InlineData(50, true)]
-    [InlineData(51, false)]
-    public async Task ProcessAsync_BtcLowerEnterPremarketUsesInclusivePaperFakCapAndCannotSubmitLive(
+    [InlineData("btc_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket", 50, true)]
+    [InlineData("btc_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket", 51, false)]
+    [InlineData("eth_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket", 50, true)]
+    [InlineData("eth_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket", 51, false)]
+    public async Task ProcessAsync_OptimizedLowerEnterPremarketUsesInclusivePaperFakCapAndCannotSubmitLive(
+        string cloneCode,
         int entryPriceCents,
         bool shouldEnter)
     {
-        const string cloneCode = "btc_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket";
         var entryPrice = entryPriceCents / 100m;
         var scenario = await RunOptimizedAverageScenarioAsync(
             cloneCode,
@@ -9820,7 +9861,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             [95m, 96m, 97m, 100m, 94m, 93m, 92m, 91m],
             liveStakes: true,
             upEntryPrice: entryPrice);
-        var variant = StrategyIds.BtcLowerEnterPremarketVariants.Single(item => item.Code == cloneCode);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == cloneCode);
         var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns, item => item.StrategyId == variant.Id);
 
         Assert.Equal(0, scenario.TradingClient.PlaceCalls);

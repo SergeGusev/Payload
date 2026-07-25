@@ -718,9 +718,9 @@ public sealed class StorageTests
             .ToArray();
 
         Assert.Equal(304, StrategyIds.BtcLowerEnterPremarketVariants.Count);
-        Assert.Equal(314, lowerEnterVariants.Length);
+        Assert.Equal(398, lowerEnterVariants.Length);
         Assert.Equal(
-            314,
+            398,
             statement.Split("b7c50005-0001-4000-", StringSplitOptions.None).Length - 1);
         foreach (var variant in lowerEnterVariants)
         {
@@ -731,6 +731,18 @@ public sealed class StorageTests
         }
         Assert.Contains(
             "'b7c50005-0001-4000-8218-000000000101', 'sol_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket', 'SOL Up or Down 5m Down 1 bps Optimized Average LowerEnter Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'b7c50005-0001-4000-8209-000000000101', 'eth_up_down_5m_up_optimized_average_bps_1_fak_lower_enter_premarket', 'ETH Up or Down 5m Up 1 bps Optimized Average LowerEnter Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'b7c50005-0001-4000-8210-000000000101', 'eth_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket', 'ETH Up or Down 5m Down 1 bps Optimized Average LowerEnter Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'b7c50005-0001-4000-8211-000000000101', 'eth_up_down_5m_optimized_average_bps_1_fak_lower_enter_premarket', 'ETH Up or Down 5m 1 bps Optimized Average LowerEnter Premarket'",
             statement,
             StringComparison.Ordinal);
 
