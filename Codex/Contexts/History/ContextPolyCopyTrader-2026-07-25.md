@@ -1,3 +1,10 @@
+## 2026-07-25T07:52:10.4012822Z
+Request:
+Пересчитай эту стратегию так: сначала оставь только 24 часовое окно, потом 12 и т.д. Хочу понять, улучшит ли это результат.
+
+Result:
+Reconstructed `ETH Up or Down 5m 3 bps Reference Average Premarket` rolling average windows from production ETH reference ticks through the prior chart cutoff `2026-07-25T07:19:05.061799Z`. Exact realized attribution of 5,112 settled original rows by selected maximum-average window: 3h `+$455.81` / ROI `+13.4486%`, 20m `+$169.30` / `+2.8778%`, 90m `+$94.54` / `+4.7101%`, 45m `+$35.28` / `+1.9637%`, 24h `-$25.26`, 12h `-$49.97`, 6h `-$134.39`; original total was `+$533.29` / ROI `+1.7360%`. Exact counterfactual PnL for true single-window variants was not claimed because archived ETH odds ticks begin after `entry_due_at_utc` and do not provide premarket FAK ask/depth for trades the original strategy skipped or would have taken on the opposite outcome. Saved report/CSVs under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-3-reference-average-single-window-20260725-105500`.
+
 ## 2026-07-25T07:19:10.0737508Z
 Request:
 Сделай Pnl график стратегии ETH Up or Down 5m 3 bps Reference Average Premarket с наложенным курсом ETH
@@ -16,3 +23,10 @@ Request:
 
 Result:
 Explained from verified code and production aggregates that the neutral Reference Average strategy can buy both outcomes, but it is not balanced in realized trading. The code buys `Down` only when current ETH is above the largest full reference average by the threshold, and buys `Up` when current ETH is below that largest reference average by the threshold. Through the chart cutoff, production settled rows were 4,432 `Up` (`86.70%`) for `+$267.53745395` and 680 `Down` (`13.30%`) for `+$265.74794637`, so the high-frequency exposure is mostly Up even though Down trades also contribute materially.
+
+## 2026-07-25T07:52:45.8898766Z
+Request:
+Накопилась ли статистика для выводов?
+
+Result:
+Verified that the synchronized BTC/ETH/SOL collector stopped on `2026-07-23` after 92 finalized five-minute segments, about 7h40m and one UTC day, rather than the planned 72 hours. Preserved finalized totals are BTC 4,230,318, ETH 2,960,419, and SOL 841,085 events, but the verified bounds permit at most 93 distinct five-minute target markets per asset. This categorically fails the predeclared gates of 500 common-valid markets, three UTC days, and 100 markets per class, so no prediction or edge conclusion is supported. The stop coincided with a `winlogon.exe` Application-API sleep request, but the exact causal link remains unknown because Task Scheduler Operational logging was disabled. No collection or production state was changed.
