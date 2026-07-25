@@ -93,3 +93,10 @@ Request:
 
 Result:
 Verified from src/PolyCopyTrader.Domain/Models.cs that this is a catalog/seed design choice, not a runtime impossibility. BTC creates Down Optimized Average variants for thresholds 1..10, then BtcLowerEnterPremarketVariants = CreateLowerEnterPremarketVariants(BtcUpDown5mVariants) clones qualifying BTC premarket variants into LowerEnter. Crypto generation creates regular Reference Average and LowEnter Average for SOL, but Optimized Average generation is inside an if ETH block, so SOL has no base Optimized variants. The LowerEnter clone filter also requires ReferenceAssetSymbol == "BTC", and optimized id-group mapping has no SOL case. Therefore no sol_up_down_5m_*optimized* or sol_up_down_5m_*lower_enter* codes exist. No source or database state changed.
+
+## 2026-07-25T13:21:07.9767849Z
+Request:
+Заполни историю
+
+Result:
+Filled production PostgreSQL history for the 84 ETH Optimized Average LowerEnter strategies from parent optimized rows with entry/order price `<= 0.50`. Inserted 650 complete settled paper chains with stake `3906.04499952` and Paper PnL `+711.12927008`; verified no missing signal/order/fill links, no entry cap violations, no duplicate strategy-market pairs, and dashboard reconciliation queue `0`. No live orders were placed or cancelled.

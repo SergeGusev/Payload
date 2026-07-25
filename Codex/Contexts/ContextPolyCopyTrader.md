@@ -1,3 +1,25 @@
+## Active Update 2026-07-25 ETH Optimized Average LowerEnter History Backfill
+Goal: Fill production PostgreSQL history for the new `ETH Up or Down 5m N bps Optimized Average LowerEnter Premarket` strategies from their parent optimized strategies.
+Status: Completed
+Done:
+- Applied a production PostgreSQL backfill on `192.168.0.101/polycopytrader` for 84 ETH optimized LowerEnter strategy clones across id groups `8209`, `8210`, and `8211`.
+- Used backfill id `eth-optimized-lowerenter-history-20260725-entry-lte-050-v1`.
+- Copied only settled parent ETH optimized rows whose source run entry price was `<= 0.50`, source filled buy paper order price was `<= 0.50`, source signal was accepted, and source run/order/signal/fill chain was present.
+- Inserted complete cloned history chains for the qualifying rows: `signals`, filled buy `paper_orders`, matching `paper_fills`, and settled `strategy_market_paper_runs`.
+- Inserted/upserted the 84 target strategy rows; 37 target strategies received copied runs and 47 had no qualifying source rows.
+- Filled 650 settled target runs with stake `3906.04499952` and Paper PnL `+711.12927008`.
+- Deleted 44 remaining dashboard reconciliation queue rows only after verifying those exact queued target strategies had no runs, no lifetime projection state, and no visible dashboard events.
+Verification:
+- Backfill utility build passed with 0 warnings and 0 errors.
+- Apply result reported `insertedSignals=650`, `insertedOrders=650`, `insertedFills=650`, `insertedRuns=650`, `insertedStake=3906.04499952`, `insertedPnl=711.12927008`, `queuedReconciliations=37`, and `deletedProjectionEvents=0`.
+- Independent source price check reported 84 source strategies, 3,986 settled source runs, 650 runs with entry/order price `<= 0.50`, min/max entry price `0.46000000/0.57000000`, and min/max order price `0.46000000/0.57000000`.
+- Independent target-run SQL verification reported `target_runs_total=650`, `target_settled=650`, `target_stake=3906.04499952`, `target_pnl=711.12927008`, `missing_signals=0`, `missing_orders=0`, `runs_without_fills=0`, `lower_above_cap=0`, and `duplicate_strategy_market_pairs=0`.
+- Independent dashboard verification after cleanup reported `target_strategies=84`, `dashboard_queue_target_rows=0`, `dashboard_lifetime_states=40`, and `dashboard_recent_snapshots=120`.
+- Evidence saved under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-optimized-lowerenter-history-backfill-20260725-115500`.
+Next: Deploy/restart the production service on commit `41286ec6` or newer before relying on forward autonomous recognition of the new ETH optimized LowerEnter source catalog; the observed service heartbeat during this task still reported older build `1.0.0+66c77a5e91d5ca24747a52f6172455fec406fc8c`.
+Notes: No live orders were placed or cancelled. Existing unrelated dirty files `README.md`, `scripts/run-crypto-orderbook-study-cohort.ps1`, `scripts/install-crypto-orderbook-study-system-task.ps1`, and `scripts/watch-crypto-orderbook-study-task.ps1` were not changed by this task.
+Blockers: None for the requested historical backfill.
+
 ## Active Update 2026-07-25 ETH Optimized Average LowerEnter Variants
 Goal: Add LowerEnter variants for `ETH Up or Down 5m N bps Optimized Average Premarket` strategies.
 Status: Completed
