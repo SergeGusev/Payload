@@ -1,3 +1,25 @@
+## Active Update 2026-07-25 SOL Optimized Average / LowerEnter History Backfill
+Goal: Fill historical Paper rows for the newly added SOL analogues of `BTC Up or Down 5m Down N bps Optimized Average Premarket` and `BTC Up or Down 5m Down N bps Optimized Average LowerEnter Premarket`, using their parent strategies.
+Status: Completed
+Done:
+- Applied a production PostgreSQL backfill on `192.168.0.101/polycopytrader` for the exact SOL optimized id group `8218`.
+- Upserted the 20 target strategy rows: 10 `SOL Down Optimized Average` variants for thresholds `N = 1..10`, plus 10 matching `SOL Down Optimized Average LowerEnter` variants.
+- Filled base optimized history from settled `SOL Down Reference Average` parent rows where the accepted decision selected `selected_reference_average_window = '3h'`.
+- Filled LowerEnter history from the new base optimized rows where the copied average entry price was `<= 0.50`.
+- Inserted a complete cloned history chain for every copied run: `signals`, filled buy `paper_orders`, matching `paper_fills`, and settled `strategy_market_paper_runs`.
+- Base optimized result: 3,740 settled copied runs, stake `22474.46577866`, Paper PnL `+549.34398950`.
+- LowerEnter result: 648 settled copied runs, stake `3893.97059868`, Paper PnL `+899.42030283`.
+- Combined result: 4,388 settled copied runs, stake `26368.43637734`, Paper PnL `+1448.76429233`.
+- Deleted the 13,184 projection events produced by the bulk transaction and queued dashboard reconciliation for the 20 target strategies; when the running service did not drain the queue, used the repository projection path to reconcile the queued target strategies.
+Verification:
+- Backfill transaction result independently reported 20 upserted strategies, 3,740 base rows, 648 lower rows, and 4,388 inserted runs.
+- Targeted independent SQL verification after reconciliation reported: `target_strategies=20`, `target_runs_total=4388`, `marked_runs_total=4388`, `marked_base=3740`, `marked_lower=648`, `missing_signals=0`, `missing_orders=0`, `runs_without_fills=0`, `lower_above_cap=0`, `duplicate_strategy_market_pairs=0`, `dashboard_queue_target_rows=0`, `dashboard_lifetime_snapshots=20`, and `dashboard_recent_snapshots=60`.
+- Reconciliation tool build passed with no errors; it emitted existing nullable warnings from repository code only.
+- Evidence saved under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/sol-optimized-history-backfill-20260725-105500`. SHA-256: `apply-result.json` `3C243A894370542446AC56F603309E195A83DEA979EDC2DE06D7C081E03D6201`; `final-independent-verify.txt` `8658E191553211E137661C42A5EA4933BF12FF10FB1D6EDF2881330F469EE90B`; `dashboard-reconciliation-result.json` `027F00EF1FE19BA7A290AE640AB74BC0CD4823492122262D6B690DE85FA79EB8`.
+Next: Deploy/restart the production service on commit `8917c3b8` or newer before relying on forward autonomous creation/processing for these SOL optimized strategies; the currently observed service heartbeat still reported old version `1.0.0+1fd89d96ff1c2eead2037614bd6d98d7fd68ba03`.
+Notes: No live orders were placed or cancelled. Existing unrelated dirty files `README.md`, `scripts/run-crypto-orderbook-study-cohort.ps1`, `scripts/install-crypto-orderbook-study-system-task.ps1`, and `scripts/watch-crypto-orderbook-study-task.ps1` were not changed by this task.
+Blockers: None for the requested historical backfill.
+
 ## Active Update 2026-07-25 SOL Down Optimized Average / LowerEnter Variants
 Goal: Add SOL analogues of `BTC Up or Down 5m Down N bps Optimized Average Premarket` and `BTC Up or Down 5m Down N bps Optimized Average LowerEnter Premarket` for all BTC N values.
 Status: Completed
