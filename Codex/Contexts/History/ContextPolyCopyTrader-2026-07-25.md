@@ -1,3 +1,17 @@
+## 2026-07-25T08:02:05.9528864Z
+Request:
+Я не понял фразы "если фильтровать фактические входы по окну, которое стратегия выбрала как максимальное average-window". Я имел в виду - считать, что других стратегий вообще нету
+
+Result:
+Clarified that the previous result was exact attribution of already executed entries by selected max-average window, not a true single-window counterfactual. Explained that a true historical counterfactual needs an entry-price assumption for trades that the original strategy did not take.
+
+## 2026-07-25T08:02:10.0000000Z
+Request:
+Считай цену входа 0.5
+
+Result:
+Ran a read-only fixed-entry-price counterfactual for `ETH Up or Down 5m 3 bps Reference Average Premarket` through `2026-07-25T07:19:05.061799Z`. Scope had 5,942 resolved candidate rows, independently confirmed by SQL, and 183,489 ETH reference ticks. With entry price fixed at `0.5`, the original max-average selector baseline produced 5,343 trades, `+$2,335.64`, ROI `+7.7354%`. True single-window variants: 3h `+$2,169.32` / ROI `+7.7736%`; 20m `+$1,895.90` / `+8.3213%`; 6h `+$1,567.42`; 90m `+$1,429.19`; 45m `+$1,353.09`; 12h `+$877.34`; 24h `+$560.84`; 10m had zero trades because no candidate reached full-window reconstruction. Saved report/CSV under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-3-reference-average-fixed-05-single-window-20260725-111500`.
+
 ## 2026-07-25T07:52:10.4012822Z
 Request:
 Пересчитай эту стратегию так: сначала оставь только 24 часовое окно, потом 12 и т.д. Хочу понять, улучшит ли это результат.

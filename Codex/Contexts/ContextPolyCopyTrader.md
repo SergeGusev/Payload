@@ -1,3 +1,17 @@
+## Active Update 2026-07-25 ETH 3 bps Reference Average Fixed 0.5 Single-Window Backtest
+Goal: Recalculate `ETH Up or Down 5m 3 bps Reference Average Premarket` as true single-window variants with fixed entry price `0.5`.
+Status: Completed
+Done:
+- Re-ran a read-only counterfactual over the same cutoff `2026-07-25T07:19:05.061799Z`, using the original strategy's market schedule but evaluating each reference-average window alone, ignoring all other windows.
+- Used fixed entry price `0.5`: each hypothetical trade PnL is `+stake_usd` if the selected outcome won and `-stake_usd` if it lost. Scope included only markets with `entry_due_at_utc <= cutoff`, resolved ETH result `first_winner_at_utc <= cutoff`, and `winning_outcome IN ('Up','Down')`.
+- Loaded 5,942 resolved candidate rows and 183,489 ETH reference ticks. An independent SQL count confirmed the 5,942 candidate-row scope.
+- Fixed-0.5 baseline for the original max-average selector: 5,343 trades, PnL `+$2,335.64`, ROI `+7.7354%`, win rate `53.5280%`, Up/Down `4,394/949`.
+- Fixed-0.5 true single-window results by absolute PnL: 3h 5,209 trades `+$2,169.32` / ROI `+7.7736%`; 20m 4,109 trades `+$1,895.90` / `+8.3213%`; 6h 5,333 trades `+$1,567.42` / `+5.4986%`; 90m 3,404 trades `+$1,429.19` / `+7.7686%`; 45m 3,150 trades `+$1,353.09` / `+7.9124%`; 12h 5,306 trades `+$877.34` / `+3.1047%`; 24h 5,512 trades `+$560.84` / `+1.9020%`; 10m 0 trades because no candidate reached full-window reconstruction (`missing_full_window=5,942`).
+- Saved `report.md`, `fixed-0.5-single-window-results.csv`, and `verification.txt` in `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-3-reference-average-fixed-05-single-window-20260725-111500`.
+Next: If optimizing for absolute PnL under fixed `0.5`, the current evidence favors keeping the original max-average selector; if optimizing for ROI, `20m` is highest but with materially fewer trades and lower absolute PnL.
+Notes: Production database access was read-only; no service, strategy, order, configuration, database row, or product code changed. Protected temp cleanup initially hit a locked Roslyn `VBCSCompiler.exe` DLL; parent PID was absent, so only that verified orphan compiler was stopped and the marked run was removed successfully (4 files / 83,477 bytes).
+Blockers: None.
+
 ## Active Update 2026-07-25 ETH 3 bps Reference Average Window Recalculation
 Goal: Recalculate `ETH Up or Down 5m 3 bps Reference Average Premarket` by leaving only individual reference-average windows (24h, 12h, etc.) to see whether the result improves.
 Status: Completed
