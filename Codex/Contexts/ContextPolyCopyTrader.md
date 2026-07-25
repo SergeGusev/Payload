@@ -12,6 +12,20 @@ Next: If optimizing for absolute PnL under fixed `0.5`, the current evidence fav
 Notes: Production database access was read-only; no service, strategy, order, configuration, database row, or product code changed. Protected temp cleanup initially hit a locked Roslyn `VBCSCompiler.exe` DLL; parent PID was absent, so only that verified orphan compiler was stopped and the marked run was removed successfully (4 files / 83,477 bytes).
 Blockers: None.
 
+## Active Update 2026-07-25 BTC / ETH / SOL Cohort Stop Cause Audit
+Goal: Determine why the synchronized BTC/ETH/SOL order-book collection stopped after about 7h40m.
+Status: Completed
+Done:
+- Verified the scheduled task principal is local user `MSI\serge` / SID `S-1-5-21-2092058168-144277274-2812361212-1001` with `InteractiveToken` and limited privileges, not S4U, SYSTEM, or a Windows service.
+- Found direct User Profile Service evidence: at `2026-07-23T15:01:51.986Z`, Windows recorded `Received user logoff notification on session 2` for that exact SID and then completed the logoff notification. At `17:06:02.996Z`, Windows recorded a new logon for the same SID in new session 3 and reloaded `C:\Users\serge\ntuser.dat`.
+- Correlated the verified logoff with the collector artifacts: unfinished partial files last changed at `15:01:27..15:01:44Z`; all three run/index manifests and the cohort remained `in_progress`; child stdout/stderr were never finalized. Task Scheduler reports `0xC000013A` / `STATUS_CONTROL_C_EXIT`, which cannot be returned by the supervisor's normal `0/1` exit path.
+- Verified from the supervisor and collector code that a normal duration, handled cancellation, child failure, WebSocket failure, or internal exception would finalize the run/index/cohort as `completed`, `interrupted`, or `failed` and produce a normal application exit code. The observed state proves that the interactive supervisor process tree was terminated externally before managed cleanup/finally ran.
+- Established the stop mechanism: the task was tied to interactive session 2, and Windows terminated that session. This supersedes the earlier narrower statement that only a temporal sleep correlation was known. At `15:01:52.2399267Z`, `winlogon.exe` separately requested suspend through the power API; sleep began at `15:01:53Z` and resume occurred at `15:01:56Z`. Normal sleep alone does not establish a CTRL+C termination, but the independently logged session-2 logoff does.
+- The upstream initiator remains unknown: available logs do not identify who or what requested the logoff/sleep. Task Scheduler Operational and relevant diagnostic logs were disabled, and the limited account could not query Security audit policy. No application crash/WER or power-loss evidence was found.
+Next: For a new collection, use an unattended SYSTEM/S4U/service principal instead of `InteractiveToken`, set `WakeToRun`, prevent sleep, enable Task Scheduler Operational logging before launch, and add an external checkpoint-freshness watchdog.
+Notes: This was a read-only task XML, source-code, filesystem, Windows System/Application/User Profile/Winlogon/event-log, and official Microsoft documentation audit. No task, process, collector, research data, production service, strategy, order, configuration, database row, or live-trading state was changed.
+Blockers: The exact upstream actor that initiated the logoff/sleep cannot be recovered from the logs that were enabled at the time.
+
 ## Active Update 2026-07-25 ETH 3 bps Reference Average Window Recalculation
 Goal: Recalculate `ETH Up or Down 5m 3 bps Reference Average Premarket` by leaving only individual reference-average windows (24h, 12h, etc.) to see whether the result improves.
 Status: Completed

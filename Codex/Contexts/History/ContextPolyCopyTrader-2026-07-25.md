@@ -44,3 +44,10 @@ Request:
 
 Result:
 Verified that the synchronized BTC/ETH/SOL collector stopped on `2026-07-23` after 92 finalized five-minute segments, about 7h40m and one UTC day, rather than the planned 72 hours. Preserved finalized totals are BTC 4,230,318, ETH 2,960,419, and SOL 841,085 events, but the verified bounds permit at most 93 distinct five-minute target markets per asset. This categorically fails the predeclared gates of 500 common-valid markets, three UTC days, and 100 markets per class, so no prediction or edge conclusion is supported. The stop coincided with a `winlogon.exe` Application-API sleep request, but the exact causal link remains unknown because Task Scheduler Operational logging was disabled. No collection or production state was changed.
+
+## 2026-07-25T08:06:11.4194567Z
+Request:
+А почему сбор остановился?
+
+Result:
+Established from User Profile Service events, task identity, supervisor code, and artifact state that Windows logged off the exact `serge` interactive session 2 at `2026-07-23T15:01:51.986Z`; the collector task used `InteractiveToken`, so its supervisor/process tree was externally terminated before cleanup and Task Scheduler recorded `0xC000013A`. A new logon later used session 3. `winlogon.exe` requested sleep immediately after the logoff, but the upstream actor that requested logoff/sleep remains unknown because Task Scheduler Operational/diagnostic logs were disabled and Security audit policy was unavailable without elevation. No runtime or production state was changed.
