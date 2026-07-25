@@ -566,23 +566,26 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void PostgresSchema_SeedsExactBtcDownOptimizedAveragePremarketGridLiveDisabledByDefault()
+    public void PostgresSchema_SeedsExactBtcOptimizedAveragePremarketGridsLiveDisabledByDefault()
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
         var statement = Assert.Single(statements, item =>
-            item.Contains("'btc_up_down_5m_down_optimized_average_bps_'", StringComparison.Ordinal));
+            item.Contains("'btc_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_'", StringComparison.Ordinal));
         var normalizedStatement = statement.Replace("\r\n", "\n", StringComparison.Ordinal);
 
+        Assert.Contains("('8219', 'up_', 'Up ', 'Up', 'Down')", statement, StringComparison.Ordinal);
+        Assert.Contains("('8212', 'down_', 'Down ', 'Down', 'Up')", statement, StringComparison.Ordinal);
+        Assert.Contains("('8220', '', '', NULL, NULL)", statement, StringComparison.Ordinal);
         Assert.Contains("generate_series(1, 10)", statement, StringComparison.Ordinal);
         Assert.DoesNotContain("generate_series(15, 100, 5)", statement, StringComparison.Ordinal);
-        Assert.Contains("b7c50005-0000-4000-8212-", statement, StringComparison.Ordinal);
+        Assert.Contains("'b7c50005-0000-4000-' || id_group || '-'", statement, StringComparison.Ordinal);
         Assert.Contains("lpad((100 + threshold_value)::text, 12, '0')", statement, StringComparison.Ordinal);
         Assert.Contains(
-            "'btc_up_down_5m_down_optimized_average_bps_' || threshold_value::text || '_fak_premarket'",
+            "'btc_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_' || threshold_value::text || '_fak_premarket'",
             statement,
             StringComparison.Ordinal);
         Assert.Contains(
-            "'BTC Up or Down 5m Down ' || threshold_value::text || ' bps Optimized Average Premarket'",
+            "'BTC Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket'",
             statement,
             StringComparison.Ordinal);
         Assert.Contains("latest Binance BTC/USDT reference price", statement, StringComparison.Ordinal);
@@ -602,23 +605,26 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void PostgresSchema_SeedsExactSolDownOptimizedAveragePremarketGridLiveDisabledByDefault()
+    public void PostgresSchema_SeedsExactSolOptimizedAveragePremarketGridsLiveDisabledByDefault()
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
         var statement = Assert.Single(statements, item =>
-            item.Contains("'sol_up_down_5m_down_optimized_average_bps_'", StringComparison.Ordinal));
+            item.Contains("'sol_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_'", StringComparison.Ordinal));
         var normalizedStatement = statement.Replace("\r\n", "\n", StringComparison.Ordinal);
 
+        Assert.Contains("('8221', 'up_', 'Up ', 'Up', 'Down')", statement, StringComparison.Ordinal);
+        Assert.Contains("('8218', 'down_', 'Down ', 'Down', 'Up')", statement, StringComparison.Ordinal);
+        Assert.Contains("('8222', '', '', NULL, NULL)", statement, StringComparison.Ordinal);
         Assert.Contains("generate_series(1, 10)", statement, StringComparison.Ordinal);
         Assert.DoesNotContain("generate_series(15, 100, 5)", statement, StringComparison.Ordinal);
-        Assert.Contains("b7c50005-0000-4000-8218-", statement, StringComparison.Ordinal);
+        Assert.Contains("'b7c50005-0000-4000-' || id_group || '-'", statement, StringComparison.Ordinal);
         Assert.Contains("lpad((100 + threshold_value)::text, 12, '0')", statement, StringComparison.Ordinal);
         Assert.Contains(
-            "'sol_up_down_5m_down_optimized_average_bps_' || threshold_value::text || '_fak_premarket'",
+            "'sol_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_' || threshold_value::text || '_fak_premarket'",
             statement,
             StringComparison.Ordinal);
         Assert.Contains(
-            "'SOL Up or Down 5m Down ' || threshold_value::text || ' bps Optimized Average Premarket'",
+            "'SOL Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket'",
             statement,
             StringComparison.Ordinal);
         Assert.Contains("latest Binance SOL/USDT reference price", statement, StringComparison.Ordinal);
@@ -717,10 +723,10 @@ public sealed class StorageTests
             .Where(variant => variant.LowerEnterSourceStrategyId is not null)
             .ToArray();
 
-        Assert.Equal(304, StrategyIds.BtcLowerEnterPremarketVariants.Count);
-        Assert.Equal(398, lowerEnterVariants.Length);
+        Assert.Equal(324, StrategyIds.BtcLowerEnterPremarketVariants.Count);
+        Assert.Equal(438, lowerEnterVariants.Length);
         Assert.Equal(
-            398,
+            438,
             statement.Split("b7c50005-0001-4000-", StringSplitOptions.None).Length - 1);
         foreach (var variant in lowerEnterVariants)
         {
@@ -729,6 +735,22 @@ public sealed class StorageTests
                 statement,
                 StringComparison.Ordinal);
         }
+        Assert.Contains(
+            "'b7c50005-0001-4000-8219-000000000101', 'btc_up_down_5m_up_optimized_average_bps_1_fak_lower_enter_premarket', 'BTC Up or Down 5m Up 1 bps Optimized Average LowerEnter Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'b7c50005-0001-4000-8220-000000000101', 'btc_up_down_5m_optimized_average_bps_1_fak_lower_enter_premarket', 'BTC Up or Down 5m 1 bps Optimized Average LowerEnter Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'b7c50005-0001-4000-8221-000000000101', 'sol_up_down_5m_up_optimized_average_bps_1_fak_lower_enter_premarket', 'SOL Up or Down 5m Up 1 bps Optimized Average LowerEnter Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'b7c50005-0001-4000-8222-000000000101', 'sol_up_down_5m_optimized_average_bps_1_fak_lower_enter_premarket', 'SOL Up or Down 5m 1 bps Optimized Average LowerEnter Premarket'",
+            statement,
+            StringComparison.Ordinal);
         Assert.Contains(
             "'b7c50005-0001-4000-8218-000000000101', 'sol_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket', 'SOL Up or Down 5m Down 1 bps Optimized Average LowerEnter Premarket'",
             statement,

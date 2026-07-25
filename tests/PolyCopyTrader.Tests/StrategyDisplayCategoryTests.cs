@@ -110,10 +110,12 @@ public sealed class StrategyDisplayCategoryTests
             .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
 
-        Assert.Equal(304, StrategyIds.BtcLowerEnterPremarketVariants.Count);
+        Assert.Equal(324, StrategyIds.BtcLowerEnterPremarketVariants.Count);
         Assert.Equal(28, categoryCounts["BTC Up or Down 5m Up Bps Reference Average LowerEnter Premarket"]);
         Assert.Equal(28, categoryCounts["BTC Up or Down 5m Down Bps Reference Average LowerEnter Premarket"]);
+        Assert.Equal(10, categoryCounts["BTC Up or Down 5m Up Bps Optimized Average LowerEnter Premarket"]);
         Assert.Equal(10, categoryCounts["BTC Up or Down 5m Down Bps Optimized Average LowerEnter Premarket"]);
+        Assert.Equal(10, categoryCounts["BTC Up or Down 5m Bps Optimized Average LowerEnter Premarket"]);
         Assert.Equal(120, categoryCounts["BTC Up or Down 5m Absolute LowerEnter Premarket"]);
         Assert.Equal(8, categoryCounts["BTC Up or Down 5m Bps Futures Basis LowerEnter Premarket"]);
         Assert.Equal(8, categoryCounts["BTC Up or Down 5m Bps Futures Basis Revert LowerEnter Premarket"]);
@@ -124,7 +126,7 @@ public sealed class StrategyDisplayCategoryTests
         Assert.Equal(14, categoryCounts["BTC Up or Down 5m Diff Reference Average LowerEnter Premarket"]);
         Assert.Equal(28, categoryCounts["BTC Up or Down 5m Bps Confirmed Average LowerEnter Premarket"]);
         Assert.Equal(14, categoryCounts["BTC Up or Down 5m Diff Confirmed Average LowerEnter Premarket"]);
-        Assert.Equal(13, categoryCounts.Count);
+        Assert.Equal(15, categoryCounts.Count);
         Assert.All(categoryCounts.Keys, category => Assert.Contains("LowerEnter", category, StringComparison.Ordinal));
     }
 

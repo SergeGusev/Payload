@@ -1466,16 +1466,26 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
-WITH thresholds(threshold_value) AS (
+WITH families(id_group, code_trigger_prefix, name_trigger_prefix, trigger_name, target_outcome) AS (
+    VALUES
+        ('8219', 'up_', 'Up ', 'Up', 'Down'),
+        ('8212', 'down_', 'Down ', 'Down', 'Up'),
+        ('8220', '', '', NULL, NULL)
+),
+thresholds(threshold_value) AS (
     SELECT value
     FROM generate_series(1, 10) AS generated(value)
 )
 SELECT
-    ('b7c50005-0000-4000-8212-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
-    'btc_up_down_5m_down_optimized_average_bps_' || threshold_value::text || '_fak_premarket',
-    'BTC Up or Down 5m Down ' || threshold_value::text || ' bps Optimized Average Premarket',
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
+    'btc_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_' || threshold_value::text || '_fak_premarket',
+    'BTC Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket',
     '30 seconds before BTC 5m market open, compare the latest Binance BTC/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
-        'If the current price moves Down by at least ' || threshold_value::text || ' bps from that maximum average, BUY Up.' ||
+        CASE
+            WHEN trigger_name IS NULL
+            THEN 'If the current price is above that maximum average by at least ' || threshold_value::text || ' bps, BUY Down; if it is below that maximum average by at least ' || threshold_value::text || ' bps, BUY Up.'
+            ELSE 'If the current price moves ' || trigger_name || ' by at least ' || threshold_value::text || ' bps from that maximum average, BUY ' || target_outcome || '.'
+        END ||
         ' Enter only when the ordinary maximum-average selector chose the 3h window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
     true,
     false,
@@ -1494,7 +1504,8 @@ SELECT
     0,
     now(),
     now()
-FROM thresholds
+FROM families
+CROSS JOIN thresholds
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -1523,16 +1534,26 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
-WITH thresholds(threshold_value) AS (
+WITH families(id_group, code_trigger_prefix, name_trigger_prefix, trigger_name, target_outcome) AS (
+    VALUES
+        ('8221', 'up_', 'Up ', 'Up', 'Down'),
+        ('8218', 'down_', 'Down ', 'Down', 'Up'),
+        ('8222', '', '', NULL, NULL)
+),
+thresholds(threshold_value) AS (
     SELECT value
     FROM generate_series(1, 10) AS generated(value)
 )
 SELECT
-    ('b7c50005-0000-4000-8218-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
-    'sol_up_down_5m_down_optimized_average_bps_' || threshold_value::text || '_fak_premarket',
-    'SOL Up or Down 5m Down ' || threshold_value::text || ' bps Optimized Average Premarket',
+    ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
+    'sol_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_' || threshold_value::text || '_fak_premarket',
+    'SOL Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket',
     '30 seconds before SOL 5m market open, compare the latest Binance SOL/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
-        'If the current price moves Down by at least ' || threshold_value::text || ' bps from that maximum average, BUY Up.' ||
+        CASE
+            WHEN trigger_name IS NULL
+            THEN 'If the current price is above that maximum average by at least ' || threshold_value::text || ' bps, BUY Down; if it is below that maximum average by at least ' || threshold_value::text || ' bps, BUY Up.'
+            ELSE 'If the current price moves ' || trigger_name || ' by at least ' || threshold_value::text || ' bps from that maximum average, BUY ' || target_outcome || '.'
+        END ||
         ' Enter only when the ordinary maximum-average selector chose the 3h window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
     true,
     false,
@@ -1551,7 +1572,8 @@ SELECT
     0,
     now(),
     now()
-FROM thresholds
+FROM families
+CROSS JOIN thresholds
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
