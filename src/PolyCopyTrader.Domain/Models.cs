@@ -1748,6 +1748,19 @@ public static class StrategyIds
                         triggerOutcome: null));
                 }
             }
+            else if (string.Equals(asset.Symbol, "SOL", StringComparison.OrdinalIgnoreCase))
+            {
+                for (var thresholdBps = 1; thresholdBps <= 10; thresholdBps++)
+                {
+                    var optimizedVariant = CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
+                        asset.Symbol,
+                        GetOptimizedReferenceAverageBpsPremarketIdGroup(asset.Symbol, BtcUpDownFixedOutcome.Down),
+                        thresholdBps,
+                        BtcUpDownFixedOutcome.Down);
+                    variants.Add(optimizedVariant);
+                    variants.Add(CreateLowerEnterPremarketVariant(optimizedVariant));
+                }
+            }
 
             variants.AddRange(CreateAbsoluteBpsThresholdPremarketVariants(asset.Symbol));
 
@@ -2943,6 +2956,7 @@ public static class StrategyIds
             ("ETH", BtcUpDownFixedOutcome.Up) => 8209,
             ("ETH", BtcUpDownFixedOutcome.Down) => 8210,
             ("ETH", null) => 8211,
+            ("SOL", BtcUpDownFixedOutcome.Down) => 8218,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(triggerOutcome),
                 triggerOutcome,

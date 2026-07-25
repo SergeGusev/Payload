@@ -602,6 +602,42 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresSchema_SeedsExactSolDownOptimizedAveragePremarketGridLiveDisabledByDefault()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var statement = Assert.Single(statements, item =>
+            item.Contains("'sol_up_down_5m_down_optimized_average_bps_'", StringComparison.Ordinal));
+        var normalizedStatement = statement.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("generate_series(1, 10)", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("generate_series(15, 100, 5)", statement, StringComparison.Ordinal);
+        Assert.Contains("b7c50005-0000-4000-8218-", statement, StringComparison.Ordinal);
+        Assert.Contains("lpad((100 + threshold_value)::text, 12, '0')", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "'sol_up_down_5m_down_optimized_average_bps_' || threshold_value::text || '_fak_premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'SOL Up or Down 5m Down ' || threshold_value::text || ' bps Optimized Average Premarket'",
+            statement,
+            StringComparison.Ordinal);
+        Assert.Contains("latest Binance SOL/USDT reference price", statement, StringComparison.Ordinal);
+        Assert.Contains("ordinary maximum-average selector chose the 3h window", statement, StringComparison.Ordinal);
+        Assert.Contains("Live execution is not supported for this optimized Paper experiment", statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "true,\n    false,\n    1.00,\n    1.00,\n    100.00,\n    false,",
+            normalizedStatement,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("enabled = excluded.enabled", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stakes = excluded.live_stakes", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_stake_amount = excluded.paper_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_stake_amount = excluded.live_stake_amount", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paused = excluded.paused", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_lost_counter = excluded.paper_lost_counter", statement, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_lost_counter = excluded.live_lost_counter", statement, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresSchema_SeedsLowEnterAveragePremarketGridForEveryAssetPaperOnly()
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
@@ -677,17 +713,26 @@ public sealed class StorageTests
         var statement = Assert.Single(statements, item =>
             item.Contains("_lower_enter_premarket", StringComparison.Ordinal));
 
+        var lowerEnterVariants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is not null)
+            .ToArray();
+
         Assert.Equal(304, StrategyIds.BtcLowerEnterPremarketVariants.Count);
+        Assert.Equal(314, lowerEnterVariants.Length);
         Assert.Equal(
-            304,
+            314,
             statement.Split("b7c50005-0001-4000-", StringSplitOptions.None).Length - 1);
-        foreach (var variant in StrategyIds.BtcLowerEnterPremarketVariants)
+        foreach (var variant in lowerEnterVariants)
         {
             Assert.Contains(
                 $"'{variant.Id:D}', '{variant.Code}', '{variant.Name}'",
                 statement,
                 StringComparison.Ordinal);
         }
+        Assert.Contains(
+            "'b7c50005-0001-4000-8218-000000000101', 'sol_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket', 'SOL Up or Down 5m Down 1 bps Optimized Average LowerEnter Premarket'",
+            statement,
+            StringComparison.Ordinal);
 
         Assert.Contains("true, false, 1.00, 1.00, 100.00, false", statement, StringComparison.Ordinal);
         Assert.Contains("actual average fill price is at most 0.50", statement, StringComparison.Ordinal);

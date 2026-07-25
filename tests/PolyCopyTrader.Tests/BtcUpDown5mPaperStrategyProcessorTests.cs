@@ -571,9 +571,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFakPremarket));
         Assert.Equal(168, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket));
-        Assert.Equal(84, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(104, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket));
-        Assert.Equal(104, StrategyIds.UpDown5mStrategyVariants.Count(variant =>
+        Assert.Equal(124, StrategyIds.UpDown5mStrategyVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(56, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket));
@@ -1296,6 +1296,89 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             item.Code.StartsWith("btc_up_down_5m_up_optimized_average_bps_", StringComparison.Ordinal) ||
             item.Code == "btc_up_down_5m_optimized_average_bps_1_fak_premarket" ||
             item.Code == "btc_up_down_5m_down_optimized_average_bps_15_fak_premarket");
+    }
+
+    [Fact]
+    public void StrategyIds_IncludeExactSolDownOptimizedAveragePremarketAndLowerEnterGrids()
+    {
+        var baseVariants = StrategyIds.CryptoUpDown5mVariants
+            .Where(item =>
+                item.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket &&
+                string.Equals(item.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase) &&
+                item.LowerEnterSourceStrategyId is null)
+            .OrderBy(item => item.DecisionThresholdBps.GetValueOrDefault())
+            .ToArray();
+        var lowerEnterVariants = StrategyIds.CryptoUpDown5mVariants
+            .Where(item =>
+                item.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket &&
+                string.Equals(item.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase) &&
+                item.LowerEnterSourceStrategyId is not null)
+            .OrderBy(item => item.DecisionThresholdBps.GetValueOrDefault())
+            .ToArray();
+        var baselineVariants = StrategyIds.CryptoUpDown5mVariants
+            .Where(item =>
+                string.Equals(item.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase) &&
+                item.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket)
+            .ToArray();
+
+        Assert.Equal(Enumerable.Range(1, 10), baseVariants.Select(item => decimal.ToInt32(item.DecisionThresholdBps.GetValueOrDefault())));
+        Assert.Equal(Enumerable.Range(1, 10), lowerEnterVariants.Select(item => decimal.ToInt32(item.DecisionThresholdBps.GetValueOrDefault())));
+        Assert.All(baseVariants, item =>
+        {
+            var threshold = decimal.ToInt32(item.DecisionThresholdBps.GetValueOrDefault());
+            var expectedId = Guid.Parse($"b7c50005-0000-4000-8218-{100 + threshold:000000000000}");
+
+            Assert.Equal(expectedId, item.Id);
+            Assert.Equal($"sol_up_down_5m_down_optimized_average_bps_{threshold}_fak_premarket", item.Code);
+            Assert.Equal($"SOL Up or Down 5m Down {threshold} bps Optimized Average Premarket", item.Name);
+            Assert.Equal("SOL Up/Down 5m Down Bps Optimized Average Premarket", item.Category);
+            Assert.Equal(
+                "SOL Up or Down 5m Down Bps Optimized Average Premarket",
+                StrategyDisplayCategories.GetCategory(item.Name));
+            Assert.Equal("SOL", item.ReferenceAssetSymbol);
+            Assert.Equal(BtcUpDown5mStrategyDirection.Dynamic, item.Direction);
+            Assert.Equal(-30, item.EntryDelaySeconds);
+            Assert.Equal(threshold, item.DecisionDepth);
+            Assert.Equal(BtcUpDownFixedOutcome.Down, item.DiffCounterTriggerOutcome);
+            Assert.Equal(BtcUpDownFixedOutcome.Up, item.FixedOutcome);
+            Assert.Equal("3h", item.RequiredReferenceAverageWindow);
+            Assert.True(item.PaperOnly);
+            Assert.Equal(item.Id, StrategyIds.TryGetStrategyIdByCode(item.Code));
+        });
+
+        foreach (var clone in lowerEnterVariants)
+        {
+            var sourceId = Assert.IsType<Guid>(clone.LowerEnterSourceStrategyId);
+            var source = Assert.Single(baseVariants, item => item.Id == sourceId);
+            var sourceIdText = source.Id.ToString("D", CultureInfo.InvariantCulture);
+            var expectedId = Guid.ParseExact(sourceIdText[..9] + "0001" + sourceIdText[13..], "D");
+
+            Assert.Equal(expectedId, clone.Id);
+            Assert.Equal(
+                source.Code.Replace("_premarket", "_lower_enter_premarket", StringComparison.Ordinal),
+                clone.Code);
+            Assert.Equal(
+                source.Name.Replace(" Premarket", " LowerEnter Premarket", StringComparison.Ordinal),
+                clone.Name);
+            Assert.Equal("SOL Up/Down 5m Down Bps Optimized Average LowerEnter Premarket", clone.Category);
+            Assert.Equal(
+                "SOL Up or Down 5m Down Bps Optimized Average LowerEnter Premarket",
+                StrategyDisplayCategories.GetCategory(clone.Name));
+            Assert.Equal(source.Behavior, clone.Behavior);
+            Assert.Equal(source.FixedOutcome, clone.FixedOutcome);
+            Assert.Equal(source.DiffCounterTriggerOutcome, clone.DiffCounterTriggerOutcome);
+            Assert.Equal(source.RequiredReferenceAverageWindow, clone.RequiredReferenceAverageWindow);
+            Assert.True(clone.PaperOnly);
+            Assert.Equal(StrategyIds.LowerEnterMaximumPaperAverageFillPrice, clone.PaperFakMaximumAverageFillPrice);
+            Assert.Equal(clone.Id, StrategyIds.TryGetStrategyIdByCode(clone.Code));
+        }
+
+        Assert.Empty(baseVariants.Select(item => item.Id).Intersect(lowerEnterVariants.Select(item => item.Id)));
+        Assert.Empty(baseVariants.Select(item => item.Id).Intersect(baselineVariants.Select(item => item.Id)));
+        Assert.DoesNotContain(StrategyIds.CryptoUpDown5mVariants, item =>
+            item.Code.StartsWith("sol_up_down_5m_up_optimized_average_bps_", StringComparison.Ordinal) ||
+            item.Code == "sol_up_down_5m_optimized_average_bps_1_fak_premarket" ||
+            item.Code == "sol_up_down_5m_down_optimized_average_bps_15_fak_premarket");
     }
 
     [Fact]

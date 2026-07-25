@@ -12,6 +12,13 @@ Request:
 Result:
 Ran a read-only fixed-entry-price counterfactual for `ETH Up or Down 5m 3 bps Reference Average Premarket` through `2026-07-25T07:19:05.061799Z`. Scope had 5,942 resolved candidate rows, independently confirmed by SQL, and 183,489 ETH reference ticks. With entry price fixed at `0.5`, the original max-average selector baseline produced 5,343 trades, `+$2,335.64`, ROI `+7.7354%`. True single-window variants: 3h `+$2,169.32` / ROI `+7.7736%`; 20m `+$1,895.90` / `+8.3213%`; 6h `+$1,567.42`; 90m `+$1,429.19`; 45m `+$1,353.09`; 12h `+$877.34`; 24h `+$560.84`; 10m had zero trades because no candidate reached full-window reconstruction. Saved report/CSV under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-3-reference-average-fixed-05-single-window-20260725-111500`.
 
+## 2026-07-25T10:43:31.0730103Z
+Request:
+Не нужно, как новый, делаем по аналогии с BTC Up or Down 5m Down N bps Optimized Average Premarket и BTC Up or Down 5m Down N bps Optimized Average LowerEnter Premarket для всех N, которые есть в BTC
+
+Result:
+Added SOL analogues for the BTC Down Optimized Average grids for all BTC thresholds `N = 1..10`: base codes `sol_up_down_5m_down_optimized_average_bps_N_fak_premarket` and LowerEnter clone codes `sol_up_down_5m_down_optimized_average_bps_N_fak_lower_enter_premarket`. Base IDs use id group `8218` with `b7c50005-0000-4000-8218-*`; LowerEnter clone IDs use `b7c50005-0001-4000-8218-*`. Semantics match BTC optimized Down: Paper-only, dynamic direction, trigger `Down`, fixed bought outcome `Up`, required `3h` reference-average window, ordinary max-average selector, and LowerEnter cap `0.50`. Added SOL base seed SQL and generalized the lower-enter seed builder to include all registered lower clones, so the SQL seed now includes the 10 SOL optimized LowerEnter variants in addition to existing BTC lower clones. Updated display categories so optimized LowerEnter variants group under `... Optimized Average LowerEnter Premarket`. Verification: targeted registry/storage/display test filter passed 7/7; `dotnet build PolyCopyTrader.sln --no-restore` passed; `git diff --check` passed with only LF-to-CRLF warnings. Full test project did not pass because of broad existing catalog expectation failures unrelated to the new SOL optimized/lower assertions: 884 passed / 113 failed. Production database rows were not changed. Protected temp cleanup stopped exact orphan `VBCSCompiler.exe` PID `22740` with absent parent PID `18424`; after a short handle-release retry, the marked run directory was removed successfully.
+
 ## 2026-07-25T07:52:10.4012822Z
 Request:
 Пересчитай эту стратегию так: сначала оставь только 24 часовое окно, потом 12 и т.д. Хочу понять, улучшит ли это результат.

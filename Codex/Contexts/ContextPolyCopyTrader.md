@@ -1,3 +1,24 @@
+## Active Update 2026-07-25 SOL Down Optimized Average / LowerEnter Variants
+Goal: Add SOL analogues of `BTC Up or Down 5m Down N bps Optimized Average Premarket` and `BTC Up or Down 5m Down N bps Optimized Average LowerEnter Premarket` for all BTC N values.
+Status: Completed
+Done:
+- Added SOL Down Optimized Average Premarket variants for thresholds `N = 1..10`, matching the BTC optimized threshold grid, with codes `sol_up_down_5m_down_optimized_average_bps_N_fak_premarket`.
+- Added matching SOL Down Optimized Average LowerEnter Premarket clones for thresholds `N = 1..10`, with codes `sol_up_down_5m_down_optimized_average_bps_N_fak_lower_enter_premarket`.
+- Implemented deterministic SOL optimized id group `8218`; base IDs use `b7c50005-0000-4000-8218-*`, LowerEnter clone IDs use `b7c50005-0001-4000-8218-*`.
+- Kept semantics aligned with BTC optimized Down: Paper-only, dynamic direction, trigger outcome `Down`, fixed bought outcome `Up`, required reference-average window `3h`, and ordinary max-average selector path.
+- LowerEnter clones inherit the optimized source behavior and apply the existing inclusive maximum average paper fill price `0.50`.
+- Added PostgreSQL seed SQL for SOL base optimized variants and generalized the LowerEnter seed builder from BTC-only lower clones to all registered lower-enter source clones, so the 10 SOL lower clones are seeded too. Seed conflicts still preserve runtime settings and update only code/name/description/updated timestamp.
+- Updated display category classification so optimized LowerEnter names are grouped as `... Optimized Average LowerEnter Premarket` instead of the generic `LowEnter Average` bucket.
+- Added registry, seed SQL, and display-category tests for the exact SOL base/lower grids and updated optimized-count expectations.
+Verification:
+- `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~StrategyIds_IncludeExactSolDownOptimizedAveragePremarketAndLowerEnterGrids|FullyQualifiedName~StrategyIds_IncludeExactBtcDownOptimizedAveragePremarketGrid|FullyQualifiedName~StrategyIds_IncludeStandardMartinAndGammaBtcVariants|FullyQualifiedName~PostgresSchema_SeedsExactSolDownOptimizedAveragePremarketGridLiveDisabledByDefault|FullyQualifiedName~PostgresSchema_SeedsExactBtcDownOptimizedAveragePremarketGridLiveDisabledByDefault|FullyQualifiedName~PostgresSchema_SeedsExactBtcLowerEnterPremarketCloneAllowlistPaperOnly|FullyQualifiedName~DirectKnownExamplesMapToExpectedCategories|FullyQualifiedName~BtcLowerEnterPremarketClonesHaveDedicatedDisplayCategories" --no-restore` passed: 7/7.
+- `dotnet build PolyCopyTrader.sln --no-restore` passed with 0 errors.
+- `git diff --check` passed; it reported only existing LF-to-CRLF warnings.
+- Full `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj --no-restore` did not pass: 884 passed / 113 failed. Failures are broad pre-existing catalog expectation/runtime tests around missing legacy standard/middle/diff variants (for example `More60Variant` and middle threshold assumptions), not specific to the new SOL optimized/lower seed assertions.
+Next: Deploy/restart/apply schema initialization in the target environment when the new SOL strategies should appear in the running database. This task changed source and seed SQL only; it did not mutate production database rows.
+Notes: Existing unrelated dirty files `README.md`, `scripts/run-crypto-orderbook-study-cohort.ps1`, `scripts/install-crypto-orderbook-study-system-task.ps1`, and `scripts/watch-crypto-orderbook-study-task.ps1` were not changed by this task. Protected temp session `019f88ae-b840-74e1-9392-4f7b2ef076c0-sol-optimized-lowerenter-20260725` was removed successfully after stopping exact orphan `VBCSCompiler.exe` PID `22740` with absent parent PID `18424`; a short retry was needed for Windows to release the analyzer DLL handle.
+Blockers: None for the requested SOL catalog/seed implementation. Full-suite health remains blocked by unrelated existing test failures and needs a separate catalog/test alignment task if required.
+
 ## Active Update 2026-07-25 SOL Optimized LowerEnter Absence Explanation
 Goal: Explain why there is no SOL analogue of `BTC Up or Down 5m Down N bps Optimized Average LowerEnter Premarket`.
 Status: Completed

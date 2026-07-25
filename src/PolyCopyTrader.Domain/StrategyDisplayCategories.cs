@@ -182,24 +182,27 @@ public static class StrategyDisplayCategories
                     : categoryPrefix + "Bps 3Hour Average Premarket";
             }
 
-            if (HasLowEnterAverageMarker(suffix))
-            {
-                return categoryPrefix + "Bps LowEnter Average Premarket";
-            }
-
             if (HasOptimizedAverageMarker(suffix))
             {
+                var lowerEnterSuffix = HasLowEnterAverageMarker(suffix)
+                    ? " LowerEnter"
+                    : string.Empty;
                 if (StartsWithBpsThreshold(suffix, "Down"))
                 {
-                    return categoryPrefix + "Down Bps Optimized Average Premarket";
+                    return categoryPrefix + "Down Bps Optimized Average" + lowerEnterSuffix + " Premarket";
                 }
 
                 if (StartsWithBpsThreshold(suffix, "Up"))
                 {
-                    return categoryPrefix + "Up Bps Optimized Average Premarket";
+                    return categoryPrefix + "Up Bps Optimized Average" + lowerEnterSuffix + " Premarket";
                 }
 
-                return categoryPrefix + "Bps Optimized Average Premarket";
+                return categoryPrefix + "Bps Optimized Average" + lowerEnterSuffix + " Premarket";
+            }
+
+            if (HasLowEnterAverageMarker(suffix))
+            {
+                return categoryPrefix + "Bps LowEnter Average Premarket";
             }
 
             if (HasFilteredAverageMarker(suffix))

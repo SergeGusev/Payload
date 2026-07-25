@@ -1523,6 +1523,63 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
+WITH thresholds(threshold_value) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+)
+SELECT
+    ('b7c50005-0000-4000-8218-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
+    'sol_up_down_5m_down_optimized_average_bps_' || threshold_value::text || '_fak_premarket',
+    'SOL Up or Down 5m Down ' || threshold_value::text || ' bps Optimized Average Premarket',
+    '30 seconds before SOL 5m market open, compare the latest Binance SOL/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
+        'If the current price moves Down by at least ' || threshold_value::text || ' bps from that maximum average, BUY Up.' ||
+        ' Enter only when the ordinary maximum-average selector chose the 3h window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
 WITH assets(asset_symbol, child_id_group, child_progress_id_group, child_roi_id_group, child_progress_roi_id_group) AS (
     VALUES
         ('BTC', '8185', '8188', '8194', '8197'),
@@ -7271,8 +7328,10 @@ END $$;
 
     private static string BuildLowerEnterPremarketStrategySeedSql()
     {
-        var variants = StrategyIds.BtcLowerEnterPremarketVariants;
-        var sql = new StringBuilder(variants.Count * 640);
+        var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.LowerEnterSourceStrategyId is not null)
+            .ToArray();
+        var sql = new StringBuilder(variants.Length * 640);
         sql.AppendLine("""
 INSERT INTO strategies (
     id,
@@ -7299,7 +7358,7 @@ INSERT INTO strategies (
 VALUES
 """);
 
-        for (var index = 0; index < variants.Count; index++)
+        for (var index = 0; index < variants.Length; index++)
         {
             var variant = variants[index];
             sql.Append("    (")
@@ -7311,7 +7370,7 @@ VALUES
                 .Append(", ")
                 .Append(ToSqlLiteral(variant.Description))
                 .Append(", true, false, 1.00, 1.00, 100.00, false, NULL, false, NULL, NULL, NULL, 1.00, 1.00, 0, 0, now(), now())")
-                .AppendLine(index == variants.Count - 1 ? string.Empty : ",");
+                .AppendLine(index == variants.Length - 1 ? string.Empty : ",");
         }
 
         sql.AppendLine("""
