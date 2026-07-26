@@ -1,3 +1,14 @@
+## Active Update 2026-07-26 Server Collector Task Inspection Instructions
+Goal: Explain exactly how to collect the server Scheduled Task action evidence needed for a safe research-collector stop.
+Status: Completed
+Done:
+- Prepared a read-only Windows PowerShell inspection sequence for direct execution as Administrator on `192.168.0.101`.
+- The sequence enumerates only the two expected protected tasks and the exact legacy candidate, prints untruncated Actions/Arguments/WorkingDirectory/principal/state/last-result fields, and lists only processes matching the research supervisor/watchdog or `--crypto-orderbook-prediction-study --crypto-orderbook-study-mode collect` signature.
+- Explained that this inspection does not disable, stop, restart, delete, or modify anything. The returned actions must be validated before the watchdog-first/main-second stop sequence is run.
+Next: User runs the read-only block on `192.168.0.101` and returns its complete text output; then validate the exact actions and provide the bounded stop/verification command.
+Notes: The expected installed actions use Windows PowerShell with `watch-crypto-orderbook-study-task.ps1` for the watchdog and `run-crypto-orderbook-study-cohort.ps1` for the main task. The ordinary `PolyCopyTrader.Service` Windows Service remains explicitly outside scope.
+Blockers: Direct server task evidence remains unavailable from the current session because WinRM authentication fails with `0x8009030e`.
+
 ## Active Update 2026-07-26 Event Collector Stop and Production Database Growth Audit
 Goal: Stop the separate BTC/ETH/SOL event-level research collector and identify production database growth that is redundant or unused by current strategies.
 Status: Blocked

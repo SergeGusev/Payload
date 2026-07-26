@@ -60,3 +60,10 @@ Request:
 
 Result:
 Production PostgreSQL `192.168.0.101/polycopytrader` и deployed commit `3fbba24b` проверены строго read-only. База достигла `85.914 GB`; независимый физический замер дал `+56.426 MB` за 24 минуты, а точные 1d/7d row rates дают согласованный прогноз около `48.5-48.9 GB` обычного роста за 14 дней. Пять крупнейших отношений занимают `63.81 GB` (`74.29%` БД): strategy runs `28.40`, WebSocket diagnostics `13.97`, Paper orders `8.22`, positions `7.47`, Gamma `5.75 GB`. Подтверждены как неиспользуемые текущими стратегиями: секундные arbitrage scans, routine sampled WebSocket raw frames, `signals.raw_context_json`, `order_book_snapshots.raw_json`, старые stage timings и crypto-reference rows старше текущего 24-часового startup window. За сутки `604,962/685,066` runs были Skipped, а их diagnostic JSON добавляет около `1.07 GB/day` до overhead; это главный кандидат на compact retention, но сами current/nonterminal runs и нужная settled history удалять нельзя. Пустая lag-diagnostics таблица сохраняет `1.175 GB` индексов. Никакая production-очистка, reindex, retention/config mutation или restart не выполнялись.
+
+## 2026-07-26T09:49:19.8836053Z
+Request:
+Чуть подробнее про Пришлите вывод Get-ScheduledTask с Actions. По шагам - что нужно делать?
+
+Result:
+Подготовлена пошаговая read-only инструкция для запуска непосредственно на `192.168.0.101` в Windows PowerShell от Администратора. Команда выводит без обрезки имя, состояние, principal, Execute, Arguments, WorkingDirectory, LastRunTime и LastTaskResult только для двух ожидаемых защищённых collector tasks и legacy-кандидата, затем перечисляет только процессы с точной research-сигнатурой. Проверка ничего не останавливает и не изменяет; пользователь должен вернуть полный текстовый вывод для валидации, после чего будет выдана безопасная последовательность `disable watchdog -> stop watchdog -> disable main -> stop main -> verify zero processes`.
