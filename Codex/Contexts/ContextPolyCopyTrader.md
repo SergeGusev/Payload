@@ -1,3 +1,15 @@
+## Active Update 2026-07-26 Server Collector Exact-Name Check Result
+Goal: Interpret the direct PowerShell output for the expected server collector tasks and processes.
+Status: In Progress
+Done:
+- Received a console result showing all three exact task candidates as `Found=False`: `PolyCopyTrader-CryptoOrderBook-Watchdog`, `PolyCopyTrader-CryptoOrderBook-Cohort`, and `PolyCopyTrader-CryptoOrderBook-Cohort-f98b8bda-20260723`.
+- The same result reports `Matching research processes: NONE` for the exact collector/supervisor/watchdog signatures.
+- Derived from that supplied output that no stop command should be run against those names: there is no matching target to disable or stop in the inspected environment.
+- Kept the conclusion bounded because the supplied output does not itself show computer identity, administrator-token status, all differently named task actions/services, or filesystem freshness.
+Next: Run one final broad read-only identity/task-action/process/service/path inspection on the server. If it confirms `192.168.0.101`, an Administrator token, no broader aliases, and no active writer, close the collector-stop objective as already stopped/not installed there.
+Notes: No production task, process, service, file, configuration, or database row was changed. The ordinary `PolyCopyTrader.Service` remains outside scope.
+Blockers: Final server attribution and broad negative confirmation require the next direct console output.
+
 ## Active Update 2026-07-26 Server Collector Task Inspection Instructions
 Goal: Explain exactly how to collect the server Scheduled Task action evidence needed for a safe research-collector stop.
 Status: Completed

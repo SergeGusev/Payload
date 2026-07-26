@@ -67,3 +67,131 @@ Request:
 
 Result:
 Подготовлена пошаговая read-only инструкция для запуска непосредственно на `192.168.0.101` в Windows PowerShell от Администратора. Команда выводит без обрезки имя, состояние, principal, Execute, Arguments, WorkingDirectory, LastRunTime и LastTaskResult только для двух ожидаемых защищённых collector tasks и legacy-кандидата, затем перечисляет только процессы с точной research-сигнатурой. Проверка ничего не останавливает и не изменяет; пользователь должен вернуть полный текстовый вывод для валидации, после чего будет выдана безопасная последовательность `disable watchdog -> stop watchdog -> disable main -> stop main -> verify zero processes`.
+
+## 2026-07-26T09:56:06.7796800Z
+Request:
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\WINDOWS\system32> $taskNames = @(
+>>     'PolyCopyTrader-CryptoOrderBook-Watchdog',
+>>     'PolyCopyTrader-CryptoOrderBook-Cohort',
+>>     'PolyCopyTrader-CryptoOrderBook-Cohort-f98b8bda-20260723'
+>> )
+>>
+>> $report = foreach ($name in $taskNames) {
+>>     $task = Get-ScheduledTask `
+>>         -TaskPath '\' `
+>>         -TaskName $name `
+>>         -ErrorAction SilentlyContinue
+>>
+>>     if ($null -eq $task) {
+>>         [pscustomobject]@{
+>>             TaskName         = $name
+>>             Found            = $false
+>>             State            = $null
+>>             Principal        = $null
+>>             ActionCount      = 0
+>>             Execute          = $null
+>>             Arguments        = $null
+>>             WorkingDirectory = $null
+>>             LastRunTime      = $null
+>>             LastTaskResult   = $null
+>>         }
+>>
+>>         continue
+>>     }
+>>
+>>     $actions = @($task.Actions)
+>>     $info = Get-ScheduledTaskInfo `
+>>         -TaskPath '\' `
+>>         -TaskName $name
+>>
+>>     [pscustomobject]@{
+>>         TaskName         = $name
+>>         Found            = $true
+>>         State            = [string]$task.State
+>>         Principal        = [string]$task.Principal.UserId
+>>         ActionCount      = $actions.Count
+>>         Execute          = $actions.Execute -join ' | '
+>>         Arguments        = $actions.Arguments -join ' | '
+>>         WorkingDirectory = $actions.WorkingDirectory -join ' | '
+>>         LastRunTime      = $info.LastRunTime
+>>         LastTaskResult   = $info.LastTaskResult
+>>     }
+>> }
+>>
+>> $report |
+>>     Format-List |
+>>     Out-String -Width 4096
+>>
+>> $processes = @(
+>>     Get-CimInstance Win32_Process |
+>>         Where-Object {
+>>             $_.ProcessId -ne $PID -and (
+>>                 (
+>>                     $_.Name -ieq 'PolyCopyTrader.Service.exe' -and
+>>                     $_.CommandLine -like '*--crypto-orderbook-prediction-study*' -and
+>>                     $_.CommandLine -like '*--crypto-orderbook-study-mode collect*'
+>>                 ) -or (
+>>                     $_.Name -ieq 'powershell.exe' -and (
+>>                         $_.CommandLine -like '*run-crypto-orderbook-study-cohort.ps1*' -or
+>>                         $_.CommandLine -like '*watch-crypto-orderbook-study-task.ps1*'
+>>                     )
+>>                 )
+>>             )
+>>         }
+>> )
+>>
+>> if ($processes.Count -eq 0) {
+>>     'Matching research processes: NONE'
+>> }
+>> else {
+>>     $processes |
+>>         Select-Object ProcessId, ParentProcessId, Name, ExecutablePath, CommandLine |
+>>         Format-List |
+>>         Out-String -Width 4096
+>> }
+
+
+TaskName         : PolyCopyTrader-CryptoOrderBook-Watchdog
+Found            : False
+State            :
+Principal        :
+ActionCount      : 0
+Execute          :
+Arguments        :
+WorkingDirectory :
+LastRunTime      :
+LastTaskResult   :
+
+TaskName         : PolyCopyTrader-CryptoOrderBook-Cohort
+Found            : False
+State            :
+Principal        :
+ActionCount      : 0
+Execute          :
+Arguments        :
+WorkingDirectory :
+LastRunTime      :
+LastTaskResult   :
+
+TaskName         : PolyCopyTrader-CryptoOrderBook-Cohort-f98b8bda-20260723
+Found            : False
+State            :
+Principal        :
+ActionCount      : 0
+Execute          :
+Arguments        :
+WorkingDirectory :
+LastRunTime      :
+LastTaskResult   :
+
+
+
+
+Matching research processes: NONE
+PS C:\WINDOWS\system32>
+
+Result:
+В переданном окружении все три точных task-кандидата отсутствуют (`Found=False`), а процессов с точной research-сигнатурой нет. Поэтому отключать или останавливать эти имена нельзя и не требуется. Вывод сам по себе не содержит hostname, administrator-token status, broad alias search или filesystem freshness; подготовлена финальная расширенная read-only проверка для точной серверной атрибуции и исключения задач/служб под другими именами.
