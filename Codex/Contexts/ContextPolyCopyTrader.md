@@ -1,3 +1,178 @@
+## Active Update 2026-07-26 Server Crypto Order-Book Collector Check
+Goal: Verify the BTC/ETH/SOL order-book collector on production server `192.168.0.101`, not on the local workstation.
+Status: Blocked
+Done:
+- Confirmed the requested target is `192.168.0.101`; did not use local collector files as server evidence.
+- Tested remote channels read-only: WinRM TCP `5985` is open, but `Test-WSMan` timed out and `Invoke-Command` failed with WinRM error `0x8009030e` (`A specified logon session does not exist`) under current credentials.
+- Tested alternatives: SSH `22`, WinRM HTTPS `5986`, and RDP `3389` are closed/unreachable; CIM DCOM and `schtasks /S` did not complete within bounded timeouts; administrative `C$`/`D$` paths are not accessible from this session.
+- No server state, local files, tasks, processes, or credentials were changed or printed.
+Next: Obtain a working authenticated remote session on `192.168.0.101` (WinRM/CIM/SMB), or run the supplied read-only inspection commands directly on that server and return their output.
+Notes: The previous local inspection showed only the old workstation task; it is deliberately excluded from the server conclusion.
+Blockers: Current Windows remoting authentication/session is not valid for the target server; a server-side authenticated execution path is required.
+
+## Active Update 2026-07-25 LowEnter Average Neutral 3 Column Daily PnL Report
+Goal: Create a one-sheet Excel report for `bps LowEnter Average Premarket` Neutral strategies across BTC, ETH, and SOL.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only for current `bps LowEnter Average Premarket` Neutral strategies.
+- Verified scope contains 84 candidate strategies: BTC 28, ETH 28, SOL 28; Up/Down variants are absent in production.
+- Selected the highest all-history settled Paper PnL Neutral strategy per currency and sorted columns by total PnL ascending: SOL `2 bps` `+254.14586907`, BTC `20 bps` `+306.58658091`, ETH `2 bps` `+537.83127431`.
+- Created workbook `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/daily-pnl-reports-20260725/lowenter-average-neutral-3cols/reports/lowenter_average_premarket_neutral_3cols_daily_paper_pnl_20260725.xlsx`.
+- Workbook has one `Daily PnL` sheet, 22 Europe/Sofia date rows, daily total formulas, category total formulas, grand total `+1098.56372429`, first row/first column freeze panes, and red-on-white negative formatting with a visible minus sign.
+Verification:
+- Source snapshot reported `candidateStrategies=84`, `rawSettledPaperRows=61143`, `strategies=3`, `dates=22`, and `grandTotalPnlUsd=1098.56372429`.
+- Artifact-tool import/render verification completed and produced `qa/final-preview.png`.
+- Visual inspection confirmed readable headers, visible totals, frozen-style layout, and red negative values.
+- Formula-error scan found no `#REF!`, `#DIV/0!`, `#VALUE!`, `#NAME?`, or `#N/A` matches.
+Next: None.
+Notes: Production DB was queried read-only; no production rows, service state, orders, strategy flags, or source code were changed.
+Blockers: None.
+
+## Active Update 2026-07-25 Daily PnL Excel Reports Fresh Snapshot
+Goal: Create fresh one-sheet Excel reports for Child/Child ROI, Optimized Average LowerEnter Premarket with Up/Down/Neutral, and bps LowEnter Average Premarket with Up/Down/Neutral.
+Status: Blocked
+Done:
+- Rechecked production PostgreSQL `192.168.0.101:5432`; connectivity was restored.
+- Created and verified the Child/Child ROI report at `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/daily-pnl-reports-20260725/child-child-roi/reports/child_child_roi_best_daily_paper_pnl_20260725.xlsx`.
+- Child/Child ROI report selected 6 strategies across BTC/ETH/SOL × Child/Child ROI, sorted by total PnL ascending, with 18 UTC date rows and grand total `1516.63144505`.
+- Created and verified the 9-column Optimized Average LowerEnter Premarket report at `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/daily-pnl-reports-20260725/optimized-average-lowerenter-9cols/reports/optimized_average_lowerenter_premarket_9cols_daily_paper_pnl_20260725.xlsx`.
+- Optimized Average LowerEnter scope had 144 candidate strategies and all 9 asset/type groups. Selected columns sorted by PnL: SOL Up `0.00000000`, BTC Up `6.00930000`, ETH Up `6.00930000`, BTC Neutral `18.86490005`, BTC Down `42.55833990`, ETH Down `51.27107831`, ETH Neutral `51.27107831`, SOL Down `117.28917704`, SOL Neutral `129.06249950`; grand total `422.33567311`.
+- Verified production inventory for `bps LowEnter Average Premarket`: only 84 Neutral strategies exist, split BTC 28 / ETH 28 / SOL 28; Up and Down strategy counts are `0`.
+- Did not create the requested 9-column `bps LowEnter Average Premarket` report because the required Up/Down source strategies do not exist in production, so the report would not satisfy the requested 9-column scope.
+Verification:
+- Child/Child ROI existing pipeline completed production snapshot, workbook build, freeze panes, Excel COM verification, and final import/render verification.
+- Optimized workbook import/render verification completed with no formula-error scan matches; PNG preview was visually inspected.
+- Both generated workbooks freeze the first row and first column, include daily total and category total formulas, and format negative values red on white with a visible minus sign.
+Next: If a 9-column `bps LowEnter Average Premarket` report is still required, first add/backfill Up and Down versions of that strategy family; otherwise request a Neutral-only 3-column LowEnter Average report.
+Notes: Production DB was queried read-only for reports; no production rows, service state, orders, strategy flags, or source code were changed. Temporary generator files were stored under `D:\CodexTemp` only.
+Blockers: The third requested workbook is blocked by missing production strategies: `bps LowEnter Average Premarket` Up/Down variants do not exist.
+
+## Active Update 2026-07-25 Three Fresh Daily PnL Excel Reports Blocked By Production DB Timeout
+Goal: Create three fresh one-sheet Excel reports: Child/Child ROI, Optimized Average LowerEnter Premarket with Up/Down/Neutral, and bps LowEnter Average Premarket with Up/Down/Neutral.
+Status: Blocked
+Done:
+- Initialized from project workflow, AGENTS, coding rules, active context, and current git state.
+- Confirmed an existing generator is available for the Child/Child ROI report under `scripts/child-child-roi-daily-report`.
+- Loaded spreadsheet skill requirements and workspace dependency paths.
+- Started the Child/Child ROI production report pipeline against the production endpoint expected by prior reports, `192.168.0.101/polycopytrader`.
+- The pipeline failed before reading data because Npgsql timed out connecting to `192.168.0.101:5432`.
+- Independently checked connectivity: `Test-NetConnection -ComputerName 192.168.0.101 -Port 5432` timed out and `psql` to `192.168.0.101:5432/polycopytrader` also timed out.
+Next: Re-run the three report generation steps after production PostgreSQL `192.168.0.101:5432` is reachable.
+Notes: No production rows, service state, orders, strategy flags, source code, or workbook outputs were changed. I did not fall back to the local `127.0.0.1` database because it was previously verified as stale/incomplete for these strategy families and would not satisfy “fresh data”.
+Blockers: Production PostgreSQL endpoint `192.168.0.101:5432` is unreachable from this machine.
+
+## Active Update 2026-07-25 Optimized Average LowerEnter Neutral-Only Excel Report
+Goal: Create a one-sheet Excel report for Neutral-only `Optimized Average LowerEnter Premarket` strategies across BTC, ETH, and SOL.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only with explicit `Neutral` / `Up` / `Down` classification for `Optimized Average LowerEnter Premarket`.
+- Verified exact scope: 144 total strategies, 48 Neutral included and 96 Up/Down excluded. Neutral split is BTC 10, ETH 28, SOL 10.
+- Selected the highest settled Paper PnL Neutral strategy per currency and sorted columns by total PnL ascending: BTC `10 bps` `+18.86490005`, ETH `2 bps` `+51.27107831`, SOL `2 bps` `+129.06249950`.
+- Created one-sheet workbook `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/optimized-average-lowerenter-premarket-report-20260725/optimized_average_lowerenter_premarket_neutral_only_pnl_report.xlsx`.
+- Rows are continuous `Europe/Sofia` settled dates from `2026-07-05` through `2026-07-24`; daily/category/grand totals are formulas and grand total is `+199.19847786`.
+Verification:
+- SQL source verification matched selected strategy total PnL and daily aggregate total at `199.19847786` across 32 non-empty daily source rows.
+- Workbook generation reported 20 date rows, 3 selected strategy columns, and grand total `199.19847786`.
+- Rendered preview `optimized_average_lowerenter_premarket_neutral_only_pnl_report_preview.png` and visually verified readable headers, totals, freeze-pane layout, and red negative values.
+Next: None.
+Notes: Production DB was queried read-only; no production rows, service state, source code, strategy flags, or orders were changed. Existing dirty repo files were not committed with this report.
+Blockers: None.
+
+## Active Update 2026-07-25 LowEnter Average Premarket Neutral-Only Report
+Goal: Rebuild the `bps LowEnter Average Premarket` Excel report with explicit Neutral-only filtering.
+Status: Completed
+Done:
+- Re-queried production PostgreSQL `192.168.0.101/polycopytrader` read-only with explicit strategy-type classification.
+- Verified the exact `LowEnter Average Premarket` scope currently contains only Neutral rows: BTC 28, ETH 28, SOL 28; excluded Up/Down count is `0`.
+- Rebuilt the report as `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/lowenter-average-premarket-report-20260725/lowenter_average_premarket_neutral_only_pnl_report.xlsx`.
+- Selected the highest settled Paper PnL Neutral strategy per currency and sorted columns by total PnL ascending: SOL `2 bps` `+248.13656907`, BTC `20 bps` `+306.58658091`, ETH `2 bps` `+513.30351921`.
+- Rows are continuous `Europe/Sofia` settled dates from `2026-07-04` through `2026-07-25`; daily/category/grand totals are formulas and grand total is `+1068.02666919`.
+Verification:
+- SQL source verification matched selected strategy total PnL and daily aggregate total at `1068.02666919` across 64 non-empty daily source rows.
+- Workbook generation reported 22 date rows, 3 selected strategy columns, and grand total `1068.02666919`.
+- Rendered preview `lowenter_average_premarket_neutral_only_pnl_report_preview.png` and visually verified readable headers, totals, freeze-pane layout, and red negative values.
+Next: None.
+Notes: Production DB was queried read-only; no production rows, service state, source code, strategy flags, or orders were changed. The total differs from the earlier report because one additional SOL settled Paper run arrived after that snapshot.
+Blockers: None.
+
+## Active Update 2026-07-25 LowEnter Average Premarket Excel Report
+Goal: Create a one-sheet Excel report for the highest-PnL `bps LowEnter Average Premarket` strategy in each of BTC, ETH, and SOL.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only and found the exact scope: 84 enabled `LowEnter Average Premarket` strategies, 28 per BTC/ETH/SOL.
+- Selected one highest settled Paper PnL strategy per currency and sorted columns by total PnL ascending: SOL `2 bps` `+242.12726907`, BTC `20 bps` `+306.58658091`, ETH `2 bps` `+513.30351921`.
+- Created one-sheet workbook `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/lowenter-average-premarket-report-20260725/lowenter_average_premarket_pnl_report.xlsx`.
+- Rows are continuous `Europe/Sofia` settled dates from `2026-07-04` through `2026-07-25`; strategy cells contain typed daily Paper PnL, with formulas for daily totals, category totals, and grand total `+1062.01736919`.
+- Applied freeze panes for first row and first column, plus red-on-white negative number formatting with a visible minus sign.
+Verification:
+- SQL source verification matched selected strategy total PnL and daily aggregate total at `1062.01736919` across 64 non-empty daily source rows.
+- Workbook generation reported 22 date rows, 3 selected strategy columns, and grand total `1062.01736919`.
+- Rendered preview `lowenter_average_premarket_pnl_report_preview.png` and visually verified readable headers, totals, and red negative values.
+Next: None.
+Notes: Production DB was queried read-only; no production rows, service state, source code, strategy flags, or orders were changed. The workbook is a durable output under `outputs/`; temporary build files were stored under a marked `D:\CodexTemp\runs` session.
+Blockers: None.
+
+## Active Update 2026-07-25 BTC/SOL Up Neutral Optimized Average History Backfill
+Goal: Add `Up` and neutral `Optimized Average Premarket` strategy families for BTC and SOL, add matching `LowerEnter` variants, and backfill their production Paper history.
+Status: Completed
+Done:
+- Added BTC optimized families for thresholds `N = 1..10`: `BTC Up or Down 5m Up N bps Optimized Average Premarket` using id group `8219`, and neutral `BTC Up or Down 5m N bps Optimized Average Premarket` using id group `8220`.
+- Added SOL optimized families for thresholds `N = 1..10`: `SOL Up or Down 5m Up N bps Optimized Average Premarket` using id group `8221`, and neutral `SOL Up or Down 5m N bps Optimized Average Premarket` using id group `8222`.
+- Added matching LowerEnter clones for every new BTC/SOL Up/Neutral optimized variant by replacing the source UUID namespace segment `0000` with `0001` and inserting `_lower_enter` before `_premarket`.
+- Generalized PostgreSQL seed SQL for BTC and SOL optimized strategies from Down-only to Up/Down/neutral families while preserving existing Down id groups `8212` and `8218`.
+- Applied production PostgreSQL backfill on `192.168.0.101/polycopytrader` with backfill id `btc-sol-up-neutral-optimized-history-20260725-v1`.
+- Upserted 80 target strategy rows and inserted complete cloned history chains for 9,457 settled Paper runs: 9,457 `signals`, 9,457 `paper_orders`, 9,457 `paper_fills`, and 9,457 `strategy_market_paper_runs`.
+- Base optimized history came from settled source Reference Average rows where `selected_reference_average_window = '3h'`, accepted signal, filled Buy paper order, and complete signal/order/fill/run chain were present.
+- LowerEnter history copied only rows with both source run `entry_price <= 0.50` and source paper order `price <= 0.50`.
+- Backfilled results by group: BTC Up base 172 runs / PnL `-360.32555240`, BTC Up LowerEnter 31 / `-66.10230000`; BTC Neutral base 3,618 / `+527.98549258`, BTC Neutral LowerEnter 760 / `+29.35415729`; SOL Up base 405 / `+627.03584360`, SOL Up LowerEnter 53 / `-18.02790000`; SOL Neutral base 3,784 / `+1010.97717440`, SOL Neutral LowerEnter 634 / `+1017.13530697`.
+- Queued dashboard reconciliation for the 80 target strategies; production reconciliation drained the queue and produced 80 lifetime states plus 240 recent states.
+- Committed and pushed source/test changes to `master` at commit `3fbba24b`.
+Verification:
+- Rollback dry-run of the exact production SQL completed all inserts and reported the expected 80 target strategies, 9,457 candidate runs, and 80 reconciliation queue rows, then rolled back.
+- Production apply committed successfully and reported the same 9,457 inserted candidate runs split across the 8 base/lower asset/family groups.
+- Independent production SQL verification reported `target_strategies=80`, `paper_enabled_safe=80`, `target_runs=9457`, `target_settled=9457`, `missing_signals=0`, `missing_orders=0`, `runs_without_fills=0`, `lower_above_cap=0`, and `duplicate_strategy_market_pairs=0`.
+- Independent dashboard verification reported `queue_rows=0`, `lifetime_states=80`, `recent_states=240`, `recent_facts=0`, and `position_facts=0`.
+- Targeted strategy/seed/display tests passed: 10/10.
+- `dotnet build PolyCopyTrader.sln --no-restore` passed with 0 errors; warnings were NU1900 because the NuGet vulnerability index was unavailable.
+- `git diff --check` passed for changed source/test files; it emitted only existing LF-to-CRLF warnings.
+Next: Deploy/restart the production service on commit `3fbba24b` or newer before relying on forward autonomous creation/processing for the new BTC/SOL Up/Neutral optimized families.
+Notes: No live orders were placed or cancelled. Existing unrelated dirty files `README.md`, order-book study scripts, and prior context/history changes were not staged into the source commit.
+Blockers: None for catalog, production rows, and historical backfill. Forward runtime activation still depends on deploying/restarting the service on `3fbba24b` or newer.
+
+## Active Update 2026-07-25 Optimized LowerEnter Report Excluding ETH Up Down
+Goal: Update the Optimized Average LowerEnter Premarket Excel report to exclude separate ETH Up and ETH Down versions.
+Status: Completed
+Done:
+- Re-queried production PostgreSQL `192.168.0.101/polycopytrader` read-only with the filter `NOT (asset = 'ETH' AND strategy_type IN ('Up', 'Down'))`.
+- Rebuilt the one-sheet report with 3 selected columns: `BTC Down`, `ETH Neutral`, and `SOL Down`, sorted by total Paper PnL ascending.
+- Saved the revised workbook as `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/optimized-average-lowerenter-premarket-report-20260725/optimized_average_lowerenter_premarket_pnl_report_exclude_eth_up_down.xlsx` because the original workbook path was locked by another process.
+- Revised report total is `+211.11859525`; it preserves typed dates/numbers, daily/category/grand-total formulas, freeze panes for first row/first column, and red-on-white negative formatting.
+Verification:
+- Workbook inspect reported 3 selected strategies, 16 date rows, 24 source daily PnL rows, and grand total `211.11859525`.
+- Formula error scan matched 0 entries for `#REF!`, `#DIV/0!`, `#VALUE!`, `#NAME?`, and `#N/A`.
+- Rendered preview `optimized_average_lowerenter_premarket_pnl_report_exclude_eth_up_down_preview.png` and visually verified that ETH Up/Down columns are absent, totals are visible, and negative values are red with a minus sign.
+Next: None.
+Notes: Production DB was queried read-only; no production row, order, service state, source code, or strategy flag was changed. Initial attempt to overwrite the prior workbook failed with `EBUSY`, so the revised file was written alongside it. Temporary build files were removed after durable output/verification was saved.
+Blockers: None.
+
+## Active Update 2026-07-25 Optimized Average LowerEnter Premarket Excel Report
+Goal: Create a one-sheet Excel report for the best `Optimized Average LowerEnter Premarket` strategies by currency/type across BTC, ETH, and SOL.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only and selected the highest settled Paper PnL strategy within each existing `currency × type` group for `Optimized Average LowerEnter Premarket`.
+- Found 5 existing groups: `ETH Up`, `BTC Down`, `ETH Down`, `ETH Neutral`, and `SOL Down`; BTC and SOL currently have only the Down optimized LowerEnter type in this family.
+- Created one-sheet workbook `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/optimized-average-lowerenter-premarket-report-20260725/optimized_average_lowerenter_premarket_pnl_report.xlsx`.
+- Columns are the 5 selected strategies sorted by total Paper PnL ascending: ETH Up `+6.00930000`, BTC Down `+42.55833990`, ETH Down `+51.27107831`, ETH Neutral `+51.27107831`, SOL Down `+117.28917704`.
+- Rows are `Europe/Sofia` settled dates; cells contain typed daily Paper PnL, with formulas for the day total column, category total row, and grand total `+268.39897356`.
+- Applied freeze panes for the first row and first column, and conditional formatting so negative values show red text on white background with a visible minus sign.
+Verification:
+- Workbook inspect reported 5 selected strategies, 16 date rows, 31 source daily PnL rows, and grand total `268.39897356`.
+- Formula error scan matched 0 entries for `#REF!`, `#DIV/0!`, `#VALUE!`, `#NAME?`, and `#N/A`.
+- Rendered preview `optimized_average_lowerenter_premarket_pnl_report_preview.png` and visually verified readable headers, visible totals, frozen-style first row/column layout, and red negative values.
+Next: None.
+Notes: Production DB was queried read-only; no production row, order, service state, source code, or strategy flag was changed. Temporary build files were removed after durable output/verification was saved.
+Blockers: None.
+
 ## Active Update 2026-07-25 ETH Optimized LowerEnter Redeploy Recheck
 Goal: Recheck production after the user reported publishing/restarting the ETH Optimized Average LowerEnter build.
 Status: Completed
