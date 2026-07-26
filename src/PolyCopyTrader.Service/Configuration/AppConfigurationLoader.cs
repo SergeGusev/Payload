@@ -18,6 +18,15 @@ public static class AppConfigurationLoader
             configuration.GetSection("BinanceCryptoReference").Get<BinanceCryptoReferenceOptions>() ?? new BinanceCryptoReferenceOptions());
         var okxExpiryFuturesReference = NormalizeOkxExpiryFuturesReferenceOptions(
             configuration.GetSection("OkxExpiryFuturesReference").Get<OkxExpiryFuturesReferenceOptions>() ?? new OkxExpiryFuturesReferenceOptions());
+        var cryptoReferencePriceHistorySection = configuration.GetSection("CryptoReferencePriceHistory");
+        var cryptoReferencePriceHistory = NormalizeCryptoReferencePriceHistoryOptions(
+            cryptoReferencePriceHistorySection.Get<CryptoReferencePriceHistoryOptions>() ?? new CryptoReferencePriceHistoryOptions(),
+            cryptoReferencePriceHistorySection
+                .GetSection(nameof(CryptoReferencePriceHistoryOptions.AssetSymbols))
+                .Get<List<string>>(),
+            cryptoReferencePriceHistorySection
+                .GetSection(nameof(CryptoReferencePriceHistoryOptions.WindowMinutes))
+                .Get<List<int>>());
         var cryptoUpDown5mOddsArchive = NormalizeCryptoUpDown5mOddsArchiveOptions(
             configuration.GetSection("CryptoUpDown5mOddsArchive").Get<CryptoUpDown5mOddsArchiveOptions>() ?? new CryptoUpDown5mOddsArchiveOptions());
         var cryptoUpDown5mResultPolling = NormalizeCryptoUpDown5mResultPollingOptions(
@@ -49,6 +58,7 @@ public static class AppConfigurationLoader
             BinanceBtcUsdReference = configuration.GetSection("BinanceBtcUsdReference").Get<BinanceBtcUsdReferenceOptions>() ?? new BinanceBtcUsdReferenceOptions(),
             BinanceCryptoReference = binanceCryptoReference,
             OkxExpiryFuturesReference = okxExpiryFuturesReference,
+            CryptoReferencePriceHistory = cryptoReferencePriceHistory,
             BtcUpDown5mOddsArchive = configuration.GetSection("BtcUpDown5mOddsArchive").Get<BtcUpDown5mOddsArchiveOptions>() ?? new BtcUpDown5mOddsArchiveOptions(),
             BtcUpDown5mStatistics = configuration.GetSection("BtcUpDown5mStatistics").Get<BtcUpDown5mStatisticsOptions>() ?? new BtcUpDown5mStatisticsOptions(),
             BtcUpDown5mArbitrageScanner = configuration.GetSection("BtcUpDown5mArbitrageScanner").Get<BtcUpDown5mArbitrageScannerOptions>() ?? new BtcUpDown5mArbitrageScannerOptions(),
@@ -89,6 +99,22 @@ public static class AppConfigurationLoader
             RequestTimeoutMilliseconds = options.RequestTimeoutMilliseconds,
             StaleAfterSeconds = options.StaleAfterSeconds,
             UserAgent = options.UserAgent
+        };
+    }
+
+    private static CryptoReferencePriceHistoryOptions NormalizeCryptoReferencePriceHistoryOptions(
+        CryptoReferencePriceHistoryOptions options,
+        IReadOnlyCollection<string>? configuredAssetSymbols,
+        IReadOnlyCollection<int>? configuredWindowMinutes)
+    {
+        return new CryptoReferencePriceHistoryOptions
+        {
+            Enabled = options.Enabled,
+            AssetSymbols = NormalizeAssetSymbols(configuredAssetSymbols ?? options.AssetSymbols),
+            WriteIntervalSeconds = options.WriteIntervalSeconds,
+            StartupLookbackHours = options.StartupLookbackHours,
+            TargetSamplesPerWindow = options.TargetSamplesPerWindow,
+            WindowMinutes = (configuredWindowMinutes ?? options.WindowMinutes).ToList()
         };
     }
 

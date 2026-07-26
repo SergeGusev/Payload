@@ -6850,17 +6850,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var repository = new TestAppRepository();
         var enabledCodes = new[]
         {
-            "btc_up_down_5m_up_diff_1_instant",
-            "eth_up_down_5m_up_diff_1_instant",
-            "sol_up_down_5m_up_diff_1_instant"
+            "btc_up_down_5m_up_diff_1_fak_premarket",
+            "eth_up_down_5m_up_diff_1_fak_premarket",
+            "sol_up_down_5m_up_diff_1_fak_premarket"
         };
+        var strategyOptions = CreateBtcOptions(paperTakerPricingEnabled: false, enabledCodes);
+        Assert.True(strategyOptions.PersistDiffCounterSnapshots);
         var processor = CreateProcessorCoreWithOptions(
             repository,
             [],
             DefaultOrderBooks(),
             _ => { },
             Array.Empty<OrderBookSnapshot>(),
-            CreateBtcOptions(paperTakerPricingEnabled: false, enabledCodes),
+            strategyOptions,
             gammaClient: new FakeGammaClient([]),
             timeProvider: timeProvider);
 
@@ -6883,6 +6885,39 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             Assert.Equal(0, snapshot.Diff);
             Assert.Equal(0, snapshot.ProcessedMarketCount);
         });
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_DoesNotPersistDiffCounterSnapshotsWhenDisabled()
+    {
+        var startupMarketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
+        var startupNow = startupMarketStartUtc.AddMinutes(3);
+        var timeProvider = new ManualTimeProvider(startupNow);
+        var repository = new TestAppRepository();
+        var enabledCodes = new[]
+        {
+            "btc_up_down_5m_up_diff_1_fak_premarket",
+            "eth_up_down_5m_up_diff_1_fak_premarket",
+            "sol_up_down_5m_up_diff_1_fak_premarket"
+        };
+        var strategyOptions = CreateBtcOptions(
+            paperTakerPricingEnabled: false,
+            enabledCodes,
+            persistDiffCounterSnapshots: false);
+        Assert.False(strategyOptions.PersistDiffCounterSnapshots);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            DefaultOrderBooks(),
+            _ => { },
+            Array.Empty<OrderBookSnapshot>(),
+            strategyOptions,
+            gammaClient: new FakeGammaClient([]),
+            timeProvider: timeProvider);
+
+        _ = await processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Empty(repository.CryptoUpDown5mDiffSnapshots);
     }
 
     [Fact]
@@ -8493,8 +8528,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0, repository.EndingBetweenGammaMarketCalls);
     }
 
-    [Fact]
-    public async Task ProcessPreviousResultFastDueEntriesAsync_UsesBoundedGammaFallbackForOlderStreakMarkets()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProcessPreviousResultFastDueEntriesAsync_UsesBoundedGammaFallbackForOlderStreakMarkets(
+        bool persistStageTimings)
     {
         var now = DateTimeOffset.UtcNow;
         var marketStart = now.AddSeconds(-2);
@@ -8541,7 +8579,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             CreateBtcOptions(
                 paperTakerPricingEnabled: false,
                 [UpBps2InstantVariant.Code],
-                maxConcurrentEntryDecisions: 4),
+                maxConcurrentEntryDecisions: 4,
+                persistStageTimings: persistStageTimings),
             new FakeBtcUsdReferencePriceClient(100m),
             CreateBtcUsdReferenceCache([100m]),
             clobClient: clobClient);
@@ -8560,11 +8599,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0, repository.BtcUpDownStrategyGammaMarketCalls);
         Assert.Equal(0, repository.CryptoUpDownGammaMarketCalls);
         Assert.Equal(1, repository.EndingBetweenGammaMarketCalls);
-        var signalWarmup = Assert.Single(repository.BtcUpDown5mStrategyStageTimings, timing =>
-            timing.StageName.EndsWith(".previous_result_signal_warmup", StringComparison.Ordinal));
-        var decisionTasks = Assert.Single(repository.BtcUpDown5mStrategyStageTimings, timing =>
-            timing.StageName.EndsWith(".decision_tasks", StringComparison.Ordinal));
-        Assert.True(signalWarmup.CompletedAtUtc <= decisionTasks.StartedAtUtc);
+        if (persistStageTimings)
+        {
+            var signalWarmup = Assert.Single(repository.BtcUpDown5mStrategyStageTimings, timing =>
+                timing.StageName.EndsWith(".previous_result_signal_warmup", StringComparison.Ordinal));
+            var decisionTasks = Assert.Single(repository.BtcUpDown5mStrategyStageTimings, timing =>
+                timing.StageName.EndsWith(".decision_tasks", StringComparison.Ordinal));
+            Assert.True(signalWarmup.CompletedAtUtc <= decisionTasks.StartedAtUtc);
+        }
+        else
+        {
+            Assert.Empty(repository.BtcUpDown5mStrategyStageTimings);
+        }
     }
 
     [Fact]
@@ -12230,7 +12276,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         int maxConcurrentSettlements = 1,
         int maxMarketsPerCycle = 500,
         int paperTakerMaxQuoteAgeMilliseconds = 1_500,
-        int entryGraceSeconds = 10)
+        int entryGraceSeconds = 10,
+        bool persistDiffCounterSnapshots = true,
+        bool persistStageTimings = true)
     {
         return new BtcUpDown5mStrategyOptions
         {
@@ -12243,6 +12291,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             MaxConcurrentSettlements = maxConcurrentSettlements,
             MartinStakeLevels = 5,
             EnabledVariantCodes = enabledVariantCodes.ToList(),
+            PersistDiffCounterSnapshots = persistDiffCounterSnapshots,
+            PersistStageTimings = persistStageTimings,
             PaperTakerPricingEnabled = paperTakerPricingEnabled,
             PaperTakerRestFallbackEnabled = true,
             PaperTakerMaxQuoteAgeMilliseconds = paperTakerMaxQuoteAgeMilliseconds,

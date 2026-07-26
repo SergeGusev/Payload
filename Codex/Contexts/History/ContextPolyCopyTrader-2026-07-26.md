@@ -302,3 +302,10 @@ Broad service matches: NONE
 
 Result:
 Точная серверная атрибуция подтверждена: `DESKTOP-QO1ON6E`, Administrator, IPv4 `192.168.0.101`. Вместе с предыдущей корректной exact-name/process проверкой это доказывает, что отдельный event-level collector сейчас не работает, а известных Scheduled Tasks для его перезапуска нет; ничего отключать или останавливать не требуется. В broad process/service predicates пользователь заменил `$_` на `$*`, поэтому broad process negative не использован как доказательство; предыдущий exact process predicate был корректен. Отдельная read-only проверка PostgreSQL в `2026-07-26T14:44:03.592647Z` показала, что основной Service и нужные стратегиям компактные BTC/ETH/SOL writers продолжают работать свежо. Production не изменялся.
+
+## 2026-07-26T15:39:17.0698775Z
+Request:
+Ок, исключай всё, что не обслуживает текущие стратегии.
+
+Result:
+По подтверждённому production-набору из 2,573 исполняемых BTC/ETH/SOL 5m стратегий реализовано ограничение будущих записей: Gamma сохраняет только BTC/ETH/SOL 5m; отключены HTTP request logs, arbitrage scans, raw WebSocket frame diagnostics, дублирующие resolved diagnostics, strategy stage/result-streak diagnostics и write-only Diff snapshots; неиспользуемые дубли структурированных данных в JSONB заменены на `NULL` или `{}`. Обязательные strategy state, Diff progress, structured resolved ledger, Gamma raw JSON, orders/fills/positions/settlements и финансовый audit сохранены. Production строки не удалялись: backup/rollback point не подтверждён, поэтому примерно 19.10 GB старых diagnostic relations остаются до отдельного backup-first cleanup. Release build завершён без ошибок, целевые тесты прошли 75/75; полный последовательный набор имеет 112 старых catalog-related падений против 115 на чистом HEAD и не получил новых failing test names. Изменения ещё не развёрнуты на сервере; после deployment требуется runtime-проверка остановки writers и Gamma scope.

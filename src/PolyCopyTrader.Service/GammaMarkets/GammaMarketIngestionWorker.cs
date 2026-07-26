@@ -20,9 +20,10 @@ public sealed class GammaMarketIngestionWorker(
 
         var interval = TimeSpan.FromSeconds(options.PollIntervalSeconds);
         logger.LogInformation(
-            "Gamma active market ingestion worker started. PollIntervalSeconds={PollIntervalSeconds} PageLimit={PageLimit}",
+            "Gamma active market ingestion worker started. PollIntervalSeconds={PollIntervalSeconds} PageLimit={PageLimit} PersistenceScope={PersistenceScope}",
             options.PollIntervalSeconds,
-            options.PageLimit);
+            options.PageLimit,
+            options.PersistenceScope);
 
         while (!stoppingToken.IsCancellationRequested)
         {

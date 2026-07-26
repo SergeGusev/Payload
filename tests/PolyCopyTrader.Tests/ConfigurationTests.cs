@@ -22,6 +22,8 @@ public sealed class ConfigurationTests
         Assert.Equal(90, configuration.MarketDataWebSocket.WatchdogStaleSeconds);
         Assert.False(configuration.MarketDataWebSocket.PersistOrderBookSnapshots);
         Assert.False(configuration.MarketDataWebSocket.PersistMarketDataEvents);
+        Assert.True(configuration.MarketDataWebSocket.PersistFrameDiagnostics);
+        Assert.True(configuration.MarketDataWebSocket.PersistMarketResolvedDiagnostics);
         Assert.Equal(32, configuration.MarketDataWebSocket.SideEffectMaxPendingUpdatesPerAsset);
         Assert.Equal(256, configuration.MarketDataWebSocket.SideEffectDiagnosticQueueCapacity);
         Assert.Equal(30, configuration.MarketDataWebSocket.SideEffectMetricsIntervalSeconds);
@@ -46,7 +48,11 @@ public sealed class ConfigurationTests
         Assert.Equal(14, configuration.PolymarketHttpLogging.FailedRetentionDays);
         Assert.Equal(0, configuration.GammaMarketIngestion.PollIntervalSeconds);
         Assert.Equal(500, configuration.GammaMarketIngestion.PageLimit);
+        Assert.Equal(GammaMarketPersistenceScope.AllActiveMarkets, configuration.GammaMarketIngestion.PersistenceScope);
         Assert.Equal(500, configuration.BtcUpDown5mStrategy.DiffCounterFastPollIntervalMilliseconds);
+        Assert.True(configuration.BtcUpDown5mStrategy.PersistStageTimings);
+        Assert.True(configuration.BtcUpDown5mStrategy.PersistResultStreakDiagnostics);
+        Assert.True(configuration.BtcUpDown5mStrategy.PersistDiffCounterSnapshots);
         Assert.Equal(1.00m, configuration.BtcUpDown5mStrategy.StakeUsd);
         Assert.Equal(60, configuration.BtcUpDown5mStrategy.EntryGraceSeconds);
         Assert.Equal(3_000, configuration.BtcUpDown5mStrategy.MaxEntriesPerCycle);
@@ -341,7 +347,8 @@ public sealed class ConfigurationTests
             GammaMarketIngestion = new GammaMarketIngestionOptions
             {
                 PollIntervalSeconds = -1,
-                PageLimit = 0
+                PageLimit = 0,
+                PersistenceScope = (GammaMarketPersistenceScope)999
             }
         };
 
@@ -349,6 +356,7 @@ public sealed class ConfigurationTests
 
         Assert.Contains(errors, error => error.Contains("GammaMarketIngestion.PollIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("GammaMarketIngestion.PageLimit", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("GammaMarketIngestion.PersistenceScope", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1128,6 +1136,8 @@ public sealed class ConfigurationTests
         Assert.Contains("Mode:", summary);
         Assert.Contains("Paper runs in live mode:", summary);
         Assert.Contains("Market WebSocket side-effect max pending updates per asset:", summary);
+        Assert.Contains("BTC Up or Down 5m persists Diff counter snapshots:", summary);
+        Assert.Contains("Gamma market persistence scope:", summary);
         Assert.Contains("Dashboard projection event batch size:", summary);
         Assert.DoesNotContain("private", summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret", summary, StringComparison.OrdinalIgnoreCase);

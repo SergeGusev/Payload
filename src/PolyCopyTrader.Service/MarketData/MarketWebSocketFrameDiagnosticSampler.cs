@@ -17,6 +17,11 @@ public sealed class MarketWebSocketFrameDiagnosticSampler(MarketDataWebSocketOpt
         IReadOnlyCollection<MarketDataUpdate>? updates,
         bool parseSucceeded)
     {
+        if (!options.PersistFrameDiagnostics)
+        {
+            return new MarketWebSocketFrameDiagnosticSamplingDecision(false, false, "disabled");
+        }
+
         if (!parseSucceeded)
         {
             return new MarketWebSocketFrameDiagnosticSamplingDecision(true, true, "parse_failure");

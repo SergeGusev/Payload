@@ -774,7 +774,11 @@ ON CONFLICT (wallet, condition_id) DO UPDATE SET
 			for (var index = 0; index < count; index++)
 			{
 				var run = runs[offset + index];
-				batch[index] = run with { StrategyId = StrategyIds.Normalize(run.StrategyId) };
+				batch[index] = run with
+				{
+					StrategyId = StrategyIds.Normalize(run.StrategyId),
+					SkipDiagnosticsJson = GetPersistedSkipDiagnosticsJson(run)
+				};
 			}
 
 			await using NpgsqlCommand command = CreateCommand(connection, """
@@ -1123,7 +1127,7 @@ RETURNING id;
 		command.Parameters.AddWithValue("ProposedSizeShares", ((object)signal.ProposedSizeShares) ?? DBNull.Value);
 		command.Parameters.AddWithValue("ProposedNotionalUsd", ((object)signal.ProposedNotionalUsd) ?? DBNull.Value);
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(signal.CreatedAtUtc));
-		command.Parameters.AddWithValue("RawContextJson", JsonSerializer.Serialize(signal));
+		command.Parameters.Add("RawContextJson", NpgsqlDbType.Text).Value = DBNull.Value;
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
@@ -1327,7 +1331,7 @@ RETURNING id;
 			proposed_size_shares = signal.ProposedSizeShares,
 			proposed_notional_usd = signal.ProposedNotionalUsd,
 			created_at_utc = UtcDateTime(signal.CreatedAtUtc),
-			raw_context_json = JsonSerializer.Serialize(signal)
+			raw_context_json = (string?)null
 		});
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO signals (
@@ -1725,7 +1729,7 @@ WHERE position.entry_paper_order_id = activation_rows.entry_paper_order_id
 			realized_pnl_usd = run.RealizedPnlUsd,
 			settled_at_utc = run.SettledAtUtc.HasValue ? UtcDateTime(run.SettledAtUtc.Value) : (DateTime?)null,
 			skip_reason = run.SkipReason,
-			skip_diagnostics_json = run.SkipDiagnosticsJson,
+			skip_diagnostics_json = GetPersistedSkipDiagnosticsJson(run),
 			created_at_utc = UtcDateTime(run.CreatedAtUtc),
 			updated_at_utc = UtcDateTime(run.UpdatedAtUtc)
 		});
@@ -8377,7 +8381,7 @@ ORDER BY participant.block_timestamp_utc, participant.block_number, participant.
 		command.Parameters.AddWithValue("BestAsk", ((object)snapshot.BestAsk) ?? DBNull.Value);
 		command.Parameters.AddWithValue("SpreadAbs", ((object)snapshot.SpreadAbs) ?? DBNull.Value);
 		command.Parameters.AddWithValue("SpreadPct", ((object)snapshot.SpreadPct) ?? DBNull.Value);
-		command.Parameters.AddWithValue("RawJson", JsonSerializer.Serialize(snapshot));
+		command.Parameters.Add("RawJson", NpgsqlDbType.Text).Value = DBNull.Value;
 		command.Parameters.AddWithValue("SnapshotAtUtc", UtcDateTime(snapshot.SnapshotAtUtc));
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
@@ -9437,9 +9441,17 @@ FROM claimed;
 		command.Parameters.AddWithValue("RealizedPnlUsd", NullableDecimal(run.RealizedPnlUsd));
 		command.Parameters.AddWithValue("SettledAtUtc", NullableDateTime(run.SettledAtUtc));
 		command.Parameters.AddWithValue("SkipReason", ((object?)run.SkipReason) ?? DBNull.Value);
-		command.Parameters.AddWithValue("SkipDiagnosticsJson", ((object?)run.SkipDiagnosticsJson) ?? DBNull.Value);
+		command.Parameters.Add("SkipDiagnosticsJson", NpgsqlDbType.Text).Value =
+			((object?)GetPersistedSkipDiagnosticsJson(run)) ?? DBNull.Value;
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(run.CreatedAtUtc));
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(run.UpdatedAtUtc));
+	}
+
+	internal static string? GetPersistedSkipDiagnosticsJson(StrategyMarketPaperRun run)
+	{
+		return string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase)
+			? null
+			: run.SkipDiagnosticsJson;
 	}
 
 	private static PaperCopiedLeaderPosition ReadPaperCopiedLeaderPosition(NpgsqlDataReader reader)
@@ -9514,7 +9526,7 @@ FROM claimed;
 		command.Parameters.AddWithValue("ProposedSizeShares", ((object?)signal.ProposedSizeShares) ?? DBNull.Value);
 		command.Parameters.AddWithValue("ProposedNotionalUsd", ((object?)signal.ProposedNotionalUsd) ?? DBNull.Value);
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(signal.CreatedAtUtc));
-		command.Parameters.AddWithValue("RawContextJson", JsonSerializer.Serialize(signal));
+		command.Parameters.Add("RawContextJson", NpgsqlDbType.Text).Value = DBNull.Value;
 	}
 
 	private static void AddPaperOrderParameters(NpgsqlCommand command, PaperOrder order)
@@ -11102,7 +11114,7 @@ FROM claimed;
 		command.Parameters.AddWithValue("MaxReservedNotionalUsd", decision.MaxReservedNotionalUsd);
 		command.Parameters.AddWithValue("OrderType", decision.OrderType);
 		command.Parameters.AddWithValue("PostOnly", decision.PostOnly);
-		command.Parameters.AddWithValue("OrderBookSnapshotJson", string.IsNullOrWhiteSpace(decision.OrderBookSnapshotJson) ? "{}" : decision.OrderBookSnapshotJson);
+		command.Parameters.AddWithValue("OrderBookSnapshotJson", "{}");
 		command.Parameters.AddWithValue("QuoteAgeMs", ((object)decision.QuoteAgeMs) ?? ((object)DBNull.Value));
 		command.Parameters.AddWithValue("Source", decision.Source);
 		command.Parameters.AddWithValue("QuoteReceivedAtUtc", UtcDateTime(decision.QuoteReceivedAtUtc));
@@ -11266,7 +11278,7 @@ FROM claimed;
 		command.Parameters.AddWithValue("DownLastTradePrice", NullableDecimal(tick.DownLastTradePrice));
 		command.Parameters.AddWithValue("DownBookSource", tick.DownBookSource);
 		command.Parameters.AddWithValue("DownBookAgeMs", NullableDecimal(tick.DownBookAgeMs));
-		command.Parameters.AddWithValue("DiagnosticsJson", string.IsNullOrWhiteSpace(tick.DiagnosticsJson) ? "{}" : tick.DiagnosticsJson);
+		command.Parameters.AddWithValue("DiagnosticsJson", "{}");
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(tick.CreatedAtUtc));
 	}
 
@@ -11349,7 +11361,7 @@ FROM claimed;
 		command.Parameters.AddWithValue("DecisionCode", tick.DecisionCode);
 		command.Parameters.AddWithValue("RecommendedOutcome", string.IsNullOrWhiteSpace(tick.RecommendedOutcome) ? DBNull.Value : tick.RecommendedOutcome);
 		command.Parameters.AddWithValue("WouldBet", tick.WouldBet);
-		command.Parameters.AddWithValue("DiagnosticsJson", string.IsNullOrWhiteSpace(tick.DiagnosticsJson) ? "{}" : tick.DiagnosticsJson);
+		command.Parameters.AddWithValue("DiagnosticsJson", "{}");
 		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(tick.CreatedAtUtc);
 	}
 
@@ -11511,7 +11523,7 @@ FROM claimed;
 		command.Parameters.AddWithValue("DownLastTradePrice", NullableDecimal(tick.DownLastTradePrice));
 		command.Parameters.AddWithValue("DownBookSource", tick.DownBookSource);
 		command.Parameters.AddWithValue("DownBookAgeMs", NullableDecimal(tick.DownBookAgeMs));
-		command.Parameters.AddWithValue("DiagnosticsJson", string.IsNullOrWhiteSpace(tick.DiagnosticsJson) ? "{}" : tick.DiagnosticsJson);
+		command.Parameters.AddWithValue("DiagnosticsJson", "{}");
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(tick.CreatedAtUtc));
 	}
 
@@ -11714,7 +11726,7 @@ FROM claimed;
 		command.Parameters.AddWithValue("ResultDelaySeconds", resolvedMarket.ResultDelaySeconds);
 		command.Parameters.AddWithValue("Source", resolvedMarket.Source);
 		command.Parameters.AddWithValue("RawEventType", resolvedMarket.RawEventType);
-		command.Parameters.AddWithValue("RawJson", string.IsNullOrWhiteSpace(resolvedMarket.RawJson) ? "{}" : resolvedMarket.RawJson);
+		command.Parameters.AddWithValue("RawJson", "{}");
 		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.CreatedAtUtc);
 		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.UpdatedAtUtc);
 	}

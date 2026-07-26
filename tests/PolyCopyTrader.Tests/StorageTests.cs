@@ -25,6 +25,47 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void GetPersistedSkipDiagnosticsJson_DropsPayloadOnlyForTerminalSkippedRuns()
+    {
+        var nowUtc = new DateTimeOffset(2026, 7, 26, 15, 0, 0, TimeSpan.Zero);
+        var observed = new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "market-1",
+            "condition-1",
+            "btc-updown-5m-1",
+            "BTC Up or Down",
+            "Crypto",
+            nowUtc,
+            nowUtc.AddMinutes(5),
+            nowUtc,
+            nowUtc,
+            StrategyMarketPaperRunStatuses.Observed,
+            null,
+            null,
+            null,
+            1m,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            nowUtc,
+            nowUtc,
+            """{"book":"large diagnostic payload"}""");
+
+        Assert.Equal(
+            observed.SkipDiagnosticsJson,
+            PostgresAppRepository.GetPersistedSkipDiagnosticsJson(observed));
+        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(
+            observed with { Status = StrategyMarketPaperRunStatuses.Skipped }));
+    }
+
+    [Fact]
     public void PostgresSchema_ContainsRequiredTables()
     {
         foreach (var table in PostgresSchema.RequiredTables)
@@ -947,6 +988,51 @@ public sealed class StorageTests
 
         Assert.Equal(64, service.RootElement.GetProperty("Storage").GetProperty("MaxPoolSize").GetInt32());
         Assert.Equal(8, dashboard.RootElement.GetProperty("Storage").GetProperty("MaxPoolSize").GetInt32());
+    }
+
+    [Fact]
+    public void ServiceAppSettings_DisablesPersistenceThatCurrentStrategiesDoNotConsume()
+    {
+        using var service = JsonDocument.Parse(
+            ReadRepositorySource("src", "PolyCopyTrader.Service", "appsettings.json"));
+        var root = service.RootElement;
+
+        Assert.False(root.GetProperty("PolymarketHttpLogging").GetProperty("Enabled").GetBoolean());
+        Assert.False(root.GetProperty("BtcUpDown5mArbitrageScanner").GetProperty("Enabled").GetBoolean());
+        Assert.False(root.GetProperty("MarketDataWebSocket").GetProperty("PersistFrameDiagnostics").GetBoolean());
+        Assert.False(root.GetProperty("MarketDataWebSocket").GetProperty("PersistMarketResolvedDiagnostics").GetBoolean());
+        Assert.Equal(0, root.GetProperty("MarketDataWebSocket").GetProperty("CriticalFrameDiagnosticSampleEvery").GetInt32());
+        Assert.False(root.GetProperty("BtcUpDown5mStrategy").GetProperty("PersistStageTimings").GetBoolean());
+        Assert.False(root.GetProperty("BtcUpDown5mStrategy").GetProperty("PersistResultStreakDiagnostics").GetBoolean());
+        Assert.False(root.GetProperty("BtcUpDown5mStrategy").GetProperty("PersistDiffCounterSnapshots").GetBoolean());
+        Assert.Equal(
+            "CryptoUpDown5mOnly",
+            root.GetProperty("GammaMarketIngestion").GetProperty("PersistenceScope").GetString());
+    }
+
+    [Fact]
+    public void StorageWriters_DoNotDuplicateStructuredRowsIntoUnusedJsonPayloads()
+    {
+        var source = ReadStorageRepositorySource();
+
+        Assert.DoesNotContain("JsonSerializer.Serialize(signal)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("JsonSerializer.Serialize(snapshot)", source, StringComparison.Ordinal);
+        Assert.Contains("GetPersistedSkipDiagnosticsJson(run)", source, StringComparison.Ordinal);
+        Assert.Contains("AddWithValue(\"OrderBookSnapshotJson\", \"{}\")", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StrategyProcessor_GatesUnusedDiagnosticPersistence()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Service",
+            "Strategies",
+            "BtcUpDown5mPaperStrategyProcessor.cs");
+
+        Assert.Contains("if (!options.PersistDiffCounterSnapshots)", source, StringComparison.Ordinal);
+        Assert.Contains("if (!options.PersistResultStreakDiagnostics)", source, StringComparison.Ordinal);
+        Assert.Contains("if (!options.PersistStageTimings)", source, StringComparison.Ordinal);
     }
 
     [Fact]

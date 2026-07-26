@@ -347,6 +347,10 @@ public sealed class MarketDataWebSocketOptions
 
     public bool PersistMarketDataEvents { get; init; }
 
+    public bool PersistFrameDiagnostics { get; init; } = true;
+
+    public bool PersistMarketResolvedDiagnostics { get; init; } = true;
+
     public int SideEffectMaxPendingUpdatesPerAsset { get; init; } = 32;
 
     public int SideEffectDiagnosticQueueCapacity { get; init; } = 256;
@@ -630,6 +634,14 @@ public sealed class GammaMarketIngestionOptions
     public int PollIntervalSeconds { get; init; } = 0;
 
     public int PageLimit { get; init; } = 500;
+
+    public GammaMarketPersistenceScope PersistenceScope { get; init; } = GammaMarketPersistenceScope.AllActiveMarkets;
+}
+
+public enum GammaMarketPersistenceScope
+{
+    AllActiveMarkets,
+    CryptoUpDown5mOnly
 }
 
 public sealed class BtcUpDown5mStrategyOptions
@@ -639,6 +651,12 @@ public sealed class BtcUpDown5mStrategyOptions
     public int PollIntervalSeconds { get; init; } = 5;
 
     public int DiffCounterFastPollIntervalMilliseconds { get; init; } = 500;
+
+    public bool PersistStageTimings { get; init; } = true;
+
+    public bool PersistResultStreakDiagnostics { get; init; } = true;
+
+    public bool PersistDiffCounterSnapshots { get; init; } = true;
 
     public decimal StakeUsd { get; init; } = 1.00m;
 

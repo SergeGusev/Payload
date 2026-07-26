@@ -9,6 +9,22 @@ namespace PolyCopyTrader.Tests;
 public sealed class MarketWebSocketFrameDiagnosticBuilderTests
 {
     [Fact]
+    public void Sampler_DoesNotCaptureImportantFramesWhenPersistenceIsDisabled()
+    {
+        var sampler = new MarketWebSocketFrameDiagnosticSampler(new MarketDataWebSocketOptions
+        {
+            PersistFrameDiagnostics = false,
+            CriticalFrameDiagnosticSampleEvery = 1
+        });
+
+        var decision = sampler.Evaluate("not-json", null, parseSucceeded: false);
+
+        Assert.False(decision.ShouldCapture);
+        Assert.False(decision.Important);
+        Assert.Equal("disabled", decision.Reason);
+    }
+
+    [Fact]
     public void Sampler_CapturesOnlyEveryConfiguredRoutineFrame()
     {
         var sampler = new MarketWebSocketFrameDiagnosticSampler(new MarketDataWebSocketOptions

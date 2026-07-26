@@ -8430,6 +8430,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
+        if (!options.PersistDiffCounterSnapshots)
+        {
+            return;
+        }
+
         try
         {
             await repository.UpsertCryptoUpDown5mDiffSnapshotAsync(
@@ -14226,6 +14231,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcPreviousMarketMoveSignal signal,
         CancellationToken cancellationToken)
     {
+        if (!options.PersistResultStreakDiagnostics)
+        {
+            return;
+        }
+
         try
         {
             var diagnostic = BuildBtcUpDown5mResultStreakDiagnostic(
@@ -21279,6 +21289,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         string? errorMessage,
         CancellationToken cancellationToken)
     {
+        if (!options.PersistStageTimings)
+        {
+            return;
+        }
+
         var timing = new BtcUpDown5mStrategyStageTiming(
             Guid.NewGuid(),
             cycleId,

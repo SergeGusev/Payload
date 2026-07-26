@@ -32,9 +32,9 @@ public sealed class GammaMarketIngestionProcessor(
         var marketsUpserted = 0;
         var activeAssetIdsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var priorityMarkets = await SyncPriorityCryptoUpDown5mMarketsAsync(activeAssetIdsSeen, cancellationToken);
-        marketsFetched += priorityMarkets;
-        marketsUpserted += priorityMarkets;
+        var priorityResult = await SyncPriorityCryptoUpDown5mMarketsAsync(activeAssetIdsSeen, cancellationToken);
+        marketsFetched += priorityResult.MarketsFetched;
+        marketsUpserted += priorityResult.MarketsUpserted;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -85,7 +85,7 @@ public sealed class GammaMarketIngestionProcessor(
                     marketDataWebSocketOptions.SubscriptionScope);
             }
 
-            foreach (var market in markets)
+            foreach (var market in SelectPersistenceMarkets(markets))
             {
                 await repository.UpsertPolymarketGammaMarketAsync(market, cancellationToken);
                 marketsUpserted++;
@@ -132,7 +132,7 @@ public sealed class GammaMarketIngestionProcessor(
             nextOffset);
     }
 
-    private async Task<int> SyncPriorityCryptoUpDown5mMarketsAsync(
+    private async Task<(int MarketsFetched, int MarketsUpserted)> SyncPriorityCryptoUpDown5mMarketsAsync(
         HashSet<string> activeAssetIdsSeen,
         CancellationToken cancellationToken)
     {
@@ -144,11 +144,11 @@ public sealed class GammaMarketIngestionProcessor(
             Crypto5mPriorityLookAheadWindows);
         var markets = await gammaClient.GetMarketsBySlugsAsync(slugs, activeOnly: true, cancellationToken);
         var cryptoMarkets = markets
-            .Where(market => IsCryptoUpDown5mSubscriptionCandidate(market, assetSymbols))
+            .Where(market => IsCryptoUpDown5mCandidate(market, assetSymbols))
             .ToArray();
         if (cryptoMarkets.Length == 0)
         {
-            return 0;
+            return (0, 0);
         }
 
         var subscriptionMarkets = SelectSubscriptionMarkets(cryptoMarkets);
@@ -162,18 +162,20 @@ public sealed class GammaMarketIngestionProcessor(
                 marketDataWebSocketOptions.SubscriptionScope);
         }
 
-        foreach (var market in cryptoMarkets)
+        var persistenceMarkets = SelectPersistenceMarkets(cryptoMarkets);
+        foreach (var market in persistenceMarkets)
         {
             await repository.UpsertPolymarketGammaMarketAsync(market, cancellationToken);
         }
 
         logger.LogInformation(
-            "Gamma active market ingestion priority crypto 5m sync completed. Assets={Assets} Slugs={Slugs} Markets={Markets}",
+            "Gamma active market ingestion priority crypto 5m sync completed. Assets={Assets} Slugs={Slugs} MarketsFetched={MarketsFetched} MarketsUpserted={MarketsUpserted}",
             string.Join(",", assetSymbols),
             slugs.Count,
-            cryptoMarkets.Length);
+            cryptoMarkets.Length,
+            persistenceMarkets.Count);
 
-        return cryptoMarkets.Length;
+        return (cryptoMarkets.Length, persistenceMarkets.Count);
     }
 
     private static IReadOnlyList<string> BuildCryptoUpDown5mSlugs(
@@ -215,7 +217,7 @@ public sealed class GammaMarketIngestionProcessor(
             : Crypto5mPriorityAssetSymbols;
     }
 
-    private static bool IsCryptoUpDown5mSubscriptionCandidate(
+    private static bool IsCryptoUpDown5mCandidate(
         PolymarketGammaMarket market,
         IReadOnlyCollection<string>? assetSymbols = null)
     {
@@ -262,7 +264,20 @@ public sealed class GammaMarketIngestionProcessor(
                 .Where(IsBtcUpDown5mSubscriptionCandidate)
                 .ToArray(),
             MarketDataWebSocketSubscriptionScope.CryptoUpDown5mOnly => markets
-                .Where(market => IsCryptoUpDown5mSubscriptionCandidate(market))
+                .Where(market => IsCryptoUpDown5mCandidate(market))
+                .ToArray(),
+            _ => []
+        };
+    }
+
+    private IReadOnlyCollection<PolymarketGammaMarket> SelectPersistenceMarkets(
+        IReadOnlyCollection<PolymarketGammaMarket> markets)
+    {
+        return options.PersistenceScope switch
+        {
+            GammaMarketPersistenceScope.AllActiveMarkets => markets,
+            GammaMarketPersistenceScope.CryptoUpDown5mOnly => markets
+                .Where(market => IsCryptoUpDown5mCandidate(market))
                 .ToArray(),
             _ => []
         };

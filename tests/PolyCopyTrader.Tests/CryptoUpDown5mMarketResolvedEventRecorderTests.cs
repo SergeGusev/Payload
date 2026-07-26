@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.MarketData;
 
 namespace PolyCopyTrader.Tests;
@@ -48,6 +49,32 @@ public sealed class CryptoUpDown5mMarketResolvedEventRecorderTests
             Assert.True(diagnostic.SnapshotIsCryptoUpDown5m);
             Assert.Equal("RecordedCryptoUpDown5mResult", diagnostic.RecorderAction);
         });
+        Assert.Empty(repository.ApiErrors);
+    }
+
+    [Fact]
+    public async Task RecordAsync_PreservesResolvedMarketWhenDiagnosticPersistenceIsDisabled()
+    {
+        var marketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 0, 0, TimeSpan.Zero);
+        var receivedAtUtc = marketStartUtc.AddMinutes(5).AddSeconds(8);
+        var repository = new TestAppRepository();
+        var recorder = new CryptoUpDown5mMarketResolvedEventRecorder(
+            NullLogger<CryptoUpDown5mMarketResolvedEventRecorder>.Instance,
+            repository,
+            new MarketDataWebSocketOptions
+            {
+                PersistMarketResolvedDiagnostics = false
+            });
+
+        await recorder.RecordAsync(
+            CriticalCryptoUpDown5mAssetSelector.ComponentName,
+            CreateResolvedUpdate("asset-up", "asset-down", "Down", receivedAtUtc),
+            CreateSnapshot("BTC", marketStartUtc),
+            receivedAtUtc);
+
+        var result = Assert.Single(repository.CryptoUpDown5mWebSocketResolvedMarkets);
+        Assert.Equal("Down", result.WinningOutcome);
+        Assert.Empty(repository.MarketResolvedEventDiagnostics);
         Assert.Empty(repository.ApiErrors);
     }
 

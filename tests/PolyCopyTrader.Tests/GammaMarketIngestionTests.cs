@@ -162,6 +162,47 @@ public sealed class GammaMarketIngestionTests
     }
 
     [Fact]
+    public async Task Refresh_CryptoUpDown5mPersistenceScope_UpsertsOnlyBtcEthSolFiveMinuteMarkets()
+    {
+        var gammaClient = new FakeGammaClient();
+        gammaClient.Pages[0] =
+        [
+            CreateMarketForTests("regular-market"),
+            CreateCryptoUpDown5mMarketForTests("BTC", "btc-5m-market"),
+            CreateCryptoUpDown5mMarketForTests("ETH", "eth-5m-market"),
+            CreateCryptoUpDown5mMarketForTests("SOL", "sol-5m-market"),
+            CreateCryptoUpDown5mMarketForTests("DOGE", "doge-5m-market"),
+            CreateCryptoUpDownMarketForTests("BTC", "15m", "btc-15m-market"),
+            CreateCryptoUpDownMarketForTests("ETH", "15m", "eth-15m-market"),
+            CreateCryptoUpDownMarketForTests("SOL", "15m", "sol-15m-market")
+        ];
+        gammaClient.Pages[8] = [];
+        var repository = new TestAppRepository();
+        var registry = new ActiveMarketAssetSubscriptionRegistry();
+        var processor = CreateProcessor(
+            gammaClient,
+            repository,
+            pageLimit: 8,
+            activeMarketAssetSubscriptionRegistry: registry,
+            marketDataWebSocketOptions: new MarketDataWebSocketOptions
+            {
+                SubscriptionScope = MarketDataWebSocketSubscriptionScope.AllActiveMarkets
+            },
+            persistenceScope: GammaMarketPersistenceScope.CryptoUpDown5mOnly);
+
+        var result = await processor.RefreshAsync();
+
+        Assert.Equal(8, result.MarketsFetched);
+        Assert.Equal(3, result.MarketsUpserted);
+        Assert.Equal(
+            new[] { "btc-5m-market", "eth-5m-market", "sol-5m-market" },
+            repository.PolymarketGammaMarkets.Select(market => market.MarketId).OrderBy(id => id).ToArray());
+        Assert.Contains("token-yes-regular-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-doge-5m-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-yes-btc-15m-market", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Refresh_PrioritySync_UpsertsBtcFiveMinuteMarketsBeforeFullScan()
     {
         var gammaClient = new FakeGammaClient
@@ -308,11 +349,17 @@ public sealed class GammaMarketIngestionTests
         TestAppRepository repository,
         int pageLimit,
         IActiveMarketAssetSubscriptionRegistry? activeMarketAssetSubscriptionRegistry = null,
-        MarketDataWebSocketOptions? marketDataWebSocketOptions = null)
+        MarketDataWebSocketOptions? marketDataWebSocketOptions = null,
+        GammaMarketPersistenceScope persistenceScope = GammaMarketPersistenceScope.AllActiveMarkets)
     {
         return new GammaMarketIngestionProcessor(
             NullLogger<GammaMarketIngestionProcessor>.Instance,
-            new GammaMarketIngestionOptions { PageLimit = pageLimit, PollIntervalSeconds = 10 },
+            new GammaMarketIngestionOptions
+            {
+                PageLimit = pageLimit,
+                PollIntervalSeconds = 10,
+                PersistenceScope = persistenceScope
+            },
             marketDataWebSocketOptions ?? new MarketDataWebSocketOptions(),
             gammaClient,
             activeMarketAssetSubscriptionRegistry ?? new ActiveMarketAssetSubscriptionRegistry(),
@@ -367,12 +414,20 @@ public sealed class GammaMarketIngestionTests
 
     public static PolymarketGammaMarket CreateCryptoUpDown5mMarketForTests(string assetSymbol, string id)
     {
+        return CreateCryptoUpDownMarketForTests(assetSymbol, "5m", id);
+    }
+
+    private static PolymarketGammaMarket CreateCryptoUpDownMarketForTests(
+        string assetSymbol,
+        string interval,
+        string id)
+    {
         var normalizedAssetSymbol = assetSymbol.ToLowerInvariant();
         return CreateMarketForTests(id) with
         {
-            Slug = normalizedAssetSymbol + "-updown-5m-1778130600",
-            EventSlug = normalizedAssetSymbol + "-updown-5m-1778130600",
-            SeriesSlug = normalizedAssetSymbol + "-up-or-down-5m",
+            Slug = normalizedAssetSymbol + "-updown-" + interval + "-1778130600",
+            EventSlug = normalizedAssetSymbol + "-updown-" + interval + "-1778130600",
+            SeriesSlug = normalizedAssetSymbol + "-up-or-down-" + interval,
             Category = "Crypto"
         };
     }

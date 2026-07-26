@@ -1,3 +1,19 @@
+## Active Update 2026-07-26 Current-Strategy Storage Scope Reduction
+Goal: Stop future PostgreSQL writes that do not serve the currently deployed strategies, while preserving trading state, financial audit data, and every verified strategy dependency.
+Status: Completed in source; not deployed
+Done:
+- Verified production `192.168.0.101/polycopytrader` read-only and matched the deployed strategy catalog: all 2,573 executable enabled variants are BTC/ETH/SOL FiveMinutes; no executable 15m/1h/4h variant was found. The 12 nonterminal market IDs in the audit snapshot were independently matched to BTC/ETH/SOL 5m Gamma rows.
+- Added an independent Gamma persistence scope and set the service configuration to `CryptoUpDown5mOnly`. Full scans and priority synchronization now persist only BTC/ETH/SOL 5m markets, while the WebSocket subscription registry remains independent. Existing Gamma rows are not deleted.
+- Disabled production persistence for Polymarket per-attempt HTTP logs, the BTC 5m arbitrage diagnostic scanner, raw WebSocket frame diagnostics, duplicate market-resolved diagnostics, strategy stage timings, result-streak diagnostics, and write-only Diff snapshots. Required structured resolved-market state and Diff progress state remain enabled.
+- Stopped duplicating unused payloads into JSONB: signal raw context and standalone order-book raw JSON now persist as `NULL`; terminal skipped-run diagnostics are dropped while nonterminal diagnostics are retained; odds diagnostics, WebSocket resolved raw payloads, and paper/live shadow order-book payloads are reduced to `{}`. Gamma `raw_json`, paper-order decisions, orders, fills, positions, settlements, risk data, and current/nonterminal strategy runs remain unchanged.
+- Corrected the existing missing `CryptoReferencePriceHistory` configuration binding while preserving its defaults and configured BTC/ETH/SOL history windows.
+- Added configuration, Gamma-scope, WebSocket, resolved-market, strategy-persistence, and storage regression coverage. Release build succeeded with 0 errors (clean build retained 120 pre-existing nullable warnings; incremental final build had 1 pre-existing nullable warning). Focused tests passed 75/75.
+- Compared the sequential full suite with a clean detached `HEAD`: baseline 887 passed / 115 failed / 1,002 total; changed tree 901 passed / 112 failed / 1,013 total. No new failing test name appeared; the remaining 112 are the pre-existing stale strategy-catalog expectations.
+- Prepared exact read-only cleanup evidence but did not delete or truncate production data. A backup/rollback point is still unverified; batch DELETE would not return disk to the OS, and the approximately 19.10 GB of immediately reclaimable diagnostic relations therefore remains in place.
+Next: Deploy the committed service build, then verify on production with two independent checks that disabled writers stop advancing and Gamma inserts remain BTC/ETH/SOL 5m only. Establish a verified backup/snapshot before any TRUNCATE or historical-row cleanup.
+Notes: Production database queries were forced read-only with UTC and bounded timeouts. No production row, schema, service, task, configuration, strategy flag, or order was changed in this task. Unrelated dirty README, history, and order-book collector script changes were preserved and excluded from the scoped commit.
+Blockers: Deployment and post-deployment runtime verification require the normal server release path. Physical cleanup remains blocked on a verified backup/rollback point.
+
 ## Active Update 2026-07-26 Server Event Collector Stop Confirmed
 Goal: Determine conclusively whether the separate BTC/ETH/SOL event-level research collector is running or can automatically restart on production server `192.168.0.101`.
 Status: Completed

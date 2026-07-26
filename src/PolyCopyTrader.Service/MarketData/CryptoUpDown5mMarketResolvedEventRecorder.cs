@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Storage;
 
@@ -7,13 +8,15 @@ namespace PolyCopyTrader.Service.MarketData;
 
 public sealed class CryptoUpDown5mMarketResolvedEventRecorder(
     ILogger<CryptoUpDown5mMarketResolvedEventRecorder> logger,
-    IAppRepository repository) : ICryptoUpDown5mMarketResolvedEventRecorder
+    IAppRepository repository,
+    MarketDataWebSocketOptions? options = null) : ICryptoUpDown5mMarketResolvedEventRecorder
 {
     private const string ComponentName = "CryptoUpDown5mMarketResolvedEventRecorder";
     private const string Source = "MarketWebSocket";
     private static readonly IReadOnlySet<string> AssetSymbols = new HashSet<string>(
         ["BTC", "ETH", "SOL"],
         StringComparer.OrdinalIgnoreCase);
+    private readonly bool persistDiagnostics = options?.PersistMarketResolvedDiagnostics ?? true;
 
     public async Task RecordAsync(
         string component,
@@ -284,6 +287,11 @@ public sealed class CryptoUpDown5mMarketResolvedEventRecorder(
         DateTimeOffset receivedAtUtc,
         CancellationToken cancellationToken)
     {
+        if (!persistDiagnostics)
+        {
+            return;
+        }
+
         var diagnostic = new MarketResolvedEventDiagnostic(
             Guid.NewGuid(),
             component,

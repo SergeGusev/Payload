@@ -92,6 +92,8 @@ public static class AppOptionsValidator
             $"Market WebSocket watchdog stale seconds: {configuration.MarketDataWebSocket.WatchdogStaleSeconds}",
             $"Market WebSocket persists order book snapshots: {configuration.MarketDataWebSocket.PersistOrderBookSnapshots}",
             $"Market WebSocket persists market data events: {configuration.MarketDataWebSocket.PersistMarketDataEvents}",
+            $"Market WebSocket persists frame diagnostics: {configuration.MarketDataWebSocket.PersistFrameDiagnostics}",
+            $"Market WebSocket persists market-resolved diagnostics: {configuration.MarketDataWebSocket.PersistMarketResolvedDiagnostics}",
             $"Market WebSocket side-effect max pending updates per asset: {configuration.MarketDataWebSocket.SideEffectMaxPendingUpdatesPerAsset}",
             $"Market WebSocket side-effect diagnostic queue capacity: {configuration.MarketDataWebSocket.SideEffectDiagnosticQueueCapacity}",
             $"Market WebSocket side-effect metrics interval seconds: {configuration.MarketDataWebSocket.SideEffectMetricsIntervalSeconds}",
@@ -129,9 +131,13 @@ public static class AppOptionsValidator
             $"Gamma market ingestion enabled: {configuration.GammaMarketIngestion.Enabled}",
             $"Gamma market ingestion poll interval seconds: {configuration.GammaMarketIngestion.PollIntervalSeconds}",
             $"Gamma market ingestion page limit: {configuration.GammaMarketIngestion.PageLimit}",
+            $"Gamma market persistence scope: {configuration.GammaMarketIngestion.PersistenceScope}",
             $"BTC Up or Down 5m strategy enabled: {configuration.BtcUpDown5mStrategy.Enabled}",
             $"BTC Up or Down 5m strategy poll interval seconds: {configuration.BtcUpDown5mStrategy.PollIntervalSeconds}",
             $"BTC Up or Down 5m Diff fast poll interval ms: {configuration.BtcUpDown5mStrategy.DiffCounterFastPollIntervalMilliseconds}",
+            $"BTC Up or Down 5m persists stage timings: {configuration.BtcUpDown5mStrategy.PersistStageTimings}",
+            $"BTC Up or Down 5m persists result streak diagnostics: {configuration.BtcUpDown5mStrategy.PersistResultStreakDiagnostics}",
+            $"BTC Up or Down 5m persists Diff counter snapshots: {configuration.BtcUpDown5mStrategy.PersistDiffCounterSnapshots}",
             $"BTC Up or Down 5m strategy stake multiplier: {configuration.BtcUpDown5mStrategy.StakeUsd}",
             $"BTC Up or Down 5m strategy entry grace seconds: {configuration.BtcUpDown5mStrategy.EntryGraceSeconds}",
             $"BTC Up or Down 5m strategy max concurrent entry decisions: {configuration.BtcUpDown5mStrategy.MaxConcurrentEntryDecisions}",
@@ -1168,6 +1174,11 @@ public static class AppOptionsValidator
 
     private static void ValidateGammaMarketIngestion(GammaMarketIngestionOptions options, List<string> errors)
     {
+        if (!Enum.IsDefined(options.PersistenceScope))
+        {
+            errors.Add("GammaMarketIngestion.PersistenceScope is invalid.");
+        }
+
         if (options.PollIntervalSeconds < 0 || options.PollIntervalSeconds > 86_400)
         {
             errors.Add("GammaMarketIngestion.PollIntervalSeconds must be between 0 and 86400.");
