@@ -1,3 +1,17 @@
+## Active Update 2026-07-26 Server Event Collector Stop Confirmed
+Goal: Determine conclusively whether the separate BTC/ETH/SOL event-level research collector is running or can automatically restart on production server `192.168.0.101`.
+Status: Completed
+Done:
+- Received direct elevated PowerShell identity evidence from `DESKTOP-QO1ON6E`: user `DESKTOP-QO1ON6E\Tommy`, `IsAdministrator=True`, IPv4 includes exact server `192.168.0.101`.
+- Combined that attribution with the preceding correct exact-name/action check: all three known Scheduled Task candidates were absent and the exact collector/supervisor/watchdog process signature returned `NONE`.
+- The broad Scheduled Task action/name search also returned `NONE`, so no known protected or aliased task path can restart this collector.
+- Noted two transcription changes in the broad command: `[-*]?` replaced `[-_]?`, but still matches the relevant hyphenated names; `$*` replaced `$_` in process/service predicates, so the broad process negative is not relied upon. The earlier exact process predicate used correct `$_` and remains valid; the broad service predicate still searched `PathName` correctly.
+- Derived from the verified task and process evidence that the separate event-level gzip collector is already stopped/not installed on this server. No Disable/Stop command is needed or safe to run against missing tasks. Evidence does not distinguish whether installation never occurred or was later removed/completed.
+- Independently queried exact production PostgreSQL read-only at `2026-07-26T14:44:03.592647Z`: the ordinary `PolyCopyTrader.Service` remained `Running` / `Live` on commit `3fbba24b`, heartbeat age `28.540s`, no error, and compact odds writers were fresh (BTC age about `6.4s`; ETH/SOL about `1.9s`; latest 10 minutes contained BTC 356, ETH 164, SOL 140 rows).
+Next: None for stopping the event-level research collector. Separately implement the audited PostgreSQL growth controls only if authorized; do not stop the compact writers blindly because current strategies consume their data.
+Notes: No server task, process, service, file, strategy, order, configuration, or production database row was changed. Production database access forced read-only transaction settings and bounded timeouts.
+Blockers: None.
+
 ## Active Update 2026-07-26 Server Collector Exact-Name Check Result
 Goal: Interpret the direct PowerShell output for the expected server collector tasks and processes.
 Status: In Progress

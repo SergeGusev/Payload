@@ -195,3 +195,110 @@ PS C:\WINDOWS\system32>
 
 Result:
 В переданном окружении все три точных task-кандидата отсутствуют (`Found=False`), а процессов с точной research-сигнатурой нет. Поэтому отключать или останавливать эти имена нельзя и не требуется. Вывод сам по себе не содержит hostname, administrator-token status, broad alias search или filesystem freshness; подготовлена финальная расширенная read-only проверка для точной серверной атрибуции и исключения задач/служб под другими именами.
+
+## 2026-07-26T14:44:15.0391606Z
+Request:
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+PS C:\WINDOWS\system32> $rx = '(?i)(crypto[-*]?orderbook|order[-*]?book.*study|orderbookstudy|run-crypto-orderbook|watch-crypto-orderbook|prediction-study|runner-f98b8bda|PolyCopyTraderOrderBookStudy)'
+>>
+>> $id = [Security.Principal.WindowsIdentity]::GetCurrent()
+>> $wp = New-Object Security.Principal.WindowsPrincipal($id)
+>>
+>> $ips = @(
+>>     Get-CimInstance Win32_NetworkAdapterConfiguration -Filter 'IPEnabled = True' |
+>>         ForEach-Object { $_.IPAddress } |
+>>         Where-Object { $_ -match '^(?:\d{1,3}\.){3}\d{1,3}$' }
+>> )
+>>
+>> [pscustomobject]@{
+>>     ComputerName    = $env:COMPUTERNAME
+>>     User            = $id.Name
+>>     IsAdministrator = $wp.IsInRole(
+>>         [Security.Principal.WindowsBuiltInRole]::Administrator)
+>>     IPv4            = $ips -join ', '
+>> } |
+>>     Format-List |
+>>     Out-String -Width 4096
+>>
+>> $tasks = foreach ($t in Get-ScheduledTask) {
+>>     $a = @($t.Actions)
+>>
+>>     $text = @(
+>>         $t.TaskName
+>>         $t.TaskPath
+>>         $t.Description
+>>         ($a.Execute -join ' ')
+>>         ($a.Arguments -join ' ')
+>>         ($a.WorkingDirectory -join ' ')
+>>     ) -join ' '
+>>
+>>     if ($text -match $rx) {
+>>         [pscustomobject]@{
+>>             TaskName         = $t.TaskName
+>>             State            = [string]$t.State
+>>             Execute          = $a.Execute -join ' | '
+>>             Arguments        = $a.Arguments -join ' | '
+>>             WorkingDirectory = $a.WorkingDirectory -join ' | '
+>>         }
+>>     }
+>> }
+>>
+>> if (@($tasks).Count -eq 0) {
+>>     'Broad task matches: NONE'
+>> }
+>> else {
+>>     $tasks | Format-List | Out-String -Width 4096
+>> }
+>>
+>> $procs = @(
+>>     Get-CimInstance Win32_Process |
+>>         Where-Object {
+>>             $_.ProcessId -ne $PID -and
+>>             (($*.ExecutablePath + ' ' + $*.CommandLine) -match $rx)
+>>         }
+>> )
+>>
+>> if ($procs.Count -eq 0) {
+>>     'Broad process matches: NONE'
+>> }
+>> else {
+>>     $procs |
+>>         Select-Object ProcessId, Name, ExecutablePath, CommandLine |
+>>         Format-List |
+>>         Out-String -Width 4096
+>> }
+>>
+>> $services = @(
+>>     Get-CimInstance Win32_Service |
+>>         Where-Object {
+>>             (($*.Name + ' ' + $*.DisplayName + ' ' + $_.PathName) -match $rx)
+>>         }
+>> )
+>>
+>> if ($services.Count -eq 0) {
+>>     'Broad service matches: NONE'
+>> }
+>> else {
+>>     $services |
+>>         Select-Object Name, State, StartMode, PathName |
+>>         Format-List |
+>>         Out-String -Width 4096
+>> }
+
+
+ComputerName    : DESKTOP-QO1ON6E
+User            : DESKTOP-QO1ON6E\Tommy
+IsAdministrator : True
+IPv4            : 192.168.0.101
+
+
+
+
+Broad task matches: NONE
+Broad process matches: NONE
+Broad service matches: NONE
+
+Result:
+Точная серверная атрибуция подтверждена: `DESKTOP-QO1ON6E`, Administrator, IPv4 `192.168.0.101`. Вместе с предыдущей корректной exact-name/process проверкой это доказывает, что отдельный event-level collector сейчас не работает, а известных Scheduled Tasks для его перезапуска нет; ничего отключать или останавливать не требуется. В broad process/service predicates пользователь заменил `$_` на `$*`, поэтому broad process negative не использован как доказательство; предыдущий exact process predicate был корректен. Отдельная read-only проверка PostgreSQL в `2026-07-26T14:44:03.592647Z` показала, что основной Service и нужные стратегиям компактные BTC/ETH/SOL writers продолжают работать свежо. Production не изменялся.
