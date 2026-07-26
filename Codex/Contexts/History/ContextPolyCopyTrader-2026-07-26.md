@@ -317,13 +317,6 @@ Request:
 Result:
 На точном production endpoint подтверждена выкладка commit `e0895edb305de03b0cc055b326cfc63d366a2fe2`: сервис `Running/Live`, heartbeat продвигается, `last_error` пуст. В двух read-only снимках через 47.580 секунды все семь отключённых writers дали нулевую дельту и ноль строк после старта, тогда как обязательные BTC/ETH/SOL odds и reference-price потоки дали положительные дельты. После старта Gamma содержала 128 обновлённых строк, все BTC/ETH/SOL 5m; все 11 nonterminal strategy market IDs сохранены. Structured resolved ledger продолжил работать с компактным `{}` raw JSON, а проверенные odds/signal/skipped-run JSON-пути не сохранили избыточные payloads. Наблюдавшиеся API errors сверены с предшествующим окном: доминирующие классы существовали до выкладки, а обязательные writers продолжали обновляться; признаков новой deployment-регрессии не установлено. Shadow-decision и standalone order-book JSON-пути за короткое окно не сработали и остаются неподтверждёнными. Production не изменялся; старые данные и примерно 19.10 GB исторических diagnostic relations не удалялись.
 
-## 2026-07-26T18:51:30.3092370Z
-Request:
-Ок, давай медленно и аккуратно подчистим старые ненужные данные
-
-Result:
-На production `192.168.0.101/polycopytrader` выполнена первая backup-first cleanup-фаза. Созданы два table-level PostgreSQL 18 archives, проверены TOC, SHA-256 и фактическое восстановление всех восьми целей в изолированный PostgreSQL 18.4 с точным совпадением counts. В отдельных guarded `TRUNCATE ONLY ... RESTRICT` транзакциях очищены семь standalone disabled-writer relations; HTTP retention удалила 262,533 ошибок старше 14 дней малыми транзакциями и сохранила 922 более свежие. Всего удалено 14,658,684 исторических строк; восемь relations уменьшились на 19,506,593,792 bytes, а вся БД — с 86,854,850,239 до 67,502,233,279 bytes в контрольных снимках. Два post-check подтвердили, что очищенные writers не возобновились, сервис `Running/Live`, все BTC/ETH/SOL odds/reference streams продолжают запись, structured resolved state и nonterminal runs сохранены, блокировок нет. `VACUUM FULL` не выполнялся; table-level backup не является полным DB/PITR backup. Временный PostgreSQL/client и 19.30 GB temp artifacts удалены защищённым lifecycle cleanup.
-
 ## 2026-07-26T18:34:35.8413190+00:00
 Request:
 Сделай Excel отчёт по Child и Child ROI стратегиям по всем трём валютам. На одной вкладке.
@@ -366,3 +359,10 @@ Request:
 
 Result:
 Три книги пересчитаны по новым вечерним read-only production-срезам. Child/Child ROI: 6 победителей, период по `2026-07-26`, Grand Total `1664.50727675`. Neutral Optimized Average LowerEnter: 3 победителя, период по `2026-07-26`, Grand Total `243.95318552`. Neutral LowEnter Average: 3 победителя, период по `2026-07-26`, Grand Total `1174.80025564`. Raw-row reconciliation, формулы, totals, отрицательное форматирование, freeze panes, formula-error scans и финальные рендеры проверены; production не изменялся.
+
+## 2026-07-26T18:51:30.3092370Z
+Request:
+Ок, давай медленно и аккуратно подчистим старые ненужные данные
+
+Result:
+На production `192.168.0.101/polycopytrader` выполнена первая backup-first cleanup-фаза. Созданы два table-level PostgreSQL 18 archives, проверены TOC, SHA-256 и фактическое восстановление всех восьми целей в изолированный PostgreSQL 18.4 с точным совпадением counts. В отдельных guarded `TRUNCATE ONLY ... RESTRICT` транзакциях очищены семь standalone disabled-writer relations; HTTP retention удалила 262,533 ошибок старше 14 дней малыми транзакциями и сохранила 922 более свежие. Всего удалено 14,658,684 исторических строк; восемь relations уменьшились на 19,506,593,792 bytes, а вся БД — с 86,854,850,239 до 67,502,233,279 bytes в контрольных снимках. Два post-check подтвердили, что очищенные writers не возобновились, сервис `Running/Live`, все BTC/ETH/SOL odds/reference streams продолжают запись, structured resolved state и nonterminal runs сохранены, блокировок нет. `VACUUM FULL` не выполнялся; table-level backup не является полным DB/PITR backup. Временный PostgreSQL/client и 19.30 GB temp artifacts удалены защищённым lifecycle cleanup.
