@@ -1,3 +1,16 @@
+## Active Update 2026-07-26 Binance L1 to Polymarket Odds Data Feasibility
+Goal: Clarify whether the data already collected can be used to test a relationship between BTC/ETH/SOL order-book state and subsequent Polymarket Up/Down price movement.
+Status: Completed
+Done:
+- Verified exact temporal overlap between the interrupted local Binance L1+trade event cohort and production Polymarket compact odds rows for `2026-07-23T07:18:50Z` through about `14:59:30Z`.
+- Queried production PostgreSQL read-only and found 16,604 overlapping BTC, 7,478 ETH, and 7,206 SOL Polymarket odds snapshots, 31,288 total. Every overlapping row has a Binance reference price and both Up/Down price proxies.
+- Measured median per-market Polymarket sampling gaps of 6.590s for BTC, 7.278s for ETH, and 7.312s for SOL; p95 gaps were 7.628s, 8.552s, and 9.289s respectively.
+- Concluded that a pilot can align preceding Binance L1 imbalance/microprice/order-flow features with later Polymarket Up/Down quote changes at roughly 10/30/60-second horizons and compare them against a price-movement-only baseline.
+- Distinguished the limits: the Binance input is L1 rather than full depth, Polymarket is sampled rather than event-level, and the overlap is less than one day. It can validate the analysis pipeline and detect a large relationship, but cannot establish sub-second lag, durable predictive lift, or tradable profit.
+Next: If requested, run the reproducible pilot analysis with chronological validation and separately report contemporaneous correlation versus predictive lift over the price-only baseline.
+Notes: Production PostgreSQL was queried in a bounded read-only transaction; no service, database row, order, strategy, file collector, or configuration was changed.
+Blockers: None for a pilot. A reliable conclusion requires more event-level collection days and out-of-sample validation.
+
 ## Active Update 2026-07-26 Order-Book Event-Level Capacity Assessment
 Goal: Explain the current compact archive cadence, define what is required for event-level BTC/ETH/SOL capture, and assess whether the production laptop can sustain it.
 Status: Completed
