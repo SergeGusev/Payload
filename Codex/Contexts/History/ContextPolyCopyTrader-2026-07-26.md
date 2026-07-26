@@ -46,3 +46,17 @@ Request:
 
 Result:
 Production PostgreSQL `192.168.0.101/polycopytrader` проверен строго read-only: текущий размер `85.857 GB`. Event-level Binance BTC/ETH/SOL collector пишет gzip-файлы, а не PostgreSQL; исторический поток прогнозируется в `13.926 GB` за 14 дней, 2x stress — `27.852 GB`. Семь полных суток production-данных дали отдельный прогноз роста компактных BTC/ETH/SOL odds и reference таблиц: `1.643 GB` за 14 дней, sustained p95 — `1.807 GB`. Исследовательская прибавка поэтому ожидается около `15.570 GB`, stress около `29.659 GB`, но обычный рост остальной базы может быть значительно больше: грубое сравнение примерно `39 GB` 12 июля и `85.9 GB` сейчас не позволяет гарантировать безопасность без текущего свободного места на `D:`. WinRM снова отклонён `0x8009030e`; production не изменялся. Рекомендован минимум `80 GB` свободного места с fail-closed disk guard и ежедневным мониторингом; один текущий campaign ограничен 7 сутками.
+
+## 2026-07-26T09:43:41.3499298Z
+Request:
+Ок, отменяем сейчас сбор статитстики.
+
+Result:
+Точный локальный legacy-task event-level BTC/ETH/SOL research collector был проверен по действию, отключён и подтверждён в состоянии `Disabled`; совпадающих локальных процессов нет, файлы не удалялись. Серверный collector на `192.168.0.101` доказанно остановить не удалось: WinRM отклоняет текущую сессию с `0x8009030e`, а bounded `schtasks`/event-log запросы завершились тайм-аутом. Поэтому серверная остановка остаётся неподтверждённой и требует запуска валидированной последовательности непосредственно на сервере от Администратора. Основной Windows Service и компактные PostgreSQL writers не останавливались.
+
+## 2026-07-26T09:43:42.3499298Z
+Request:
+И сразу сделай анализ существующих источников роста базы. Подумай, какая информация уже является избыточной и не используется в текущих стратегиях
+
+Result:
+Production PostgreSQL `192.168.0.101/polycopytrader` и deployed commit `3fbba24b` проверены строго read-only. База достигла `85.914 GB`; независимый физический замер дал `+56.426 MB` за 24 минуты, а точные 1d/7d row rates дают согласованный прогноз около `48.5-48.9 GB` обычного роста за 14 дней. Пять крупнейших отношений занимают `63.81 GB` (`74.29%` БД): strategy runs `28.40`, WebSocket diagnostics `13.97`, Paper orders `8.22`, positions `7.47`, Gamma `5.75 GB`. Подтверждены как неиспользуемые текущими стратегиями: секундные arbitrage scans, routine sampled WebSocket raw frames, `signals.raw_context_json`, `order_book_snapshots.raw_json`, старые stage timings и crypto-reference rows старше текущего 24-часового startup window. За сутки `604,962/685,066` runs были Skipped, а их diagnostic JSON добавляет около `1.07 GB/day` до overhead; это главный кандидат на compact retention, но сами current/nonterminal runs и нужная settled history удалять нельзя. Пустая lag-diagnostics таблица сохраняет `1.175 GB` индексов. Никакая production-очистка, reindex, retention/config mutation или restart не выполнялись.
