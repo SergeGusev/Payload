@@ -1,3 +1,19 @@
+## Active Update 2026-07-26 Production DB Crypto Order-Book Collection Check
+Goal: Verify BTC/ETH/SOL order-book collection on server `192.168.0.101` through production PostgreSQL.
+Status: Completed
+Done:
+- Queried `192.168.0.101/polycopytrader` strictly read-only with UTC, `REPEATABLE READ READ ONLY`, forced `default_transaction_read_only=on`, and bounded statement/lock timeouts.
+- Confirmed the production service is `Running` / `Live` on commit `3fbba24b`, heartbeat is fresh, and `last_error` is empty.
+- Obtained two advancing database snapshots about 50 seconds apart. Latest compact odds samples advanced from BTC `2026-07-26T07:20:01.606808Z` / ETH+SOL `07:19:57.858381Z` to BTC `07:20:52.037323Z` / ETH+SOL `07:20:53.677856Z`.
+- In the latest 15-minute window the database contained 524 BTC, 232 ETH, and 214 SOL compact odds/order-book ticks. Latest sample ages were 6.281s for BTC and 4.640s for ETH/SOL.
+- Current 5-minute market sampling had no missing book source. Typical per-market intervals were about 7-8 seconds; observed maxima were 8.571s for the current ETH/SOL markets and 7.598s for current BTC, while the wider active-market set had an isolated maximum of 22.066s for SOL.
+- Book sources in the latest 15 minutes were BTC 523 WebSocket-cache / 1 CLOB REST, ETH 124 WebSocket-cache / 108 REST, and SOL 115 WebSocket-cache / 99 REST.
+- Independently confirmed `market_data_status`: the current crypto-critical WebSocket is connected, non-stale, has no error, and tracks 204 assets; the aggregate market WebSocket is connected and receiving current messages.
+- Distinguished this compact archive from the original event-level prediction collector: `btc_order_book_lag_diagnostic_events` has zero rows, and `market_data_events` has no new row since `2026-05-03`. Production PostgreSQL therefore does not contain the raw every-change BTC/ETH/SOL event stream used by the separate CSV cohort.
+Next: Use the active compact odds tables for coarse 5-10 second analysis; for sub-second/individual-change lag analysis, restore or deploy a raw event-level collector/persistence path.
+Notes: The prior conclusion that server collection status could not be checked is withdrawn for database-backed collection; WinRM is still unavailable for inspecting the server's scheduled task and CSV files. No production state was changed.
+Blockers: None for database-backed collection verification.
+
 ## Active Update 2026-07-26 Server Crypto Order-Book Collector Check
 Goal: Verify the BTC/ETH/SOL order-book collector on production server `192.168.0.101`, not on the local workstation.
 Status: Blocked
