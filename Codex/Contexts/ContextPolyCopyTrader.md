@@ -1,3 +1,16 @@
+## Active Update 2026-07-26 Three Evening Daily PnL Excel Reports
+Goal: Recalculate the requested Child/Child ROI, Neutral Optimized Average LowerEnter, and Neutral LowEnter Average daily Paper PnL workbooks from a new evening production snapshot.
+Status: Completed
+Done:
+- Queried exact production PostgreSQL `192.168.0.101/polycopytrader` read-only and created three new one-sheet workbooks under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/daily-pnl-reports-20260726-211138`.
+- Child/Child ROI cutoff was `2026-07-26T18:14:08.275564Z`: 144 candidates, 238,326 settled rows, 6 unique winners, 19 UTC dates through `2026-07-26`, and Grand Total `1664.50727675`.
+- Neutral Optimized Average LowerEnter cutoff was `2026-07-26T18:20:33.481194Z`: 48 candidates, 1,848 settled rows, BTC 10 bps `26.45487760`, ETH 2 bps `64.03573086`, SOL 2 bps `153.46257706`, 22 Europe/Sofia dates through `2026-07-26`, and Grand Total `243.95318552`.
+- Neutral LowEnter Average cutoff was `2026-07-26T18:20:42.277432Z`: 84 candidates, 61,857 settled rows, SOL 2 bps `230.47154665`, BTC 20 bps `306.83185846`, ETH 2 bps `637.49685053`, 23 Europe/Sofia dates through `2026-07-26`, and Grand Total `1174.80025564`.
+- Independently reconciled raw settled rows, winner selection, daily values, and totals. Verified one `Daily PnL` sheet per workbook, formula-driven daily/category/grand totals, zero formula errors, red-on-white negative values with a visible minus, and first-row/first-column freeze panes.
+Next: None.
+Notes: All three final renders were visually inspected. Production was read-only; no service, strategy, order, or database state changed. All marked temporary report sessions were removed.
+Blockers: None.
+
 ## Active Update 2026-07-26 Production Verification of Current-Strategy Storage Scope
 Goal: Verify the deployed storage-scope reduction on exact production PostgreSQL without mutating production state.
 Status: Completed
