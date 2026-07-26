@@ -1,3 +1,16 @@
+## Active Update 2026-07-26 Three Fresh Daily PnL Excel Reports
+Goal: Recalculate the requested Child/Child ROI, Neutral Optimized Average LowerEnter, and Neutral LowEnter Average daily Paper PnL workbooks from current production data.
+Status: Completed
+Done:
+- Queried production PostgreSQL `192.168.0.101/polycopytrader` read-only; all three report snapshots include `2026-07-26` data.
+- Created fresh Child/Child ROI workbook with 6 selected strategies, 19 UTC dates, cutoff `2026-07-26T07:17:24Z`, and grand total `1520.57335767`.
+- Created fresh Neutral-only Optimized Average LowerEnter workbook with 3 selected strategies, 22 Europe/Sofia dates, cutoff `2026-07-26T07:25:02Z`, and grand total `237.94388552`.
+- Created fresh Neutral-only LowEnter Average workbook with 3 selected strategies, 23 Europe/Sofia dates, cutoff `2026-07-26T07:25:13Z`, and grand total `1127.42419934`.
+- Verified all workbooks have one `Daily PnL` sheet, strategy columns sorted by total PnL ascending, formula-driven daily/category/grand totals, red-on-white negatives with a visible minus, and first-row/first-column freeze panes.
+Next: None.
+Notes: Independent production SQL/raw-row reconciliation passed for selections and totals; Excel COM verification reported zero formula errors; all three final sheet renders were visually inspected. Production data was read-only and no service/order/strategy state changed.
+Blockers: None.
+
 ## Active Update 2026-07-26 Production DB Crypto Order-Book Collection Check
 Goal: Verify BTC/ETH/SOL order-book collection on server `192.168.0.101` through production PostgreSQL.
 Status: Completed

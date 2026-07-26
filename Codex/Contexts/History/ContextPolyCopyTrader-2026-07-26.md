@@ -11,3 +11,10 @@ Request:
 
 Result:
 Да. Production PostgreSQL `192.168.0.101/polycopytrader` проверен строго read-only. Два снимка примерно за 50 секунд подтвердили продвижение компактного BTC/ETH/SOL odds/order-book архива: последние samples дошли до `2026-07-26T07:20:52.037323Z` для BTC и `07:20:53.677856Z` для ETH/SOL. За последние 15 минут записано BTC 524, ETH 232, SOL 214 строк; возраст последних samples 4.640-6.281 секунды, источники стакана не отсутствуют. WebSocket crypto-critical подключён, не stale, без ошибки. При этом это периодические top-of-book snapshots примерно раз в 5-10 секунд, а не полный event-level поток: `btc_order_book_lag_diagnostic_events` пуст, `market_data_events` не обновлялся с `2026-05-03`. Предыдущий блокер WinRM снят для проверки данных в БД, но остаётся для чтения серверных задач и CSV-файлов. Production не изменялся.
+
+## 2026-07-26T07:28:31.3531223+00:00
+Request:
+Пересчитай новые
+
+Result:
+Три отчёта пересчитаны по свежим read-only снимкам production PostgreSQL `192.168.0.101/polycopytrader`. Все книги содержат строку `2026-07-26`: Child/Child ROI — 6 стратегий и Grand Total `1520.57335767`; Neutral Optimized Average LowerEnter — 3 стратегии и Grand Total `237.94388552`; Neutral LowEnter Average — 3 стратегии и Grand Total `1127.42419934`. Формулы, сортировка, отрицательное форматирование, freeze panes и финальные рендеры проверены; formula errors = 0.
