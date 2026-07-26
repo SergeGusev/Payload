@@ -1,3 +1,16 @@
+## Active Update 2026-07-27 FAK 0.99 Rationale for LowEnter
+Goal: Explain why a hypothetical Live FAK path for `ETH Up or Down 5m 2 bps LowEnter Average Premarket` forces worst price `0.99` instead of `0.50`.
+Status: Completed
+Done:
+- Traced the fixed `FakGuaranteedWorstPrice = 0.99` and all three Live request overrides in the current processor. It is a maximum acceptable BUY price used to expose almost the whole ask book, not the expected execution price; an existing focused test records request price `0.99` with actual average fill `0.64`.
+- Recovered the exact origin in commit `342ca8c3269318b49a2d5da83d54a58141e5f587` from 2026-06-29 and the preserved user requirement to make all then-current Up/Down Paper and Live FAK orders use `0.99` for broad stack selection. The preceding production investigation found lower submitted caps excluded higher ask levels and correlated with FAK no-match/zero-fill responses.
+- Cross-checked official Polymarket semantics: a BUY price/maxPrice is a ceiling; eligible better asks receive price improvement. FAK fills currently available eligible liquidity immediately and cancels the remainder, so `0.99` broadens eligible depth but does not guarantee a full or any fill. The protocol does not require `0.99`.
+- Established the chronology mismatch: LowEnter was added later in commit `25aeb5871149e573fbab6d4430bcc61c6c3b26a1` on 2026-07-22 as `PaperOnly=true`, with its separate post-simulation average-fill cap `<=0.50`. No dedicated Live LowEnter contract was implemented; merely removing the Paper-only guard would therefore inherit the older generic `0.99` rule.
+- Derived the design consequence: a hard Live cap `0.50` is the simple fail-closed choice and accepts partial/zero fills, but it is stricter than the current Paper VWAP rule because it rejects every individual ask above `0.50`, including a combination whose weighted average might remain `<=0.50`. Exact Paper/Live parity needs a dedicated drift-safe implementation rather than a flag change.
+Next: If explicitly requested, specify and test the desired Live LowEnter contract: strict per-fill `0.50` ceiling or bounded aggregate-VWAP behavior under order-book drift.
+Notes: Read-only source, Git-history, test, and official-documentation inspection only; no code, production setting, order, service, or database state changed.
+Blockers: None for the explanation. Live LowEnter behavior remains intentionally unavailable and its exact desired price contract is not yet specified.
+
 ## Active Update 2026-07-26 ETH 2 bps LowEnter Live Readiness Audit
 Goal: Determine whether `ETH Up or Down 5m 2 bps LowEnter Average Premarket` can be moved to Live safely.
 Status: Completed
