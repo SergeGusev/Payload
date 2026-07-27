@@ -1,3 +1,15 @@
+## Active Update 2026-07-27 Final Max/Min Reference-Average Contract Confirmation
+Goal: Confirm the final intended boundary and outcome mapping for fixed Up, fixed Down, and neutral Reference Average strategies.
+Status: Completed
+Done:
+- Confirmed the intended fixed `Up N bps` rule: compare with `Amax`; at `N bps` or more above it, buy `Down`.
+- Confirmed the intended fixed `Down N bps` rule: compare with `Amin`; at `N bps` or more below it, buy `Up`.
+- Confirmed the intended neutral rule: independently test both boundaries; buy `Down` above `Amax`, buy `Up` below `Amin`, and skip while current price remains inside the `Amin..Amax` envelope or outside it by less than `N bps`.
+- Added the final three-row intended-contract table to `Codex/Tasks/ETH_MIRROR_24H_GRAPH_2026-07-27.md`.
+Next: If requested, implement this contract with explicit scope across ordinary Reference Average variants and related LowEnter/Optimized/Filtered families.
+Notes: Contract clarification and documentation only. No strategy code, test, database row, order, service, or production state changed. No build/test run was required because implementation did not change.
+Blockers: None.
+
 ## Active Update 2026-07-27 Current Reference-Average Max Selector Scope
 Goal: Determine whether maximum-only average selection existed only in the mirror replay or is used by current neutral and fixed Down Reference Average strategies.
 Status: Completed

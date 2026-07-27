@@ -69,6 +69,12 @@ Therefore `max(A') = 2P0 - min(A)`, not `2P0 - max(A)`. The charts are exactly s
 
 The subsequent user clarification supersedes the nearest-average wording. The desired countertrend contract treats the eight full positive averages as an envelope:
 
+| Intended variant | Reference boundary | Entry condition | Bought outcome |
+|---|---|---|---|
+| named `Up N bps` | `Amax` | current is at least `N bps` above `Amax` | `Down` |
+| named `Down N bps` | `Amin` | current is at least `N bps` below `Amin` | `Up` |
+| neutral | both `Amax` and `Amin` | above `Amax` or below `Amin` by at least `N bps` | opposite side; otherwise skip |
+
 ```text
 Amax = max(Average_w)
 Amin = min(Average_w)
