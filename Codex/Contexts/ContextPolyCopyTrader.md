@@ -1,3 +1,18 @@
+## Active Update 2026-07-27 ETH Neutral Reference Average Mirror Symmetry
+Goal: Confirm or refute whether an exactly downward-mirrored ETH chart would make `ETH Up or Down 5m 2 bps Reference Average Premarket` earn the same PnL with every Up/Down bet reversed.
+Status: Completed
+Done:
+- Resolved the exact strategy as the dynamic-outcome neutral variant `eth_up_down_5m_reference_average_bps_2_fak_premarket`. Here “neutral” means no fixed outcome; it does not mean mathematical invariance under an Up/Down mirror.
+- Verified the exact signal: from full positive `24h/12h/6h/3h/90m/45m/20m/10m` arithmetic averages it always selects the maximum `M`, computes `d = 10000 * (P-M)/M`, applies `|d| >= 2`, and buys the direction opposite the sign.
+- Proved that a vertical reflection `P' = K-P` transforms every average to `A'_w = K-A_w`, so the new selected maximum is `K-min(A_w)`, not `K-max(A_w)`. Therefore the mirrored deviation is not `-d`; signal direction, threshold crossings, selected windows, entry count, and entry timestamps need not mirror.
+- Independently calculated a concrete counterexample from the existing focused-test fixture. Original averages `[3150,3200,3175,3180]` and `P=3196` select `M=3200`, `d=-12.5 bps`, BUY Up. Reflecting the full state around `3200` gives averages `[3250,3200,3225,3220]`, `P'=3204`, selected `M'=3250`, `d'=-141.5384615 bps`, and BUY Up again rather than Down.
+- Separated outcome symmetry from strategy symmetry. If the complete Chainlink ETH/USD path is reflected, every non-tie five-minute winner flips, but exact ties remain Up under the market rule. Mirroring only the Binance ETH/USDT signal feed does not establish mirrored official outcomes.
+- Established that even forced signal/winner reversal would not determine equal dollar PnL. Polymarket token asks and depth are set by the CLOB; identical ETH paths do not imply role-swapped prices, full/partial fills, min sizes, fees, latency, or risk/stake state. Equal PnL requires those execution inputs to mirror as well.
+- Conclusion: refuted for the actual strategy. The claim is true only in an artificial fully mirrored model that also swaps the signal reference contract, Chainlink outcomes, Up/Down order books, executions, costs, and stake trajectory. An exact real-FAK counterfactual amount cannot be derived from the ETH chart alone.
+Next: If requested, run a signal-only replay after fixing the mirror definition and execution assumption; a reproducible first model would mirror the full ETH warm-up path, recalculate all eight averages, flip non-tie winners, and use a fixed `0.50` entry price.
+Notes: Read-only source, focused-test inspection, repository-history review, independent PowerShell decimal calculation, and current official Polymarket rule/order-book documentation only. No code, production configuration, database row, service, strategy flag, or order changed; no build/test run was needed because implementation did not change.
+Blockers: A numeric real-execution PnL needs a precise mirror definition plus counterfactual two-sided premarket books/fills; the ETH price path alone is insufficient evidence.
+
 ## Active Update 2026-07-27 FAK 0.99 Rationale for LowEnter
 Goal: Explain why a hypothetical Live FAK path for `ETH Up or Down 5m 2 bps LowEnter Average Premarket` forces worst price `0.99` instead of `0.50`.
 Status: Completed
