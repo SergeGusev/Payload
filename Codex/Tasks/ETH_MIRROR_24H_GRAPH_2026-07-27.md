@@ -90,6 +90,7 @@ For this selected point the outcome does reverse, but the reference does not: th
 - Focused production tests for `CryptoReferencePriceAverageCacheTests` and `ProcessAsync_EthNeutral9FakPremarketUsesReferenceAverageMoveSign` passed `4/4`; the build emitted only the repository's existing nullable warnings.
 - PNG exists, was visually inspected at its original `2400 × 1800` resolution, is `395,228` bytes, and has SHA-256 `C824A763AAC82B67312348E09678D1129A5F7EE5CD6DE2876F4AD668A7CF2709`.
 - The HTML fragment is `261,365` bytes, starts with the required root `<div>`, contains one SVG, has no document wrapper, literal escape artifacts, or dashed-line styling.
+- Protected temp cleanup initially met one Roslyn analyzer DLL lock. Process `23944` was verified to have five loaded modules inside the exact marked run directory before only that task-created `VBCSCompiler` was stopped; lifecycle cleanup then removed the marked run and a final check confirmed the directory absent.
 
 ## Display semantics and limitation
 
