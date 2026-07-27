@@ -1,3 +1,17 @@
+## Active Update 2026-07-27 ETH Mirror Pairwise Settlement Symmetry
+Goal: Determine whether the concrete original `Down` and mirrored `Up` decisions shown on the 24-hour graph necessarily have the same win/loss and PnL.
+Status: Completed
+Done:
+- Separated the rendered signal history from the later five-minute settlement path. The graph stops at the decision and by itself proves only `Down` versus `Up`; it does not contain the Chainlink settlement interval.
+- Verified the exact market `2910584` rule through current official Gamma metadata and the same ETH 5m rule through retained market rows and current processor/test behavior: `Up` wins when Chainlink ETH/USD end is greater than or equal to start; otherwise `Down` wins.
+- Proved pairwise settlement algebra for an exact fixed vertical reflection of the complete Chainlink path. A strict original decline makes both original `Down` and mirrored `Up` win; a strict original rise makes both lose. Exact equality is the sole exception: original `Down` loses while mirrored `Up` wins because equality settles `Up` in both worlds.
+- Independently checked the concrete selected market `2910584`: official winner `Down`; target Paper entry/VWAP `0.52`, filled notional `$6.0093`, `11.55634615` shares, and settled PnL `+$5.54704615`. Since an official `Down` winner cannot be a tie, the exact mirrored Chainlink path makes the paired `Up` win; with the stipulated identical swapped-book fill it also earns `+$5.54704615`.
+- Established the PnL boundary. Equal win/loss implies equal dollar PnL only when the earlier mirrored-book premise also preserves requested stake/notional, FAK eligibility, filled shares/notional, holding/exit path, and fees. Under an identical paired fill the current settlement formula gives identical PnL; different fills can produce different PnL despite the same win/loss.
+- Added this interpretation to `Codex/Tasks/ETH_MIRROR_24H_GRAPH_2026-07-27.md` and qualified the forced winner-swap control in `Codex/Tasks/ETH_MIRROR_REPLAY_2026-07-27.md` so it no longer silently treats a true Chainlink tie as a swapped winner.
+Next: None.
+Notes: Evidence used the exact official Gamma endpoint, current official Polymarket market rules, read-only retained-market inspection, current settlement/result code and focused tie test, and independent signal/book audits. No order, strategy, service, database row, or production state changed; only durable Markdown evidence was updated. No build/test run was required because no implementation changed.
+Blockers: None. The count of exact Chainlink ties in the broad historical replay remains unknown because retained official winners do not distinguish a strict `Up` move from equality.
+
 ## Active Update 2026-07-27 ETH 24h Growth and Mirror Decision Graph
 Goal: Produce one graph showing a real 24-hour ETH growth interval with a saved Down decision, all eight averages, the exact vertical mirror, recomputed mirrored averages, and its decision.
 Status: Completed

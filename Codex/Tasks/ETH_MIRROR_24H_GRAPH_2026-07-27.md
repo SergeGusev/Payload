@@ -78,10 +78,32 @@ Mirror decision:
 - inclusive `2 bps` threshold passed;
 - negative move is inverted by the neutral strategy, producing `Up`.
 
-For this selected point the outcome does reverse, but the reference does not: the actual decision uses the `10m` maximum, while the mirror uses the `24h` maximum. Algebraically, linear reflection makes `max(A') = 2P0 - min(A)`, so the actual minimum (`24h`) becomes the mirrored maximum.
+For this selected point the strategy's selected outcome/token does reverse, but the reference does not: the actual decision uses the `10m` maximum, while the mirror uses the `24h` maximum. This sentence concerns the signal, not the later market winner. Algebraically, linear reflection makes `max(A') = 2P0 - min(A)`, so the actual minimum (`24h`) becomes the mirrored maximum.
+
+## Pairwise settlement interpretation
+
+The chart stops at the decision and does not contain the following five-minute settlement interval. The exact market metadata for `2910584` states that settlement uses the Chainlink ETH/USD stream: `Up` wins when the end price is greater than or equal to the beginning price; otherwise `Down` wins.
+
+If the same fixed vertical reflection is extended through the complete Chainlink settlement path, with original start/end prices `O,C` and mirrored values `O'=2P0-O`, `C'=2P0-C`, then:
+
+| Chainlink condition | Original `Down` bet | Mirrored `Up` bet |
+|---|---|---|
+| `C < O` | wins | wins |
+| `C > O` | loses | loses |
+| `C = O` | loses | wins |
+
+Thus the pair has identical win/loss status for every non-tie path. Exact equality is the sole settlement-direction exception because reflection preserves equality and the market assigns equality to `Up`.
+
+Equal win/loss does not by itself prove equal dollar PnL. Equal PnL additionally requires the mirrored-book contract `counterfactual Up book = actual Down book`, equal requested notional and stake state, identical FAK eligibility/fills, the same holding/exit path, and equal fees. Under those conditions the paired trades have identical shares and cost, so the settlement formula produces identical PnL. Without those execution conditions, the graph remains signal-only evidence.
+
+For this exact selected market, a read-only production check at `2026-07-27T10:11:46Z` found the official `MarketWebSocket market_resolved` winner `Down`, with the target run settled as a win: entry/VWAP `0.52`, filled notional `$6.0093`, `11.55634615` shares, and Paper PnL `+$5.54704615`. This rules out the tie case for the original market. Therefore, under the additional complete-Chainlink reflection and identical mirrored-book fill premises, the counterfactual `Up` also wins and has the same `+$5.54704615` Paper PnL.
 
 ## Verification
 
+- Selected-market settlement/fill audit: exact production `192.168.0.101:5432/polycopytrader`, UTC, `REPEATABLE READ / READ ONLY`, transaction timestamp `2026-07-27T10:16:35.361263Z`, snapshot `577920158:577920985:577920158,577920842,577920982`, ended by rollback. Filtering `strategy_market_paper_runs` by target strategy ID and market `2910584`, then joining its order, fill, target-wallet/asset/condition settlement, ETH resolved ledger, and Gamma market produced exactly one required row in each relation and zero unmatched links.
+- Mirrored-fill audit: candidates were same-market Filled `Down` FAK summaries with multiplier `1`, requested and filled notional `$6.0093`, saved snapshot timestamp, and gap at most 2 seconds. There were 84 eligible summaries, 50 inside 2 seconds, and all 50 matched `0.52 / 11.55634615 / $6.0093` with zero partial fills. Deterministic order by absolute gap then order ID selected gap `0.222320s`.
+- Settlement arithmetic was independently recomputed: `11.55634615 - 6.00930000 = 5.54704615`, matching both the target run and target-specific settlement row exactly.
+- Fresh official Gamma `GET /markets/2910584` at `2026-07-27T10:14:57.9786379Z` returned HTTP 200, `closed=true`, outcomes `[Up,Down]`, prices `[0,1]`, and response SHA-256 `3EF297C45A32113420A45416CA9ABDA288F226DE9DBC60CAA6F986E0041E4472`, independently confirming `Down`.
 - Independent selection query: same market, rank `1/432`, same pivot, current price, and endpoint return.
 - Independent production-order .NET replay: all eight original persisted decimal averages and the stored original bps reproduced exactly.
 - Renderer replay: all bucket counts and first/last bucket boundaries matched exactly; its alternative deterministic tick ordering differed from persisted long-window decimals by at most `8e-25 USD`. The graph therefore uses the exact persisted original decimals above.

@@ -117,7 +117,9 @@ For the `5,786` actually settled target orders at the snapshot:
 - difference: `$0.00000043`, attributable to stored 8-decimal row rounding;
 - forcibly swapping every selected outcome and every winner while preserving the exact same fills also gives `+$887.11180365`.
 
-So the proposed logic is algebraically correct only after assuming the original trades remain one-to-one and merely relabeling both bets and winners. The actual strategy replay does not preserve those trades: reflecting the ticks changes which of the eight averages is maximal, changes thresholds, creates and removes entries, and usually does not reverse the selected outcome.
+This last calculation is a forced relabeling control, not an exact vertical-reflection control for a true Chainlink tie. A vertical reflection preserves equality, and the official market rule keeps a tie as `Up`; the retained inputs do not identify which official `Up` winners, if any, were exact Chainlink ties. The control is therefore exact for non-tie rows, while its tie blast radius is unknown.
+
+So the proposed logic is algebraically correct for non-tie rows only after assuming the original trades remain one-to-one and merely relabeling both bets and winners. The actual strategy replay does not preserve those trades: reflecting the ticks changes which of the eight averages is maximal, changes thresholds, creates and removes entries, and usually does not reverse the selected outcome.
 
 ## Conclusion and limitations
 
