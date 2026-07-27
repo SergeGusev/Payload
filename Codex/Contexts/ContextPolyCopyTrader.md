@@ -1,3 +1,15 @@
+## Active Update 2026-07-27 Fresh Child and Neutral LowerEnter Daily PnL Reports
+Goal: Recalculate and deliver the three requested one-sheet Excel daily Paper PnL reports from fresh production data through July 27.
+Status: Completed
+Done:
+- Generated a fresh Child / Child ROI workbook from a production read-only cutoff at `2026-07-27T20:40:48.386502Z`: 144 candidates, 252,480 settled Paper rows, 20 UTC dates through `2026-07-27`, and six unique currency/family winners sorted by total PnL ascending. The winners are BTC 4 Child (`84.26804199`), BTC 16 Child ROI (`93.98040924`), SOL 2 Child ROI (`133.61832232`), SOL 8 Child (`203.39303414`), ETH 10 Child ROI (`469.32182069`), and ETH 17 Child (`668.35716984`); Grand Total is `1652.93879822`.
+- Generated a fresh neutral-only Optimized Average LowerEnter Premarket workbook from a production `REPEATABLE READ`, `READ ONLY` cutoff at `2026-07-27T20:42:04.413713Z`: 48 candidates, 2,039 settled Paper rows, 23 Europe/Sofia dates through `2026-07-27`, and BTC 10 bps (`26.45487760`), ETH 2 bps (`52.76318341`), SOL 2 bps (`177.74505461`) sorted ascending; Grand Total is `256.96311562`.
+- Generated a fresh neutral-only LowEnter Average Premarket workbook from a production read-only cutoff at `2026-07-27T20:42:18.776801Z`: 84 candidates, 62,769 settled Paper rows, 24 Europe/Sofia dates through `2026-07-27`, and SOL 2 bps (`237.20660178`), BTC 20 bps (`296.76977474`), ETH 2 bps (`618.46211516`) sorted ascending; Grand Total is `1152.43849168`.
+- Independently reconciled winner selection, raw-row/daily aggregates, strategy totals, and Grand Totals. Excel verification confirmed one worksheet per workbook, formula-driven daily/category/grand totals, zero formula errors, red-on-white negative values with a visible minus, and frozen first row/first column at `B2`; all three final renders were visually inspected.
+Next: None unless the user requests another refresh or a different date/timezone convention.
+Notes: Production was queried read-only and was not changed. Each report has its own captured cutoff because the three fresh snapshots were calculated independently. Child/Child ROI preserves the established UTC date convention; the two Neutral reports preserve the established Europe/Sofia date convention. All marked temporary run directories were removed.
+Blockers: None.
+
 ## Active Update 2026-07-27 Paused Reference Average Historical Paper Correction
 Goal: Correct the pre-v2 Paper history of all 848 affected BTC, ETH, and SOL Reference Average strategies under the deployed Max/Min decision rules.
 Status: In Progress
