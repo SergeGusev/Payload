@@ -1,3 +1,18 @@
+## Active Update 2026-07-27 Reference Average Historical Replay Sufficiency Audit
+Goal: Determine whether the production database can support an exact historical Max/Min correction across all affected BTC, ETH, SOL, and downstream Child strategies.
+Status: Completed
+Done:
+- Verified the deployed v2 runtime at commit `ce430a20`, fixed the legacy-history cutoff at service start `2026-07-27T13:24:05.932282Z`, and audited production only through `REPEATABLE READ READ ONLY` transactions followed by rollback.
+- Counted the exact pre-cutover 848-strategy static history: 3,066,414 runs across 21,319 markets, comprising 707,772 settled and 2,358,642 skipped runs, 707,965 Paper orders, 707,772 Paper fills, and 2,094 Live-order records. All 707,965 Paper orders have non-null raw decision JSON.
+- Measured skipped diagnostics: 2,122,230 of 2,358,642 skipped rows have some JSON (89.9768%); 236,412 do not. The pre-cutover part of July 27 alone has 122,622 skips and zero retained diagnostics.
+- Isolated the only potential-add surface, 192 Optimized fixed-Down/neutral variants. Of 253,816 historical skips, 207,991 (81.9456%) retain exact selector inputs; 45,825 do not. All 23,772 existing orders in that cohort retain exact selector inputs.
+- Verified that exact new FAK execution cannot be guaranteed for missed entries because the signal-level skip occurs before book lookup and the general odds archive is top-of-book only. LostCounter progression, full counterfactual Child parent reselection, and historical enabled/paused settings are also not event-sourced.
+- Counted 496,784 pre-cutover settled Child runs. Existing parent links allow a frozen-assignment removal replay, but not an exact counterfactual reassignment replay after parent PnL changes.
+- Recorded the evidence, reproducible scope, confidence tiers, and immutable correction-ledger recommendation in `Codex/Tasks/REFERENCE_AVERAGE_HISTORY_REPLAY_AUDIT_2026-07-27.md`.
+Next: If requested, build a read-only/in-memory replay that first emits an immutable row-level correction ledger, without rewriting actual Paper or Live history.
+Notes: No code, database row, service, order, strategy, deployment, or production setting changed. Several bounded broad JSON queries timed out safely; narrower cohort queries completed and supplied the reported coverage. No build/test run was required because this was a read-only diagnostic and documentation task.
+Blockers: The database does not contain complete exact decision inputs, full selected-outcome FAK depth, or historical state transitions for every potential counterfactual entry; a bit-exact full-history rewrite is therefore not possible from current evidence.
+
 ## Active Update 2026-07-27 Reference Average Max/Min Migration for BTC ETH SOL
 Goal: Apply the confirmed Max/Min reference-average envelope to every affected BTC, ETH, and SOL strategy and provide an exact catalog inventory.
 Status: Completed
