@@ -1,3 +1,15 @@
+## Active Update 2026-07-27 ETH Mirror Reference-Window Ranking Explanation
+Goal: Explain why an exactly symmetric ETH reflection changes the selected reference-average window from `10m` to `24h`.
+Status: Completed
+Done:
+- Verified the current strategy path sorts all full positive averages by `AveragePriceUsd` descending and selects index `0`; it therefore selects the maximum anew in each scenario rather than preserving the original window identity.
+- Demonstrated from the exact graph values that actual `10m = 1872.174833333333...` is the maximum while `24h = 1803.657737207485...` is the minimum.
+- Applied the exact reflection `A'=2P0-A`, `2P0=3521.20`: it reverses every vertical comparison, making mirrored `10m = 1649.025166666666...` the minimum and mirrored `24h = 1717.542262792514...` the maximum.
+- Added a compact extrema table and the identity `max(A')=2P0-min(A)` to `Codex/Tasks/ETH_MIRROR_24H_GRAPH_2026-07-27.md`.
+Next: None.
+Notes: Read-only source/report inspection and exact decimal values only. No code, strategy, service, database row, order, or production state changed; the charts remain exactly symmetric, and that symmetry itself reverses the vertical ranking.
+Blockers: None.
+
 ## Active Update 2026-07-27 ETH Mirror Pairwise Settlement Symmetry
 Goal: Determine whether the concrete original `Down` and mirrored `Up` decisions shown on the 24-hour graph necessarily have the same win/loss and PnL.
 Status: Completed

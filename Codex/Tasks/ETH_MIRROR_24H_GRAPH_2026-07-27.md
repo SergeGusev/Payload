@@ -52,6 +52,19 @@ The persisted originals and independently transformed/replayed mirror values use
 | 20m | 20s | 60 | 1871.2139166666666666666666667 | 1649.9860833333333333333333333 |
 | 10m | 10s | 60 | 1872.1748333333333333333333333 | 1649.0251666666666666666666667 |
 
+### Why the selected window changes despite exact symmetry
+
+The strategy does not preserve the identity of the previously selected line. On each path it sorts all full positive averages by price descending and selects the first one. The reflection is `A' = 2P0 - A`, which reverses every vertical comparison: whenever `A_i > A_j`, the mirrored values satisfy `A'_i < A'_j`.
+
+For this graph `2P0 = 3521.20`, so the two extrema exchange roles:
+
+| Window | Actual role/value | Mirrored role/value |
+|---|---|---|
+| 10m | maximum: `1872.174833333333...` | minimum: `1649.025166666666...` |
+| 24h | minimum: `1803.657737207485...` | maximum: `1717.542262792514...` |
+
+Therefore `max(A') = 2P0 - min(A)`, not `2P0 - max(A)`. The charts are exactly symmetric; that exact symmetry is what reverses the ranking and changes the selected reference from `10m` to `24h`.
+
 Original decision:
 
 - maximum average: `10m = $1,872.1748333333333333333333333`;
