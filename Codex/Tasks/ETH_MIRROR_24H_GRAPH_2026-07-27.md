@@ -83,7 +83,15 @@ else:                    Skip
 
 This is symmetric in which boundary is used: a point above the complete average envelope is compared with its upper boundary, while a point below it is compared with its lower boundary. A point inside the envelope does not enter. It also matches the original June 23 wording: the Up-oriented case selected the largest average and bought `Down` above it; the Down-oriented case was required to use mirror logic and buy `Up`.
 
-The current neutral implementation does not implement that lower mirror branch. It always selects `Amax` first and only then derives `Up` or `Down` from the sign, so it can buy `Up` while the current price is merely below `Amax`, including when it is still inside the envelope. The rendered graph and its `10m -> 24h` production-reference change show that current implementation, not this clarified hypothetical contract.
+The current ordinary Reference Average implementation does not implement that lower mirror branch. Its fixed `Up` trigger, fixed `Down` trigger, and neutral variants all dispatch to the same selector, which always selects `Amax` first. Direction is evaluated only afterward:
+
+| Current variant | Trigger relative to the selected reference | Bought outcome |
+|---|---|---|
+| named `Up` | at least `N bps` above `Amax` | `Down` |
+| named `Down` | at least `N bps` below the same `Amax` | `Up` |
+| neutral | either sign at least `N bps` from `Amax` | opposite sign |
+
+Thus `Down` in a fixed strategy name denotes the required direction of the ETH move, not the token bought. Both the fixed `Down` and neutral lower branches can buy `Up` while the current price is merely below `Amax`, including when it is still above `Amin` and therefore inside the clarified envelope. The mirror replay faithfully reproduced this current selector; it did not introduce the maximum-only behavior. The rendered graph and its `10m -> 24h` production-reference change show the current implementation, not the clarified hypothetical contract.
 
 Under the clarified contract, this example uses the corresponding `10m` envelope boundary on both sides:
 

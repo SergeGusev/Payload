@@ -1,3 +1,17 @@
+## Active Update 2026-07-27 Current Reference-Average Max Selector Scope
+Goal: Determine whether maximum-only average selection existed only in the mirror replay or is used by current neutral and fixed Down Reference Average strategies.
+Status: Completed
+Done:
+- Verified all three ordinary ETH 2 bps Reference Average variants (`Up`, `Down`, and neutral) share `GetReferenceAverageBpsThresholdEntryDecisionAsync`; before direction is evaluated it sorts all available full positive averages descending and selects index `0`, so all three use `Amax`.
+- Clarified naming: fixed `Up` means an upward trigger relative to `Amax` and buys `Down`; fixed `Down` means a downward trigger relative to the same `Amax` and buys `Up`; neutral derives the trigger from the sign relative to `Amax` and buys the opposite outcome.
+- Confirmed the mirror replay copied this current neutral selector exactly; maximum-only behavior was not introduced by the replay. The proposed `Amax` upper boundary / `Amin` lower boundary remains a hypothetical corrected contract and is not implemented.
+- Independently ran the existing fixed-Down and neutral focused tests. All three cases passed: one fixed-Down fact plus two neutral theory cases. The fixed-Down fixture explicitly selects `3200` as the maximum from `3150/3200/3175/3180`, then a current price of `3196` triggers `Up` despite being above the minimum.
+- Recorded relevant exceptions: ETH `3Hour Average` variants use only `3h`; `Optimized Average` first selects the ordinary maximum and then requires its window to be `3h`; `Absolute Premarket` is a separate extrema strategy; ordinary `LowEnter Average` retains the maximum-only signal.
+- Expanded `Codex/Tasks/ETH_MIRROR_24H_GRAPH_2026-07-27.md` to state explicitly that fixed Down and neutral current variants both use the same maximum.
+Next: If requested, change the ordinary Reference Average lower branch to compare against `Amin`, with explicit scope for base, LowEnter, Optimized, and Filtered families and new regression tests.
+Notes: Verified current local HEAD `3a2b79e4` through source, factories, dispatch, focused tests, and the prior production-backed neutral replay. The focused test command passed 3/3 with existing nullable warnings. All task test artifacts were kept under a marked `D:\CodexTemp` run and removed; one task-created Roslyn compiler holding analyzer DLLs was identified by exact loaded-module paths and stopped before cleanup. Lifecycle startup also removed the marked stale disposable run `admin-a10-next-20260726` (12,580 files / 4,213,064,417 bytes) and safely skipped a different invalid marker; no project data was affected. No strategy code, database, order, service, or production state changed. Current deployed binary/version was not independently rechecked in this clarification.
+Blockers: None for current source behavior. Exact deployed-runtime parity remains unknown without deployment-version evidence.
+
 ## Active Update 2026-07-27 ETH Max/Min Reference-Average Envelope Contract
 Goal: Confirm whether the neutral Reference Average strategy should buy `Down` only above the maximum of all eight averages and buy `Up` only below their minimum.
 Status: Completed
