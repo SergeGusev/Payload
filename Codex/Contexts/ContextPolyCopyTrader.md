@@ -1,3 +1,18 @@
+## Active Update 2026-07-27 ETH 24h Growth and Mirror Decision Graph
+Goal: Produce one graph showing a real 24-hour ETH growth interval with a saved Down decision, all eight averages, the exact vertical mirror, recomputed mirrored averages, and its decision.
+Status: Completed
+Done:
+- Took a fixed production snapshot at `2026-07-27T09:22:38.1340270Z` in one PostgreSQL `REPEATABLE READ / READ ONLY` transaction and rolled it back after loading. All selection, replay, reflection, decision math, and rendering ran in C#/.NET memory; no database or product state changed.
+- Loaded 916 entered target-strategy Down decisions from the available 30-day interval; 432 had exactly eight expected full positive averages and a positive mirrored decision price. Both the final renderer and an independent selection query ranked market `2910584` (`eth-updown-5m-1784054400`) first by 24-hour endpoint growth.
+- Used the real interval `2026-07-13T18:39:29.9152019Z..2026-07-14T18:39:31.0286053Z`, pivoted the mirror at the first plotted tick `$1,760.60`, and used saved current `$1,875.33`. The real path gained `+651.652845620811... bps` / `+6.5165284562%` and the stored/replayed decision selected the `10m` maximum `$1,872.174833333333...`, move `+16.852948829832... bps`, outcome `Down`.
+- Reflected every replay tick and the current price through `P'=2P0-P`, producing current `$1,645.87`; recalculated all eight bucket averages. The mirrored decision selected the `24h` maximum `$1,717.542262792514...`, move `-417.295482883686... bps`, outcome `Up`.
+- Rendered `outputs/eth-mirror-24h-growth-20260727/eth-mirror-24h-growth.png` at `2400x1800`, showing both synchronized panels, eight solid sample-support average segments per panel, direct labels, decision markers, and the `max(A')=2P0-min(A)` explanation. No dashed/dotted lines are present. Visually inspected the final PNG at original resolution.
+- Created the theme-aware inline SVG fragment `eth-mirror-24h-decision.html` in the task visualization directory and verified its fragment contract, size, literal markup, and absence of dashed styling.
+- Wrote full selection, exact eight-average values, calculation, verification, artifact hash, and limitations to `Codex/Tasks/ETH_MIRROR_24H_GRAPH_2026-07-27.md`.
+Next: None.
+Notes: The final diagnostic Release build completed with 0 warnings/errors. Focused cache and neutral-direction tests passed 4/4, with only pre-existing repository nullable warnings. An independent production-order replay reproduced all persisted originals exactly; the renderer's alternative deterministic tick ordering matched bucket membership/bounds exactly and differed by at most `8e-25 USD`, so labels use persisted exact originals. Direct mirror versus the linear identity differed by at most `1e-24 USD`. The selected interval has 8,424 plotted ticks; raw timestamp gaps over 60 seconds were left visually broken rather than interpolated.
+Blockers: None. The graph is signal-only; it does not model mirrored CLOB depth, FAK fills, settlement, or PnL.
+
 ## Active Update 2026-07-27 ETH Mirrored-Tick In-Memory Replay
 Goal: Replay a downward-mirrored ETH path for `ETH Up or Down 5m 2 bps Reference Average Premarket`, recompute all eight averages, assume label-swapped books, and keep all replay state out of PostgreSQL.
 Status: Completed
