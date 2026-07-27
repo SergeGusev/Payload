@@ -8,6 +8,8 @@
 - Fixed database snapshot: `2026-07-27T07:06:41.4845900Z`
 - Database access: one PostgreSQL `REPEATABLE READ / READ ONLY` transaction; it was rolled back after loading inputs. All replay calculations and nearest-book pairing ran in process memory. No replay row, temporary table, strategy setting, order, or database state was written.
 
+> Algorithm-status note (2026-07-27): this is a frozen replay of the legacy maximum-only Reference Average selector present in the saved production decisions. The current source now uses the Max/Min envelope contract (`Up -> Amax`, `Down -> Amin`, neutral -> either outside boundary). The counts and PnL below are historical evidence for the legacy selector, not a performance claim for the migrated selector.
+
 ## Mirror definition
 
 The primary vertical reflection used the first replayable decision as the fixed anchor:
@@ -123,6 +125,6 @@ So the proposed logic is algebraically correct for non-tie rows only after assum
 
 ## Conclusion and limitations
 
-The user's equal-PnL hypothesis is rejected under the specified mirrored-tick and mirrored-book model. On the strict common FAK cohort the original path earned about `+$328.74`, while the primary linear mirror lost about `-$437.41`.
+For the legacy maximum-only selector, the user's equal-PnL hypothesis is rejected under the specified mirrored-tick and mirrored-book model. On the strict common FAK cohort the original path earned about `+$328.74`, while the primary linear mirror lost about `-$437.41`. A fresh replay is required before drawing the corresponding conclusion for the migrated Max/Min envelope selector.
 
 This is an in-sample counterfactual, not a forecast or a production trading rule. The strict cohort covers only rows whose persisted ticks exactly replayed the online cache and whose two FAK summaries were available within 2 seconds. Full historical order-book depth is absent, exact-tie outcome behavior is not separately observable, fees are absent from the current Paper model, and the chosen reflection anchor is part of the stated hypothetical.

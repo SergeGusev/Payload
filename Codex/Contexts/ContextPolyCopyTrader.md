@@ -1,3 +1,17 @@
+## Active Update 2026-07-27 Reference Average Max/Min Migration for BTC ETH SOL
+Goal: Apply the confirmed Max/Min reference-average envelope to every affected BTC, ETH, and SOL strategy and provide an exact catalog inventory.
+Status: Completed
+Done:
+- Reworked the shared Reference Average decision path: fixed `Up N bps` uses `Amax` and buys `Down` above it, fixed `Down N bps` uses `Amin` and buys `Up` below it, and neutral variants enter only outside the `Amin..Amax` envelope on the opposite side.
+- Applied the same selected-boundary contract to ordinary, native LowEnter, Optimized, and Filtered behavior paths; added deterministic extrema tie-breaking and v2 decision diagnostics containing both boundaries and the selected one.
+- Updated source and PostgreSQL seed descriptions for BTC, ETH, and SOL, plus README/configuration and historical mirror-report caveats.
+- Enumerated and independently reflected the complete current catalog: 680 directly affected variants plus 168 BpsConfirmed/DiffConfirmed composites form the 848-strategy static tier (BTC 312, ETH 322, SOL 214); another 247 Child/Child Progress/ROI variants are conditionally downstream-affected (BTC 96, ETH 63, SOL 88). The inclusive potential blast radius is 1,095 unique strategies (BTC 408, ETH 385, SOL 302), all listed by exact ID/code/name in `Codex/Tasks/REFERENCE_AVERAGE_MAX_MIN_MIGRATION_2026-07-27.md`.
+- Verified that 378 affected non-Paper-only parents (126 per asset) pass the Child parent-type filters. Whether a particular Child decision changes remains runtime-dependent on its active assignment and PnL/ROI gates; no production assignments were inspected or changed.
+- Preserved every strategy ID, code, and name. Existing aggregate history for the 848 static variants therefore spans the legacy maximum-only and v2 Max/Min algorithms; their raw v2 decisions are distinguishable by `decision_source=reference_price_average_envelope_bps_premarket_v2` and `reference_average_algorithm_version=2`.
+Next: Deploy and synchronize strategy descriptions only if explicitly requested; no runtime or production mutation was part of this task.
+Notes: Focused Reference/Optimized/LowEnter/schema verification passed 87/87; the Release solution build succeeded with 0 errors and 120 existing nullable warnings. The full suite produced 904 passed / 111 failed; representative failures were reproduced unchanged at pre-task HEAD `2b9849e3` and concern already-removed catalog families, not the Max/Min path. Fresh-worktree reflection matched all 848 static identities plus 247 conditional Child identities with zero missing, extra, or duplicate IDs/codes/names. No database, running service, live order, deployment, or production state was changed.
+Blockers: None.
+
 ## Active Update 2026-07-27 Final Max/Min Reference-Average Contract Confirmation
 Goal: Confirm the final intended boundary and outcome mapping for fixed Up, fixed Down, and neutral Reference Average strategies.
 Status: Completed

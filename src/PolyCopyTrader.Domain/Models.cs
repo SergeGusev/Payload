@@ -2802,6 +2802,9 @@ public static class StrategyIds
         var triggerName = triggerOutcome.ToString();
         var triggerCode = triggerName.ToLowerInvariant();
         var targetOutcomeName = targetOutcome.ToString();
+        var boundaryName = triggerOutcome == BtcUpDownFixedOutcome.Up ? "maximum" : "minimum";
+        var boundarySelectionName = triggerOutcome == BtcUpDownFixedOutcome.Up ? "largest" : "smallest";
+        var boundaryRelation = triggerOutcome == BtcUpDownFixedOutcome.Up ? "above" : "below";
         var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
         var thresholdName = thresholdBps.ToString(CultureInfo.InvariantCulture);
         var useReferenceAverageCodeMarker =
@@ -2813,7 +2816,7 @@ public static class StrategyIds
             Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
             $"{assetCode}_up_down_5m_{triggerCode}{codeMarker}_bps_{thresholdName}_fak_premarket",
             $"{normalizedAsset} Up or Down 5m {triggerName} {thresholdName} bps Reference Average Premarket",
-            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, compare the latest Binance {normalizedAsset}/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price moves {triggerName} by at least {thresholdName} bps from that maximum average, BUY {targetOutcomeName} from current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, select the {boundarySelectionName} full in-memory reference average ({boundaryName} boundary) across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is {boundaryRelation} that {boundaryName} boundary by at least {thresholdName} bps, BUY {targetOutcomeName} from current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
             BtcUpDown5mStrategyDirection.Dynamic,
             entryDelaySeconds,
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket,
@@ -2840,7 +2843,7 @@ public static class StrategyIds
             Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
             $"{assetCode}_up_down_5m_reference_average_bps_{thresholdName}_fak_premarket",
             $"{normalizedAsset} Up or Down 5m {thresholdName} bps Reference Average Premarket",
-            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, compare the latest Binance {normalizedAsset}/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is above that maximum average by at least {thresholdName} bps, BUY Down; if it is below that maximum average by at least {thresholdName} bps, BUY Up. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, treat the full in-memory 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m reference averages as an envelope. If the current price is above the maximum average by at least {thresholdName} bps, BUY Down; if it is below the minimum average by at least {thresholdName} bps, BUY Up. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.",
             BtcUpDown5mStrategyDirection.Dynamic,
             entryDelaySeconds,
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket,
@@ -2866,7 +2869,7 @@ public static class StrategyIds
             Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
             $"{assetCode}_up_down_5m_low_enter_average_bps_{thresholdName}_fak_premarket",
             $"{normalizedAsset} Up or Down 5m {thresholdName} bps LowEnter Average Premarket",
-            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, apply the neutral Reference Average signal: above the largest full in-memory reference average by at least {thresholdName} bps buys Down, while below it by at least {thresholdName} bps buys Up. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most {maximumPaperEntryPrice.ToString("0.00", CultureInfo.InvariantCulture)}. Live execution is not supported for this Paper experiment.",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, apply the neutral Reference Average envelope signal: above the maximum full in-memory reference average by at least {thresholdName} bps buys Down, while below the minimum full average by at least {thresholdName} bps buys Up; otherwise skip. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most {maximumPaperEntryPrice.ToString("0.00", CultureInfo.InvariantCulture)}. Live execution is not supported for this Paper experiment.",
             BtcUpDown5mStrategyDirection.Dynamic,
             entryDelaySeconds,
             BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket,
@@ -2898,15 +2901,24 @@ public static class StrategyIds
         var codeTriggerPart = triggerCode is null ? string.Empty : triggerCode + "_";
         var nameTriggerPart = triggerName is null ? string.Empty : triggerName + " ";
         var categoryTriggerPart = triggerName is null ? string.Empty : triggerName + " ";
-        var signalDescription = triggerOutcome is { } fixedTrigger
-            ? $"If the current price moves {fixedTrigger} by at least {thresholdName} bps from that maximum average, BUY {targetOutcome}."
-            : $"If the current price is above that maximum average by at least {thresholdName} bps, BUY Down; if it is below that maximum average by at least {thresholdName} bps, BUY Up.";
+        var boundarySelectionDescription = triggerOutcome switch
+        {
+            BtcUpDownFixedOutcome.Up => "select the largest full in-memory reference average as the maximum boundary",
+            BtcUpDownFixedOutcome.Down => "select the smallest full in-memory reference average as the minimum boundary",
+            _ => "select both the maximum and minimum full in-memory reference-average boundaries"
+        };
+        var signalDescription = triggerOutcome switch
+        {
+            BtcUpDownFixedOutcome.Up => $"If the current price is above the maximum boundary by at least {thresholdName} bps, BUY Down.",
+            BtcUpDownFixedOutcome.Down => $"If the current price is below the minimum boundary by at least {thresholdName} bps, BUY Up.",
+            _ => $"If the current price is above the maximum boundary by at least {thresholdName} bps, BUY Down; if it is below the minimum boundary by at least {thresholdName} bps, BUY Up."
+        };
 
         return new BtcUpDown5mStrategyVariant(
             Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
             $"{assetCode}_up_down_5m_{codeTriggerPart}optimized_average_bps_{thresholdName}_fak_premarket",
             $"{normalizedAsset} Up or Down 5m {nameTriggerPart}{thresholdName} bps Optimized Average Premarket",
-            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, compare the latest Binance {normalizedAsset}/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. {signalDescription} Enter only when the ordinary maximum-average selector chose the {requiredWindow} window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, {boundarySelectionDescription} across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. {signalDescription} Enter only when the direction-relevant selected boundary uses the {requiredWindow} window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.",
             BtcUpDown5mStrategyDirection.Dynamic,
             entryDelaySeconds,
             BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket,

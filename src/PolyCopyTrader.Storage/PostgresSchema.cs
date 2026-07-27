@@ -1283,7 +1283,7 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
     lower(asset_symbol) || '_up_down_5m_low_enter_average_bps_' || threshold_value::text || '_fak_premarket',
     asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps LowEnter Average Premarket',
-    '30 seconds before ' || asset_symbol || ' 5m market open, apply the neutral Reference Average signal: above the largest full in-memory reference average by at least ' || threshold_value::text || ' bps buys Down, while below it by at least ' || threshold_value::text || ' bps buys Up. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most 0.50. Live execution is not supported for this Paper experiment.',
+    '30 seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the envelope formed by the smallest and largest full in-memory reference averages across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is above the maximum boundary by at least ' || threshold_value::text || ' bps, BUY Down; if it is below the minimum boundary by at least ' || threshold_value::text || ' bps, BUY Up. Otherwise skip. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most 0.50. Live execution is not supported for this Paper experiment.',
     true,
     false,
     1.00,
@@ -1412,13 +1412,22 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
     'eth_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_' || threshold_value::text || '_fak_premarket',
     'ETH Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket',
-    '30 seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
+    '30 seconds before ETH 5m market open, evaluate the latest Binance ETH/USDT reference price against the full in-memory reference averages across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
         CASE
-            WHEN trigger_name IS NULL
-            THEN 'If the current price is above that maximum average by at least ' || threshold_value::text || ' bps, BUY Down; if it is below that maximum average by at least ' || threshold_value::text || ' bps, BUY Up.'
-            ELSE 'If the current price moves ' || trigger_name || ' by at least ' || threshold_value::text || ' bps from that maximum average, BUY ' || target_outcome || '.'
+            WHEN trigger_name = 'Up'
+            THEN 'Use the largest full reference average as the maximum boundary. If the current price moves Up by at least ' || threshold_value::text || ' bps from that maximum boundary, BUY Down.'
+            WHEN trigger_name = 'Down'
+            THEN 'Use the smallest full reference average as the minimum boundary. If the current price moves Down by at least ' || threshold_value::text || ' bps from that minimum boundary, BUY Up.'
+            ELSE 'Use the envelope formed by the smallest and largest full reference averages. If the current price is above the maximum boundary by at least ' || threshold_value::text || ' bps, BUY Down; if it is below the minimum boundary by at least ' || threshold_value::text || ' bps, BUY Up.'
         END ||
-        ' Enter only when the ordinary maximum-average selector chose the 3h window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
+        CASE
+            WHEN trigger_name = 'Up'
+            THEN ' Enter only when the direction-relevant maximum boundary came from the 3h window; otherwise skip.'
+            WHEN trigger_name = 'Down'
+            THEN ' Enter only when the direction-relevant minimum boundary came from the 3h window; otherwise skip.'
+            ELSE ' Enter only when the envelope boundary that triggered the signal came from the 3h window; otherwise skip.'
+        END ||
+        ' Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
     true,
     false,
     1.00,
@@ -1480,13 +1489,22 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
     'btc_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_' || threshold_value::text || '_fak_premarket',
     'BTC Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket',
-    '30 seconds before BTC 5m market open, compare the latest Binance BTC/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
+    '30 seconds before BTC 5m market open, evaluate the latest Binance BTC/USDT reference price against the full in-memory reference averages across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
         CASE
-            WHEN trigger_name IS NULL
-            THEN 'If the current price is above that maximum average by at least ' || threshold_value::text || ' bps, BUY Down; if it is below that maximum average by at least ' || threshold_value::text || ' bps, BUY Up.'
-            ELSE 'If the current price moves ' || trigger_name || ' by at least ' || threshold_value::text || ' bps from that maximum average, BUY ' || target_outcome || '.'
+            WHEN trigger_name = 'Up'
+            THEN 'Use the largest full reference average as the maximum boundary. If the current price moves Up by at least ' || threshold_value::text || ' bps from that maximum boundary, BUY Down.'
+            WHEN trigger_name = 'Down'
+            THEN 'Use the smallest full reference average as the minimum boundary. If the current price moves Down by at least ' || threshold_value::text || ' bps from that minimum boundary, BUY Up.'
+            ELSE 'Use the envelope formed by the smallest and largest full reference averages. If the current price is above the maximum boundary by at least ' || threshold_value::text || ' bps, BUY Down; if it is below the minimum boundary by at least ' || threshold_value::text || ' bps, BUY Up.'
         END ||
-        ' Enter only when the ordinary maximum-average selector chose the 3h window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
+        CASE
+            WHEN trigger_name = 'Up'
+            THEN ' Enter only when the direction-relevant maximum boundary came from the 3h window; otherwise skip.'
+            WHEN trigger_name = 'Down'
+            THEN ' Enter only when the direction-relevant minimum boundary came from the 3h window; otherwise skip.'
+            ELSE ' Enter only when the envelope boundary that triggered the signal came from the 3h window; otherwise skip.'
+        END ||
+        ' Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
     true,
     false,
     1.00,
@@ -1548,13 +1566,22 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
     'sol_up_down_5m_' || code_trigger_prefix || 'optimized_average_bps_' || threshold_value::text || '_fak_premarket',
     'SOL Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket',
-    '30 seconds before SOL 5m market open, compare the latest Binance SOL/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
+    '30 seconds before SOL 5m market open, evaluate the latest Binance SOL/USDT reference price against the full in-memory reference averages across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. ' ||
         CASE
-            WHEN trigger_name IS NULL
-            THEN 'If the current price is above that maximum average by at least ' || threshold_value::text || ' bps, BUY Down; if it is below that maximum average by at least ' || threshold_value::text || ' bps, BUY Up.'
-            ELSE 'If the current price moves ' || trigger_name || ' by at least ' || threshold_value::text || ' bps from that maximum average, BUY ' || target_outcome || '.'
+            WHEN trigger_name = 'Up'
+            THEN 'Use the largest full reference average as the maximum boundary. If the current price moves Up by at least ' || threshold_value::text || ' bps from that maximum boundary, BUY Down.'
+            WHEN trigger_name = 'Down'
+            THEN 'Use the smallest full reference average as the minimum boundary. If the current price moves Down by at least ' || threshold_value::text || ' bps from that minimum boundary, BUY Up.'
+            ELSE 'Use the envelope formed by the smallest and largest full reference averages. If the current price is above the maximum boundary by at least ' || threshold_value::text || ' bps, BUY Down; if it is below the minimum boundary by at least ' || threshold_value::text || ' bps, BUY Up.'
         END ||
-        ' Enter only when the ordinary maximum-average selector chose the 3h window; otherwise skip. Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
+        CASE
+            WHEN trigger_name = 'Up'
+            THEN ' Enter only when the direction-relevant maximum boundary came from the 3h window; otherwise skip.'
+            WHEN trigger_name = 'Down'
+            THEN ' Enter only when the direction-relevant minimum boundary came from the 3h window; otherwise skip.'
+            ELSE ' Enter only when the envelope boundary that triggered the signal came from the 3h window; otherwise skip.'
+        END ||
+        ' Paper entry simulates the same taker BUY from executable ask depth using the worst-price cap. Live execution is not supported for this optimized Paper experiment.',
     true,
     false,
     1.00,
@@ -1817,7 +1844,11 @@ SELECT
         CASE WHEN asset_symbol = 'ETH' AND trigger_code = 'down' THEN '_reference_average' ELSE '' END ||
         '_bps_' || code_suffix || '_fak_premarket',
     asset_symbol || ' Up or Down 5m ' || trigger_name || ' ' || threshold_name || ' bps Reference Average Premarket',
-    'Thirty seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price moves ' || trigger_name || ' by at least ' || threshold_name || ' bps from that maximum average, BUY ' || target_outcome || ' from current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
+    CASE
+        WHEN trigger_code = 'up'
+        THEN 'Thirty seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price moves Up by at least ' || threshold_name || ' bps from that maximum boundary, BUY Down from current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.'
+        ELSE 'Thirty seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the smallest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price moves Down by at least ' || threshold_name || ' bps from that minimum boundary, BUY Up from current premarket executable ask depth using the worst-price cap. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.'
+    END,
     true,
     false,
     1.00,
@@ -1891,7 +1922,7 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_tenths)::text, 12, '0'))::uuid,
     lower(asset_symbol) || '_up_down_5m_reference_average_bps_' || code_suffix || '_fak_premarket',
     asset_symbol || ' Up or Down 5m ' || threshold_name || ' bps Reference Average Premarket',
-    'Thirty seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is above that maximum average by at least ' || threshold_name || ' bps, BUY Down; if it is below that maximum average by at least ' || threshold_name || ' bps, BUY Up. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
+    'Thirty seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the envelope formed by the smallest and largest full in-memory reference averages across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is above the maximum boundary by at least ' || threshold_name || ' bps, BUY Down; if it is below the minimum boundary by at least ' || threshold_name || ' bps, BUY Up. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.',
     true,
     false,
     1.00,

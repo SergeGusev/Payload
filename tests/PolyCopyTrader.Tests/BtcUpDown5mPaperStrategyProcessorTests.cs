@@ -206,7 +206,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
-        Assert.Equal(1078, StrategyIds.BtcUpDown5mVariants.Count);
+        Assert.Equal(1098, StrategyIds.BtcUpDown5mVariants.Count);
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Id).Distinct().Count());
         Assert.Equal(StrategyIds.BtcUpDown5mVariants.Count, StrategyIds.BtcUpDown5mVariants.Select(variant => variant.Code).Distinct().Count());
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.Standard));
@@ -232,7 +232,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Code.Contains("_up_down_5m_skip_", StringComparison.Ordinal));
         Assert.Equal(200, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdInstant));
         Assert.Equal(84, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket));
-        Assert.Equal(10, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket));
+        Assert.Equal(30, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(28, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket));
         Assert.Equal(0, StrategyIds.BtcUpDown5mVariants.Count(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket));
@@ -1524,6 +1524,97 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Null(StrategyIds.TryGetStrategyIdByCode("eth_up_down_5m_down_filtered_average_bps_1_fak_premarket"));
         Assert.DoesNotContain(StrategyIds.UpDown5mStrategyVariants, item =>
             item.Code.StartsWith("eth_up_down_5m_down_filtered_average_bps_", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void StrategyIds_ClassifyCompleteReferenceAverageEnvelopeImpactCatalog()
+    {
+        var catalog = StrategyIds.UpDown5mStrategyVariants;
+        var direct = catalog
+            .Where(item => item.Behavior is
+                BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
+                BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
+                BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket)
+            .ToArray();
+        var indirect = catalog
+            .Where(item => item.Behavior is
+                BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket or
+                BtcUpDown5mStrategyBehavior.DiffConfirmedAveragePremarket)
+            .ToArray();
+        var signalUnchangedSingleWindow = catalog
+            .Where(item => item.Behavior is
+                BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket or
+                BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket)
+            .ToArray();
+        var retiredFiltered = catalog
+            .Where(item => item.Behavior == BtcUpDown5mStrategyBehavior.FilteredReferenceAverageBpsThresholdFakPremarket)
+            .ToArray();
+        var staticallyAffected = direct.Concat(indirect).ToArray();
+        var conditionallyAffectedChildMirrors = catalog
+            .Where(item => item.Behavior is
+                BtcUpDown5mStrategyBehavior.ChildMirror or
+                BtcUpDown5mStrategyBehavior.ChildProgressMirror or
+                BtcUpDown5mStrategyBehavior.ChildRoiMirror or
+                BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror)
+            .ToArray();
+        var childParentTypeEligibleAffectedParents = staticallyAffected
+            .Where(item => item.MarketInterval == BtcUpDownMarketInterval.FiveMinutes &&
+                !item.PaperOnly &&
+                item.Behavior != BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket)
+            .ToArray();
+        var inclusivePotentialBlastRadius = staticallyAffected.Concat(conditionallyAffectedChildMirrors).ToArray();
+
+        Assert.Equal(680, direct.Length);
+        Assert.Equal(168, indirect.Length);
+        Assert.Equal(848, staticallyAffected.Length);
+        Assert.Equal(247, conditionallyAffectedChildMirrors.Length);
+        Assert.Equal(1095, inclusivePotentialBlastRadius.Length);
+        Assert.Equal(848, staticallyAffected.Select(item => item.Id).Distinct().Count());
+        Assert.Equal(848, staticallyAffected.Select(item => item.Code).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(848, staticallyAffected.Select(item => item.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(247, conditionallyAffectedChildMirrors.Select(item => item.Id).Distinct().Count());
+        Assert.Equal(247, conditionallyAffectedChildMirrors.Select(item => item.Code).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(247, conditionallyAffectedChildMirrors.Select(item => item.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(1095, inclusivePotentialBlastRadius.Select(item => item.Id).Distinct().Count());
+        Assert.Equal(1095, inclusivePotentialBlastRadius.Select(item => item.Code).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(1095, inclusivePotentialBlastRadius.Select(item => item.Name).Distinct(StringComparer.Ordinal).Count());
+        Assert.Empty(direct.Select(item => item.Id).Intersect(indirect.Select(item => item.Id)));
+        Assert.Empty(staticallyAffected.Select(item => item.Id).Intersect(conditionallyAffectedChildMirrors.Select(item => item.Id)));
+
+        var staticallyAffectedByAsset = staticallyAffected
+            .GroupBy(item => item.ReferenceAssetSymbol, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key ?? string.Empty, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(312, staticallyAffectedByAsset["BTC"]);
+        Assert.Equal(322, staticallyAffectedByAsset["ETH"]);
+        Assert.Equal(214, staticallyAffectedByAsset["SOL"]);
+        Assert.Equal(3, staticallyAffectedByAsset.Count);
+
+        var conditionalChildrenByAsset = conditionallyAffectedChildMirrors
+            .GroupBy(item => item.ReferenceAssetSymbol, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key ?? string.Empty, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(96, conditionalChildrenByAsset["BTC"]);
+        Assert.Equal(63, conditionalChildrenByAsset["ETH"]);
+        Assert.Equal(88, conditionalChildrenByAsset["SOL"]);
+        Assert.Equal(3, conditionalChildrenByAsset.Count);
+
+        var affectedByAsset = inclusivePotentialBlastRadius
+            .GroupBy(item => item.ReferenceAssetSymbol, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key ?? string.Empty, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(408, affectedByAsset["BTC"]);
+        Assert.Equal(385, affectedByAsset["ETH"]);
+        Assert.Equal(302, affectedByAsset["SOL"]);
+        Assert.Equal(3, affectedByAsset.Count);
+
+        Assert.Equal(378, childParentTypeEligibleAffectedParents.Length);
+        Assert.All(
+            childParentTypeEligibleAffectedParents
+                .GroupBy(item => item.ReferenceAssetSymbol, StringComparer.OrdinalIgnoreCase),
+            group => Assert.Equal(126, group.Count()));
+
+        Assert.Equal(56, signalUnchangedSingleWindow.Length);
+        Assert.Equal(56, signalUnchangedSingleWindow.Select(item => item.Id).Distinct().Count());
+        Assert.Empty(inclusivePotentialBlastRadius.Select(item => item.Id).Intersect(signalUnchangedSingleWindow.Select(item => item.Id)));
+        Assert.Empty(retiredFiltered);
     }
 
     [Fact]
@@ -8834,7 +8925,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var cryptoPriceClient = new FakeCryptoReferencePriceClient();
         cryptoPriceClient.SetPrice("ETH", 3_196m);
         var averageProvider = new FakeCryptoReferencePriceAverageProvider();
-        averageProvider.SetFullAverages("ETH", 3_150m, 3_200m, 3_175m, 3_180m);
+        averageProvider.SetFullAverages("ETH", 3_200m, 3_250m, 3_225m, 3_230m, 3_215m, 3_210m, 3_208m, 3_205m);
         OrderBookSnapshot[] orderBooks =
         [
             OrderBook(
@@ -8879,15 +8970,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Up", order.Outcome);
         Assert.Equal(0.41m, order.Price);
         Assert.Equal("btc_updown5m_fak_taker_paper", order.ExecutionSource);
-        Assert.Contains("\"decision_source\":\"reference_price_max_average_bps_premarket\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"decision_source\":\"reference_price_average_envelope_bps_premarket_v2\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_source\":\"crypto_reference_price_average_cache\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_algorithm_version\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_contract\":\"max_for_up_min_for_down\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_reference_average_price_usd\":3200", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"selected_reference_average_window\":\"12h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"selected_reference_average_window\":\"24h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_selected_boundary\":\"minimum\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_maximum_window\":\"12h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_maximum_price_usd\":3250", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_minimum_window\":\"24h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_minimum_price_usd\":3200", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"current_price_usd\":3196", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_direction_source\":\"configured_trigger\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_trigger_direction\":\"Down\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_target_direction\":\"Up\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"fixed_outcome\":\"Up\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_move_from_middle_bps\":-12.5", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_move_from_selected_boundary_bps\":-12.5", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_move_below_minimum_bps\":-12.5", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"premarket_reference_average_enabled\":true", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"fak_stats_probe\":true", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_execution_evidence_class\":\"paper_executable_snapshot_model\"", order.RawDecisionJson, StringComparison.Ordinal);
@@ -8895,20 +8996,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Theory]
-    [InlineData("eth_up_down_5m_up_optimized_average_bps_9_fak_premarket", 3204, "Down", "eth-optimized-down")]
-    [InlineData("eth_up_down_5m_down_optimized_average_bps_9_fak_premarket", 3196, "Up", "eth-optimized-up")]
-    [InlineData("eth_up_down_5m_optimized_average_bps_9_fak_premarket", 3196, "Up", "eth-optimized-up")]
-    [InlineData("eth_up_down_5m_optimized_average_bps_9_fak_premarket", 3204, "Down", "eth-optimized-down")]
+    [InlineData("eth_up_down_5m_up_optimized_average_bps_9_fak_premarket", 3204, true, "Down", "eth-optimized-down", "maximum")]
+    [InlineData("eth_up_down_5m_down_optimized_average_bps_9_fak_premarket", 3146, false, "Up", "eth-optimized-up", "minimum")]
+    [InlineData("eth_up_down_5m_optimized_average_bps_9_fak_premarket", 3146, false, "Up", "eth-optimized-up", "minimum")]
+    [InlineData("eth_up_down_5m_optimized_average_bps_9_fak_premarket", 3204, true, "Down", "eth-optimized-down", "maximum")]
     public async Task ProcessAsync_EthOptimizedAveragePremarketEntersWhenOrdinarySelectorChooses3h(
         string variantCode,
         int currentPriceUsd,
+        bool selectsMaximumBoundary,
         string expectedOutcome,
-        string expectedAssetId)
+        string expectedAssetId,
+        string expectedBoundary)
     {
+        decimal[] averages = selectsMaximumBoundary
+            ? [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m]
+            : [3_200m, 3_175m, 3_180m, 3_150m, 3_170m, 3_160m, 3_155m, 3_152m];
         var scenario = await RunOptimizedAverageScenarioAsync(
             variantCode,
             currentPriceUsd,
-            [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m]);
+            averages);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
         Assert.Equal(0, scenario.Result.RunsSkipped);
@@ -8920,6 +9026,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(PaperOrderStatus.Filled, order.Status);
         Assert.Equal(expectedOutcome, order.Outcome);
         Assert.Contains("\"selected_reference_average_window\":\"3h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains($"\"reference_average_selected_boundary\":\"{expectedBoundary}\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_contract\":\"max_for_up_min_for_down\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"optimized_average_enabled\":true", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"optimized_average_required_window\":\"3h\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"optimized_average_selected_window_matches\":true", order.RawDecisionJson, StringComparison.Ordinal);
@@ -8938,11 +9046,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         int selectedWindowIndex,
         string expectedSelectedWindow)
     {
-        var averages = Enumerable.Repeat(3_000m, 8).ToArray();
-        averages[selectedWindowIndex] = 3_200m;
+        var averages = Enumerable.Repeat(3_200m, 8).ToArray();
+        averages[selectedWindowIndex] = 3_000m;
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_down_optimized_average_bps_1_fak_premarket",
-            3_190m,
+            2_990m,
             averages);
 
         Assert.Equal(0, scenario.Result.EntriesPlaced);
@@ -8964,8 +9072,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     {
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_down_optimized_average_bps_1_fak_premarket",
-            3_190m,
-            [3_200m, 3_100m, 3_100m, 3_200m, 3_100m, 3_100m, 3_100m, 3_100m]);
+            2_990m,
+            [3_000m, 3_100m, 3_100m, 3_000m, 3_100m, 3_100m, 3_100m, 3_100m]);
 
         Assert.Equal(0, scenario.Result.EntriesPlaced);
         var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
@@ -8994,6 +9102,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Down", order.Outcome);
         Assert.Contains("\"selected_reference_average_price_usd\":3180", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_reference_average_window\":\"3h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_selected_boundary\":\"maximum\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_maximum_window\":\"3h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_minimum_window\":\"3h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_maximum_price_usd\":3180", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_minimum_price_usd\":3180", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_trigger_direction\":\"Up\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_target_direction\":\"Down\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_single_window_enabled\":true", order.RawDecisionJson, StringComparison.Ordinal);
@@ -9017,6 +9130,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
         Assert.Equal(SignalReasonCodes.ExecutionPriceAboveStrategyCap, run.SkipReason);
         Assert.Contains("\"selected_reference_average_window\":\"3h\"", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_maximum_window\":\"3h\"", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_minimum_window\":\"3h\"", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
         Assert.Contains("\"paper_fak_maximum_average_fill_price\":0.50", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
         Assert.Contains("\"paper_fak_entry_price_cap_exceeded\":true", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
     }
@@ -9027,7 +9142,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_down_optimized_average_bps_9_fak_premarket",
             3_199m,
-            [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m]);
+            [3_250m, 3_240m, 3_230m, 3_200m, 3_220m, 3_210m, 3_205m, 3_202m]);
 
         Assert.Equal(0, scenario.Result.EntriesPlaced);
         var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
@@ -9041,11 +9156,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_down_optimized_average_bps_1_fak_premarket",
             3_184m,
-            [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m]);
+            [3_250m, 3_240m, 3_230m, 3_200m, 3_220m, 3_210m, 3_205m, 3_202m]);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
         var order = Assert.Single(scenario.Repository.PaperOrders);
-        Assert.Contains("\"reference_average_abs_move_from_middle_bps\":50", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_move_from_selected_boundary_bps\":-50", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_filtered_enabled\":false", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
@@ -9055,7 +9170,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_down_optimized_average_bps_1_fak_premarket",
             3_196m,
-            [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m],
+            [3_250m, 3_240m, 3_230m, 3_200m, 3_220m, 3_210m, 3_205m, 3_202m],
             liveStakes: true);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
@@ -9077,7 +9192,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             variant.Code,
             3_196m,
-            [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m],
+            [3_250m, 3_240m, 3_230m, 3_200m, 3_220m, 3_210m, 3_205m, 3_202m],
             includeStaleChildAssignment: true);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
@@ -9103,7 +9218,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             $"btc_up_down_5m_down_optimized_average_bps_{thresholdBps}_fak_premarket",
             currentPriceUsd,
-            [95m, 96m, 97m, 100m, 94m, 93m, 92m, 91m]);
+            [105m, 104m, 103m, 100m, 102m, 101m, 100.5m, 100.2m]);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
         Assert.Equal(0, scenario.Result.RunsSkipped);
@@ -9116,6 +9231,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("Up", order.Outcome);
         Assert.Contains("\"reference_asset_symbol\":\"BTC\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"selected_reference_average_window\":\"3h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_selected_boundary\":\"minimum\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"btc_current_price_usd\":" + currentPriceUsd.ToString(CultureInfo.InvariantCulture), order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"crypto_asset_symbol\":null", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"optimized_average_enabled\":true", order.RawDecisionJson, StringComparison.Ordinal);
@@ -9136,7 +9252,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         int selectedWindowIndex,
         string expectedSelectedWindow)
     {
-        var averages = Enumerable.Repeat(90m, 8).ToArray();
+        var averages = Enumerable.Repeat(110m, 8).ToArray();
         averages[selectedWindowIndex] = 100m;
         var scenario = await RunOptimizedAverageScenarioAsync(
             "btc_up_down_5m_down_optimized_average_bps_1_fak_premarket",
@@ -9162,7 +9278,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         string expectedSelectedWindow,
         bool shouldEnter)
     {
-        var averages = Enumerable.Repeat(90m, 8).ToArray();
+        var averages = Enumerable.Repeat(110m, 8).ToArray();
         averages[3] = 100m;
         averages[tiedWindowIndex] = 100m;
         var scenario = await RunOptimizedAverageScenarioAsync(
@@ -9187,7 +9303,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             "btc_up_down_5m_down_optimized_average_bps_1_fak_premarket",
             99.995m,
-            [100m, 90m, 90m, 90m, 90m, 90m, 90m, 90m]);
+            [100m, 110m, 110m, 110m, 110m, 110m, 110m, 110m]);
 
         Assert.Equal(0, scenario.Result.EntriesPlaced);
         Assert.Empty(scenario.Repository.PaperOrders);
@@ -9203,7 +9319,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             "btc_up_down_5m_down_optimized_average_bps_1_fak_premarket",
             99.90m,
-            [95m, 96m, 97m, 100m, 94m, 93m, 92m, 91m],
+            [105m, 104m, 103m, 100m, 102m, 101m, 100.5m, 100.2m],
             liveStakes: true);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
@@ -9230,7 +9346,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             variant.Code,
             99.90m,
-            [95m, 96m, 97m, 100m, 94m, 93m, 92m, 91m],
+            [105m, 104m, 103m, 100m, 102m, 101m, 100.5m, 100.2m],
             includeStaleChildAssignment: true);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
@@ -9795,14 +9911,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Theory]
-    [InlineData(3196, "Down", "Up", "eth-neutral-up", 41)]
-    [InlineData(3204, "Up", "Down", "eth-neutral-down", 60)]
-    public async Task ProcessAsync_EthNeutral9FakPremarketUsesReferenceAverageMoveSign(
+    [InlineData(3146, "Down", "Up", "eth-neutral-up", 41, "minimum")]
+    [InlineData(3204, "Up", "Down", "eth-neutral-down", 60, "maximum")]
+    public async Task ProcessAsync_EthNeutral9FakPremarketUsesReferenceAverageEnvelope(
         int currentPriceUsd,
         string expectedTriggerDirection,
         string expectedTargetDirection,
         string expectedAssetId,
-        int expectedEntryPriceCents)
+        int expectedEntryPriceCents,
+        string expectedBoundary)
     {
         var now = new DateTimeOffset(2026, 6, 18, 12, 0, 0, TimeSpan.Zero);
         var marketStartUtc = now.AddSeconds(30);
@@ -9869,11 +9986,42 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(expectedTargetDirection, order.Outcome);
         Assert.Equal(expectedEntryPrice, order.Price);
         Assert.Contains("\"reference_average_auto_direction_enabled\":true", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"reference_average_direction_source\":\"move_sign\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"decision_source\":\"reference_price_average_envelope_bps_premarket_v2\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_algorithm_version\":2", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_contract\":\"max_for_up_min_for_down\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_direction_source\":\"envelope_boundary\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains($"\"reference_average_selected_boundary\":\"{expectedBoundary}\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_maximum_window\":\"12h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_maximum_price_usd\":3200", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_minimum_window\":\"24h\"", order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_minimum_price_usd\":3150", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains($"\"reference_average_trigger_direction\":\"{expectedTriggerDirection}\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains($"\"reference_average_target_direction\":\"{expectedTargetDirection}\"", order.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"fixed_outcome\":null", order.RawDecisionJson, StringComparison.Ordinal);
-        Assert.Contains("\"reference_average_abs_move_from_middle_bps\":12.5", order.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_EthNeutral9FakPremarketSkipsInsideReferenceAverageEnvelope()
+    {
+        var scenario = await RunOptimizedAverageScenarioAsync(
+            "eth_up_down_5m_reference_average_bps_9_fak_premarket",
+            3_196m,
+            [3_150m, 3_200m, 3_175m, 3_180m, 3_170m, 3_160m, 3_155m, 3_152m]);
+
+        Assert.Equal(0, scenario.Result.EntriesPlaced);
+        Assert.Equal(1, scenario.Result.RunsSkipped);
+        Assert.Empty(scenario.Repository.PaperOrders);
+        var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal("reference_average_move_below_bps_threshold", run.SkipReason);
+        var diagnostics = Assert.IsType<string>(run.SkipDiagnosticsJson);
+        Assert.Contains("\"decision_source\":\"reference_price_average_envelope_bps_premarket_v2\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_algorithm_version\":2", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_direction_source\":\"envelope_boundary\"", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_maximum_price_usd\":3200", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_minimum_price_usd\":3150", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_selected_boundary\":null", diagnostics, StringComparison.Ordinal);
+        Assert.Contains("\"reference_average_trigger_direction\":null", diagnostics, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -9903,7 +10051,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var cryptoPriceClient = new FakeCryptoReferencePriceClient();
         cryptoPriceClient.SetPrice("ETH", 3_196m);
         var averageProvider = new FakeCryptoReferencePriceAverageProvider();
-        averageProvider.SetFullAverages("ETH", 3_150m, 3_200m, 3_175m, 3_180m);
+        averageProvider.SetFullAverages("ETH", 3_200m, 3_250m, 3_225m, 3_230m, 3_215m, 3_210m, 3_208m, 3_205m);
         var entryPrice = entryPriceCents / 100m;
         OrderBookSnapshot[] orderBooks =
         [
@@ -9968,7 +10116,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     {
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_low_enter_average_bps_1_fak_premarket",
-            3_196m,
+            3_146m,
             [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m],
             liveStakes: true);
 
@@ -9997,7 +10145,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var scenario = await RunOptimizedAverageScenarioAsync(
             cloneCode,
             99.90m,
-            [95m, 96m, 97m, 100m, 94m, 93m, 92m, 91m],
+            [105m, 104m, 103m, 100m, 102m, 101m, 100.5m, 100.2m],
             liveStakes: true,
             upEntryPrice: entryPrice);
         var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == cloneCode);
@@ -10301,7 +10449,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var cryptoPriceClient = new FakeCryptoReferencePriceClient();
         cryptoPriceClient.SetPrice("ETH", 3_196m);
         var averageProvider = new FakeCryptoReferencePriceAverageProvider();
-        averageProvider.SetFullAverages("ETH", 3_150m, 3_200m, 3_175m, 3_180m);
+        averageProvider.SetFullAverages("ETH", 3_200m, 3_250m, 3_225m, 3_230m, 3_215m, 3_210m, 3_208m, 3_205m);
         OrderBookSnapshot[] orderBooks =
         [
             OrderBook(
@@ -10408,7 +10556,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var repository = CreateSolDown8ReferenceAveragePremarketRepository(now, variant);
         repository.DateDependentStrategyHourlyPaperPnl[(StrategyIds.Normalize(variant.Id), now.UtcDateTime.Hour)] = -0.01m;
         var cryptoPriceClient = new FakeCryptoReferencePriceClient();
-        cryptoPriceClient.SetPrice("SOL", 149.80m);
+        cryptoPriceClient.SetPrice("SOL", 146.80m);
         var averageProvider = new FakeCryptoReferencePriceAverageProvider();
         averageProvider.SetFullAverages("SOL", 149m, 150m, 148m, 147m);
         var orderBooks = CreateSolDown8ReferenceAveragePremarketOrderBooks(now);
@@ -10462,7 +10610,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var repository = CreateSolDown8ReferenceAveragePremarketRepository(now, variant);
         repository.DateDependentStrategyHourlyPaperPnl[(StrategyIds.Normalize(variant.Id), now.UtcDateTime.Hour)] = 0m;
         var cryptoPriceClient = new FakeCryptoReferencePriceClient();
-        cryptoPriceClient.SetPrice("SOL", 149.80m);
+        cryptoPriceClient.SetPrice("SOL", 146.80m);
         var averageProvider = new FakeCryptoReferencePriceAverageProvider();
         averageProvider.SetFullAverages("SOL", 149m, 150m, 148m, 147m);
         var orderBooks = CreateSolDown8ReferenceAveragePremarketOrderBooks(now);
@@ -11145,7 +11293,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var cryptoPriceClient = new FailingCryptoReferencePriceClient(
             "SOL",
-            successPriceUsd: 149.80m,
+            successPriceUsd: 146.80m,
             snapshotPricesUsd: [150m]);
         var averageProvider = new FakeCryptoReferencePriceAverageProvider();
         averageProvider.SetFullAverages("SOL", 149m, 150m, 148m, 147m);

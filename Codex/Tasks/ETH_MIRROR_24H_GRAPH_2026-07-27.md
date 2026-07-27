@@ -9,6 +9,8 @@
 - PostgreSQL access: one `REPEATABLE READ / READ ONLY` transaction with bounded statement/lock timeouts, ended by rollback.
 - All ranking, tick reflection, eight-average replay, signal calculation, and rendering ran in C#/.NET memory. No database row, strategy setting, order, service, or product state changed.
 
+> Migration note (2026-07-27): this report preserves the historical, pre-migration maximum-only selector that produced the saved decisions. The current source now implements the clarified Max/Min envelope contract documented below. Historical replay results in this file must not be read as a replay of the new selector.
+
 The rendered PNG is:
 
 `D:\My\Business\PolyMarket\outputs\eth-mirror-24h-growth-20260727\eth-mirror-24h-growth.png`
@@ -89,9 +91,9 @@ else:                    Skip
 
 This is symmetric in which boundary is used: a point above the complete average envelope is compared with its upper boundary, while a point below it is compared with its lower boundary. A point inside the envelope does not enter. It also matches the original June 23 wording: the Up-oriented case selected the largest average and bought `Down` above it; the Down-oriented case was required to use mirror logic and buy `Up`.
 
-The current ordinary Reference Average implementation does not implement that lower mirror branch. Its fixed `Up` trigger, fixed `Down` trigger, and neutral variants all dispatch to the same selector, which always selects `Amax` first. Direction is evaluated only afterward:
+The ordinary Reference Average implementation captured by this database snapshot and replay did not implement that lower mirror branch. Its fixed `Up` trigger, fixed `Down` trigger, and neutral variants all dispatched to the same selector, which selected `Amax` first. Direction was evaluated only afterward. This is now historical behavior; the current source implements the Max/Min envelope contract:
 
-| Current variant | Trigger relative to the selected reference | Bought outcome |
+| Legacy variant behavior | Trigger relative to the selected reference | Bought outcome |
 |---|---|---|
 | named `Up` | at least `N bps` above `Amax` | `Down` |
 | named `Down` | at least `N bps` below the same `Amax` | `Up` |
@@ -117,7 +119,7 @@ Original decision:
 
 ## Mirror replay
 
-The graph reflection is anchored at the first plotted tick:
+The historical maximum-only graph reflection is anchored at the first plotted tick:
 
 ```text
 P0 = 1760.60

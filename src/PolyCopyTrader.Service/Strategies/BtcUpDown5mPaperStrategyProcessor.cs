@@ -12862,7 +12862,35 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     reason));
         }
 
-        var selectedAverage = averages[0];
+        var (maximumAverage, minimumAverage) = GetReferenceAverageBoundaries(averages);
+        if (maximumAverage is null || minimumAverage is null)
+        {
+            const string reason = "reference_average_boundaries_missing";
+            return BtcOpeningLimitDecision.Reject(
+                reason,
+                BuildReferenceAverageBpsRawDecisionJson(
+                    market,
+                    variant,
+                    stakeUsd,
+                    nowUtc,
+                    currentPrice: null,
+                    averages,
+                    selectedAverage: null,
+                    triggerDirection: null,
+                    selectedDirection: null,
+                    selectedOutcome: null,
+                    moveFromAverageBps: null,
+                    reason));
+        }
+
+        var thresholdBps = GetReferenceAverageMinMoveBps(variant);
+        var configuredTriggerDirection = GetReferenceAverageTriggerDirection(variant);
+        CryptoReferencePriceAverage? selectedAverage = configuredTriggerDirection switch
+        {
+            BtcPriceDirection.Up => maximumAverage,
+            BtcPriceDirection.Down => minimumAverage,
+            _ => null
+        };
         if (IsOptimizedReferenceAverageBpsFakPremarketEntry(variant) &&
             string.IsNullOrWhiteSpace(variant.RequiredReferenceAverageWindow))
         {
@@ -12909,17 +12937,32 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     reason));
         }
 
-        var averagePriceUsd = selectedAverage.AveragePriceUsd.GetValueOrDefault();
-        var moveFromAverageBps = GetMeanDeviationBps(currentPrice.PriceUsd, averagePriceUsd);
-        var thresholdBps = GetReferenceAverageMinMoveBps(variant);
-        var configuredTriggerDirection = GetReferenceAverageTriggerDirection(variant);
-        var triggerDirection = configuredTriggerDirection ?? (moveFromAverageBps switch
+        var moveAboveMaximumBps = GetMeanDeviationBps(
+            currentPrice.PriceUsd,
+            maximumAverage.AveragePriceUsd.GetValueOrDefault());
+        var moveBelowMinimumBps = GetMeanDeviationBps(
+            currentPrice.PriceUsd,
+            minimumAverage.AveragePriceUsd.GetValueOrDefault());
+        var triggerDirection = configuredTriggerDirection ??
+            ((moveAboveMaximumBps, moveBelowMinimumBps) switch
+            {
+                (> 0m, _) => BtcPriceDirection.Up,
+                (_, < 0m) => BtcPriceDirection.Down,
+                _ => null
+            });
+        selectedAverage = triggerDirection switch
         {
-            > 0m => BtcPriceDirection.Up,
-            < 0m => BtcPriceDirection.Down,
+            BtcPriceDirection.Up => maximumAverage,
+            BtcPriceDirection.Down => minimumAverage,
             _ => null
-        });
-        if (triggerDirection is null)
+        };
+        var moveFromAverageBps = triggerDirection switch
+        {
+            BtcPriceDirection.Up => moveAboveMaximumBps,
+            BtcPriceDirection.Down => moveBelowMinimumBps,
+            _ => (decimal?)null
+        };
+        if (triggerDirection is null || selectedAverage is null || moveFromAverageBps is null)
         {
             var reason = variant.DiffCounterTriggerOutcome is null
                 ? "reference_average_move_below_bps_threshold"
@@ -12941,11 +12984,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     reason));
         }
 
-        var thresholdMet = configuredTriggerDirection is null
-            ? Math.Abs(moveFromAverageBps) >= thresholdBps
-            : triggerDirection.Value == BtcPriceDirection.Up
-            ? moveFromAverageBps >= thresholdBps
-            : moveFromAverageBps <= -thresholdBps;
+        var evaluatedMoveFromAverageBps = moveFromAverageBps.Value;
+        var thresholdMet = triggerDirection.Value == BtcPriceDirection.Up
+            ? evaluatedMoveFromAverageBps >= thresholdBps
+            : evaluatedMoveFromAverageBps <= -thresholdBps;
         if (!thresholdMet)
         {
             const string reason = "reference_average_move_below_bps_threshold";
@@ -12962,7 +13004,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     triggerDirection,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    moveFromAverageBps,
+                    evaluatedMoveFromAverageBps,
                     reason));
         }
 
@@ -12986,7 +13028,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     triggerDirection,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    moveFromAverageBps,
+                    evaluatedMoveFromAverageBps,
                     reason));
         }
 
@@ -13007,12 +13049,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     triggerDirection,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    moveFromAverageBps,
+                    evaluatedMoveFromAverageBps,
                     reason));
         }
 
         if (IsFilteredReferenceAverageBpsFakPremarketEntry(variant) &&
-            IsFilteredReferenceAverageAbsMoveSkipped(Math.Abs(moveFromAverageBps)))
+            IsFilteredReferenceAverageAbsMoveSkipped(Math.Abs(evaluatedMoveFromAverageBps)))
         {
             const string reason = "reference_average_filtered_abs_move_zone_skipped";
             return BtcOpeningLimitDecision.Reject(
@@ -13028,7 +13070,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     triggerDirection,
                     selectedDirection: null,
                     selectedOutcome: null,
-                    moveFromAverageBps,
+                    evaluatedMoveFromAverageBps,
                     reason));
         }
 
@@ -13057,7 +13099,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     triggerDirection,
                     selectedDirection,
                     selectedOutcome: null,
-                    moveFromAverageBps,
+                    evaluatedMoveFromAverageBps,
                     reason));
         }
 
@@ -13074,7 +13116,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 triggerDirection,
                 selectedDirection,
                 selectedOutcome,
-                moveFromAverageBps,
+                evaluatedMoveFromAverageBps,
                 reason: null));
     }
 
@@ -14924,6 +14966,32 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static decimal GetMeanDeviationBps(decimal priceUsd, decimal meanUsd)
     {
         return (priceUsd - meanUsd) / meanUsd * 10_000m;
+    }
+
+    private static (
+        CryptoReferencePriceAverage? Maximum,
+        CryptoReferencePriceAverage? Minimum) GetReferenceAverageBoundaries(
+        IReadOnlyList<CryptoReferencePriceAverage> averages)
+    {
+        var validAverages = averages
+            .Where(average => average.IsFullWindow && average.AveragePriceUsd is > 0m)
+            .ToArray();
+        if (validAverages.Length == 0)
+        {
+            return (null, null);
+        }
+
+        var maximum = validAverages
+            .OrderByDescending(average => average.AveragePriceUsd.GetValueOrDefault())
+            .ThenByDescending(average => average.WindowSeconds)
+            .ThenBy(average => average.WindowLabel, StringComparer.OrdinalIgnoreCase)
+            .First();
+        var minimum = validAverages
+            .OrderBy(average => average.AveragePriceUsd.GetValueOrDefault())
+            .ThenByDescending(average => average.WindowSeconds)
+            .ThenBy(average => average.WindowLabel, StringComparer.OrdinalIgnoreCase)
+            .First();
+        return (maximum, minimum);
     }
 
     private static BtcPriceDirection? ResolveStartRelativeDirection(decimal currentPriceUsd, decimal startPriceUsd)
@@ -17578,6 +17646,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var referenceAssetSymbol = GetReferenceAssetSymbol(variant);
         var isBtcReference = IsBtcReferenceVariant(variant);
         var selectedAveragePriceUsd = selectedAverage?.AveragePriceUsd;
+        var (maximumAverage, minimumAverage) = GetReferenceAverageBoundaries(averages);
+        var maximumAveragePriceUsd = maximumAverage?.AveragePriceUsd;
+        var minimumAveragePriceUsd = minimumAverage?.AveragePriceUsd;
+        var moveAboveMaximumBps = currentPrice is not null && maximumAveragePriceUsd is > 0m
+            ? GetMeanDeviationBps(currentPrice.PriceUsd, maximumAveragePriceUsd.Value)
+            : (decimal?)null;
+        var moveBelowMinimumBps = currentPrice is not null && minimumAveragePriceUsd is > 0m
+            ? GetMeanDeviationBps(currentPrice.PriceUsd, minimumAveragePriceUsd.Value)
+            : (decimal?)null;
+        var selectedBoundary = triggerDirection switch
+        {
+            BtcPriceDirection.Up => "maximum",
+            BtcPriceDirection.Down => "minimum",
+            _ => null
+        };
         return JsonSerializer.Serialize(new
         {
             pricing_mode = OpeningLimitPricingMode,
@@ -17586,8 +17669,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             strategy_code = variant.Code,
             reference_asset_symbol = referenceAssetSymbol,
             reference_binance_symbol = selectedAverage?.BinanceSymbol ?? referenceAssetSymbol + "USDT",
-            decision_source = "reference_price_max_average_bps_premarket",
+            decision_source = "reference_price_average_envelope_bps_premarket_v2",
             reference_average_source = "crypto_reference_price_average_cache",
+            reference_average_algorithm_version = 2,
+            reference_average_contract = "max_for_up_min_for_down",
             quote_received_at_utc = nowUtc,
             condition_id = market.ConditionId,
             market_id = market.MarketId,
@@ -17615,6 +17700,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             selected_reference_average_first_bucket_utc = selectedAverage?.FirstBucketStartUtc,
             selected_reference_average_last_bucket_utc = selectedAverage?.LastBucketStartUtc,
             selected_reference_average_updated_at_utc = selectedAverage?.UpdatedAtUtc,
+            reference_average_selected_boundary = selectedBoundary,
+            reference_average_maximum_window = maximumAverage?.WindowLabel,
+            reference_average_maximum_window_seconds = maximumAverage?.WindowSeconds,
+            reference_average_maximum_price_usd = maximumAveragePriceUsd,
+            reference_average_minimum_window = minimumAverage?.WindowLabel,
+            reference_average_minimum_window_seconds = minimumAverage?.WindowSeconds,
+            reference_average_minimum_price_usd = minimumAveragePriceUsd,
             reference_average_count = averages.Count,
             reference_full_average_count = averages.Count(average => average.IsFullWindow && average.AveragePriceUsd is > 0m),
             reference_averages = averages
@@ -17634,13 +17726,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 .ToArray(),
             reference_average_auto_direction_enabled = variant.DiffCounterTriggerOutcome is null,
             reference_average_direction_source = variant.DiffCounterTriggerOutcome is null
-                ? "move_sign"
+                ? "envelope_boundary"
                 : "configured_trigger",
             reference_average_trigger_direction = triggerDirection?.ToString(),
             reference_average_target_direction = selectedDirection?.ToString(),
             fixed_outcome = variant.FixedOutcome?.ToString(),
             reference_average_move_from_middle_bps = moveFromAverageBps,
             reference_average_abs_move_from_middle_bps = moveFromAverageBps is { } move ? Math.Abs(move) : (decimal?)null,
+            reference_average_move_from_selected_boundary_bps = moveFromAverageBps,
+            reference_average_move_above_maximum_bps = moveAboveMaximumBps,
+            reference_average_move_below_minimum_bps = moveBelowMinimumBps,
             reference_average_min_move_from_middle_bps = GetReferenceAverageMinMoveBps(variant),
             btc_reference_average_move_from_middle_bps = isBtcReference ? moveFromAverageBps : null,
             btc_reference_average_abs_move_from_middle_bps = isBtcReference && moveFromAverageBps is { } btcMove ? Math.Abs(btcMove) : (decimal?)null,
