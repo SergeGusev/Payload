@@ -1,3 +1,16 @@
+## Active Update 2026-07-27 Paused Reference Average Historical Paper Correction
+Goal: Correct the pre-v2 Paper history of all 848 affected BTC, ETH, and SOL Reference Average strategies under the deployed Max/Min decision rules.
+Status: In Progress
+Done:
+- Recorded the requested correction contract: replay all eight averages; fixed `Up N bps` uses `Amax` and buys `Down` above it, fixed `Down N bps` uses `Amin` and buys `Up` below it, and neutral buys the opposite side only outside the `Amin..Amax` envelope.
+- Recorded the requested historical mutations before cutoff `2026-07-27T13:24:05.932282Z`: physically delete an existing Paper bet when the new rule would skip it; add a previously missed Paper bet when the new rule would enter, assuming sufficient book liquidity at `0.52` for ordinary variants and `0.50` for LowEnter, then settle it from the actual market result.
+- Fixed the bounded scope for resumption: the 848 static affected strategies across BTC/ETH/SOL only; leave unverifiable rows unchanged and report them; do not recalculate Child history and do not delete Live-order records.
+- Recorded the user's explicit scope constraint: no backup, generic correction framework, unrelated audit, refactor, deployment, or other new workstream without separate approval.
+- Paused execution at the user's request. No replay, database mutation, service operation, or other production action was started while recording this pause.
+Next: Tomorrow, resume with one bounded read-only final replay/allowlist, then prepare and execute one validated transaction only after resolving the nullable reference from retained Live orders to Paper orders selected for deletion.
+Notes: Working estimate remains `30–45 minutes`: approximately `15–20` minutes for the final read-only replay, `10–15` minutes for transaction preparation/checks, and `5–10` minutes for application and verification while the service is stopped. Stop and ask before continuing if the estimate exceeds `45 minutes`. Existing interrupted artifacts under `D:\CodexTemp\runs\reference-history-physical-correction-20260727-a42d68f1` are provisional and must not be treated as a final allowlist without the bounded rerun.
+Blockers: Work is intentionally paused until the user resumes it. Before deleting a Paper order referenced by a retained Live order, confirm whether to preserve the Live row and set its nullable `paper_order_id` reference to `NULL`.
+
 ## Active Update 2026-07-27 Reference Average Historical Replay Sufficiency Audit
 Goal: Determine whether the production database can support an exact historical Max/Min correction across all affected BTC, ETH, SOL, and downstream Child strategies.
 Status: Completed
