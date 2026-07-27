@@ -1,3 +1,17 @@
+## Active Update 2026-07-27 ETH Nearest Reference-Average Contract Clarification
+Goal: Evaluate the clarified rule that the neutral Reference Average strategy should select the average nearest to the current price.
+Status: Completed
+Done:
+- Verified the current implementation still sorts full positive averages by price descending and selects the maximum before it evaluates the current-price sign; it does not implement nearest-average selection.
+- Traced the behavior to the original June 23 contract, which explicitly selected the largest average for the Up-oriented case, followed by the July 4 neutral family reusing that selector while making only direction dynamic. Repository history contains no economic/statistical rationale proving maximum is optimal.
+- Formalized the clarified geometric rule as `argmin |Current-Average|`. Under `P'=2P0-P`, every raw USD distance is preserved exactly, so a stable price-independent tie-break selects the same window and the signed difference reverses.
+- Recomputed the displayed case under this rule: `10m` remains selected on both paths; raw differences are `+/-$3.155166666666...`; production deviations are `+16.8529488298...` and `-19.1335264643... bps`, so both pass 2 bps and choose `Down`/`Up`.
+- Identified the remaining asymmetry: current bps divides by the selected average, whose mirrored value differs. Therefore nearest-by-USD guarantees the same window and opposite sign but not identical bps magnitude or threshold crossing near 2 bps. Nearest-by-bps does not even guarantee the same window.
+- Added the rule, exact example, tie-break requirement, and threshold limitation to `Codex/Tasks/ETH_MIRROR_24H_GRAPH_2026-07-27.md`.
+Next: If implementation is requested, define scope (exact ETH neutral 2 bps versus a new broader family) and whether exact threshold symmetry is required. Prefer a new Paper-only strategy ID to avoid mixing max-selector and nearest-selector history.
+Notes: Read-only source, Git blame/history, report, and decimal-math inspection only. No implementation, strategy row, order, service, database, or production state changed.
+Blockers: None for the clarification. Implementation scope and threshold normalization remain user decisions.
+
 ## Active Update 2026-07-27 ETH Mirror Reference-Window Ranking Explanation
 Goal: Explain why an exactly symmetric ETH reflection changes the selected reference-average window from `10m` to `24h`.
 Status: Completed

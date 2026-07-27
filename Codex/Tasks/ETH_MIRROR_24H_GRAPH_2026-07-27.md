@@ -65,6 +65,30 @@ For this graph `2P0 = 3521.20`, so the two extrema exchange roles:
 
 Therefore `max(A') = 2P0 - min(A)`, not `2P0 - max(A)`. The charts are exactly symmetric; that exact symmetry is what reverses the ranking and changes the selected reference from `10m` to `24h`.
 
+### Nearest-average contract clarification
+
+The later user clarification defines the desired geometric selector as the average line nearest to the current price:
+
+```text
+selected = argmin_w |Current - Average_w|
+```
+
+This differs from the current maximum-average implementation and was not applied to the rendered graph. Under the exact linear reflection, raw price distance is invariant for every window:
+
+```text
+|Current' - Average'_w| = |(2P0-Current) - (2P0-Average_w)|
+                         = |Current - Average_w|
+```
+
+With a stable price-independent tie-break, such as longer window then stable window key, the same window is therefore selected on both paths. In this example it is `10m` on both sides:
+
+| Path | Current | 10m average | Signed USD difference | Production bps |
+|---|---:|---:|---:|---:|
+| Actual | `1875.33` | `1872.174833333333...` | `+3.155166666666...` | `+16.8529488298...` |
+| Mirror | `1645.87` | `1649.025166666666...` | `-3.155166666666...` | `-19.1335264643...` |
+
+Thus this example still enters on both sides at the inclusive `2 bps` threshold and selects opposite outcomes (`Down` / `Up`). However, current production bps is normalized by the selected average itself. That denominator changes after an additive reflection, so the bps magnitudes are not mirror-invariant and near-threshold entry/skip decisions are not guaranteed to pair. Selecting the nearest average by absolute production bps also does not guarantee the same window. Exact window/sign symmetry requires raw-price nearest selection; exact threshold symmetry would additionally require a mirror-invariant normalization or an absolute USD threshold.
+
 Original decision:
 
 - maximum average: `10m = $1,872.1748333333333333333333333`;
