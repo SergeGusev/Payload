@@ -1,3 +1,16 @@
+## Active Update 2026-07-27 ETH Max/Min Reference-Average Envelope Contract
+Goal: Confirm whether the neutral Reference Average strategy should buy `Down` only above the maximum of all eight averages and buy `Up` only below their minimum.
+Status: Completed
+Done:
+- Formalized the clarified countertrend envelope: `Amax=max(Aw)`, `Amin=min(Aw)`; buy `Down` when `10000*(P/Amax-1) >= N`, buy `Up` when `10000*(P/Amin-1) <= -N`, otherwise skip.
+- Verified this matches the original June 23 requirement's explicit largest-average upper branch and its instruction to use mirror logic for the lower branch.
+- Verified the current neutral implementation is asymmetric relative to that contract: it selects the maximum before determining direction, so its lower branch still compares against `Amax` and may enter `Up` from inside the `Amin..Amax` envelope.
+- Recomputed the displayed example under the clarified contract: actual `Amax=10m` gives `+16.8529488298... bps` and `Down`; mirrored `Amin=10m` gives `-19.1335264643... bps` and `Up`; both pass the inclusive `2 bps` threshold.
+- Replaced the superseded nearest-average clarification in `Codex/Tasks/ETH_MIRROR_24H_GRAPH_2026-07-27.md` with the Max/Min envelope contract and retained the bps-normalization caveat near the threshold.
+Next: If implementation is requested, define whether to replace only the exact ETH neutral 2 bps strategy or introduce a separate Paper-only strategy so historical results from the old and new selectors are not mixed.
+Notes: Read-only requirement, source, history, and exact-value inspection only. No strategy code, database row, order, service, or production state changed.
+Blockers: None for the contract clarification. Implementation scope has not been requested or selected.
+
 ## Active Update 2026-07-27 ETH Nearest Reference-Average Contract Clarification
 Goal: Evaluate the clarified rule that the neutral Reference Average strategy should select the average nearest to the current price.
 Status: Completed

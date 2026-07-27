@@ -65,29 +65,34 @@ For this graph `2P0 = 3521.20`, so the two extrema exchange roles:
 
 Therefore `max(A') = 2P0 - min(A)`, not `2P0 - max(A)`. The charts are exactly symmetric; that exact symmetry is what reverses the ranking and changes the selected reference from `10m` to `24h`.
 
-### Nearest-average contract clarification
+### Max/Min envelope contract clarification
 
-The later user clarification defines the desired geometric selector as the average line nearest to the current price:
-
-```text
-selected = argmin_w |Current - Average_w|
-```
-
-This differs from the current maximum-average implementation and was not applied to the rendered graph. Under the exact linear reflection, raw price distance is invariant for every window:
+The subsequent user clarification supersedes the nearest-average wording. The desired countertrend contract treats the eight full positive averages as an envelope:
 
 ```text
-|Current' - Average'_w| = |(2P0-Current) - (2P0-Average_w)|
-                         = |Current - Average_w|
+Amax = max(Average_w)
+Amin = min(Average_w)
+
+upper_bps = 10000 * (Current / Amax - 1)
+lower_bps = 10000 * (Current / Amin - 1)
+
+if upper_bps >= N:      BUY Down
+else if lower_bps <= -N: BUY Up
+else:                    Skip
 ```
 
-With a stable price-independent tie-break, such as longer window then stable window key, the same window is therefore selected on both paths. In this example it is `10m` on both sides:
+This is symmetric in which boundary is used: a point above the complete average envelope is compared with its upper boundary, while a point below it is compared with its lower boundary. A point inside the envelope does not enter. It also matches the original June 23 wording: the Up-oriented case selected the largest average and bought `Down` above it; the Down-oriented case was required to use mirror logic and buy `Up`.
 
-| Path | Current | 10m average | Signed USD difference | Production bps |
-|---|---:|---:|---:|---:|
-| Actual | `1875.33` | `1872.174833333333...` | `+3.155166666666...` | `+16.8529488298...` |
-| Mirror | `1645.87` | `1649.025166666666...` | `-3.155166666666...` | `-19.1335264643...` |
+The current neutral implementation does not implement that lower mirror branch. It always selects `Amax` first and only then derives `Up` or `Down` from the sign, so it can buy `Up` while the current price is merely below `Amax`, including when it is still inside the envelope. The rendered graph and its `10m -> 24h` production-reference change show that current implementation, not this clarified hypothetical contract.
 
-Thus this example still enters on both sides at the inclusive `2 bps` threshold and selects opposite outcomes (`Down` / `Up`). However, current production bps is normalized by the selected average itself. That denominator changes after an additive reflection, so the bps magnitudes are not mirror-invariant and near-threshold entry/skip decisions are not guaranteed to pair. Selecting the nearest average by absolute production bps also does not guarantee the same window. Exact window/sign symmetry requires raw-price nearest selection; exact threshold symmetry would additionally require a mirror-invariant normalization or an absolute USD threshold.
+Under the clarified contract, this example uses the corresponding `10m` envelope boundary on both sides:
+
+| Path | Boundary | Current | Boundary average | Signed boundary move | Decision |
+|---|---|---:|---:|---:|---|
+| Actual | `Amax` (`10m`) | `1875.33` | `1872.174833333333...` | `+16.8529488298... bps` | `Down` |
+| Mirror | `Amin` (`10m`) | `1645.87` | `1649.025166666666...` | `-19.1335264643... bps` | `Up` |
+
+Both pass the inclusive `2 bps` threshold. Exact linear reflection maps the original maximum boundary to the mirrored minimum boundary and reverses the raw USD difference exactly. The production bps magnitudes are nevertheless not identical because each side divides by a different boundary price; therefore an additive mirror can still produce an entry/skip mismatch for observations extremely close to the threshold unless the normalization is also made mirror-invariant.
 
 Original decision:
 
