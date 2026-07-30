@@ -474,6 +474,16 @@ public sealed class PipelineIntegrationTests
     {
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
+        var immutableOrderBook = OrderBook(
+            "asset-down",
+            [new OrderBookLevel(0.19m, 100m)],
+            [
+                new OrderBookLevel(0.20m, 10m),
+                new OrderBookLevel(0.30m, 10m)
+            ]) with
+        {
+            SnapshotAtUtc = now
+        };
         var order = new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -487,23 +497,18 @@ public sealed class PipelineIntegrationTests
             5.05050505m,
             5m,
             now,
-            now.AddMinutes(5),
-            RawDecisionJson: JsonSerializer.Serialize(new Dictionary<string, object?>
-            {
-                ["fak_stats_probe"] = true,
-                ["live_order_type"] = "FAK"
-            }));
+            now.AddMinutes(5));
+        order = WithImmutableFakExecutionContext(order, immutableOrderBook);
         await repository.AddPaperOrderAsync(order);
 
+        // The current CLOB is deliberately non-executable. The fill must come
+        // only from the immutable snapshot persisted with the decision.
         var paperProcessor = CreatePaperProcessor(
             repository,
             OrderBook(
                 "asset-down",
-                [new OrderBookLevel(0.19m, 100m)],
-                [
-                    new OrderBookLevel(0.20m, 10m),
-                    new OrderBookLevel(0.30m, 10m)
-                ]));
+                [new OrderBookLevel(0.98m, 100m)],
+                [new OrderBookLevel(1.00m, 100m)]));
 
         var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
 
@@ -520,6 +525,7 @@ public sealed class PipelineIntegrationTests
         Assert.Equal(5m, updatedOrder.NotionalUsd);
         Assert.Contains("fak_taker_executable_snapshot_v2", updatedOrder.RawDecisionJson);
         Assert.Contains("\"paper_execution_evidence_class\":\"paper_executable_snapshot_model\"", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_fak_replay_eligible\":true", updatedOrder.RawDecisionJson);
         Assert.Contains("\"paper_fak_worst_price\":0.99", updatedOrder.RawDecisionJson);
         Assert.Contains("\"paper_fak_average_fill_price\":0.25", updatedOrder.RawDecisionJson);
 
@@ -529,7 +535,7 @@ public sealed class PipelineIntegrationTests
     }
 
     [Fact]
-    public async Task PaperTradingProcessor_FakPaperOrderRejectsWhenNoAskWithinWorstPrice()
+    public async Task PaperTradingProcessor_FakPaperOrderRejectsLegacyRowWithoutImmutableSnapshotEvenWhenCurrentBookIsExecutable()
     {
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
@@ -557,8 +563,8 @@ public sealed class PipelineIntegrationTests
             repository,
             OrderBook(
                 "asset-down",
-                [new OrderBookLevel(0.49m, 100m)],
-                [new OrderBookLevel(1.00m, 100m)]));
+                [new OrderBookLevel(0.47m, 100m)],
+                [new OrderBookLevel(0.48m, 100m)]));
 
         var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
 
@@ -569,11 +575,302 @@ public sealed class PipelineIntegrationTests
 
         var updatedOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.Rejected, updatedOrder.Status);
-        Assert.Equal(0.99m, updatedOrder.Price);
+        Assert.Equal(0.50m, updatedOrder.Price);
         Assert.NotNull(updatedOrder.CancelledAtUtc);
-        Assert.Contains("best_ask_above_max_entry", updatedOrder.RawDecisionJson);
+        Assert.Contains("paper_fak_immutable_snapshot_missing", updatedOrder.RawDecisionJson);
         Assert.Contains("fak_taker_executable_snapshot_v2", updatedOrder.RawDecisionJson);
-        Assert.Contains("\"paper_execution_evidence_class\":\"paper_executable_snapshot_model\"", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_execution_evidence_class\":\"legacy_non_reproducible\"", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_fak_replay_eligible\":false", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_fak_worst_price\":0.50", updatedOrder.RawDecisionJson);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_FakPaperOrderFillsOnlyDepthWithinPersistedPriceAndCancelsRemainder()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var immutableOrderBook = OrderBook(
+            "asset-down",
+            [new OrderBookLevel(0.47m, 100m)],
+            [
+                new OrderBookLevel(0.48m, 1m),
+                new OrderBookLevel(0.52m, 100m)
+            ]) with
+        {
+            SnapshotAtUtc = now
+        };
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.50m,
+            10m,
+            5m,
+            now,
+            now.AddMinutes(5));
+        order = WithImmutableFakExecutionContext(order, immutableOrderBook);
+        await repository.AddPaperOrderAsync(order);
+
+        // The current CLOB could fully fill the request. A partial result proves
+        // the processor used the persisted decision-time snapshot instead.
+        var paperProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.19m, 100m)],
+                [new OrderBookLevel(0.20m, 100m)]));
+
+        var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, paperResult.OrdersFilled);
+        var fill = Assert.Single(repository.PaperFills);
+        Assert.Equal(0.48m, fill.Price);
+        Assert.Equal(1m, fill.SizeShares);
+
+        var updatedOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, updatedOrder.Status);
+        Assert.Equal(0.48m, updatedOrder.Price);
+        Assert.Equal(0.48m, updatedOrder.NotionalUsd);
+        Assert.Null(updatedOrder.FilledAtUtc);
+        Assert.NotNull(updatedOrder.CancelledAtUtc);
+        Assert.Contains("\"paper_fak_replay_eligible\":true", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_fak_worst_price\":0.50", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_fak_levels_used\":1", updatedOrder.RawDecisionJson);
+        Assert.Contains("\"paper_fak_partial_fill\":true", updatedOrder.RawDecisionJson);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_FakPaperOrderWithExistingFillIsFailSafeNoOp()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        const decimal fillPrice = 0.48m;
+        var filledAtUtc = now.AddSeconds(-1);
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.50m,
+            1m,
+            0.50m,
+            now.AddMinutes(-1),
+            now.AddMinutes(5),
+            RawDecisionJson: JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["paper_order_type"] = "FAK"
+            }));
+        var persistedFill = new PaperFill(
+            Guid.NewGuid(),
+            order.Id,
+            fillPrice,
+            1m,
+            filledAtUtc,
+            "persisted-before-order-terminal-update");
+        var accountedPosition = new PaperPosition(
+            order.AssetId,
+            order.ConditionId,
+            order.Outcome,
+            1m,
+            fillPrice,
+            fillPrice,
+            0m,
+            filledAtUtc,
+            Wallet);
+        var copiedLeaderPosition = new PaperCopiedLeaderPosition(
+            Guid.NewGuid(),
+            order.SignalId,
+            order.Id,
+            Wallet,
+            order.AssetId,
+            order.ConditionId,
+            order.Outcome,
+            EntryTransactionHash: null,
+            EntryTimestampUtc: order.CreatedAtUtc,
+            LeaderEntryPrice: order.Price,
+            LeaderInitialSizeShares: 1m,
+            CopiedInitialSizeShares: 1m,
+            LeaderSoldSizeShares: 0m,
+            CopiedExitRequestedSizeShares: 0m,
+            Status: PaperCopiedLeaderPositionStatus.Active,
+            LastActivityTimestampUtc: null,
+            LastActivityTransactionHash: null,
+            LastActivitySyncAtUtc: null,
+            NextActivitySyncAtUtc: now.AddMinutes(1),
+            CreatedAtUtc: order.CreatedAtUtc,
+            UpdatedAtUtc: filledAtUtc);
+        await repository.AddPaperOrderAsync(order);
+        await repository.AddPaperFillAsync(persistedFill);
+        await repository.UpsertPaperPositionAsync(accountedPosition);
+        repository.PaperCopiedLeaderPositions.Add(copiedLeaderPosition);
+
+        var paperProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.47m, 100m)],
+                [new OrderBookLevel(0.48m, 100m)]));
+
+        var firstResult = await paperProcessor.ProcessOpenOrdersAsync();
+        var secondResult = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(0, firstResult.OrdersFilled);
+        Assert.Equal(0, firstResult.OrdersExpired);
+        Assert.Equal(0, secondResult.OrdersFilled);
+        Assert.Equal(0, secondResult.OrdersExpired);
+
+        var retainedOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(order, retainedOrder);
+        Assert.Equal(PaperOrderStatus.Pending, retainedOrder.Status);
+        Assert.Null(retainedOrder.FilledAtUtc);
+        Assert.Null(retainedOrder.CancelledAtUtc);
+
+        Assert.Equal(persistedFill, Assert.Single(repository.PaperFills));
+        var retainedPosition = Assert.Single(repository.PaperPositions);
+        Assert.Equal(1m, retainedPosition.SizeShares);
+        Assert.Equal(fillPrice, retainedPosition.AveragePrice);
+        var retainedCopiedPosition = Assert.Single(repository.PaperCopiedLeaderPositions);
+        Assert.Equal(1m, retainedCopiedPosition.CopiedInitialSizeShares);
+        Assert.Equal(PaperCopiedLeaderPositionStatus.Active, retainedCopiedPosition.Status);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_FakImmutableContextAcceptsAuditDecisionIdPostgresMicrosecondsAndLaterRestSnapshot()
+    {
+        var repository = new TestAppRepository();
+        var preDatabaseCreatedAtUtc = new DateTimeOffset(2026, 7, 31, 12, 0, 0, TimeSpan.Zero)
+            .AddTicks(1_234_567);
+        var persistedCreatedAtUtc = preDatabaseCreatedAtUtc.AddTicks(
+            -(preDatabaseCreatedAtUtc.Ticks % TimeSpan.TicksPerMicrosecond));
+        var laterRestSnapshotAtUtc = preDatabaseCreatedAtUtc.AddMilliseconds(25);
+        var runCorrelationDecisionId = Guid.Parse("7b310000-0000-4000-8000-000000000031");
+        var immutableOrderBook = OrderBook(
+            "asset-down",
+            [new OrderBookLevel(0.47m, 100m)],
+            [new OrderBookLevel(0.48m, 100m)]) with
+        {
+            SnapshotAtUtc = laterRestSnapshotAtUtc
+        };
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.50m,
+            10m,
+            5m,
+            persistedCreatedAtUtc,
+            persistedCreatedAtUtc.AddMinutes(5));
+        Assert.NotEqual(order.SignalId, runCorrelationDecisionId);
+        Assert.InRange(
+            (preDatabaseCreatedAtUtc - persistedCreatedAtUtc).Ticks,
+            1,
+            TimeSpan.TicksPerMicrosecond - 1);
+        Assert.True(laterRestSnapshotAtUtc > preDatabaseCreatedAtUtc);
+        order = WithImmutableFakExecutionContext(
+            order,
+            immutableOrderBook,
+            runCorrelationDecisionId,
+            preDatabaseCreatedAtUtc);
+        await repository.AddPaperOrderAsync(order);
+
+        var paperProcessor = CreatePaperProcessor(
+            repository,
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.98m, 100m)],
+                [new OrderBookLevel(1.00m, 100m)]));
+
+        var result = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersFilled);
+        Assert.Single(repository.PaperFills);
+        var filledOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Filled, filledOrder.Status);
+        using var decisionJson = JsonDocument.Parse(filledOrder.RawDecisionJson!);
+        Assert.Equal(
+            runCorrelationDecisionId,
+            decisionJson.RootElement.GetProperty("execution_intent_decision_id").GetGuid());
+        Assert.Equal(
+            laterRestSnapshotAtUtc,
+            decisionJson.RootElement
+                .GetProperty("execution_intent_order_book_snapshot")
+                .GetProperty("snapshot_at_utc")
+                .GetDateTimeOffset());
+    }
+
+    private static PaperOrder WithImmutableFakExecutionContext(
+        PaperOrder order,
+        OrderBookSnapshot orderBook,
+        Guid? decisionId = null,
+        DateTimeOffset? intentCreatedAtUtc = null)
+    {
+        var intent = FakBuyExecutionIntent.Create(
+            order.StrategyId,
+            decisionId ?? order.SignalId,
+            order.ConditionId,
+            order.AssetId,
+            order.Price,
+            order.NotionalUsd,
+            order.SizeShares,
+            orderBook,
+            intentCreatedAtUtc ?? order.CreatedAtUtc);
+        var normalizedOrder = order with
+        {
+            SizeShares = intent.TargetSizeShares,
+            NotionalUsd = intent.TargetNotionalUsd
+        };
+        return normalizedOrder with
+        {
+            RawDecisionJson = JsonSerializer.Serialize(new
+            {
+                paper_order_type = "FAK",
+                execution_intent_strategy_id = intent.StrategyId.ToString(),
+                execution_intent_decision_id = intent.DecisionId.ToString(),
+                execution_intent_condition_id = intent.ConditionId,
+                execution_intent_asset_id = intent.AssetId,
+                execution_intent_side = intent.Side.ToString(),
+                execution_intent_order_type = FakBuyExecutionIntent.TimeInForce,
+                execution_intent_time_in_force = FakBuyExecutionIntent.TimeInForce,
+                execution_intent_post_only = intent.PostOnly,
+                execution_intent_maximum_order_price = intent.MaximumOrderPrice,
+                execution_intent_requested_notional_usd = intent.RequestedNotionalUsd,
+                execution_intent_requested_size_shares = intent.RequestedSizeShares,
+                execution_intent_target_notional_usd = intent.TargetNotionalUsd,
+                execution_intent_target_size_shares = intent.TargetSizeShares,
+                execution_intent_tick_size = intent.TickSize,
+                execution_intent_min_order_size = intent.MinOrderSize,
+                execution_intent_negative_risk = intent.NegativeRisk,
+                execution_intent_created_at_utc = intent.CreatedAtUtc.ToString("O"),
+                execution_intent_order_book_snapshot = new
+                {
+                    source = "pipeline_test",
+                    age_ms = 0,
+                    asset_id = orderBook.AssetId,
+                    condition_id = orderBook.ConditionId,
+                    snapshot_at_utc = orderBook.SnapshotAtUtc,
+                    min_order_size = orderBook.MinOrderSize,
+                    tick_size = orderBook.TickSize,
+                    negative_risk = orderBook.NegativeRisk,
+                    last_trade_price = orderBook.LastTradePrice,
+                    bids = orderBook.Bids.Select(level => new { price = level.Price, size = level.Size }).ToArray(),
+                    asks = orderBook.Asks.Select(level => new { price = level.Price, size = level.Size }).ToArray()
+                }
+            })
+        };
     }
 
     private static PaperTradingProcessor CreatePaperProcessor(

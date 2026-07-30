@@ -40,6 +40,11 @@ internal static class PaperLiveShadowFillAccounting
         }
 
         var isMatched = liveOrder.Status == LiveOrderStatus.Matched;
+        var isTerminalFakPartial = isMatched &&
+            string.Equals(liveOrder.OrderType, "FAK", StringComparison.OrdinalIgnoreCase) &&
+            FakExecutionRules.IsPartialNotionalFill(
+                liveFilledNotional,
+                liveOrder.NotionalUsd);
         var isTerminal = liveOrder.Status is LiveOrderStatus.Cancelled or
             LiveOrderStatus.CancelFailed or
             LiveOrderStatus.Rejected or
@@ -67,12 +72,14 @@ internal static class PaperLiveShadowFillAccounting
         var canonicalOrder = isMatched
             ? currentOrder with
             {
-                Status = PaperOrderStatus.Filled,
+                Status = isTerminalFakPartial
+                    ? PaperOrderStatus.PartiallyFilledExpired
+                    : PaperOrderStatus.Filled,
                 Price = fillPrice,
                 SizeShares = canonicalSize,
                 NotionalUsd = canonicalNotional,
-                FilledAtUtc = statusUpdatedAtUtc,
-                CancelledAtUtc = null,
+                FilledAtUtc = isTerminalFakPartial ? null : statusUpdatedAtUtc,
+                CancelledAtUtc = isTerminalFakPartial ? statusUpdatedAtUtc : null,
                 RawDecisionJson = rawDecisionJson,
                 ExecutionSource = ActualFillExecutionSource
             }
@@ -248,6 +255,12 @@ internal static class PaperLiveShadowFillAccounting
         }
 
         root["paper_live_shadow_test"] = true;
+        root["execution_intent_order_type"] ??= liveOrder.OrderType;
+        root["execution_intent_side"] ??= liveOrder.Side.ToString();
+        root["execution_intent_maximum_order_price"] ??= liveOrder.Price;
+        root["execution_intent_target_notional_usd"] ??= liveOrder.NotionalUsd;
+        root["execution_intent_target_size_shares"] ??= liveOrder.SizeShares;
+        root["execution_intent_post_only"] ??= liveOrder.PostOnly;
         root["paper_live_shadow_reconciled_at_utc"] = reconciledAtUtc.ToString("O");
         root["live_order_id"] = liveOrder.Id.ToString();
         root["live_order_status"] = liveOrder.Status.ToString();

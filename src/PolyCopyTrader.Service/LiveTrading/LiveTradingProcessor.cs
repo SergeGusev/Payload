@@ -25,9 +25,9 @@ public sealed class LiveTradingProcessor(
     IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null) : ILiveTradingProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
+    private const string PaperLiveShadowActualFillSource = "paper_live_shadow_actual_fill";
     private const string DataApiPositionObservationMarker = "Data API aggregate position observed; exact per-order fill not applied.";
     private const decimal ShadowPriceTolerance = 0.000001m;
-    private const decimal ExpectedFakWorstPrice = 0.99m;
     private const decimal FillSizeTolerance = 0.000001m;
     private readonly IPaperLiveShadowFillReconciler shadowFillReconciler =
         paperLiveShadowFillReconciler ?? CreateShadowFillReconciler(repository, exposureCache, paperTradingEngine);
@@ -605,6 +605,37 @@ public sealed class LiveTradingProcessor(
     {
         var mismatches = new List<string>();
         var incidents = new List<string>();
+        if (paperOrder.Side != TradeSide.Buy || liveOrder.Side != TradeSide.Buy)
+        {
+            mismatches.Add($"side mismatch or unsupported: expected=Buy; paper={paperOrder.Side}; live={liveOrder.Side}");
+        }
+
+        if (StrategyIds.Normalize(paperOrder.StrategyId) != StrategyIds.Normalize(liveOrder.StrategyId))
+        {
+            mismatches.Add("strategy_id mismatch");
+        }
+
+        if (paperOrder.SignalId != liveOrder.SignalId)
+        {
+            mismatches.Add("signal_id mismatch");
+        }
+
+        if (liveOrder.PaperOrderId != paperOrder.Id)
+        {
+            mismatches.Add("paper_order_id mismatch");
+        }
+
+        if (paperOrder.CorrelationId is null || liveOrder.CorrelationId != paperOrder.CorrelationId)
+        {
+            mismatches.Add("correlation_id mismatch or missing");
+        }
+
+        if (!string.Equals(paperOrder.ExecutionSource, PaperLiveShadowTestSource, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(paperOrder.ExecutionSource, PaperLiveShadowActualFillSource, StringComparison.OrdinalIgnoreCase))
+        {
+            mismatches.Add($"paper_execution_source mismatch: paper={paperOrder.ExecutionSource}");
+        }
+
         if (!string.Equals(paperOrder.AssetId, liveOrder.AssetId, StringComparison.OrdinalIgnoreCase))
         {
             mismatches.Add("asset_id mismatch");
@@ -626,15 +657,18 @@ public sealed class LiveTradingProcessor(
 
         if (isExpectedFak)
         {
-            if (paperOrder.Price - liveOrder.Price > ShadowPriceTolerance)
+            var expectedMaximumOrderPrice = GetExpectedFakMaximumOrderPrice(paperOrder);
+            if (Math.Abs(expectedMaximumOrderPrice - liveOrder.Price) > ShadowPriceTolerance)
             {
-                incidents.Add($"FAK worst_price below paper price: paper={paperOrder.Price:0.########}; live={liveOrder.Price:0.########}");
+                mismatches.Add(
+                    $"FAK maximum_order_price mismatch: paper_intent={expectedMaximumOrderPrice:0.########}; live={liveOrder.Price:0.########}");
             }
 
-            if (Math.Abs(liveOrder.Price - ExpectedFakWorstPrice) > ShadowPriceTolerance)
+            var expectedTargetNotionalUsd = GetExpectedFakTargetNotionalUsd(paperOrder);
+            if (Math.Abs(expectedTargetNotionalUsd - liveOrder.NotionalUsd) > ShadowPriceTolerance)
             {
-                incidents.Add(
-                    $"FAK worst_price unexpected: expected={ExpectedFakWorstPrice:0.########}; live={liveOrder.Price:0.########}; paper={paperOrder.Price:0.########}");
+                mismatches.Add(
+                    $"FAK target_notional_usd mismatch: paper_intent={expectedTargetNotionalUsd:0.########}; live={liveOrder.NotionalUsd:0.########}");
             }
         }
         else if (Math.Abs(paperOrder.Price - liveOrder.Price) > ShadowPriceTolerance)
@@ -670,6 +704,69 @@ public sealed class LiveTradingProcessor(
         }
 
         return "FAK";
+    }
+
+    private static decimal GetExpectedFakMaximumOrderPrice(PaperOrder paperOrder)
+    {
+        foreach (var propertyName in new[]
+        {
+            "execution_intent_maximum_order_price",
+            "paper_fak_maximum_order_price",
+            "paper_fak_worst_price",
+            "live_fak_worst_price",
+            "fak_worst_price"
+        })
+        {
+            if (TryReadDecimalFromRawDecisionJson(paperOrder.RawDecisionJson, propertyName, out var value))
+            {
+                return value;
+            }
+        }
+
+        return paperOrder.Price;
+    }
+
+    private static decimal GetExpectedFakTargetNotionalUsd(PaperOrder paperOrder)
+    {
+        foreach (var propertyName in new[]
+        {
+            "execution_intent_target_notional_usd",
+            "paper_fak_requested_notional_usd",
+            "target_notional_usd"
+        })
+        {
+            if (TryReadDecimalFromRawDecisionJson(paperOrder.RawDecisionJson, propertyName, out var value))
+            {
+                return value;
+            }
+        }
+
+        return paperOrder.NotionalUsd;
+    }
+
+    private static bool TryReadDecimalFromRawDecisionJson(
+        string? rawDecisionJson,
+        string propertyName,
+        out decimal value)
+    {
+        value = 0m;
+        if (string.IsNullOrWhiteSpace(rawDecisionJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(rawDecisionJson);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty(propertyName, out var property) &&
+                property.ValueKind == JsonValueKind.Number &&
+                property.TryGetDecimal(out value);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static bool TryReadStringFromRawDecisionJson(string? rawDecisionJson, string propertyName, out string value)

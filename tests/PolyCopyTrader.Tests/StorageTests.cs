@@ -728,7 +728,9 @@ public sealed class StorageTests
         Assert.Contains("envelope formed by the smallest and largest full in-memory reference averages", statement, StringComparison.Ordinal);
         Assert.Contains("above the maximum boundary by at least", statement, StringComparison.Ordinal);
         Assert.Contains("below the minimum boundary by at least", statement, StringComparison.Ordinal);
-        Assert.Contains("actual average fill price is at most 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains("maximum order price of 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains("immediately executable asks at or below that price", statement, StringComparison.Ordinal);
+        Assert.Contains("remainder", statement, StringComparison.Ordinal);
         Assert.Contains("Live execution is not supported for this Paper experiment", statement, StringComparison.Ordinal);
         Assert.Contains(
             "true,\n    false,\n    1.00,\n    1.00,\n    100.00,\n    false,",
@@ -763,7 +765,9 @@ public sealed class StorageTests
             statement,
             StringComparison.Ordinal);
         Assert.Contains("full in-memory 3h reference average only", statement, StringComparison.Ordinal);
-        Assert.Contains("actual average fill price is at most 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains("maximum order price of 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains("immediately executable asks at or below that price", statement, StringComparison.Ordinal);
+        Assert.Contains("remainder", statement, StringComparison.Ordinal);
         Assert.Contains(
             "true,\n    false,\n    1.00,\n    1.00,\n    100.00,\n    false,",
             normalizedStatement,
@@ -832,7 +836,9 @@ public sealed class StorageTests
             StringComparison.Ordinal);
 
         Assert.Contains("true, false, 1.00, 1.00, 100.00, false", statement, StringComparison.Ordinal);
-        Assert.Contains("actual average fill price is at most 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains("maximum order price of 0.50", statement, StringComparison.Ordinal);
+        Assert.Contains("immediately executable asks at or below that price", statement, StringComparison.Ordinal);
+        Assert.Contains("remainder", statement, StringComparison.Ordinal);
         Assert.Contains("Live execution is disabled", statement, StringComparison.Ordinal);
         Assert.DoesNotContain("enabled = excluded.enabled", statement, StringComparison.Ordinal);
         Assert.DoesNotContain("live_stakes = excluded.live_stakes", statement, StringComparison.Ordinal);

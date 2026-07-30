@@ -1236,7 +1236,7 @@ public sealed record BtcUpDown5mMarketResult(
 
 public static class StrategyIds
 {
-    public const decimal LowerEnterMaximumPaperAverageFillPrice = 0.50m;
+    public const decimal LowerEnterMaximumOrderPrice = 0.50m;
     public const string FollowLeaderIdValue = "f0110a0d-1ead-4c00-8b01-000000000001";
     public const string FollowLeaderCode = "follow_leader";
     public const string FollowLeaderName = "Follow leader";
@@ -1870,10 +1870,10 @@ public static class StrategyIds
             Code = InsertBeforeExactCodeToken(sourceVariant.Code, "premarket", "lower_enter"),
             Name = lowerEnterName,
             Description =
-                $"Paper-only LowerEnter clone of {sourceVariant.Name}. It preserves the source signal, direction, timing, progression, stake, and FAK liquidity rules, but enters only when the simulated actual average fill price is at most {LowerEnterMaximumPaperAverageFillPrice.ToString("0.00", CultureInfo.InvariantCulture)}. Live execution is disabled.",
+                $"Paper-only LowerEnter clone of {sourceVariant.Name}. It preserves the source signal, direction, timing, progression, stake, and FAK liquidity rules, but submits the simulated FAK BUY with a maximum order price of {LowerEnterMaximumOrderPrice.ToString("0.00", CultureInfo.InvariantCulture)}, fills only immediately executable asks at or below that price, and cancels the remainder. Live execution is disabled.",
             Category = lowerEnterCategory,
             PaperOnly = true,
-            PaperFakMaximumAverageFillPrice = LowerEnterMaximumPaperAverageFillPrice,
+            FakMaximumOrderPrice = LowerEnterMaximumOrderPrice,
             LowerEnterSourceStrategyId = sourceVariant.Id
         };
     }
@@ -2860,7 +2860,7 @@ public static class StrategyIds
         int thresholdBps,
         int entryDelaySeconds = -30)
     {
-        const decimal maximumPaperEntryPrice = 0.50m;
+        const decimal maximumOrderPrice = 0.50m;
         var normalizedAsset = assetSymbol.ToUpperInvariant();
         var assetCode = normalizedAsset.ToLowerInvariant();
         var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
@@ -2870,7 +2870,7 @@ public static class StrategyIds
             Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + thresholdBps:000000000000}"),
             $"{assetCode}_up_down_5m_low_enter_average_bps_{thresholdName}_fak_premarket",
             $"{normalizedAsset} Up or Down 5m {thresholdName} bps LowEnter Average Premarket",
-            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, apply the neutral Reference Average envelope signal: above the maximum full in-memory reference average by at least {thresholdName} bps buys Down, while below the minimum full average by at least {thresholdName} bps buys Up; otherwise skip. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most {maximumPaperEntryPrice.ToString("0.00", CultureInfo.InvariantCulture)}. Live execution is not supported for this Paper experiment.",
+            $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before {normalizedAsset} 5m market open, apply the neutral Reference Average envelope signal: above the maximum full in-memory reference average by at least {thresholdName} bps buys Down, while below the minimum full average by at least {thresholdName} bps buys Up; otherwise skip. Simulate a Paper FAK taker BUY with a maximum order price of {maximumOrderPrice.ToString("0.00", CultureInfo.InvariantCulture)}; fill only immediately executable asks at or below that price and cancel the remainder. Live execution is not supported for this Paper experiment.",
             BtcUpDown5mStrategyDirection.Dynamic,
             entryDelaySeconds,
             BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket,
@@ -2879,7 +2879,7 @@ public static class StrategyIds
             ReferenceAssetSymbol: normalizedAsset,
             Category: $"{normalizedAsset} Up/Down 5m Bps LowEnter Average Premarket",
             PaperOnly: true,
-            PaperFakMaximumAverageFillPrice: maximumPaperEntryPrice);
+            FakMaximumOrderPrice: maximumOrderPrice);
     }
 
     private static BtcUpDown5mStrategyVariant CreateOptimizedReferenceAverageBpsThresholdFakPremarketVariant(
@@ -2941,7 +2941,7 @@ public static class StrategyIds
         const string normalizedAsset = "ETH";
         const string assetCode = "eth";
         const string requiredWindow = "3h";
-        const decimal maximumPaperEntryPrice = 0.50m;
+        const decimal maximumOrderPrice = 0.50m;
         var secondsBeforeOpen = Math.Abs(entryDelaySeconds);
         var thresholdName = thresholdBps.ToString(CultureInfo.InvariantCulture);
         var idGroup = lowEnter ? 8217 : 8216;
@@ -2951,7 +2951,7 @@ public static class StrategyIds
             ? BtcUpDown5mStrategyBehavior.ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket
             : BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket;
         var description = lowEnter
-            ? $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the full in-memory 3h reference average only. If the current price is above that 3h average by at least {thresholdName} bps, BUY Down; if it is below that 3h average by at least {thresholdName} bps, BUY Up. Otherwise skip. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most {maximumPaperEntryPrice.ToString("0.00", CultureInfo.InvariantCulture)}. Live execution is not supported for this Paper experiment."
+            ? $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the full in-memory 3h reference average only. If the current price is above that 3h average by at least {thresholdName} bps, BUY Down; if it is below that 3h average by at least {thresholdName} bps, BUY Up. Otherwise skip. Simulate a Paper FAK taker BUY with a maximum order price of {maximumOrderPrice.ToString("0.00", CultureInfo.InvariantCulture)}; fill only immediately executable asks at or below that price and cancel the remainder. Live execution is not supported for this Paper experiment."
             : $"{secondsBeforeOpen.ToString(CultureInfo.InvariantCulture)} seconds before ETH 5m market open, compare the latest Binance ETH/USDT reference price with the full in-memory 3h reference average only. If the current price is above that 3h average by at least {thresholdName} bps, BUY Down; if it is below that 3h average by at least {thresholdName} bps, BUY Up. Otherwise skip. Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.";
 
         return new BtcUpDown5mStrategyVariant(
@@ -2968,7 +2968,7 @@ public static class StrategyIds
             Category: $"{normalizedAsset} Up/Down 5m Bps {nameMarker} Premarket",
             RequiredReferenceAverageWindow: requiredWindow,
             PaperOnly: lowEnter,
-            PaperFakMaximumAverageFillPrice: lowEnter ? maximumPaperEntryPrice : null);
+            FakMaximumOrderPrice: lowEnter ? maximumOrderPrice : null);
     }
 
     private static int GetReferenceAverageBpsPremarketIdGroup(string assetSymbol, bool isUpTrigger)
@@ -3590,7 +3590,7 @@ public sealed record BtcUpDown5mStrategyVariant(
     Guid? ConfirmationSignalStrategyId = null,
     string? RequiredReferenceAverageWindow = null,
     bool PaperOnly = false,
-    decimal? PaperFakMaximumAverageFillPrice = null,
+    decimal? FakMaximumOrderPrice = null,
     Guid? LowerEnterSourceStrategyId = null)
 {
     public string CopiedTraderWallet => "strategy:" + Code;

@@ -5,6 +5,7 @@ using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.MarketData;
+using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
@@ -25,7 +26,8 @@ public sealed class PaperTradingProcessor(
     private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
     private const string PaperExecutableSnapshotEvidenceClass = "paper_executable_snapshot_model";
     private const string PaperFakExecutableSnapshotFillModel = "fak_taker_executable_snapshot_v2";
-    private const decimal FakGuaranteedWorstPrice = 0.99m;
+    private const string LegacyNonReproducibleEvidenceClass = "legacy_non_reproducible";
+    private const string FakImmutableSnapshotMissingReason = "paper_fak_immutable_snapshot_missing";
 
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
@@ -274,29 +276,33 @@ public sealed class PaperTradingProcessor(
     {
         try
         {
+            var requestedNotionalUsd = order.NotionalUsd;
             var existingFills = await repository.GetPaperFillsForOrderAsync(order.Id, cancellationToken);
             if (existingFills.Count > 0)
             {
+                // The existing fill does not prove which later accounting writes
+                // completed. Do not duplicate them or hide the still-open order.
                 return new FakPaperOrderProcessingResult(false, false, false);
             }
 
-            var worstPrice = FakGuaranteedWorstPrice;
-            var orderBook = await GetOrderBookAsync(order.AssetId, cancellationToken);
-            if (orderBook is null)
+            if (!TryReadImmutableFakExecutionContext(order, out var executionContext) ||
+                executionContext is null)
             {
                 var rejectedOrder = order with
                 {
                     Status = PaperOrderStatus.Rejected,
-                    Price = worstPrice,
+                    Price = order.Price,
                     CancelledAtUtc = nowUtc,
                     RawDecisionJson = AttachFakPaperProcessorJson(
                         order.RawDecisionJson,
                         null,
                         null,
-                        order.NotionalUsd,
-                        worstPrice,
-                        "paper_fak_orderbook_missing",
-                        nowUtc),
+                        requestedNotionalUsd,
+                        order.Price,
+                        FakImmutableSnapshotMissingReason,
+                        nowUtc,
+                        LegacyNonReproducibleEvidenceClass,
+                        replayEligible: false),
                     ExecutionSource = BtcFakTakerPaperExecutionSource
                 };
                 await repository.UpdatePaperOrderAsync(rejectedOrder, cancellationToken);
@@ -304,11 +310,13 @@ public sealed class PaperTradingProcessor(
                 return new FakPaperOrderProcessingResult(false, true, false);
             }
 
-            var estimate = TakerBuyFillEstimator.Estimate(
+            var executionIntent = executionContext.Intent;
+            var orderBook = executionContext.OrderBook;
+            var worstPrice = executionIntent.MaximumOrderPrice;
+            var estimate = FakBuyExecutionParity.SimulatePaper(
+                executionIntent,
                 orderBook,
-                order.NotionalUsd,
-                worstPrice,
-                orderBook.MinOrderSize);
+                maximumSpreadAbsolute: null);
             if (!estimate.Filled)
             {
                 var rejectedOrder = order with
@@ -320,7 +328,7 @@ public sealed class PaperTradingProcessor(
                         order.RawDecisionJson,
                         orderBook,
                         estimate,
-                        order.NotionalUsd,
+                        executionIntent.TargetNotionalUsd,
                         worstPrice,
                         estimate.RejectionReason ?? "paper_fak_not_filled",
                         nowUtc),
@@ -346,19 +354,24 @@ public sealed class PaperTradingProcessor(
                     estimate.SizeShares,
                     estimate.NotionalUsd,
                     estimate.LevelsUsed));
+            var isPartialFill = FakExecutionRules.IsPartialNotionalFill(
+                estimate.NotionalUsd,
+                executionIntent.TargetNotionalUsd);
             var filledOrder = order with
             {
-                Status = PaperOrderStatus.Filled,
+                Status = isPartialFill
+                    ? PaperOrderStatus.PartiallyFilledExpired
+                    : PaperOrderStatus.Filled,
                 Price = estimate.AverageFillPrice,
                 SizeShares = estimate.SizeShares,
                 NotionalUsd = estimate.NotionalUsd,
-                FilledAtUtc = nowUtc,
-                CancelledAtUtc = estimate.NotionalUsd < order.NotionalUsd ? nowUtc : null,
+                FilledAtUtc = isPartialFill ? null : nowUtc,
+                CancelledAtUtc = isPartialFill ? nowUtc : null,
                 RawDecisionJson = AttachFakPaperProcessorJson(
                     order.RawDecisionJson,
                     orderBook,
                     estimate,
-                    order.NotionalUsd,
+                    executionIntent.TargetNotionalUsd,
                     worstPrice,
                     null,
                     nowUtc),
@@ -403,33 +416,6 @@ public sealed class PaperTradingProcessor(
             await TryRecordApiErrorAsync("ProcessFakTakerPaperOrderTimeout", ex.Message, cancellationToken);
             return new FakPaperOrderProcessingResult(false, false, false);
         }
-        catch (PolymarketApiException ex) when (IsMissingOrderBook(ex))
-        {
-            logger.LogDebug(
-                "Paper FAK order rejected because CLOB has no order book for asset {AssetId}. PaperOrderId={PaperOrderId} Message={Message}",
-                order.AssetId,
-                order.Id,
-                ex.Message);
-
-            var rejectedOrder = order with
-            {
-                Status = PaperOrderStatus.Rejected,
-                Price = FakGuaranteedWorstPrice,
-                CancelledAtUtc = nowUtc,
-                RawDecisionJson = AttachFakPaperProcessorJson(
-                    order.RawDecisionJson,
-                    null,
-                    null,
-                    order.NotionalUsd,
-                    FakGuaranteedWorstPrice,
-                    "paper_fak_orderbook_missing",
-                    nowUtc),
-                ExecutionSource = BtcFakTakerPaperExecutionSource
-            };
-            await repository.UpdatePaperOrderAsync(rejectedOrder, cancellationToken);
-            exposureCache.ApplyPaperOrder(rejectedOrder);
-            return new FakPaperOrderProcessingResult(false, true, false);
-        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Paper FAK order processing failed for order {PaperOrderId}.", order.Id);
@@ -445,7 +431,9 @@ public sealed class PaperTradingProcessor(
         decimal requestedNotionalUsd,
         decimal worstPrice,
         string? rejectionReason,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        string evidenceClass = PaperExecutableSnapshotEvidenceClass,
+        bool replayEligible = true)
     {
         JsonObject root;
         try
@@ -466,8 +454,9 @@ public sealed class PaperTradingProcessor(
         root["paper_order_type"] = "FAK";
         root["paper_order_execution_mode"] = "FAK";
         root["paper_execution_source"] = BtcFakTakerPaperExecutionSource;
-        root["paper_execution_evidence_class"] = PaperExecutableSnapshotEvidenceClass;
+        root["paper_execution_evidence_class"] = evidenceClass;
         root["paper_fak_fill_model"] = PaperFakExecutableSnapshotFillModel;
+        root["paper_fak_replay_eligible"] = replayEligible;
         root["paper_fak_processed_at_utc"] = nowUtc.ToString("O", CultureInfo.InvariantCulture);
         root["paper_fak_snapshot_at_utc"] = orderBook?.SnapshotAtUtc.ToString("O", CultureInfo.InvariantCulture);
         root["paper_fak_best_bid"] = orderBook?.BestBid;
@@ -486,7 +475,10 @@ public sealed class PaperTradingProcessor(
             : 0m;
         root["paper_fak_target_size_shares"] = estimate?.TargetSizeShares;
         root["paper_fak_levels_used"] = estimate?.LevelsUsed;
-        root["paper_fak_partial_fill"] = estimate?.Filled == true && estimate.NotionalUsd < requestedNotionalUsd;
+        root["paper_fak_partial_fill"] = estimate?.Filled == true &&
+            FakExecutionRules.IsPartialNotionalFill(
+                estimate.NotionalUsd,
+                requestedNotionalUsd);
         root["paper_fak_rejection_reason"] = rejectionReason;
         if (!string.IsNullOrWhiteSpace(rejectionReason))
         {
@@ -494,6 +486,253 @@ public sealed class PaperTradingProcessor(
         }
 
         return root.ToJsonString();
+    }
+
+    private static bool TryReadImmutableFakExecutionContext(
+        PaperOrder order,
+        out FakImmutableExecutionContext? context)
+    {
+        context = null;
+        if (string.IsNullOrWhiteSpace(order.RawDecisionJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(order.RawDecisionJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !TryGetRequiredGuid(root, "execution_intent_strategy_id", out var strategyId) ||
+                !TryGetRequiredGuid(root, "execution_intent_decision_id", out var decisionId) ||
+                !TryGetRequiredString(root, "execution_intent_condition_id", out var conditionId) ||
+                !TryGetRequiredString(root, "execution_intent_asset_id", out var assetId) ||
+                !TryGetRequiredString(root, "execution_intent_side", out var sideText) ||
+                !Enum.TryParse<TradeSide>(sideText, ignoreCase: true, out var side) ||
+                !TryGetRequiredString(root, "execution_intent_order_type", out var orderType) ||
+                !TryGetRequiredString(root, "execution_intent_time_in_force", out var timeInForce) ||
+                !TryGetRequiredBoolean(root, "execution_intent_post_only", out var postOnly) ||
+                !TryGetRequiredDecimal(root, "execution_intent_maximum_order_price", out var maximumOrderPrice) ||
+                !TryGetRequiredDecimal(root, "execution_intent_requested_notional_usd", out var requestedNotionalUsd) ||
+                !TryGetRequiredDecimal(root, "execution_intent_requested_size_shares", out var requestedSizeShares) ||
+                !TryGetRequiredDecimal(root, "execution_intent_target_notional_usd", out var targetNotionalUsd) ||
+                !TryGetRequiredDecimal(root, "execution_intent_target_size_shares", out var targetSizeShares) ||
+                !TryGetRequiredDecimal(root, "execution_intent_tick_size", out var tickSize) ||
+                !TryGetRequiredDecimal(root, "execution_intent_min_order_size", out var minOrderSize) ||
+                !TryGetRequiredBoolean(root, "execution_intent_negative_risk", out var negativeRisk) ||
+                !TryGetRequiredDateTimeOffset(root, "execution_intent_created_at_utc", out var createdAtUtc) ||
+                !root.TryGetProperty("execution_intent_order_book_snapshot", out var snapshotElement) ||
+                snapshotElement.ValueKind != JsonValueKind.Object ||
+                !TryGetRequiredString(snapshotElement, "asset_id", out var snapshotAssetId) ||
+                !TryGetOptionalString(snapshotElement, "condition_id", out var snapshotConditionId) ||
+                !TryGetRequiredDateTimeOffset(snapshotElement, "snapshot_at_utc", out var snapshotAtUtc) ||
+                !TryGetOptionalDecimal(snapshotElement, "min_order_size", out var snapshotMinOrderSize) ||
+                !TryGetOptionalDecimal(snapshotElement, "tick_size", out var snapshotTickSize) ||
+                !TryGetRequiredBoolean(snapshotElement, "negative_risk", out var snapshotNegativeRisk) ||
+                !TryGetOptionalDecimal(snapshotElement, "last_trade_price", out var snapshotLastTradePrice) ||
+                !TryReadOrderBookLevels(snapshotElement, "bids", out var bids) ||
+                !TryReadOrderBookLevels(snapshotElement, "asks", out var asks))
+            {
+                return false;
+            }
+
+            // DecisionId is an audit/correlation identifier (for example, a run id),
+            // not the Paper order's SignalId.
+            // A REST fallback can complete after the strategy cycle timestamp. The
+            // resulting snapshot is still immutable because it is persisted atomically
+            // with the intent in the same RawDecisionJson payload.
+            if (strategyId != order.StrategyId ||
+                side != TradeSide.Buy ||
+                side != order.Side ||
+                !string.Equals(orderType, FakBuyExecutionIntent.TimeInForce, StringComparison.Ordinal) ||
+                !string.Equals(timeInForce, FakBuyExecutionIntent.TimeInForce, StringComparison.Ordinal) ||
+                postOnly ||
+                !string.Equals(conditionId, order.ConditionId, StringComparison.Ordinal) ||
+                !string.Equals(assetId, order.AssetId, StringComparison.Ordinal) ||
+                !string.Equals(snapshotAssetId, assetId, StringComparison.Ordinal) ||
+                (snapshotConditionId is not null &&
+                    !string.Equals(snapshotConditionId, conditionId, StringComparison.Ordinal)) ||
+                maximumOrderPrice != order.Price ||
+                targetNotionalUsd != order.NotionalUsd ||
+                targetSizeShares != order.SizeShares ||
+                (snapshotTickSize ?? 0.01m) != tickSize ||
+                (snapshotMinOrderSize ?? 1m) != minOrderSize ||
+                snapshotNegativeRisk != negativeRisk ||
+                NormalizeToPostgresMicroseconds(createdAtUtc) !=
+                    NormalizeToPostgresMicroseconds(order.CreatedAtUtc))
+            {
+                return false;
+            }
+
+            var orderBook = new OrderBookSnapshot(
+                snapshotAssetId,
+                bids,
+                asks,
+                snapshotAtUtc,
+                snapshotConditionId,
+                snapshotMinOrderSize,
+                snapshotTickSize,
+                snapshotNegativeRisk,
+                snapshotLastTradePrice);
+            var intent = new FakBuyExecutionIntent(
+                strategyId,
+                decisionId,
+                conditionId,
+                assetId,
+                side,
+                maximumOrderPrice,
+                requestedNotionalUsd,
+                requestedSizeShares,
+                targetNotionalUsd,
+                targetSizeShares,
+                tickSize,
+                minOrderSize,
+                negativeRisk,
+                createdAtUtc);
+            if (!FakBuyExecutionParity.Validate(intent).IsValid)
+            {
+                return false;
+            }
+
+            context = new FakImmutableExecutionContext(intent, orderBook);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static DateTimeOffset NormalizeToPostgresMicroseconds(DateTimeOffset value)
+    {
+        var utcValue = value.ToUniversalTime();
+        return utcValue.AddTicks(-(utcValue.Ticks % TimeSpan.TicksPerMicrosecond));
+    }
+
+    private static bool TryReadOrderBookLevels(
+        JsonElement root,
+        string propertyName,
+        out IReadOnlyList<OrderBookLevel> levels)
+    {
+        levels = [];
+        if (!root.TryGetProperty(propertyName, out var array) || array.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        var parsed = new List<OrderBookLevel>();
+        foreach (var element in array.EnumerateArray())
+        {
+            if (element.ValueKind != JsonValueKind.Object ||
+                !TryGetRequiredDecimal(element, "price", out var price) ||
+                !TryGetRequiredDecimal(element, "size", out var size))
+            {
+                return false;
+            }
+
+            parsed.Add(new OrderBookLevel(price, size));
+        }
+
+        levels = parsed;
+        return true;
+    }
+
+    private static bool TryGetRequiredGuid(JsonElement root, string propertyName, out Guid value)
+    {
+        value = default;
+        return TryGetRequiredString(root, propertyName, out var text) && Guid.TryParse(text, out value);
+    }
+
+    private static bool TryGetRequiredString(JsonElement root, string propertyName, out string value)
+    {
+        value = string.Empty;
+        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = element.GetString() ?? string.Empty;
+        return value.Length > 0;
+    }
+
+    private static bool TryGetOptionalString(JsonElement root, string propertyName, out string? value)
+    {
+        value = null;
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return false;
+        }
+
+        if (element.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (element.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = element.GetString();
+        return true;
+    }
+
+    private static bool TryGetRequiredDecimal(JsonElement root, string propertyName, out decimal value)
+    {
+        value = default;
+        return root.TryGetProperty(propertyName, out var element) &&
+            element.ValueKind == JsonValueKind.Number &&
+            element.TryGetDecimal(out value);
+    }
+
+    private static bool TryGetOptionalDecimal(JsonElement root, string propertyName, out decimal? value)
+    {
+        value = null;
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return false;
+        }
+
+        if (element.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (element.ValueKind != JsonValueKind.Number || !element.TryGetDecimal(out var parsed))
+        {
+            return false;
+        }
+
+        value = parsed;
+        return true;
+    }
+
+    private static bool TryGetRequiredBoolean(JsonElement root, string propertyName, out bool value)
+    {
+        value = default;
+        if (!root.TryGetProperty(propertyName, out var element) ||
+            element.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            return false;
+        }
+
+        value = element.GetBoolean();
+        return true;
+    }
+
+    private static bool TryGetRequiredDateTimeOffset(
+        JsonElement root,
+        string propertyName,
+        out DateTimeOffset value)
+    {
+        value = default;
+        return root.TryGetProperty(propertyName, out var element) &&
+            element.ValueKind == JsonValueKind.String &&
+            element.TryGetDateTimeOffset(out value);
     }
 
     private async Task<bool> ExpireOrderIfNeededAsync(
@@ -722,6 +961,10 @@ public sealed class PaperTradingProcessor(
             logger.LogError(ex, "Failed to persist paper trading API error for {Operation}.", operation);
         }
     }
+
+    private sealed record FakImmutableExecutionContext(
+        FakBuyExecutionIntent Intent,
+        OrderBookSnapshot OrderBook);
 
     private sealed record FakPaperOrderProcessingResult(bool OrderFilled, bool OrderFinalized, bool PositionUpdated);
 }

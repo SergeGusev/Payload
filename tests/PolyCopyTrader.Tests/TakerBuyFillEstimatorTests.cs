@@ -87,20 +87,21 @@ public sealed class TakerBuyFillEstimatorTests
     {
         var estimate = TakerBuyFillEstimator.Estimate(
             Book(
-                bids: [new OrderBookLevel(0.50m, 100m)],
+                bids: [new OrderBookLevel(0.47m, 100m)],
                 asks:
                 [
-                    new OrderBookLevel(0.51m, 5m),
-                    new OrderBookLevel(0.53m, 100m)
+                    new OrderBookLevel(0.48m, 5m),
+                    new OrderBookLevel(0.52m, 100m)
                 ]),
             targetNotionalUsd: 7.80m,
-            maxAllowedPrice: 0.52m);
+            maxAllowedPrice: 0.50m);
 
         Assert.True(estimate.Filled);
         Assert.Equal(5m, estimate.SizeShares);
-        Assert.Equal(2.55m, estimate.NotionalUsd);
-        Assert.Equal(0.51m, estimate.AverageFillPrice);
-        Assert.Equal(15.294117647058823529411764706m, estimate.TargetSizeShares);
+        Assert.Equal(2.40m, estimate.NotionalUsd);
+        Assert.Equal(0.48m, estimate.AverageFillPrice);
+        Assert.Equal(16.25m, estimate.TargetSizeShares);
+        Assert.Equal(1, estimate.LevelsUsed);
     }
 
     [Fact]

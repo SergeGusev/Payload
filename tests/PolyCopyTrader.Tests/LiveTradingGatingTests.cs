@@ -457,9 +457,9 @@ public sealed class LiveTradingGatingTests
             "asset-yes",
             "condition-1",
             "Yes",
-            0.40m,
+            0.99m,
             10m,
-            4m,
+            4.95m,
             now.AddMinutes(-1),
             now.AddMinutes(4),
             StrategyId: strategyId,
@@ -541,9 +541,9 @@ public sealed class LiveTradingGatingTests
             "asset-yes",
             "condition-1",
             "Yes",
-            0.40m,
+            0.99m,
             5m,
-            2m,
+            4.95m,
             now.AddMinutes(-1),
             now.AddMinutes(4),
             StrategyId: strategyId,
@@ -669,7 +669,7 @@ public sealed class LiveTradingGatingTests
             now.AddMinutes(4),
             FilledAtUtc: now.AddSeconds(-10),
             StrategyId: strategyId,
-            RawDecisionJson: "{\"paper_live_shadow_test\":true}",
+            RawDecisionJson: "{\"paper_live_shadow_test\":true,\"execution_intent_maximum_order_price\":0.99,\"execution_intent_target_notional_usd\":3.96}",
             CorrelationId: correlationId,
             ExecutionSource: "paper_live_shadow_actual_fill"));
         repository.PaperFills.AddRange(
@@ -734,7 +734,9 @@ public sealed class LiveTradingGatingTests
         await processor.ProcessOpenOrdersAsync();
 
         var paperOrder = Assert.Single(repository.PaperOrders);
-        Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, paperOrder.Status);
+        Assert.Null(paperOrder.FilledAtUtc);
+        Assert.NotNull(paperOrder.CancelledAtUtc);
         Assert.Equal("paper_live_shadow_actual_fill", paperOrder.ExecutionSource);
         Assert.Equal(0.50m, paperOrder.Price);
         Assert.Equal(4m, paperOrder.SizeShares);
@@ -832,7 +834,9 @@ public sealed class LiveTradingGatingTests
         var position = Assert.Single(repository.PaperPositions);
         Assert.Equal(5m, position.SizeShares);
         Assert.Equal(0.40m, position.AveragePrice);
-        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(repository.PaperOrders).Status);
+        var canonicalOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, canonicalOrder.Status);
+        Assert.NotNull(canonicalOrder.CancelledAtUtc);
     }
 
     [Fact]
@@ -853,9 +857,9 @@ public sealed class LiveTradingGatingTests
             "asset-up",
             "condition-1",
             "Up",
-            0.44m,
+            0.99m,
             10m,
-            4.40m,
+            4.95m,
             now.AddMinutes(-1),
             now.AddMinutes(4),
             StrategyId: strategyId,
@@ -912,8 +916,13 @@ public sealed class LiveTradingGatingTests
         Assert.False(Assert.Single(repository.LiveOrders).PostOnly);
     }
 
-    [Fact]
-    public async Task LiveProcessorIgnoresExpectedFakPaperAndLivePriceDifference()
+    [Theory]
+    [InlineData(0.40, 9.90, "FAK maximum_order_price mismatch")]
+    [InlineData(0.99, 4.00, "FAK target_notional_usd mismatch")]
+    public async Task LiveProcessorDisablesShadowLiveWhenFakIntentDiffers(
+        double paperMaximumOrderPrice,
+        double paperTargetNotionalUsd,
+        string expectedMismatch)
     {
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
@@ -934,9 +943,9 @@ public sealed class LiveTradingGatingTests
             "asset-up",
             "condition-1",
             "Up",
-            0.400000m,
+            (decimal)paperMaximumOrderPrice,
             10m,
-            4m,
+            (decimal)paperTargetNotionalUsd,
             now.AddMinutes(-1),
             now.AddMinutes(4),
             StrategyId: strategyId,
@@ -988,18 +997,138 @@ public sealed class LiveTradingGatingTests
         var result = await processor.ProcessOpenOrdersAsync();
 
         Assert.Equal(1, result.OrdersPolled);
-        Assert.Equal(0, tradingClient.CancelOrderCalls);
-        Assert.True(repository.StrategySettings[strategyId].LiveStakes);
-        Assert.Empty(repository.StrategyLiveStakeUpdates);
-        Assert.Empty(repository.PaperLiveShadowDiscrepancies);
+        Assert.Equal(1, tradingClient.CancelOrderCalls);
+        Assert.False(repository.StrategySettings[strategyId].LiveStakes);
+        Assert.Single(repository.StrategyLiveStakeUpdates);
+        var discrepancy = Assert.Single(repository.PaperLiveShadowDiscrepancies);
+        Assert.Equal("paper_live_shadow_shape_mismatch", discrepancy.Classification);
+        Assert.Equal("critical", discrepancy.Severity);
+        Assert.Contains(expectedMismatch, discrepancy.Details, StringComparison.Ordinal);
         Assert.Empty(repository.PaperFills);
-        Assert.Equal(LiveOrderStatus.Live, Assert.Single(repository.LiveOrders).Status);
+        Assert.Equal(LiveOrderStatus.Cancelled, Assert.Single(repository.LiveOrders).Status);
         Assert.DoesNotContain(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowIncident");
-        Assert.DoesNotContain(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowDiscrepancy");
+        Assert.Single(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowDiscrepancy");
+    }
+
+    [Theory]
+    [InlineData("side", "side mismatch or unsupported")]
+    [InlineData("strategy_id", "strategy_id mismatch")]
+    [InlineData("signal_id", "signal_id mismatch")]
+    [InlineData("paper_order_id", "paper_order_id mismatch")]
+    [InlineData("correlation_id", "correlation_id mismatch or missing")]
+    [InlineData("paper_execution_source", "paper_execution_source mismatch")]
+    public async Task LiveProcessorDisablesShadowLiveWhenIdentityDiffers(
+        string mismatchedField,
+        string expectedMismatch)
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = Guid.NewGuid();
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
+        var mismatchedStrategyId = StrategyIds.BtcUpDown5mDownSimple;
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            LiveStakes = true
+        };
+        repository.StrategySettings[mismatchedStrategyId] = StrategyRuntimeSettings.Default(mismatchedStrategyId) with
+        {
+            LiveStakes = true
+        };
+        var paperOrder = new PaperOrder(
+            paperOrderId,
+            signalId,
+            StrategyIds.BtcUpDown5mUpSimpleCode,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.99m,
+            10m,
+            9.90m,
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test");
+        if (string.Equals(mismatchedField, "paper_execution_source", StringComparison.Ordinal))
+        {
+            paperOrder = paperOrder with { ExecutionSource = "btc_updown5m_maker" };
+        }
+
+        await repository.AddPaperOrderAsync(paperOrder);
+        var liveOrder = new LiveOrder(
+            Guid.NewGuid(),
+            signalId,
+            LiveOrderStatus.Live,
+            "0xorder",
+            TradeSide.Buy,
+            "asset-up",
+            "condition-1",
+            "Up",
+            0.99m,
+            10m,
+            9.90m,
+            "FAK",
+            now.AddMinutes(-1),
+            now.AddMinutes(4),
+            now.AddMinutes(-1),
+            "live",
+            0m,
+            10m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddMinutes(-1),
+            StrategyId: strategyId,
+            CorrelationId: correlationId,
+            ExecutionSource: "paper_live_shadow_test",
+            PostOnly: false,
+            PaperOrderId: paperOrderId);
+        liveOrder = mismatchedField switch
+        {
+            "side" => liveOrder with { Side = TradeSide.Sell },
+            "strategy_id" => liveOrder with { StrategyId = mismatchedStrategyId },
+            "signal_id" => liveOrder with { SignalId = Guid.NewGuid() },
+            "paper_order_id" => liveOrder with { PaperOrderId = null },
+            "correlation_id" => liveOrder with { CorrelationId = Guid.NewGuid() },
+            "paper_execution_source" => liveOrder,
+            _ => throw new ArgumentOutOfRangeException(nameof(mismatchedField), mismatchedField, null)
+        };
+        await repository.AddLiveOrderAsync(liveOrder);
+        var tradingClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult("0xorder", "LIVE", "10000000", "0", "0.99", "{}")
+        };
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([]),
+            tradingClient,
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersPolled);
+        Assert.Equal(1, tradingClient.CancelOrderCalls);
+        Assert.False(repository.StrategySettings[StrategyIds.Normalize(liveOrder.StrategyId)].LiveStakes);
+        var discrepancy = Assert.Single(repository.PaperLiveShadowDiscrepancies);
+        Assert.Equal("paper_live_shadow_shape_mismatch", discrepancy.Classification);
+        Assert.Equal("critical", discrepancy.Severity);
+        Assert.Contains(expectedMismatch, discrepancy.Details, StringComparison.Ordinal);
+        Assert.Empty(repository.PaperFills);
+        Assert.Equal(LiveOrderStatus.Cancelled, Assert.Single(repository.LiveOrders).Status);
+        Assert.Single(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowDiscrepancy");
     }
 
     [Fact]
-    public async Task LiveProcessorRecordsIncidentButKeepsShadowLiveWhenFakWorstPriceIsUnexpected()
+    public async Task LiveProcessorAcceptsMatchingStrategySpecificFakMaximumOrderPrice()
     {
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
@@ -1020,9 +1149,9 @@ public sealed class LiveTradingGatingTests
             "asset-up",
             "condition-1",
             "Up",
-            0.400000m,
+            0.500000m,
             10m,
-            4m,
+            5m,
             now.AddMinutes(-1),
             now.AddMinutes(4),
             StrategyId: strategyId,
@@ -1037,9 +1166,9 @@ public sealed class LiveTradingGatingTests
             "asset-up",
             "condition-1",
             "Up",
-            0.980000m,
+            0.500000m,
             10m,
-            9.8m,
+            5m,
             "FAK",
             now.AddMinutes(-1),
             now.AddMinutes(4),
@@ -1058,7 +1187,7 @@ public sealed class LiveTradingGatingTests
             PaperOrderId: paperOrderId));
         var tradingClient = new CapturingTradingClient
         {
-            StatusResult = new LiveOrderStatusResult("0xorder", "LIVE", "10000000", "0", "0.98", "{}")
+            StatusResult = new LiveOrderStatusResult("0xorder", "LIVE", "10000000", "0", "0.50", "{}")
         };
         var processor = new LiveTradingProcessor(
             NullLogger<LiveTradingProcessor>.Instance,
@@ -1077,14 +1206,11 @@ public sealed class LiveTradingGatingTests
         Assert.Equal(0, tradingClient.CancelOrderCalls);
         Assert.True(repository.StrategySettings[strategyId].LiveStakes);
         Assert.Empty(repository.StrategyLiveStakeUpdates);
-        var discrepancy = Assert.Single(repository.PaperLiveShadowDiscrepancies);
-        Assert.Equal(strategyId, discrepancy.StrategyId);
-        Assert.Equal("paper_live_shadow_shape_incident", discrepancy.Classification);
-        Assert.Equal("warning", discrepancy.Severity);
-        Assert.Contains("FAK worst_price unexpected", discrepancy.Details, StringComparison.Ordinal);
+        Assert.Empty(repository.PaperLiveShadowDiscrepancies);
         Assert.Empty(repository.PaperFills);
         Assert.Equal(LiveOrderStatus.Live, Assert.Single(repository.LiveOrders).Status);
-        Assert.Single(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowIncident");
+        Assert.DoesNotContain(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowIncident");
+        Assert.DoesNotContain(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowDiscrepancy");
     }
 
     [Fact]
@@ -1311,7 +1437,7 @@ public sealed class LiveTradingGatingTests
             now.AddMinutes(-5),
             FilledAtUtc: now.AddMinutes(-9),
             StrategyId: strategyId,
-            RawDecisionJson: "{\"paper_live_shadow_test\":true}",
+            RawDecisionJson: "{\"paper_live_shadow_test\":true,\"execution_intent_maximum_order_price\":0.99,\"execution_intent_target_notional_usd\":3.96}",
             CorrelationId: correlationId,
             ExecutionSource: "paper_live_shadow_actual_fill"));
         repository.PaperFills.Add(new PaperFill(

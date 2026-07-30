@@ -1,0 +1,142 @@
+# Paper/Live Execution Parity Contract
+
+## Purpose
+
+Paper results are valid only when they model behavior that the current Live
+Polymarket integration can perform. This contract is mandatory for every strategy,
+order type, simulator, execution-policy change, replay, and performance claim.
+
+The governing rule is:
+
+> No proven Live equivalent means no Paper trade.
+
+## Verified Polymarket FAK equivalent
+
+The current official Polymarket CLOB V2 documentation defines FAK as an
+immediate order that fills available liquidity and cancels the unfilled
+remainder. For a BUY market order, `amount` is the cash amount to spend and
+`price` is the worst-price limit (slippage protection), not an expected or
+target fill price. FAK/FOK orders cannot be post-only.
+
+Authoritative references, verified 2026-07-30:
+
+- [Create Order](https://docs.polymarket.com/trading/orders/create)
+- [Orders Overview](https://docs.polymarket.com/trading/orders/overview)
+- [Order Lifecycle](https://docs.polymarket.com/concepts/order-lifecycle)
+
+Therefore the supported Live equivalent for a capped Paper FAK BUY is:
+`side=BUY`, `orderType=FAK`, `postOnly=false`, a cash amount, and the same hard
+maximum order price. Paper may fill only snapshot asks at or below that price;
+it must mark an unfilled remainder cancelled immediately.
+
+## Execution intent
+
+A strategy must create one immutable pre-submit `ExecutionIntent` before Paper or
+Live execution begins. It must contain every field that affects venue behavior,
+including at least:
+
+- market and token identifiers;
+- side and amount semantics (cash amount or share quantity);
+- order type and time-in-force;
+- requested price limit or worst acceptable price;
+- tick-size rounding and the resulting effective price;
+- expiry and cancellation conditions when applicable;
+- strategy and decision identifiers needed for audit.
+
+Paper simulation and Live submission must consume the same intent. Transport,
+authentication, and response mapping may differ; economic and order semantics may
+not. A shared default must not overwrite a strategy-specific constraint.
+Before Paper simulation, the requested BUY cash amount must be normalized by the
+same current amount calculator and precision rules used by the Live request. Both
+paths consume that effective amount. Auth, kill-switch, bankroll, exposure, and
+other non-market safety gates may still reject it. The Live FAK path must not add
+a second order-book lookup merely to revalidate transient liquidity: it submits
+the unchanged intent, and the venue determines the actual fill. No preflight may
+resize, reprice, or otherwise replace the intent before submission.
+
+Every decision encoded in the intent must use information available before the
+submission time. Future book changes, eventual fills, resolution results, or any
+other later information are forbidden inputs.
+
+## Execution and outcome rules
+
+Paper must model the documented behavior of the matching Live order type:
+
+- enforce the same price boundary, liquidity boundary, time-in-force, partial-fill
+  behavior, and cancellation behavior;
+- never fill liquidity that the admissible market evidence does not contain;
+- never model atomicity, rollback, or conditional acceptance that the venue does
+  not provide;
+- never treat an aggregate result such as final VWAP as a pre-submit constraint
+  unless the Live API can enforce that exact constraint atomically.
+
+Fill price, filled size, VWAP, fees, remainder cancellation, and rejection details
+are outcomes. They may update accounting, risk, telemetry, and later decisions.
+They must not authorize, reject, resize, reprice, or undo the originating order.
+
+For example, a Live FAK buy with a hard price cap may consume eligible asks and
+cancel the remainder. Paper must do the same. Paper must not sweep beyond the cap
+and then retain or discard the trade based on the resulting average price.
+A delayed Paper worker must not refetch a later order book to simulate an
+immediate FAK. It must use the immutable decision-time snapshot; when that
+snapshot is absent, the candidate is rejected as non-reproducible and contributes
+no Paper fill or PnL.
+
+Until fill, order, position, and copied-position writes share one atomic commit,
+an open Paper FAK that already has a persisted fill is a fail-safe no-op. The
+processor must neither duplicate uncertain accounting nor terminalize and hide
+the order; explicit reconciliation is required.
+
+`PaperOnly` means that the intent is not sent externally. It does not relax any
+rule in this contract.
+
+## Research-only algorithms
+
+An algorithm that depends on unavailable Live behavior or hindsight must be
+classified `ResearchOnly`. Its records and metrics must be physically or
+logically separated from Paper trades, Paper PnL, Paper win rate, and any statement
+about expected Live execution. Research output must clearly identify the
+counterfactual assumption.
+
+A research result may become Paper only after its Live equivalent is documented,
+implemented through the common intent path, and covered by the parity gate below.
+
+## Mandatory parity gate
+
+Before completing a new or changed Paper execution feature:
+
+1. Document the exact Live API mechanism and authoritative venue behavior for each
+   material intent field and execution guarantee.
+2. Inspect the actual Paper and Live dispatch paths and prove that both preserve
+   the same intent. Names, comments, and strategy descriptions are not proof.
+3. Add focused contract tests that compare the intents and cover, as applicable:
+   price boundaries, tick rounding, full fill, partial fill, no fill, and remainder
+   cancellation.
+4. Add a regression test showing that post-fill data cannot alter acceptance of
+   the originating order.
+5. Run the relevant test suite. Missing evidence, an unsupported guarantee, or a
+   failing parity test blocks completion and Paper performance claims.
+
+## Persistence and audit evidence
+
+Each Paper execution candidate must be reproducible from durable evidence. Persist
+or durably reference:
+
+- the complete requested and effective `ExecutionIntent`;
+- strategy version and decision inputs;
+- submission/decision timestamp and market-data timestamp;
+- the order-book snapshot or immutable snapshot reference used by the simulator;
+- all simulated fills, fees, partial-fill and cancellation details;
+- rejection or no-fill reason and final accounting outcome;
+- correlation identifiers connecting the decision, intent, execution, and result.
+
+The execution-intent decision identifier is an audit/correlation identifier and
+does not have to equal the Paper signal identifier. Persisted timestamp identity
+checks use PostgreSQL's microsecond precision. A snapshot obtained by an awaited
+REST fallback can legitimately be later than the strategy-cycle timestamp when
+the complete intent and snapshot are persisted atomically in the same decision
+payload.
+
+Audit records must not contain private keys, signatures, credentials, or other
+secrets. If the required market evidence was not retained, the result must be
+marked non-reproducible; it must not be represented as an exact replay.

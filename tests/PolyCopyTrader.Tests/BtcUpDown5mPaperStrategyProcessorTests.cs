@@ -1012,7 +1012,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 Assert.Null(item.DiffCounterTriggerOutcome);
                 Assert.Null(item.FixedOutcome);
                 Assert.True(item.PaperOnly);
-                Assert.Equal(0.50m, item.PaperFakMaximumAverageFillPrice);
+                Assert.Equal(0.50m, item.FakMaximumOrderPrice);
                 Assert.Equal(item.Id, StrategyIds.TryGetStrategyIdByCode(item.Code));
             });
         }
@@ -1088,8 +1088,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             Assert.Equal(source.ConfirmationSignalStrategyId, clone.ConfirmationSignalStrategyId);
             Assert.Equal(source.RequiredReferenceAverageWindow, clone.RequiredReferenceAverageWindow);
             Assert.True(clone.PaperOnly);
-            Assert.Equal(StrategyIds.LowerEnterMaximumPaperAverageFillPrice, clone.PaperFakMaximumAverageFillPrice);
-            Assert.Contains("actual average fill price is at most 0.50", clone.Description, StringComparison.Ordinal);
+            Assert.Equal(StrategyIds.LowerEnterMaximumOrderPrice, clone.FakMaximumOrderPrice);
+            Assert.Contains("maximum order price of 0.50", clone.Description, StringComparison.Ordinal);
             Assert.Equal(clone.Id, StrategyIds.TryGetStrategyIdByCode(clone.Code));
         }
 
@@ -1214,7 +1214,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             Assert.Equal(source.DiffCounterTriggerOutcome, clone.DiffCounterTriggerOutcome);
             Assert.Equal(source.RequiredReferenceAverageWindow, clone.RequiredReferenceAverageWindow);
             Assert.True(clone.PaperOnly);
-            Assert.Equal(StrategyIds.LowerEnterMaximumPaperAverageFillPrice, clone.PaperFakMaximumAverageFillPrice);
+            Assert.Equal(StrategyIds.LowerEnterMaximumOrderPrice, clone.FakMaximumOrderPrice);
             Assert.Equal(clone.Id, StrategyIds.TryGetStrategyIdByCode(clone.Code));
         }
 
@@ -1245,7 +1245,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             ExpectedReferenceAverageBpsThresholds(),
             lowEnterVariants.Select(item => item.DecisionThresholdBps.GetValueOrDefault()).ToArray());
 
-        foreach (var (variants, idGroup, codeMarker, nameMarker, category, displayCategory, paperOnly, maxAverageFillPrice) in new[]
+        foreach (var (variants, idGroup, codeMarker, nameMarker, category, displayCategory, paperOnly, maximumOrderPrice) in new[]
         {
             (
                 Variants: standardVariants,
@@ -1255,7 +1255,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 Category: "ETH Up/Down 5m Bps 3Hour Average Premarket",
                 DisplayCategory: "ETH Up or Down 5m Bps 3Hour Average Premarket",
                 PaperOnly: false,
-                MaxAverageFillPrice: (decimal?)null),
+                MaximumOrderPrice: (decimal?)null),
             (
                 Variants: lowEnterVariants,
                 IdGroup: 8217,
@@ -1264,7 +1264,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 Category: "ETH Up/Down 5m Bps 3Hour LowEnter Average Premarket",
                 DisplayCategory: "ETH Up or Down 5m Bps 3Hour LowEnter Average Premarket",
                 PaperOnly: true,
-                MaxAverageFillPrice: (decimal?)0.50m)
+                MaximumOrderPrice: (decimal?)0.50m)
         })
         {
             Assert.All(variants, item =>
@@ -1284,7 +1284,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 Assert.Equal(threshold, item.DecisionThresholdBps);
                 Assert.Equal("3h", item.RequiredReferenceAverageWindow);
                 Assert.Equal(paperOnly, item.PaperOnly);
-                Assert.Equal(maxAverageFillPrice, item.PaperFakMaximumAverageFillPrice);
+                Assert.Equal(maximumOrderPrice, item.FakMaximumOrderPrice);
                 Assert.Null(item.FixedOutcome);
                 Assert.Null(item.DiffCounterTriggerOutcome);
                 Assert.Equal(displayCategory, StrategyDisplayCategories.GetCategory(item.Name));
@@ -1501,7 +1501,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             Assert.Equal(source.DiffCounterTriggerOutcome, clone.DiffCounterTriggerOutcome);
             Assert.Equal(source.RequiredReferenceAverageWindow, clone.RequiredReferenceAverageWindow);
             Assert.True(clone.PaperOnly);
-            Assert.Equal(StrategyIds.LowerEnterMaximumPaperAverageFillPrice, clone.PaperFakMaximumAverageFillPrice);
+            Assert.Equal(StrategyIds.LowerEnterMaximumOrderPrice, clone.FakMaximumOrderPrice);
             Assert.Equal(clone.Id, StrategyIds.TryGetStrategyIdByCode(clone.Code));
         }
 
@@ -9117,7 +9117,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_EthThreeHourLowEnterAveragePremarketRejectsFillAboveHalf()
+    public async Task ProcessAsync_EthThreeHourLowEnterAveragePremarketDoesNotCrossMaximumOrderPrice()
     {
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_3hour_low_enter_average_bps_9_fak_premarket",
@@ -9131,12 +9131,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Empty(scenario.Repository.PaperOrders);
         var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
         Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
-        Assert.Equal(SignalReasonCodes.ExecutionPriceAboveStrategyCap, run.SkipReason);
+        Assert.Equal(SignalReasonCodes.BestAskAboveMaxEntry, run.SkipReason);
         Assert.Contains("\"selected_reference_average_window\":\"3h\"", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_maximum_window\":\"3h\"", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
         Assert.Contains("\"reference_average_minimum_window\":\"3h\"", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains("\"paper_fak_maximum_average_fill_price\":0.50", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains("\"paper_fak_entry_price_cap_exceeded\":true", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_worst_price\":0.50", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_maximum_order_price\":0.50", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"paper_fak_order_price_cap_applied\":true", run.SkipDiagnosticsJson ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -10116,7 +10117,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Theory]
     [InlineData(50, true)]
     [InlineData(51, false)]
-    public async Task ProcessAsync_LowEnterAveragePremarketUsesInclusivePaperFakAverageFillPriceCap(
+    public async Task ProcessAsync_LowEnterAveragePremarketUsesInclusivePaperFakMaximumOrderPrice(
         int entryPriceCents,
         bool shouldEnter)
     {
@@ -10179,25 +10180,96 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             var order = Assert.Single(repository.PaperOrders);
             Assert.Equal(entryPrice, order.Price);
             using var rawDecision = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
-            Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("paper_fak_maximum_average_fill_price").GetDecimal());
-            Assert.False(rawDecision.RootElement.GetProperty("paper_fak_entry_price_cap_exceeded").GetBoolean());
+            Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("paper_fak_worst_price").GetDecimal());
+            Assert.Equal(0.50m, rawDecision.RootElement.GetProperty("paper_fak_maximum_order_price").GetDecimal());
+            Assert.True(rawDecision.RootElement.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
         }
         else
         {
             Assert.Equal(0, result.EntriesPlaced);
             Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
-            Assert.Equal(SignalReasonCodes.ExecutionPriceAboveStrategyCap, run.SkipReason);
+            Assert.Equal(SignalReasonCodes.BestAskAboveMaxEntry, run.SkipReason);
             Assert.Empty(repository.PaperOrders);
             using var diagnostics = JsonDocument.Parse(Assert.IsType<string>(run.SkipDiagnosticsJson));
-            Assert.Equal(entryPrice, diagnostics.RootElement.GetProperty("paper_fak_average_fill_price").GetDecimal());
-            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_maximum_average_fill_price").GetDecimal());
-            Assert.True(diagnostics.RootElement.GetProperty("paper_fak_entry_price_cap_exceeded").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, diagnostics.RootElement.GetProperty("paper_fak_average_fill_price").ValueKind);
+            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_worst_price").GetDecimal());
+            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_maximum_order_price").GetDecimal());
+            Assert.True(diagnostics.RootElement.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
             Assert.Equal(
-                SignalReasonCodes.ExecutionPriceAboveStrategyCap,
+                SignalReasonCodes.BestAskAboveMaxEntry,
                 diagnostics.RootElement.GetProperty("skip_reason").GetString());
         }
 
         Assert.Empty(repository.LiveOrders);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_LowEnterAveragePremarketFillsOnlyDepthAtOrBelowMaximumOrderPrice()
+    {
+        var scenario = await RunOptimizedAverageScenarioAsync(
+            "eth_up_down_5m_low_enter_average_bps_1_fak_premarket",
+            3_146m,
+            [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m],
+            upEntryPrice: 0.48m,
+            upAskLevels:
+            [
+                new OrderBookLevel(0.48m, 1m),
+                new OrderBookLevel(0.52m, 100m)
+            ]);
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(0, scenario.Result.RunsSkipped);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, order.Status);
+        Assert.Equal(0.48m, order.Price);
+        Assert.Equal(1m, order.SizeShares);
+        Assert.Equal(0.48m, order.NotionalUsd);
+        Assert.NotNull(order.CancelledAtUtc);
+        using var diagnostics = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
+        var root = diagnostics.RootElement;
+        Assert.Equal(0.50m, root.GetProperty("fak_worst_price").GetDecimal());
+        Assert.Equal(1m, root.GetProperty("fak_executable_ask_shares_at_worst_price").GetDecimal());
+        Assert.Equal(0.50m, root.GetProperty("paper_fak_worst_price").GetDecimal());
+        Assert.Equal(0.50m, root.GetProperty("paper_fak_maximum_order_price").GetDecimal());
+        Assert.True(root.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
+        Assert.Equal(1, root.GetProperty("paper_fak_levels_used").GetInt32());
+        Assert.True(root.GetProperty("paper_fak_partial_fill").GetBoolean());
+        Assert.Equal(0.50m, root.GetProperty("execution_intent_maximum_order_price").GetDecimal());
+        Assert.Equal("FAK", root.GetProperty("execution_intent_order_type").GetString());
+        Assert.False(root.GetProperty("execution_intent_post_only").GetBoolean());
+        var snapshot = root.GetProperty("execution_intent_order_book_snapshot");
+        Assert.Equal(2, snapshot.GetProperty("asks").GetArrayLength());
+        Assert.Equal(0.48m, snapshot.GetProperty("asks")[0].GetProperty("price").GetDecimal());
+        Assert.Equal(0.52m, snapshot.GetProperty("asks")[1].GetProperty("price").GetDecimal());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_OrdinaryReferenceAverageFakStillUsesGuaranteedWorstPrice()
+    {
+        var scenario = await RunOptimizedAverageScenarioAsync(
+            "eth_up_down_5m_reference_average_bps_1_fak_premarket",
+            3_146m,
+            [3_150m, 3_175m, 3_180m, 3_200m, 3_170m, 3_160m, 3_155m, 3_152m],
+            upEntryPrice: 0.48m,
+            upAskLevels:
+            [
+                new OrderBookLevel(0.48m, 1m),
+                new OrderBookLevel(0.52m, 100m)
+            ]);
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(0, scenario.Result.RunsSkipped);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.True(order.Price > 0.48m);
+        using var diagnostics = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
+        var root = diagnostics.RootElement;
+        Assert.Equal(0.99m, root.GetProperty("fak_worst_price").GetDecimal());
+        Assert.Equal(101m, root.GetProperty("fak_executable_ask_shares_at_worst_price").GetDecimal());
+        Assert.Equal(0.99m, root.GetProperty("paper_fak_worst_price").GetDecimal());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("paper_fak_maximum_order_price").ValueKind);
+        Assert.False(root.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
+        Assert.Equal(2, root.GetProperty("paper_fak_levels_used").GetInt32());
+        Assert.False(root.GetProperty("paper_fak_partial_fill").GetBoolean());
     }
 
     [Fact]
@@ -10253,18 +10325,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             Assert.Equal(PaperOrderStatus.Filled, order.Status);
             Assert.Contains("\"paper_only\":true", order.RawDecisionJson, StringComparison.Ordinal);
             using var diagnostics = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
-            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_maximum_average_fill_price").GetDecimal());
+            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_worst_price").GetDecimal());
+            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_maximum_order_price").GetDecimal());
+            Assert.True(diagnostics.RootElement.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
         }
         else
         {
             Assert.Equal(0, scenario.Result.EntriesPlaced);
             Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
-            Assert.Equal(SignalReasonCodes.ExecutionPriceAboveStrategyCap, run.SkipReason);
+            Assert.Equal(SignalReasonCodes.BestAskAboveMaxEntry, run.SkipReason);
             Assert.Empty(scenario.Repository.PaperOrders);
             using var diagnostics = JsonDocument.Parse(Assert.IsType<string>(run.SkipDiagnosticsJson));
-            Assert.Equal(entryPrice, diagnostics.RootElement.GetProperty("paper_fak_average_fill_price").GetDecimal());
-            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_maximum_average_fill_price").GetDecimal());
-            Assert.True(diagnostics.RootElement.GetProperty("paper_fak_entry_price_cap_exceeded").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, diagnostics.RootElement.GetProperty("paper_fak_average_fill_price").ValueKind);
+            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_worst_price").GetDecimal());
+            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_maximum_order_price").GetDecimal());
+            Assert.True(diagnostics.RootElement.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
         }
     }
 
@@ -10358,10 +10433,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_EthDown9FakLiveStakeSubmitsFakMarketBuyAmount()
+    public async Task ProcessAsync_EthDown9FakLiveStakeUsesOriginalPaperIntentWhenFreshBookWouldResize()
     {
-        var now = DateTimeOffset.UtcNow;
         var currentMarketStart = GetCurrentFiveMinuteMarketStartUtc();
+        var now = currentMarketStart.AddSeconds(1);
+        var orderBookSnapshotAtUtc = DateTimeOffset.UtcNow;
         var previousStart = currentMarketStart.AddMinutes(-5);
         var previousSuffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var previousMarketId = "eth-ws-market-" + previousSuffix;
@@ -10422,13 +10498,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 "eth-asset-up",
                 [new OrderBookLevel(0.39m, 100m)],
                 [new OrderBookLevel(0.41m, 100m)],
-                now),
+                orderBookSnapshotAtUtc),
             OrderBook(
                 "eth-asset-down",
                 [new OrderBookLevel(0.58m, 100m)],
                 [new OrderBookLevel(0.60m, 100m)],
-                now)
+                orderBookSnapshotAtUtc,
+                minOrderSize: 2m)
         ];
+        var livePreflightOrderBooks = closeBookOrderBooks
+            .Concat(
+            [
+                OrderBook(
+                    "eth-asset-down",
+                    [new OrderBookLevel(0.68m, 100m)],
+                    [new OrderBookLevel(0.70m, 100m)],
+                    orderBookSnapshotAtUtc,
+                    minOrderSize: 1m)
+            ])
+            .ToArray();
         var tradingClient = new CapturingTradingClient
         {
             PlacementResult = new LiveOrderPlacementResult(
@@ -10441,17 +10529,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 """{"status":"matched","makingAmount":"0.80","takingAmount":"1.25"}""",
                 "{}")
         };
+        var clobClient = new FakeClobClient(livePreflightOrderBooks);
         var processor = CreateLiveProcessorWithCryptoReference(
             repository,
             tradingClient,
             new FakeCryptoReferencePriceClient(),
             orderBooks,
-            closeBookOrderBooks,
+            livePreflightOrderBooks,
+            clobClient,
+            new ManualTimeProvider(now),
             variant.Code);
 
         var result = await processor.ProcessPreviousResultDueEntriesAsync();
 
-        Assert.Equal(1, result.EntriesPlaced);
+        Assert.True(
+            result.EntriesPlaced == 1,
+            string.Join(
+                " | ",
+                repository.StrategyMarketPaperRuns.Select(run => run.SkipReason)
+                    .Concat(repository.LiveOrders.Select(order => order.ValidationSummary))));
         Assert.True(
             tradingClient.PlaceCalls == 1,
             string.Join(" | ", repository.LiveOrders.Select(order => order.ValidationSummary)));
@@ -10460,7 +10556,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.False(request.PostOnly);
         Assert.Null(request.GtdExpirationUtc);
         Assert.Equal(0.99m, request.Price);
-        Assert.Equal(1m, request.MarketBuyAmountUsd);
+        Assert.Equal(3m, request.MarketBuyAmountUsd);
+        Assert.Equal(0, clobClient.GetOrderBookCallsForAsset("eth-asset-down"));
 
         var liveOrder = Assert.Single(repository.LiveOrders);
         Assert.Equal(variant.Id, liveOrder.StrategyId);
@@ -10469,8 +10566,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("eth-asset-down", liveOrder.AssetId);
         Assert.Equal("Down", liveOrder.Outcome);
         Assert.Equal(0.99m, liveOrder.Price);
-        Assert.Equal(1m, liveOrder.NotionalUsd);
-        Assert.Equal(1.25m, liveOrder.SizeShares);
+        Assert.Equal(3m, liveOrder.NotionalUsd);
+        Assert.Equal(request.SizeShares, liveOrder.SizeShares);
         Assert.Equal(1.25m, liveOrder.FilledSize);
         Assert.Equal(0m, liveOrder.RemainingSize);
         Assert.Equal(0.64m, liveOrder.AverageFillPrice);
@@ -10480,7 +10577,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.False(liveOrder.PostOnly);
 
         var paperOrder = Assert.Single(repository.PaperOrders);
-        Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, paperOrder.Status);
+        Assert.NotNull(paperOrder.CancelledAtUtc);
         Assert.Equal(liveOrder.AverageFillPrice, paperOrder.Price);
         Assert.Equal(liveOrder.FilledNotionalUsd, paperOrder.NotionalUsd);
         Assert.Equal(liveOrder.FilledSize, paperOrder.SizeShares);
@@ -10506,6 +10604,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         var decision = Assert.Single(repository.PaperLiveShadowDecisions);
         Assert.Equal("FAK", decision.OrderType);
+        Assert.Equal(request.TokenId, decision.AssetId);
+        Assert.Equal(request.Side, decision.Side);
+        Assert.Equal(request.Price, decision.LimitPrice);
+        Assert.Equal(request.MarketBuyAmountUsd, decision.TargetNotionalUsd);
+        Assert.Equal(request.PostOnly, decision.PostOnly);
         Assert.Equal(liveOrder.Id, decision.LiveOrderId);
     }
 
@@ -10610,7 +10713,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(0.80m, liveOrder.CostBasisUsd);
 
         var paperOrder = Assert.Single(repository.PaperOrders);
-        Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, paperOrder.Status);
+        Assert.NotNull(paperOrder.CancelledAtUtc);
         Assert.Equal(liveOrder.AverageFillPrice, paperOrder.Price);
         Assert.Equal(liveOrder.FilledNotionalUsd, paperOrder.NotionalUsd);
         Assert.Equal(liveOrder.FilledSize, paperOrder.SizeShares);
@@ -10744,8 +10848,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public async Task ProcessAsync_EthDown9FakLiveStakeRejectsZeroFill()
     {
-        var now = DateTimeOffset.UtcNow;
         var currentMarketStart = GetCurrentFiveMinuteMarketStartUtc();
+        var now = currentMarketStart.AddSeconds(1);
+        var orderBookSnapshotAtUtc = DateTimeOffset.UtcNow;
         var previousStart = currentMarketStart.AddMinutes(-5);
         var previousSuffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
         var previousMarketId = "eth-ws-market-" + previousSuffix;
@@ -10804,12 +10909,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 "eth-asset-up",
                 [new OrderBookLevel(0.39m, 100m)],
                 [new OrderBookLevel(0.41m, 100m)],
-                now),
+                orderBookSnapshotAtUtc),
             OrderBook(
                 "eth-asset-down",
                 [new OrderBookLevel(0.58m, 100m)],
                 [new OrderBookLevel(0.60m, 100m)],
-                now)
+                orderBookSnapshotAtUtc)
         ];
         var tradingClient = new CapturingTradingClient
         {
@@ -10829,6 +10934,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             new FakeCryptoReferencePriceClient(),
             orderBooks,
             closeBookOrderBooks,
+            new ManualTimeProvider(now),
             variant.Code);
 
         var result = await processor.ProcessPreviousResultDueEntriesAsync();
@@ -12020,6 +12126,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             new FakeCryptoReferencePriceClient(),
             DefaultOrderBooks(),
             clobOrderBooks,
+            null,
+            TimeProvider.System,
             enabledVariantCodes);
     }
 
@@ -12029,6 +12137,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         ICryptoReferencePriceClient cryptoReferencePriceClient,
         IReadOnlyList<OrderBookSnapshot> orderBooks,
         IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
+        TimeProvider timeProvider,
         params string[] enabledVariantCodes)
     {
         return CreateLiveProcessorWithReferences(
@@ -12039,6 +12148,31 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             cryptoReferencePriceClient,
             orderBooks,
             clobOrderBooks,
+            null,
+            timeProvider,
+            enabledVariantCodes);
+    }
+
+    private static BtcUpDown5mPaperStrategyProcessor CreateLiveProcessorWithCryptoReference(
+        TestAppRepository repository,
+        CapturingTradingClient tradingClient,
+        ICryptoReferencePriceClient cryptoReferencePriceClient,
+        IReadOnlyList<OrderBookSnapshot> orderBooks,
+        IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
+        IPolymarketClobPublicClient clobClient,
+        TimeProvider timeProvider,
+        params string[] enabledVariantCodes)
+    {
+        return CreateLiveProcessorWithReferences(
+            repository,
+            tradingClient,
+            new FakeBtcUsdReferencePriceClient(100m),
+            CreateBtcUsdReferenceCache(100m),
+            cryptoReferencePriceClient,
+            orderBooks,
+            clobOrderBooks,
+            clobClient,
+            timeProvider,
             enabledVariantCodes);
     }
 
@@ -12050,6 +12184,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         ICryptoReferencePriceClient cryptoReferencePriceClient,
         IReadOnlyList<OrderBookSnapshot> orderBooks,
         IReadOnlyList<OrderBookSnapshot> clobOrderBooks,
+        IPolymarketClobPublicClient? clobClient,
+        TimeProvider timeProvider,
         params string[] enabledVariantCodes)
     {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
@@ -12106,7 +12242,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             },
             marketDataWebSocketOptions,
             new FakeGammaClient([]),
-            new FakeClobClient(orderBooks.Concat(clobOrderBooks).ToArray()),
+            clobClient ?? new FakeClobClient(orderBooks.Concat(clobOrderBooks).ToArray()),
             new PassGeoClient(),
             tradingClient,
             new ReadyAuthService(),
@@ -12121,7 +12257,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             new ExposureSnapshotCache(repository),
             new ServiceControlState(),
             new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository),
-            repository);
+            repository,
+            timeProvider);
     }
 
     private static BtcUpDown5mPaperStrategyProcessor CreateProcessorWithRegistryBestAsk(
@@ -12369,7 +12506,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         bool liveStakes = false,
         bool includeStaleChildAssignment = false,
         decimal upEntryPrice = 0.41m,
-        decimal downEntryPrice = 0.60m)
+        decimal downEntryPrice = 0.60m,
+        IReadOnlyList<OrderBookLevel>? upAskLevels = null,
+        IReadOnlyList<OrderBookLevel>? downAskLevels = null)
     {
         var now = new DateTimeOffset(2026, 7, 18, 12, 0, 0, TimeSpan.Zero);
         var marketStartUtc = now.AddSeconds(30);
@@ -12443,13 +12582,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             OrderBook(
                 $"{assetCode}-optimized-up",
                 [new OrderBookLevel(upEntryPrice - 0.02m, 100m)],
-                [new OrderBookLevel(upEntryPrice, 100m)],
+                upAskLevels ?? [new OrderBookLevel(upEntryPrice, 100m)],
                 now,
                 minOrderSize: 1m),
             OrderBook(
                 $"{assetCode}-optimized-down",
                 [new OrderBookLevel(downEntryPrice - 0.02m, 100m)],
-                [new OrderBookLevel(downEntryPrice, 100m)],
+                downAskLevels ?? [new OrderBookLevel(downEntryPrice, 100m)],
                 now,
                 minOrderSize: 1m)
         ];
@@ -14660,6 +14799,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             }
         }
 
+        public int GetOrderBookCallsForAsset(string assetId)
+        {
+            lock (sync)
+            {
+                return orderBookCallsByAssetId.TryGetValue(assetId, out var calls) ? calls : 0;
+            }
+        }
+
         public FakeClobClient(OrderBookSnapshot? orderBook)
             : this(ToClobOrderBooks(orderBook))
         {
@@ -14669,7 +14816,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         {
             orderBooksByAssetId = orderBooks
                 .Where(orderBook => !string.IsNullOrWhiteSpace(orderBook.AssetId))
-                .ToDictionary(orderBook => orderBook.AssetId, StringComparer.OrdinalIgnoreCase);
+                .GroupBy(orderBook => orderBook.AssetId, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
             this.responseDelay = responseDelay ?? TimeSpan.Zero;
         }
 

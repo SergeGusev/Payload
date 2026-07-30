@@ -1286,7 +1286,7 @@ SELECT
     ('b7c50005-0000-4000-' || id_group || '-' || lpad((100 + threshold_value)::text, 12, '0'))::uuid,
     lower(asset_symbol) || '_up_down_5m_low_enter_average_bps_' || threshold_value::text || '_fak_premarket',
     asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps LowEnter Average Premarket',
-    '30 seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the envelope formed by the smallest and largest full in-memory reference averages across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is above the maximum boundary by at least ' || threshold_value::text || ' bps, BUY Down; if it is below the minimum boundary by at least ' || threshold_value::text || ' bps, BUY Up. Otherwise skip. Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most 0.50. Live execution is not supported for this Paper experiment.',
+    '30 seconds before ' || asset_symbol || ' 5m market open, compare the latest Binance ' || asset_symbol || '/USDT reference price with the envelope formed by the smallest and largest full in-memory reference averages across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows. If the current price is above the maximum boundary by at least ' || threshold_value::text || ' bps, BUY Down; if it is below the minimum boundary by at least ' || threshold_value::text || ' bps, BUY Up. Otherwise skip. Simulate a Paper FAK taker BUY with a maximum order price of 0.50, fill only immediately executable asks at or below that price, and cancel the remainder. Live execution is not supported for this Paper experiment.',
     true,
     false,
     1.00,
@@ -1337,7 +1337,7 @@ INSERT INTO strategies (
 WITH families(id_group, code_marker, name_marker, description_suffix) AS (
     VALUES
         ('8216', '3hour_average', '3Hour Average', 'Paper entry simulates the same taker BUY, while Live-shadow submits a market BUY amount so available liquidity is taken immediately and any remainder is cancelled.'),
-        ('8217', '3hour_low_enter_average', '3Hour LowEnter Average', 'Simulate a Paper FAK taker BUY from current executable ask depth only when its actual average fill price is at most 0.50. Live execution is not supported for this Paper experiment.')
+        ('8217', '3hour_low_enter_average', '3Hour LowEnter Average', 'Simulate a Paper FAK taker BUY with a maximum order price of 0.50, fill only immediately executable asks at or below that price, and cancel the remainder. Live execution is not supported for this Paper experiment.')
 ),
 thresholds(threshold_value) AS (
     SELECT value

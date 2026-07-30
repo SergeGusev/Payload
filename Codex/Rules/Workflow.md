@@ -65,6 +65,24 @@ For substantial or multi-step work:
 - continue autonomously when a reasonable fallback exists;
 - stop only on true blockers.
 
+For every new or changed Paper strategy or execution rule, apply the mandatory
+Paper/live parity gate in `docs/architecture/PAPER_LIVE_PARITY.md` before treating
+the implementation or its results as Paper trading:
+
+- identify and document the exact current Live API order equivalent;
+- verify that Paper and Live consume the same pre-submit `ExecutionIntent` and
+  preserve its order semantics;
+- verify that post-fill information affects accounting or future decisions only;
+- reject unsupported atomicity, rollback, post-fill acceptance, and aggregate
+  fill-price guarantees;
+- classify an algorithm as `ResearchOnly`, outside Paper PnL and Paper performance
+  claims, when a Live equivalent cannot be proved;
+- add or update parity tests and verify that intent, market evidence, fills, and
+  outcomes are persisted or otherwise auditable.
+
+Missing Live-equivalence evidence or a failing parity test is a completion blocker,
+not a documentation caveat.
+
 ## 4. Task Finalization
 
 After every completed non-`start` task:

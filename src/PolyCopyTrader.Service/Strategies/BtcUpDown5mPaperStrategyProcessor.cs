@@ -1779,11 +1779,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var isPaperLiveShadowTest = ShouldRunPaperLiveShadowTest(variant, settings);
+        Guid? correlationId = isPaperLiveShadowTest ? Guid.NewGuid() : null;
         PaperLiveShadowOrderBookSnapshotResult? shadowSnapshot = null;
         TakerOrderBookLookupResult? shadowFakLookup = null;
         BtcMinimumStakeSizing? shadowFakSizing = null;
         TakerBuyFillEstimate? shadowFakEstimate = null;
         string? shadowFakFillEvidence = null;
+        FakBuyExecutionIntent? shadowFakExecutionIntent = null;
         var paperEntryPrice = priceDecision.LimitPrice.Value;
         var paperEntryNotionalUsd = sizing.TargetNotionalUsd;
         var paperEntrySizeShares = sizing.TargetSizeShares;
@@ -1861,17 +1863,35 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 return BtcMakerOrderResult.SkippedResult;
             }
 
-            shadowFakEstimate = EstimatePaperFakFill(
-                shadowFakOrderBook,
+            shadowFakExecutionIntent = FakBuyExecutionIntent.Create(
+                variant.Id,
+                correlationId!.Value,
+                market.ConditionId,
+                selectedOutcome.AssetId,
+                fakWorstPrice,
                 shadowFakSizing.TargetNotionalUsd,
-                fakWorstPrice);
+                shadowFakSizing.TargetSizeShares,
+                shadowFakOrderBook,
+                nowUtc);
+            shadowFakSizing = shadowFakSizing with
+            {
+                TargetNotionalUsd = shadowFakExecutionIntent.TargetNotionalUsd,
+                TargetSizeShares = shadowFakExecutionIntent.TargetSizeShares
+            };
+            shadowFakRawDecisionJson = AttachOpeningLimitStakeSizingJson(
+                rawDecisionJson,
+                paperLiveShadowStakeUsd,
+                shadowFakSizing,
+                expiration);
+            shadowFakEstimate = EstimatePaperFakFill(shadowFakExecutionIntent, shadowFakOrderBook);
             rawDecisionJson = AttachFakPaperFillSimulationJson(
                 shadowFakRawDecisionJson,
                 shadowFakLookup,
                 shadowFakSizing,
                 shadowFakEstimate,
                 shadowFakEstimate.RejectionReason,
-                nowUtc);
+                nowUtc,
+                executionIntent: shadowFakExecutionIntent);
             if (!shadowFakEstimate.Filled)
             {
                 await RecordSkippedMakerRunAsync(
@@ -1914,20 +1934,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 ".");
         }
 
-        Guid? correlationId = null;
         Signal? signal = null;
         PaperOrder? order = null;
         StrategyMarketPaperRun? run = null;
         await entryPlacementLock.WaitAsync(cancellationToken);
         try
         {
-            if (isPaperLiveShadowTest && shadowSnapshot?.OrderBook is { } shadowOrderBook)
+            if (isPaperLiveShadowTest &&
+                correlationId is { } createdShadowCorrelationId &&
+                shadowSnapshot?.OrderBook is { } shadowOrderBook)
             {
-                correlationId = Guid.NewGuid();
                 var quoteAgeMs = (int)Math.Round(GetSnapshotAge(shadowOrderBook.SnapshotAtUtc).TotalMilliseconds);
                 var marketStartUtc = GetMarketWindowStartUtc(market, variant);
                 var shadowDecision = new PaperLiveShadowDecision(
-                    correlationId.Value,
+                    createdShadowCorrelationId,
                     variant.Id,
                     market.MarketId,
                     market.ConditionId,
@@ -2083,15 +2103,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 selectedOutcome,
                 variant,
                 order,
-                priceDecision.LimitPrice.Value,
-                paperLiveShadowStakeUsd,
-                expiration,
+                shadowFakExecutionIntent ?? throw new InvalidOperationException("Paper live-shadow FAK intent was not created."),
                 paperLiveShadowCorrelationId,
                 GetMarketWindowStartUtc(market, variant),
                 market.EndDateUtc,
                 nowUtc,
-                cancellationToken,
-                postOnly: false);
+                cancellationToken);
             if (placementResult.Placed && placementResult.LiveOrder is { } liveOrder && run is not null)
             {
                 await ApplyActualLiveFillToPaperShadowAsync(
@@ -5084,9 +5101,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         }
 
                         var limitPrice = limitPricing.LimitPrice;
-                        var orderPrice = IsFakOrderEntry(variant) || isPaperLiveShadowTest
-                            ? ResolveFakGuaranteedWorstPrice(limitPricing.OrderBookLookup?.OrderBook)
-                            : limitPrice;
+                        var orderPrice = IsFakOrderEntry(variant)
+                            ? ResolveFakMaximumOrderPrice(variant, limitPricing.OrderBookLookup?.OrderBook)
+                            : isPaperLiveShadowTest
+                                ? ResolveFakGuaranteedWorstPrice(limitPricing.OrderBookLookup?.OrderBook)
+                                : limitPrice;
                         var limitSelectedOutcome = limitDecision.SelectedOutcome;
                         var limitSizing = await MeasureEntryLatencyAsync(
                             latencyMetrics,
@@ -5167,7 +5186,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                         null,
                                         paperFakLookup.RejectionReason,
                                         nowUtc,
-                                        variant.PaperFakMaximumAverageFillPrice));
+                                        variant.FakMaximumOrderPrice));
                                 runsSkipped++;
                                 continue;
                             }
@@ -5188,7 +5207,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                         null,
                                         "paper_fak_orderbook_missing",
                                         nowUtc,
-                                        variant.PaperFakMaximumAverageFillPrice));
+                                        variant.FakMaximumOrderPrice));
                                 runsSkipped++;
                                 continue;
                             }
@@ -5222,51 +5241,49 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                         null,
                                         paperFakSizing.RejectionReason ?? "paper_fak_stake_sizing_rejected",
                                         nowUtc,
-                                        variant.PaperFakMaximumAverageFillPrice));
+                                        variant.FakMaximumOrderPrice));
                                 runsSkipped++;
                                 continue;
                             }
 
-                            var paperFakStakeUsd = paperFakSizing.TargetNotionalUsd;
-                            var fakEstimate = EstimatePaperFakFill(
+                            var fakExecutionIntent = FakBuyExecutionIntent.Create(
+                                variant.Id,
+                                run.Id,
+                                market.ConditionId,
+                                limitSelectedOutcome.AssetId,
+                                orderPrice,
+                                paperFakSizing.TargetNotionalUsd,
+                                paperFakSizing.TargetSizeShares,
                                 fakOrderBook,
-                                paperFakStakeUsd,
-                                orderPrice);
-                            var paperFakEntryPriceCapExceeded =
-                                fakEstimate.Filled &&
-                                variant.PaperFakMaximumAverageFillPrice is { } paperFakMaximumAverageFillPrice &&
-                                fakEstimate.AverageFillPrice > paperFakMaximumAverageFillPrice;
-                            var paperFakRejectionReason = paperFakEntryPriceCapExceeded
-                                ? SignalReasonCodes.ExecutionPriceAboveStrategyCap
-                                : fakEstimate.RejectionReason;
+                                nowUtc);
+                            paperFakSizing = paperFakSizing with
+                            {
+                                TargetNotionalUsd = fakExecutionIntent.TargetNotionalUsd,
+                                TargetSizeShares = fakExecutionIntent.TargetSizeShares
+                            };
+                            var paperFakStakeUsd = fakExecutionIntent.TargetNotionalUsd;
+                            paperFakRawDecisionJson = AttachOpeningLimitStakeSizingJson(
+                                limitPricing.RawDecisionJson,
+                                stakeMultiplier,
+                                paperFakSizing,
+                                expiration,
+                                paperLostCounterAdjustment);
+                            var fakEstimate = EstimatePaperFakFill(fakExecutionIntent, fakOrderBook);
                             var fakRawDecisionJson = AttachFakPaperFillSimulationJson(
                                 paperFakRawDecisionJson,
                                 paperFakLookup,
                                 paperFakSizing,
                                 fakEstimate,
-                                paperFakRejectionReason,
+                                fakEstimate.RejectionReason,
                                 nowUtc,
-                                variant.PaperFakMaximumAverageFillPrice);
+                                variant.FakMaximumOrderPrice,
+                                fakExecutionIntent);
                             if (!fakEstimate.Filled)
                             {
                                 await RecordEntryRunSkippedAsync(
                                     run,
                                     variant,
                                     fakEstimate.RejectionReason ?? "paper_fak_no_immediate_fill",
-                                    nowUtc,
-                                    deferredPersistence,
-                                    cancellationToken,
-                                    fakRawDecisionJson);
-                                runsSkipped++;
-                                continue;
-                            }
-
-                            if (paperFakEntryPriceCapExceeded)
-                            {
-                                await RecordEntryRunSkippedAsync(
-                                    run,
-                                    variant,
-                                    SignalReasonCodes.ExecutionPriceAboveStrategyCap,
                                     nowUtc,
                                     deferredPersistence,
                                     cancellationToken,
@@ -5319,6 +5336,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     nowUtc,
                                     fakRawDecisionJson,
                                     BtcFakTakerPaperExecutionSource);
+                                if (FakExecutionRules.IsPartialNotionalFill(
+                                    fakEstimate.NotionalUsd,
+                                    paperFakStakeUsd))
+                                {
+                                    fakOrder = fakOrder with
+                                    {
+                                        Status = PaperOrderStatus.PartiallyFilledExpired,
+                                        FilledAtUtc = null,
+                                        CancelledAtUtc = nowUtc
+                                    };
+                                }
                                 fakFill = new PaperFill(
                                     Guid.NewGuid(),
                                     fakOrder.Id,
@@ -5394,10 +5422,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         var shadowDecisionTargetNotionalUsd = stakeUsd;
                         var shadowDecisionRequestedSizeShares = limitSizeShares;
                         var shadowDecisionMaxReservedNotionalUsd = limitSizeShares * orderPrice;
+                        Guid? correlationId = isPaperLiveShadowTest ? Guid.NewGuid() : null;
                         TakerOrderBookLookupResult? shadowFakLookup = null;
                         BtcMinimumStakeSizing? shadowFakSizing = null;
                         TakerBuyFillEstimate? shadowFakEstimate = null;
                         string? shadowFakFillEvidence = null;
+                        FakBuyExecutionIntent? shadowFakExecutionIntent = null;
                         PaperLiveShadowOrderBookSnapshotResult? shadowSnapshot = null;
                         var paperLiveShadowStakeUsd = settings.LiveStakeAmount;
                         if (isPaperLiveShadowTest)
@@ -5472,17 +5502,35 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 continue;
                             }
 
-                            shadowFakEstimate = EstimatePaperFakFill(
-                                shadowFakOrderBook,
+                            shadowFakExecutionIntent = FakBuyExecutionIntent.Create(
+                                variant.Id,
+                                correlationId!.Value,
+                                market.ConditionId,
+                                limitSelectedOutcome.AssetId,
+                                orderPrice,
                                 shadowFakSizing.TargetNotionalUsd,
-                                orderPrice);
+                                shadowFakSizing.TargetSizeShares,
+                                shadowFakOrderBook,
+                                nowUtc);
+                            shadowFakSizing = shadowFakSizing with
+                            {
+                                TargetNotionalUsd = shadowFakExecutionIntent.TargetNotionalUsd,
+                                TargetSizeShares = shadowFakExecutionIntent.TargetSizeShares
+                            };
+                            shadowFakRawDecisionJson = AttachOpeningLimitStakeSizingJson(
+                                limitPricing.RawDecisionJson,
+                                paperLiveShadowStakeUsd,
+                                shadowFakSizing,
+                                expiration);
+                            shadowFakEstimate = EstimatePaperFakFill(shadowFakExecutionIntent, shadowFakOrderBook);
                             limitRawDecisionJson = AttachFakPaperFillSimulationJson(
                                 shadowFakRawDecisionJson,
                                 shadowFakLookup,
                                 shadowFakSizing,
                                 shadowFakEstimate,
                                 shadowFakEstimate.RejectionReason,
-                                nowUtc);
+                                nowUtc,
+                                executionIntent: shadowFakExecutionIntent);
                             if (!shadowFakEstimate.Filled)
                             {
                                 await RecordEntryRunSkippedAsync(
@@ -5522,7 +5570,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 ".");
                         }
 
-                        Guid? correlationId = null;
                         Signal? limitSignal = null;
                         PaperOrder? limitOrder = null;
                         var entryPrice = shadowFakEstimate?.AverageFillPrice ?? orderPrice;
@@ -5535,10 +5582,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         {
                             if (isPaperLiveShadowTest && shadowSnapshot?.OrderBook is { } shadowOrderBook)
                             {
-                                correlationId = Guid.NewGuid();
+                                var createdShadowCorrelationId = correlationId ??
+                                    throw new InvalidOperationException("Paper live-shadow correlation id was not created.");
                                 var quoteAgeMs = (int)Math.Round(GetSnapshotAge(shadowOrderBook.SnapshotAtUtc).TotalMilliseconds);
                                 var shadowDecision = new PaperLiveShadowDecision(
-                                    correlationId.Value,
+                                    createdShadowCorrelationId,
                                     variant.Id,
                                     market.MarketId,
                                     market.ConditionId,
@@ -5694,9 +5742,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 limitSelectedOutcome,
                                 variant,
                                 limitOrder,
-                                orderPrice,
-                                paperLiveShadowStakeUsd,
-                                expiration,
+                                shadowFakExecutionIntent ?? throw new InvalidOperationException("Paper live-shadow FAK intent was not created."),
                                 paperLiveShadowCorrelationId,
                                 BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market),
                                 market.EndDateUtc,
@@ -5935,11 +5981,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         gtdSizing,
                         gtdExpiration,
                         paperLostCounterAdjustment);
-                    var shouldSubmitLegacyLiveOrder = HasEffectiveLiveStakes(variant, settings) &&
-                        botOptions.Mode == BotMode.Live &&
-                        !UsesGammaOutcomeSelection(variant) &&
-                        !UsesOpeningLimitEntry(variant) &&
-                        CanSubmitLegacyBtcLiveOrder(variant);
                     Signal? signal = null;
                     PaperOrder? order = null;
                     var gtdChildEntriesPlaced = 0;
@@ -5959,45 +6000,33 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             rawDecisionJson,
                             executionSource: BtcGtdLimitExecutionSource);
 
-                        if (shouldSubmitLegacyLiveOrder)
-                        {
-                            await repository.AddSignalAndPaperOrderAsync(signal, order, cancellationToken);
-                        }
-                        else
-                        {
-                            var enteredRun = CreateEnteredRun(
-                                run,
-                                market,
-                                selectedOutcome,
-                                gtdLimitPrice,
-                                reservedNotionalUsd,
-                                sizeShares,
-                                signal.Id,
-                                order.Id,
-                                nowUtc);
-                            deferredPersistence.AddPendingPaperEntry(signal, order, enteredRun);
-                            gtdChildEntriesPlaced = AddChildPendingPaperEntries(
-                                childAssignmentsByParent,
-                                variant,
-                                market,
-                                selectedOutcome,
-                                enteredRun,
-                                signal.Id,
-                                order.Id,
-                                gtdLimitPrice,
-                                gtdLimitPrice,
-                                reservedNotionalUsd,
-                                sizeShares,
-                                gtdCancelDeadlineUtc,
-                                nowUtc,
-                                BtcChildMirrorPaperExecutionSource,
-                                deferredPersistence);
-                        }
-
-                        if (shouldSubmitLegacyLiveOrder)
-                        {
-                            exposureCache.ApplyPaperOrder(order);
-                        }
+                        var enteredRun = CreateEnteredRun(
+                            run,
+                            market,
+                            selectedOutcome,
+                            gtdLimitPrice,
+                            reservedNotionalUsd,
+                            sizeShares,
+                            signal.Id,
+                            order.Id,
+                            nowUtc);
+                        deferredPersistence.AddPendingPaperEntry(signal, order, enteredRun);
+                        gtdChildEntriesPlaced = AddChildPendingPaperEntries(
+                            childAssignmentsByParent,
+                            variant,
+                            market,
+                            selectedOutcome,
+                            enteredRun,
+                            signal.Id,
+                            order.Id,
+                            gtdLimitPrice,
+                            gtdLimitPrice,
+                            reservedNotionalUsd,
+                            sizeShares,
+                            gtdCancelDeadlineUtc,
+                            nowUtc,
+                            BtcChildMirrorPaperExecutionSource,
+                            deferredPersistence);
                     }
                     finally
                     {
@@ -6007,35 +6036,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     if (signal is null || order is null)
                     {
                         continue;
-                    }
-
-                    if (shouldSubmitLegacyLiveOrder)
-                    {
-                        await repository.UpdateStrategyMarketPaperRunAsync(
-                            CreateEnteredRun(
-                                run,
-                                market,
-                                selectedOutcome,
-                                gtdLimitPrice,
-                                reservedNotionalUsd,
-                                sizeShares,
-                                signal.Id,
-                                order.Id,
-                                nowUtc),
-                            cancellationToken);
-
-                        var liveLostCounterAdjustment = ApplyLiveLostCounterStakeAdjustment(
-                            variant,
-                            settings,
-                            settings.LiveStakeAmount);
-                        await TryPlaceLiveOrderAsync(
-                            signal,
-                            selectedOutcome,
-                            variant,
-                            gtdLimitPrice,
-                            liveLostCounterAdjustment.EffectiveStakeUsd,
-                            nowUtc,
-                            cancellationToken);
                     }
 
                     entriesPlaced += 1 + gtdChildEntriesPlaced;
@@ -7195,11 +7195,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return HasEffectiveLiveStakes(variant, settings);
     }
 
-    private static bool CanSubmitLegacyBtcLiveOrder(BtcUpDown5mStrategyVariant variant)
-    {
-        return false;
-    }
-
     private async Task<BtcOpeningLimitDecision> GetOpeningLimitEntryDecisionAsync(
         PolymarketGammaMarket market,
         BtcUpDown5mStrategyVariant variant,
@@ -7501,6 +7496,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         if (IsFakStatsProbeEntry(variant))
         {
             return await GetFakStatsProbeOpeningLimitPriceAsync(
+                variant,
                 assetId,
                 rawDecisionJson,
                 nowUtc,
@@ -7764,6 +7760,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     }
 
     private async Task<BtcOpeningLimitPriceDecision> GetFakStatsProbeOpeningLimitPriceAsync(
+        BtcUpDown5mStrategyVariant variant,
         string assetId,
         string rawDecisionJson,
         DateTimeOffset nowUtc,
@@ -7808,7 +7805,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     RejectionReason: "invalid_limit_price_tick_size"));
         }
 
-        var worstPrice = ResolveFakGuaranteedWorstPrice(orderBook);
+        var worstPrice = ResolveFakMaximumOrderPrice(variant, orderBook);
         if (worstPrice <= 0m || worstPrice >= 1m)
         {
             return BtcOpeningLimitPriceDecision.Reject(
@@ -16414,15 +16411,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     }
 
     private TakerBuyFillEstimate EstimatePaperFakFill(
-        OrderBookSnapshot orderBook,
-        decimal targetNotionalUsd,
-        decimal worstPrice)
+        FakBuyExecutionIntent intent,
+        OrderBookSnapshot orderBook)
     {
-        return TakerBuyFillEstimator.Estimate(
+        return FakBuyExecutionParity.SimulatePaper(
+            intent,
             orderBook,
-            targetNotionalUsd,
-            worstPrice,
-            orderBook.MinOrderSize,
             options.PaperTakerMaxSpreadAbs);
     }
 
@@ -16444,7 +16438,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             .Where(level => level is { Price: > 0m, Size: > 0m } && level.Price <= limitPrice)
             .OrderBy(level => level.Price))
         {
-            if (shares >= targetSizeShares)
+            if (targetSizeShares > 0m && shares >= targetSizeShares)
             {
                 break;
             }
@@ -17001,7 +16995,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         TakerBuyFillEstimate? estimate,
         string? rejectionReason,
         DateTimeOffset nowUtc,
-        decimal? maximumAverageFillPrice = null)
+        decimal? maximumOrderPrice = null,
+        FakBuyExecutionIntent? executionIntent = null)
     {
         JsonObject root;
         try
@@ -17036,16 +17031,56 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         root["paper_fak_requested_size_shares_at_cap"] = sizing.TargetSizeShares;
         root["paper_fak_worst_price"] = estimate?.MaxAllowedPrice ?? sizing.ReferencePrice;
         root["paper_fak_average_fill_price"] = estimate?.Filled == true ? estimate.AverageFillPrice : null;
-        root["paper_fak_maximum_average_fill_price"] = maximumAverageFillPrice;
-        root["paper_fak_entry_price_cap_exceeded"] = estimate?.Filled == true && maximumAverageFillPrice is { } cap
-            ? estimate.AverageFillPrice > cap
-            : null;
+        root["paper_fak_maximum_order_price"] = maximumOrderPrice;
+        root["paper_fak_order_price_cap_applied"] = maximumOrderPrice is not null;
         root["paper_fak_filled_size_shares"] = estimate?.Filled == true ? estimate.SizeShares : 0m;
         root["paper_fak_filled_notional_usd"] = estimate?.Filled == true ? estimate.NotionalUsd : 0m;
         root["paper_fak_target_size_shares"] = estimate?.TargetSizeShares;
         root["paper_fak_levels_used"] = estimate?.LevelsUsed;
-        root["paper_fak_partial_fill"] = estimate?.Filled == true && estimate.NotionalUsd < sizing.TargetNotionalUsd;
+        root["paper_fak_partial_fill"] = estimate?.Filled == true &&
+            FakExecutionRules.IsPartialNotionalFill(
+                estimate.NotionalUsd,
+                sizing.TargetNotionalUsd);
         root["paper_fak_rejection_reason"] = rejectionReason;
+        if (executionIntent is not null)
+        {
+            root["execution_intent_strategy_id"] = executionIntent.StrategyId.ToString();
+            root["execution_intent_decision_id"] = executionIntent.DecisionId.ToString();
+            root["execution_intent_condition_id"] = executionIntent.ConditionId;
+            root["execution_intent_asset_id"] = executionIntent.AssetId;
+            root["execution_intent_side"] = executionIntent.Side.ToString();
+            root["execution_intent_order_type"] = FakBuyExecutionIntent.TimeInForce;
+            root["execution_intent_time_in_force"] = FakBuyExecutionIntent.TimeInForce;
+            root["execution_intent_post_only"] = executionIntent.PostOnly;
+            root["execution_intent_maximum_order_price"] = executionIntent.MaximumOrderPrice;
+            root["execution_intent_requested_notional_usd"] = executionIntent.RequestedNotionalUsd;
+            root["execution_intent_requested_size_shares"] = executionIntent.RequestedSizeShares;
+            root["execution_intent_target_notional_usd"] = executionIntent.TargetNotionalUsd;
+            root["execution_intent_target_size_shares"] = executionIntent.TargetSizeShares;
+            root["execution_intent_tick_size"] = executionIntent.TickSize;
+            root["execution_intent_min_order_size"] = executionIntent.MinOrderSize;
+            root["execution_intent_negative_risk"] = executionIntent.NegativeRisk;
+            root["execution_intent_created_at_utc"] = executionIntent.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture);
+
+            if (lookup?.OrderBook is { } intentOrderBook)
+            {
+                root["execution_intent_order_book_snapshot"] = JsonSerializer.SerializeToNode(new
+                {
+                    source = lookup.Source,
+                    age_ms = lookup.Age?.TotalMilliseconds,
+                    asset_id = intentOrderBook.AssetId,
+                    condition_id = intentOrderBook.ConditionId,
+                    snapshot_at_utc = intentOrderBook.SnapshotAtUtc,
+                    min_order_size = intentOrderBook.MinOrderSize,
+                    tick_size = intentOrderBook.TickSize,
+                    negative_risk = intentOrderBook.NegativeRisk,
+                    last_trade_price = intentOrderBook.LastTradePrice,
+                    bids = intentOrderBook.Bids.Select(level => new { price = level.Price, size = level.Size }).ToArray(),
+                    asks = intentOrderBook.Asks.Select(level => new { price = level.Price, size = level.Size }).ToArray()
+                });
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(rejectionReason))
         {
             root["skip_reason"] = rejectionReason;
@@ -17825,7 +17860,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 ? variant.RequiredReferenceAverageWindow
                 : null,
             low_enter_average_enabled = IsLowEnterReferenceAverageBpsFakPremarketEntry(variant),
-            paper_fak_maximum_average_fill_price = variant.PaperFakMaximumAverageFillPrice,
+            fak_maximum_order_price = variant.FakMaximumOrderPrice,
             paper_only = IsPaperOnlyVariant(variant),
             reference_average_filtered_enabled = IsFilteredReferenceAverageBpsFakPremarketEntry(variant),
             reference_average_filtered_skipped_windows = IsFilteredReferenceAverageBpsFakPremarketEntry(variant)
@@ -20192,20 +20227,80 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
     }
 
+    private static void AddFakExecutionIntentValidation(
+        ICollection<string> validation,
+        FakBuyExecutionIntent executionIntent,
+        Signal signal,
+        BtcUpDown5mOutcomeQuote outcome,
+        BtcUpDown5mStrategyVariant variant,
+        PaperOrder paperOrder,
+        Guid correlationId)
+    {
+        var sharedValidation = FakBuyExecutionParity.Validate(executionIntent);
+        foreach (var error in sharedValidation.Errors)
+        {
+            validation.Add("FAK execution intent is not Live-valid: " + error);
+        }
+
+        if (executionIntent.StrategyId != variant.Id || paperOrder.StrategyId != executionIntent.StrategyId)
+        {
+            validation.Add("Paper and Live FAK strategy identifiers do not match the shared execution intent.");
+        }
+
+        if (executionIntent.DecisionId != correlationId || paperOrder.CorrelationId != executionIntent.DecisionId)
+        {
+            validation.Add("Paper and Live FAK decision identifiers do not match the shared execution intent.");
+        }
+
+        if (paperOrder.SignalId != signal.Id)
+        {
+            validation.Add("Paper FAK signal identifier does not match the Live signal.");
+        }
+
+        if (!string.Equals(executionIntent.ConditionId, signal.LeaderTrade.ConditionId, StringComparison.Ordinal) ||
+            !string.Equals(paperOrder.ConditionId, executionIntent.ConditionId, StringComparison.Ordinal))
+        {
+            validation.Add("Paper and Live FAK condition identifiers do not match the shared execution intent.");
+        }
+
+        if (!string.Equals(executionIntent.AssetId, outcome.AssetId, StringComparison.Ordinal) ||
+            !string.Equals(paperOrder.AssetId, executionIntent.AssetId, StringComparison.Ordinal))
+        {
+            validation.Add("Paper and Live FAK asset identifiers do not match the shared execution intent.");
+        }
+
+        if (executionIntent.Side != TradeSide.Buy || paperOrder.Side != executionIntent.Side)
+        {
+            validation.Add("Paper and Live FAK sides do not match the shared execution intent.");
+        }
+
+        if (paperOrder.Price != executionIntent.MaximumOrderPrice)
+        {
+            validation.Add("Paper FAK maximum order price does not match the shared Live execution intent.");
+        }
+
+        if (paperOrder.NotionalUsd != executionIntent.TargetNotionalUsd)
+        {
+            validation.Add("Paper FAK target notional does not match the shared Live execution intent.");
+        }
+
+        if (paperOrder.SizeShares != executionIntent.TargetSizeShares)
+        {
+            validation.Add("Paper FAK target size does not match the shared Live execution intent.");
+        }
+    }
+
     private async Task<PaperLiveShadowPlacementResult> TryPlacePaperLiveShadowOrderAsync(
         Signal signal,
         BtcUpDown5mOutcomeQuote outcome,
         BtcUpDown5mStrategyVariant variant,
         PaperOrder paperOrder,
-        decimal price,
-        decimal liveStakeMultiplier,
-        OpeningLimitExpirationDecision expiration,
+        FakBuyExecutionIntent executionIntent,
         Guid correlationId,
         DateTimeOffset? marketStartUtc,
         DateTimeOffset? marketEndUtc,
         DateTimeOffset nowUtc,
-        CancellationToken cancellationToken,
-        bool postOnly = false)
+        CancellationToken cancellationToken)
     {
         if (IsPaperOnlyVariant(variant))
         {
@@ -20214,8 +20309,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var isFakOrder = true;
         var liveOrderType = FakOrderType;
-        price = ResolveFakGuaranteedWorstPrice();
+        var price = executionIntent.MaximumOrderPrice;
+        var sizeShares = executionIntent.TargetSizeShares;
+        var liveNotional = executionIntent.TargetNotionalUsd;
+        var postOnly = executionIntent.PostOnly;
         var validation = new List<string>();
+        AddFakExecutionIntentValidation(
+            validation,
+            executionIntent,
+            signal,
+            outcome,
+            variant,
+            paperOrder,
+            correlationId);
         if (botOptions.Mode != BotMode.Live)
         {
             validation.Add("Bot mode is not Live.");
@@ -20241,11 +20347,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         if (price <= 0m || price >= 1m)
         {
             validation.Add("Live BUY limit price is invalid.");
-        }
-
-        if (liveStakeMultiplier <= 0m)
-        {
-            validation.Add("Strategy live stake multiplier must be greater than zero.");
         }
 
         var cancelDeadlineUtc = nowUtc;
@@ -20296,10 +20397,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             validation,
             cancellationToken);
 
-        OrderBookSnapshot? orderBook = null;
         try
         {
-            orderBook = await clobClient.GetOrderBookAsync(outcome.AssetId, cancellationToken);
             var serverTime = await clobClient.GetServerTimeAsync(cancellationToken);
             var clockCheckUtc = DateTimeOffset.UtcNow;
             if (Math.Abs((serverTime - clockCheckUtc).TotalSeconds) > liveTradingOptions.MaxClockDriftSeconds)
@@ -20309,29 +20408,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            validation.Add("Live preflight market-data check failed: " + ex.Message);
+            validation.Add("Live preflight clock check failed: " + ex.Message);
         }
 
         var maxTradeNotional = liveTradingOptions.MaxTradeBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd;
         var maxTotalDeployed = liveTradingOptions.MaxTotalDeployedPct / 100m * paperTradingOptions.InitialBankrollUsd;
         var maxMarketNotional = liveTradingOptions.MaxMarketBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd;
         var maxNotional = Math.Min(liveTradingOptions.MaxOrderNotionalUsd, maxTradeNotional);
-        var liveSizing = CreateLiveMinimumStakeSizing(orderBook, price, liveStakeMultiplier);
-        if (!liveSizing.Available)
-        {
-            validation.Add("Live minimum stake sizing failed: " + (liveSizing.RejectionReason ?? "unknown"));
-        }
-
-        var sizeShares = liveSizing.TargetSizeShares;
-        var liveNotional = liveSizing.TargetNotionalUsd;
         if (sizeShares <= 0m)
         {
             validation.Add("Live BUY size must be greater than zero.");
-        }
-
-        if (orderBook?.MinOrderSize is { } minOrderSize && sizeShares > 0m && sizeShares < minOrderSize)
-        {
-            validation.Add("Live order size is below the market minimum order size.");
         }
 
         if (liveNotional > maxNotional)
@@ -20397,7 +20483,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return PaperLiveShadowPlacementResult.NotPlaced(rejectedOrder);
         }
 
-        var intent = CreatePaperLiveShadowLiveOrder(
+        var liveOrderIntent = CreatePaperLiveShadowLiveOrder(
             signal,
             outcome,
             variant,
@@ -20417,13 +20503,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             liveNotional);
         try
         {
-            await repository.AddLiveOrderAsync(intent, cancellationToken);
-            exposureCache.ApplyLiveOrder(intent);
+            await repository.AddLiveOrderAsync(liveOrderIntent, cancellationToken);
+            exposureCache.ApplyLiveOrder(liveOrderIntent);
             await repository.UpdatePaperLiveShadowDecisionLinksAsync(
                 correlationId,
                 signal.Id,
                 paperOrder.Id,
-                intent.Id,
+                liveOrderIntent.Id,
                 "live_intent_created",
                 nowUtc,
                 cancellationToken);
@@ -20437,8 +20523,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return PaperLiveShadowPlacementResult.NotPlaced();
         }
 
-        var submitUtc = DateTimeOffset.UtcNow;
-        var request = CreateFakMarketBuyRequest(outcome, price, sizeShares, liveNotional, orderBook, submitUtc);
+        var request = CreateFakMarketBuyRequest(executionIntent);
         LiveOrderPlacementResult result;
         try
         {
@@ -20446,7 +20531,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var errorOrder = intent with
+            var errorOrder = liveOrderIntent with
             {
                 Status = LiveOrderStatus.Error,
                 ResponseStatus = "error",
@@ -20461,7 +20546,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 correlationId,
                 signal.Id,
                 paperOrder.Id,
-                intent.Id,
+                liveOrderIntent.Id,
                 "live_submit_error",
                 DateTimeOffset.UtcNow,
                 cancellationToken);
@@ -20500,7 +20585,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var persistedRemainingSize = isFakOrder
             ? 0m
             : fillSummary.RemainingSize;
-        var updatedLiveOrder = intent with
+        var updatedLiveOrder = liveOrderIntent with
         {
             Status = status,
             OrderId = result.OrderId,
@@ -20601,282 +20686,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return variant.EntryDelaySeconds < 0;
     }
 
-    private async Task<bool> TryPlaceLiveOrderAsync(
-        Signal signal,
-        BtcUpDown5mOutcomeQuote outcome,
-        BtcUpDown5mStrategyVariant variant,
-        decimal price,
-        decimal liveStakeMultiplier,
-        DateTimeOffset nowUtc,
-        CancellationToken cancellationToken)
-    {
-        if (IsPaperOnlyVariant(variant))
-        {
-            return false;
-        }
-
-        price = ResolveFakGuaranteedWorstPrice();
-        var validation = new List<string>();
-        if (botOptions.Mode != BotMode.Live)
-        {
-            validation.Add("Bot mode is not Live.");
-        }
-
-        if (!botOptions.EnableLiveTrading)
-        {
-            validation.Add("Live trading is not explicitly enabled.");
-        }
-
-        if (controlState.KillSwitchActive)
-        {
-            validation.Add("Kill switch is active.");
-        }
-
-        if (controlState.LiveTradingPaused)
-        {
-            validation.Add("Live trading is paused.");
-        }
-
-        if (liveStakeMultiplier <= 0m)
-        {
-            validation.Add("Strategy live stake multiplier must be greater than zero.");
-        }
-
-        var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
-        var openLiveOrders = exposureSnapshot.OpenLiveOrders;
-        if (OpenOrderDirectionGuard.FindOppositeLiveOutcomeOpenOrder(
-                signal.LeaderTrade.ConditionId,
-                outcome.Outcome,
-                openLiveOrders) is { } oppositeBlock)
-        {
-            validation.Add(OpenOrderDirectionGuard.CreateValidationMessage(outcome.Outcome, oppositeBlock));
-        }
-
-        if (openLiveOrders.Any(order => nowUtc - order.CreatedAtUtc > TimeSpan.FromSeconds(liveTradingOptions.DefaultOrderTtlSeconds)))
-        {
-            validation.Add("A stale live order exists; live placement is locked until maintenance cancels it.");
-        }
-
-        var apiErrors = await repository.GetRecentApiErrorsAsync(cancellationToken: cancellationToken);
-        var lockoutStart = nowUtc.AddMinutes(-liveTradingOptions.ApiErrorLockoutWindowMinutes);
-        var recentPolymarketErrors = apiErrors.Count(error =>
-            error.CreatedAtUtc >= lockoutStart &&
-            LiveApiErrorLockoutPolicy.CountsForLiveOrderLockout(error));
-        if (recentPolymarketErrors >= liveTradingOptions.ApiErrorLockoutCount)
-        {
-            validation.Add("API error lockout is active.");
-        }
-
-        var riskEvents = await repository.GetRecentRiskEventsAsync(cancellationToken: cancellationToken);
-        if (riskEvents.Any(item =>
-            item.CreatedAtUtc >= nowUtc.AddDays(-1) &&
-            item.ReasonCode.Contains("daily_loss", StringComparison.OrdinalIgnoreCase)))
-        {
-            validation.Add("Daily loss lockout is active.");
-        }
-
-        var authReadiness = await authService.GetReadinessAsync(cancellationToken);
-        if (!authReadiness.CanAuthenticate)
-        {
-            validation.Add("Polymarket auth is not ready: " + string.Join(", ", authReadiness.MissingRequirements));
-        }
-
-        await LiveGeoblockPreflight.ValidateAsync(
-            geoClient,
-            liveTradingOptions,
-            repository,
-            validation,
-            cancellationToken);
-
-        OrderBookSnapshot? orderBook = null;
-        try
-        {
-            orderBook = await clobClient.GetOrderBookAsync(outcome.AssetId, cancellationToken);
-            var serverTime = await clobClient.GetServerTimeAsync(cancellationToken);
-            var clockCheckUtc = DateTimeOffset.UtcNow;
-            if (Math.Abs((serverTime - clockCheckUtc).TotalSeconds) > liveTradingOptions.MaxClockDriftSeconds)
-            {
-                validation.Add("CLOB server time drift exceeds configured limit.");
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            validation.Add("Live preflight market-data check failed: " + ex.Message);
-        }
-
-        if (orderBook?.BestAsk is not { } bestAsk)
-        {
-            validation.Add("Live FAK BUY requires a fresh best ask.");
-        }
-        else if (price <= 0m || price > 1m)
-        {
-            validation.Add("Live FAK BUY worst price is invalid.");
-        }
-        else if (price < bestAsk)
-        {
-            validation.Add("Live FAK BUY worst price is below the current best ask.");
-        }
-
-        var maxTradeNotional = liveTradingOptions.MaxTradeBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd;
-        var maxTotalDeployed = liveTradingOptions.MaxTotalDeployedPct / 100m * paperTradingOptions.InitialBankrollUsd;
-        var maxMarketNotional = liveTradingOptions.MaxMarketBankrollPct / 100m * paperTradingOptions.InitialBankrollUsd;
-        var maxNotional = Math.Min(liveTradingOptions.MaxOrderNotionalUsd, maxTradeNotional);
-        var liveSizing = CreateLiveMinimumStakeSizing(orderBook, price, liveStakeMultiplier);
-        if (!liveSizing.Available)
-        {
-            validation.Add("Live minimum stake sizing failed: " + (liveSizing.RejectionReason ?? "unknown"));
-        }
-
-        var liveNotional = liveSizing.TargetNotionalUsd;
-        if (liveNotional > maxNotional)
-        {
-            validation.Add(
-                $"Live minimum buffered notional exceeds configured order/risk cap. Required={liveNotional:0.########}; Cap={maxNotional:0.########}.");
-        }
-
-        if (liveNotional > 0m)
-        {
-            await ValidateStrategyLiveBalanceAsync(
-                variant.Id,
-                openLiveOrders,
-                liveNotional,
-                validation,
-                nowUtc,
-                cancellationToken);
-        }
-
-        AddLiveExposureValidation(
-            validation,
-            openLiveOrders,
-            signal.LeaderTrade.ConditionId,
-            liveNotional,
-            maxMarketNotional,
-            maxTotalDeployed);
-
-        var liveSizeShares = price > 0m ? RoundDown(liveNotional / price, 4) : 0m;
-        if (liveSizeShares <= 0m)
-        {
-            validation.Add("Live order size after risk caps is zero.");
-        }
-
-        if (orderBook?.MinOrderSize is { } minOrderSize && liveSizeShares > 0m && liveSizeShares < minOrderSize)
-        {
-            validation.Add("Live order size is below the market minimum order size.");
-        }
-
-        if (validation.Count > 0)
-        {
-            await PersistLiveOrderAsync(
-                CreateLiveOrder(
-                    signal,
-                    outcome,
-                    variant,
-                    price,
-                    liveSizeShares,
-                    nowUtc,
-                    nowUtc,
-                    LiveOrderStatus.PreflightRejected,
-                    null,
-                    "preflight_rejected",
-                    string.Join("; ", validation),
-                    "{}",
-                    FakOrderType,
-                    liveNotional),
-                "BtcUpDown5mLivePreflight",
-                "Rejected",
-                string.Join("; ", validation),
-                cancellationToken);
-            return false;
-        }
-
-        var submitUtc = DateTimeOffset.UtcNow;
-        var liveOrderExpiresAtUtc = submitUtc;
-        var request = CreateFakMarketBuyRequest(outcome, price, liveSizeShares, liveNotional, orderBook, submitUtc);
-        LiveOrderPlacementResult result;
-        try
-        {
-            result = await tradingClient.PlaceLiveOrderAsync(request, cancellationToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            await PersistLiveOrderAsync(
-                CreateLiveOrder(
-                    signal,
-                    outcome,
-                    variant,
-                        price,
-                        liveSizeShares,
-                        nowUtc,
-                        nowUtc,
-                        LiveOrderStatus.Error,
-                        null,
-                        "error",
-                        "Live order placement failed: " + ex.Message,
-                        "{}",
-                        FakOrderType,
-                        liveNotional),
-                "BtcUpDown5mLivePlaceOrder",
-                "Error",
-                ex.Message,
-                cancellationToken);
-            return false;
-        }
-
-        var placementStatus = MapPlacementStatus(result);
-        var fillSummary = LiveOrderPlacementAccounting.FromPlacementResult(
-            TradeSide.Buy,
-            price,
-            liveSizeShares,
-            LiveOrderStatus.Matched,
-            result,
-            allowFilledSizeAboveRequested: true);
-        var status = placementStatus;
-        var validationSummary = result.ErrorMessage ?? string.Empty;
-        if (fillSummary.FilledSize > 0m)
-        {
-            status = LiveOrderStatus.Matched;
-        }
-        else if (result.Success)
-        {
-            status = LiveOrderStatus.Rejected;
-            validationSummary = "FAK order reported no immediate fill.";
-        }
-
-        var persistedSizeShares = fillSummary.FilledSize > liveSizeShares
-            ? fillSummary.FilledSize
-            : liveSizeShares;
-        var liveOrder = CreateLiveOrder(
-            signal,
-            outcome,
-            variant,
-            price,
-            persistedSizeShares,
-            nowUtc,
-            liveOrderExpiresAtUtc,
-            status,
-            result.OrderId,
-            result.ResponseStatus,
-            validationSummary,
-            string.IsNullOrWhiteSpace(result.RawResponseJson) ? "{}" : result.RawResponseJson,
-            FakOrderType,
-            liveNotional) with
-        {
-            FilledSize = fillSummary.FilledSize,
-            RemainingSize = 0m,
-            AverageFillPrice = fillSummary.AverageFillPrice,
-            FilledNotionalUsd = fillSummary.FilledNotionalUsd,
-            CostBasisUsd = fillSummary.CostBasisUsd
-        };
-
-        await PersistLiveOrderAsync(
-            liveOrder,
-            "BtcUpDown5mLivePlaceOrder",
-            result.Success ? "OK" : "Rejected",
-            result.ErrorMessage ?? result.ResponseStatus,
-            cancellationToken);
-        return result.Success && liveOrder.Status == LiveOrderStatus.Matched;
-    }
-
     private async Task ValidateStrategyLiveBalanceAsync(
         Guid strategyId,
         IReadOnlyList<LiveOrder> openLiveOrders,
@@ -20936,30 +20745,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
     }
 
-    private ClobV2OrderRequest CreateFakMarketBuyRequest(
-        BtcUpDown5mOutcomeQuote outcome,
-        decimal worstPrice,
-        decimal estimatedSizeShares,
-        decimal marketBuyAmountUsd,
-        OrderBookSnapshot? orderBook,
-        DateTimeOffset createdAtUtc)
+    private ClobV2OrderRequest CreateFakMarketBuyRequest(FakBuyExecutionIntent intent)
     {
-        worstPrice = ResolveFakGuaranteedWorstPrice(orderBook);
-        return new ClobV2OrderRequest(
-            outcome.AssetId,
-            TradeSide.Buy,
-            worstPrice,
-            estimatedSizeShares,
-            orderBook?.TickSize ?? 0.01m,
-            orderBook?.MinOrderSize ?? 1m,
+        return FakBuyExecutionParity.CreateLiveRequest(
+            intent,
             authOptions.FunderAddress,
             authOptions.SigningAddress,
-            ParseSignatureType(authOptions.SignatureType),
-            ClobV2OrderType.FAK,
-            createdAtUtc,
-            NegativeRisk: orderBook?.NegativeRisk ?? false,
-            PostOnly: false,
-            MarketBuyAmountUsd: marketBuyAmountUsd);
+            ParseSignatureType(authOptions.SignatureType));
     }
 
     private DateTimeOffset ResolveClobGtdExpirationUtc(DateTimeOffset localExpiresAtUtc)
@@ -21276,6 +21068,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static decimal ResolveFakGuaranteedWorstPrice(OrderBookSnapshot? _ = null)
     {
         return FakGuaranteedWorstPrice;
+    }
+
+    private static decimal ResolveFakMaximumOrderPrice(
+        BtcUpDown5mStrategyVariant variant,
+        OrderBookSnapshot? orderBook = null)
+    {
+        return variant.FakMaximumOrderPrice ?? ResolveFakGuaranteedWorstPrice(orderBook);
     }
 
     private static decimal RoundDown(decimal value, int decimals)

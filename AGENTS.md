@@ -48,6 +48,33 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
 - The service must be able to run 24/7 on a Windows VPS.
 - Do not use Python, Node.js, TypeScript, or sidecars unless a later explicit task changes this. This project is C#/.NET native.
 
+## Paper/live execution parity
+
+- A Paper strategy may model only an order and execution sequence that the current
+  Live Polymarket API can perform with the same pre-submit constraints and order
+  semantics. See `docs/architecture/PAPER_LIVE_PARITY.md`.
+- Strategy logic must produce one pre-submit `ExecutionIntent`. Paper simulation
+  and Live submission must consume that same intent without changing its side,
+  size, price limit, order type, time-in-force, or other execution constraints.
+- Fill data, including fill prices, filled size, and VWAP, is outcome data. It may
+  be used for accounting and later decisions, but never to authorize, reject,
+  alter, or roll back the order that produced it.
+- After an immediate FAK/FOK intent is frozen, the Live path must not fetch a
+  newer order book merely to validate liquidity, resize the amount, or reprice
+  the order. Submit the unchanged hard-limit intent and let the venue determine
+  the fill. Purely local payload validation (price/tick/size/format) is allowed;
+  it must not read market data or change the intent.
+- `PaperOnly` disables external submission; it does not permit execution semantics
+  that are unavailable in Live. Counterfactual logic without a proven Live
+  equivalent must be classified `ResearchOnly` and excluded from Paper PnL and
+  Paper performance claims.
+- Never simulate atomicity, rollback, post-fill rejection, or aggregate fill-price
+  guarantees unless the Live venue explicitly provides that guarantee for the
+  same order type.
+- A new or changed Paper execution rule is incomplete until its Live equivalent is
+  documented, parity tests pass, and the execution intent, decision inputs, market
+  snapshot reference, fills, and outcome are persistable for audit.
+
 ## Engineering rules
 
 - Use C#/.NET.
