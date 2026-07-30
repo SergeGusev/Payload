@@ -155,6 +155,7 @@ public sealed record CryptoReferencePriceAverage(
     int ExpectedSampleCount,
     bool IsFullWindow,
     decimal? AveragePriceUsd,
+    decimal? FirstBucketAveragePriceUsd,
     DateTimeOffset? FirstBucketStartUtc,
     DateTimeOffset? LastBucketStartUtc,
     DateTimeOffset UpdatedAtUtc);

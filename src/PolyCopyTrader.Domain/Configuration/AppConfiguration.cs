@@ -14,6 +14,8 @@ public sealed class AppConfiguration
 
     public PolymarketHttpLoggingOptions PolymarketHttpLogging { get; init; } = new();
 
+    public StrategyRunRetentionOptions StrategyRunRetention { get; init; } = new();
+
     public PolymarketAuthOptions PolymarketAuth { get; init; } = new();
 
     public PolymarketAutoRedeemOptions PolymarketAutoRedeem { get; init; } = new();
@@ -233,6 +235,21 @@ public sealed class PolymarketHttpLoggingOptions
     public int SuccessfulRetentionHours { get; init; } = 6;
 
     public int FailedRetentionDays { get; init; } = 14;
+}
+
+public sealed class StrategyRunRetentionOptions
+{
+    public bool Enabled { get; init; }
+
+    public bool ApplyEnabled { get; init; }
+
+    public int RawRetentionHours { get; init; } = 48;
+
+    public int CleanupIntervalMinutes { get; init; } = 10;
+
+    public int CleanupBatchSize { get; init; } = 500;
+
+    public int CleanupMaxBatchesPerCycle { get; init; } = 1;
 }
 
 public sealed class PolymarketAuthOptions

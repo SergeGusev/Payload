@@ -166,6 +166,10 @@ dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj
 
 `PolyCopyTrader.Service` requires PostgreSQL storage. If no PostgreSQL connection string is configured, the service fails on startup instead of silently using a no-op repository. This keeps Polymarket HTTP logs, API errors, commands, and trading events from disappearing during debugging. The dashboard can still open without storage and will show empty/diagnostic states. `Storage:MaxPoolSize` is set to `64` for the service and `8` for the Dashboard so a burst cannot consume every client slot on the production PostgreSQL server. PostgreSQL sessions use distinct `application_name` values, `PolyCopyTrader.Service` and `PolyCopyTrader.Dashboard`, so server activity can be attributed to the correct process.
 
+Strategy-run retention is fail-closed and disabled by default through both `StrategyRunRetention:Enabled=false` and `StrategyRunRetention:ApplyEnabled=false`. Legacy `strategy_market_paper_runs` remain `Unknown` and are never compacted. New runs are classified monotonically as `PaperOnly` or `LiveOrShadow`; once a strategy is observed with Live enabled, its append-only Live guard protects all later runs. Linked Paper orders, positions (including closed zero positions), settlements, signals, diagnostics, Live orders, Live-shadow decisions, and projection work also block retention. Consequently, complete Paper and Live bet histories remain raw; only a future, dependency-free terminal Paper-only `Skipped` run with a known market end and both end/update timestamps older than the configured retention window can qualify. The enforced minimum window is 48 hours.
+
+Preview-only mode calculates the exact eligible row and strategy totals and logs a bounded ID sample without changing data. Apply mode must be enabled separately after reviewing that preview; every batch then rechecks the exact logged run-ID allowlist inside one serializable transaction, adds UTC-day/skip-reason lifetime rollups and permanent runtime deduplication tombstones, suppresses only the corresponding Dashboard delete events, queues reconciliation, and deletes the same number of raw skipped rows or rolls back. Lifetime Dashboard and direct strategy-performance skip counts include the rollups, while `1h`/`6h`/`24h` views remain raw because the retention floor is older than those windows. The proof covers the application's runtime paths; arbitrary concurrent manual SQL writes require a separately coordinated maintenance boundary. Do not enable apply mode until the PostgreSQL integration suite has passed against a disposable test database and a separate production read-only preview has been reviewed.
+
 Paper/Live shadow testing stores the shared BTC decision in `paper_live_shadow_decisions`, links `paper_orders` and `live_orders` by `correlation_id`, and writes fatal mismatches to `paper_live_shadow_discrepancies`.
 Orders with `execution_source=paper_live_shadow_test` are excluded from ordinary market-data Paper fill simulation. Persisted cumulative Live execution is the sole fill authority: Paper order, canonical cumulative fill, aggregate position cost, and copied-leader size are reconciled idempotently in one wallet-serialized PostgreSQL transaction. Terminal partial fills close as `PartiallyFilledExpired`, and a Paper-projection repair failure cannot block the corresponding Live balance settlement.
 
@@ -385,15 +389,100 @@ one isolated service process and run directory per asset:
 .\scripts\run-crypto-orderbook-study-cohort.ps1 `
   -ServiceExecutable 'D:\PolyCopyTraderResearch\runner\PolyCopyTrader.Service.exe' `
   -OutputRoot 'D:\PolyCopyTraderResearch\crypto-orderbook' `
+  -ControlRoot 'C:\ProgramData\PolyCopyTrader\OrderBookStudy' `
+  -CampaignId 'crypto-orderbook-72h-001' `
   -DurationSeconds 259200
 ```
 
-If any child returns a nonzero code, the supervisor stops only the two exact
-sibling PIDs and itself returns nonzero so an external supervisor such as Windows
-Task Scheduler can restart the complete three-asset cohort. A restart always
-creates a new isolated cohort and new runs; interrupted fragments are preserved
-and are never silently resumed, merged, or presented as one continuous 72-hour
-sample.
+For the unattended Windows setup, first validate the exact pinned runner and task
+definition without changing the machine:
+
+```powershell
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe `
+  -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\install-crypto-orderbook-study-system-task.ps1 `
+  -ValidateOnly
+```
+
+Then run the same installer from an elevated Windows PowerShell prompt:
+
+```powershell
+.\scripts\install-crypto-orderbook-study-system-task.ps1 `
+  -StartAfterInstall `
+  -DisableLegacyTask
+```
+
+The installer verifies both the pinned service SHA-256 and a deterministic
+SHA-256 fingerprint covering every file in the publish, then copies the publish
+plus the supervisor and watchdog through a verified staging directory into a
+versioned, ACL-protected runtime under
+`C:\Program Files`, keeps protected campaign control state under
+`C:\ProgramData`, and writes the large event archive to a separately protected
+directory on `D:`. The main collector task runs as the passwordless, noninteractive
+`LOCAL SERVICE` account because all study endpoints are public; this survives
+user logoff without granting the collector Local System privileges. A separate
+protected `SYSTEM` watchdog checks a compact supervisor heartbeat once per minute
+without opening `ControlRoot`, `OutputRoot`, or any archive file. Heartbeats use
+the dedicated 64-MB `PolyCopyTrader-OrderBookStudy` Windows Event Log; its channel
+ACL grants write access only to `LOCAL SERVICE`, `SYSTEM`, and elevated
+administrators, while the local `Users` group receives read access. Task Scheduler
+Operational logging is also enabled during installation. The installer
+accepts only the documented deployment roots and refuses to replace ACLs on an
+unmarked non-empty directory. An unreferenced incomplete versioned runtime is
+moved to a recoverable quarantine name before a fresh staged copy is promoted.
+Without `-StartAfterInstall`, both new tasks remain
+disabled; with it, installation succeeds only after a current campaign heartbeat,
+all three first five-minute collecting checkpoints, `LOCAL SERVICE` process
+ownership, and a recent successful `SYSTEM` watchdog run are verified. This gate
+normally takes a little over five minutes. Only then may `-DisableLegacyTask`
+disable the exact old task.
+
+An upgrade or reinstall refuses to replace either protected task while it is
+enabled or running. Deliberately disable both protected tasks first. Use
+`-ReplaceExistingTasks` only after reviewing a changed definition that still
+belongs to the protected runtime and uses the same passwordless service-account
+principal; password-backed tasks are never accepted for automatic rollback.
+
+`LOCAL SERVICE` is a least-privilege reliability choice, not an adversarial
+isolation boundary from another Windows process already running under the same
+built-in SID. The protected runtime prevents ordinary-user code replacement, but
+research hashes must still be revalidated before any financial inference.
+
+The supervisor holds a system-awake request, writes atomic cohort and campaign
+heartbeats, rejects duplicate campaign instances, and checks each asset's
+`events.index.json` freshness only while that child is collecting. Index freshness
+is intentionally not applied while Gamma analysis is running. All three child
+processes are assigned to one Windows Job Object, so loss of the supervisor closes
+the exact process tree instead of leaving orphan collectors. A nonzero child,
+invalid identity, missing run, or two consecutive stale-checkpoint observations
+fails the whole aligned attempt; Task Scheduler or the external watchdog then
+starts a new attempt. Completion validation emits its own progress heartbeat while
+hashing the finalized segments, so a correct long validation is not mistaken for
+a hung supervisor.
+
+A restart always creates a new isolated cohort and new per-asset output roots such
+as `D:\PolyCopyTraderOrderBookStudy\data\btc\cohorts\<cohort-id>\runs`.
+The durable campaign
+guard prevents a successful 72-hour campaign from starting again after a later
+boot. Interrupted fragments are preserved and are never silently resumed, merged,
+or presented as one continuous sample. A full attempt is complete only after all
+three run manifests, completed indexes with events, index and segment SHA-256
+checks, and asset-matched `analysis.json` files exist. The lower-privilege
+supervisor performs that full validation and only then publishes a terminal event;
+the `SYSTEM` watchdog consumes the protected event and disables both tasks without
+traversing lower-privilege-writable data paths. This is not a second independent
+archive validation. Campaign completion is terminal: starting a later campaign,
+or recovering from archive corruption discovered after completion, requires
+rerunning the installer or an explicit manual re-enable. `InsufficientData` is
+still a valid analysis result; it is reported rather than silently extending or
+pooling the sample.
+
+`WakeToRun` and the runtime power request protect against normal idle sleep, but
+cannot prevent an explicit shutdown, forced sleep, reboot, or loss of power. Keep
+the machine on AC power for a continuous sample. After a reboot during an
+incomplete campaign, the protected boot task starts a new isolated full-duration
+attempt; the prior finalized SHA-256-indexed segments remain available as a
+separate fragment. After verified completion, both tasks remain disabled.
 
 The output directory must be absolute. The collector writes atomically finalized
 and SHA-256-verified gzip segments, with a five-minute rotation by default, plus
@@ -855,7 +944,7 @@ When non-Instant `Middle` or `Middle Revert` rows do not yet have enough own set
 
 ETH/SOL Binance bps rows were removed from the seed set and local/server history. `ETH Up or Down 5m Down 9 bps` keeps the same previous-result fixed Down signal as the matching Instant strategy. The legacy selected ETH Premarket variants remain only at `-10s` for `40..42 bps` and `-5s` for `30..38 bps`; each samples the previous ETH reference price the same number of seconds before previous market close and enters the next market the same number of seconds before open.
 
-`BTC/ETH/SOL Up or Down 5m Up/Down N bps Reference Average Premarket` reference-average variants run 30 seconds before the 5-minute market open. `N` covers `1..10` in steps of `1`, then `15..100` in steps of `5`. From the full in-memory `middle` averages for the `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m` crypto reference windows, the strategy computes a maximum boundary `Amax` and a minimum boundary `Amin`, preferring the longer window when equal prices tie. An `Up` trigger compares the current Binance price with `Amax` and buys `Down` at `>= N` bps above it; a `Down` trigger compares with `Amin` and buys `Up` at `<= -N` bps below it. Neutral rows test both sides of the envelope: above `Amax` by at least `N` buys `Down`, below `Amin` by at least `N` buys `Up`, and every price inside the envelope or less than `N` bps outside it skips. Each bps calculation uses its selected boundary as the denominator. Diagnostics use `decision_source=reference_price_average_envelope_bps_premarket_v2` and store both boundaries, both moves, and the selected boundary while retaining the legacy selected-average aliases. ETH Down reference-average rows also use distinct strategy codes from legacy ETH Down previous-result Premarket rows; the legacy `... Down N bps Premarket` rows stay in the catalog only for historical runs and settlement. These rows simulate the same taker BUY from executable ask depth using worst price `1 - tick`: fills are recorded at ask-depth VWAP, partial fills keep only the filled notional, and zero-fill cases are skipped/rejected instead of being treated as a buy at the cap. Their Live-shadow entry sends a BUY `FAK` market amount with the same worst-price cap; any unfilled remainder is cancelled by the exchange and a zero-fill response is stored as a rejected live entry. These rows are seeded with runtime `Live` disabled by default, except a first migration can copy an existing ETH Down legacy runtime flag to the matching new reference-average row before disabling the legacy row; enabled rows can enter the Paper/Live-shadow path when their Dashboard `Live` flags are enabled and all live gates pass.
+`BTC/ETH/SOL Up or Down 5m Up/Down N bps Reference Average Premarket` reference-average variants run 30 seconds before the 5-minute market open. `N` covers `1..10` in steps of `1`, then `15..100` in steps of `5`. From the full in-memory `middle` averages for the `24h`, `12h`, `6h`, `3h`, `90m`, `45m`, `20m`, and `10m` crypto reference windows, the strategy computes a maximum boundary `Amax` and a minimum boundary `Amin`, preferring the longer window when equal prices tie. An `Up` trigger compares the current Binance price with `Amax` and buys `Down` at `>= N` bps above it; a `Down` trigger compares with `Amin` and buys `Up` at `<= -N` bps below it. Neutral rows test both sides of the envelope: above `Amax` by at least `N` buys `Down`, below `Amin` by at least `N` buys `Up`, and every price inside the envelope or less than `N` bps outside it skips. Every price-bps calculation uses the same denominator: the first bucket average price of the full `24h` decision window, so Up, Down, and neutral rows share the same measurement base. Diagnostics use `decision_source=reference_price_average_envelope_bps_premarket_v3` and store both boundaries, both moves, the selected boundary, and the `24h` denominator evidence while retaining the legacy selected-average aliases. ETH Down reference-average rows also use distinct strategy codes from legacy ETH Down previous-result Premarket rows; the legacy `... Down N bps Premarket` rows stay in the catalog only for historical runs and settlement. These rows simulate the same taker BUY from executable ask depth using worst price `1 - tick`: fills are recorded at ask-depth VWAP, partial fills keep only the filled notional, and zero-fill cases are skipped/rejected instead of being treated as a buy at the cap. Their Live-shadow entry sends a BUY `FAK` market amount with the same worst-price cap; any unfilled remainder is cancelled by the exchange and a zero-fill response is stored as a rejected live entry. These rows are seeded with runtime `Live` disabled by default, except a first migration can copy an existing ETH Down legacy runtime flag to the matching new reference-average row before disabling the legacy row; enabled rows can enter the Paper/Live-shadow path when their Dashboard `Live` flags are enabled and all live gates pass.
 
 `BTC/ETH/SOL Up or Down 5m Optimized Average Premarket` contains 144 base Paper experiments: 84 ETH rows over the full 28-threshold Up/Down/neutral grid and 30 rows each for BTC and SOL over the `1..10` Up/Down/neutral grid. These strategies do not force the 3-hour average or remove any window. They first run the complete ordinary Reference Average envelope decision, including Max/Min selection, the longer-window tie-break, trigger direction, and the inclusive `N bps` threshold; only then do they keep the entry when the direction-relevant selected boundary uses `3h`. Thus an Up trigger requires the `3h` average to be `Amax`, while a Down trigger requires it to be `Amin`; a neutral trigger follows whichever envelope side crossed. Diagnostics record the selected boundary, selected and required windows, and whether they matched. These rows cannot create Live-shadow or Live orders and cannot become parents for Child strategies.
 

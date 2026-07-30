@@ -51,6 +51,19 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int BulkStrategyMarketPaperRunInsertFailuresToThrow { get; set; }
 
+    public Queue<StrategyRunRetentionPreview> StrategyRunRetentionPreviews { get; } = [];
+
+    public List<(DateTimeOffset UpdatedBeforeUtc, int Limit)> StrategyRunRetentionPreviewCalls { get; } = [];
+
+    public Queue<StrategyRunRetentionSummary> StrategyRunRetentionSummaries { get; } = [];
+
+    public List<(DateTimeOffset UpdatedBeforeUtc, int SampleLimit)> StrategyRunRetentionSummaryCalls { get; } = [];
+
+    public List<(IReadOnlyList<Guid> RunIds, DateTimeOffset UpdatedBeforeUtc)> StrategyRunRetentionTransferCalls { get; } = [];
+
+    public StrategyRunRetentionBatchResult StrategyRunRetentionTransferResult { get; set; } =
+        new(0, 0, 0, 0, 0);
+
     public int PaperEntryPersistenceBatchCalls { get; private set; }
 
     public int PaperEntryPersistenceBatchAttempts { get; private set; }
@@ -776,6 +789,48 @@ internal sealed class TestAppRepository : IAppRepository
             }
 
             return Task.FromResult<IReadOnlySet<Guid>>(insertedIds);
+        }
+    }
+
+    public Task<StrategyRunRetentionPreview> PreviewPaperOnlySkippedRunRetentionAsync(
+        DateTimeOffset updatedBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            StrategyRunRetentionPreviewCalls.Add((updatedBeforeUtc, limit));
+            return Task.FromResult(
+                StrategyRunRetentionPreviews.Count > 0
+                    ? StrategyRunRetentionPreviews.Dequeue()
+                    : new StrategyRunRetentionPreview([], 0, null, null));
+        }
+    }
+
+    public Task<StrategyRunRetentionBatchResult> TransferPaperOnlySkippedRunsToRollupsAsync(
+        IReadOnlyCollection<Guid> expectedRunIds,
+        DateTimeOffset updatedBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            StrategyRunRetentionTransferCalls.Add((expectedRunIds.ToArray(), updatedBeforeUtc));
+            return Task.FromResult(StrategyRunRetentionTransferResult);
+        }
+    }
+
+    public Task<StrategyRunRetentionSummary> GetPaperOnlySkippedRunRetentionSummaryAsync(
+        DateTimeOffset updatedBeforeUtc,
+        int sampleLimit,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            StrategyRunRetentionSummaryCalls.Add((updatedBeforeUtc, sampleLimit));
+            return Task.FromResult(
+                StrategyRunRetentionSummaries.Count > 0
+                    ? StrategyRunRetentionSummaries.Dequeue()
+                    : new StrategyRunRetentionSummary(0, 0, null, null, []));
         }
     }
 

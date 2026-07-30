@@ -49,6 +49,7 @@ public sealed partial class PostgresDashboardProjectionRepository
 
         await AccumulatePaperSettlementsAsync();
         await AccumulateStrategyRunsAsync();
+        await AccumulateStrategyPaperSkipRollupsAsync();
         await AccumulateLiveOrdersAsync();
 
         return new ProjectionBuildResult(descriptors, lifetimeStates, recentStates, recentFactCount);
@@ -276,6 +277,41 @@ ORDER BY run.strategy_id, run.updated_at_utc, run.id;
                     DashboardProjectionCalculator.GetLifetimeContribution(payload),
                     1);
                 await AddFactsAsync(DashboardProjectionCalculator.GetRecentFacts(payload));
+            }
+        }
+
+        async Task AccumulateStrategyPaperSkipRollupsAsync()
+        {
+            var filter = strategyId is null ? string.Empty : "WHERE rollup.strategy_id = @StrategyId";
+            await using var command = CreateSourceCommand(
+                $$"""
+SELECT rollup.strategy_id,
+       sum(rollup.run_count)::bigint AS run_count,
+       max(rollup.last_updated_at_utc) AS last_run_utc
+FROM strategy_paper_skip_rollups rollup
+{{filter}}
+GROUP BY rollup.strategy_id
+ORDER BY rollup.strategy_id;
+""",
+                connection,
+                transaction,
+                strategyId);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var payload = new StrategyPaperSkipRollupProjectionPayload(
+                    reader.GetGuid(0),
+                    checked((int)reader.GetInt64(1)),
+                    UtcNow(reader.GetDateTime(2)));
+                if (!lifetimeStates.TryGetValue(payload.StrategyId, out var state))
+                {
+                    continue;
+                }
+
+                DashboardProjectionCalculator.Apply(
+                    state,
+                    DashboardProjectionCalculator.GetLifetimeContribution(payload),
+                    1);
             }
         }
 

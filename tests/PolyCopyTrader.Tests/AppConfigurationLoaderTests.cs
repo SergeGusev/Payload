@@ -44,4 +44,30 @@ public sealed class AppConfigurationLoaderTests
         Assert.Equal(45, configuration.CryptoReferencePriceHistory.TargetSamplesPerWindow);
         Assert.Equal([120, 30], configuration.CryptoReferencePriceHistory.WindowMinutes);
     }
+
+    [Fact]
+    public void Load_BindsStrategyRunRetentionSafetyGates()
+    {
+        Dictionary<string, string?> values = new()
+        {
+            ["StrategyRunRetention:Enabled"] = "true",
+            ["StrategyRunRetention:ApplyEnabled"] = "false",
+            ["StrategyRunRetention:RawRetentionHours"] = "96",
+            ["StrategyRunRetention:CleanupIntervalMinutes"] = "15",
+            ["StrategyRunRetention:CleanupBatchSize"] = "750",
+            ["StrategyRunRetention:CleanupMaxBatchesPerCycle"] = "2"
+        };
+        var configurationRoot = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var configuration = AppConfigurationLoader.Load(configurationRoot);
+
+        Assert.True(configuration.StrategyRunRetention.Enabled);
+        Assert.False(configuration.StrategyRunRetention.ApplyEnabled);
+        Assert.Equal(96, configuration.StrategyRunRetention.RawRetentionHours);
+        Assert.Equal(15, configuration.StrategyRunRetention.CleanupIntervalMinutes);
+        Assert.Equal(750, configuration.StrategyRunRetention.CleanupBatchSize);
+        Assert.Equal(2, configuration.StrategyRunRetention.CleanupMaxBatchesPerCycle);
+    }
 }

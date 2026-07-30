@@ -91,6 +91,27 @@ public sealed class DashboardProjectionCalculatorTests
     }
 
     [Fact]
+    public void StrategyPaperSkipRollup_AddsOnlyPaperSkipLifetimeContribution()
+    {
+        var lastRunUtc = new DateTimeOffset(2026, 7, 10, 8, 0, 0, TimeSpan.Zero);
+        var payload = new StrategyPaperSkipRollupProjectionPayload(
+            Guid.NewGuid(),
+            17,
+            lastRunUtc);
+
+        var contribution = DashboardProjectionCalculator.GetLifetimeContribution(payload);
+
+        Assert.Equal(17, contribution.RunsCount);
+        Assert.Equal(17, contribution.SkippedRunsCount);
+        Assert.Equal(17, contribution.PaperConditionSkippedRunsCount);
+        Assert.Equal(0, contribution.PaperNotAcceptedRunsCount);
+        Assert.Equal(0, contribution.RunLiveConditionSkippedCount);
+        Assert.Equal(0, contribution.RunLiveTechnicalSkippedCount);
+        Assert.Equal(0, contribution.RunLiveIgnoredGtdCount);
+        Assert.Equal(lastRunUtc, contribution.LastRunUtc);
+    }
+
+    [Fact]
     public void RecentCandidateRemoval_CanBeRebuiltFromRemainingFacts()
     {
         var state = new DashboardRecentProjectionState();

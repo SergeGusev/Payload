@@ -124,6 +124,20 @@ public static class DashboardProjectionCalculator
         };
     }
 
+    public static DashboardLifetimeContribution GetLifetimeContribution(
+        StrategyPaperSkipRollupProjectionPayload payload)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(payload.RunCount);
+
+        return new DashboardLifetimeContribution
+        {
+            RunsCount = payload.RunCount,
+            SkippedRunsCount = payload.RunCount,
+            PaperConditionSkippedRunsCount = payload.RunCount,
+            LastRunUtc = payload.LastRunUtc
+        };
+    }
+
     public static DashboardLifetimeContribution GetLifetimeContribution(PaperPositionProjectionPayload payload)
     {
         return new DashboardLifetimeContribution

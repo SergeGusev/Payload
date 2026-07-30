@@ -336,6 +336,30 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>([]);
     }
 
+    Task<StrategyRunRetentionPreview> PreviewPaperOnlySkippedRunRetentionAsync(
+        DateTimeOffset updatedBeforeUtc,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new StrategyRunRetentionPreview([], 0, null, null));
+    }
+
+    Task<StrategyRunRetentionSummary> GetPaperOnlySkippedRunRetentionSummaryAsync(
+        DateTimeOffset updatedBeforeUtc,
+        int sampleLimit,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new StrategyRunRetentionSummary(0, 0, null, null, []));
+    }
+
+    Task<StrategyRunRetentionBatchResult> TransferPaperOnlySkippedRunsToRollupsAsync(
+        IReadOnlyCollection<Guid> expectedRunIds,
+        DateTimeOffset updatedBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new StrategyRunRetentionBatchResult(0, 0, 0, 0, 0));
+    }
+
     Task<IReadOnlyList<BtcUpDown5mMarketResult>> GetRecentBtcUpDown5mMarketResultsAsync(
         int limit,
         CancellationToken cancellationToken = default)

@@ -4,7 +4,7 @@ namespace PolyCopyTrader.Storage;
 
 public static class DashboardProjectionVersions
 {
-    public const int Current = 2;
+    public const int Current = 3;
 }
 
 public static class DashboardProjectionSourceKinds
@@ -129,6 +129,11 @@ public sealed record StrategyRunProjectionPayload(
     string? SkipReason,
     DateTimeOffset UpdatedAtUtc,
     DateTimeOffset? LiveEnabledAtUtc);
+
+public sealed record StrategyPaperSkipRollupProjectionPayload(
+    Guid StrategyId,
+    int RunCount,
+    DateTimeOffset LastRunUtc);
 
 public sealed record PaperPositionProjectionPayload(
     Guid Id,

@@ -140,6 +140,29 @@ public sealed class DashboardSnapshotTests
     }
 
     [Fact]
+    public void DashboardProjectionBuild_AddsPaperSkipRollupsOnlyToLifetimeState()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresDashboardProjectionRepository.Build.cs");
+        var start = source.IndexOf(
+            "async Task AccumulateStrategyPaperSkipRollupsAsync()",
+            StringComparison.Ordinal);
+        Assert.True(start >= 0);
+
+        var end = source.IndexOf("async Task AccumulateLiveOrdersAsync()", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+
+        var method = source[start..end];
+        Assert.Contains("FROM strategy_paper_skip_rollups rollup", method, StringComparison.Ordinal);
+        Assert.Contains("StrategyPaperSkipRollupProjectionPayload", method, StringComparison.Ordinal);
+        Assert.Contains("GetLifetimeContribution(payload)", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddFactsAsync", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetRecentFacts", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DashboardProjectionWorkers_UseIncrementalAndIndependentReconciliationLoops()
     {
         var projectionWorker = ReadRepositorySource(
@@ -174,6 +197,24 @@ public sealed class DashboardSnapshotTests
 
     private static string ReadRepositorySource(params string[] segments)
     {
+        var configuredRoot = Environment.GetEnvironmentVariable("POLYCOPYTRADER_REPOSITORY_ROOT");
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            var configuredPath = Path.GetFullPath(Path.Combine(configuredRoot, Path.Combine(segments)));
+            if (File.Exists(configuredPath))
+            {
+                return File.ReadAllText(configuredPath);
+            }
+        }
+
+        var workingDirectoryPath = Path.GetFullPath(Path.Combine(
+            Directory.GetCurrentDirectory(),
+            Path.Combine(segments)));
+        if (File.Exists(workingDirectoryPath))
+        {
+            return File.ReadAllText(workingDirectoryPath);
+        }
+
         var path = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
             "..",

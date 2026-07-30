@@ -32,6 +32,7 @@ public static class AppOptionsValidator
         ValidateRisk(configuration.Risk, errors);
         ValidateWatchlist(configuration.Watchlist, errors);
         ValidatePolymarketHttpLogging(configuration.PolymarketHttpLogging, errors);
+        ValidateStrategyRunRetention(configuration.StrategyRunRetention, errors);
         ValidateLiveTrading(configuration.Bot, configuration.PolymarketAuth, configuration.LiveTrading, errors);
         ValidateDashboard(configuration.Dashboard, errors);
         ValidateAnalytics(configuration.Analytics, errors);
@@ -73,6 +74,9 @@ public static class AppOptionsValidator
             $"Polymarket HTTP logging persists successes: {configuration.PolymarketHttpLogging.PersistSuccessfulRequests}",
             $"Polymarket HTTP logging success sample rate: {configuration.PolymarketHttpLogging.SuccessfulRequestSampleRate}",
             $"Polymarket HTTP log cleanup enabled: {configuration.PolymarketHttpLogging.CleanupEnabled}",
+            $"Strategy run retention enabled: {configuration.StrategyRunRetention.Enabled}",
+            $"Strategy run retention apply enabled: {configuration.StrategyRunRetention.ApplyEnabled}",
+            $"Strategy run raw retention hours: {configuration.StrategyRunRetention.RawRetentionHours}",
             $"Auth enabled: {configuration.PolymarketAuth.Enabled}",
             $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
             $"Auth configured: {configuration.PolymarketAuth.Enabled && IsAddressLike(configuration.PolymarketAuth.SigningAddress)}",
@@ -1108,6 +1112,36 @@ public static class AppOptionsValidator
         if (options.ProjectionEventBatchSize <= 0 || options.ProjectionEventBatchSize > 2_000)
         {
             errors.Add("Dashboard.ProjectionEventBatchSize must be between 1 and 2000.");
+        }
+    }
+
+    private static void ValidateStrategyRunRetention(
+        StrategyRunRetentionOptions options,
+        List<string> errors)
+    {
+        if (options.ApplyEnabled && !options.Enabled)
+        {
+            errors.Add("StrategyRunRetention.ApplyEnabled requires StrategyRunRetention.Enabled.");
+        }
+
+        if (options.RawRetentionHours < 48)
+        {
+            errors.Add("StrategyRunRetention.RawRetentionHours must be at least 48.");
+        }
+
+        if (options.CleanupIntervalMinutes <= 0)
+        {
+            errors.Add("StrategyRunRetention.CleanupIntervalMinutes must be greater than zero.");
+        }
+
+        if (options.CleanupBatchSize is <= 0 or > 25_000)
+        {
+            errors.Add("StrategyRunRetention.CleanupBatchSize must be between 1 and 25000.");
+        }
+
+        if (options.CleanupMaxBatchesPerCycle is <= 0 or > 100)
+        {
+            errors.Add("StrategyRunRetention.CleanupMaxBatchesPerCycle must be between 1 and 100.");
         }
     }
 

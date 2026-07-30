@@ -40,6 +40,7 @@ public static class AppConfigurationLoader
             Signal = configuration.GetSection("Signal").Get<SignalOptions>() ?? new SignalOptions(),
             Polymarket = configuration.GetSection("Polymarket").Get<PolymarketOptions>() ?? new PolymarketOptions(),
             PolymarketHttpLogging = configuration.GetSection("PolymarketHttpLogging").Get<PolymarketHttpLoggingOptions>() ?? new PolymarketHttpLoggingOptions(),
+            StrategyRunRetention = configuration.GetSection("StrategyRunRetention").Get<StrategyRunRetentionOptions>() ?? new StrategyRunRetentionOptions(),
             PolymarketAuth = configuration.GetSection("PolymarketAuth").Get<PolymarketAuthOptions>() ?? new PolymarketAuthOptions(),
             PolymarketAutoRedeem = configuration.GetSection("PolymarketAutoRedeem").Get<PolymarketAutoRedeemOptions>() ?? new PolymarketAutoRedeemOptions(),
             MarketDataWebSocket = configuration.GetSection("MarketDataWebSocket").Get<MarketDataWebSocketOptions>() ?? new MarketDataWebSocketOptions(),

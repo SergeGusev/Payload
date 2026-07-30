@@ -32,6 +32,7 @@ public sealed class CryptoReferencePriceAverageCacheTests
         Assert.Equal(60, tenMinute.SampleCount);
         Assert.True(tenMinute.IsFullWindow);
         Assert.Equal(189.5m, tenMinute.AveragePriceUsd);
+        Assert.Equal(160m, tenMinute.FirstBucketAveragePriceUsd);
     }
 
     [Fact]
@@ -57,6 +58,7 @@ public sealed class CryptoReferencePriceAverageCacheTests
         Assert.Equal(60, average.SampleCount);
         Assert.True(average.IsFullWindow);
         Assert.Equal(131.5m, average.AveragePriceUsd);
+        Assert.Equal(101m, average.FirstBucketAveragePriceUsd);
         Assert.Equal(now.AddSeconds(-580), average.FirstBucketStartUtc);
         Assert.Equal(now.AddSeconds(10), average.LastBucketStartUtc);
     }

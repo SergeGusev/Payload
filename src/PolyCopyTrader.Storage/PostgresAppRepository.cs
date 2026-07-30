@@ -11,7 +11,7 @@ using PolyCopyTrader.Domain;
 
 namespace PolyCopyTrader.Storage;
 
-public sealed class PostgresAppRepository(PostgresConnectionFactory connectionFactory) : IAppRepository
+public sealed partial class PostgresAppRepository(PostgresConnectionFactory connectionFactory) : IAppRepository
 {
 	private const int OnChainDerivedRefreshLockKey1 = 1348686930;
 
@@ -751,7 +751,7 @@ ON CONFLICT (wallet, condition_id) DO UPDATE SET
 	public async Task<bool> TryAddStrategyMarketPaperRunAsync(StrategyMarketPaperRun run, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO strategy_market_paper_runs (\n    id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc\n) VALUES (\n    @Id, @StrategyId, @MarketId, @ConditionId, @MarketSlug, @MarketTitle, @Category,\n    @MarketStartUtc, @MarketEndUtc, @DetectedAtUtc, @EntryDueAtUtc, @Status,\n    @SelectedAssetId, @SelectedOutcome, @EntryPrice, @StakeUsd, @SizeShares,\n    @SignalId, @PaperOrderId, @EnteredAtUtc, @SettlementPrice, @SettlementValueUsd,\n    @RealizedPnlUsd, @SettledAtUtc, @SkipReason, CAST(@SkipDiagnosticsJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc\n)\nON CONFLICT (strategy_id, market_id) DO NOTHING;");
+		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO strategy_market_paper_runs (\n    id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc\n)\nSELECT\n    @Id, @StrategyId, @MarketId, @ConditionId, @MarketSlug, @MarketTitle, @Category,\n    @MarketStartUtc, @MarketEndUtc, @DetectedAtUtc, @EntryDueAtUtc, @Status,\n    @SelectedAssetId, @SelectedOutcome, @EntryPrice, @StakeUsd, @SizeShares,\n    @SignalId, @PaperOrderId, @EnteredAtUtc, @SettlementPrice, @SettlementValueUsd,\n    @RealizedPnlUsd, @SettledAtUtc, @SkipReason, CAST(@SkipDiagnosticsJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM strategy_market_paper_skip_tombstones tombstone\n    WHERE tombstone.strategy_id = @StrategyId\n      AND tombstone.market_id = @MarketId\n)\nON CONFLICT (strategy_id, market_id) DO NOTHING;");
 		AddStrategyMarketPaperRunParameters(command, run);
 		return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
 	}
@@ -829,6 +829,12 @@ SELECT
     signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
     realized_pnl_usd, settled_at_utc, skip_reason, CAST(skip_diagnostics_json AS jsonb), created_at_utc, updated_at_utc
 FROM run_rows
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM strategy_market_paper_skip_tombstones tombstone
+    WHERE tombstone.strategy_id = run_rows.strategy_id
+      AND tombstone.market_id = run_rows.market_id
+)
 ON CONFLICT (strategy_id, market_id) DO NOTHING
 RETURNING id;
 """);
@@ -1818,6 +1824,12 @@ WHERE NOT EXISTS (
     SELECT 1
     FROM updated_rows
     WHERE updated_rows.id = run_rows.id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM strategy_market_paper_skip_tombstones tombstone
+    WHERE tombstone.strategy_id = run_rows.strategy_id
+      AND tombstone.market_id = run_rows.market_id
 )
 ON CONFLICT (strategy_id, market_id) DO UPDATE SET
     condition_id = excluded.condition_id,
@@ -3729,6 +3741,14 @@ run_agg AS (
     FROM run_rows
     GROUP BY strategy_id
 ),
+paper_skip_rollup_agg AS (
+    SELECT
+        strategy_id,
+        sum(run_count)::integer AS runs_count,
+        max(last_updated_at_utc) AS last_run_utc
+    FROM strategy_paper_skip_rollups
+    GROUP BY strategy_id
+),
 live_order_agg AS (
     SELECT
         strategy_id,
@@ -3792,20 +3812,22 @@ combined AS (
         COALESCE(position_agg.open_positions_count, 0) AS open_positions_count,
         COALESCE(run_agg.observed_runs_count, 0) AS observed_runs_count,
         COALESCE(run_agg.entered_runs_count, 0) AS entered_runs_count,
-        COALESCE(run_agg.skipped_runs_count, 0) AS skipped_runs_count,
-        COALESCE(run_agg.paper_condition_skipped_runs_count, 0) AS paper_condition_skipped_runs_count,
+        COALESCE(run_agg.skipped_runs_count, 0)
+            + COALESCE(paper_skip_rollup_agg.runs_count, 0) AS skipped_runs_count,
+        COALESCE(run_agg.paper_condition_skipped_runs_count, 0)
+            + COALESCE(paper_skip_rollup_agg.runs_count, 0) AS paper_condition_skipped_runs_count,
         COALESCE(run_agg.paper_not_accepted_runs_count, 0) AS paper_not_accepted_runs_count,
         COALESCE(run_agg.settled_runs_count, 0) AS settled_runs_count,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.settled_runs_count, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.settled_runs_count, 0)
             ELSE COALESCE(settlement_agg.settled_positions_count, 0)
         END AS settled_positions_count,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.won_runs_count, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.won_runs_count, 0)
             ELSE COALESCE(settlement_agg.won_positions_count, 0)
         END AS won_positions_count,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.lost_runs_count, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.lost_runs_count, 0)
             ELSE COALESCE(settlement_agg.lost_positions_count, 0)
         END AS lost_positions_count,
         CASE
@@ -3814,31 +3836,31 @@ combined AS (
             ELSE COALESCE(settlement_agg.cost_basis_usd, 0)
         END AS stake_usd,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.settled_stake_usd, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.settled_stake_usd, 0)
             ELSE COALESCE(settlement_agg.cost_basis_usd, 0) + COALESCE(fill_agg.closed_fill_cost_basis_usd, 0)
         END AS closed_stake_usd,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.realized_pnl_usd, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.realized_pnl_usd, 0)
             ELSE COALESCE(settlement_agg.realized_pnl_usd, 0) + COALESCE(fill_agg.realized_fill_pnl_usd, 0)
         END AS realized_pnl_usd,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.avg_win_pnl_usd, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.avg_win_pnl_usd, 0)
             ELSE COALESCE(settlement_agg.avg_win_pnl_usd, 0)
         END AS avg_win_pnl_usd,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.avg_loss_pnl_usd, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.avg_loss_pnl_usd, 0)
             ELSE COALESCE(settlement_agg.avg_loss_pnl_usd, 0)
         END AS avg_loss_pnl_usd,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.positive_pnl_usd, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.positive_pnl_usd, 0)
             ELSE COALESCE(settlement_agg.positive_pnl_usd, 0)
         END AS closed_positive_pnl_usd,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.loss_abs_pnl_usd, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.loss_abs_pnl_usd, 0)
             ELSE COALESCE(settlement_agg.loss_abs_pnl_usd, 0)
         END AS closed_loss_abs_pnl_usd,
         CASE
-            WHEN COALESCE(run_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.expectancy_pnl_usd, 0)
+            WHEN COALESCE(run_agg.runs_count, 0) + COALESCE(paper_skip_rollup_agg.runs_count, 0) > 0 THEN COALESCE(run_agg.expectancy_pnl_usd, 0)
             ELSE COALESCE(settlement_agg.expectancy_pnl_usd, 0)
         END AS expectancy_pnl_usd,
         COALESCE(position_agg.unrealized_pnl_usd, 0) AS unrealized_pnl_usd,
@@ -3878,13 +3900,14 @@ combined AS (
         live_order_agg.live_last_order_utc,
         live_order_agg.live_last_settlement_utc,
         order_agg.last_order_utc,
-        run_agg.last_run_utc
+        GREATEST(run_agg.last_run_utc, paper_skip_rollup_agg.last_run_utc) AS last_run_utc
     FROM strategies strategy
     LEFT JOIN order_agg ON order_agg.strategy_id = strategy.id
     LEFT JOIN fill_agg ON fill_agg.strategy_id = strategy.id
     LEFT JOIN position_agg ON position_agg.strategy_id = strategy.id
     LEFT JOIN settlement_agg ON settlement_agg.strategy_id = strategy.id
     LEFT JOIN run_agg ON run_agg.strategy_id = strategy.id
+    LEFT JOIN paper_skip_rollup_agg ON paper_skip_rollup_agg.strategy_id = strategy.id
     LEFT JOIN live_order_agg ON live_order_agg.strategy_id = strategy.id
     LEFT JOIN countertrend_signal_agg ON countertrend_signal_agg.strategy_id = strategy.id
 )

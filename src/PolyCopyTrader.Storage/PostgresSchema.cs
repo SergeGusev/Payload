@@ -38,6 +38,9 @@ public static class PostgresSchema
         "paper_orders",
         "paper_fills",
         "strategy_market_paper_runs",
+        "strategy_live_retention_guards",
+        "strategy_paper_skip_rollups",
+        "strategy_market_paper_skip_tombstones",
         "strategy_child_parent_assignments",
         "paper_positions",
         "paper_position_settlements",
@@ -2755,12 +2758,28 @@ CREATE TABLE IF NOT EXISTS strategy_market_paper_runs (
     settled_at_utc timestamptz NULL,
     skip_reason text NULL,
     skip_diagnostics_json jsonb NULL,
+    retention_scope text NOT NULL DEFAULT 'Unknown',
     created_at_utc timestamptz NOT NULL,
     updated_at_utc timestamptz NOT NULL,
     UNIQUE (strategy_id, market_id)
 );
 
 ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS skip_diagnostics_json jsonb NULL;
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS retention_scope text NOT NULL DEFAULT 'Unknown';
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_strategy_market_paper_runs_retention_scope'
+          AND conrelid = 'public.strategy_market_paper_runs'::regclass
+    ) THEN
+        ALTER TABLE strategy_market_paper_runs
+            ADD CONSTRAINT ck_strategy_market_paper_runs_retention_scope
+            CHECK (retention_scope IN ('Unknown', 'PaperOnly', 'LiveOrShadow')) NOT VALID;
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS ix_strategy_market_paper_runs_entry_due
 ON strategy_market_paper_runs(strategy_id, status, entry_due_at_utc);
@@ -2798,6 +2817,202 @@ WHERE entered_at_utc IS NOT NULL;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_runs_settled_time_strategy
 ON strategy_market_paper_runs(settled_at_utc, strategy_id)
 WHERE settled_at_utc IS NOT NULL;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_runs_retention_candidates
+ON strategy_market_paper_runs(updated_at_utc, market_end_utc, strategy_id, id)
+WHERE status = 'Skipped' AND retention_scope = 'PaperOnly';
+
+BEGIN;
+
+LOCK TABLE public.strategies IN SHARE ROW EXCLUSIVE MODE;
+
+CREATE TABLE IF NOT EXISTS strategy_live_retention_guards (
+    strategy_id uuid PRIMARY KEY REFERENCES strategies(id) ON DELETE CASCADE,
+    first_live_observed_at_utc timestamptz NOT NULL,
+    last_live_observed_at_utc timestamptz NOT NULL
+);
+
+CREATE OR REPLACE FUNCTION public.record_strategy_live_retention_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    was_live boolean := false;
+    previous_live_enabled_at_utc timestamptz;
+    observed_at_utc timestamptz;
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        was_live := OLD.live_stakes;
+        previous_live_enabled_at_utc := OLD.live_enabled_at_utc;
+    END IF;
+
+    IF NEW.live_stakes OR was_live THEN
+        observed_at_utc := COALESCE(
+            NEW.live_enabled_at_utc,
+            previous_live_enabled_at_utc,
+            NEW.updated_at_utc,
+            clock_timestamp());
+
+        INSERT INTO public.strategy_live_retention_guards (
+            strategy_id, first_live_observed_at_utc, last_live_observed_at_utc)
+        VALUES (NEW.id, observed_at_utc, observed_at_utc)
+        ON CONFLICT (strategy_id) DO UPDATE SET
+            first_live_observed_at_utc = LEAST(
+                strategy_live_retention_guards.first_live_observed_at_utc,
+                EXCLUDED.first_live_observed_at_utc),
+            last_live_observed_at_utc = GREATEST(
+                strategy_live_retention_guards.last_live_observed_at_utc,
+                EXCLUDED.last_live_observed_at_utc);
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_record_strategy_live_retention_guard ON public.strategies;
+CREATE TRIGGER trg_record_strategy_live_retention_guard
+AFTER INSERT OR UPDATE OF live_stakes, live_enabled_at_utc
+ON public.strategies
+FOR EACH ROW
+EXECUTE FUNCTION public.record_strategy_live_retention_guard();
+
+INSERT INTO strategy_live_retention_guards (
+    strategy_id, first_live_observed_at_utc, last_live_observed_at_utc)
+SELECT
+    strategy.id,
+    COALESCE(strategy.live_enabled_at_utc, strategy.updated_at_utc),
+    COALESCE(strategy.live_enabled_at_utc, strategy.updated_at_utc)
+FROM strategies strategy
+WHERE strategy.live_stakes
+ON CONFLICT (strategy_id) DO UPDATE SET
+    first_live_observed_at_utc = LEAST(
+        strategy_live_retention_guards.first_live_observed_at_utc,
+        EXCLUDED.first_live_observed_at_utc),
+    last_live_observed_at_utc = GREATEST(
+        strategy_live_retention_guards.last_live_observed_at_utc,
+        EXCLUDED.last_live_observed_at_utc);
+
+COMMIT;
+
+CREATE TABLE IF NOT EXISTS strategy_paper_skip_rollups (
+    strategy_id uuid NOT NULL REFERENCES strategies(id) ON DELETE CASCADE,
+    bucket_start_utc timestamptz NOT NULL,
+    skip_reason text NOT NULL,
+    run_count integer NOT NULL,
+    first_updated_at_utc timestamptz NOT NULL,
+    last_updated_at_utc timestamptz NOT NULL,
+    created_at_utc timestamptz NOT NULL,
+    updated_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (strategy_id, bucket_start_utc, skip_reason),
+    CONSTRAINT ck_strategy_paper_skip_rollups_positive_count CHECK (run_count > 0),
+    CONSTRAINT ck_strategy_paper_skip_rollups_utc_day CHECK (
+        bucket_start_utc = date_trunc('day', bucket_start_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
+);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_paper_skip_rollups_strategy_last
+ON strategy_paper_skip_rollups(strategy_id, last_updated_at_utc DESC);
+
+CREATE TABLE IF NOT EXISTS strategy_market_paper_skip_tombstones (
+    strategy_id uuid NOT NULL REFERENCES strategies(id) ON DELETE CASCADE,
+    market_id text NOT NULL,
+    archived_run_id uuid NOT NULL,
+    archived_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (strategy_id, market_id)
+);
+
+CREATE OR REPLACE FUNCTION public.prevent_archived_strategy_market_paper_run_reinsert()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM public.strategy_market_paper_skip_tombstones tombstone
+        WHERE tombstone.strategy_id = NEW.strategy_id
+          AND tombstone.market_id = NEW.market_id
+    ) THEN
+        RETURN NULL;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_prevent_archived_strategy_market_paper_run_reinsert
+ON public.strategy_market_paper_runs;
+CREATE TRIGGER trg_prevent_archived_strategy_market_paper_run_reinsert
+BEFORE INSERT ON public.strategy_market_paper_runs
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_archived_strategy_market_paper_run_reinsert();
+
+CREATE OR REPLACE FUNCTION public.classify_strategy_market_paper_run_retention_scope()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    current_live_stakes boolean := false;
+    has_live_retention_guard boolean := false;
+BEGIN
+    SELECT
+        strategy.live_stakes,
+        EXISTS (
+            SELECT 1
+            FROM public.strategy_live_retention_guards live_guard
+            WHERE live_guard.strategy_id = NEW.strategy_id)
+    INTO current_live_stakes, has_live_retention_guard
+    FROM public.strategies strategy
+    WHERE strategy.id = NEW.strategy_id;
+
+    IF TG_OP = 'INSERT' THEN
+        NEW.retention_scope := CASE
+            WHEN COALESCE(current_live_stakes, false)
+              OR COALESCE(has_live_retention_guard, false) THEN 'LiveOrShadow'
+            ELSE 'PaperOnly'
+        END;
+    ELSIF OLD.retention_scope = 'LiveOrShadow'
+       OR NEW.retention_scope = 'LiveOrShadow'
+       OR COALESCE(current_live_stakes, false)
+       OR COALESCE(has_live_retention_guard, false) THEN
+        NEW.retention_scope := 'LiveOrShadow';
+    ELSE
+        NEW.retention_scope := OLD.retention_scope;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_classify_strategy_market_paper_run_retention_scope
+ON public.strategy_market_paper_runs;
+CREATE TRIGGER trg_classify_strategy_market_paper_run_retention_scope
+BEFORE INSERT OR UPDATE OF status, signal_id, paper_order_id, retention_scope
+ON public.strategy_market_paper_runs
+FOR EACH ROW
+EXECUTE FUNCTION public.classify_strategy_market_paper_run_retention_scope();
+
+CREATE OR REPLACE FUNCTION public.promote_active_strategy_runs_to_live_scope()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.live_stakes AND NOT OLD.live_stakes THEN
+        UPDATE public.strategy_market_paper_runs run
+        SET retention_scope = 'LiveOrShadow'
+        WHERE run.strategy_id = NEW.id
+          AND run.retention_scope = 'PaperOnly'
+          AND run.status IN ('Observed', 'Entered');
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_promote_active_strategy_runs_to_live_scope ON public.strategies;
+CREATE TRIGGER trg_promote_active_strategy_runs_to_live_scope
+AFTER UPDATE OF live_stakes ON public.strategies
+FOR EACH ROW
+WHEN (OLD.live_stakes IS DISTINCT FROM NEW.live_stakes)
+EXECUTE FUNCTION public.promote_active_strategy_runs_to_live_scope();
 
 CREATE TABLE IF NOT EXISTS strategy_child_parent_assignments (
     id uuid PRIMARY KEY,
@@ -3791,6 +4006,60 @@ ON paper_live_shadow_discrepancies(strategy_id, created_at_utc DESC);
 
 CREATE INDEX IF NOT EXISTS ix_paper_live_shadow_discrepancies_correlation
 ON paper_live_shadow_discrepancies(correlation_id, created_at_utc DESC);
+
+CREATE OR REPLACE FUNCTION public.promote_strategy_runs_for_live_order()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE public.strategy_market_paper_runs run
+    SET retention_scope = 'LiveOrShadow'
+    WHERE run.strategy_id = NEW.strategy_id
+      AND run.retention_scope <> 'LiveOrShadow'
+      AND (
+          run.condition_id = NEW.condition_id
+          OR (NEW.signal_id IS NOT NULL AND run.signal_id = NEW.signal_id)
+          OR (NEW.paper_order_id IS NOT NULL AND run.paper_order_id = NEW.paper_order_id)
+      );
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_promote_strategy_runs_for_live_order ON public.live_orders;
+CREATE TRIGGER trg_promote_strategy_runs_for_live_order
+AFTER INSERT OR UPDATE OF signal_id, paper_order_id, condition_id
+ON public.live_orders
+FOR EACH ROW
+EXECUTE FUNCTION public.promote_strategy_runs_for_live_order();
+
+CREATE OR REPLACE FUNCTION public.promote_strategy_runs_for_shadow_decision()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE public.strategy_market_paper_runs run
+    SET retention_scope = 'LiveOrShadow'
+    WHERE run.strategy_id = NEW.strategy_id
+      AND run.retention_scope <> 'LiveOrShadow'
+      AND (
+          run.market_id = NEW.market_id
+          OR run.condition_id = NEW.condition_id
+          OR (NEW.signal_id IS NOT NULL AND run.signal_id = NEW.signal_id)
+          OR (NEW.paper_order_id IS NOT NULL AND run.paper_order_id = NEW.paper_order_id)
+      );
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_promote_strategy_runs_for_shadow_decision
+ON public.paper_live_shadow_decisions;
+CREATE TRIGGER trg_promote_strategy_runs_for_shadow_decision
+AFTER INSERT OR UPDATE OF signal_id, paper_order_id, live_order_id, market_id, condition_id
+ON public.paper_live_shadow_decisions
+FOR EACH ROW
+EXECUTE FUNCTION public.promote_strategy_runs_for_shadow_decision();
 
 CREATE TABLE IF NOT EXISTS live_trading_events (
     id uuid PRIMARY KEY,

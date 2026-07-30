@@ -283,6 +283,7 @@ public sealed class CryptoReferencePriceAverageCache : ICryptoReferencePriceAver
                 window.ExpectedSampleCount,
                 sampleCount >= window.ExpectedSampleCount,
                 sampleCount == 0 ? null : bucketAverageSum / sampleCount,
+                sampleCount == 0 ? null : buckets.First().Value.Average,
                 sampleCount == 0 ? null : DateTimeOffset.FromUnixTimeSeconds(buckets.First().Key),
                 sampleCount == 0 ? null : DateTimeOffset.FromUnixTimeSeconds(buckets.Last().Key),
                 updatedAtUtc);

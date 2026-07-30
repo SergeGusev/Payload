@@ -19,6 +19,18 @@ This repository contains **PolyCopyTrader**, a Windows/.NET C# application for m
 - Immediately report unexpected tooling, permission, environment, or runtime obstacles that block or materially delay the task. Name the exact stage and error, state whether user systems or data are affected, and describe the bounded workaround. Do not repeat a failing operation silently or leave the user waiting through unexplained retries.
 - Never use dashed, dotted, or dash-dot lines in charts. Distinguish series with solid colors, direct labels, and markers instead.
 
+## Operational scope lock and execution gates
+
+- Before any non-trivial task, explicitly lock scope before material work. State the goal, exact in-scope entities, out-of-scope entities, period/window/filter, mode (`read-only`, local edit, or mutation), expected scale if known, and the first verification step.
+- Do not start material work when a missing choice could change meaning, risk, cost, data touched, or runtime behavior. Ask the smallest focused question instead.
+- Never substitute one meaning of a term for another. In particular, a strategy lookback window, calculation window, or chart window is not an analysis period unless the user explicitly says so.
+- For production, trading, financial, database, statistical, deletion, deployment, security, or service-state tasks, run a read-only preview first. The preview must include exact identifiers, row counts or candidate counts, period/timezone, key filters, and dependency/risk checks relevant to the requested action.
+- Compare preview counts and scale against the user's stated or implied expectation before drawing conclusions or mutating anything. If the result is surprising or inconsistent, halt, report the mismatch, and resolve scope before continuing.
+- If new evidence contradicts an earlier premise, invalidate every downstream conclusion based on that premise until rechecked. Do not patch only the final sentence.
+- Do not convert a bounded task into a framework, broad audit, generalized migration, backup, deployment, service stop, live-order action, cleanup campaign, or long-running job unless the user explicitly requests or approves that exact expansion.
+- Use the simplest working method that satisfies the locked scope. Optional hardening, broader verification, and reusable tooling are separate work and require explicit approval when they add material time or risk.
+- A communicated time estimate is for transparency, not an automatic stop condition. If the approved task is still running within the same locked scope, method, risk profile, and resource usage, continue and report the updated ETA. Stop and ask only when continuing requires additional resources, new workstreams, materially different methods, broader verification, higher risk, writes/mutations/deployments/backups/external actions, or a user-specified hard time limit would be exceeded.
+
 ## Core principle
 
 This is **not** a blind copy-trading bot.

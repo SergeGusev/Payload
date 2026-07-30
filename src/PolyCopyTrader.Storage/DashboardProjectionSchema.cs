@@ -126,6 +126,108 @@ CREATE TABLE IF NOT EXISTS dashboard_strategy_position_projection_facts (
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_position_projection_facts_strategy
 ON dashboard_strategy_position_projection_facts (strategy_id, source_id);
 
+CREATE OR REPLACE FUNCTION public.strategy_market_paper_run_retention_blockers(
+    target_run public.strategy_market_paper_runs)
+RETURNS text[]
+LANGUAGE sql
+STABLE
+AS $function$
+SELECT array_remove(ARRAY[
+    CASE WHEN (target_run).retention_scope <> 'PaperOnly' THEN 'retention_scope' END,
+    CASE WHEN (target_run).status <> 'Skipped' THEN 'non_skipped_status' END,
+    CASE WHEN NULLIF(btrim(COALESCE((target_run).skip_reason, '')), '') IS NULL THEN 'missing_skip_reason' END,
+    CASE WHEN (target_run).signal_id IS NOT NULL THEN 'signal_id' END,
+    CASE WHEN (target_run).paper_order_id IS NOT NULL THEN 'paper_order_id' END,
+    CASE WHEN (target_run).entered_at_utc IS NOT NULL THEN 'entered_at_utc' END,
+    CASE WHEN (target_run).entry_price IS NOT NULL THEN 'entry_price' END,
+    CASE WHEN (target_run).size_shares IS NOT NULL THEN 'size_shares' END,
+    CASE WHEN (target_run).settlement_price IS NOT NULL THEN 'settlement_price' END,
+    CASE WHEN (target_run).settlement_value_usd IS NOT NULL THEN 'settlement_value_usd' END,
+    CASE WHEN (target_run).realized_pnl_usd IS NOT NULL THEN 'realized_pnl_usd' END,
+    CASE WHEN (target_run).settled_at_utc IS NOT NULL THEN 'settled_at_utc' END,
+    CASE WHEN (target_run).skip_diagnostics_json IS NOT NULL THEN 'skip_diagnostics_json' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.paper_orders paper_order
+        WHERE paper_order.strategy_id = (target_run).strategy_id
+          AND paper_order.condition_id = (target_run).condition_id
+    ) THEN 'paper_order_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.dry_run_orders dry_order
+        WHERE dry_order.strategy_id = (target_run).strategy_id
+          AND dry_order.condition_id = (target_run).condition_id
+    ) THEN 'dry_run_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.live_orders live_order
+        WHERE live_order.strategy_id = (target_run).strategy_id
+          AND live_order.condition_id = (target_run).condition_id
+    ) THEN 'live_order_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.paper_live_shadow_decisions decision
+        WHERE decision.strategy_id = (target_run).strategy_id
+          AND (decision.market_id = (target_run).market_id
+               OR decision.condition_id = (target_run).condition_id)
+    ) THEN 'live_shadow_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.strategies strategy
+        INNER JOIN public.paper_positions position_row
+            ON lower(position_row.copied_trader_wallet) = lower('strategy:' || strategy.code)
+           AND position_row.condition_id = (target_run).condition_id
+        WHERE strategy.id = (target_run).strategy_id
+    ) THEN 'paper_position_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.strategies strategy
+        INNER JOIN public.paper_position_settlements settlement
+            ON lower(settlement.copied_trader_wallet) = lower('strategy:' || strategy.code)
+           AND settlement.condition_id = (target_run).condition_id
+        WHERE strategy.id = (target_run).strategy_id
+    ) THEN 'paper_settlement_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.paper_copied_leader_positions position_row
+        WHERE position_row.condition_id = (target_run).condition_id
+    ) THEN 'copied_leader_position_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.paper_copied_leader_activity_events activity
+        WHERE activity.condition_id = (target_run).condition_id
+    ) THEN 'copied_leader_activity_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.polymarket_onchain_paper_signal_results result_row
+        WHERE result_row.condition_id = (target_run).condition_id
+    ) THEN 'onchain_paper_dependency' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.strategy_market_paper_skip_tombstones tombstone
+        WHERE tombstone.strategy_id = (target_run).strategy_id
+          AND tombstone.market_id = (target_run).market_id
+    ) THEN 'existing_tombstone' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.dashboard_projection_events projection_event
+        WHERE projection_event.source_kind = 'StrategyRun'
+          AND projection_event.source_id = (target_run).id
+    ) THEN 'pending_projection_event' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.dashboard_strategy_recent_projection_facts fact
+        WHERE fact.source_kind = 'StrategyRun'
+          AND fact.source_id = (target_run).id
+    ) THEN 'recent_projection_fact' END,
+    CASE WHEN EXISTS (
+        SELECT 1
+        FROM public.dashboard_projection_reconciliation_queue queue_row
+        WHERE queue_row.strategy_id = (target_run).strategy_id
+    ) THEN 'pending_projection_reconciliation' END
+]::text[], NULL);
+$function$;
+
 CREATE OR REPLACE FUNCTION public.dashboard_projection_strategy_payload(row_value public.strategies)
 RETURNS jsonb
 LANGUAGE sql
@@ -361,6 +463,11 @@ DECLARE
     target_strategy_id uuid := COALESCE(NEW.strategy_id, OLD.strategy_id);
     target_live_enabled_at_utc timestamptz;
 BEGIN
+    IF TG_OP = 'DELETE'
+       AND current_setting('polycopytrader.skip_run_retention_transfer', true) = 'on' THEN
+        RETURN OLD;
+    END IF;
+
     SELECT strategy.live_enabled_at_utc
     INTO target_live_enabled_at_utc
     FROM strategies strategy
