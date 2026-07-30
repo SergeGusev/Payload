@@ -15,8 +15,8 @@ public sealed partial class PostgresDashboardProjectionRepository
         var stopwatch = Stopwatch.StartNew();
         await SetBootstrapStatusAsync("Bootstrapping", null, cancellationToken);
 
-        await using var readConnection = connectionFactory.CreateConnection();
-        await using var writeConnection = connectionFactory.CreateConnection();
+        await using var readConnection = CreateBootstrapConnection();
+        await using var writeConnection = CreateBootstrapConnection();
         await readConnection.OpenAsync(cancellationToken);
         await writeConnection.OpenAsync(cancellationToken);
         await using var readTransaction = await readConnection.BeginTransactionAsync(
@@ -191,6 +191,20 @@ WHERE singleton_id = 1;
             transaction);
         command.Parameters.AddWithValue("LockKey", ProjectionAdvisoryLockKey);
         return (bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false);
+    }
+
+    private NpgsqlConnection CreateBootstrapConnection()
+    {
+        return new NpgsqlConnection(CreateBootstrapConnectionString(connectionFactory.ConnectionString));
+    }
+
+    internal static string CreateBootstrapConnectionString(string connectionString)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            CommandTimeout = 0
+        };
+        return builder.ConnectionString;
     }
 
     private async Task SetBootstrapStatusAsync(
