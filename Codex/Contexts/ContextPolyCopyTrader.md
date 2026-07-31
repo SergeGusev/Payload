@@ -1,3 +1,18 @@
+## Active Update 2026-07-31 ETH 2bps Reference Average PnL Chart And Daily Excel
+Goal: Create a fresh cumulative Paper PnL chart and one-sheet daily Paper PnL Excel report for `ETH Up or Down 5m 2 bps Reference Average Premarket`.
+Status: Completed
+Done:
+- Resolved the exact production strategy as `b7c50005-0000-4000-8179-000000000102` / `eth_up_down_5m_reference_average_bps_2_fak_premarket`; it was enabled, not paused, not live-staked, and had zero Live orders.
+- Captured one production PostgreSQL `192.168.0.101/polycopytrader` `REPEATABLE READ`, `READ ONLY`, UTC snapshot at `2026-07-31T18:23:39.520396Z` with exact filter `status='Settled'`, non-null stake/PnL/settlement time, and `settled_at_utc <= cutoff`.
+- Exported `1901` unique settled Paper rows spanning `2026-07-04T14:37:36.524238Z` through `2026-07-31T15:35:01.554670Z`: stake `$11423.67929923`, PnL `+$561.50522155`, ROI `4.91527473%`, wins/losses/flat `1071/830/0`.
+- Independently reconciled raw CSV totals, final cumulative PnL, 28-row UTC daily aggregation, SQL summary, and a repeated fixed-cutoff SQL aggregate. All row counts, stake, PnL, outcome counts, date counts, and maximum drawdown matched.
+- Created `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-reference-average-pnl-report-20260731-1823/eth-2-reference-average-paper-pnl.png`. The `1800x920` chart uses a solid blue step line and the standing translucent red maximum-drawdown peak-to-trough interval: peak `$643.14382805` at `2026-07-31T01:38:12.384228Z`, trough `$533.54501368` at `2026-07-31T14:15:01.912144Z`, drawdown `$109.59881437`.
+- Created `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-reference-average-pnl-report-20260731-1823/eth-2-reference-average-daily-paper-pnl-2026-07-31.xlsx` with one `Daily PnL` sheet, 28 continuous UTC date rows, the exact strategy column, formula-driven `Daily Total`, and formula-driven total row.
+- Final Excel verification in Microsoft Excel passed: used range `30x3`, frozen panes at `B2` (`SplitRow=1`, `SplitColumn=1`), zero formula errors, 58 numeric financial cells verified, 14 negative financial cells displayed red on white with a visible minus, and grand total `+$561.50522155`. The final workbook was re-imported and visually rendered after freeze-pane correction.
+Next: None.
+Notes: The chart PNG SHA-256 is `E49F976E22E1A719407818767682F9362E72CBE2829C3E681D6BECF2B21DBAF9`; the final workbook SHA-256 is `0C8503476D11FA06F85988149DE2CD81FFCEA487CAAD9B7C260063DF4F12F00C`. This reports stored realized production Paper history and is not a replay under the locally committed, undeployed Paper/Live parity change. Production, service state, strategy settings, schema, Paper/Live rows, and application code were unchanged. The spreadsheet library initially omitted freeze panes; the verified project OpenXML correction set `xSplit=1`, `ySplit=1`, `topLeftCell=B2`, after which Microsoft Excel validation passed. Push remains withheld because local `master` was already three commits ahead of `origin/master`; pushing this report journal would also publish those broader existing commits.
+Blockers: None.
+
 ## Active Update 2026-07-31 Paper/Live FAK Execution Parity
 Goal: Permanently prevent Paper strategies from using execution semantics unavailable in Live, and correct LowEnter FAK entry semantics to a real hard maximum price.
 Status: Completed locally and ready in a local commit; not deployed, not pushed, and historical rows were not recalculated.
