@@ -1,3 +1,20 @@
+## Active Update 2026-08-01 Conditional Win Probability Design For LowEnter
+Goal: Develop evidence-backed options for estimating the win probability needed to set a positive-net-EV LowEnter FAK price cap.
+Status: Completed
+Done:
+- Distinguished raw strategy win rate from the required quantity: `P(win | signal, asset, side, decision-time price/book, and executability at cap p)`. Filled-only LowEnter WR is policy-selected, while parent lifetime WR mixes different price and execution cohorts.
+- Recommended a hierarchical estimator: parent lifetime results as a Bayesian prior; all prospectively labelled LowEnter-eligible opportunities as the child update; partial pooling by asset/family/direction/threshold; lifetime stability plus a time-decayed recent correction; and a lower posterior/credible bound rather than the point estimate.
+- Recommended pricing by exact net EV: choose the greatest tick `p` satisfying `q_lower - p - fee(p) - model/adverse-selection buffer > 0`; retain `min(0.50, p)` only if the strategy must preserve the current LowEnter ceiling.
+- Verified from current official Polymarket documentation that fee-enabled crypto taker fees use `C * feeRate * p * (1-p)`, with the current category table showing `feeRate=0.07`; actual fee details are market-specific and queryable through CLOB market info. Therefore a fee percentage cannot be subtracted directly from WR as cents.
+- Verified the local runtime has no FAK fee parameters in `ExecutionIntent`, Paper settlement is gross of fees, and `LiveOrder.FeeUsd` defaults to zero unless separately populated. A trustworthy net-EV cap requires persisting the decision-time market fee model and reconciling it to actual fills.
+- Verified the current prospective-data gap: terminal skipped/no-fill LowEnter runs lose `selected_outcome` and `skip_diagnostics_json`; signals/orders/fills are created only after a positive fill. Market winners may be stored separately, but without the selected side skipped candidates cannot be labelled W/L.
+- Verified LowerEnter parent linkage exists only in the in-memory C# variant registry and is not persisted to `strategies`; native `*_low_enter_average_*` variants do not have `LowerEnterSourceStrategyId`. Existing history can support only filled-own WR or an approximate matched parent counterfactual, not an exact all-opportunities conditional WR.
+- Recommended prospective compact evidence for every triggered signal before execution: stable parent/policy ID, selected outcome, shared decision key, signal features, decision-time market-price/book reference, cap grid executability, fee parameters, fill/no-fill, and eventual winner. To control growth, store the shared book/market outcome once per market decision and reference it from compact strategy candidate records; do not duplicate a full book for every clone.
+- Recommended time-grouped walk-forward validation with all clones of one `condition_id` in one block, shadow/ResearchOnly predictions before changing Paper orders, and calibration/Brier/log-loss plus net PnL, fill rate, drawdown, and stability checks.
+Next: If requested, design the exact minimal persistence contract and a read-only historical feasibility preview before implementing a ResearchOnly shadow estimator.
+Notes: Advisory and local read-only inspection only. No production/local DB query or write, strategy/order/service/configuration change, source change, build, test, deployment, or Git remote mutation was performed. Official sources checked: Polymarket Fees and Get CLOB Market Info documentation, current on 2026-08-01 local date.
+Blockers: Exact unbiased historical conditional WR cannot be reconstructed from current skipped/no-fill rows because the selected outcome and decision evidence were not retained.
+
 ## Active Update 2026-08-01 LowEnter FAK Parity Post-Deploy Verification
 Goal: Verify read-only that the newly deployed production service runs the corrected LowEnter/LowerEnter FAK execution logic.
 Status: Completed
