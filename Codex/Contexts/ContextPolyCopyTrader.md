@@ -1,3 +1,20 @@
+## Active Update 2026-08-01 LowEnter FAK Parity Post-Deploy Verification
+Goal: Verify read-only that the newly deployed production service runs the corrected LowEnter/LowerEnter FAK execution logic.
+Status: Completed
+Done:
+- Verified production PostgreSQL `192.168.0.101:5432/polycopytrader` in `REPEATABLE READ`, `READ ONLY`, UTC snapshots after a temporary post-deploy connectivity interruption cleared.
+- Confirmed `PolyCopyTrader.Service` is `Running`/`Live`, started `2026-07-31T22:02:37.498646Z`, with advancing heartbeats, `last_error=NULL`, and deployed build `8765a8d1754aab94f11e61ed205914787afe28f4` / MVID `4812e01ccf82`.
+- Confirmed deployed build `8765a8d1` exactly matches local HEAD and directly includes parent commit `7e74c4ee fix: enforce paper live FAK parity`; Git ancestry check passed.
+- Enumerated exactly `550` LowEnter/LowerEnter strategies: all `550` enabled, `0` Live-staked, `0` auto-paused, and all paper stakes `$1.00`. All `550` were evaluated in each of the first two complete post-start due slots (`1100` runs total: `17` Entered, `1083` Skipped).
+- At cutoff `2026-07-31T22:12:13.012802Z`, all `17/17` fresh LowEnter/LowerEnter Paper orders used `btc_updown5m_fak_taker_paper`, immutable `FAK` intent, time-in-force `FAK`, `post_only=false`, hard maximum order price `$0.50`, and a persisted decision-time order-book snapshot. All `17/17` recorded `paper_fak_worst_price=$0.50`; `0` used `$0.99` or the legacy maximum-average-fill-price field.
+- Independently checked all `17` associated fills: prices ranged `$0.48` to `$0.50`, with `0` fills above `$0.50`. A later cutoff `2026-07-31T22:15:48.293910Z` had `25/25` fresh orders with `$0.50` worst price, `$0.50` intent cap, persisted snapshots, and `0` at `$0.99`.
+- Exact `BTC Up or Down 5m 2 bps LowEnter Average Premarket` (`b7c50005-0000-4000-8213-000000000102`) was evaluated three times but placed no fresh order: skips were `best_ask_above_max_entry` once and `reference_average_move_below_bps_threshold` twice. Therefore its own fill path has not yet fired post-deploy; the runtime proof comes from the shared path exercised by other LowEnter/LowerEnter variants.
+- Confirmed `0` post-start Live orders for all `550` targets and `0` API errors mentioning immutable intent, `paper_fak`, `execution_intent`, Paper/Live shadow, or a FAK operation. Separately observed `32` non-parity errors for one unavailable OKX fixed-expiry SOL ticker; no causal link to the FAK change was asserted.
+- Confirmed this deploy implements the static `$0.50` parity correction only. The discussed lifetime/own-win-rate-minus-one-cent dynamic cap is absent; all current LowEnter/LowerEnter `FakMaximumOrderPrice` assignments remain static `$0.50`.
+Next: Monitor until the exact BTC 2 bps LowEnter strategy produces its first qualifying post-deploy order if strategy-specific runtime evidence is desired. Implement and validate a win-rate-derived dynamic cap only as a separate explicit task.
+Notes: Production verification changed no database rows/schema, service state, strategy settings, orders, configuration, deployment, or Git remote. Historical pre-deploy `$0.99` Paper rows were not replayed and are not claimed to match the corrected execution model. `btc_up_down_5m_strategy_stage_timings` contained no post-start rows in the checked window, so it was not used as positive evidence. The initial database outage ended before the successful audit; its cause remains unknown.
+Blockers: None.
+
 ## Active Update 2026-07-31 ETH 2bps Reference Average PnL Chart And Daily Excel
 Goal: Create a fresh cumulative Paper PnL chart and one-sheet daily Paper PnL Excel report for `ETH Up or Down 5m 2 bps Reference Average Premarket`.
 Status: Completed
