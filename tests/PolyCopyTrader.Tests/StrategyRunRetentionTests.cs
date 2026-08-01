@@ -9,18 +9,20 @@ namespace PolyCopyTrader.Tests;
 public sealed class StrategyRunRetentionTests
 {
     [Fact]
-    public async Task RunCycleAsync_PreviewOnlyModeNeverTransfersRows()
+    public async Task RunCycleAsync_PreviewOnlyModeUsesBoundedPageAndNeverTransfersRows()
     {
         var firstRunId = Guid.NewGuid();
         var secondRunId = Guid.NewGuid();
         var nowUtc = new DateTimeOffset(2026, 7, 29, 12, 0, 0, TimeSpan.Zero);
         var repository = new TestAppRepository();
-        repository.StrategyRunRetentionSummaries.Enqueue(new StrategyRunRetentionSummary(
-            2,
+        repository.StrategyRunRetentionPreviews.Enqueue(new StrategyRunRetentionPreview(
+            [firstRunId, secondRunId],
             2,
             nowUtc.AddDays(-4),
             nowUtc.AddDays(-3),
-            [firstRunId, secondRunId]));
+            2,
+            null,
+            true));
         var options = new StrategyRunRetentionOptions
         {
             Enabled = true,
@@ -40,10 +42,11 @@ public sealed class StrategyRunRetentionTests
         Assert.Equal(2, result.PreviewedRows);
         Assert.Equal(0, result.TransferredRows);
         Assert.Empty(repository.StrategyRunRetentionTransferCalls);
-        Assert.Empty(repository.StrategyRunRetentionPreviewCalls);
-        var summaryCall = Assert.Single(repository.StrategyRunRetentionSummaryCalls);
-        Assert.Equal(nowUtc.AddHours(-72), summaryCall.UpdatedBeforeUtc);
-        Assert.Equal(10, summaryCall.SampleLimit);
+        Assert.Empty(repository.StrategyRunRetentionSummaryCalls);
+        var previewCall = Assert.Single(repository.StrategyRunRetentionPreviewCalls);
+        Assert.Equal(nowUtc.AddHours(-72), previewCall.UpdatedBeforeUtc);
+        Assert.Equal(10, previewCall.Limit);
+        Assert.Null(previewCall.AfterCursor);
     }
 
     [Fact]
@@ -55,11 +58,25 @@ public sealed class StrategyRunRetentionTests
         {
             StrategyRunRetentionTransferResult = new StrategyRunRetentionBatchResult(2, 2, 1, 2, 1)
         };
+        var continuationCursor = new StrategyRunRetentionCursor(
+            nowUtc.AddDays(-3),
+            Guid.NewGuid());
         repository.StrategyRunRetentionPreviews.Enqueue(new StrategyRunRetentionPreview(
             previewedRunIds,
             1,
             nowUtc.AddDays(-4),
-            nowUtc.AddDays(-3)));
+            nowUtc.AddDays(-3),
+            10,
+            continuationCursor,
+            false));
+        repository.StrategyRunRetentionPreviews.Enqueue(new StrategyRunRetentionPreview(
+            [],
+            0,
+            null,
+            null,
+            3,
+            null,
+            true));
         var options = new StrategyRunRetentionOptions
         {
             Enabled = true,
@@ -84,6 +101,166 @@ public sealed class StrategyRunRetentionTests
         var transferCall = Assert.Single(repository.StrategyRunRetentionTransferCalls);
         Assert.Equal(previewedRunIds, transferCall.RunIds);
         Assert.Equal(nowUtc.AddHours(-48), transferCall.UpdatedBeforeUtc);
+        Assert.Collection(
+            repository.StrategyRunRetentionPreviewCalls,
+            firstCall =>
+            {
+                Assert.Equal(nowUtc.AddHours(-48), firstCall.UpdatedBeforeUtc);
+                Assert.Null(firstCall.AfterCursor);
+            },
+            secondCall =>
+            {
+                Assert.Equal(nowUtc.AddHours(-48), secondCall.UpdatedBeforeUtc);
+                Assert.Equal(continuationCursor, secondCall.AfterCursor);
+            });
+    }
+
+    [Fact]
+    public async Task RunCycleAsync_AllBlockedPageAdvancesCursorAcrossCyclesAndResetsAtEnd()
+    {
+        var candidateRunId = Guid.NewGuid();
+        var nowUtc = new DateTimeOffset(2026, 7, 29, 12, 0, 0, TimeSpan.Zero);
+        var continuationCursor = new StrategyRunRetentionCursor(
+            nowUtc.AddDays(-4),
+            Guid.NewGuid());
+        var repository = new TestAppRepository
+        {
+            StrategyRunRetentionTransferResult = new StrategyRunRetentionBatchResult(1, 1, 1, 1, 1)
+        };
+        repository.StrategyRunRetentionPreviews.Enqueue(new StrategyRunRetentionPreview(
+            [],
+            0,
+            null,
+            null,
+            10,
+            continuationCursor,
+            false));
+        repository.StrategyRunRetentionPreviews.Enqueue(new StrategyRunRetentionPreview(
+            [candidateRunId],
+            1,
+            nowUtc.AddDays(-3),
+            nowUtc.AddDays(-3),
+            1,
+            null,
+            true));
+        repository.StrategyRunRetentionPreviews.Enqueue(new StrategyRunRetentionPreview(
+            [],
+            0,
+            null,
+            null,
+            0,
+            null,
+            true));
+        var options = new StrategyRunRetentionOptions
+        {
+            Enabled = true,
+            ApplyEnabled = true,
+            RawRetentionHours = 48,
+            CleanupBatchSize = 10,
+            CleanupMaxBatchesPerCycle = 1
+        };
+        var worker = new StrategyRunRetentionWorker(
+            NullLogger<StrategyRunRetentionWorker>.Instance,
+            options,
+            repository);
+
+        var blockedPageResult = await worker.RunCycleAsync(nowUtc);
+        var eligiblePageResult = await worker.RunCycleAsync(nowUtc.AddMinutes(1));
+        var restartedSweepResult = await worker.RunCycleAsync(nowUtc.AddMinutes(2));
+
+        Assert.Equal(0, blockedPageResult.PreviewedRows);
+        Assert.Equal(0, blockedPageResult.TransferredRows);
+        Assert.Equal(1, eligiblePageResult.PreviewedRows);
+        Assert.Equal(1, eligiblePageResult.TransferredRows);
+        Assert.Equal(0, restartedSweepResult.PreviewedRows);
+        Assert.Equal(0, restartedSweepResult.TransferredRows);
+        var transferCall = Assert.Single(repository.StrategyRunRetentionTransferCalls);
+        Assert.Equal(new[] { candidateRunId }, transferCall.RunIds);
+        Assert.Equal(nowUtc.AddHours(-48), transferCall.UpdatedBeforeUtc);
+        Assert.Collection(
+            repository.StrategyRunRetentionPreviewCalls,
+            firstCall =>
+            {
+                Assert.Equal(nowUtc.AddHours(-48), firstCall.UpdatedBeforeUtc);
+                Assert.Null(firstCall.AfterCursor);
+            },
+            secondCall =>
+            {
+                Assert.Equal(nowUtc.AddHours(-48), secondCall.UpdatedBeforeUtc);
+                Assert.Equal(continuationCursor, secondCall.AfterCursor);
+            },
+            thirdCall =>
+            {
+                Assert.Equal(nowUtc.AddMinutes(2).AddHours(-48), thirdCall.UpdatedBeforeUtc);
+                Assert.Null(thirdCall.AfterCursor);
+            });
+    }
+
+    [Fact]
+    public async Task RunCycleAsync_TransferFailureRetainsSweepCutoffAndCursorForRetry()
+    {
+        var candidateRunId = Guid.NewGuid();
+        var nowUtc = new DateTimeOffset(2026, 7, 29, 12, 0, 0, TimeSpan.Zero);
+        var continuationCursor = new StrategyRunRetentionCursor(
+            nowUtc.AddDays(-4),
+            Guid.NewGuid());
+        var page = new StrategyRunRetentionPreview(
+            [candidateRunId],
+            1,
+            nowUtc.AddDays(-4),
+            nowUtc.AddDays(-4),
+            10,
+            continuationCursor,
+            false);
+        var repository = new TestAppRepository
+        {
+            StrategyRunRetentionTransferFailuresToThrow = 1,
+            StrategyRunRetentionTransferResult = new StrategyRunRetentionBatchResult(1, 1, 1, 1, 1)
+        };
+        repository.StrategyRunRetentionPreviews.Enqueue(page);
+        repository.StrategyRunRetentionPreviews.Enqueue(page);
+        var options = new StrategyRunRetentionOptions
+        {
+            Enabled = true,
+            ApplyEnabled = true,
+            RawRetentionHours = 48,
+            CleanupBatchSize = 10,
+            CleanupMaxBatchesPerCycle = 1
+        };
+        var worker = new StrategyRunRetentionWorker(
+            NullLogger<StrategyRunRetentionWorker>.Instance,
+            options,
+            repository);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => worker.RunCycleAsync(nowUtc));
+        var retryResult = await worker.RunCycleAsync(nowUtc.AddMinutes(1));
+
+        Assert.Equal(1, retryResult.PreviewedRows);
+        Assert.Equal(1, retryResult.TransferredRows);
+        Assert.Collection(
+            repository.StrategyRunRetentionPreviewCalls,
+            firstCall =>
+            {
+                Assert.Equal(nowUtc.AddHours(-48), firstCall.UpdatedBeforeUtc);
+                Assert.Null(firstCall.AfterCursor);
+            },
+            secondCall =>
+            {
+                Assert.Equal(nowUtc.AddHours(-48), secondCall.UpdatedBeforeUtc);
+                Assert.Null(secondCall.AfterCursor);
+            });
+        Assert.Collection(
+            repository.StrategyRunRetentionTransferCalls,
+            firstCall =>
+            {
+                Assert.Equal(new[] { candidateRunId }, firstCall.RunIds);
+                Assert.Equal(nowUtc.AddHours(-48), firstCall.UpdatedBeforeUtc);
+            },
+            secondCall =>
+            {
+                Assert.Equal(new[] { candidateRunId }, secondCall.RunIds);
+                Assert.Equal(nowUtc.AddHours(-48), secondCall.UpdatedBeforeUtc);
+            });
     }
 
     [Fact]
@@ -182,22 +359,29 @@ public sealed class StrategyRunRetentionTests
         Assert.Contains("run.market_end_utc IS NOT NULL", repositorySource, StringComparison.Ordinal);
         Assert.DoesNotContain("strategy_market_paper_run_retention_blockers(run)", repositorySource, StringComparison.Ordinal);
         Assert.Contains("AND run.skip_diagnostics_json IS NULL", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.paper_orders paper_order", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.dry_run_orders dry_order", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.live_orders live_order", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.paper_live_shadow_decisions decision", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("INNER JOIN public.paper_positions position_row", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("INNER JOIN public.paper_position_settlements settlement", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.paper_copied_leader_positions position_row", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.paper_copied_leader_activity_events activity", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.polymarket_onchain_paper_signal_results result_row", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.strategy_market_paper_skip_tombstones tombstone", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.dashboard_projection_events projection_event", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.dashboard_strategy_recent_projection_facts fact", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("FROM public.dashboard_projection_reconciliation_queue queue_row", repositorySource, StringComparison.Ordinal);
-        Assert.Equal(
-            4,
-            CountOccurrences(repositorySource, "FROM public.strategy_market_paper_runs run"));
+        Assert.Contains("candidate_batch AS MATERIALIZED", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("candidate_strategy_keys AS MATERIALIZED", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("blocked_candidate_ids AS MATERIALIZED", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @CandidatePageSize", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("run.updated_at_utc > @AfterUpdatedAtUtc", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("run.id > @AfterRunId", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("blocked.id IS NULL AS is_eligible", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.paper_orders dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.dry_run_orders dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.live_orders dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.paper_live_shadow_decisions dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.paper_positions dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.paper_position_settlements dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.paper_copied_leader_positions dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.paper_copied_leader_activity_events dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.polymarket_onchain_paper_signal_results dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.strategy_market_paper_skip_tombstones dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.dashboard_projection_events dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.dashboard_strategy_recent_projection_facts dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.dashboard_projection_reconciliation_queue dependency", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN LATERAL", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("lower(dependency.copied_trader_wallet)", repositorySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("dependency.size_shares", repositorySource, StringComparison.Ordinal);
         Assert.Contains(
             "DELETE FROM public.strategy_market_paper_runs run",
             repositorySource,

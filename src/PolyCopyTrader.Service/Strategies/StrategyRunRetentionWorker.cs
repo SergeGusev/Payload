@@ -8,6 +8,9 @@ public sealed class StrategyRunRetentionWorker(
     StrategyRunRetentionOptions options,
     IAppRepository repository) : BackgroundService
 {
+    private StrategyRunRetentionCursor? continuationCursor;
+    private DateTimeOffset? sweepUpdatedBeforeUtc;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!options.Enabled)
@@ -50,7 +53,9 @@ public sealed class StrategyRunRetentionWorker(
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken = default)
     {
-        var updatedBeforeUtc = nowUtc.ToUniversalTime().AddHours(-options.RawRetentionHours);
+        var updatedBeforeUtc = sweepUpdatedBeforeUtc ??
+            nowUtc.ToUniversalTime().AddHours(-options.RawRetentionHours);
+        sweepUpdatedBeforeUtc ??= updatedBeforeUtc;
         var previewedRows = 0;
         var transferredRows = 0;
         var rollupRowsChanged = 0;
@@ -59,20 +64,24 @@ public sealed class StrategyRunRetentionWorker(
 
         if (!options.ApplyEnabled)
         {
-            var summary = await repository.GetPaperOnlySkippedRunRetentionSummaryAsync(
+            var preview = await repository.PreviewPaperOnlySkippedRunRetentionAsync(
                 updatedBeforeUtc,
                 options.CleanupBatchSize,
+                continuationCursor,
                 cancellationToken);
             logger.LogWarning(
-                "Strategy run retention exact preview completed in read-only mode. UpdatedBeforeUtc={UpdatedBeforeUtc:O} TotalCandidateRows={TotalCandidateRows} DistinctStrategies={DistinctStrategies} OldestUpdatedAtUtc={OldestUpdatedAtUtc:O} NewestUpdatedAtUtc={NewestUpdatedAtUtc:O} SampleRunIds={SampleRunIds}. No rows were transferred or deleted.",
+                "Strategy run retention bounded preview completed in read-only mode. UpdatedBeforeUtc={UpdatedBeforeUtc:O} IntrinsicRowsScanned={IntrinsicRowsScanned} CandidateRows={CandidateRows} DistinctStrategies={DistinctStrategies} OldestUpdatedAtUtc={OldestUpdatedAtUtc:O} NewestUpdatedAtUtc={NewestUpdatedAtUtc:O} CandidateRunIds={CandidateRunIds} ReachedIntrinsicEnd={ReachedIntrinsicEnd}. No rows were transferred or deleted.",
                 updatedBeforeUtc,
-                summary.TotalCandidateRows,
-                summary.DistinctStrategies,
-                summary.OldestUpdatedAtUtc,
-                summary.NewestUpdatedAtUtc,
-                string.Join(',', summary.SampleRunIds));
+                preview.IntrinsicRowsScanned,
+                preview.CandidateRunIds.Count,
+                preview.DistinctStrategies,
+                preview.OldestUpdatedAtUtc,
+                preview.NewestUpdatedAtUtc,
+                string.Join(',', preview.CandidateRunIds),
+                preview.ReachedIntrinsicEnd);
+            AdvanceContinuationCursor(preview);
             return new StrategyRunRetentionCycleResult(
-                summary.TotalCandidateRows,
+                preview.CandidateRunIds.Count,
                 0,
                 0,
                 0,
@@ -85,41 +94,44 @@ public sealed class StrategyRunRetentionWorker(
             var preview = await repository.PreviewPaperOnlySkippedRunRetentionAsync(
                 updatedBeforeUtc,
                 options.CleanupBatchSize,
+                continuationCursor,
                 cancellationToken);
-            if (preview.CandidateRunIds.Count == 0)
-            {
-                break;
-            }
 
             previewedRows += preview.CandidateRunIds.Count;
             logger.LogInformation(
-                "Strategy run retention batch preview. ApplyEnabled={ApplyEnabled} UpdatedBeforeUtc={UpdatedBeforeUtc:O} CandidateRows={CandidateRows} DistinctStrategies={DistinctStrategies} OldestUpdatedAtUtc={OldestUpdatedAtUtc:O} NewestUpdatedAtUtc={NewestUpdatedAtUtc:O} CandidateRunIds={CandidateRunIds}",
+                "Strategy run retention batch preview. ApplyEnabled={ApplyEnabled} UpdatedBeforeUtc={UpdatedBeforeUtc:O} IntrinsicRowsScanned={IntrinsicRowsScanned} CandidateRows={CandidateRows} DistinctStrategies={DistinctStrategies} OldestUpdatedAtUtc={OldestUpdatedAtUtc:O} NewestUpdatedAtUtc={NewestUpdatedAtUtc:O} CandidateRunIds={CandidateRunIds} ReachedIntrinsicEnd={ReachedIntrinsicEnd}",
                 options.ApplyEnabled,
                 updatedBeforeUtc,
+                preview.IntrinsicRowsScanned,
                 preview.CandidateRunIds.Count,
                 preview.DistinctStrategies,
                 preview.OldestUpdatedAtUtc,
                 preview.NewestUpdatedAtUtc,
-                string.Join(',', preview.CandidateRunIds));
+                string.Join(',', preview.CandidateRunIds),
+                preview.ReachedIntrinsicEnd);
 
-            var result = await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
-                preview.CandidateRunIds,
-                updatedBeforeUtc,
-                cancellationToken);
-            transferredRows += result.DeletedRows;
-            rollupRowsChanged += result.RollupRowsChanged;
-            tombstonesChanged += result.TombstonesChanged;
-            strategiesQueued += result.StrategiesQueuedForReconciliation;
+            if (preview.CandidateRunIds.Count > 0)
+            {
+                var result = await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                    preview.CandidateRunIds,
+                    updatedBeforeUtc,
+                    cancellationToken);
+                transferredRows += result.DeletedRows;
+                rollupRowsChanged += result.RollupRowsChanged;
+                tombstonesChanged += result.TombstonesChanged;
+                strategiesQueued += result.StrategiesQueuedForReconciliation;
 
-            logger.LogInformation(
-                "Strategy run retention batch transferred atomically. SelectedRows={SelectedRows} DeletedRows={DeletedRows} RollupRowsChanged={RollupRowsChanged} TombstonesChanged={TombstonesChanged} StrategiesQueuedForReconciliation={StrategiesQueuedForReconciliation}",
-                result.SelectedRows,
-                result.DeletedRows,
-                result.RollupRowsChanged,
-                result.TombstonesChanged,
-                result.StrategiesQueuedForReconciliation);
+                logger.LogInformation(
+                    "Strategy run retention batch transferred atomically. SelectedRows={SelectedRows} DeletedRows={DeletedRows} RollupRowsChanged={RollupRowsChanged} TombstonesChanged={TombstonesChanged} StrategiesQueuedForReconciliation={StrategiesQueuedForReconciliation}",
+                    result.SelectedRows,
+                    result.DeletedRows,
+                    result.RollupRowsChanged,
+                    result.TombstonesChanged,
+                    result.StrategiesQueuedForReconciliation);
+            }
 
-            if (preview.CandidateRunIds.Count < options.CleanupBatchSize)
+            AdvanceContinuationCursor(preview);
+            if (preview.ReachedIntrinsicEnd)
             {
                 break;
             }
@@ -132,6 +144,31 @@ public sealed class StrategyRunRetentionWorker(
             tombstonesChanged,
             strategiesQueued,
             options.ApplyEnabled);
+    }
+
+    private void AdvanceContinuationCursor(StrategyRunRetentionPreview preview)
+    {
+        if (preview.IntrinsicRowsScanned < 0 ||
+            preview.CandidateRunIds.Count > preview.IntrinsicRowsScanned)
+        {
+            throw new InvalidOperationException(
+                "Strategy-run retention preview returned inconsistent intrinsic row counts.");
+        }
+
+        if (preview.ReachedIntrinsicEnd)
+        {
+            continuationCursor = null;
+            sweepUpdatedBeforeUtc = null;
+            return;
+        }
+
+        if (preview.IntrinsicRowsScanned == 0 || preview.ContinuationCursor is null)
+        {
+            throw new InvalidOperationException(
+                "Strategy-run retention preview did not provide a continuation cursor before intrinsic end.");
+        }
+
+        continuationCursor = preview.ContinuationCursor;
     }
 }
 

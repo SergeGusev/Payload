@@ -53,7 +53,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Queue<StrategyRunRetentionPreview> StrategyRunRetentionPreviews { get; } = [];
 
-    public List<(DateTimeOffset UpdatedBeforeUtc, int Limit)> StrategyRunRetentionPreviewCalls { get; } = [];
+    public List<(
+        DateTimeOffset UpdatedBeforeUtc,
+        int Limit,
+        StrategyRunRetentionCursor? AfterCursor)> StrategyRunRetentionPreviewCalls { get; } = [];
 
     public Queue<StrategyRunRetentionSummary> StrategyRunRetentionSummaries { get; } = [];
 
@@ -63,6 +66,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public StrategyRunRetentionBatchResult StrategyRunRetentionTransferResult { get; set; } =
         new(0, 0, 0, 0, 0);
+
+    public int StrategyRunRetentionTransferFailuresToThrow { get; set; }
 
     public int PaperEntryPersistenceBatchCalls { get; private set; }
 
@@ -795,11 +800,12 @@ internal sealed class TestAppRepository : IAppRepository
     public Task<StrategyRunRetentionPreview> PreviewPaperOnlySkippedRunRetentionAsync(
         DateTimeOffset updatedBeforeUtc,
         int limit,
+        StrategyRunRetentionCursor? afterCursor = null,
         CancellationToken cancellationToken = default)
     {
         lock (sync)
         {
-            StrategyRunRetentionPreviewCalls.Add((updatedBeforeUtc, limit));
+            StrategyRunRetentionPreviewCalls.Add((updatedBeforeUtc, limit, afterCursor));
             return Task.FromResult(
                 StrategyRunRetentionPreviews.Count > 0
                     ? StrategyRunRetentionPreviews.Dequeue()
@@ -815,6 +821,12 @@ internal sealed class TestAppRepository : IAppRepository
         lock (sync)
         {
             StrategyRunRetentionTransferCalls.Add((expectedRunIds.ToArray(), updatedBeforeUtc));
+            if (StrategyRunRetentionTransferFailuresToThrow > 0)
+            {
+                StrategyRunRetentionTransferFailuresToThrow--;
+                throw new InvalidOperationException("Retention transfer fixture failure.");
+            }
+
             return Task.FromResult(StrategyRunRetentionTransferResult);
         }
     }

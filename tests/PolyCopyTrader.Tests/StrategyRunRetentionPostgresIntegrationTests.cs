@@ -1500,25 +1500,37 @@ public sealed class StrategyRunRetentionPostgresIntegrationTests
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
-    public async Task SetBasedEligibility_NonZeroBatchReturnsExactCountsAndReportsDuration()
+    public async Task CandidateFirstEligibility_FullyBlockedFirstPageAdvancesToEligibleTailAndReportsDuration()
     {
         var factory = await CreateFactoryAsync();
 
+        const int pageSize = 500;
         const int eligibleCount = 500;
         const int blockedCount = 500;
         var repository = new PostgresAppRepository(factory);
         var strategyId = Guid.NewGuid();
         var strategyCode = $"retention_{Guid.NewGuid():N}";
         var prefix = $"retention-benchmark-{Guid.NewGuid():N}";
-        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
         var cutoffUtc = DateTimeOffset.UtcNow.AddHours(-48);
+        var priorIntrinsicCursor = await ReadNewestIntrinsicRunCursorAsync(factory, cutoffUtc);
+        var firstUpdatedAtUtc = priorIntrinsicCursor?.UpdatedAtUtc.AddMilliseconds(1)
+            ?? new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var lastUpdatedAtUtc = firstUpdatedAtUtc.AddTicks(
+            (eligibleCount + blockedCount - 1L) * TimeSpan.TicksPerMicrosecond);
+        Assert.True(
+            lastUpdatedAtUtc < cutoffUtc,
+            $"The retention paging fixture needs an intrinsic timestamp gap before {cutoffUtc:O}, " +
+            $"but the newest existing cursor is {priorIntrinsicCursor?.UpdatedAtUtc:O}.");
         var baseline = await repository.GetPaperOnlySkippedRunRetentionSummaryAsync(cutoffUtc, 0);
         var runs = Enumerable.Range(0, eligibleCount + blockedCount)
             .Select(index => WithRetentionKey(
-                CreateSkippedRun(strategyId, oldUtc.AddSeconds(index)),
+                CreateSkippedRun(
+                    strategyId,
+                    firstUpdatedAtUtc.AddTicks(index * TimeSpan.TicksPerMicrosecond)),
                 $"{prefix}-{index:D4}"))
             .ToArray();
-        var blockedRuns = runs.Skip(eligibleCount).ToArray();
+        var blockedRuns = runs.Take(blockedCount).ToArray();
+        var eligibleRuns = runs.Skip(blockedCount).ToArray();
 
         await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
         try
@@ -1526,7 +1538,7 @@ public sealed class StrategyRunRetentionPostgresIntegrationTests
             await InsertPaperOrderDependenciesAsync(
                 factory,
                 strategyId,
-                oldUtc,
+                firstUpdatedAtUtc,
                 blockedRuns.Select(run => run.ConditionId).ToArray());
             Assert.Equal(
                 runs.Length,
@@ -1537,24 +1549,48 @@ public sealed class StrategyRunRetentionPostgresIntegrationTests
             var summary = await repository.GetPaperOnlySkippedRunRetentionSummaryAsync(cutoffUtc, 10);
             summaryTimer.Stop();
             var previewTimer = Stopwatch.StartNew();
-            var preview = await repository.PreviewPaperOnlySkippedRunRetentionAsync(
+            var firstPage = await repository.PreviewPaperOnlySkippedRunRetentionAsync(
                 cutoffUtc,
-                eligibleCount + blockedCount);
+                pageSize,
+                priorIntrinsicCursor);
+            var firstPageCursor = Assert.IsType<StrategyRunRetentionCursor>(
+                firstPage.ContinuationCursor);
+            var secondPage = await repository.PreviewPaperOnlySkippedRunRetentionAsync(
+                cutoffUtc,
+                pageSize,
+                firstPageCursor);
             previewTimer.Stop();
 
-            var runIds = runs.Select(run => run.Id).ToHashSet();
-            var fixturePreviewIds = preview.CandidateRunIds
-                .Where(runIds.Contains)
-                .ToArray();
-            Assert.Equal(eligibleCount, fixturePreviewIds.Length);
+            Assert.Empty(firstPage.CandidateRunIds);
+            Assert.Equal(0, firstPage.DistinctStrategies);
+            Assert.Null(firstPage.OldestUpdatedAtUtc);
+            Assert.Null(firstPage.NewestUpdatedAtUtc);
+            Assert.Equal(pageSize, firstPage.IntrinsicRowsScanned);
+            Assert.False(firstPage.ReachedIntrinsicEnd);
             Assert.Equal(
-                runs.Take(eligibleCount).Select(run => run.Id),
-                fixturePreviewIds);
+                new StrategyRunRetentionCursor(
+                    blockedRuns[^1].UpdatedAtUtc,
+                    blockedRuns[^1].Id),
+                firstPageCursor);
+
+            Assert.Equal(
+                eligibleRuns.Select(run => run.Id),
+                secondPage.CandidateRunIds);
+            Assert.Equal(1, secondPage.DistinctStrategies);
+            Assert.Equal(eligibleRuns[0].UpdatedAtUtc, secondPage.OldestUpdatedAtUtc);
+            Assert.Equal(eligibleRuns[^1].UpdatedAtUtc, secondPage.NewestUpdatedAtUtc);
+            Assert.Equal(pageSize, secondPage.IntrinsicRowsScanned);
+            Assert.True(secondPage.ReachedIntrinsicEnd);
+            Assert.Equal(
+                new StrategyRunRetentionCursor(
+                    eligibleRuns[^1].UpdatedAtUtc,
+                    eligibleRuns[^1].Id),
+                secondPage.ContinuationCursor);
             Assert.Equal(baseline.TotalCandidateRows + eligibleCount, summary.TotalCandidateRows);
             Console.WriteLine(
                 $"Set-based retention benchmark: rows={runs.Length}, eligible={eligibleCount}, " +
                 $"paperOrderBlocked={blockedCount}, summaryMs={summaryTimer.Elapsed.TotalMilliseconds:F2}, " +
-                $"previewMs={previewTimer.Elapsed.TotalMilliseconds:F2}");
+                $"pagedPreviewMs={previewTimer.Elapsed.TotalMilliseconds:F2}");
         }
         finally
         {
@@ -1719,6 +1755,48 @@ ORDER BY run.updated_at_utc, run.id;
         }
 
         return results.ToArray();
+    }
+
+    private static async Task<StrategyRunRetentionCursor?> ReadNewestIntrinsicRunCursorAsync(
+        PostgresConnectionFactory factory,
+        DateTimeOffset updatedBeforeUtc)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT run.updated_at_utc, run.id
+FROM public.strategy_market_paper_runs run
+WHERE run.status = 'Skipped'
+  AND run.retention_scope = 'PaperOnly'
+  AND run.updated_at_utc < LEAST(@UpdatedBeforeUtc, clock_timestamp() - interval '48 hours')
+  AND run.market_end_utc IS NOT NULL
+  AND run.market_end_utc < LEAST(@UpdatedBeforeUtc, clock_timestamp() - interval '48 hours')
+  AND NULLIF(btrim(COALESCE(run.skip_reason, '')), '') IS NOT NULL
+  AND run.signal_id IS NULL
+  AND run.paper_order_id IS NULL
+  AND run.entered_at_utc IS NULL
+  AND run.entry_price IS NULL
+  AND run.size_shares IS NULL
+  AND run.settlement_price IS NULL
+  AND run.settlement_value_usd IS NULL
+  AND run.realized_pnl_usd IS NULL
+  AND run.settled_at_utc IS NULL
+  AND run.skip_diagnostics_json IS NULL
+ORDER BY run.updated_at_utc DESC, run.id DESC
+LIMIT 1;
+""",
+            connection);
+        command.Parameters.AddWithValue("UpdatedBeforeUtc", updatedBeforeUtc.UtcDateTime);
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+        return new StrategyRunRetentionCursor(
+            new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(0), DateTimeKind.Utc)),
+            reader.GetGuid(1));
     }
 
     private static async Task<IReadOnlyDictionary<Guid, string[]>> ReadLegacyBlockersAsync(

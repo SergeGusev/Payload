@@ -339,6 +339,7 @@ public interface IAppRepository
     Task<StrategyRunRetentionPreview> PreviewPaperOnlySkippedRunRetentionAsync(
         DateTimeOffset updatedBeforeUtc,
         int limit,
+        StrategyRunRetentionCursor? afterCursor = null,
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult(new StrategyRunRetentionPreview([], 0, null, null));

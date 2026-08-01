@@ -7,11 +7,9 @@ namespace PolyCopyTrader.Storage;
 public sealed partial class PostgresAppRepository
 {
     private const int StrategyRunRetentionCommandTimeoutSeconds = 30;
+    private const int StrategyRunRetentionCandidatePageSize = 500;
 
-    // Keep every dependency predicate visible to PostgreSQL so it can plan the
-    // eligibility check as one set-based query instead of invoking the composite
-    // blocker function once for every candidate run.
-    private const string EligiblePaperOnlySkippedRunFilter = """
+    private const string IntrinsicPaperOnlySkippedRunFilter = """
 run.status = 'Skipped'
 AND run.retention_scope = 'PaperOnly'
 AND run.updated_at_utc < LEAST(@UpdatedBeforeUtc, clock_timestamp() - interval '48 hours')
@@ -28,95 +26,141 @@ AND run.settlement_value_usd IS NULL
 AND run.realized_pnl_usd IS NULL
 AND run.settled_at_utc IS NULL
 AND run.skip_diagnostics_json IS NULL
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.paper_orders paper_order
-    WHERE paper_order.strategy_id = run.strategy_id
-      AND paper_order.condition_id = run.condition_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.dry_run_orders dry_order
-    WHERE dry_order.strategy_id = run.strategy_id
-      AND dry_order.condition_id = run.condition_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.live_orders live_order
-    WHERE live_order.strategy_id = run.strategy_id
-      AND live_order.condition_id = run.condition_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.paper_live_shadow_decisions decision
-    WHERE decision.strategy_id = run.strategy_id
-      AND decision.market_id = run.market_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.paper_live_shadow_decisions decision
-    WHERE decision.strategy_id = run.strategy_id
-      AND decision.condition_id = run.condition_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.strategies strategy
-    INNER JOIN public.paper_positions position_row
-        ON lower(position_row.copied_trader_wallet) = lower('strategy:' || strategy.code)
-       AND position_row.condition_id = run.condition_id
-    WHERE strategy.id = run.strategy_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.strategies strategy
-    INNER JOIN public.paper_position_settlements settlement
-        ON lower(settlement.copied_trader_wallet) = lower('strategy:' || strategy.code)
-       AND settlement.condition_id = run.condition_id
-    WHERE strategy.id = run.strategy_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.paper_copied_leader_positions position_row
-    WHERE position_row.condition_id = run.condition_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.paper_copied_leader_activity_events activity
-    WHERE activity.condition_id = run.condition_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.polymarket_onchain_paper_signal_results result_row
-    WHERE result_row.condition_id = run.condition_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.strategy_market_paper_skip_tombstones tombstone
-    WHERE tombstone.strategy_id = run.strategy_id
-      AND tombstone.market_id = run.market_id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.dashboard_projection_events projection_event
-    WHERE projection_event.source_kind = 'StrategyRun'
-      AND projection_event.source_id = run.id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.dashboard_strategy_recent_projection_facts fact
-    WHERE fact.source_kind = 'StrategyRun'
-      AND fact.source_id = run.id
-)
-AND NOT EXISTS (
-    SELECT 1
-    FROM public.dashboard_projection_reconciliation_queue queue_row
-    WHERE queue_row.strategy_id = run.strategy_id
+""";
+
+    // Blockers are evaluated against an already materialized candidate relation.
+    // This prevents an unbounded correlated dependency scan for every raw run and
+    // keeps closed paper positions (size_shares = 0) in the durable-history guard.
+    private const string StrategyRunRetentionBlockerCtes = """
+candidate_strategy_keys AS MATERIALIZED (
+    SELECT
+        candidate.id,
+        candidate.condition_id,
+        lower('strategy:' || strategy.code) AS copied_trader_wallet_key
+    FROM candidate_batch candidate
+    INNER JOIN public.strategies strategy ON strategy.id = candidate.strategy_id
+),
+blocker_hits AS (
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.paper_orders dependency
+        ON dependency.strategy_id = candidate.strategy_id
+       AND dependency.condition_id = candidate.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.dry_run_orders dependency
+        ON dependency.strategy_id = candidate.strategy_id
+       AND dependency.condition_id = candidate.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.live_orders dependency
+        ON dependency.strategy_id = candidate.strategy_id
+       AND dependency.condition_id = candidate.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.paper_live_shadow_decisions dependency
+        ON dependency.strategy_id = candidate.strategy_id
+       AND dependency.market_id = candidate.market_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.paper_live_shadow_decisions dependency
+        ON dependency.strategy_id = candidate.strategy_id
+       AND dependency.condition_id = candidate.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate_key.id
+    FROM candidate_strategy_keys candidate_key
+    INNER JOIN public.paper_positions dependency
+        ON lower(dependency.copied_trader_wallet) = candidate_key.copied_trader_wallet_key
+       AND dependency.condition_id = candidate_key.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate_key.id
+    FROM candidate_strategy_keys candidate_key
+    INNER JOIN public.paper_position_settlements dependency
+        ON lower(dependency.copied_trader_wallet) = candidate_key.copied_trader_wallet_key
+       AND dependency.condition_id = candidate_key.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.paper_copied_leader_positions dependency
+        ON dependency.condition_id = candidate.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.paper_copied_leader_activity_events dependency
+        ON dependency.condition_id = candidate.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.polymarket_onchain_paper_signal_results dependency
+        ON dependency.condition_id = candidate.condition_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.strategy_market_paper_skip_tombstones dependency
+        ON dependency.strategy_id = candidate.strategy_id
+       AND dependency.market_id = candidate.market_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.dashboard_projection_events dependency
+        ON dependency.source_kind = 'StrategyRun'
+       AND dependency.source_id = candidate.id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN LATERAL (
+        SELECT 1
+        FROM public.dashboard_strategy_recent_projection_facts dependency
+        WHERE dependency.source_kind = 'StrategyRun'
+          AND dependency.source_id = candidate.id
+        LIMIT 1
+    ) recent_fact_hit ON true
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
+    INNER JOIN public.dashboard_projection_reconciliation_queue dependency
+        ON dependency.strategy_id = candidate.strategy_id
+),
+blocked_candidate_ids AS MATERIALIZED (
+    SELECT DISTINCT blocker_hit.id
+    FROM blocker_hits blocker_hit
 )
 """;
 
     public async Task<StrategyRunRetentionPreview> PreviewPaperOnlySkippedRunRetentionAsync(
         DateTimeOffset updatedBeforeUtc,
         int limit,
+        StrategyRunRetentionCursor? afterCursor = null,
         CancellationToken cancellationToken = default)
     {
         if (limit <= 0)
@@ -128,35 +172,82 @@ AND NOT EXISTS (
         await using var command = CreateCommand(
             connection,
             $$"""
-SELECT run.id, run.strategy_id, run.updated_at_utc
-FROM public.strategy_market_paper_runs run
-WHERE {{EligiblePaperOnlySkippedRunFilter}}
-ORDER BY run.updated_at_utc, run.id
-LIMIT @Limit;
+WITH intrinsic_scan AS MATERIALIZED (
+    SELECT
+        run.id,
+        run.strategy_id,
+        run.market_id,
+        run.condition_id,
+        run.updated_at_utc
+    FROM public.strategy_market_paper_runs run
+    WHERE {{IntrinsicPaperOnlySkippedRunFilter}}
+      AND (
+          NOT @HasCursor
+          OR run.updated_at_utc > @AfterUpdatedAtUtc
+          OR (run.updated_at_utc = @AfterUpdatedAtUtc AND run.id > @AfterRunId)
+    )
+    ORDER BY run.updated_at_utc, run.id
+    LIMIT @CandidateScanSize
+),
+candidate_batch AS MATERIALIZED (
+    SELECT scan.id, scan.strategy_id, scan.market_id, scan.condition_id, scan.updated_at_utc
+    FROM intrinsic_scan scan
+    ORDER BY scan.updated_at_utc, scan.id
+    LIMIT @CandidatePageSize
+),
+{{StrategyRunRetentionBlockerCtes}}
+SELECT
+    candidate.id,
+    candidate.strategy_id,
+    candidate.updated_at_utc,
+    blocked.id IS NULL AS is_eligible,
+    (SELECT count(*) > @CandidatePageSize FROM intrinsic_scan) AS has_more
+FROM candidate_batch candidate
+LEFT JOIN blocked_candidate_ids blocked ON blocked.id = candidate.id
+ORDER BY candidate.updated_at_utc, candidate.id;
 """);
         command.CommandTimeout = StrategyRunRetentionCommandTimeoutSeconds;
         command.Parameters.AddWithValue("UpdatedBeforeUtc", updatedBeforeUtc.UtcDateTime);
-        command.Parameters.AddWithValue("Limit", Math.Min(limit, 100_000));
+        var candidatePageSize = Math.Min(limit, StrategyRunRetentionCandidatePageSize);
+        command.Parameters.AddWithValue("CandidatePageSize", candidatePageSize);
+        command.Parameters.AddWithValue("CandidateScanSize", candidatePageSize + 1);
+        command.Parameters.AddWithValue("HasCursor", afterCursor is not null);
+        command.Parameters.AddWithValue(
+            "AfterUpdatedAtUtc",
+            afterCursor?.UpdatedAtUtc.UtcDateTime ?? DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc));
+        command.Parameters.AddWithValue("AfterRunId", afterCursor?.RunId ?? Guid.Empty);
 
         var candidateIds = new List<Guid>();
         var strategyIds = new HashSet<Guid>();
         DateTimeOffset? oldestUpdatedAtUtc = null;
         DateTimeOffset? newestUpdatedAtUtc = null;
+        StrategyRunRetentionCursor? continuationCursor = null;
+        var intrinsicRowsScanned = 0;
+        var hasMore = false;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            candidateIds.Add(reader.GetGuid(0));
-            strategyIds.Add(reader.GetGuid(1));
             var updatedAtUtc = DateTimeOffsetFromUtc(reader.GetDateTime(2));
-            oldestUpdatedAtUtc ??= updatedAtUtc;
-            newestUpdatedAtUtc = updatedAtUtc;
+            continuationCursor = new StrategyRunRetentionCursor(updatedAtUtc, reader.GetGuid(0));
+            intrinsicRowsScanned++;
+            hasMore = reader.GetBoolean(4);
+            if (reader.GetBoolean(3))
+            {
+                candidateIds.Add(reader.GetGuid(0));
+                strategyIds.Add(reader.GetGuid(1));
+                oldestUpdatedAtUtc ??= updatedAtUtc;
+                newestUpdatedAtUtc = updatedAtUtc;
+            }
         }
 
         return new StrategyRunRetentionPreview(
             candidateIds,
             strategyIds.Count,
             oldestUpdatedAtUtc,
-            newestUpdatedAtUtc);
+            newestUpdatedAtUtc,
+            intrinsicRowsScanned,
+            continuationCursor,
+            !hasMore);
     }
 
     public async Task<StrategyRunRetentionSummary> GetPaperOnlySkippedRunRetentionSummaryAsync(
@@ -168,10 +259,22 @@ LIMIT @Limit;
         await using var command = CreateCommand(
             connection,
             $$"""
-WITH eligible AS MATERIALIZED (
-    SELECT run.id, run.strategy_id, run.updated_at_utc
+WITH candidate_batch AS MATERIALIZED (
+    SELECT
+        run.id,
+        run.strategy_id,
+        run.market_id,
+        run.condition_id,
+        run.updated_at_utc
     FROM public.strategy_market_paper_runs run
-    WHERE {{EligiblePaperOnlySkippedRunFilter}}
+    WHERE {{IntrinsicPaperOnlySkippedRunFilter}}
+),
+{{StrategyRunRetentionBlockerCtes}},
+retained_candidates AS MATERIALIZED (
+    SELECT candidate.id, candidate.strategy_id, candidate.updated_at_utc
+    FROM candidate_batch candidate
+    LEFT JOIN blocked_candidate_ids blocked ON blocked.id = candidate.id
+    WHERE blocked.id IS NULL
 ),
 summary AS (
     SELECT
@@ -179,14 +282,14 @@ summary AS (
         count(DISTINCT strategy_id)::bigint AS distinct_strategies,
         min(updated_at_utc) AS oldest_updated_at_utc,
         max(updated_at_utc) AS newest_updated_at_utc
-    FROM eligible
+    FROM retained_candidates
 ),
 sample AS (
     SELECT COALESCE(array_agg(sample_row.id ORDER BY sample_row.updated_at_utc, sample_row.id), ARRAY[]::uuid[]) AS run_ids
     FROM (
-        SELECT eligible.id, eligible.updated_at_utc
-        FROM eligible
-        ORDER BY eligible.updated_at_utc, eligible.id
+        SELECT candidate.id, candidate.updated_at_utc
+        FROM retained_candidates candidate
+        ORDER BY candidate.updated_at_utc, candidate.id
         LIMIT @SampleLimit
     ) sample_row
 )
@@ -269,7 +372,7 @@ CROSS JOIN sample;
             await using var command = CreateCommand(
                 connection,
                 $$"""
-WITH candidates AS MATERIALIZED (
+WITH candidate_batch AS MATERIALIZED (
     SELECT
         run.id,
         run.strategy_id,
@@ -292,9 +395,17 @@ WITH candidates AS MATERIALIZED (
             AS rollup_bucket_start_utc
     FROM public.strategy_market_paper_runs run
     WHERE run.id = ANY(@RunIds)
-      AND {{EligiblePaperOnlySkippedRunFilter}}
+      AND {{IntrinsicPaperOnlySkippedRunFilter}}
     ORDER BY run.updated_at_utc, run.id
     FOR UPDATE OF run
+),
+{{StrategyRunRetentionBlockerCtes}},
+candidates AS MATERIALIZED (
+    SELECT candidate.*
+    FROM candidate_batch candidate
+    LEFT JOIN blocked_candidate_ids blocked ON blocked.id = candidate.id
+    WHERE blocked.id IS NULL
+    ORDER BY candidate.updated_at_utc, candidate.id
 ),
 rollups AS (
     INSERT INTO public.strategy_paper_skip_rollups AS existing_rollup (
