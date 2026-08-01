@@ -308,6 +308,33 @@ public sealed class StrategyRunRetentionTests
     }
 
     [Fact]
+    public void Schema_InstallsRetentionDependencyLookupIndexesConcurrently()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var paperOrdersIndex = Assert.Single(statements, statement =>
+            statement.StartsWith(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_strategy_condition",
+                StringComparison.Ordinal));
+        var paperPositionsIndex = Assert.Single(statements, statement =>
+            statement.StartsWith(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_wallet_condition_ci",
+                StringComparison.Ordinal));
+
+        Assert.Equal(
+            """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_strategy_condition
+            ON paper_orders(strategy_id, condition_id);
+            """,
+            paperOrdersIndex.Replace("\r\n", "\n", StringComparison.Ordinal));
+        Assert.Equal(
+            """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_wallet_condition_ci
+            ON paper_positions(lower(copied_trader_wallet), condition_id);
+            """,
+            paperPositionsIndex.Replace("\r\n", "\n", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Schema_InstallsLiveGuardAtomicallyAndKeepsRetentionScopeMonotonic()
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);

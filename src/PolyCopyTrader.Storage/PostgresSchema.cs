@@ -2685,6 +2685,9 @@ ON paper_orders(copied_trader_wallet, created_at_utc DESC);
 CREATE INDEX IF NOT EXISTS ix_paper_orders_strategy_time
 ON paper_orders(strategy_id, created_at_utc DESC);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_strategy_condition
+ON paper_orders(strategy_id, condition_id);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_created_time
 ON paper_orders(created_at_utc DESC);
 
@@ -3186,6 +3189,9 @@ ON paper_positions(copied_trader_wallet, asset_id);
 
 CREATE INDEX IF NOT EXISTS ix_paper_positions_wallet_updated
 ON paper_positions(copied_trader_wallet, updated_at_utc DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_wallet_condition_ci
+ON paper_positions(lower(copied_trader_wallet), condition_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_updated_page_cover
 ON paper_positions(updated_at_utc DESC, copied_trader_wallet, asset_id)
