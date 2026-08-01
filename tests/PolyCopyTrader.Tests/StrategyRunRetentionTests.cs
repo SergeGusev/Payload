@@ -180,7 +180,44 @@ public sealed class StrategyRunRetentionTests
         Assert.Contains("run.retention_scope = 'PaperOnly'", repositorySource, StringComparison.Ordinal);
         Assert.Contains("clock_timestamp() - interval '48 hours'", repositorySource, StringComparison.Ordinal);
         Assert.Contains("run.market_end_utc IS NOT NULL", repositorySource, StringComparison.Ordinal);
-        Assert.Contains("strategy_market_paper_run_retention_blockers(run)", repositorySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy_market_paper_run_retention_blockers(run)", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("AND run.skip_diagnostics_json IS NULL", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.paper_orders paper_order", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.dry_run_orders dry_order", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.live_orders live_order", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.paper_live_shadow_decisions decision", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.paper_positions position_row", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("INNER JOIN public.paper_position_settlements settlement", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.paper_copied_leader_positions position_row", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.paper_copied_leader_activity_events activity", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.polymarket_onchain_paper_signal_results result_row", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.strategy_market_paper_skip_tombstones tombstone", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.dashboard_projection_events projection_event", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.dashboard_strategy_recent_projection_facts fact", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("FROM public.dashboard_projection_reconciliation_queue queue_row", repositorySource, StringComparison.Ordinal);
+        Assert.Equal(
+            4,
+            CountOccurrences(repositorySource, "FROM public.strategy_market_paper_runs run"));
+        Assert.Contains(
+            "DELETE FROM public.strategy_market_paper_runs run",
+            repositorySource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "INSERT INTO public.strategy_paper_skip_rollups AS existing_rollup",
+            repositorySource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "INSERT INTO public.strategy_market_paper_skip_tombstones",
+            repositorySource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue",
+            repositorySource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("FROM strategy_market_paper_runs run", repositorySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("INTO strategy_paper_skip_rollups", repositorySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("INTO strategy_market_paper_skip_tombstones", repositorySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("INTO dashboard_projection_reconciliation_queue", repositorySource, StringComparison.Ordinal);
         Assert.Contains("IsolationLevel.Serializable", repositorySource, StringComparison.Ordinal);
         Assert.Contains("run.id = ANY(@RunIds)", repositorySource, StringComparison.Ordinal);
         Assert.Contains("result.SelectedRows != normalizedRunIds.Length", repositorySource, StringComparison.Ordinal);

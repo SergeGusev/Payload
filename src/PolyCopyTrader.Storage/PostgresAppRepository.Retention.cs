@@ -8,13 +8,110 @@ public sealed partial class PostgresAppRepository
 {
     private const int StrategyRunRetentionCommandTimeoutSeconds = 30;
 
+    // Keep every dependency predicate visible to PostgreSQL so it can plan the
+    // eligibility check as one set-based query instead of invoking the composite
+    // blocker function once for every candidate run.
     private const string EligiblePaperOnlySkippedRunFilter = """
 run.status = 'Skipped'
 AND run.retention_scope = 'PaperOnly'
 AND run.updated_at_utc < LEAST(@UpdatedBeforeUtc, clock_timestamp() - interval '48 hours')
 AND run.market_end_utc IS NOT NULL
 AND run.market_end_utc < LEAST(@UpdatedBeforeUtc, clock_timestamp() - interval '48 hours')
-AND cardinality(public.strategy_market_paper_run_retention_blockers(run)) = 0
+AND NULLIF(btrim(COALESCE(run.skip_reason, '')), '') IS NOT NULL
+AND run.signal_id IS NULL
+AND run.paper_order_id IS NULL
+AND run.entered_at_utc IS NULL
+AND run.entry_price IS NULL
+AND run.size_shares IS NULL
+AND run.settlement_price IS NULL
+AND run.settlement_value_usd IS NULL
+AND run.realized_pnl_usd IS NULL
+AND run.settled_at_utc IS NULL
+AND run.skip_diagnostics_json IS NULL
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.paper_orders paper_order
+    WHERE paper_order.strategy_id = run.strategy_id
+      AND paper_order.condition_id = run.condition_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.dry_run_orders dry_order
+    WHERE dry_order.strategy_id = run.strategy_id
+      AND dry_order.condition_id = run.condition_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.live_orders live_order
+    WHERE live_order.strategy_id = run.strategy_id
+      AND live_order.condition_id = run.condition_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.paper_live_shadow_decisions decision
+    WHERE decision.strategy_id = run.strategy_id
+      AND decision.market_id = run.market_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.paper_live_shadow_decisions decision
+    WHERE decision.strategy_id = run.strategy_id
+      AND decision.condition_id = run.condition_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.strategies strategy
+    INNER JOIN public.paper_positions position_row
+        ON lower(position_row.copied_trader_wallet) = lower('strategy:' || strategy.code)
+       AND position_row.condition_id = run.condition_id
+    WHERE strategy.id = run.strategy_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.strategies strategy
+    INNER JOIN public.paper_position_settlements settlement
+        ON lower(settlement.copied_trader_wallet) = lower('strategy:' || strategy.code)
+       AND settlement.condition_id = run.condition_id
+    WHERE strategy.id = run.strategy_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.paper_copied_leader_positions position_row
+    WHERE position_row.condition_id = run.condition_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.paper_copied_leader_activity_events activity
+    WHERE activity.condition_id = run.condition_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.polymarket_onchain_paper_signal_results result_row
+    WHERE result_row.condition_id = run.condition_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.strategy_market_paper_skip_tombstones tombstone
+    WHERE tombstone.strategy_id = run.strategy_id
+      AND tombstone.market_id = run.market_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.dashboard_projection_events projection_event
+    WHERE projection_event.source_kind = 'StrategyRun'
+      AND projection_event.source_id = run.id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.dashboard_strategy_recent_projection_facts fact
+    WHERE fact.source_kind = 'StrategyRun'
+      AND fact.source_id = run.id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM public.dashboard_projection_reconciliation_queue queue_row
+    WHERE queue_row.strategy_id = run.strategy_id
+)
 """;
 
     public async Task<StrategyRunRetentionPreview> PreviewPaperOnlySkippedRunRetentionAsync(
@@ -32,7 +129,7 @@ AND cardinality(public.strategy_market_paper_run_retention_blockers(run)) = 0
             connection,
             $$"""
 SELECT run.id, run.strategy_id, run.updated_at_utc
-FROM strategy_market_paper_runs run
+FROM public.strategy_market_paper_runs run
 WHERE {{EligiblePaperOnlySkippedRunFilter}}
 ORDER BY run.updated_at_utc, run.id
 LIMIT @Limit;
@@ -73,7 +170,7 @@ LIMIT @Limit;
             $$"""
 WITH eligible AS MATERIALIZED (
     SELECT run.id, run.strategy_id, run.updated_at_utc
-    FROM strategy_market_paper_runs run
+    FROM public.strategy_market_paper_runs run
     WHERE {{EligiblePaperOnlySkippedRunFilter}}
 ),
 summary AS (
@@ -164,14 +261,14 @@ WITH candidates AS MATERIALIZED (
         run.market_id,
         run.skip_reason,
         run.updated_at_utc
-    FROM strategy_market_paper_runs run
+    FROM public.strategy_market_paper_runs run
     WHERE run.id = ANY(@RunIds)
       AND {{EligiblePaperOnlySkippedRunFilter}}
     ORDER BY run.updated_at_utc, run.id
     FOR UPDATE OF run
 ),
 rollups AS (
-    INSERT INTO strategy_paper_skip_rollups (
+    INSERT INTO public.strategy_paper_skip_rollups AS existing_rollup (
         strategy_id,
         bucket_start_utc,
         skip_reason,
@@ -195,18 +292,18 @@ rollups AS (
         date_trunc('day', candidate.updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC',
         candidate.skip_reason
     ON CONFLICT (strategy_id, bucket_start_utc, skip_reason) DO UPDATE SET
-        run_count = strategy_paper_skip_rollups.run_count + EXCLUDED.run_count,
+        run_count = existing_rollup.run_count + EXCLUDED.run_count,
         first_updated_at_utc = LEAST(
-            strategy_paper_skip_rollups.first_updated_at_utc,
+            existing_rollup.first_updated_at_utc,
             EXCLUDED.first_updated_at_utc),
         last_updated_at_utc = GREATEST(
-            strategy_paper_skip_rollups.last_updated_at_utc,
+            existing_rollup.last_updated_at_utc,
             EXCLUDED.last_updated_at_utc),
         updated_at_utc = clock_timestamp()
     RETURNING 1
 ),
 tombstones AS (
-    INSERT INTO strategy_market_paper_skip_tombstones (
+    INSERT INTO public.strategy_market_paper_skip_tombstones (
         strategy_id, market_id, archived_run_id, archived_at_utc)
     SELECT
         candidate.strategy_id,
@@ -218,13 +315,13 @@ tombstones AS (
     RETURNING 1
 ),
 deleted AS (
-    DELETE FROM strategy_market_paper_runs run
+    DELETE FROM public.strategy_market_paper_runs run
     USING candidates candidate
     WHERE run.id = candidate.id
     RETURNING run.id
 ),
 queued AS (
-    INSERT INTO dashboard_projection_reconciliation_queue (
+    INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
         strategy_id, priority, reason, requested_at_utc, attempt_count, next_attempt_at_utc, last_error)
     SELECT DISTINCT
         candidate.strategy_id,
@@ -236,13 +333,13 @@ queued AS (
         NULL
     FROM candidates candidate
     ON CONFLICT (strategy_id) DO UPDATE SET
-        priority = GREATEST(dashboard_projection_reconciliation_queue.priority, EXCLUDED.priority),
+        priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
         reason = EXCLUDED.reason,
         requested_at_utc = LEAST(
-            dashboard_projection_reconciliation_queue.requested_at_utc,
+            existing_queue.requested_at_utc,
             EXCLUDED.requested_at_utc),
         next_attempt_at_utc = LEAST(
-            dashboard_projection_reconciliation_queue.next_attempt_at_utc,
+            existing_queue.next_attempt_at_utc,
             EXCLUDED.next_attempt_at_utc),
         last_error = NULL
     RETURNING 1
