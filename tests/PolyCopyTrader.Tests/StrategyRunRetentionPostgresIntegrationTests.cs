@@ -1,3 +1,4 @@
+using System.Data;
 using System.Diagnostics;
 using Npgsql;
 using NpgsqlTypes;
@@ -669,6 +670,836 @@ public sealed class StrategyRunRetentionPostgresIntegrationTests
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task ArchivedRun_PaperOrderRestoresExactRawRunAndReversesRollup()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var snapshots = new PostgresDashboardSnapshotRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"retention_{Guid.NewGuid():N}";
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var cutoffUtc = DateTimeOffset.UtcNow.AddHours(-48);
+        var run = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc),
+            $"retention-paper-restore-{Guid.NewGuid():N}");
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(run));
+            await projection.BootstrapAsync();
+            var originalPayload = await ReadRunPayloadWithoutScopeAsync(factory, run.Id);
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+
+            var transfer = await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [run.Id],
+                cutoffUtc);
+            Assert.Equal(1, transfer.DeletedRows);
+            Assert.Equal(new RetentionCounts(0, 1, 1, 0, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+
+            await repository.AddPaperOrderAsync(CreatePaperOrder(
+                strategyId,
+                run.ConditionId,
+                oldUtc.AddMinutes(1)));
+
+            Assert.Equal(originalPayload, await ReadRunPayloadWithoutScopeAsync(factory, run.Id));
+            Assert.Equal(StrategyRunRetentionScopes.PaperOnly,
+                await ReadRetentionScopeAsync(factory, run.Id));
+            var restored = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal(1, restored.RawRuns);
+            Assert.Equal(0, restored.RollupRuns);
+            Assert.Equal(0, restored.Tombstones);
+            Assert.Equal(1, restored.ReconciliationQueueRows);
+            Assert.Equal(0, await ReadStrategyRunProjectionEventCountAsync(factory, run.Id));
+
+            var preview = await repository.PreviewPaperOnlySkippedRunRetentionAsync(cutoffUtc, 10);
+            Assert.DoesNotContain(run.Id, preview.CandidateRunIds);
+            Assert.Contains(
+                "paper_order_dependency",
+                await ReadRunBlockersAsync(factory, run.Id));
+
+            var reconciliation = await projection.ReconcileNextStrategyAsync();
+            Assert.True(reconciliation.Reconciled, reconciliation.Error);
+            Assert.Equal(strategyId, reconciliation.StrategyId);
+            var authoritative = (await repository.GetStrategyPerformanceAsync())
+                .Single(row => row.StrategyId == strategyId);
+            var dashboard = await ReadDashboardSnapshotAsync(snapshots, strategyId);
+            AssertStrategyLifetimeMetricsEqual(authoritative, dashboard);
+            var reconciledCounts = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal(0, reconciledCounts.ProjectionEvents);
+            Assert.Equal(0, reconciledCounts.ReconciliationQueueRows);
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Transfer_RacingPaperOrderWaitsAndRestoresRawRunAfterCommit()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"retention_{Guid.NewGuid():N}";
+        var prefix = $"retention-paper-race-{Guid.NewGuid():N}";
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var cutoffUtc = DateTimeOffset.UtcNow.AddHours(-48);
+        var anchor = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc),
+            $"{prefix}-anchor");
+        var candidate = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc.AddMinutes(1)),
+            $"{prefix}-candidate");
+        var retentionApplicationName = $"retention_race_{Guid.NewGuid():N}";
+        var dependencyApplicationName = $"paper_race_{Guid.NewGuid():N}";
+        var retentionFactory = WithApplicationName(factory, retentionApplicationName);
+        var dependencyFactory = WithApplicationName(factory, dependencyApplicationName);
+        using var raceCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        Task<StrategyRunRetentionBatchResult>? retentionTask = null;
+        Task? dependencyTask = null;
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(anchor));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [anchor.Id],
+                cutoffUtc)).DeletedRows);
+            var anchorRollup = await ReadRollupGroupAsync(
+                factory,
+                strategyId,
+                anchor.UpdatedAtUtc,
+                anchor.SkipReason!);
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(candidate));
+            var originalPayload = await ReadRunPayloadWithoutScopeAsync(factory, candidate.Id);
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Contains(
+                candidate.Id,
+                (await repository.PreviewPaperOnlySkippedRunRetentionAsync(cutoffUtc, 10))
+                    .CandidateRunIds);
+
+            await using var blockerConnection = factory.CreateConnection();
+            await blockerConnection.OpenAsync();
+            await using var blockerTransaction = await blockerConnection.BeginTransactionAsync();
+            await LockRollupGroupAsync(
+                blockerConnection,
+                blockerTransaction,
+                strategyId,
+                anchor.UpdatedAtUtc,
+                anchor.SkipReason!);
+
+            retentionTask = new PostgresAppRepository(retentionFactory)
+                .TransferPaperOnlySkippedRunsToRollupsAsync(
+                    [candidate.Id],
+                    cutoffUtc,
+                    raceCancellation.Token);
+            var retentionPid = await WaitForBlockedApplicationAsync(
+                factory,
+                retentionApplicationName,
+                "transactionid");
+            await AssertBlockedByAsync(factory, retentionPid, blockerConnection.ProcessID);
+            Assert.True(await HoldsExclusiveRetentionGateAsync(factory, retentionPid));
+            await AssertRunRowIsLockedAsync(factory, candidate.Id);
+
+            var order = CreatePaperOrder(
+                strategyId,
+                candidate.ConditionId,
+                oldUtc.AddMinutes(2));
+            dependencyTask = new PostgresAppRepository(dependencyFactory)
+                .AddPaperOrderAsync(order, raceCancellation.Token);
+            var dependencyPid = await WaitForBlockedApplicationAsync(
+                factory,
+                dependencyApplicationName,
+                "advisory");
+            await AssertBlockedByAsync(factory, dependencyPid, retentionPid);
+            Assert.False(dependencyTask.IsCompleted);
+            Assert.False(retentionTask.IsCompleted);
+
+            await blockerTransaction.CommitAsync();
+            var transfer = await retentionTask.WaitAsync(TimeSpan.FromSeconds(15));
+            await dependencyTask.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Equal(1, transfer.SelectedRows);
+            Assert.Equal(1, transfer.DeletedRows);
+            Assert.Equal(1, transfer.TombstonesChanged);
+
+            Assert.Equal(originalPayload,
+                await ReadRunPayloadWithoutScopeAsync(factory, candidate.Id));
+            Assert.Equal(StrategyRunRetentionScopes.PaperOnly,
+                await ReadRetentionScopeAsync(factory, candidate.Id));
+            Assert.Equal(new RetentionCounts(1, 1, 1, 1, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+            var rollup = await ReadRollupGroupAsync(
+                factory,
+                strategyId,
+                anchor.UpdatedAtUtc,
+                anchor.SkipReason!);
+            Assert.Equal(anchorRollup, rollup);
+            Assert.Equal([anchor.Id], await ReadArchivedRunIdsAsync(factory, strategyId));
+            Assert.Equal(0, await ReadStrategyRunProjectionEventCountAsync(factory, candidate.Id));
+        }
+        finally
+        {
+            raceCancellation.Cancel();
+            await DrainRaceTaskAsync(dependencyTask);
+            await DrainRaceTaskAsync(retentionTask);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Transfer_RacingCommittedPaperOrderFirstRejectsStaleAllowlist()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var cutoffUtc = DateTimeOffset.UtcNow.AddHours(-48);
+        var run = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc),
+            $"retention-paper-first-race-{Guid.NewGuid():N}");
+        var retentionApplicationName = $"retention_dep_first_{Guid.NewGuid():N}";
+        var retentionFactory = WithApplicationName(factory, retentionApplicationName);
+        var order = CreatePaperOrder(strategyId, run.ConditionId, oldUtc.AddMinutes(1));
+        using var raceCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        Task<StrategyRunRetentionBatchResult>? retentionTask = null;
+
+        await InsertStrategyAsync(
+            factory,
+            strategyId,
+            $"retention_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(run));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Contains(
+                run.Id,
+                (await repository.PreviewPaperOnlySkippedRunRetentionAsync(cutoffUtc, 10))
+                    .CandidateRunIds);
+
+            await using var dependencyConnection = factory.CreateConnection();
+            await dependencyConnection.OpenAsync();
+            await using var dependencyTransaction =
+                await dependencyConnection.BeginTransactionAsync();
+            Assert.Equal(1, await InsertPaperOrderAsync(
+                dependencyConnection,
+                dependencyTransaction,
+                order));
+
+            retentionTask = new PostgresAppRepository(retentionFactory)
+                .TransferPaperOnlySkippedRunsToRollupsAsync(
+                    [run.Id],
+                    cutoffUtc,
+                    raceCancellation.Token);
+            var retentionPid = await WaitForBlockedApplicationAsync(
+                factory,
+                retentionApplicationName,
+                "advisory");
+            await AssertBlockedByAsync(factory, retentionPid, dependencyConnection.ProcessID);
+            Assert.False(retentionTask.IsCompleted);
+
+            await dependencyTransaction.CommitAsync();
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await retentionTask.WaitAsync(TimeSpan.FromSeconds(15)));
+
+            Assert.Equal([run.Id], await ReadRunIdsAsync(factory, [run.Id]));
+            Assert.Equal(1, await ReadPaperOrderCountAsync(factory, order.Id));
+            var counts = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal(1, counts.RawRuns);
+            Assert.Equal(0, counts.RollupRuns);
+            Assert.Equal(0, counts.Tombstones);
+        }
+        finally
+        {
+            raceCancellation.Cancel();
+            await DrainRaceTaskAsync(retentionTask);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task ArchivedRuns_LiveOrderAndShadowDecisionRestoreExactPromotedRawRuns()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var liveStrategyId = Guid.NewGuid();
+        var shadowStrategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var cutoffUtc = DateTimeOffset.UtcNow.AddHours(-48);
+        var prefix = $"retention-live-restore-{Guid.NewGuid():N}";
+        var liveRun = WithRetentionKey(
+            CreateSkippedRun(liveStrategyId, oldUtc),
+            $"{prefix}-live");
+        var shadowRun = WithRetentionKey(
+            CreateSkippedRun(shadowStrategyId, oldUtc.AddMinutes(1)),
+            $"{prefix}-shadow");
+
+        await InsertStrategyAsync(
+            factory,
+            liveStrategyId,
+            $"retention_{Guid.NewGuid():N}",
+            liveStakes: false);
+        await InsertStrategyAsync(
+            factory,
+            shadowStrategyId,
+            $"retention_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(liveRun));
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(shadowRun));
+            var livePayload = await ReadRunPayloadWithoutScopeAsync(factory, liveRun.Id);
+            var shadowPayload = await ReadRunPayloadWithoutScopeAsync(factory, shadowRun.Id);
+            await DeleteProjectionBlockersAsync(factory, liveStrategyId);
+            await DeleteProjectionBlockersAsync(factory, shadowStrategyId);
+
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [liveRun.Id],
+                cutoffUtc)).DeletedRows);
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [shadowRun.Id],
+                cutoffUtc)).DeletedRows);
+
+            await repository.AddLiveOrderAsync(CreateLiveOrder(
+                liveStrategyId,
+                liveRun.ConditionId,
+                oldUtc.AddMinutes(2)));
+            await repository.AddPaperLiveShadowDecisionAsync(CreateShadowDecision(
+                shadowStrategyId,
+                shadowRun.MarketId,
+                shadowRun.ConditionId,
+                oldUtc.AddMinutes(2)));
+
+            Assert.Equal(livePayload, await ReadRunPayloadWithoutScopeAsync(factory, liveRun.Id));
+            Assert.Equal(shadowPayload, await ReadRunPayloadWithoutScopeAsync(factory, shadowRun.Id));
+            Assert.Equal(StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, liveRun.Id));
+            Assert.Equal(StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, shadowRun.Id));
+            Assert.Equal(0, (await ReadRetentionCountsAsync(factory, liveStrategyId)).RollupRuns);
+            Assert.Equal(0, (await ReadRetentionCountsAsync(factory, shadowStrategyId)).RollupRuns);
+            Assert.Equal(0, await ReadStrategyRunProjectionEventCountAsync(factory, liveRun.Id));
+            Assert.Equal(0, await ReadStrategyRunProjectionEventCountAsync(factory, shadowRun.Id));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, liveStrategyId);
+            await DeleteTestStrategyAsync(factory, shadowStrategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Restore_RolledBackPaperOrderRollsBackRawRunAndRollupCompensation()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var run = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc),
+            $"retention-rollback-restore-{Guid.NewGuid():N}");
+
+        await InsertStrategyAsync(
+            factory,
+            strategyId,
+            $"retention_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(run));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [run.Id],
+                DateTimeOffset.UtcNow.AddHours(-48))).DeletedRows);
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            var before = await ReadRetentionCountsAsync(factory, strategyId);
+            var order = CreatePaperOrder(strategyId, run.ConditionId, oldUtc.AddMinutes(1));
+
+            await using (var connection = factory.CreateConnection())
+            {
+                await connection.OpenAsync();
+                await using var transaction = await connection.BeginTransactionAsync();
+                Assert.Equal(1, await InsertPaperOrderAsync(connection, transaction, order));
+                Assert.Equal(1, await ReadRunCountAsync(connection, transaction, run.Id));
+                Assert.Equal(0, await ReadTombstoneCountAsync(connection, transaction, run.Id));
+                await transaction.RollbackAsync();
+            }
+
+            Assert.Equal(before, await ReadRetentionCountsAsync(factory, strategyId));
+            Assert.Empty(await ReadRunIdsAsync(factory, [run.Id]));
+            Assert.Equal(0, await ReadPaperOrderCountAsync(factory, order.Id));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Restore_ConflictDoNothingDoesNotRestoreArchivedRun()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var run = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc),
+            $"retention-conflict-restore-{Guid.NewGuid():N}");
+        var existingOrder = CreatePaperOrder(
+            strategyId,
+            $"retention-unrelated-{Guid.NewGuid():N}",
+            oldUtc);
+
+        await InsertStrategyAsync(
+            factory,
+            strategyId,
+            $"retention_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            await repository.AddPaperOrderAsync(existingOrder);
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(run));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [run.Id],
+                DateTimeOffset.UtcNow.AddHours(-48))).DeletedRows);
+            var before = await ReadRetentionCountsAsync(factory, strategyId);
+
+            Assert.Equal(0, await InsertConflictingPaperOrderAsync(
+                factory,
+                existingOrder,
+                run.ConditionId));
+
+            Assert.Equal(before, await ReadRetentionCountsAsync(factory, strategyId));
+            Assert.Empty(await ReadRunIdsAsync(factory, [run.Id]));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Restore_LegacyTombstoneRejectsDependencyWriteFailClosed()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var archivedRunId = Guid.NewGuid();
+        var order = CreatePaperOrder(
+            strategyId,
+            $"retention-legacy-condition-{Guid.NewGuid():N}",
+            DateTimeOffset.UtcNow.AddDays(-4));
+
+        await InsertStrategyAsync(
+            factory,
+            strategyId,
+            $"retention_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            await using (var connection = factory.CreateConnection())
+            {
+                await connection.OpenAsync();
+                await using var command = new NpgsqlCommand(
+                    "INSERT INTO public.strategy_market_paper_skip_tombstones " +
+                    "(strategy_id, market_id, archived_run_id, archived_at_utc) " +
+                    "VALUES (@StrategyId, @MarketId, @ArchivedRunId, @ArchivedAtUtc);",
+                    connection);
+                command.Parameters.AddWithValue("StrategyId", strategyId);
+                command.Parameters.AddWithValue("MarketId", $"retention-legacy-market-{Guid.NewGuid():N}");
+                command.Parameters.AddWithValue("ArchivedRunId", archivedRunId);
+                command.Parameters.AddWithValue("ArchivedAtUtc", DateTime.UtcNow.AddDays(-3));
+                Assert.Equal(1, await command.ExecuteNonQueryAsync());
+            }
+
+            var exception = await Assert.ThrowsAsync<PostgresException>(
+                () => repository.AddPaperOrderAsync(order));
+            Assert.Equal("55000", exception.SqlState);
+            Assert.Contains("legacy/incomplete tombstone", exception.MessageText);
+            Assert.Equal(0, await ReadPaperOrderCountAsync(factory, order.Id));
+            Assert.Empty(await ReadRunIdsAsync(factory, [archivedRunId]));
+            Assert.Equal([archivedRunId], await ReadArchivedRunIdsAsync(factory, strategyId));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Restore_PositionWalletMatchingCaseVariantCodesRestoresEveryRun()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var firstStrategyId = Guid.NewGuid();
+        var secondStrategyId = Guid.NewGuid();
+        var codeSuffix = Guid.NewGuid().ToString("N");
+        var firstStrategyCode = $"RetentionCase_{codeSuffix}";
+        var secondStrategyCode = $"retentioncase_{codeSuffix}";
+        var conditionId = $"retention-case-wallet-{Guid.NewGuid():N}";
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var firstRun = WithRetentionKey(
+            CreateSkippedRun(firstStrategyId, oldUtc),
+            conditionId);
+        var secondRun = WithRetentionKey(
+            CreateSkippedRun(secondStrategyId, oldUtc.AddMinutes(1)),
+            conditionId);
+
+        await InsertStrategyAsync(factory, firstStrategyId, firstStrategyCode, liveStakes: false);
+        await InsertStrategyAsync(factory, secondStrategyId, secondStrategyCode, liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(firstRun));
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(secondRun));
+            await DeleteProjectionBlockersAsync(factory, firstStrategyId);
+            await DeleteProjectionBlockersAsync(factory, secondStrategyId);
+            var transfer = await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [firstRun.Id, secondRun.Id],
+                DateTimeOffset.UtcNow.AddHours(-48));
+            Assert.Equal(2, transfer.DeletedRows);
+
+            await repository.UpsertPaperPositionAsync(new PaperPosition(
+                $"asset-{Guid.NewGuid():N}",
+                conditionId,
+                "Yes",
+                2m,
+                0.50m,
+                1m,
+                0m,
+                oldUtc,
+                $"strategy:{firstStrategyCode.ToUpperInvariant()}"));
+
+            Assert.Equal(
+                new[] { firstRun.Id, secondRun.Id }.OrderBy(id => id),
+                (await ReadRunIdsAsync(factory, [firstRun.Id, secondRun.Id])).OrderBy(id => id));
+            var firstCounts = await ReadRetentionCountsAsync(factory, firstStrategyId);
+            var secondCounts = await ReadRetentionCountsAsync(factory, secondStrategyId);
+            Assert.Equal((1L, 0L, 0L, 1L),
+                (firstCounts.RawRuns, firstCounts.RollupRuns,
+                    firstCounts.Tombstones, firstCounts.ReconciliationQueueRows));
+            Assert.Equal((1L, 0L, 0L, 1L),
+                (secondCounts.RawRuns, secondCounts.RollupRuns,
+                    secondCounts.Tombstones, secondCounts.ReconciliationQueueRows));
+            Assert.Equal(0, await ReadStrategyRunProjectionEventCountAsync(factory, firstRun.Id));
+            Assert.Equal(0, await ReadStrategyRunProjectionEventCountAsync(factory, secondRun.Id));
+        }
+        finally
+        {
+            await DeleteConditionDependenciesAsync(factory, conditionId);
+            await DeleteTestStrategyAsync(factory, firstStrategyId);
+            await DeleteTestStrategyAsync(factory, secondStrategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Restore_StrategyCodeUpdateThatCreatesPositionMatchRestoresRun()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var oldCode = $"retention_old_{Guid.NewGuid():N}";
+        var newCode = $"retention_new_{Guid.NewGuid():N}";
+        var conditionId = $"retention-code-update-{Guid.NewGuid():N}";
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var run = WithRetentionKey(CreateSkippedRun(strategyId, oldUtc), conditionId);
+
+        await InsertStrategyAsync(factory, strategyId, oldCode, liveStakes: false);
+        try
+        {
+            await repository.UpsertPaperPositionAsync(new PaperPosition(
+                $"asset-{Guid.NewGuid():N}",
+                conditionId,
+                "Yes",
+                2m,
+                0.50m,
+                1m,
+                0m,
+                oldUtc,
+                $"strategy:{newCode}"));
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(run));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [run.Id],
+                DateTimeOffset.UtcNow.AddHours(-48))).DeletedRows);
+
+            await using (var connection = factory.CreateConnection())
+            {
+                await connection.OpenAsync();
+                await using var command = new NpgsqlCommand(
+                    "UPDATE public.strategies SET code = @Code, updated_at_utc = clock_timestamp() " +
+                    "WHERE id = @StrategyId;",
+                    connection);
+                command.Parameters.AddWithValue("Code", newCode);
+                command.Parameters.AddWithValue("StrategyId", strategyId);
+                Assert.Equal(1, await command.ExecuteNonQueryAsync());
+            }
+
+            Assert.Equal([run.Id], await ReadRunIdsAsync(factory, [run.Id]));
+            var counts = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal((1L, 0L, 0L, 1L),
+                (counts.RawRuns, counts.RollupRuns,
+                    counts.Tombstones, counts.ReconciliationQueueRows));
+            Assert.Equal(0, await ReadStrategyRunProjectionEventCountAsync(factory, run.Id));
+            Assert.Contains("paper_position_dependency", await ReadRunBlockersAsync(factory, run.Id));
+        }
+        finally
+        {
+            await DeleteConditionDependenciesAsync(factory, conditionId);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Restore_RacingStrategyCodeAndPositionWritesPreserveRunInBothOrders()
+    {
+        await AssertStrategyCodePositionRaceAsync(codeUpdateFirst: true);
+        await AssertStrategyCodePositionRaceAsync(codeUpdateFirst: false);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task ArchivedRuns_RemainingPaperDependenciesRestoreExactRawRunsAndReverseRollup()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"retention_{Guid.NewGuid():N}";
+        var prefix = $"retention-remaining-restore-{Guid.NewGuid():N}";
+        var oldUtc = new DateTimeOffset(
+            DateTime.UtcNow.Date.AddDays(-4).AddHours(12),
+            TimeSpan.Zero);
+        var cutoffUtc = DateTimeOffset.UtcNow.AddHours(-48);
+        var dryRun = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc),
+            $"{prefix}-dry-run");
+        var copiedPositionRun = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc.AddMinutes(1)),
+            $"{prefix}-copied-position");
+        var copiedActivityRun = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc.AddMinutes(2)),
+            $"{prefix}-copied-activity");
+        var onchainRun = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc.AddMinutes(3)),
+            $"{prefix}-onchain");
+        var settlementRun = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc.AddMinutes(4)),
+            $"{prefix}-settlement");
+        var runs = new[]
+        {
+            dryRun,
+            copiedPositionRun,
+            copiedActivityRun,
+            onchainRun,
+            settlementRun
+        };
+        var settlement = new PaperPositionSettlement(
+            Guid.NewGuid(),
+            $"strategy:{strategyCode}",
+            $"asset-{Guid.NewGuid():N}",
+            settlementRun.ConditionId,
+            "Yes",
+            $"asset-{Guid.NewGuid():N}",
+            "Yes",
+            "IntegrationTest",
+            2m,
+            0.50m,
+            1m,
+            2m,
+            1m,
+            true,
+            "IntegrationTest",
+            oldUtc.AddHours(1),
+            oldUtc.AddHours(1));
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            Assert.Equal(runs.Length,
+                (await repository.TryAddStrategyMarketPaperRunsAsync(runs)).Count);
+            var originalPayloads = new Dictionary<Guid, string>();
+            foreach (var run in runs)
+            {
+                originalPayloads.Add(
+                    run.Id,
+                    await ReadRunPayloadWithoutScopeAsync(factory, run.Id));
+            }
+
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            var transfer = await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                runs.Select(run => run.Id).ToArray(),
+                cutoffUtc);
+            Assert.Equal(runs.Length, transfer.SelectedRows);
+            Assert.Equal(runs.Length, transfer.DeletedRows);
+            Assert.Equal(1, transfer.RollupRowsChanged);
+            Assert.Equal(runs.Length, transfer.TombstonesChanged);
+            Assert.Equal(new RetentionCounts(0, runs.Length, runs.Length, 0, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+            Assert.Equal(
+                runs.Select(run => run.Id).OrderBy(id => id),
+                await ReadArchivedRunIdsAsync(factory, strategyId));
+
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            await InsertDirectExternalDependenciesAsync(
+                factory,
+                strategyId,
+                oldUtc.AddHours(2),
+                dryRun,
+                copiedPositionRun,
+                copiedActivityRun,
+                onchainRun);
+
+            var afterFourRestores = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal((4L, 1L, 1L, 1L),
+                (afterFourRestores.RawRuns,
+                    afterFourRestores.RollupRuns,
+                    afterFourRestores.Tombstones,
+                    afterFourRestores.ReconciliationQueueRows));
+            Assert.Equal([settlementRun.Id],
+                await ReadArchivedRunIdsAsync(factory, strategyId));
+            Assert.Equal(
+                new RollupGroup(
+                    1,
+                    settlementRun.UpdatedAtUtc,
+                    settlementRun.UpdatedAtUtc),
+                await ReadRollupGroupAsync(
+                    factory,
+                    strategyId,
+                    settlementRun.UpdatedAtUtc,
+                    settlementRun.SkipReason!));
+
+            var firstRestoreExpectations = new[]
+            {
+                (Run: dryRun, Blocker: "dry_run_dependency"),
+                (Run: copiedPositionRun, Blocker: "copied_leader_position_dependency"),
+                (Run: copiedActivityRun, Blocker: "copied_leader_activity_dependency"),
+                (Run: onchainRun, Blocker: "onchain_paper_dependency")
+            };
+            foreach (var expectation in firstRestoreExpectations)
+            {
+                Assert.Equal(
+                    originalPayloads[expectation.Run.Id],
+                    await ReadRunPayloadWithoutScopeAsync(factory, expectation.Run.Id));
+                Assert.Equal(
+                    StrategyRunRetentionScopes.PaperOnly,
+                    await ReadRetentionScopeAsync(factory, expectation.Run.Id));
+                Assert.Contains(
+                    expectation.Blocker,
+                    await ReadRunBlockersAsync(factory, expectation.Run.Id));
+                Assert.Equal(
+                    0,
+                    await ReadStrategyRunProjectionEventCountAsync(factory, expectation.Run.Id));
+            }
+
+            Assert.True(await repository.TryAddPaperPositionSettlementAsync(settlement));
+
+            Assert.Equal(
+                originalPayloads[settlementRun.Id],
+                await ReadRunPayloadWithoutScopeAsync(factory, settlementRun.Id));
+            Assert.Equal(
+                StrategyRunRetentionScopes.PaperOnly,
+                await ReadRetentionScopeAsync(factory, settlementRun.Id));
+            Assert.Contains(
+                "paper_settlement_dependency",
+                await ReadRunBlockersAsync(factory, settlementRun.Id));
+            Assert.Equal(
+                0,
+                await ReadStrategyRunProjectionEventCountAsync(factory, settlementRun.Id));
+            var restored = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal((5L, 0L, 0L, 1L),
+                (restored.RawRuns,
+                    restored.RollupRuns,
+                    restored.Tombstones,
+                    restored.ReconciliationQueueRows));
+            Assert.Empty(await ReadArchivedRunIdsAsync(factory, strategyId));
+            var restoredRunIds = runs.Select(run => run.Id).ToHashSet();
+            Assert.DoesNotContain(
+                (await repository.PreviewPaperOnlySkippedRunRetentionAsync(cutoffUtc, 25))
+                    .CandidateRunIds,
+                restoredRunIds.Contains);
+        }
+        finally
+        {
+            await DeleteConditionDependenciesAsync(factory, prefix);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Restore_HigherIsolationDependencyWriteFailsClosedWithoutChangingArchive()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var run = WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc),
+            $"retention-isolation-restore-{Guid.NewGuid():N}");
+
+        await InsertStrategyAsync(
+            factory,
+            strategyId,
+            $"retention_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(run));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [run.Id],
+                DateTimeOffset.UtcNow.AddHours(-48))).DeletedRows);
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            var archived = await ReadRetentionCountsAsync(factory, strategyId);
+
+            foreach (var isolationLevel in new[]
+                     {
+                         IsolationLevel.RepeatableRead,
+                         IsolationLevel.Serializable
+                     })
+            {
+                var order = CreatePaperOrder(
+                    strategyId,
+                    run.ConditionId,
+                    oldUtc.AddMinutes(1));
+                await using var connection = factory.CreateConnection();
+                await connection.OpenAsync();
+                await using var transaction = await connection.BeginTransactionAsync(isolationLevel);
+                var exception = await Assert.ThrowsAsync<PostgresException>(
+                    async () => await InsertPaperOrderAsync(connection, transaction, order));
+                Assert.Equal("0A000", exception.SqlState);
+                Assert.Contains("requires READ COMMITTED", exception.MessageText);
+                await transaction.RollbackAsync();
+
+                Assert.Equal(0, await ReadPaperOrderCountAsync(factory, order.Id));
+                Assert.Equal(archived, await ReadRetentionCountsAsync(factory, strategyId));
+                Assert.Empty(await ReadRunIdsAsync(factory, [run.Id]));
+                Assert.Equal([run.Id], await ReadArchivedRunIdsAsync(factory, strategyId));
+            }
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task SetBasedEligibility_NonZeroBatchReturnsExactCountsAndReportsDuration()
     {
         var factory = await CreateFactoryAsync();
@@ -1100,6 +1931,576 @@ CREATE TABLE {quotedSchemaName}.paper_orders (
         return results.ToArray();
     }
 
+    private static async Task<string> ReadRunPayloadWithoutScopeAsync(
+        PostgresConnectionFactory factory,
+        Guid runId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT (to_jsonb(run) - 'retention_scope')::text " +
+            "FROM public.strategy_market_paper_runs run WHERE run.id = @RunId;",
+            connection);
+        command.Parameters.AddWithValue("RunId", runId);
+        return (string)(await command.ExecuteScalarAsync()
+            ?? throw new InvalidOperationException("Strategy run payload was not found."));
+    }
+
+    private static PostgresConnectionFactory WithApplicationName(
+        PostgresConnectionFactory factory,
+        string applicationName)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(factory.ConnectionString)
+        {
+            ApplicationName = applicationName
+        };
+        return new PostgresConnectionFactory(new StorageOptions
+        {
+            ConnectionString = builder.ConnectionString
+        });
+    }
+
+    private static async Task AssertStrategyCodePositionRaceAsync(bool codeUpdateFirst)
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var oldCode = $"retention_mapping_old_{Guid.NewGuid():N}";
+        var newCode = $"retention_mapping_new_{Guid.NewGuid():N}";
+        var conditionId = $"retention-mapping-race-{Guid.NewGuid():N}";
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var run = WithRetentionKey(CreateSkippedRun(strategyId, oldUtc), conditionId);
+        var positionId = Guid.NewGuid();
+        var position = new PaperPosition(
+            $"asset-{Guid.NewGuid():N}",
+            conditionId,
+            "Yes",
+            2m,
+            0.50m,
+            1m,
+            0m,
+            oldUtc,
+            $"strategy:{newCode}");
+        var ownerApplicationName = $"mapping_owner_{Guid.NewGuid():N}";
+        var blockedApplicationName = $"mapping_blocked_{Guid.NewGuid():N}";
+        var ownerFactory = WithApplicationName(factory, ownerApplicationName);
+        var blockedFactory = WithApplicationName(factory, blockedApplicationName);
+        using var raceCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        Task<int>? blockedTask = null;
+
+        await InsertStrategyAsync(factory, strategyId, oldCode, liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(run));
+            var originalPayload = await ReadRunPayloadWithoutScopeAsync(factory, run.Id);
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [run.Id],
+                DateTimeOffset.UtcNow.AddHours(-48))).DeletedRows);
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+
+            if (codeUpdateFirst)
+            {
+                await using var ownerConnection = ownerFactory.CreateConnection();
+                await ownerConnection.OpenAsync();
+                await using var ownerTransaction = await ownerConnection.BeginTransactionAsync();
+                var ownerCommitted = false;
+                try
+                {
+                    Assert.Equal(1, await UpdateStrategyCodeAsync(
+                        ownerConnection,
+                        ownerTransaction,
+                        strategyId,
+                        newCode));
+                    blockedTask = InsertPaperPositionAsync(
+                        blockedFactory,
+                        positionId,
+                        position,
+                        raceCancellation.Token);
+                    var blockedPid = await WaitForBlockedApplicationAsync(
+                        factory,
+                        blockedApplicationName,
+                        "advisory");
+                    await AssertBlockedByAsync(factory, blockedPid, ownerConnection.ProcessID);
+
+                    await ownerTransaction.CommitAsync();
+                    ownerCommitted = true;
+                    Assert.Equal(1, await blockedTask.WaitAsync(TimeSpan.FromSeconds(15)));
+                }
+                finally
+                {
+                    if (!ownerCommitted)
+                    {
+                        await ownerTransaction.RollbackAsync(CancellationToken.None);
+                    }
+
+                    raceCancellation.Cancel();
+                    await DrainRaceTaskAsync(blockedTask);
+                }
+            }
+            else
+            {
+                await using var ownerConnection = ownerFactory.CreateConnection();
+                await ownerConnection.OpenAsync();
+                await using var ownerTransaction = await ownerConnection.BeginTransactionAsync();
+                var ownerCommitted = false;
+                try
+                {
+                    Assert.Equal(1, await InsertPaperPositionAsync(
+                        ownerConnection,
+                        ownerTransaction,
+                        positionId,
+                        position,
+                        CancellationToken.None));
+                    blockedTask = UpdateStrategyCodeAsync(
+                        blockedFactory,
+                        strategyId,
+                        newCode,
+                        raceCancellation.Token);
+                    var blockedPid = await WaitForBlockedApplicationAsync(
+                        factory,
+                        blockedApplicationName,
+                        "advisory");
+                    await AssertBlockedByAsync(factory, blockedPid, ownerConnection.ProcessID);
+
+                    await ownerTransaction.CommitAsync();
+                    ownerCommitted = true;
+                    Assert.Equal(1, await blockedTask.WaitAsync(TimeSpan.FromSeconds(15)));
+                }
+                finally
+                {
+                    if (!ownerCommitted)
+                    {
+                        await ownerTransaction.RollbackAsync(CancellationToken.None);
+                    }
+
+                    raceCancellation.Cancel();
+                    await DrainRaceTaskAsync(blockedTask);
+                }
+            }
+
+            Assert.Equal(originalPayload, await ReadRunPayloadWithoutScopeAsync(factory, run.Id));
+            Assert.Equal(StrategyRunRetentionScopes.PaperOnly,
+                await ReadRetentionScopeAsync(factory, run.Id));
+            var counts = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal((1L, 0L, 0L, 1L),
+                (counts.RawRuns, counts.RollupRuns,
+                    counts.Tombstones, counts.ReconciliationQueueRows));
+            Assert.Equal(0, await ReadStrategyRunProjectionEventCountAsync(factory, run.Id));
+            Assert.Contains("paper_position_dependency", await ReadRunBlockersAsync(factory, run.Id));
+        }
+        finally
+        {
+            raceCancellation.Cancel();
+            await DrainRaceTaskAsync(blockedTask);
+            await DeleteConditionDependenciesAsync(factory, conditionId);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    private static async Task<int> UpdateStrategyCodeAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        string code,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        return await UpdateStrategyCodeAsync(
+            connection,
+            null,
+            strategyId,
+            code,
+            cancellationToken);
+    }
+
+    private static async Task<int> UpdateStrategyCodeAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid strategyId,
+        string code,
+        CancellationToken cancellationToken = default)
+    {
+        await using var command = new NpgsqlCommand(
+            "UPDATE public.strategies SET code = @Code, updated_at_utc = clock_timestamp() " +
+            "WHERE id = @StrategyId;",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("Code", code);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<int> InsertPaperPositionAsync(
+        PostgresConnectionFactory factory,
+        Guid positionId,
+        PaperPosition position,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        return await InsertPaperPositionAsync(
+            connection,
+            null,
+            positionId,
+            position,
+            cancellationToken);
+    }
+
+    private static async Task<int> InsertPaperPositionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        Guid positionId,
+        PaperPosition position,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO public.paper_positions (
+    id, copied_trader_wallet, asset_id, condition_id, outcome,
+    size_shares, average_price, estimated_value_usd,
+    unrealized_pnl_usd, updated_at_utc)
+VALUES (
+    @Id, @CopiedTraderWallet, @AssetId, @ConditionId, @Outcome,
+    @SizeShares, @AveragePrice, @EstimatedValueUsd,
+    @UnrealizedPnlUsd, @UpdatedAtUtc);
+""",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("Id", positionId);
+        command.Parameters.AddWithValue("CopiedTraderWallet", position.CopiedTraderWallet);
+        command.Parameters.AddWithValue("AssetId", position.AssetId);
+        command.Parameters.AddWithValue("ConditionId", position.ConditionId);
+        command.Parameters.AddWithValue("Outcome", position.Outcome);
+        command.Parameters.AddWithValue("SizeShares", position.SizeShares);
+        command.Parameters.AddWithValue("AveragePrice", position.AveragePrice);
+        command.Parameters.AddWithValue("EstimatedValueUsd", position.EstimatedValueUsd);
+        command.Parameters.AddWithValue("UnrealizedPnlUsd", position.UnrealizedPnlUsd);
+        command.Parameters.AddWithValue("UpdatedAtUtc", position.UpdatedAtUtc.UtcDateTime);
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task LockRollupGroupAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid strategyId,
+        DateTimeOffset updatedAtUtc,
+        string skipReason)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT run_count
+FROM public.strategy_paper_skip_rollups
+WHERE strategy_id = @StrategyId
+  AND bucket_start_utc =
+      date_trunc('day', @UpdatedAtUtc::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+  AND skip_reason = @SkipReason
+FOR UPDATE;
+""",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("UpdatedAtUtc", updatedAtUtc.UtcDateTime);
+        command.Parameters.AddWithValue("SkipReason", skipReason);
+        Assert.Equal(1, Convert.ToInt32(await command.ExecuteScalarAsync()));
+    }
+
+    private static async Task<int> WaitForBlockedApplicationAsync(
+        PostgresConnectionFactory factory,
+        string applicationName,
+        string waitEvent)
+    {
+        var timeoutAt = DateTimeOffset.UtcNow.AddSeconds(10);
+        while (DateTimeOffset.UtcNow < timeoutAt)
+        {
+            await using var connection = factory.CreateConnection();
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(
+                """
+SELECT pid
+FROM pg_stat_activity
+WHERE application_name = @ApplicationName
+  AND state = 'active'
+  AND wait_event_type = 'Lock'
+  AND lower(COALESCE(wait_event, '')) = lower(@WaitEvent)
+LIMIT 1;
+""",
+                connection);
+            command.Parameters.AddWithValue("ApplicationName", applicationName);
+            command.Parameters.AddWithValue("WaitEvent", waitEvent);
+            var result = await command.ExecuteScalarAsync();
+            if (result is int pid)
+            {
+                return pid;
+            }
+
+            await Task.Delay(50);
+        }
+
+        throw new TimeoutException(
+            $"PostgreSQL application {applicationName} did not wait on {waitEvent} within 10 seconds.");
+    }
+
+    private static async Task AssertBlockedByAsync(
+        PostgresConnectionFactory factory,
+        int blockedPid,
+        int blockerPid)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT @BlockerPid = ANY(pg_blocking_pids(@BlockedPid));",
+            connection);
+        command.Parameters.AddWithValue("BlockedPid", blockedPid);
+        command.Parameters.AddWithValue("BlockerPid", blockerPid);
+        Assert.True((bool)(await command.ExecuteScalarAsync() ?? false));
+    }
+
+    private static async Task DrainRaceTaskAsync(Task? task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await task.WaitAsync(TimeSpan.FromSeconds(15));
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (PostgresException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (TimeoutException)
+        {
+        }
+    }
+
+    private static async Task<bool> HoldsExclusiveRetentionGateAsync(
+        PostgresConnectionFactory factory,
+        int pid)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_locks
+    WHERE pid = @Pid
+      AND locktype = 'advisory'
+      AND classid = 1346589778
+      AND objid = 1
+      AND mode = 'ExclusiveLock'
+      AND granted);
+""",
+            connection);
+        command.Parameters.AddWithValue("Pid", pid);
+        return (bool)(await command.ExecuteScalarAsync() ?? false);
+    }
+
+    private static async Task AssertRunRowIsLockedAsync(
+        PostgresConnectionFactory factory,
+        Guid runId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT id FROM public.strategy_market_paper_runs " +
+            "WHERE id = @RunId FOR UPDATE NOWAIT;",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("RunId", runId);
+        var exception = await Assert.ThrowsAsync<PostgresException>(
+            () => command.ExecuteScalarAsync());
+        Assert.Equal(PostgresErrorCodes.LockNotAvailable, exception.SqlState);
+        await transaction.RollbackAsync();
+    }
+
+    private static async Task<RollupGroup> ReadRollupGroupAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        DateTimeOffset updatedAtUtc,
+        string skipReason)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT run_count, first_updated_at_utc, last_updated_at_utc
+FROM public.strategy_paper_skip_rollups
+WHERE strategy_id = @StrategyId
+  AND bucket_start_utc =
+      date_trunc('day', @UpdatedAtUtc::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+  AND skip_reason = @SkipReason;
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("UpdatedAtUtc", updatedAtUtc.UtcDateTime);
+        command.Parameters.AddWithValue("SkipReason", skipReason);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new RollupGroup(
+            reader.GetInt32(0),
+            new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(1), DateTimeKind.Utc)),
+            new DateTimeOffset(DateTime.SpecifyKind(reader.GetDateTime(2), DateTimeKind.Utc)));
+    }
+
+    private static async Task<Guid[]> ReadArchivedRunIdsAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT archived_run_id FROM public.strategy_market_paper_skip_tombstones " +
+            "WHERE strategy_id = @StrategyId ORDER BY archived_run_id;",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        var results = new List<Guid>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(reader.GetGuid(0));
+        }
+
+        return results.ToArray();
+    }
+
+    private static async Task<string[]> ReadRunBlockersAsync(
+        PostgresConnectionFactory factory,
+        Guid runId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT public.strategy_market_paper_run_retention_blockers(run) " +
+            "FROM public.strategy_market_paper_runs run WHERE run.id = @RunId;",
+            connection);
+        command.Parameters.AddWithValue("RunId", runId);
+        return (string[])(await command.ExecuteScalarAsync()
+            ?? throw new InvalidOperationException("Strategy run blockers were not found."));
+    }
+
+    private static async Task<long> ReadStrategyRunProjectionEventCountAsync(
+        PostgresConnectionFactory factory,
+        Guid runId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*) FROM public.dashboard_projection_events " +
+            "WHERE source_kind = 'StrategyRun' AND source_id = @RunId;",
+            connection);
+        command.Parameters.AddWithValue("RunId", runId);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<int> InsertPaperOrderAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        PaperOrder order)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO public.paper_orders (
+    id, signal_id, strategy_id, copied_trader_wallet, status, side,
+    asset_id, condition_id, outcome, price, size_shares, notional_usd,
+    created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc,
+    raw_decision_json, correlation_id, execution_source)
+VALUES (
+    @Id, @SignalId, @StrategyId, @CopiedTraderWallet, @Status, @Side,
+    @AssetId, @ConditionId, @Outcome, @Price, @SizeShares, @NotionalUsd,
+    @CreatedAtUtc, @ExpiresAtUtc, @FilledAtUtc, @CancelledAtUtc,
+    CAST(@RawDecisionJson AS jsonb), @CorrelationId, @ExecutionSource)
+ON CONFLICT (id) DO NOTHING;
+""",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("Id", order.Id);
+        command.Parameters.AddWithValue("SignalId", order.SignalId);
+        command.Parameters.AddWithValue("StrategyId", order.StrategyId);
+        command.Parameters.AddWithValue("CopiedTraderWallet", order.CopiedTraderWallet);
+        command.Parameters.AddWithValue("Status", order.Status.ToString());
+        command.Parameters.AddWithValue("Side", order.Side.ToString());
+        command.Parameters.AddWithValue("AssetId", order.AssetId);
+        command.Parameters.AddWithValue("ConditionId", order.ConditionId);
+        command.Parameters.AddWithValue("Outcome", order.Outcome);
+        command.Parameters.AddWithValue("Price", order.Price);
+        command.Parameters.AddWithValue("SizeShares", order.SizeShares);
+        command.Parameters.AddWithValue("NotionalUsd", order.NotionalUsd);
+        command.Parameters.AddWithValue("CreatedAtUtc", order.CreatedAtUtc.UtcDateTime);
+        command.Parameters.AddWithValue("ExpiresAtUtc", order.ExpiresAtUtc.UtcDateTime);
+        command.Parameters.Add("FilledAtUtc", NpgsqlDbType.TimestampTz).Value =
+            order.FilledAtUtc is null ? DBNull.Value : order.FilledAtUtc.Value.UtcDateTime;
+        command.Parameters.Add("CancelledAtUtc", NpgsqlDbType.TimestampTz).Value =
+            order.CancelledAtUtc is null ? DBNull.Value : order.CancelledAtUtc.Value.UtcDateTime;
+        command.Parameters.AddWithValue("RawDecisionJson", order.RawDecisionJson ?? "{}");
+        command.Parameters.Add("CorrelationId", NpgsqlDbType.Uuid).Value =
+            order.CorrelationId is null ? DBNull.Value : order.CorrelationId.Value;
+        command.Parameters.AddWithValue("ExecutionSource", order.ExecutionSource);
+        return await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<int> InsertConflictingPaperOrderAsync(
+        PostgresConnectionFactory factory,
+        PaperOrder existingOrder,
+        string conflictingConditionId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        return await InsertPaperOrderAsync(
+            connection,
+            null,
+            existingOrder with { ConditionId = conflictingConditionId });
+    }
+
+    private static async Task<long> ReadRunCountAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid runId)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*) FROM public.strategy_market_paper_runs WHERE id = @RunId;",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("RunId", runId);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<long> ReadTombstoneCountAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid runId)
+    {
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*) FROM public.strategy_market_paper_skip_tombstones " +
+            "WHERE archived_run_id = @RunId;",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("RunId", runId);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task<long> ReadPaperOrderCountAsync(
+        PostgresConnectionFactory factory,
+        Guid orderId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*) FROM public.paper_orders WHERE id = @OrderId;",
+            connection);
+        command.Parameters.AddWithValue("OrderId", orderId);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
     private static async Task<PaperHistoryCounts> ReadPaperHistoryCountsAsync(
         PostgresConnectionFactory factory,
         Guid strategyId)
@@ -1348,6 +2749,28 @@ SELECT
             .Single(row => row.StrategyId == strategyId);
     }
 
+    private static void AssertStrategyLifetimeMetricsEqual(
+        StrategyPerformance expected,
+        StrategyPerformance actual)
+    {
+        Assert.Equal(expected.OrdersCount, actual.OrdersCount);
+        Assert.Equal(expected.FilledOrdersCount, actual.FilledOrdersCount);
+        Assert.Equal(expected.OpenOrdersCount, actual.OpenOrdersCount);
+        Assert.Equal(expected.OpenPositionsCount, actual.OpenPositionsCount);
+        Assert.Equal(expected.ObservedRunsCount, actual.ObservedRunsCount);
+        Assert.Equal(expected.EnteredRunsCount, actual.EnteredRunsCount);
+        Assert.Equal(expected.SkippedRunsCount, actual.SkippedRunsCount);
+        Assert.Equal(expected.PaperConditionSkippedRunsCount, actual.PaperConditionSkippedRunsCount);
+        Assert.Equal(expected.PaperNotAcceptedRunsCount, actual.PaperNotAcceptedRunsCount);
+        Assert.Equal(expected.SettledRunsCount, actual.SettledRunsCount);
+        Assert.Equal(expected.StakeUsd, actual.StakeUsd);
+        Assert.Equal(expected.RealizedPnlUsd, actual.RealizedPnlUsd);
+        Assert.Equal(expected.UnrealizedPnlUsd, actual.UnrealizedPnlUsd);
+        Assert.Equal(expected.TotalPnlUsd, actual.TotalPnlUsd);
+        Assert.Equal(expected.LastOrderUtc, actual.LastOrderUtc);
+        Assert.Equal(expected.LastRunUtc, actual.LastRunUtc);
+    }
+
     private static async Task DeleteTestStrategyAsync(
         PostgresConnectionFactory factory,
         Guid strategyId)
@@ -1493,4 +2916,9 @@ WHERE lower(copied_trader_wallet) IN (
         long Fills,
         long Positions,
         long Settlements);
+
+    private sealed record RollupGroup(
+        int RunCount,
+        DateTimeOffset FirstUpdatedAtUtc,
+        DateTimeOffset LastUpdatedAtUtc);
 }

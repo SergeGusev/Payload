@@ -239,28 +239,57 @@ CROSS JOIN sample;
         }
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(
-            IsolationLevel.Serializable,
-            cancellationToken);
-
-        await using (var settingsCommand = CreateCommand(
-            connection,
-            "SET LOCAL polycopytrader.skip_run_retention_transfer = 'on';"))
+        var gateHeld = false;
+        try
         {
-            settingsCommand.Transaction = transaction;
-            await settingsCommand.ExecuteNonQueryAsync(cancellationToken);
-        }
+            await using (var gateCommand = CreateCommand(
+                connection,
+                "SELECT public.lock_strategy_run_retention_transfer();"))
+            {
+                gateCommand.CommandTimeout = StrategyRunRetentionCommandTimeoutSeconds;
+                await gateCommand.ExecuteNonQueryAsync(cancellationToken);
+                gateHeld = true;
+            }
 
-        await using var command = CreateCommand(
-            connection,
-            $$"""
+            // The session gate is acquired before the SERIALIZABLE transaction
+            // takes a snapshot. Dependency writers that won the shared gate
+            // first are therefore visible to the exact allowlist recheck.
+            await using var transaction = await connection.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
+
+            await using (var settingsCommand = CreateCommand(
+                connection,
+                "SET LOCAL polycopytrader.skip_run_retention_transfer = 'on';"))
+            {
+                settingsCommand.Transaction = transaction;
+                await settingsCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await using var command = CreateCommand(
+                connection,
+                $$"""
 WITH candidates AS MATERIALIZED (
-        SELECT
+    SELECT
         run.id,
         run.strategy_id,
         run.market_id,
+        run.condition_id,
+        run.market_slug,
+        run.market_title,
+        run.category,
+        run.market_start_utc,
+        run.market_end_utc,
+        run.detected_at_utc,
+        run.entry_due_at_utc,
+        run.selected_asset_id,
+        run.selected_outcome,
+        run.stake_usd,
         run.skip_reason,
-        run.updated_at_utc
+        run.created_at_utc,
+        run.updated_at_utc,
+        date_trunc('day', run.updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+            AS rollup_bucket_start_utc
     FROM public.strategy_market_paper_runs run
     WHERE run.id = ANY(@RunIds)
       AND {{EligiblePaperOnlySkippedRunFilter}}
@@ -279,7 +308,7 @@ rollups AS (
         updated_at_utc)
     SELECT
         candidate.strategy_id,
-        date_trunc('day', candidate.updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC',
+        candidate.rollup_bucket_start_utc,
         candidate.skip_reason,
         count(*)::integer,
         min(candidate.updated_at_utc),
@@ -289,7 +318,7 @@ rollups AS (
     FROM candidates candidate
     GROUP BY
         candidate.strategy_id,
-        date_trunc('day', candidate.updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC',
+        candidate.rollup_bucket_start_utc,
         candidate.skip_reason
     ON CONFLICT (strategy_id, bucket_start_utc, skip_reason) DO UPDATE SET
         run_count = existing_rollup.run_count + EXCLUDED.run_count,
@@ -304,12 +333,47 @@ rollups AS (
 ),
 tombstones AS (
     INSERT INTO public.strategy_market_paper_skip_tombstones (
-        strategy_id, market_id, archived_run_id, archived_at_utc)
+        strategy_id,
+        market_id,
+        archived_run_id,
+        archived_at_utc,
+        archive_format_version,
+        condition_id,
+        market_slug,
+        market_title,
+        category,
+        market_start_utc,
+        market_end_utc,
+        detected_at_utc,
+        entry_due_at_utc,
+        selected_asset_id,
+        selected_outcome,
+        stake_usd,
+        skip_reason,
+        run_created_at_utc,
+        run_updated_at_utc,
+        rollup_bucket_start_utc)
     SELECT
         candidate.strategy_id,
         candidate.market_id,
         candidate.id,
-        clock_timestamp()
+        clock_timestamp(),
+        1,
+        candidate.condition_id,
+        candidate.market_slug,
+        candidate.market_title,
+        candidate.category,
+        candidate.market_start_utc,
+        candidate.market_end_utc,
+        candidate.detected_at_utc,
+        candidate.entry_due_at_utc,
+        candidate.selected_asset_id,
+        candidate.selected_outcome,
+        candidate.stake_usd,
+        candidate.skip_reason,
+        candidate.created_at_utc,
+        candidate.updated_at_utc,
+        candidate.rollup_bucket_start_utc
     FROM candidates candidate
     ON CONFLICT (strategy_id, market_id) DO NOTHING
     RETURNING 1
@@ -323,15 +387,18 @@ deleted AS (
 queued AS (
     INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
         strategy_id, priority, reason, requested_at_utc, attempt_count, next_attempt_at_utc, last_error)
-    SELECT DISTINCT
-        candidate.strategy_id,
+    SELECT
+        distinct_candidate.strategy_id,
         50,
         'paper_skip_retention_transfer',
         clock_timestamp(),
         0,
         clock_timestamp(),
         NULL
-    FROM candidates candidate
+    FROM (
+        SELECT DISTINCT candidate.strategy_id
+        FROM candidates candidate
+    ) distinct_candidate
     ON CONFLICT (strategy_id) DO UPDATE SET
         priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
         reason = EXCLUDED.reason,
@@ -351,36 +418,65 @@ SELECT
     (SELECT count(*)::integer FROM tombstones),
     (SELECT count(*)::integer FROM queued);
 """);
-        command.Transaction = transaction;
-        command.CommandTimeout = StrategyRunRetentionCommandTimeoutSeconds;
-        command.Parameters.Add("RunIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = normalizedRunIds;
-        command.Parameters.AddWithValue("UpdatedBeforeUtc", updatedBeforeUtc.UtcDateTime);
+            command.Transaction = transaction;
+            command.CommandTimeout = StrategyRunRetentionCommandTimeoutSeconds;
+            command.Parameters.Add("RunIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = normalizedRunIds;
+            command.Parameters.AddWithValue("UpdatedBeforeUtc", updatedBeforeUtc.UtcDateTime);
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            throw new InvalidOperationException("Paper-only skipped-run retention returned no batch result.");
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                throw new InvalidOperationException("Paper-only skipped-run retention returned no batch result.");
+            }
+
+            var result = new StrategyRunRetentionBatchResult(
+                reader.GetInt32(0),
+                reader.GetInt32(1),
+                reader.GetInt32(2),
+                reader.GetInt32(3),
+                reader.GetInt32(4));
+            await reader.DisposeAsync();
+
+            if (result.SelectedRows != normalizedRunIds.Length ||
+                result.SelectedRows != result.DeletedRows ||
+                result.SelectedRows != result.TombstonesChanged)
+            {
+                throw new InvalidOperationException(
+                    $"Paper-only skipped-run retention invariant failed: expected={normalizedRunIds.Length}, " +
+                    $"selected={result.SelectedRows}, " +
+                    $"deleted={result.DeletedRows}, tombstones={result.TombstonesChanged}.");
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return result;
         }
-
-        var result = new StrategyRunRetentionBatchResult(
-            reader.GetInt32(0),
-            reader.GetInt32(1),
-            reader.GetInt32(2),
-            reader.GetInt32(3),
-            reader.GetInt32(4));
-        await reader.DisposeAsync();
-
-        if (result.SelectedRows != normalizedRunIds.Length ||
-            result.SelectedRows != result.DeletedRows ||
-            result.SelectedRows != result.TombstonesChanged)
+        finally
         {
-            throw new InvalidOperationException(
-                $"Paper-only skipped-run retention invariant failed: expected={normalizedRunIds.Length}, " +
-                $"selected={result.SelectedRows}, " +
-                $"deleted={result.DeletedRows}, tombstones={result.TombstonesChanged}.");
+            if (!gateHeld)
+            {
+                NpgsqlConnection.ClearPool(connection);
+            }
+            else
+            {
+                try
+                {
+                    await using var unlockCommand = CreateCommand(
+                        connection,
+                        "SELECT public.unlock_strategy_run_retention_transfer();");
+                    unlockCommand.CommandTimeout = StrategyRunRetentionCommandTimeoutSeconds;
+                    var unlocked = await unlockCommand.ExecuteScalarAsync(CancellationToken.None);
+                    if (unlocked is not true)
+                    {
+                        NpgsqlConnection.ClearPool(connection);
+                        throw new InvalidOperationException("Strategy-run retention session gate was not held during release.");
+                    }
+                }
+                catch
+                {
+                    NpgsqlConnection.ClearPool(connection);
+                    throw;
+                }
+            }
         }
-
-        await transaction.CommitAsync(cancellationToken);
-        return result;
     }
 }

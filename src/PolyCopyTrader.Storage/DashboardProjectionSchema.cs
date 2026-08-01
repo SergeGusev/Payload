@@ -126,6 +126,551 @@ CREATE TABLE IF NOT EXISTS dashboard_strategy_position_projection_facts (
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_position_projection_facts_strategy
 ON dashboard_strategy_position_projection_facts (strategy_id, source_id);
 
+-- Normal strategy-run/dependency writes share this gate and therefore remain
+-- concurrent. Retention alone takes the matching exclusive session lock before
+-- opening its SERIALIZABLE transaction, so its allowlist snapshot cannot miss
+-- a dependency transaction that already passed the gate.
+CREATE OR REPLACE FUNCTION public.lock_strategy_run_retention_dependency()
+RETURNS void
+LANGUAGE sql
+VOLATILE
+AS $function$
+SELECT pg_advisory_xact_lock_shared(1346589778, 1);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.lock_strategy_run_retention_transfer()
+RETURNS void
+LANGUAGE sql
+VOLATILE
+AS $function$
+SELECT pg_advisory_lock(1346589778, 1);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.unlock_strategy_run_retention_transfer()
+RETURNS boolean
+LANGUAGE sql
+VOLATILE
+AS $function$
+SELECT pg_advisory_unlock(1346589778, 1);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.lock_strategy_run_dependency_mapping_mutation()
+RETURNS void
+LANGUAGE sql
+VOLATILE
+AS $function$
+SELECT pg_advisory_xact_lock(1346589778, 1);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.coordinate_strategy_run_mutation_with_retention()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+    IF current_setting('polycopytrader.skip_run_retention_transfer', true)
+       IS DISTINCT FROM 'on' THEN
+        PERFORM public.lock_strategy_run_retention_dependency();
+    END IF;
+
+    RETURN NULL;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_00_coordinate_strategy_run_mutation_with_retention
+ON public.strategy_market_paper_runs;
+CREATE TRIGGER trg_00_coordinate_strategy_run_mutation_with_retention
+BEFORE INSERT OR UPDATE OR DELETE ON public.strategy_market_paper_runs
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.coordinate_strategy_run_mutation_with_retention();
+
+CREATE OR REPLACE FUNCTION public.suppress_dashboard_strategy_run_projection(
+    target_run_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    suppressed_ids text := current_setting(
+        'polycopytrader.suppressed_run_projection_ids', true);
+BEGIN
+    IF suppressed_ids IS NULL OR suppressed_ids = '' THEN
+        PERFORM set_config(
+            'polycopytrader.suppressed_run_projection_ids',
+            target_run_id::text,
+            true);
+    ELSIF NOT (
+        target_run_id = ANY(string_to_array(suppressed_ids, ',')::uuid[])) THEN
+        PERFORM set_config(
+            'polycopytrader.suppressed_run_projection_ids',
+            suppressed_ids || ',' || target_run_id::text,
+            true);
+    END IF;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.restore_archived_strategy_runs_for_dependency(
+    target_strategy_id uuid,
+    target_condition_id text,
+    target_market_id text,
+    match_market_or_condition boolean,
+    promote_live_or_shadow boolean)
+RETURNS integer
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    archived record;
+    rollup_count integer;
+    rollup_first_updated_at_utc timestamptz;
+    rollup_last_updated_at_utc timestamptz;
+    remaining_count integer;
+    remaining_first_updated_at_utc timestamptz;
+    remaining_last_updated_at_utc timestamptz;
+    expected_first_updated_at_utc timestamptz;
+    expected_last_updated_at_utc timestamptz;
+    affected_rows integer;
+    restored_count integer := 0;
+BEGIN
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION
+            'Late strategy-run dependency restoration requires READ COMMITTED; current isolation is %.',
+            current_setting('transaction_isolation')
+            USING ERRCODE = '0A000';
+    END IF;
+
+    PERFORM public.lock_strategy_run_retention_dependency();
+
+    -- A legacy/incomplete tombstone does not contain enough data to prove that
+    -- the dependency is unrelated or to reconstruct the raw run. Fail closed:
+    -- for a strategy-scoped write, any such row for that strategy is a possible
+    -- match; for a condition-only global write, any such row is a possible match.
+    IF EXISTS (
+        SELECT 1
+        FROM public.strategy_market_paper_skip_tombstones tombstone
+        WHERE tombstone.archive_format_version IS DISTINCT FROM 1
+          AND (target_strategy_id IS NULL
+               OR tombstone.strategy_id = target_strategy_id)
+          AND (target_condition_id IS NOT NULL
+               OR (target_market_id IS NOT NULL
+                   AND tombstone.market_id = target_market_id))
+    ) THEN
+        RAISE EXCEPTION
+            'Cannot safely persist a strategy-run dependency while a possible legacy/incomplete tombstone exists.'
+            USING ERRCODE = '55000';
+    END IF;
+
+    FOR archived IN
+        SELECT tombstone.*
+        FROM public.strategy_market_paper_skip_tombstones tombstone
+        WHERE tombstone.archive_format_version = 1
+          AND (target_strategy_id IS NULL
+               OR tombstone.strategy_id = target_strategy_id)
+          AND (
+              (
+                  match_market_or_condition
+                  AND (
+                      (target_condition_id IS NOT NULL
+                       AND tombstone.condition_id = target_condition_id)
+                      OR (target_market_id IS NOT NULL
+                          AND tombstone.market_id = target_market_id)
+                  )
+              )
+              OR (
+                  NOT match_market_or_condition
+                  AND target_condition_id IS NOT NULL
+                  AND tombstone.condition_id = target_condition_id
+              )
+          )
+        ORDER BY tombstone.strategy_id, tombstone.market_id
+        FOR UPDATE
+    LOOP
+        IF EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_runs run
+            WHERE run.id = archived.archived_run_id
+               OR (run.strategy_id = archived.strategy_id
+                   AND run.market_id = archived.market_id)
+        ) THEN
+            RAISE EXCEPTION
+                'Cannot restore archived strategy run %: a raw row already exists.',
+                archived.archived_run_id;
+        END IF;
+
+        SELECT
+            rollup.run_count,
+            rollup.first_updated_at_utc,
+            rollup.last_updated_at_utc
+        INTO
+            rollup_count,
+            rollup_first_updated_at_utc,
+            rollup_last_updated_at_utc
+        FROM public.strategy_paper_skip_rollups rollup
+        WHERE rollup.strategy_id = archived.strategy_id
+          AND rollup.bucket_start_utc = archived.rollup_bucket_start_utc
+          AND rollup.skip_reason = archived.skip_reason
+        FOR UPDATE;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION
+                'Cannot restore archived strategy run %: rollup group is missing.',
+                archived.archived_run_id;
+        END IF;
+
+        SELECT
+            count(*)::integer,
+            min(tombstone.run_updated_at_utc),
+            max(tombstone.run_updated_at_utc)
+        INTO
+            remaining_count,
+            remaining_first_updated_at_utc,
+            remaining_last_updated_at_utc
+        FROM public.strategy_market_paper_skip_tombstones tombstone
+        WHERE tombstone.archive_format_version = 1
+          AND tombstone.strategy_id = archived.strategy_id
+          AND tombstone.rollup_bucket_start_utc = archived.rollup_bucket_start_utc
+          AND tombstone.skip_reason = archived.skip_reason
+          AND tombstone.archived_run_id <> archived.archived_run_id;
+
+        expected_first_updated_at_utc := CASE
+            WHEN remaining_count = 0 THEN archived.run_updated_at_utc
+            ELSE LEAST(archived.run_updated_at_utc, remaining_first_updated_at_utc)
+        END;
+        expected_last_updated_at_utc := CASE
+            WHEN remaining_count = 0 THEN archived.run_updated_at_utc
+            ELSE GREATEST(archived.run_updated_at_utc, remaining_last_updated_at_utc)
+        END;
+
+        IF rollup_count <> remaining_count + 1
+           OR rollup_first_updated_at_utc IS DISTINCT FROM expected_first_updated_at_utc
+           OR rollup_last_updated_at_utc IS DISTINCT FROM expected_last_updated_at_utc THEN
+            RAISE EXCEPTION
+                'Cannot restore archived strategy run %: rollup/archive invariant mismatch.',
+                archived.archived_run_id;
+        END IF;
+
+        PERFORM public.suppress_dashboard_strategy_run_projection(
+            archived.archived_run_id);
+
+        DELETE FROM public.strategy_market_paper_skip_tombstones tombstone
+        WHERE tombstone.strategy_id = archived.strategy_id
+          AND tombstone.market_id = archived.market_id;
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        IF affected_rows <> 1 THEN
+            RAISE EXCEPTION
+                'Cannot restore archived strategy run %: tombstone delete changed % rows.',
+                archived.archived_run_id,
+                affected_rows;
+        END IF;
+
+        INSERT INTO public.strategy_market_paper_runs (
+            id,
+            strategy_id,
+            market_id,
+            condition_id,
+            market_slug,
+            market_title,
+            category,
+            market_start_utc,
+            market_end_utc,
+            detected_at_utc,
+            entry_due_at_utc,
+            status,
+            selected_asset_id,
+            selected_outcome,
+            entry_price,
+            stake_usd,
+            size_shares,
+            signal_id,
+            paper_order_id,
+            entered_at_utc,
+            settlement_price,
+            settlement_value_usd,
+            realized_pnl_usd,
+            settled_at_utc,
+            skip_reason,
+            skip_diagnostics_json,
+            retention_scope,
+            created_at_utc,
+            updated_at_utc)
+        VALUES (
+            archived.archived_run_id,
+            archived.strategy_id,
+            archived.market_id,
+            archived.condition_id,
+            archived.market_slug,
+            archived.market_title,
+            archived.category,
+            archived.market_start_utc,
+            archived.market_end_utc,
+            archived.detected_at_utc,
+            archived.entry_due_at_utc,
+            'Skipped',
+            archived.selected_asset_id,
+            archived.selected_outcome,
+            NULL,
+            archived.stake_usd,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            archived.skip_reason,
+            NULL,
+            'PaperOnly',
+            archived.run_created_at_utc,
+            archived.run_updated_at_utc);
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        IF affected_rows <> 1 THEN
+            RAISE EXCEPTION
+                'Cannot restore archived strategy run %: raw insert changed % rows.',
+                archived.archived_run_id,
+                affected_rows;
+        END IF;
+
+        IF promote_live_or_shadow THEN
+            UPDATE public.strategy_market_paper_runs run
+            SET retention_scope = 'LiveOrShadow'
+            WHERE run.id = archived.archived_run_id;
+        END IF;
+
+        IF remaining_count = 0 THEN
+            DELETE FROM public.strategy_paper_skip_rollups rollup
+            WHERE rollup.strategy_id = archived.strategy_id
+              AND rollup.bucket_start_utc = archived.rollup_bucket_start_utc
+              AND rollup.skip_reason = archived.skip_reason;
+        ELSE
+            UPDATE public.strategy_paper_skip_rollups rollup
+            SET run_count = remaining_count,
+                first_updated_at_utc = remaining_first_updated_at_utc,
+                last_updated_at_utc = remaining_last_updated_at_utc,
+                updated_at_utc = clock_timestamp()
+            WHERE rollup.strategy_id = archived.strategy_id
+              AND rollup.bucket_start_utc = archived.rollup_bucket_start_utc
+              AND rollup.skip_reason = archived.skip_reason;
+        END IF;
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        IF affected_rows <> 1 THEN
+            RAISE EXCEPTION
+                'Cannot restore archived strategy run %: rollup reversal changed % rows.',
+                archived.archived_run_id,
+                affected_rows;
+        END IF;
+
+        INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
+            strategy_id,
+            priority,
+            reason,
+            requested_at_utc,
+            attempt_count,
+            next_attempt_at_utc,
+            last_error)
+        VALUES (
+            archived.strategy_id,
+            100,
+            'late_dependency_run_restore',
+            clock_timestamp(),
+            0,
+            clock_timestamp(),
+            NULL)
+        ON CONFLICT (strategy_id) DO UPDATE SET
+            priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
+            reason = EXCLUDED.reason,
+            requested_at_utc = LEAST(
+                existing_queue.requested_at_utc,
+                EXCLUDED.requested_at_utc),
+            next_attempt_at_utc = LEAST(
+                existing_queue.next_attempt_at_utc,
+                EXCLUDED.next_attempt_at_utc),
+            last_error = NULL;
+
+        restored_count := restored_count + 1;
+    END LOOP;
+
+    RETURN restored_count;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.restore_strategy_runs_after_dependency_write()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    new_row jsonb := to_jsonb(NEW);
+    target_strategy_id uuid;
+    target_condition_id text := NULLIF(new_row ->> 'condition_id', '');
+    target_market_id text;
+    target_wallet text;
+    match_market_or_condition boolean := false;
+    promote_live_or_shadow boolean := false;
+BEGIN
+    IF TG_TABLE_NAME IN ('paper_orders', 'dry_run_orders', 'live_orders',
+                         'paper_live_shadow_decisions') THEN
+        target_strategy_id := NULLIF(new_row ->> 'strategy_id', '')::uuid;
+    ELSIF TG_TABLE_NAME IN ('paper_positions', 'paper_position_settlements') THEN
+        -- Lock before resolving the mutable strategy code. A concurrent code
+        -- change takes the exclusive side and must become visible first or
+        -- recheck these rows after this transaction commits.
+        PERFORM public.lock_strategy_run_retention_dependency();
+        target_wallet := new_row ->> 'copied_trader_wallet';
+        FOR target_strategy_id IN
+            SELECT strategy.id
+            FROM public.strategies strategy
+            WHERE lower(target_wallet) = lower('strategy:' || strategy.code)
+            ORDER BY strategy.id
+        LOOP
+            PERFORM public.restore_archived_strategy_runs_for_dependency(
+                target_strategy_id,
+                target_condition_id,
+                NULL,
+                false,
+                false);
+        END LOOP;
+
+        -- Strategy codes are unique case-sensitively, while the historical
+        -- position blocker is case-insensitive. Enumerating every match keeps
+        -- restoration exactly aligned even if codes differ only by case.
+        RETURN NEW;
+    ELSIF TG_TABLE_NAME NOT IN (
+        'paper_copied_leader_positions',
+        'paper_copied_leader_activity_events',
+        'polymarket_onchain_paper_signal_results') THEN
+        RAISE EXCEPTION 'Unsupported late-dependency trigger table: %.', TG_TABLE_NAME;
+    END IF;
+
+    IF TG_TABLE_NAME = 'paper_live_shadow_decisions' THEN
+        target_market_id := NULLIF(new_row ->> 'market_id', '');
+        match_market_or_condition := true;
+    END IF;
+
+    promote_live_or_shadow := TG_TABLE_NAME IN (
+        'live_orders', 'paper_live_shadow_decisions');
+
+    PERFORM public.restore_archived_strategy_runs_for_dependency(
+        target_strategy_id,
+        target_condition_id,
+        target_market_id,
+        match_market_or_condition,
+        promote_live_or_shadow);
+
+    RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_paper_order
+ON public.paper_orders;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_paper_order
+AFTER INSERT OR UPDATE OF strategy_id, condition_id ON public.paper_orders
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_dry_run_order
+ON public.dry_run_orders;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_dry_run_order
+AFTER INSERT OR UPDATE OF strategy_id, condition_id ON public.dry_run_orders
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_live_order
+ON public.live_orders;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_live_order
+AFTER INSERT OR UPDATE OF strategy_id, condition_id ON public.live_orders
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_shadow_decision
+ON public.paper_live_shadow_decisions;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_shadow_decision
+AFTER INSERT OR UPDATE OF strategy_id, market_id, condition_id
+ON public.paper_live_shadow_decisions
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_paper_position
+ON public.paper_positions;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_paper_position
+AFTER INSERT OR UPDATE OF copied_trader_wallet, condition_id ON public.paper_positions
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_paper_settlement
+ON public.paper_position_settlements;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_paper_settlement
+AFTER INSERT OR UPDATE OF copied_trader_wallet, condition_id
+ON public.paper_position_settlements
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_copied_position
+ON public.paper_copied_leader_positions;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_copied_position
+AFTER INSERT OR UPDATE OF condition_id ON public.paper_copied_leader_positions
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_copied_activity
+ON public.paper_copied_leader_activity_events;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_copied_activity
+AFTER INSERT OR UPDATE OF condition_id ON public.paper_copied_leader_activity_events
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_onchain_result
+ON public.polymarket_onchain_paper_signal_results;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_onchain_result
+AFTER INSERT OR UPDATE OF condition_id
+ON public.polymarket_onchain_paper_signal_results
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();
+
+CREATE OR REPLACE FUNCTION public.restore_strategy_runs_after_strategy_code_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    target_condition_id text;
+BEGIN
+    IF OLD.code IS NOT DISTINCT FROM NEW.code THEN
+        RETURN NEW;
+    END IF;
+
+    -- The blocker contract resolves position ownership through the current
+    -- strategy code. A code change is therefore itself a dependency mutation.
+    -- Code changes and position/settlement writes must not both make their
+    -- mapping decision against the other's old committed state.
+    PERFORM public.lock_strategy_run_dependency_mapping_mutation();
+
+    FOR target_condition_id IN
+        SELECT position_row.condition_id
+        FROM public.paper_positions position_row
+        WHERE lower(position_row.copied_trader_wallet) =
+              lower('strategy:' || NEW.code)
+        UNION
+        SELECT settlement.condition_id
+        FROM public.paper_position_settlements settlement
+        WHERE lower(settlement.copied_trader_wallet) =
+              lower('strategy:' || NEW.code)
+        ORDER BY 1
+    LOOP
+        PERFORM public.restore_archived_strategy_runs_for_dependency(
+            NEW.id,
+            target_condition_id,
+            NULL,
+            false,
+            false);
+    END LOOP;
+
+    RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_00_restore_strategy_runs_after_strategy_code_update
+ON public.strategies;
+CREATE TRIGGER trg_00_restore_strategy_runs_after_strategy_code_update
+AFTER UPDATE OF code ON public.strategies
+FOR EACH ROW
+EXECUTE FUNCTION public.restore_strategy_runs_after_strategy_code_update();
+
 CREATE OR REPLACE FUNCTION public.strategy_market_paper_run_retention_blockers(
     target_run public.strategy_market_paper_runs)
 RETURNS text[]
@@ -466,6 +1011,14 @@ BEGIN
     IF TG_OP = 'DELETE'
        AND current_setting('polycopytrader.skip_run_retention_transfer', true) = 'on' THEN
         RETURN OLD;
+    END IF;
+
+    IF source_row_id = ANY(
+        string_to_array(
+            NULLIF(current_setting(
+                'polycopytrader.suppressed_run_projection_ids', true), ''),
+            ',')::uuid[]) THEN
+        RETURN COALESCE(NEW, OLD);
     END IF;
 
     SELECT strategy.live_enabled_at_utc

@@ -2917,8 +2917,103 @@ CREATE TABLE IF NOT EXISTS strategy_market_paper_skip_tombstones (
     market_id text NOT NULL,
     archived_run_id uuid NOT NULL,
     archived_at_utc timestamptz NOT NULL,
+    archive_format_version smallint NULL,
+    condition_id text NULL,
+    market_slug text NULL,
+    market_title text NULL,
+    category text NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    detected_at_utc timestamptz NULL,
+    entry_due_at_utc timestamptz NULL,
+    selected_asset_id text NULL,
+    selected_outcome text NULL,
+    stake_usd numeric(28,8) NULL,
+    skip_reason text NULL,
+    run_created_at_utc timestamptz NULL,
+    run_updated_at_utc timestamptz NULL,
+    rollup_bucket_start_utc timestamptz NULL,
     PRIMARY KEY (strategy_id, market_id)
 );
+
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS archive_format_version smallint NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS condition_id text NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS market_slug text NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS market_title text NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS category text NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS market_start_utc timestamptz NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS market_end_utc timestamptz NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS detected_at_utc timestamptz NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS entry_due_at_utc timestamptz NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS selected_asset_id text NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS selected_outcome text NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS stake_usd numeric(28,8) NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS skip_reason text NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS run_created_at_utc timestamptz NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS run_updated_at_utc timestamptz NULL;
+ALTER TABLE strategy_market_paper_skip_tombstones
+    ADD COLUMN IF NOT EXISTS rollup_bucket_start_utc timestamptz NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_strategy_market_paper_skip_tombstones_archive_v1'
+          AND conrelid = 'public.strategy_market_paper_skip_tombstones'::regclass
+    ) THEN
+        ALTER TABLE public.strategy_market_paper_skip_tombstones
+            ADD CONSTRAINT ck_strategy_market_paper_skip_tombstones_archive_v1
+            CHECK (
+                archive_format_version IS NULL
+                OR (
+                    archive_format_version = 1
+                    AND condition_id IS NOT NULL
+                    AND market_slug IS NOT NULL
+                    AND market_title IS NOT NULL
+                    AND detected_at_utc IS NOT NULL
+                    AND entry_due_at_utc IS NOT NULL
+                    AND stake_usd IS NOT NULL
+                    AND NULLIF(btrim(COALESCE(skip_reason, '')), '') IS NOT NULL
+                    AND run_created_at_utc IS NOT NULL
+                    AND run_updated_at_utc IS NOT NULL
+                    AND rollup_bucket_start_utc IS NOT NULL
+                    AND rollup_bucket_start_utc =
+                        date_trunc('day', rollup_bucket_start_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+                )) NOT VALID;
+    END IF;
+END $$;
+
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ux_strategy_market_paper_skip_tombstones_run
+ON strategy_market_paper_skip_tombstones(archived_run_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_skip_tombstones_condition_strategy
+ON strategy_market_paper_skip_tombstones(condition_id, strategy_id)
+WHERE archive_format_version = 1;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_skip_tombstones_rollup_group
+ON strategy_market_paper_skip_tombstones(
+    strategy_id, rollup_bucket_start_utc, skip_reason, run_updated_at_utc)
+WHERE archive_format_version = 1;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_skip_tombstones_incomplete
+ON strategy_market_paper_skip_tombstones(strategy_id, market_id)
+WHERE archive_format_version IS DISTINCT FROM 1;
 
 CREATE OR REPLACE FUNCTION public.prevent_archived_strategy_market_paper_run_reinsert()
 RETURNS trigger

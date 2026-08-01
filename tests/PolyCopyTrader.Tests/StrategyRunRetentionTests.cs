@@ -166,7 +166,7 @@ public sealed class StrategyRunRetentionTests
     }
 
     [Fact]
-    public void RetentionSql_IsFailClosedAndUsesExactSerializableAllowlist()
+    public void RetentionSql_IsFailClosedAndUsesGatedSerializableAllowlist()
     {
         var repositorySource = ReadRepositorySource(
             "src",
@@ -219,6 +219,18 @@ public sealed class StrategyRunRetentionTests
         Assert.DoesNotContain("INTO strategy_market_paper_skip_tombstones", repositorySource, StringComparison.Ordinal);
         Assert.DoesNotContain("INTO dashboard_projection_reconciliation_queue", repositorySource, StringComparison.Ordinal);
         Assert.Contains("IsolationLevel.Serializable", repositorySource, StringComparison.Ordinal);
+        Assert.Contains(
+            "SELECT public.lock_strategy_run_retention_transfer();",
+            repositorySource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SELECT public.unlock_strategy_run_retention_transfer();",
+            repositorySource,
+            StringComparison.Ordinal);
+        Assert.Contains("archive_format_version", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("candidate.condition_id", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("candidate.rollup_bucket_start_utc", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("SELECT DISTINCT candidate.strategy_id", repositorySource, StringComparison.Ordinal);
         Assert.Contains("run.id = ANY(@RunIds)", repositorySource, StringComparison.Ordinal);
         Assert.Contains("result.SelectedRows != normalizedRunIds.Length", repositorySource, StringComparison.Ordinal);
         Assert.Contains("count(*)::bigint AS total_candidate_rows", repositorySource, StringComparison.Ordinal);
@@ -236,6 +248,20 @@ public sealed class StrategyRunRetentionTests
             "current_setting('polycopytrader.skip_run_retention_transfer', true) = 'on'",
             projectionSchema,
             StringComparison.Ordinal);
+        Assert.Contains("lock_strategy_run_retention_dependency", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("restore_archived_strategy_runs_for_dependency", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("archive_format_version IS DISTINCT FROM 1", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("possible legacy/incomplete tombstone", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("FOR target_strategy_id IN", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("restore_strategy_runs_after_strategy_code_update", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("lock_strategy_run_dependency_mapping_mutation", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("late_dependency_run_restore", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("suppressed_run_projection_ids", projectionSchema, StringComparison.Ordinal);
+        Assert.Equal(
+            9,
+            CountOccurrences(
+                projectionSchema,
+                "EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();"));
     }
 
     [Fact]
@@ -253,6 +279,10 @@ public sealed class StrategyRunRetentionTests
             schema,
             StringComparison.Ordinal);
         Assert.Contains("CHECK (retention_scope IN ('Unknown', 'PaperOnly', 'LiveOrShadow')) NOT VALID", schema, StringComparison.Ordinal);
+        Assert.Contains("archive_format_version smallint NULL", schema, StringComparison.Ordinal);
+        Assert.Contains("rollup_bucket_start_utc timestamptz NULL", schema, StringComparison.Ordinal);
+        Assert.Contains("ux_strategy_market_paper_skip_tombstones_run", schema, StringComparison.Ordinal);
+        Assert.Contains("ix_strategy_market_paper_skip_tombstones_incomplete", schema, StringComparison.Ordinal);
         Assert.True(
             CountOccurrences(repositorySource, "FROM strategy_market_paper_skip_tombstones tombstone") >= 3,
             "All three current strategy-run INSERT paths must check tombstones explicitly.");
