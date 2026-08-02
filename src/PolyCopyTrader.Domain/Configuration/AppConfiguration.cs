@@ -609,6 +609,8 @@ public sealed class DashboardOptions
 
     public int ProjectionEventBatchSize { get; init; } = 250;
 
+    public int ProjectionReconciliationIntervalSeconds { get; init; } = 60;
+
     public string DefaultDatabaseSource { get; init; } = "Local database";
 }
 

@@ -187,7 +187,9 @@ public sealed class DashboardSnapshotTests
         Assert.Contains("ExpireRecentFactsAsync", projectionWorker, StringComparison.Ordinal);
         Assert.DoesNotContain("GetStrategyPerformanceAsync", projectionWorker, StringComparison.Ordinal);
         Assert.DoesNotContain("GetStrategyRecentPerformanceAsync", projectionWorker, StringComparison.Ordinal);
-        Assert.Contains("TimeSpan.FromMinutes(1)", reconciliationWorker, StringComparison.Ordinal);
+        Assert.Contains("options.ProjectionReconciliationIntervalSeconds", reconciliationWorker, StringComparison.Ordinal);
+        Assert.Contains("Task.Delay(cadence, clock, stoppingToken)", reconciliationWorker, StringComparison.Ordinal);
+        Assert.Contains("BatchSize=1", reconciliationWorker, StringComparison.Ordinal);
         Assert.Contains("ReconcileNextStrategyAsync", reconciliationWorker, StringComparison.Ordinal);
         Assert.Contains("AddHostedService<DashboardStrategyProjectionReconciliationWorker>", program, StringComparison.Ordinal);
         Assert.Contains("SET LOCAL max_parallel_workers_per_gather = 0", reconciliationRepository, StringComparison.Ordinal);

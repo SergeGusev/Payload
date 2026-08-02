@@ -255,6 +255,7 @@ public sealed class ConfigurationTests
         Assert.True(configuration.Dashboard.StrategiesOnlyMode);
         Assert.Equal(8, configuration.Dashboard.OptionalReportTimeoutSeconds);
         Assert.Equal(250, configuration.Dashboard.ProjectionEventBatchSize);
+        Assert.Equal(60, configuration.Dashboard.ProjectionReconciliationIntervalSeconds);
     }
 
     [Fact]
@@ -293,7 +294,8 @@ public sealed class ConfigurationTests
                 RefreshIntervalSeconds = 0,
                 StrategyRefreshIntervalSeconds = 0,
                 OptionalReportTimeoutSeconds = 0,
-                ProjectionEventBatchSize = 0
+                ProjectionEventBatchSize = 0,
+                ProjectionReconciliationIntervalSeconds = 0
             },
             PolymarketHttpLogging = new PolymarketHttpLoggingOptions
             {
@@ -330,6 +332,7 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("Dashboard.StrategyRefreshIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.OptionalReportTimeoutSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.ProjectionEventBatchSize", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("Dashboard.ProjectionReconciliationIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.SuccessfulRequestSampleRate", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.CleanupIntervalMinutes", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.CleanupBatchSize", StringComparison.Ordinal));
@@ -357,6 +360,28 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("GammaMarketIngestion.PollIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("GammaMarketIngestion.PageLimit", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("GammaMarketIngestion.PersistenceScope", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(3_601)]
+    public void DashboardProjectionReconciliationInterval_IsBounded(int intervalSeconds)
+    {
+        var configuration = new AppConfiguration
+        {
+            Dashboard = new DashboardOptions
+            {
+                ProjectionReconciliationIntervalSeconds = intervalSeconds
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(
+            errors,
+            error => error.Contains(
+                "Dashboard.ProjectionReconciliationIntervalSeconds",
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1139,6 +1164,7 @@ public sealed class ConfigurationTests
         Assert.Contains("BTC Up or Down 5m persists Diff counter snapshots:", summary);
         Assert.Contains("Gamma market persistence scope:", summary);
         Assert.Contains("Dashboard projection event batch size:", summary);
+        Assert.Contains("Dashboard projection reconciliation interval seconds:", summary);
         Assert.DoesNotContain("private", summary, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("secret", summary, StringComparison.OrdinalIgnoreCase);
     }

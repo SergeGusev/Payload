@@ -70,4 +70,20 @@ public sealed class AppConfigurationLoaderTests
         Assert.Equal(750, configuration.StrategyRunRetention.CleanupBatchSize);
         Assert.Equal(2, configuration.StrategyRunRetention.CleanupMaxBatchesPerCycle);
     }
+
+    [Fact]
+    public void Load_BindsDashboardProjectionReconciliationInterval()
+    {
+        Dictionary<string, string?> values = new()
+        {
+            ["Dashboard:ProjectionReconciliationIntervalSeconds"] = "30"
+        };
+        var configurationRoot = new ConfigurationBuilder()
+            .AddInMemoryCollection(values)
+            .Build();
+
+        var configuration = AppConfigurationLoader.Load(configurationRoot);
+
+        Assert.Equal(30, configuration.Dashboard.ProjectionReconciliationIntervalSeconds);
+    }
 }

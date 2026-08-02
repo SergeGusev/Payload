@@ -128,6 +128,7 @@ public static class AppOptionsValidator
             $"IPC dashboard URL: {configuration.Ipc.DashboardBaseUrl}",
             $"Dashboard strategies-only mode: {configuration.Dashboard.StrategiesOnlyMode}",
             $"Dashboard projection event batch size: {configuration.Dashboard.ProjectionEventBatchSize}",
+            $"Dashboard projection reconciliation interval seconds: {configuration.Dashboard.ProjectionReconciliationIntervalSeconds}",
             $"Daily reports enabled: {configuration.Analytics.DailyReportGenerationEnabled}",
             $"Trader discovery enabled: {configuration.TraderDiscovery.Enabled}",
             $"Trader discovery category: {configuration.TraderDiscovery.Category}",
@@ -1112,6 +1113,12 @@ public static class AppOptionsValidator
         if (options.ProjectionEventBatchSize <= 0 || options.ProjectionEventBatchSize > 2_000)
         {
             errors.Add("Dashboard.ProjectionEventBatchSize must be between 1 and 2000.");
+        }
+
+        if (options.ProjectionReconciliationIntervalSeconds < 5 ||
+            options.ProjectionReconciliationIntervalSeconds > 3_600)
+        {
+            errors.Add("Dashboard.ProjectionReconciliationIntervalSeconds must be between 5 and 3600.");
         }
     }
 

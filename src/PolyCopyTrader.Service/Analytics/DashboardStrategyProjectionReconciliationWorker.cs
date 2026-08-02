@@ -1,20 +1,29 @@
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.Analytics;
 
 public sealed class DashboardStrategyProjectionReconciliationWorker(
     ILogger<DashboardStrategyProjectionReconciliationWorker> logger,
-    IDashboardProjectionRepository projection) : BackgroundService
+    IDashboardProjectionRepository projection,
+    DashboardOptions options,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
-    private static readonly TimeSpan Cadence = TimeSpan.FromMinutes(1);
+    private readonly TimeSpan cadence = TimeSpan.FromSeconds(
+        options.ProjectionReconciliationIntervalSeconds);
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        logger.LogInformation(
+            "Dashboard strategy projection reconciliation worker started. IntervalSeconds={IntervalSeconds} BatchSize=1",
+            options.ProjectionReconciliationIntervalSeconds);
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await Task.Delay(Cadence, stoppingToken);
+                await Task.Delay(cadence, clock, stoppingToken);
                 var control = await projection.GetControlStateAsync(stoppingToken);
                 if (!control.Initialized ||
                     control.CalculationVersion != DashboardProjectionVersions.Current)
