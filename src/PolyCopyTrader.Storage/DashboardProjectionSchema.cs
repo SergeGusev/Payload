@@ -691,6 +691,13 @@ SELECT array_remove(ARRAY[
     CASE WHEN (target_run).realized_pnl_usd IS NOT NULL THEN 'realized_pnl_usd' END,
     CASE WHEN (target_run).settled_at_utc IS NOT NULL THEN 'settled_at_utc' END,
     CASE WHEN (target_run).skip_diagnostics_json IS NOT NULL THEN 'skip_diagnostics_json' END,
+    CASE WHEN (target_run).status = 'Skipped' AND EXISTS (
+        SELECT 1
+        FROM public.strategies strategy
+        WHERE strategy.id = (target_run).strategy_id
+          AND strategy.live_enabled_at_utc IS NOT NULL
+          AND (target_run).updated_at_utc >= strategy.live_enabled_at_utc
+    ) THEN 'live_skip_projection_dependency' END,
     CASE WHEN EXISTS (
         SELECT 1
         FROM public.paper_orders paper_order

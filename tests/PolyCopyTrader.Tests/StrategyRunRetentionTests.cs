@@ -388,6 +388,12 @@ public sealed class StrategyRunRetentionTests
         Assert.Contains("AND run.skip_diagnostics_json IS NULL", repositorySource, StringComparison.Ordinal);
         Assert.Contains("candidate_batch AS MATERIALIZED", repositorySource, StringComparison.Ordinal);
         Assert.Contains("candidate_strategy_keys AS MATERIALIZED", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("strategy.live_enabled_at_utc", repositorySource, StringComparison.Ordinal);
+        Assert.Contains("candidate_key.live_enabled_at_utc IS NOT NULL", repositorySource, StringComparison.Ordinal);
+        Assert.Contains(
+            "candidate_key.updated_at_utc >= candidate_key.live_enabled_at_utc",
+            repositorySource,
+            StringComparison.Ordinal);
         Assert.Contains("blocked_candidate_ids AS MATERIALIZED", repositorySource, StringComparison.Ordinal);
         Assert.Contains("LIMIT @CandidatePageSize", repositorySource, StringComparison.Ordinal);
         Assert.Contains("run.updated_at_utc > @AfterUpdatedAtUtc", repositorySource, StringComparison.Ordinal);
@@ -447,6 +453,12 @@ public sealed class StrategyRunRetentionTests
         Assert.Contains("count(*)::bigint AS total_candidate_rows", repositorySource, StringComparison.Ordinal);
 
         Assert.Contains("signal_id", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("live_skip_projection_dependency", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains("strategy.live_enabled_at_utc IS NOT NULL", projectionSchema, StringComparison.Ordinal);
+        Assert.Contains(
+            "(target_run).updated_at_utc >= strategy.live_enabled_at_utc",
+            projectionSchema,
+            StringComparison.Ordinal);
         Assert.Contains("paper_order_dependency", projectionSchema, StringComparison.Ordinal);
         Assert.Contains("live_order_dependency", projectionSchema, StringComparison.Ordinal);
         Assert.Contains("live_shadow_dependency", projectionSchema, StringComparison.Ordinal);

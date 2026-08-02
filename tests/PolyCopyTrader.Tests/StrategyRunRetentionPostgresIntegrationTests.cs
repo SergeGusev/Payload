@@ -171,6 +171,115 @@ public sealed class StrategyRunRetentionPostgresIntegrationTests
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task LiveSkipProjectionBoundary_CompactsOnlyPreLiveRunAndKeepsLiveSkipRowsRaw()
+    {
+        var factory = await CreateFactoryAsync();
+
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"retention_{Guid.NewGuid():N}";
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var cutoffUtc = DateTimeOffset.UtcNow.AddHours(-48);
+        var baseline = await repository.GetPaperOnlySkippedRunRetentionSummaryAsync(cutoffUtc, 0);
+        var preLiveRun = CreateSkippedRun(strategyId, oldUtc);
+        var boundaryRun = CreateSkippedRun(strategyId, oldUtc.AddMinutes(1));
+        var postLiveRun = CreateSkippedRun(strategyId, oldUtc.AddMinutes(2));
+        var allRuns = new[] { preLiveRun, boundaryRun, postLiveRun };
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            Assert.Equal(
+                allRuns.Length,
+                (await repository.TryAddStrategyMarketPaperRunsAsync(allRuns)).Count);
+            Assert.True(await repository.SetStrategyLiveStakesAsync(
+                strategyId,
+                liveStakes: true,
+                updatedAtUtc: boundaryRun.UpdatedAtUtc));
+            foreach (var run in allRuns)
+            {
+                Assert.Equal(
+                    StrategyRunRetentionScopes.PaperOnly,
+                    await ReadRetentionScopeAsync(factory, run.Id));
+            }
+
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+
+            var blockers = await ReadLegacyBlockersAsync(
+                factory,
+                allRuns.Select(run => run.Id).ToArray());
+            Assert.Empty(blockers[preLiveRun.Id]);
+            Assert.Equal(["live_skip_projection_dependency"], blockers[boundaryRun.Id]);
+            Assert.Equal(["live_skip_projection_dependency"], blockers[postLiveRun.Id]);
+
+            var preview = await repository.PreviewPaperOnlySkippedRunRetentionAsync(cutoffUtc, 25_000);
+            var fixtureIds = allRuns.Select(run => run.Id).ToHashSet();
+            Assert.Equal(
+                [preLiveRun.Id],
+                preview.CandidateRunIds.Where(fixtureIds.Contains).ToArray());
+            var summary = await repository.GetPaperOnlySkippedRunRetentionSummaryAsync(cutoffUtc, 0);
+            Assert.Equal(baseline.TotalCandidateRows + 1, summary.TotalCandidateRows);
+
+            var performanceBefore = (await repository.GetStrategyPerformanceAsync())
+                .Single(row => row.StrategyId == strategyId);
+            Assert.Equal(3, performanceBefore.SkippedRunsCount);
+            Assert.Equal(3, performanceBefore.PaperConditionSkippedRunsCount);
+            Assert.Equal(2, performanceBefore.LiveSkippedOrdersCount);
+            Assert.Equal(0, performanceBefore.LiveConditionSkippedOrdersCount);
+            Assert.Equal(2, performanceBefore.LiveTechnicalSkippedOrdersCount);
+            Assert.Equal(0, performanceBefore.LiveIgnoredOrdersCount);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                    [preLiveRun.Id, boundaryRun.Id],
+                    cutoffUtc));
+            Assert.Equal(
+                new RetentionCounts(3, 0, 0, 0, 0),
+                await ReadRetentionCountsAsync(factory, strategyId));
+            Assert.Equal(
+                allRuns.Select(run => run.Id).OrderBy(id => id),
+                (await ReadRunIdsAsync(factory, allRuns.Select(run => run.Id).ToArray())).OrderBy(id => id));
+
+            var transfer = await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [preLiveRun.Id],
+                cutoffUtc);
+            Assert.Equal(1, transfer.SelectedRows);
+            Assert.Equal(1, transfer.DeletedRows);
+            Assert.Equal(1, transfer.RollupRowsChanged);
+            Assert.Equal(1, transfer.TombstonesChanged);
+            Assert.Equal(
+                new RetentionCounts(2, 1, 1, 0, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+            Assert.Equal(
+                new[] { boundaryRun.Id, postLiveRun.Id }.OrderBy(id => id),
+                (await ReadRunIdsAsync(factory, allRuns.Select(run => run.Id).ToArray())).OrderBy(id => id));
+
+            var performanceAfter = (await repository.GetStrategyPerformanceAsync())
+                .Single(row => row.StrategyId == strategyId);
+            Assert.Equal(performanceBefore.SkippedRunsCount, performanceAfter.SkippedRunsCount);
+            Assert.Equal(
+                performanceBefore.PaperConditionSkippedRunsCount,
+                performanceAfter.PaperConditionSkippedRunsCount);
+            Assert.Equal(performanceBefore.LiveSkippedOrdersCount, performanceAfter.LiveSkippedOrdersCount);
+            Assert.Equal(
+                performanceBefore.LiveConditionSkippedOrdersCount,
+                performanceAfter.LiveConditionSkippedOrdersCount);
+            Assert.Equal(
+                performanceBefore.LiveTechnicalSkippedOrdersCount,
+                performanceAfter.LiveTechnicalSkippedOrdersCount);
+            Assert.Equal(
+                performanceBefore.LiveIgnoredOrdersCount,
+                performanceAfter.LiveIgnoredOrdersCount);
+            Assert.Equal(performanceBefore.LastRunUtc, performanceAfter.LastRunUtc);
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task SetBasedEligibility_MatchesLegacyBlockersAndPreservesPaperAndLiveHistory()
     {
         var factory = await CreateFactoryAsync();

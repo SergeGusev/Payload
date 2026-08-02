@@ -31,16 +31,27 @@ AND run.skip_diagnostics_json IS NULL
     // Blockers are evaluated against an already materialized candidate relation.
     // This prevents an unbounded correlated dependency scan for every raw run and
     // keeps closed paper positions (size_shares = 0) in the durable-history guard.
+    // The same strategy join keeps runs that contribute Live-skip projection
+    // counters raw because the compact Paper rollup does not preserve those fields.
     private const string StrategyRunRetentionBlockerCtes = """
 candidate_strategy_keys AS MATERIALIZED (
     SELECT
         candidate.id,
         candidate.condition_id,
+        candidate.updated_at_utc,
+        strategy.live_enabled_at_utc,
         lower('strategy:' || strategy.code) AS copied_trader_wallet_key
     FROM candidate_batch candidate
     INNER JOIN public.strategies strategy ON strategy.id = candidate.strategy_id
 ),
 blocker_hits AS (
+    SELECT candidate_key.id
+    FROM candidate_strategy_keys candidate_key
+    WHERE candidate_key.live_enabled_at_utc IS NOT NULL
+      AND candidate_key.updated_at_utc >= candidate_key.live_enabled_at_utc
+
+    UNION ALL
+
     SELECT DISTINCT candidate.id
     FROM candidate_batch candidate
     INNER JOIN public.paper_orders dependency
