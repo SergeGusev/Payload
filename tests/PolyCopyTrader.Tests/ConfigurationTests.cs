@@ -255,7 +255,7 @@ public sealed class ConfigurationTests
         Assert.True(configuration.Dashboard.StrategiesOnlyMode);
         Assert.Equal(8, configuration.Dashboard.OptionalReportTimeoutSeconds);
         Assert.Equal(250, configuration.Dashboard.ProjectionEventBatchSize);
-        Assert.Equal(60, configuration.Dashboard.ProjectionReconciliationIntervalSeconds);
+        Assert.Equal(30, configuration.Dashboard.ProjectionReconciliationIntervalSeconds);
     }
 
     [Fact]

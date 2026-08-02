@@ -76,7 +76,7 @@ public sealed class AppConfigurationLoaderTests
     {
         Dictionary<string, string?> values = new()
         {
-            ["Dashboard:ProjectionReconciliationIntervalSeconds"] = "30"
+            ["Dashboard:ProjectionReconciliationIntervalSeconds"] = "45"
         };
         var configurationRoot = new ConfigurationBuilder()
             .AddInMemoryCollection(values)
@@ -84,6 +84,6 @@ public sealed class AppConfigurationLoaderTests
 
         var configuration = AppConfigurationLoader.Load(configurationRoot);
 
-        Assert.Equal(30, configuration.Dashboard.ProjectionReconciliationIntervalSeconds);
+        Assert.Equal(45, configuration.Dashboard.ProjectionReconciliationIntervalSeconds);
     }
 }
