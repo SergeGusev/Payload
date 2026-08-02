@@ -1365,6 +1365,26 @@ public sealed class StorageTests
         Assert.Contains("(SELECT count(*)::integer FROM selected) AS wallets_selected", refreshSource, StringComparison.Ordinal);
         Assert.DoesNotContain("pickSeededReconciliationCommand", refreshSource, StringComparison.Ordinal);
         Assert.Contains("highPriorityWalletsProcessed + reconciliationWalletsProcessed", refreshSource, StringComparison.Ordinal);
+        var selectedWalletCount = refreshSource.IndexOf(
+            "(SELECT count(*)::integer FROM selected) AS wallets_selected",
+            StringComparison.Ordinal);
+        var selectionAnalyze = refreshSource.IndexOf(
+            "ANALYZE pg_temp.temp_paper_copied_trader_performance_wallets;",
+            StringComparison.Ordinal);
+        var projectionDelete = refreshSource.IndexOf(
+            "DELETE FROM paper_copied_trader_performance performance",
+            StringComparison.Ordinal);
+        var projectionAggregate = refreshSource.IndexOf("WITH event_rows AS (", StringComparison.Ordinal);
+        Assert.True(
+            selectedWalletCount >= 0
+            && selectionAnalyze > selectedWalletCount
+            && projectionDelete > selectionAnalyze
+            && projectionAggregate > projectionDelete);
+        Assert.Equal(
+            1,
+            refreshSource.Split(
+                "ANALYZE pg_temp.temp_paper_copied_trader_performance_wallets;",
+                StringSplitOptions.None).Length - 1);
         Assert.Contains("HighPriorityQueueRemaining", refreshSource, StringComparison.Ordinal);
         Assert.Contains("ReconciliationQueueRemaining", refreshSource, StringComparison.Ordinal);
         Assert.Contains("temp_paper_copied_trader_performance_wallets", refreshSource, StringComparison.Ordinal);

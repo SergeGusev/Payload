@@ -3190,6 +3190,16 @@ WHERE singleton_id = 1;
 			var performanceRowsWritten = 0;
 			if (walletsProcessed > 0)
 			{
+				// PostgreSQL otherwise applies its default cardinality estimate to this
+				// session-local selector and may scan every Paper source table.
+				await using (NpgsqlCommand analyzeWalletSelectionCommand = CreateCommand(connection, """
+ANALYZE pg_temp.temp_paper_copied_trader_performance_wallets;
+"""))
+				{
+					analyzeWalletSelectionCommand.Transaction = transaction;
+					await analyzeWalletSelectionCommand.ExecuteNonQueryAsync(cancellationToken);
+				}
+
 				await using (NpgsqlCommand deleteCommand = CreateCommand(connection, """
 DELETE FROM paper_copied_trader_performance performance
 USING temp_paper_copied_trader_performance_wallets selected
