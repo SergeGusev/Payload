@@ -163,6 +163,29 @@ public sealed class DashboardSnapshotTests
     }
 
     [Fact]
+    public void DashboardProjectionExpiry_UsesDisjointPartialIndexBranches()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresDashboardProjectionRepository.Expiry.cs");
+
+        Assert.Contains("WITH due_1h AS MATERIALIZED", source, StringComparison.Ordinal);
+        Assert.Contains("due_6h AS MATERIALIZED", source, StringComparison.Ordinal);
+        Assert.Contains("due_24h AS MATERIALIZED", source, StringComparison.Ordinal);
+        Assert.Contains("WHERE applied_1h", source, StringComparison.Ordinal);
+        Assert.Matches(@"WHERE applied_6h\s+AND NOT applied_1h", source);
+        Assert.Matches(
+            @"WHERE applied_24h\s+AND NOT applied_1h\s+AND NOT applied_6h",
+            source);
+        Assert.Equal(3, source.Split("FOR UPDATE SKIP LOCKED").Length - 1);
+        Assert.DoesNotContain(
+            "WHERE (applied_1h AND occurred_at_utc",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DashboardProjectionWorkers_UseIncrementalAndIndependentReconciliationLoops()
     {
         var projectionWorker = ReadRepositorySource(

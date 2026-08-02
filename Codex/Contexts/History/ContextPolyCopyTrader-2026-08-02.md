@@ -53,3 +53,17 @@ Request:
 
 Result:
 Verified the deployment strictly read-only at exact `192.168.0.101:5432/polycopytrader`. Runtime is exact commit `d19311e100c80454ac58989c3e2a70d6009a6cea`, MVID `222fd3b269a9`, stable start `09:53:34.764974Z`, Running/Live/no error, with one stable heartbeat writer across a 113.516-second former-phase window. The first reconciliation completed `30.068s` after start, and five consecutive successful gaps later measured `31.012-33.901s`, confirming effective delay-plus-work behavior consistent with the new 30-second default. Queue fell `1,833 -> 1,823`; a fixed 366.440-second window measured `0.9824 rows/min`, attempts/errors `0/0`. Long 121s and 185s no-success gaps remain consistent with fail-fast contention on the shared projection advisory gate; no lock waiters/overlap or new deadlocks were observed. Service pressure peaked at 18 active sessions, 6 idle-in-transaction, and 25.750s transaction age; database-wide read/temp activity was high but lacks a pre-deploy counterfactual and cannot be attributed to this change. Independent retention snapshots and final audit retained exactly the one approved no-bet canary (`1` v1 tombstone / `1` rollup / total `run_count=1`), zero post-start surviving transfer/restore/invariant/lock/build activity, and both indexes valid. No production mutation was performed. Keep 30 seconds, do not reduce further, keep retention apply disabled, and next measure/optimize projection-gate occupancy and long/high-I/O service transactions.
+
+## 2026-08-02T15:42:47.4585427+00:00
+Request:
+Ок, продолжай
+
+Result:
+Completed the bounded local optimization selected from strict read-only production profiling. The deployed expiry query repeatedly full-scanned the `1,577,916`-row derived recent-fact table: a 379.576-second counter window recorded `49` sequential scans and `77,298,714` sequential tuple reads, while a later exact snapshot had zero due rows. Replaced the old `OR` scan with three disjoint 1h/6h/24h `MATERIALIZED` branches using the existing partial indexes and branch-local `LIMIT ... FOR UPDATE SKIP LOCKED`; production read-only `EXPLAIN` selected all three indexes and reduced estimated planner cost from about `102102` to `41376`, without `ANALYZE` or production mutation. Raw Paper/Live history is untouched; only the same derived recent facts expire. Fresh PostgreSQL tests passed the complete 1h/6h/24h sequence and concurrent locked-oldest backfill, focused tests passed `17/17`, and the Release solution build completed with zero errors. Independent review found no material defect and identified the documented maximum `3 x batch` temporary row-lock footprint for post-deploy monitoring. Protected cleanup removed `6,486` disposable files / `605,733,341` bytes and verified the marked run and test listener absent. The change is ready for normal service republish; push remains withheld because local `master` contains the broader accumulated ahead stack.
+
+## 2026-08-02T15:42:47.4585428+00:00
+Request:
+Ок, что дальше?
+
+Result:
+Explained that the immediate next step after finalizing this local change is a normal service republish, followed by strict read-only production verification of exact build identity, real index usage, sequential-scan slope, projection-lock occupancy, queue throughput, and unchanged Paper/Live history. After that evidence, the next bounded optimization target is the independently observed full Paper-history scanning in `RefreshPaperCopiedTraderPerformanceProjectionAsync`. Retention apply remains disabled while the reconciliation queue is nonzero.

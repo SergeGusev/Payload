@@ -183,7 +183,7 @@ public sealed class DashboardIncrementalProjectionIntegrationTests
             AssertRecentMetricsEqual(rawRecent[index], projectedRecent[index]);
         }
 
-        await AgePaperOrderProjectionFactAsync(factory, paperOrderId);
+        await AgePaperOrderProjectionFactAsync(factory, paperOrderId, 2);
         var expiry = await projection.ExpireRecentFactsAsync(100);
         Assert.Equal(1, expiry.FactsExpired);
         var afterExpiry = (await snapshots.GetStrategyRecentPerformanceSnapshotAsync())
@@ -192,6 +192,30 @@ public sealed class DashboardIncrementalProjectionIntegrationTests
         Assert.Equal(0, afterExpiry[1].OrdersCount);
         Assert.Equal(1, afterExpiry[6].OrdersCount);
         Assert.Equal(1, afterExpiry[24].OrdersCount);
+
+        await AgePaperOrderProjectionFactAsync(factory, paperOrderId, 7);
+        var sixHourExpiry = await projection.ExpireRecentFactsAsync(100);
+        Assert.Equal(1, sixHourExpiry.FactsExpired);
+        var afterSixHourExpiry = (await snapshots.GetStrategyRecentPerformanceSnapshotAsync())
+            .Where(row => row.StrategyId == strategyId)
+            .ToDictionary(row => row.WindowHours);
+        Assert.Equal(0, afterSixHourExpiry[1].OrdersCount);
+        Assert.Equal(0, afterSixHourExpiry[6].OrdersCount);
+        Assert.Equal(1, afterSixHourExpiry[24].OrdersCount);
+
+        await AgePaperOrderProjectionFactAsync(factory, paperOrderId, 25);
+        var twentyFourHourExpiry = await projection.ExpireRecentFactsAsync(100);
+        Assert.Equal(1, twentyFourHourExpiry.FactsExpired);
+        var afterTwentyFourHourExpiry = (await snapshots.GetStrategyRecentPerformanceSnapshotAsync())
+            .Where(row => row.StrategyId == strategyId)
+            .ToDictionary(row => row.WindowHours);
+        Assert.Equal(0, afterTwentyFourHourExpiry[1].OrdersCount);
+        Assert.Equal(0, afterTwentyFourHourExpiry[6].OrdersCount);
+        Assert.Equal(0, afterTwentyFourHourExpiry[24].OrdersCount);
+        Assert.Equal(0, await ReadRecentProjectionFactCountForSourceAsync(
+            factory,
+            DashboardProjectionSourceKinds.PaperOrder,
+            paperOrderId));
 
         var disposableStrategyId = Guid.NewGuid();
         await InsertStrategyAsync(factory, disposableStrategyId);
@@ -285,6 +309,83 @@ public sealed class DashboardIncrementalProjectionIntegrationTests
         Assert.Equal(1, (await projection.ApplyPendingEventsAsync(100)).EventsApplied);
     }
 
+    [Fact]
+    public async Task ExpireRecentFacts_SkipsLockedOldestFactAndBackfillsBatch()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var lockedOrderId = Guid.NewGuid();
+        var nextOrderId = Guid.NewGuid();
+        var nowUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+
+        await InsertStrategyAsync(factory, strategyId);
+        await InsertPaperOrderAsync(factory, lockedOrderId, strategyId, nowUtc);
+        await InsertPaperOrderAsync(factory, nextOrderId, strategyId, nowUtc.AddSeconds(1));
+        await projection.BootstrapAsync();
+        await SetPaperOrderProjectionFactOccurredAtAsync(
+            factory,
+            lockedOrderId,
+            DateTimeOffset.UnixEpoch.AddDays(1));
+        await SetPaperOrderProjectionFactOccurredAtAsync(
+            factory,
+            nextOrderId,
+            DateTimeOffset.UnixEpoch.AddDays(2));
+
+        await using var blockerConnection = factory.CreateConnection();
+        await blockerConnection.OpenAsync();
+        await using var blockerTransaction = await blockerConnection.BeginTransactionAsync();
+        await using (var lockCommand = new NpgsqlCommand(
+            """
+SELECT source_id
+FROM dashboard_strategy_recent_projection_facts
+WHERE source_kind = @SourceKind
+  AND source_id = @SourceId
+  AND fact_kind = @FactKind
+FOR UPDATE;
+""",
+            blockerConnection,
+            blockerTransaction))
+        {
+            lockCommand.Parameters.AddWithValue("SourceKind", DashboardProjectionSourceKinds.PaperOrder);
+            lockCommand.Parameters.AddWithValue("SourceId", lockedOrderId);
+            lockCommand.Parameters.AddWithValue("FactKind", DashboardProjectionFactKinds.PaperOrderCreated);
+            Assert.Equal(lockedOrderId, Assert.IsType<Guid>(await lockCommand.ExecuteScalarAsync()));
+        }
+
+        try
+        {
+            var expiry = await projection.ExpireRecentFactsAsync(1);
+
+            Assert.Equal(1, expiry.FactsExpired);
+            Assert.Equal(1, await ReadRecentProjectionFactCountForSourceAsync(
+                factory,
+                DashboardProjectionSourceKinds.PaperOrder,
+                lockedOrderId));
+            Assert.Equal(0, await ReadRecentProjectionFactCountForSourceAsync(
+                factory,
+                DashboardProjectionSourceKinds.PaperOrder,
+                nextOrderId));
+        }
+        finally
+        {
+            await blockerTransaction.RollbackAsync();
+        }
+
+        Assert.Equal(1, (await projection.ExpireRecentFactsAsync(1)).FactsExpired);
+        Assert.Equal(0, await ReadRecentProjectionFactCountForSourceAsync(
+            factory,
+            DashboardProjectionSourceKinds.PaperOrder,
+            lockedOrderId));
+    }
+
     private static async Task<(Guid StrategyId, string StrategyCode)> ReadFirstStrategyAsync(
         PostgresConnectionFactory factory)
     {
@@ -356,19 +457,45 @@ VALUES (@Id, @Code, @Name, 'projection integration test', clock_timestamp(), clo
 
     private static async Task AgePaperOrderProjectionFactAsync(
         PostgresConnectionFactory factory,
-        Guid paperOrderId)
+        Guid paperOrderId,
+        int ageHours)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ageHours);
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+UPDATE dashboard_strategy_recent_projection_facts
+SET occurred_at_utc = clock_timestamp() - make_interval(hours => @AgeHours)
+WHERE source_kind = @SourceKind
+  AND source_id = @SourceId
+  AND fact_kind = @FactKind;
+""",
+            connection);
+        command.Parameters.AddWithValue("SourceKind", DashboardProjectionSourceKinds.PaperOrder);
+        command.Parameters.AddWithValue("SourceId", paperOrderId);
+        command.Parameters.AddWithValue("FactKind", DashboardProjectionFactKinds.PaperOrderCreated);
+        command.Parameters.AddWithValue("AgeHours", ageHours);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task SetPaperOrderProjectionFactOccurredAtAsync(
+        PostgresConnectionFactory factory,
+        Guid paperOrderId,
+        DateTimeOffset occurredAtUtc)
     {
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
             """
 UPDATE dashboard_strategy_recent_projection_facts
-SET occurred_at_utc = clock_timestamp() - interval '2 hours'
+SET occurred_at_utc = @OccurredAtUtc
 WHERE source_kind = @SourceKind
   AND source_id = @SourceId
   AND fact_kind = @FactKind;
 """,
             connection);
+        command.Parameters.AddWithValue("OccurredAtUtc", NpgsqlDbType.TimestampTz, occurredAtUtc.UtcDateTime);
         command.Parameters.AddWithValue("SourceKind", DashboardProjectionSourceKinds.PaperOrder);
         command.Parameters.AddWithValue("SourceId", paperOrderId);
         command.Parameters.AddWithValue("FactKind", DashboardProjectionFactKinds.PaperOrderCreated);

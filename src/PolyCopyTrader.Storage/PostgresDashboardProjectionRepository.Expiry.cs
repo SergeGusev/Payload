@@ -150,15 +150,56 @@ public sealed partial class PostgresDashboardProjectionRepository
     {
         await using var command = new NpgsqlCommand(
             """
+-- The cutoffs are nested, so the earliest still-applied window owns each due fact.
+-- Locking inside each disjoint branch preserves SKIP LOCKED backfill while letting
+-- every window use its partial expiry index.
+WITH due_1h AS MATERIALIZED (
+    SELECT source_kind, source_id, fact_kind, strategy_id, occurred_at_utc,
+           contribution_json::text AS contribution_json,
+           applied_1h, applied_6h, applied_24h
+    FROM dashboard_strategy_recent_projection_facts
+    WHERE applied_1h
+      AND occurred_at_utc < @OneHourStartUtc
+    ORDER BY occurred_at_utc, strategy_id, source_id
+    LIMIT @Limit
+    FOR UPDATE SKIP LOCKED
+),
+due_6h AS MATERIALIZED (
+    SELECT source_kind, source_id, fact_kind, strategy_id, occurred_at_utc,
+           contribution_json::text AS contribution_json,
+           applied_1h, applied_6h, applied_24h
+    FROM dashboard_strategy_recent_projection_facts
+    WHERE applied_6h
+      AND NOT applied_1h
+      AND occurred_at_utc < @SixHourStartUtc
+    ORDER BY occurred_at_utc, strategy_id, source_id
+    LIMIT @Limit
+    FOR UPDATE SKIP LOCKED
+),
+due_24h AS MATERIALIZED (
+    SELECT source_kind, source_id, fact_kind, strategy_id, occurred_at_utc,
+           contribution_json::text AS contribution_json,
+           applied_1h, applied_6h, applied_24h
+    FROM dashboard_strategy_recent_projection_facts
+    WHERE applied_24h
+      AND NOT applied_1h
+      AND NOT applied_6h
+      AND occurred_at_utc < @TwentyFourHourStartUtc
+    ORDER BY occurred_at_utc, strategy_id, source_id
+    LIMIT @Limit
+    FOR UPDATE SKIP LOCKED
+)
 SELECT source_kind, source_id, fact_kind, strategy_id, occurred_at_utc,
-       contribution_json::text, applied_1h, applied_6h, applied_24h
-FROM dashboard_strategy_recent_projection_facts
-WHERE (applied_1h AND occurred_at_utc < @OneHourStartUtc)
-   OR (applied_6h AND occurred_at_utc < @SixHourStartUtc)
-   OR (applied_24h AND occurred_at_utc < @TwentyFourHourStartUtc)
+       contribution_json, applied_1h, applied_6h, applied_24h
+FROM (
+    SELECT * FROM due_1h
+    UNION ALL
+    SELECT * FROM due_6h
+    UNION ALL
+    SELECT * FROM due_24h
+) due
 ORDER BY occurred_at_utc, strategy_id, source_id
-LIMIT @Limit
-FOR UPDATE SKIP LOCKED;
+LIMIT @Limit;
 """,
             connection,
             transaction);
