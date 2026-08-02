@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Service.PaperTrading;
 
 namespace PolyCopyTrader.Tests;
@@ -10,6 +11,7 @@ public sealed class PaperCopiedTraderPerformanceWorkerTests
     public async Task Worker_ForwardsBoundedProjectionOptions()
     {
         var repository = new TestAppRepository();
+        var telemetryState = new DatabaseScanTelemetryState();
         var worker = new PaperCopiedTraderPerformanceWorker(
             NullLogger<PaperCopiedTraderPerformanceWorker>.Instance,
             new PaperTradingOptions
@@ -20,13 +22,17 @@ public sealed class PaperCopiedTraderPerformanceWorkerTests
                 CopiedTraderPerformanceReconciliationWalletBatchSize = 7,
                 CopiedTraderPerformanceReconciliationSeedWalletBatchSize = 41
             },
-            repository);
+            repository,
+            telemetryState);
 
         await worker.StartAsync(CancellationToken.None);
         try
         {
             await WaitForAsync(
-                () => repository.RefreshPaperCopiedTraderPerformanceProjectionCalls > 0,
+                () => repository.RefreshPaperCopiedTraderPerformanceProjectionCalls > 0 &&
+                      !telemetryState.GetHeartbeatSummary().Contains(
+                          "CopiedPerformance=pending",
+                          StringComparison.Ordinal),
                 TimeSpan.FromSeconds(5));
         }
         finally
@@ -38,6 +44,10 @@ public sealed class PaperCopiedTraderPerformanceWorkerTests
         Assert.Equal(17, repository.LastPaperCopiedTraderPerformanceWalletBatchSize);
         Assert.Equal(7, repository.LastPaperCopiedTraderPerformanceReconciliationWalletBatchSize);
         Assert.Equal(41, repository.LastPaperCopiedTraderPerformanceReconciliationSeedWalletBatchSize);
+        Assert.Contains(
+            "Seed(last=unmeasured/unmeasured,total=0/0,lastPositive=none)",
+            telemetryState.GetHeartbeatSummary(),
+            StringComparison.Ordinal);
     }
 
     [Fact]

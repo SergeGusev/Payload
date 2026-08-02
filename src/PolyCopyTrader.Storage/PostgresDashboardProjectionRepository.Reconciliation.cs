@@ -19,6 +19,7 @@ public sealed partial class PostgresDashboardProjectionRepository
         var stopwatch = Stopwatch.StartNew();
         Guid? selectedStrategyId = null;
         string? selectedStrategyCode = null;
+        PostgresPaperPositionsScanStats? paperPositionsBuildScanDelta = null;
         try
         {
             await using var connection = connectionFactory.CreateConnection();
@@ -61,6 +62,10 @@ public sealed partial class PostgresDashboardProjectionRepository
                 cancellationToken);
             var facts = new List<DashboardRecentProjectionFact>();
             var positionFacts = new List<PaperPositionProjectionPayload>();
+            var paperPositionsStatsBeforeBuild = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+                connection,
+                transaction,
+                cancellationToken);
             var projection = await BuildProjectionAsync(
                 connection,
                 transaction,
@@ -78,6 +83,13 @@ public sealed partial class PostgresDashboardProjectionRepository
                 },
                 includePaperPositions: true,
                 cancellationToken);
+            var paperPositionsStatsAfterBuild = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+                connection,
+                transaction,
+                cancellationToken);
+            paperPositionsBuildScanDelta = PostgresPaperPositionsScanStats.Delta(
+                paperPositionsStatsBeforeBuild,
+                paperPositionsStatsAfterBuild);
 
             if (projection.Strategies.Count == 0)
             {
@@ -104,7 +116,9 @@ public sealed partial class PostgresDashboardProjectionRepository
                     selectedStrategyCode,
                     stopwatch.Elapsed,
                     existingState is not null,
-                    null);
+                    null,
+                    paperPositionsBuildScanDelta?.SequentialScans,
+                    paperPositionsBuildScanDelta?.SequentialTuplesRead);
             }
 
             var lastVisibleEventId = await ReadLastVisibleStrategyEventIdAsync(
@@ -180,7 +194,9 @@ public sealed partial class PostgresDashboardProjectionRepository
                 selectedStrategyCode,
                 stopwatch.Elapsed,
                 valuesChanged,
-                null);
+                null,
+                paperPositionsBuildScanDelta?.SequentialScans,
+                paperPositionsBuildScanDelta?.SequentialTuplesRead);
         }
         catch (OperationCanceledException)
         {
@@ -202,7 +218,9 @@ public sealed partial class PostgresDashboardProjectionRepository
                 selectedStrategyCode,
                 stopwatch.Elapsed,
                 false,
-                ex.Message);
+                ex.Message,
+                paperPositionsBuildScanDelta?.SequentialScans,
+                paperPositionsBuildScanDelta?.SequentialTuplesRead);
         }
     }
 

@@ -4057,7 +4057,11 @@ public sealed record PaperCopiedTraderPerformanceRefreshResult(
     int HighPriorityWalletsProcessed = 0,
     int ReconciliationWalletsProcessed = 0,
     int HighPriorityQueueRemaining = 0,
-    int ReconciliationQueueRemaining = 0);
+    int ReconciliationQueueRemaining = 0,
+    long? PaperPositionsSeedSequentialScans = null,
+    long? PaperPositionsSeedSequentialTuplesRead = null,
+    long? PaperPositionsAggregationSequentialScans = null,
+    long? PaperPositionsAggregationSequentialTuplesRead = null);
 
 public static class StrategyMarketPaperRunStatuses
 {

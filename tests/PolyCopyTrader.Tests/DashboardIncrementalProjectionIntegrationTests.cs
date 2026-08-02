@@ -157,6 +157,8 @@ public sealed class DashboardIncrementalProjectionIntegrationTests
         var reconciliation = await projection.ReconcileNextStrategyAsync();
         Assert.True(reconciliation.Reconciled);
         Assert.Equal(strategyId, reconciliation.StrategyId);
+        Assert.True(reconciliation.PaperPositionsBuildSequentialScans is >= 0);
+        Assert.True(reconciliation.PaperPositionsBuildSequentialTuplesRead is >= 0);
         var reconciledStateJson = await ReadLifetimeStateJsonAsync(factory, strategyId);
         Assert.False(
             reconciliation.ValuesChanged,

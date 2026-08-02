@@ -1,5 +1,6 @@
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.Scanning;
 using PolyCopyTrader.Service.Signals;
@@ -13,7 +14,8 @@ public sealed class BotWorker(
     IAppRepository repository,
     IWatchlistScanner watchlistScanner,
     ISignalProcessor signalProcessor,
-    ServiceControlState controlState) : BackgroundService
+    ServiceControlState controlState,
+    DatabaseScanTelemetryState? databaseScanTelemetryState = null) : BackgroundService
 {
     private readonly DateTimeOffset startedAtUtc = DateTimeOffset.UtcNow;
 
@@ -84,6 +86,9 @@ public sealed class BotWorker(
             }
 
             controlState.RecordLoop(currentLoop, lastError);
+            var heartbeatCurrentLoop = databaseScanTelemetryState is null
+                ? currentLoop
+                : currentLoop + "; " + databaseScanTelemetryState.GetHeartbeatSummary();
 
             var heartbeat = new ServiceHeartbeat(
                 "PolyCopyTrader.Service",
@@ -92,7 +97,7 @@ public sealed class BotWorker(
                 DateTimeOffset.UtcNow,
                 ServiceBuildVersion.GetHeartbeatVersion(),
                 botOptions.Mode,
-                currentLoop,
+                heartbeatCurrentLoop,
                 lastError);
 
             try

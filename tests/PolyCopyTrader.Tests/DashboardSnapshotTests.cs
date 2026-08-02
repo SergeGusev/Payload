@@ -199,6 +199,12 @@ public sealed class DashboardSnapshotTests
             "Analytics",
             "DashboardStrategyProjectionReconciliationWorker.cs");
         var program = ReadRepositorySource("src", "PolyCopyTrader.Service", "Program.cs");
+        var botWorker = ReadRepositorySource("src", "PolyCopyTrader.Service", "BotWorker.cs");
+        var telemetryState = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Service",
+            "Analytics",
+            "DatabaseScanTelemetryState.cs");
         var reconciliationRepository = ReadRepositorySource(
             "src",
             "PolyCopyTrader.Storage",
@@ -215,9 +221,31 @@ public sealed class DashboardSnapshotTests
         Assert.Contains("BatchSize=1", reconciliationWorker, StringComparison.Ordinal);
         Assert.Contains("ReconcileNextStrategyAsync", reconciliationWorker, StringComparison.Ordinal);
         Assert.Contains("AddHostedService<DashboardStrategyProjectionReconciliationWorker>", program, StringComparison.Ordinal);
+        Assert.Contains("AddSingleton<DatabaseScanTelemetryState>", program, StringComparison.Ordinal);
+        Assert.Contains("RecordDashboardReconciliation", projectionWorker, StringComparison.Ordinal);
+        Assert.Contains("RecordDashboardReconciliation", reconciliationWorker, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionsBuildSequentialScans", projectionWorker, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionsBuildSequentialTuplesRead", projectionWorker, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionsBuildSequentialScans", reconciliationWorker, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionsBuildSequentialTuplesRead", reconciliationWorker, StringComparison.Ordinal);
+        Assert.Contains("GetHeartbeatSummary", botWorker, StringComparison.Ordinal);
+        Assert.Contains("DBScanTelemetry", telemetryState, StringComparison.Ordinal);
         Assert.Contains("SET LOCAL max_parallel_workers_per_gather = 0", reconciliationRepository, StringComparison.Ordinal);
         Assert.Contains("SET LOCAL work_mem = '4MB'", reconciliationRepository, StringComparison.Ordinal);
         Assert.Contains("SET LOCAL statement_timeout = '15s'", reconciliationRepository, StringComparison.Ordinal);
+        var statsBeforeBuild = reconciliationRepository.IndexOf(
+            "paperPositionsStatsBeforeBuild = await PostgresPaperPositionsScanTelemetry.ReadAsync",
+            StringComparison.Ordinal);
+        var buildProjection = reconciliationRepository.IndexOf(
+            "var projection = await BuildProjectionAsync",
+            StringComparison.Ordinal);
+        var statsAfterBuild = reconciliationRepository.IndexOf(
+            "paperPositionsStatsAfterBuild = await PostgresPaperPositionsScanTelemetry.ReadAsync",
+            StringComparison.Ordinal);
+        Assert.True(
+            statsBeforeBuild >= 0
+            && buildProjection > statsBeforeBuild
+            && statsAfterBuild > buildProjection);
     }
 
     private static string ReadRepositorySource(params string[] segments)

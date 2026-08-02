@@ -4,6 +4,7 @@ using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Service;
+using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.Diagnostics;
 using PolyCopyTrader.Service.LiveTrading;
@@ -422,6 +423,85 @@ public sealed class ResilienceTests
             Assert.False(snapshot.PaperTradingPaused);
             Assert.False(snapshot.LiveTradingPaused);
             Assert.False(snapshot.KillSwitchActive);
+        }
+        finally
+        {
+            using var stopCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await service.StopAsync(stopCts.Token);
+        }
+    }
+
+    [Fact]
+    public async Task BotWorker_HeartbeatIncludesLatestDatabaseScanTelemetry()
+    {
+        var repository = new TestAppRepository();
+        var controlState = new ServiceControlState();
+        var telemetryState = new DatabaseScanTelemetryState();
+        telemetryState.RecordCopiedPerformance(new PaperCopiedTraderPerformanceRefreshResult(
+            LockAcquired: true,
+            WalletsSeeded: 0,
+            WalletsProcessed: 1,
+            PerformanceRowsWritten: 1,
+            QueueRemaining: 0,
+            ReconciliationCycleCompleted: false,
+            PaperPositionsSeedSequentialScans: 1,
+            PaperPositionsSeedSequentialTuplesRead: 1_852_305,
+            PaperPositionsAggregationSequentialScans: 0,
+            PaperPositionsAggregationSequentialTuplesRead: 0));
+        telemetryState.RecordDashboardReconciliation(new DashboardProjectionReconciliationResult(
+            Reconciled: true,
+            StrategyId: Guid.NewGuid(),
+            StrategyCode: "test_strategy",
+            Duration: TimeSpan.FromMilliseconds(25),
+            ValuesChanged: false,
+            Error: null,
+            PaperPositionsBuildSequentialScans: 0,
+            PaperPositionsBuildSequentialTuplesRead: 0));
+        telemetryState.RecordCopiedPerformance(new PaperCopiedTraderPerformanceRefreshResult(
+            LockAcquired: true,
+            WalletsSeeded: 0,
+            WalletsProcessed: 1,
+            PerformanceRowsWritten: 1,
+            QueueRemaining: 0,
+            ReconciliationCycleCompleted: false,
+            PaperPositionsSeedSequentialScans: 0,
+            PaperPositionsSeedSequentialTuplesRead: 0,
+            PaperPositionsAggregationSequentialScans: 0,
+            PaperPositionsAggregationSequentialTuplesRead: 0));
+        var service = new BotWorker(
+            NullLogger<BotWorker>.Instance,
+            new BotOptions { Mode = BotMode.Paper, PollIntervalSeconds = 60 },
+            repository,
+            new NoOpWatchlistScanner(),
+            new NoOpSignalProcessor(),
+            controlState,
+            telemetryState);
+
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            var completed = await Task.WhenAny(
+                repository.ServiceHeartbeatAttempt.Task,
+                Task.Delay(TimeSpan.FromSeconds(5)));
+
+            Assert.Same(repository.ServiceHeartbeatAttempt.Task, completed);
+            var heartbeat = await repository.ServiceHeartbeatAttempt.Task;
+            Assert.Contains("DBScanTelemetry", heartbeat.CurrentLoop, StringComparison.Ordinal);
+            Assert.Contains(
+                "Seed(last=0/0,total=1/1852305,lastPositive=",
+                heartbeat.CurrentLoop,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Aggregate(last=0/0,total=0/0,lastPositive=none)",
+                heartbeat.CurrentLoop,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Build(last=0/0,total=0/0,lastPositive=none)",
+                heartbeat.CurrentLoop,
+                StringComparison.Ordinal);
+            Assert.Matches(
+                @"CopiedPerformance@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z",
+                heartbeat.CurrentLoop);
         }
         finally
         {

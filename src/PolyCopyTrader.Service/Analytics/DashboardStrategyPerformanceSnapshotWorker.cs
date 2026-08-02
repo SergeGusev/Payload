@@ -7,7 +7,8 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
     ILogger<DashboardStrategyPerformanceSnapshotWorker> logger,
     DashboardOptions options,
     IDashboardProjectionRepository projection,
-    IAppRepository repository) : BackgroundService
+    IAppRepository repository,
+    DatabaseScanTelemetryState? databaseScanTelemetryState = null) : BackgroundService
 {
     private const int ExpiryBatchSize = 5_000;
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(1);
@@ -97,14 +98,17 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
     private async Task ReconcileOnceAsync(CancellationToken cancellationToken)
     {
         var result = await projection.ReconcileNextStrategyAsync(cancellationToken);
+        databaseScanTelemetryState?.RecordDashboardReconciliation(result);
         if (result.Error is not null)
         {
             logger.LogWarning(
-                "Dashboard strategy projection reconciliation deferred. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} Error={Error}",
+                "Dashboard strategy projection reconciliation deferred. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} Error={Error} PaperPositionsBuildSequentialScans={PaperPositionsBuildSequentialScans} PaperPositionsBuildSequentialTuplesRead={PaperPositionsBuildSequentialTuplesRead}",
                 result.StrategyId,
                 result.StrategyCode,
                 result.Duration.TotalMilliseconds,
-                result.Error);
+                result.Error,
+                result.PaperPositionsBuildSequentialScans,
+                result.PaperPositionsBuildSequentialTuplesRead);
             return;
         }
 
@@ -116,18 +120,22 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
         if (result.ValuesChanged)
         {
             logger.LogWarning(
-                "Dashboard strategy projection drift repaired. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs}",
+                "Dashboard strategy projection drift repaired. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} PaperPositionsBuildSequentialScans={PaperPositionsBuildSequentialScans} PaperPositionsBuildSequentialTuplesRead={PaperPositionsBuildSequentialTuplesRead}",
                 result.StrategyId,
                 result.StrategyCode,
-                result.Duration.TotalMilliseconds);
+                result.Duration.TotalMilliseconds,
+                result.PaperPositionsBuildSequentialScans,
+                result.PaperPositionsBuildSequentialTuplesRead);
         }
         else
         {
             logger.LogInformation(
-                "Dashboard strategy projection reconciled. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs}",
+                "Dashboard strategy projection reconciled. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} PaperPositionsBuildSequentialScans={PaperPositionsBuildSequentialScans} PaperPositionsBuildSequentialTuplesRead={PaperPositionsBuildSequentialTuplesRead}",
                 result.StrategyId,
                 result.StrategyCode,
-                result.Duration.TotalMilliseconds);
+                result.Duration.TotalMilliseconds,
+                result.PaperPositionsBuildSequentialScans,
+                result.PaperPositionsBuildSequentialTuplesRead);
         }
     }
 

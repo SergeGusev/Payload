@@ -3027,6 +3027,10 @@ FOR UPDATE;
 				cursorCommand.Transaction = transaction;
 				reconciliationCursor = await cursorCommand.ExecuteScalarAsync(cancellationToken) as string;
 			}
+			var paperPositionsStatsBeforeSeed = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+				connection,
+				transaction,
+				cancellationToken);
 
 			var walletsSeeded = 0;
 			var reconciliationCycleCompleted = false;
@@ -3185,6 +3189,13 @@ WHERE singleton_id = 1;
 					await updateCursorCommand.ExecuteNonQueryAsync(cancellationToken);
 				}
 			}
+			var paperPositionsStatsAfterSeed = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+				connection,
+				transaction,
+				cancellationToken);
+			var paperPositionsSeedScanDelta = PostgresPaperPositionsScanStats.Delta(
+				paperPositionsStatsBeforeSeed,
+				paperPositionsStatsAfterSeed);
 
 			var walletsProcessed = highPriorityWalletsProcessed + reconciliationWalletsProcessed;
 			var performanceRowsWritten = 0;
@@ -3425,6 +3436,13 @@ WHERE inflight.copied_trader_wallet = selected.copied_trader_wallet;
 				clearInflightCommand.Transaction = transaction;
 				await clearInflightCommand.ExecuteNonQueryAsync(cancellationToken);
 			}
+			var paperPositionsStatsAfterAggregation = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+				connection,
+				transaction,
+				cancellationToken);
+			var paperPositionsAggregationScanDelta = PostgresPaperPositionsScanStats.Delta(
+				paperPositionsStatsAfterSeed,
+				paperPositionsStatsAfterAggregation);
 
 			var highPriorityQueueRemaining = 0;
 			var reconciliationQueueRemaining = 0;
@@ -3463,7 +3481,11 @@ SELECT
 				HighPriorityWalletsProcessed: highPriorityWalletsProcessed,
 				ReconciliationWalletsProcessed: reconciliationWalletsProcessed,
 				HighPriorityQueueRemaining: highPriorityQueueRemaining,
-				ReconciliationQueueRemaining: reconciliationQueueRemaining);
+				ReconciliationQueueRemaining: reconciliationQueueRemaining,
+				PaperPositionsSeedSequentialScans: paperPositionsSeedScanDelta?.SequentialScans,
+				PaperPositionsSeedSequentialTuplesRead: paperPositionsSeedScanDelta?.SequentialTuplesRead,
+				PaperPositionsAggregationSequentialScans: paperPositionsAggregationScanDelta?.SequentialScans,
+				PaperPositionsAggregationSequentialTuplesRead: paperPositionsAggregationScanDelta?.SequentialTuplesRead);
 		}
 		catch (Exception ex)
 		{

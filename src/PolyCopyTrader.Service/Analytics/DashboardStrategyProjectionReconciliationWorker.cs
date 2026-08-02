@@ -7,7 +7,8 @@ public sealed class DashboardStrategyProjectionReconciliationWorker(
     ILogger<DashboardStrategyProjectionReconciliationWorker> logger,
     IDashboardProjectionRepository projection,
     DashboardOptions options,
-    TimeProvider? timeProvider = null) : BackgroundService
+    TimeProvider? timeProvider = null,
+    DatabaseScanTelemetryState? databaseScanTelemetryState = null) : BackgroundService
 {
     private readonly TimeSpan cadence = TimeSpan.FromSeconds(
         options.ProjectionReconciliationIntervalSeconds);
@@ -32,14 +33,17 @@ public sealed class DashboardStrategyProjectionReconciliationWorker(
                 }
 
                 var result = await projection.ReconcileNextStrategyAsync(stoppingToken);
+                databaseScanTelemetryState?.RecordDashboardReconciliation(result);
                 if (result.Error is not null)
                 {
                     logger.LogWarning(
-                        "Dashboard strategy projection background reconciliation deferred. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} Error={Error}",
+                        "Dashboard strategy projection background reconciliation deferred. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} Error={Error} PaperPositionsBuildSequentialScans={PaperPositionsBuildSequentialScans} PaperPositionsBuildSequentialTuplesRead={PaperPositionsBuildSequentialTuplesRead}",
                         result.StrategyId,
                         result.StrategyCode,
                         result.Duration.TotalMilliseconds,
-                        result.Error);
+                        result.Error,
+                        result.PaperPositionsBuildSequentialScans,
+                        result.PaperPositionsBuildSequentialTuplesRead);
                     continue;
                 }
 
@@ -51,18 +55,22 @@ public sealed class DashboardStrategyProjectionReconciliationWorker(
                 if (result.ValuesChanged)
                 {
                     logger.LogWarning(
-                        "Dashboard strategy projection background reconciliation repaired drift. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs}",
+                        "Dashboard strategy projection background reconciliation repaired drift. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} PaperPositionsBuildSequentialScans={PaperPositionsBuildSequentialScans} PaperPositionsBuildSequentialTuplesRead={PaperPositionsBuildSequentialTuplesRead}",
                         result.StrategyId,
                         result.StrategyCode,
-                        result.Duration.TotalMilliseconds);
+                        result.Duration.TotalMilliseconds,
+                        result.PaperPositionsBuildSequentialScans,
+                        result.PaperPositionsBuildSequentialTuplesRead);
                 }
                 else
                 {
                     logger.LogInformation(
-                        "Dashboard strategy projection background reconciliation completed. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs}",
+                        "Dashboard strategy projection background reconciliation completed. StrategyId={StrategyId} Code={Code} DurationMs={DurationMs} PaperPositionsBuildSequentialScans={PaperPositionsBuildSequentialScans} PaperPositionsBuildSequentialTuplesRead={PaperPositionsBuildSequentialTuplesRead}",
                         result.StrategyId,
                         result.StrategyCode,
-                        result.Duration.TotalMilliseconds);
+                        result.Duration.TotalMilliseconds,
+                        result.PaperPositionsBuildSequentialScans,
+                        result.PaperPositionsBuildSequentialTuplesRead);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

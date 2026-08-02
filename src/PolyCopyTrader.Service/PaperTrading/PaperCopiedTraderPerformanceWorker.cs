@@ -1,5 +1,6 @@
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.Analytics;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.PaperTrading;
@@ -7,7 +8,8 @@ namespace PolyCopyTrader.Service.PaperTrading;
 public sealed class PaperCopiedTraderPerformanceWorker(
     ILogger<PaperCopiedTraderPerformanceWorker> logger,
     PaperTradingOptions options,
-    IAppRepository repository) : BackgroundService
+    IAppRepository repository,
+    DatabaseScanTelemetryState? databaseScanTelemetryState = null) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -44,8 +46,9 @@ public sealed class PaperCopiedTraderPerformanceWorker(
                 }
                 else
                 {
+                    databaseScanTelemetryState?.RecordCopiedPerformance(result);
                     logger.LogInformation(
-                        "Paper copied-trader performance projection cycle completed. WalletsSeeded={WalletsSeeded} HighPriorityWalletsProcessed={HighPriorityWalletsProcessed} ReconciliationWalletsProcessed={ReconciliationWalletsProcessed} WalletsProcessed={WalletsProcessed} PerformanceRowsWritten={PerformanceRowsWritten} HighPriorityQueueRemaining={HighPriorityQueueRemaining} ReconciliationQueueRemaining={ReconciliationQueueRemaining} QueueRemaining={QueueRemaining} ReconciliationCycleCompleted={ReconciliationCycleCompleted}",
+                        "Paper copied-trader performance projection cycle completed. WalletsSeeded={WalletsSeeded} HighPriorityWalletsProcessed={HighPriorityWalletsProcessed} ReconciliationWalletsProcessed={ReconciliationWalletsProcessed} WalletsProcessed={WalletsProcessed} PerformanceRowsWritten={PerformanceRowsWritten} HighPriorityQueueRemaining={HighPriorityQueueRemaining} ReconciliationQueueRemaining={ReconciliationQueueRemaining} QueueRemaining={QueueRemaining} ReconciliationCycleCompleted={ReconciliationCycleCompleted} PaperPositionsSeedSequentialScans={PaperPositionsSeedSequentialScans} PaperPositionsSeedSequentialTuplesRead={PaperPositionsSeedSequentialTuplesRead} PaperPositionsAggregationSequentialScans={PaperPositionsAggregationSequentialScans} PaperPositionsAggregationSequentialTuplesRead={PaperPositionsAggregationSequentialTuplesRead}",
                         result.WalletsSeeded,
                         result.HighPriorityWalletsProcessed,
                         result.ReconciliationWalletsProcessed,
@@ -54,7 +57,11 @@ public sealed class PaperCopiedTraderPerformanceWorker(
                         result.HighPriorityQueueRemaining,
                         result.ReconciliationQueueRemaining,
                         result.QueueRemaining,
-                        result.ReconciliationCycleCompleted);
+                        result.ReconciliationCycleCompleted,
+                        result.PaperPositionsSeedSequentialScans,
+                        result.PaperPositionsSeedSequentialTuplesRead,
+                        result.PaperPositionsAggregationSequentialScans,
+                        result.PaperPositionsAggregationSequentialTuplesRead);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

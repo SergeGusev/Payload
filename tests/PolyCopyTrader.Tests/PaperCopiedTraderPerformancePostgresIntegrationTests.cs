@@ -11,6 +11,172 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
 {
     [Fact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task PaperPositionsScanTelemetry_DetectsParallelAndCountsSerialSequentialScans()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        var suffix = Guid.NewGuid().ToString("N");
+        await using (var disableTriggers = new NpgsqlCommand(
+            "ALTER TABLE public.paper_positions DISABLE TRIGGER USER;",
+            connection,
+            transaction))
+        {
+            await disableTriggers.ExecuteNonQueryAsync();
+        }
+        await using (var insert = new NpgsqlCommand(
+            """
+INSERT INTO public.paper_positions (
+    id,
+    copied_trader_wallet,
+    asset_id,
+    condition_id,
+    outcome,
+    size_shares,
+    average_price,
+    estimated_value_usd,
+    unrealized_pnl_usd,
+    updated_at_utc)
+SELECT
+    gen_random_uuid(),
+    @Wallet,
+    @AssetPrefix || value,
+    @ConditionId,
+    'YES',
+    1,
+    0.5,
+    0.5,
+    0,
+    clock_timestamp()
+FROM generate_series(1, 100000) value;
+""",
+            connection,
+            transaction))
+        {
+            insert.Parameters.AddWithValue("Wallet", $"scan-telemetry-{suffix}");
+            insert.Parameters.AddWithValue("AssetPrefix", $"asset-{suffix}-");
+            insert.Parameters.AddWithValue("ConditionId", $"condition-{suffix}");
+            Assert.Equal(100_000, await insert.ExecuteNonQueryAsync());
+        }
+
+        await using (var analyze = new NpgsqlCommand(
+            "ANALYZE public.paper_positions;",
+            connection,
+            transaction))
+        {
+            await analyze.ExecuteNonQueryAsync();
+        }
+
+        await using (var configure = new NpgsqlCommand(
+            """
+SET LOCAL max_parallel_workers_per_gather = 4;
+SET LOCAL min_parallel_table_scan_size = 0;
+SET LOCAL parallel_setup_cost = 0;
+SET LOCAL parallel_tuple_cost = 0;
+SET LOCAL parallel_leader_participation = off;
+SET LOCAL enable_indexscan = off;
+SET LOCAL enable_indexonlyscan = off;
+SET LOCAL enable_bitmapscan = off;
+""",
+            connection,
+            transaction))
+        {
+            await configure.ExecuteNonQueryAsync();
+        }
+
+        string scanPlan;
+        await using (var explain = new NpgsqlCommand(
+            "EXPLAIN (ANALYZE, COSTS OFF, SUMMARY OFF, TIMING OFF) SELECT count(*) FROM public.paper_positions;",
+            connection,
+            transaction))
+        await using (var reader = await explain.ExecuteReaderAsync())
+        {
+            var planLines = new List<string>();
+            while (await reader.ReadAsync())
+            {
+                planLines.Add(reader.GetString(0));
+            }
+
+            scanPlan = string.Join(Environment.NewLine, planLines);
+        }
+        Assert.Contains("Parallel Seq Scan on paper_positions", scanPlan, StringComparison.Ordinal);
+        Assert.Matches(@"Workers Launched: [1-9]\d*", scanPlan);
+
+        var before = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+            connection,
+            transaction,
+            CancellationToken.None);
+        long visibleRows;
+        await using (var scan = new NpgsqlCommand(
+            "SELECT count(*)::bigint FROM public.paper_positions;",
+            connection,
+            transaction))
+        {
+            visibleRows = Convert.ToInt64(await scan.ExecuteScalarAsync());
+        }
+
+        var after = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+            connection,
+            transaction,
+            CancellationToken.None);
+        var parallelScanDelta = PostgresPaperPositionsScanStats.Delta(before, after);
+
+        await using (var forceSerial = new NpgsqlCommand(
+            "SET LOCAL max_parallel_workers_per_gather = 0;",
+            connection,
+            transaction))
+        {
+            await forceSerial.ExecuteNonQueryAsync();
+        }
+        var beforeSerialScan = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+            connection,
+            transaction,
+            CancellationToken.None);
+        await using (var serialScan = new NpgsqlCommand(
+            "SELECT count(*)::bigint FROM public.paper_positions;",
+            connection,
+            transaction))
+        {
+            Assert.Equal(visibleRows, Convert.ToInt64(await serialScan.ExecuteScalarAsync()));
+        }
+        var afterSerialScan = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+            connection,
+            transaction,
+            CancellationToken.None);
+        var afterStatsRead = await PostgresPaperPositionsScanTelemetry.ReadAsync(
+            connection,
+            transaction,
+            CancellationToken.None);
+        var serialScanDelta = PostgresPaperPositionsScanStats.Delta(
+            beforeSerialScan,
+            afterSerialScan);
+        var statsReadDelta = PostgresPaperPositionsScanStats.Delta(
+            afterSerialScan,
+            afterStatsRead);
+
+        Assert.True(visibleRows >= 100_000);
+        Assert.True(parallelScanDelta.HasValue);
+        Assert.True(parallelScanDelta.Value.SequentialScans >= 1);
+        Assert.Equal(0, parallelScanDelta.Value.SequentialTuplesRead);
+        Assert.True(serialScanDelta.HasValue);
+        Assert.True(serialScanDelta.Value.SequentialScans >= 1);
+        Assert.True(serialScanDelta.Value.SequentialTuplesRead >= visibleRows);
+        Assert.True(statsReadDelta.HasValue);
+        Assert.Equal(new PostgresPaperPositionsScanStats(0, 0), statsReadDelta.Value);
+
+        await transaction.RollbackAsync();
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task Projection_BoundedBatchAndFillChanges_RecomputeExactWalletState()
     {
         var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
@@ -333,6 +499,10 @@ public sealed class PaperCopiedTraderPerformancePostgresIntegrationTests
             Assert.Equal(5, result.ReconciliationWalletsProcessed);
             Assert.Equal(5, result.WalletsProcessed);
             Assert.Equal(8, result.PerformanceRowsWritten);
+            Assert.True(result.PaperPositionsSeedSequentialScans is >= 0);
+            Assert.True(result.PaperPositionsSeedSequentialTuplesRead is >= 0);
+            Assert.True(result.PaperPositionsAggregationSequentialScans is >= 0);
+            Assert.True(result.PaperPositionsAggregationSequentialTuplesRead is >= 0);
             Assert.Equal(0, await CountQueuedWalletsAsync(factory, wallets));
             Assert.NotEmpty(await ReadProjectionRowsAsync(factory, sourceWallets[0]));
             Assert.NotEmpty(await ReadProjectionRowsAsync(factory, sourceWallets[1]));

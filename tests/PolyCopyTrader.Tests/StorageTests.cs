@@ -1310,6 +1310,10 @@ public sealed class StorageTests
     public void PostgresRepository_PaperCopiedTraderPerformance_UsesBoundedWalletProjection()
     {
         var source = ReadStorageRepositorySource().Replace("\r\n", "\n", StringComparison.Ordinal);
+        var telemetrySource = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresPaperPositionsScanTelemetry.cs");
         var refreshStart = source.IndexOf(
             "public async Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync",
             StringComparison.Ordinal);
@@ -1375,11 +1379,35 @@ public sealed class StorageTests
             "DELETE FROM paper_copied_trader_performance performance",
             StringComparison.Ordinal);
         var projectionAggregate = refreshSource.IndexOf("WITH event_rows AS (", StringComparison.Ordinal);
+        var statsBeforeSeed = refreshSource.IndexOf(
+            "paperPositionsStatsBeforeSeed = await PostgresPaperPositionsScanTelemetry.ReadAsync",
+            StringComparison.Ordinal);
+        var seedProjection = refreshSource.IndexOf(
+            "WITH source_wallets AS (",
+            statsBeforeSeed,
+            StringComparison.Ordinal);
+        var statsAfterSeed = refreshSource.IndexOf(
+            "paperPositionsStatsAfterSeed = await PostgresPaperPositionsScanTelemetry.ReadAsync",
+            StringComparison.Ordinal);
+        var statsAfterAggregation = refreshSource.IndexOf(
+            "paperPositionsStatsAfterAggregation = await PostgresPaperPositionsScanTelemetry.ReadAsync",
+            StringComparison.Ordinal);
+        var projectionCommit = refreshSource.IndexOf(
+            "await transaction.CommitAsync",
+            statsAfterAggregation,
+            StringComparison.Ordinal);
         Assert.True(
             selectedWalletCount >= 0
             && selectionAnalyze > selectedWalletCount
             && projectionDelete > selectionAnalyze
             && projectionAggregate > projectionDelete);
+        Assert.True(
+            statsBeforeSeed >= 0
+            && seedProjection > statsBeforeSeed
+            && statsAfterSeed > seedProjection
+            && projectionAggregate > statsAfterSeed
+            && statsAfterAggregation > projectionAggregate
+            && projectionCommit > statsAfterAggregation);
         Assert.Equal(
             1,
             refreshSource.Split(
@@ -1401,6 +1429,12 @@ public sealed class StorageTests
         Assert.Contains("LEFT JOIN LATERAL", source, StringComparison.Ordinal);
         Assert.Contains("ORDER BY market.fetched_at_utc DESC, market.market_id", source, StringComparison.Ordinal);
         Assert.Contains("COALESCE((SELECT sum(ps.realized_pnl_usd) FROM paper_position_settlements ps), 0) AS paper_pnl", source, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionsSeedSequentialScans", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionsSeedSequentialTuplesRead", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionsAggregationSequentialScans", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionsAggregationSequentialTuplesRead", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("pg_catalog.pg_stat_xact_user_tables", telemetrySource, StringComparison.Ordinal);
+        Assert.Contains("'public.paper_positions'::regclass", telemetrySource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2311,6 +2345,16 @@ CREATE INDEX first_table_id_idx ON first_table(id);
 
     private static string ReadRepositorySource(params string[] pathParts)
     {
+        var configuredRoot = Environment.GetEnvironmentVariable("POLYCOPYTRADER_REPOSITORY_ROOT");
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            var configuredPath = Path.GetFullPath(Path.Combine(configuredRoot, Path.Combine(pathParts)));
+            if (File.Exists(configuredPath))
+            {
+                return File.ReadAllText(configuredPath);
+            }
+        }
+
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {

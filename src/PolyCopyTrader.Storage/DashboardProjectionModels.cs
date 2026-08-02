@@ -65,7 +65,9 @@ public sealed record DashboardProjectionReconciliationResult(
     string? StrategyCode,
     TimeSpan Duration,
     bool ValuesChanged,
-    string? Error);
+    string? Error,
+    long? PaperPositionsBuildSequentialScans = null,
+    long? PaperPositionsBuildSequentialTuplesRead = null);
 
 public sealed record DashboardProjectionBootstrapResult(
     int Strategies,
