@@ -33,7 +33,7 @@ public sealed class PaperTradingProcessor(
     {
         var now = DateTimeOffset.UtcNow;
         var openOrders = PrioritizeOpenOrders(await repository.GetOpenPaperOrdersAsync(cancellationToken), now);
-        var positions = (await repository.GetOpenPaperPositionsAsync(cancellationToken)).ToList();
+        var positions = (await exposureCache.GetSnapshotAsync(cancellationToken)).PaperPositions.ToList();
         if (openOrders.Count == 0)
         {
             var updatedPositionMarks = await UpdatePositionMarksAsync(positions, cancellationToken);
@@ -163,7 +163,7 @@ public sealed class PaperTradingProcessor(
                     continue;
                 }
 
-                var currentPosition = FindPosition(positions, orderForFill);
+                var currentPosition = await GetCurrentOpenPaperPositionAsync(orderForFill, cancellationToken);
                 if (orderForFill.Side == TradeSide.Sell && currentPosition is null)
                 {
                     continue;
@@ -339,7 +339,7 @@ public sealed class PaperTradingProcessor(
                 return new FakPaperOrderProcessingResult(false, true, false);
             }
 
-            var currentPosition = FindPosition(positions, order);
+            var currentPosition = await GetCurrentOpenPaperPositionAsync(order, cancellationToken);
             var fill = new PaperFill(
                 Guid.NewGuid(),
                 order.Id,
@@ -915,13 +915,20 @@ public sealed class PaperTradingProcessor(
         return updated;
     }
 
-    private static PaperPosition? FindPosition(
-        IEnumerable<PaperPosition> positions,
-        PaperOrder order)
+    private async Task<PaperPosition?> GetCurrentOpenPaperPositionAsync(
+        PaperOrder order,
+        CancellationToken cancellationToken)
     {
-        return positions.FirstOrDefault(position =>
-            string.Equals(position.AssetId, order.AssetId, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(position.CopiedTraderWallet, order.CopiedTraderWallet, StringComparison.OrdinalIgnoreCase));
+        var cachedPosition = exposureCache.GetPaperPosition(
+            order.CopiedTraderWallet,
+            order.AssetId);
+        var position = await repository.GetPaperPositionAsync(
+            cachedPosition?.CopiedTraderWallet ?? order.CopiedTraderWallet,
+            cachedPosition?.AssetId ?? order.AssetId,
+            cancellationToken);
+        return position is { SizeShares: > 0m }
+            ? position
+            : null;
     }
 
     private static void RemovePosition(

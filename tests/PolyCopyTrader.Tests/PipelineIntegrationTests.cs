@@ -142,15 +142,18 @@ public sealed class PipelineIntegrationTests
     [Fact]
     public async Task PaperTradingProcessor_SellFillClosesCopiedWalletPosition()
     {
-        var repository = new TestAppRepository();
+        var repository = new TestAppRepository
+        {
+            UseCaseSensitivePaperPositionLookup = true
+        };
         var now = DateTimeOffset.UtcNow;
         var order = new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
-            Wallet,
+            Wallet.ToUpperInvariant(),
             PaperOrderStatus.Pending,
             TradeSide.Sell,
-            "asset-1",
+            "ASSET-1",
             "condition-1",
             "Yes",
             0.74m,
@@ -170,6 +173,7 @@ public sealed class PipelineIntegrationTests
             now,
             Wallet));
 
+        var exposureCache = new ExposureSnapshotCache(repository);
         var paperProcessor = new PaperTradingProcessor(
             NullLogger<PaperTradingProcessor>.Instance,
             new DefaultPaperTradingEngine(),
@@ -177,11 +181,12 @@ public sealed class PipelineIntegrationTests
             new MarketDataCache(new MarketDataWebSocketOptions()),
             new MarketDataWebSocketOptions(),
             new PaperTradingOptions(),
-            new ExposureSnapshotCache(repository),
+            exposureCache,
             new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
         var paperResult = await paperProcessor.ProcessOpenOrdersAsync();
+        await paperProcessor.ProcessOpenOrdersAsync();
 
         Assert.Equal(1, paperResult.OrdersFilled);
         Assert.Equal(PaperOrderStatus.Filled, repository.PaperOrders.Single().Status);
@@ -190,6 +195,70 @@ public sealed class PipelineIntegrationTests
         var position = Assert.Single(repository.PaperPositions);
         Assert.Equal(75m, position.SizeShares);
         Assert.Equal(Wallet, position.CopiedTraderWallet);
+        Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+        Assert.Equal(1, repository.GetPaperPositionCalls);
+    }
+
+    [Fact]
+    public async Task PaperTradingProcessor_SellFillRechecksStaleCachedPositionInRepository()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var openPosition = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            100m,
+            0.60m,
+            73m,
+            13m,
+            now,
+            Wallet);
+        await repository.UpsertPaperPositionAsync(openPosition);
+        var exposureCache = new ExposureSnapshotCache(repository);
+        await exposureCache.GetSnapshotAsync();
+
+        await repository.UpsertPaperPositionAsync(openPosition with
+        {
+            SizeShares = 0m,
+            EstimatedValueUsd = 0m,
+            UnrealizedPnlUsd = 0m,
+            UpdatedAtUtc = now.AddSeconds(1)
+        });
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Wallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Sell,
+            "asset-1",
+            "condition-1",
+            "Yes",
+            0.74m,
+            25m,
+            18.50m,
+            now,
+            now.AddMinutes(5));
+        await repository.AddPaperOrderAsync(order);
+        var paperProcessor = new PaperTradingProcessor(
+            NullLogger<PaperTradingProcessor>.Instance,
+            new DefaultPaperTradingEngine(),
+            new FakeClobClient(OrderBook(bestBid: 0.74m, bestAsk: 0.75m)),
+            new MarketDataCache(new MarketDataWebSocketOptions()),
+            new MarketDataWebSocketOptions(),
+            new PaperTradingOptions(),
+            exposureCache,
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        var result = await paperProcessor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(0, result.OrdersFilled);
+        Assert.Empty(repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(repository.PaperOrders).Status);
+        Assert.Equal(0m, Assert.Single(repository.PaperPositions).SizeShares);
+        Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+        Assert.Equal(1, repository.GetPaperPositionCalls);
     }
 
     [Fact]

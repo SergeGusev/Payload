@@ -8,8 +8,12 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
     private static readonly IReadOnlySet<Guid> EmptyPaperOrderIds = new HashSet<Guid>();
     private readonly object updateSync = new();
     private readonly SemaphoreSlim refreshLock = new(1, 1);
+    private readonly Dictionary<Guid, PaperOrder> paperOrderRefreshOverlay = [];
+    private readonly Dictionary<PaperPositionKey, PaperPosition> paperPositionRefreshOverlay = [];
+    private readonly Dictionary<Guid, LiveOrder> liveOrderRefreshOverlay = [];
     private Dictionary<PaperPositionKey, int> paperPositionIndexes = [];
     private Dictionary<string, HashSet<Guid>> openPaperOrderIdsByAsset = new(StringComparer.OrdinalIgnoreCase);
+    private bool refreshInProgress;
     private TradingExposureSnapshot? snapshot;
 
     public async Task<TradingExposureSnapshot> GetSnapshotAsync(CancellationToken cancellationToken = default)
@@ -17,7 +21,7 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
         var current = Volatile.Read(ref snapshot);
         if (current is null)
         {
-            await RefreshAsync(cancellationToken);
+            await EnsureInitializedAsync(cancellationToken);
             current = Volatile.Read(ref snapshot);
         }
 
@@ -69,26 +73,7 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
         await refreshLock.WaitAsync(cancellationToken);
         try
         {
-            var openPaperOrdersTask = repository.GetOpenPaperOrdersAsync(cancellationToken);
-            var paperPositionsTask = repository.GetOpenPaperPositionsAsync(cancellationToken);
-            var openLiveOrdersTask = repository.GetOpenLiveOrdersAsync(cancellationToken);
-
-            await Task.WhenAll(openPaperOrdersTask, paperPositionsTask, openLiveOrdersTask);
-            var loadedOpenPaperOrders = await openPaperOrdersTask;
-            var loadedPaperPositions = await paperPositionsTask;
-            var loadedOpenLiveOrders = await openLiveOrdersTask;
-
-            var refreshedSnapshot = new TradingExposureSnapshot(
-                loadedOpenPaperOrders.ToArray(),
-                loadedPaperPositions.ToArray(),
-                loadedOpenLiveOrders.ToArray(),
-                DateTimeOffset.UtcNow);
-            lock (updateSync)
-            {
-                paperPositionIndexes = CreatePaperPositionIndexes(refreshedSnapshot.PaperPositions);
-                openPaperOrderIdsByAsset = CreateOpenPaperOrderIdsByAsset(refreshedSnapshot.OpenPaperOrders);
-                Volatile.Write(ref snapshot, refreshedSnapshot);
-            }
+            await RefreshCoreAsync(cancellationToken);
         }
         finally
         {
@@ -110,34 +95,28 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
 
         lock (updateSync)
         {
+            if (refreshInProgress)
+            {
+                foreach (var order in orders)
+                {
+                    paperOrderRefreshOverlay[order.Id] = order;
+                }
+            }
+
             var current = Volatile.Read(ref snapshot);
             if (current is null)
             {
                 return;
             }
 
-            var openOrdersById = current.OpenPaperOrders.ToDictionary(order => order.Id);
-            foreach (var order in orders)
-            {
-                if (IsOpenPaperOrder(order))
-                {
-                    openOrdersById[order.Id] = order;
-                }
-                else
-                {
-                    openOrdersById.Remove(order.Id);
-                }
-            }
-
-            openPaperOrderIdsByAsset = CreateOpenPaperOrderIdsByAsset(openOrdersById.Values);
+            var updatedOpenOrders = MergeOpenPaperOrders(current.OpenPaperOrders, orders);
+            openPaperOrderIdsByAsset = CreateOpenPaperOrderIdsByAsset(updatedOpenOrders);
 
             Volatile.Write(
                 ref snapshot,
                 current with
                 {
-                    OpenPaperOrders = openOrdersById.Values
-                        .OrderByDescending(item => item.CreatedAtUtc)
-                        .ToArray(),
+                    OpenPaperOrders = updatedOpenOrders,
                     LoadedAtUtc = DateTimeOffset.UtcNow
                 });
         }
@@ -157,46 +136,22 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
 
         lock (updateSync)
         {
+            if (refreshInProgress)
+            {
+                foreach (var position in positions)
+                {
+                    paperPositionRefreshOverlay[
+                        PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = position;
+                }
+            }
+
             var current = Volatile.Read(ref snapshot);
             if (current is null)
             {
                 return;
             }
 
-            var updatesByKey = new Dictionary<PaperPositionKey, PaperPosition>(positions.Count);
-            foreach (var position in positions)
-            {
-                updatesByKey[PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = position;
-            }
-
-            var updatedPositions = new List<PaperPosition>(current.PaperPositions.Count + updatesByKey.Count);
-            foreach (var currentPosition in current.PaperPositions)
-            {
-                var key = PaperPositionKey.From(currentPosition.CopiedTraderWallet, currentPosition.AssetId);
-                if (updatesByKey.Remove(key, out var updatedPosition))
-                {
-                    if (updatedPosition.SizeShares > 0m)
-                    {
-                        updatedPositions.Add(updatedPosition);
-                    }
-                    continue;
-                }
-
-                if (currentPosition.SizeShares > 0m)
-                {
-                    updatedPositions.Add(currentPosition);
-                }
-            }
-
-            foreach (var position in updatesByKey.Values)
-            {
-                if (position.SizeShares > 0m)
-                {
-                    updatedPositions.Add(position);
-                }
-            }
-
-            var updatedPositionArray = updatedPositions.ToArray();
+            var updatedPositionArray = MergePaperPositions(current.PaperPositions, positions);
             paperPositionIndexes = CreatePaperPositionIndexes(updatedPositionArray);
 
             Volatile.Write(
@@ -213,30 +168,183 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
     {
         lock (updateSync)
         {
+            if (refreshInProgress)
+            {
+                liveOrderRefreshOverlay[order.Id] = order;
+            }
+
             var current = Volatile.Read(ref snapshot);
             if (current is null)
             {
                 return;
             }
 
-            var orders = current.OpenLiveOrders
-                .Where(item => item.Id != order.Id)
-                .ToList();
-            if (IsOpenLiveOrder(order))
-            {
-                orders.Add(order);
-            }
+            var updatedOpenLiveOrders = MergeOpenLiveOrders(current.OpenLiveOrders, [order]);
 
             Volatile.Write(
                 ref snapshot,
                 current with
                 {
-                    OpenLiveOrders = orders
-                        .OrderByDescending(item => item.CreatedAtUtc)
-                        .ToArray(),
+                    OpenLiveOrders = updatedOpenLiveOrders,
                     LoadedAtUtc = DateTimeOffset.UtcNow
                 });
         }
+    }
+
+    private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
+    {
+        await refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (Volatile.Read(ref snapshot) is null)
+            {
+                await RefreshCoreAsync(cancellationToken);
+            }
+        }
+        finally
+        {
+            refreshLock.Release();
+        }
+    }
+
+    private async Task RefreshCoreAsync(CancellationToken cancellationToken)
+    {
+        lock (updateSync)
+        {
+            refreshInProgress = true;
+            paperOrderRefreshOverlay.Clear();
+            paperPositionRefreshOverlay.Clear();
+            liveOrderRefreshOverlay.Clear();
+        }
+
+        try
+        {
+            var openPaperOrdersTask = repository.GetOpenPaperOrdersAsync(cancellationToken);
+            var paperPositionsTask = repository.GetOpenPaperPositionsAsync(cancellationToken);
+            var openLiveOrdersTask = repository.GetOpenLiveOrdersAsync(cancellationToken);
+
+            await Task.WhenAll(openPaperOrdersTask, paperPositionsTask, openLiveOrdersTask);
+            var loadedOpenPaperOrders = await openPaperOrdersTask;
+            var loadedPaperPositions = await paperPositionsTask;
+            var loadedOpenLiveOrders = await openLiveOrdersTask;
+
+            lock (updateSync)
+            {
+                var refreshedOpenPaperOrders = MergeOpenPaperOrders(
+                    loadedOpenPaperOrders,
+                    paperOrderRefreshOverlay.Values);
+                var refreshedPaperPositions = MergePaperPositions(
+                    loadedPaperPositions,
+                    paperPositionRefreshOverlay.Values);
+                var refreshedOpenLiveOrders = MergeOpenLiveOrders(
+                    loadedOpenLiveOrders,
+                    liveOrderRefreshOverlay.Values);
+                var refreshedSnapshot = new TradingExposureSnapshot(
+                    refreshedOpenPaperOrders,
+                    refreshedPaperPositions,
+                    refreshedOpenLiveOrders,
+                    DateTimeOffset.UtcNow);
+
+                paperPositionIndexes = CreatePaperPositionIndexes(refreshedSnapshot.PaperPositions);
+                openPaperOrderIdsByAsset = CreateOpenPaperOrderIdsByAsset(refreshedSnapshot.OpenPaperOrders);
+                Volatile.Write(ref snapshot, refreshedSnapshot);
+                ClearRefreshState();
+            }
+        }
+        catch
+        {
+            lock (updateSync)
+            {
+                ClearRefreshState();
+            }
+
+            throw;
+        }
+    }
+
+    private void ClearRefreshState()
+    {
+        refreshInProgress = false;
+        paperOrderRefreshOverlay.Clear();
+        paperPositionRefreshOverlay.Clear();
+        liveOrderRefreshOverlay.Clear();
+    }
+
+    private static PaperOrder[] MergeOpenPaperOrders(
+        IEnumerable<PaperOrder> currentOrders,
+        IEnumerable<PaperOrder> updatedOrders)
+    {
+        var openOrdersById = currentOrders
+            .Where(IsOpenPaperOrder)
+            .ToDictionary(order => order.Id);
+        foreach (var order in updatedOrders)
+        {
+            if (IsOpenPaperOrder(order))
+            {
+                openOrdersById[order.Id] = order;
+            }
+            else
+            {
+                openOrdersById.Remove(order.Id);
+            }
+        }
+
+        return openOrdersById.Values
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .ToArray();
+    }
+
+    private static PaperPosition[] MergePaperPositions(
+        IEnumerable<PaperPosition> currentPositions,
+        IEnumerable<PaperPosition> updatedPositions)
+    {
+        var positionsByKey = new Dictionary<PaperPositionKey, PaperPosition>();
+        foreach (var position in currentPositions)
+        {
+            if (position.SizeShares > 0m)
+            {
+                positionsByKey[PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId)] = position;
+            }
+        }
+
+        foreach (var position in updatedPositions)
+        {
+            var key = PaperPositionKey.From(position.CopiedTraderWallet, position.AssetId);
+            if (position.SizeShares > 0m)
+            {
+                positionsByKey[key] = position;
+            }
+            else
+            {
+                positionsByKey.Remove(key);
+            }
+        }
+
+        return positionsByKey.Values.ToArray();
+    }
+
+    private static LiveOrder[] MergeOpenLiveOrders(
+        IEnumerable<LiveOrder> currentOrders,
+        IEnumerable<LiveOrder> updatedOrders)
+    {
+        var openOrdersById = currentOrders
+            .Where(IsOpenLiveOrder)
+            .ToDictionary(order => order.Id);
+        foreach (var order in updatedOrders)
+        {
+            if (IsOpenLiveOrder(order))
+            {
+                openOrdersById[order.Id] = order;
+            }
+            else
+            {
+                openOrdersById.Remove(order.Id);
+            }
+        }
+
+        return openOrdersById.Values
+            .OrderByDescending(item => item.CreatedAtUtc)
+            .ToArray();
     }
 
     private static bool IsOpenPaperOrder(PaperOrder order)

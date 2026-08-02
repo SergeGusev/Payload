@@ -15,6 +15,7 @@ internal sealed class TestAppRepository : IAppRepository
     private int cryptoUpDownGammaMarketCalls;
     private int observationGammaMarketCalls;
     private int endingBetweenGammaMarketCalls;
+    private int getOpenPaperPositionsCalls;
 
     public TimeSpan PolymarketGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
     public TimeSpan ObservationGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
@@ -79,7 +80,11 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int GetPaperPositionsCalls { get; private set; }
 
-    public int GetOpenPaperPositionsCalls { get; private set; }
+    public int GetOpenPaperPositionsCalls => Volatile.Read(ref getOpenPaperPositionsCalls);
+
+    public Func<CancellationToken, Task>? GetOpenPaperPositionsHook { get; set; }
+
+    public bool UseCaseSensitivePaperPositionLookup { get; set; }
 
     public int GetOpenPaperPositionsForMarketCalls { get; private set; }
 
@@ -1598,12 +1603,26 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult<IReadOnlyList<PaperPosition>>(PaperPositions.ToArray());
     }
 
-    public Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsAsync(CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsAsync(CancellationToken cancellationToken = default)
     {
-        GetOpenPaperPositionsCalls++;
-        return Task.FromResult<IReadOnlyList<PaperPosition>>(PaperPositions
-            .Where(position => position.SizeShares > 0m)
-            .ToArray());
+        cancellationToken.ThrowIfCancellationRequested();
+        Interlocked.Increment(ref getOpenPaperPositionsCalls);
+
+        PaperPosition[] positions;
+        lock (sync)
+        {
+            positions = PaperPositions
+                .Where(position => position.SizeShares > 0m)
+                .ToArray();
+        }
+
+        if (GetOpenPaperPositionsHook is { } hook)
+        {
+            await hook(cancellationToken);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return positions;
     }
 
     public Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsForMarketAsync(
@@ -1628,9 +1647,12 @@ internal sealed class TestAppRepository : IAppRepository
         CancellationToken cancellationToken = default)
     {
         GetPaperPositionCalls++;
+        var comparison = UseCaseSensitivePaperPositionLookup
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
         return Task.FromResult(PaperPositions.FirstOrDefault(position =>
-            string.Equals(position.CopiedTraderWallet, copiedTraderWallet, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase)));
+            string.Equals(position.CopiedTraderWallet, copiedTraderWallet, comparison) &&
+            string.Equals(position.AssetId, assetId, comparison)));
     }
 
     public Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default)

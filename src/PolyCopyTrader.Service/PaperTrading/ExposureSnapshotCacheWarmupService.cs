@@ -6,23 +6,28 @@ namespace PolyCopyTrader.Service.PaperTrading;
 public sealed class ExposureSnapshotCacheWarmupService(
     ILogger<ExposureSnapshotCacheWarmupService> logger,
     IExposureSnapshotCache exposureCache,
-    IAppRepository repository) : BackgroundService
+    IAppRepository repository) : IHostedService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await exposureCache.RefreshAsync(stoppingToken);
+            await exposureCache.GetSnapshotAsync(cancellationToken);
             logger.LogInformation("Exposure snapshot cache warmed up.");
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Exposure snapshot cache warmup failed.");
-            await TryRecordApiErrorAsync(ex.Message, stoppingToken);
+            await TryRecordApiErrorAsync(ex.Message, cancellationToken);
         }
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
     }
 
     private async Task TryRecordApiErrorAsync(string message, CancellationToken cancellationToken)

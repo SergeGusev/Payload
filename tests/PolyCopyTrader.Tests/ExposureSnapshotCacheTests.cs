@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Service.PaperTrading;
 
@@ -41,6 +42,193 @@ public sealed class ExposureSnapshotCacheTests
         Assert.Equal(openLiveOrder.Id, snapshot.OpenLiveOrders[0].Id);
         Assert.True(cache.TryGetOpenPaperOrderIds("ASSET-1", out var openPaperOrderIds));
         Assert.Equal(new HashSet<Guid> { openPaperOrder.Id }, openPaperOrderIds);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_ConcurrentColdCallsShareOneRepositoryLoad()
+    {
+        var repository = new TestAppRepository();
+        repository.PaperPositions.Add(PaperPosition(10m));
+        var readStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRead = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.GetOpenPaperPositionsHook = async cancellationToken =>
+        {
+            readStarted.TrySetResult(true);
+            await releaseRead.Task.WaitAsync(cancellationToken);
+        };
+        var cache = new ExposureSnapshotCache(repository);
+
+        var firstLoad = cache.GetSnapshotAsync();
+        try
+        {
+            await readStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var secondLoad = cache.GetSnapshotAsync();
+
+            releaseRead.TrySetResult(true);
+            var snapshots = await Task.WhenAll(firstLoad, secondLoad);
+
+            Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+            Assert.Same(snapshots[0], snapshots[1]);
+        }
+        finally
+        {
+            releaseRead.TrySetResult(true);
+        }
+    }
+
+    [Fact]
+    public async Task WarmupService_StartAsyncAwaitsInitialSnapshotLoad()
+    {
+        var repository = new TestAppRepository();
+        var readStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRead = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.GetOpenPaperPositionsHook = async cancellationToken =>
+        {
+            readStarted.TrySetResult(true);
+            await releaseRead.Task.WaitAsync(cancellationToken);
+        };
+        var cache = new ExposureSnapshotCache(repository);
+        var warmupService = new ExposureSnapshotCacheWarmupService(
+            NullLogger<ExposureSnapshotCacheWarmupService>.Instance,
+            cache,
+            repository);
+
+        var startup = warmupService.StartAsync(CancellationToken.None);
+        try
+        {
+            await readStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(startup.IsCompleted);
+
+            releaseRead.TrySetResult(true);
+            await startup;
+
+            Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+        }
+        finally
+        {
+            releaseRead.TrySetResult(true);
+        }
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_PreservesApplyMutationsDuringInitialLoad()
+    {
+        var repository = new TestAppRepository();
+        var openPaperOrder = PaperOrder(PaperOrderStatus.Pending);
+        var openPosition = PaperPosition(10m);
+        var openLiveOrder = LiveOrder(LiveOrderStatus.Live);
+        repository.PaperOrders.Add(openPaperOrder);
+        repository.PaperPositions.Add(openPosition);
+        repository.LiveOrders.Add(openLiveOrder);
+        var readStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRead = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.GetOpenPaperPositionsHook = async cancellationToken =>
+        {
+            readStarted.TrySetResult(true);
+            await releaseRead.Task.WaitAsync(cancellationToken);
+        };
+        var cache = new ExposureSnapshotCache(repository);
+        var closedPaperOrder = openPaperOrder with { Status = PaperOrderStatus.Filled };
+        var updatedPosition = openPosition with { SizeShares = 25m };
+        var closedLiveOrder = openLiveOrder with { Status = LiveOrderStatus.Cancelled };
+
+        var initialLoad = cache.GetSnapshotAsync();
+        try
+        {
+            await readStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await repository.UpdatePaperOrderAsync(closedPaperOrder);
+            await repository.UpsertPaperPositionAsync(updatedPosition);
+            await repository.UpdateLiveOrderAsync(closedLiveOrder);
+            cache.ApplyPaperOrder(closedPaperOrder);
+            cache.ApplyPaperPosition(updatedPosition);
+            cache.ApplyLiveOrder(closedLiveOrder);
+
+            releaseRead.TrySetResult(true);
+            var snapshot = await initialLoad;
+
+            Assert.Empty(snapshot.OpenPaperOrders);
+            Assert.Equal(25m, Assert.Single(snapshot.PaperPositions).SizeShares);
+            Assert.Empty(snapshot.OpenLiveOrders);
+        }
+        finally
+        {
+            releaseRead.TrySetResult(true);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshAsync_PreservesApplyMutationsMadeWhileRepositoryLoadIsInFlight()
+    {
+        var repository = new TestAppRepository();
+        var openPaperOrder = PaperOrder(PaperOrderStatus.Pending);
+        var openPosition = PaperPosition(10m);
+        var openLiveOrder = LiveOrder(LiveOrderStatus.Live);
+        repository.PaperOrders.Add(openPaperOrder);
+        repository.PaperPositions.Add(openPosition);
+        repository.LiveOrders.Add(openLiveOrder);
+        var cache = new ExposureSnapshotCache(repository);
+        await cache.GetSnapshotAsync();
+
+        var readStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRead = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.GetOpenPaperPositionsHook = async cancellationToken =>
+        {
+            readStarted.TrySetResult(true);
+            await releaseRead.Task.WaitAsync(cancellationToken);
+        };
+        var closedPaperOrder = openPaperOrder with { Status = PaperOrderStatus.Filled };
+        var updatedPosition = openPosition with { SizeShares = 25m };
+        var closedLiveOrder = openLiveOrder with { Status = LiveOrderStatus.Cancelled };
+
+        var refresh = cache.RefreshAsync();
+        try
+        {
+            await readStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await repository.UpdatePaperOrderAsync(closedPaperOrder);
+            await repository.UpsertPaperPositionAsync(updatedPosition);
+            await repository.UpdateLiveOrderAsync(closedLiveOrder);
+            cache.ApplyPaperOrder(closedPaperOrder);
+            cache.ApplyPaperPosition(updatedPosition);
+            cache.ApplyLiveOrder(closedLiveOrder);
+
+            releaseRead.TrySetResult(true);
+            await refresh;
+            var snapshot = await cache.GetSnapshotAsync();
+
+            Assert.Empty(snapshot.OpenPaperOrders);
+            Assert.Equal(25m, Assert.Single(snapshot.PaperPositions).SizeShares);
+            Assert.Empty(snapshot.OpenLiveOrders);
+        }
+        finally
+        {
+            releaseRead.TrySetResult(true);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshAsync_FailureRetainsLastGoodSnapshotAndAllowsRetry()
+    {
+        var repository = new TestAppRepository();
+        var originalPosition = PaperPosition(10m);
+        repository.PaperPositions.Add(originalPosition);
+        var cache = new ExposureSnapshotCache(repository);
+        await cache.GetSnapshotAsync();
+
+        var updatedPosition = originalPosition with { SizeShares = 25m };
+        await repository.UpsertPaperPositionAsync(updatedPosition);
+        repository.GetOpenPaperPositionsHook = _ =>
+            Task.FromException(new InvalidOperationException("simulated refresh failure"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => cache.RefreshAsync());
+        var retainedSnapshot = await cache.GetSnapshotAsync();
+
+        Assert.Equal(10m, Assert.Single(retainedSnapshot.PaperPositions).SizeShares);
+
+        repository.GetOpenPaperPositionsHook = null;
+        await cache.RefreshAsync();
+        var recoveredSnapshot = await cache.GetSnapshotAsync();
+
+        Assert.Equal(25m, Assert.Single(recoveredSnapshot.PaperPositions).SizeShares);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.MarketData;
+using PolyCopyTrader.Service.PaperTrading;
 
 namespace PolyCopyTrader.Tests;
 
@@ -34,15 +35,20 @@ public sealed class ActiveMarketAssetSubscriptionRegistryTests
             Enumerable.Range(0, 125)
                 .Select(index => GammaMarketIngestionTests.CreateMarketForTests("market-" + index))
                 .ToArray());
+        var repository = new TestAppRepository();
         var provider = new RelevantMarketAssetProvider(
             new MarketDataWebSocketOptions(),
-            new TestAppRepository(),
+            repository,
+            new ExposureSnapshotCache(repository),
             registry);
 
         var assetIds = await provider.GetRelevantAssetIdsAsync();
+        var repeatedAssetIds = await provider.GetRelevantAssetIdsAsync();
 
         Assert.Equal(250, assetIds.Count);
         Assert.Contains("token-yes-market-124", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.True(assetIds.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(repeatedAssetIds));
+        Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
     }
 
     [Fact]
@@ -72,14 +78,55 @@ public sealed class ActiveMarketAssetSubscriptionRegistryTests
         var provider = new RelevantMarketAssetProvider(
             new MarketDataWebSocketOptions(),
             repository,
+            new ExposureSnapshotCache(repository),
+            new ActiveMarketAssetSubscriptionRegistry());
+
+        var assetIds = await provider.GetRelevantAssetIdsAsync();
+        var repeatedAssetIds = await provider.GetRelevantAssetIdsAsync();
+
+        Assert.Contains("open-asset", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("closed-asset", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("open-asset", repeatedAssetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("closed-asset", repeatedAssetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
+        Assert.Equal(0, repository.GetPaperPositionsCalls);
+    }
+
+    [Fact]
+    public async Task RelevantMarketAssetProvider_PrioritizesNewestCachedPositionWhenCapped()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        repository.PaperPositions.Add(new PaperPosition(
+            "older-asset",
+            "older-condition",
+            "Up",
+            5m,
+            0.50m,
+            2.50m,
+            0m,
+            now.AddMinutes(-1),
+            "older-wallet"));
+        repository.PaperPositions.Add(new PaperPosition(
+            "newer-asset",
+            "newer-condition",
+            "Down",
+            5m,
+            0.50m,
+            2.50m,
+            0m,
+            now,
+            "newer-wallet"));
+        var provider = new RelevantMarketAssetProvider(
+            new MarketDataWebSocketOptions { MaxSubscribedAssets = 1 },
+            repository,
+            new ExposureSnapshotCache(repository),
             new ActiveMarketAssetSubscriptionRegistry());
 
         var assetIds = await provider.GetRelevantAssetIdsAsync();
 
-        Assert.Contains("open-asset", assetIds, StringComparer.OrdinalIgnoreCase);
-        Assert.DoesNotContain("closed-asset", assetIds, StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(["newer-asset"], assetIds);
         Assert.Equal(1, repository.GetOpenPaperPositionsCalls);
-        Assert.Equal(0, repository.GetPaperPositionsCalls);
     }
 
     [Fact]

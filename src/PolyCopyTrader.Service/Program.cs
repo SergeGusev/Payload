@@ -434,6 +434,7 @@ builder.Services.Configure<HostOptions>(options =>
     options.ShutdownTimeout = TimeSpan.FromMinutes(10);
 });
 builder.Services.AddHostedService<StartupSafetyCheckService>();
+builder.Services.AddHostedService<ExposureSnapshotCacheWarmupService>();
 // BTC 5m focused mode: HTTP-log retention is not part of BTC Up or Down 5m strategy execution.
 // builder.Services.AddHostedService<PolymarketHttpLogRetentionWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
@@ -443,7 +444,6 @@ builder.Services.AddHostedService<DashboardStrategyPerformanceSnapshotWorker>();
 builder.Services.AddHostedService<DashboardStrategyProjectionReconciliationWorker>();
 builder.Services.AddHostedService<DateDependentStrategyHourlyPaperPnlWorker>();
 builder.Services.AddHostedService<StrategyRunRetentionWorker>();
-builder.Services.AddHostedService<ExposureSnapshotCacheWarmupService>();
 builder.Services.AddHostedService<PaperTradingWorker>();
 builder.Services.AddHostedService<PaperCopiedTraderPerformanceWorker>();
 builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();

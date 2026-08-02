@@ -1,4 +1,5 @@
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.MarketData;
@@ -6,6 +7,7 @@ namespace PolyCopyTrader.Service.MarketData;
 public sealed class RelevantMarketAssetProvider(
     MarketDataWebSocketOptions options,
     IAppRepository repository,
+    IExposureSnapshotCache exposureSnapshotCache,
     IActiveMarketAssetSubscriptionRegistry activeMarketAssetSubscriptionRegistry) : IRelevantMarketAssetProvider
 {
     public async Task<IReadOnlyCollection<string>> GetRelevantAssetIdsAsync(CancellationToken cancellationToken = default)
@@ -37,7 +39,11 @@ public sealed class RelevantMarketAssetProvider(
             AddIfUsable(assetIds, order.AssetId);
         }
 
-        foreach (var position in await repository.GetOpenPaperPositionsAsync(cancellationToken))
+        var exposureSnapshot = await exposureSnapshotCache.GetSnapshotAsync(cancellationToken);
+        foreach (var position in exposureSnapshot.PaperPositions
+                     .OrderByDescending(item => item.UpdatedAtUtc)
+                     .ThenBy(item => item.CopiedTraderWallet, StringComparer.Ordinal)
+                     .ThenBy(item => item.AssetId, StringComparer.Ordinal))
         {
             AddIfUsable(assetIds, position.AssetId);
         }
