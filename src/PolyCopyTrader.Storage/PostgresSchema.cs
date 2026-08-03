@@ -3190,6 +3190,10 @@ ON paper_positions(copied_trader_wallet, asset_id);
 CREATE INDEX IF NOT EXISTS ix_paper_positions_wallet_updated
 ON paper_positions(copied_trader_wallet, updated_at_utc DESC);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_wallet
+ON paper_positions(copied_trader_wallet)
+WHERE size_shares > 0;
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_wallet_condition_ci
 ON paper_positions(lower(copied_trader_wallet), condition_id);
 

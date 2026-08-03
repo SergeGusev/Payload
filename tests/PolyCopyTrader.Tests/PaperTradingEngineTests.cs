@@ -229,6 +229,37 @@ public sealed class PaperTradingEngineTests
         Assert.Equal(order.CopiedTraderWallet, updated.CopiedTraderWallet);
     }
 
+    [Fact]
+    public void ApplySellFill_FullFillClearsPositionValuation()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var order = PendingOrder(now.AddMinutes(5)) with
+        {
+            Side = TradeSide.Sell,
+            Price = 0.80m,
+            SizeShares = 100m,
+            NotionalUsd = 80m
+        };
+        var currentPosition = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            100m,
+            0.60m,
+            70m,
+            10m,
+            now.AddMinutes(-1),
+            order.CopiedTraderWallet);
+        var fill = new PaperFill(Guid.NewGuid(), order.Id, 0.80m, 100m, now, "SimulatedApproximate");
+
+        var updated = engine.ApplySellFill(currentPosition, order, fill, currentBid: 0.70m, now);
+
+        Assert.Equal(0m, updated.SizeShares);
+        Assert.Equal(0m, updated.AveragePrice);
+        Assert.Equal(0m, updated.EstimatedValueUsd);
+        Assert.Equal(0m, updated.UnrealizedPnlUsd);
+    }
+
     private static Signal AcceptedSignal()
     {
         var trade = new LeaderTrade(

@@ -177,6 +177,105 @@ SET LOCAL enable_bitmapscan = off;
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task Projection_OpenOnlyAggregate_PreservesClosedHistoryAndUsesPartialWalletIndex()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallet = $"paper-performance-open-only-{suffix}";
+        var closedOnlyWallet = $"paper-performance-closed-only-{suffix}";
+        var wallets = new[] { wallet, closedOnlyWallet };
+        var adversarialClosedAssetId = $"closed-adversarial-{suffix}";
+        var controlState = await ReadControlStateAsync(factory);
+
+        try
+        {
+            await InsertOpenOnlyAggregateFixtureAsync(
+                factory,
+                wallet,
+                closedOnlyWallet,
+                adversarialClosedAssetId,
+                suffix);
+            await AnalyzePaperPositionsAsync(factory);
+
+            var before = await ReadOpenOnlyAggregateFixtureStateAsync(
+                factory,
+                wallet,
+                adversarialClosedAssetId);
+            Assert.Equal(100_003L, before.TotalPositions);
+            Assert.Equal(100_001L, before.ClosedPositions);
+            Assert.Equal(2L, before.OpenPositions);
+            Assert.True(before.AdversarialClosedPositionPresent);
+
+            var plan = await ExplainOpenWalletPositionLookupAsync(factory, wallets);
+            Assert.Contains("ix_paper_positions_open_wallet", plan, StringComparison.Ordinal);
+            Assert.DoesNotContain("Seq Scan on paper_positions", plan, StringComparison.Ordinal);
+
+            await QueueWalletsAsync(factory, wallets, int.MaxValue, "open_only_aggregate_test");
+            await SetControlCursorToMaximumSourceWalletAsync(factory);
+
+            var result = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
+                highPriorityWalletBatchSize: 2,
+                reconciliationWalletBatchSize: 1,
+                reconciliationSeedWalletBatchSize: 1);
+
+            Assert.True(result.LockAcquired);
+            Assert.Equal(2, result.HighPriorityWalletsProcessed);
+            Assert.Equal(2, result.WalletsProcessed);
+            Assert.Equal(2, result.PerformanceRowsWritten);
+            Assert.True(result.PaperPositionsAggregationSequentialScans.HasValue);
+            Assert.Equal(0L, result.PaperPositionsAggregationSequentialScans.Value);
+            Assert.True(result.PaperPositionsAggregationSequentialTuplesRead.HasValue);
+            Assert.Equal(0L, result.PaperPositionsAggregationSequentialTuplesRead.Value);
+
+            var overall = Assert.IsType<PaperCopiedTraderPerformance>(
+                await repository.GetPaperCopiedTraderPerformanceAsync(wallet, "OVERALL"));
+            var unknown = Assert.IsType<PaperCopiedTraderPerformance>(
+                await repository.GetPaperCopiedTraderPerformanceAsync(wallet, "unknown"));
+            AssertOpenOnlyAggregatePerformance(overall, wallet, "OVERALL");
+            AssertOpenOnlyAggregatePerformance(unknown, wallet, "unknown");
+
+            Assert.Null(await repository.GetPaperCopiedTraderPerformanceAsync(closedOnlyWallet, "OVERALL"));
+            Assert.Null(await repository.GetPaperCopiedTraderPerformanceAsync(closedOnlyWallet, "unknown"));
+
+            var after = await ReadOpenOnlyAggregateFixtureStateAsync(
+                factory,
+                wallet,
+                adversarialClosedAssetId);
+            Assert.Equal(before, after);
+
+            var closedOnlyState = await ReadOpenOnlyAggregateFixtureStateAsync(
+                factory,
+                closedOnlyWallet,
+                $"closed-only-{suffix}");
+            Assert.Equal(1L, closedOnlyState.TotalPositions);
+            Assert.Equal(1L, closedOnlyState.ClosedPositions);
+            Assert.Equal(0L, closedOnlyState.OpenPositions);
+            Assert.True(closedOnlyState.AdversarialClosedPositionPresent);
+        }
+        finally
+        {
+            try
+            {
+                await DeleteOpenOnlyAggregateFixtureAsync(factory, wallets);
+                await AnalyzePaperPositionsAsync(factory);
+            }
+            finally
+            {
+                await RestoreControlStateAsync(factory, controlState);
+            }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task Projection_BoundedBatchAndFillChanges_RecomputeExactWalletState()
     {
         var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
@@ -1646,6 +1745,299 @@ SET LOCAL enable_bitmapscan = off;
         }
     }
 
+    private static void AssertOpenOnlyAggregatePerformance(
+        PaperCopiedTraderPerformance performance,
+        string wallet,
+        string category)
+    {
+        Assert.Equal(wallet, performance.CopiedTraderWallet);
+        Assert.Equal(category, performance.Category);
+        Assert.Equal(0, performance.OrdersCount);
+        Assert.Equal(0, performance.FilledOrdersCount);
+        Assert.Equal(0, performance.BuyFillsCount);
+        Assert.Equal(0, performance.SellFillsCount);
+        Assert.Equal(2, performance.OpenPositionsCount);
+        Assert.Equal(0, performance.SettledPositionsCount);
+        Assert.Equal(0, performance.WonPositionsCount);
+        Assert.Equal(0, performance.LostPositionsCount);
+        Assert.Equal(0m, performance.BuyCostUsd);
+        Assert.Equal(0m, performance.SellProceedsUsd);
+        Assert.Equal(0m, performance.SettlementValueUsd);
+        Assert.Equal(0m, performance.RealizedPnlUsd);
+        Assert.Equal(0.75m, performance.UnrealizedPnlUsd);
+        Assert.Equal(0.75m, performance.TotalPnlUsd);
+        Assert.Equal(0m, performance.RoiPct);
+        Assert.Equal(0m, performance.WinRatePct);
+        Assert.Equal(38.2375m, performance.Score);
+        Assert.Null(performance.FirstOrderUtc);
+        Assert.Null(performance.LastOrderUtc);
+    }
+
+    private static async Task InsertOpenOnlyAggregateFixtureAsync(
+        PostgresConnectionFactory factory,
+        string wallet,
+        string closedOnlyWallet,
+        string adversarialClosedAssetId,
+        string suffix)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await using (var disableTriggers = new NpgsqlCommand(
+            "ALTER TABLE public.paper_positions DISABLE TRIGGER USER;",
+            connection,
+            transaction))
+        {
+            await disableTriggers.ExecuteNonQueryAsync();
+        }
+
+        await using (var insertClosedHistory = new NpgsqlCommand(
+            """
+INSERT INTO public.paper_positions (
+    id,
+    copied_trader_wallet,
+    asset_id,
+    condition_id,
+    outcome,
+    size_shares,
+    average_price,
+    estimated_value_usd,
+    unrealized_pnl_usd,
+    updated_at_utc)
+SELECT
+    gen_random_uuid(),
+    @Wallet,
+    @AssetPrefix || value::text,
+    @ConditionId,
+    'Yes',
+    0,
+    0,
+    0,
+    0,
+    @UpdatedAtUtc
+FROM generate_series(1, 100000) value;
+""",
+            connection,
+            transaction))
+        {
+            insertClosedHistory.Parameters.AddWithValue("Wallet", wallet);
+            insertClosedHistory.Parameters.AddWithValue("AssetPrefix", $"closed-history-{suffix}-");
+            insertClosedHistory.Parameters.AddWithValue("ConditionId", $"closed-history-condition-{suffix}");
+            insertClosedHistory.Parameters.AddWithValue("UpdatedAtUtc", DateTime.UtcNow);
+            Assert.Equal(100_000, await insertClosedHistory.ExecuteNonQueryAsync());
+        }
+
+        await using (var insertFocusedRows = new NpgsqlCommand(
+            """
+INSERT INTO public.paper_positions (
+    id,
+    copied_trader_wallet,
+    asset_id,
+    condition_id,
+    outcome,
+    size_shares,
+    average_price,
+    estimated_value_usd,
+    unrealized_pnl_usd,
+    updated_at_utc)
+VALUES
+    (gen_random_uuid(), @Wallet, @AdversarialClosedAssetId, @AdversarialClosedConditionId,
+     'Yes', 0, 0, 0, 123.45, @UpdatedAtUtc),
+    (gen_random_uuid(), @Wallet, @OpenAssetIdOne, @OpenConditionIdOne,
+     'Yes', 2, 0.40, 0.80, 1.25, @UpdatedAtUtc),
+    (gen_random_uuid(), @Wallet, @OpenAssetIdTwo, @OpenConditionIdTwo,
+     'No', 3, 0.50, 1.50, -0.50, @UpdatedAtUtc),
+    (gen_random_uuid(), @ClosedOnlyWallet, @ClosedOnlyAssetId, @ClosedOnlyConditionId,
+     'Yes', 0, 0, 0, 17.25, @UpdatedAtUtc);
+""",
+            connection,
+            transaction))
+        {
+            insertFocusedRows.Parameters.AddWithValue("Wallet", wallet);
+            insertFocusedRows.Parameters.AddWithValue("ClosedOnlyWallet", closedOnlyWallet);
+            insertFocusedRows.Parameters.AddWithValue("AdversarialClosedAssetId", adversarialClosedAssetId);
+            insertFocusedRows.Parameters.AddWithValue("AdversarialClosedConditionId", $"closed-adversarial-condition-{suffix}");
+            insertFocusedRows.Parameters.AddWithValue("OpenAssetIdOne", $"open-one-{suffix}");
+            insertFocusedRows.Parameters.AddWithValue("OpenConditionIdOne", $"open-condition-one-{suffix}");
+            insertFocusedRows.Parameters.AddWithValue("OpenAssetIdTwo", $"open-two-{suffix}");
+            insertFocusedRows.Parameters.AddWithValue("OpenConditionIdTwo", $"open-condition-two-{suffix}");
+            insertFocusedRows.Parameters.AddWithValue("ClosedOnlyAssetId", $"closed-only-{suffix}");
+            insertFocusedRows.Parameters.AddWithValue("ClosedOnlyConditionId", $"closed-only-condition-{suffix}");
+            insertFocusedRows.Parameters.AddWithValue("UpdatedAtUtc", DateTime.UtcNow);
+            Assert.Equal(4, await insertFocusedRows.ExecuteNonQueryAsync());
+        }
+
+        await using (var enableTriggers = new NpgsqlCommand(
+            "ALTER TABLE public.paper_positions ENABLE TRIGGER USER;",
+            connection,
+            transaction))
+        {
+            await enableTriggers.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+    }
+
+    private static async Task AnalyzePaperPositionsAsync(PostgresConnectionFactory factory)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("ANALYZE public.paper_positions;", connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<OpenOnlyAggregateFixtureState> ReadOpenOnlyAggregateFixtureStateAsync(
+        PostgresConnectionFactory factory,
+        string wallet,
+        string adversarialClosedAssetId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    count(*)::bigint,
+    count(*) FILTER (WHERE size_shares <= 0)::bigint,
+    count(*) FILTER (WHERE size_shares > 0)::bigint,
+    count(*) FILTER (
+        WHERE asset_id = @AdversarialClosedAssetId
+          AND size_shares = 0
+          AND unrealized_pnl_usd <> 0) = 1
+FROM public.paper_positions
+WHERE copied_trader_wallet = @Wallet;
+""",
+            connection);
+        command.Parameters.AddWithValue("Wallet", wallet);
+        command.Parameters.AddWithValue("AdversarialClosedAssetId", adversarialClosedAssetId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new OpenOnlyAggregateFixtureState(
+            reader.GetInt64(0),
+            reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.GetBoolean(3));
+    }
+
+    private static async Task<string> ExplainOpenWalletPositionLookupAsync(
+        PostgresConnectionFactory factory,
+        string[] wallets)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await using (var selectorCommand = new NpgsqlCommand(
+            """
+DROP TABLE IF EXISTS pg_temp.temp_paper_copied_trader_performance_wallets;
+CREATE TEMP TABLE temp_paper_copied_trader_performance_wallets (
+    copied_trader_wallet text PRIMARY KEY,
+    work_kind text NOT NULL CHECK (work_kind IN ('high_priority', 'reconciliation'))
+) ON COMMIT PRESERVE ROWS;
+INSERT INTO temp_paper_copied_trader_performance_wallets (copied_trader_wallet, work_kind)
+SELECT wallet, 'high_priority'
+FROM unnest(@Wallets::text[]) wallet;
+ANALYZE pg_temp.temp_paper_copied_trader_performance_wallets;
+""",
+            connection,
+            transaction))
+        {
+            selectorCommand.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
+            await selectorCommand.ExecuteNonQueryAsync();
+        }
+
+        await using var command = new NpgsqlCommand(
+            """
+EXPLAIN (COSTS OFF)
+SELECT
+    pp.copied_trader_wallet,
+    COALESCE(NULLIF(gm.category, ''), 'unknown') AS category,
+    0, 0, 0, 0,
+    1,
+    0, 0, 0,
+    0, 0, 0, 0,
+    pp.unrealized_pnl_usd,
+    NULL::timestamptz,
+    NULL::timestamptz
+FROM public.paper_positions pp
+JOIN temp_paper_copied_trader_performance_wallets selected
+  ON selected.copied_trader_wallet = pp.copied_trader_wallet
+LEFT JOIN LATERAL (
+    SELECT market.category
+    FROM public.polymarket_gamma_markets market
+    WHERE market.condition_id = pp.condition_id
+    ORDER BY market.fetched_at_utc DESC, market.market_id
+    LIMIT 1
+) gm ON true
+WHERE pp.copied_trader_wallet <> ''
+  AND pp.size_shares > 0;
+""",
+            connection,
+            transaction);
+        await using var reader = await command.ExecuteReaderAsync();
+        var planLines = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            planLines.Add(reader.GetString(0));
+        }
+
+        await reader.DisposeAsync();
+        await transaction.RollbackAsync();
+        return string.Join(Environment.NewLine, planLines);
+    }
+
+    private static async Task DeleteOpenOnlyAggregateFixtureAsync(
+        PostgresConnectionFactory factory,
+        string[] wallets)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await using (var disableTriggers = new NpgsqlCommand(
+            "ALTER TABLE public.paper_positions DISABLE TRIGGER USER;",
+            connection,
+            transaction))
+        {
+            await disableTriggers.ExecuteNonQueryAsync();
+        }
+
+        await using (var deletePositions = new NpgsqlCommand(
+            "DELETE FROM public.paper_positions WHERE copied_trader_wallet = ANY(@Wallets);",
+            connection,
+            transaction))
+        {
+            deletePositions.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
+            await deletePositions.ExecuteNonQueryAsync();
+        }
+
+        await using (var enableTriggers = new NpgsqlCommand(
+            "ALTER TABLE public.paper_positions ENABLE TRIGGER USER;",
+            connection,
+            transaction))
+        {
+            await enableTriggers.ExecuteNonQueryAsync();
+        }
+
+        await using (var deleteDerivedRows = new NpgsqlCommand(
+            """
+DELETE FROM public.paper_copied_trader_performance
+WHERE copied_trader_wallet = ANY(@Wallets);
+DELETE FROM public.paper_copied_trader_performance_refresh_queue
+WHERE copied_trader_wallet = ANY(@Wallets);
+DELETE FROM public.paper_copied_trader_performance_refresh_inflight
+WHERE copied_trader_wallet = ANY(@Wallets);
+""",
+            connection,
+            transaction))
+        {
+            deleteDerivedRows.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
+            await deleteDerivedRows.ExecuteNonQueryAsync();
+        }
+
+        await transaction.CommitAsync();
+    }
+
     private static PaperPosition CreatePosition(
         string wallet,
         string assetId,
@@ -2521,6 +2913,12 @@ SELECT max(wallet) FROM source_wallets;
         int OpenPositionsCount,
         int SettledPositionsCount,
         decimal RealizedPnlUsd);
+
+    private sealed record OpenOnlyAggregateFixtureState(
+        long TotalPositions,
+        long ClosedPositions,
+        long OpenPositions,
+        bool AdversarialClosedPositionPresent);
 
     private sealed record ProjectionControlState(
         string? CursorWallet,

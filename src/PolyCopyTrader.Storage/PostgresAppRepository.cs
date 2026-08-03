@@ -3288,7 +3288,7 @@ WITH event_rows AS (
         pp.copied_trader_wallet,
         COALESCE(NULLIF(gm.category, ''), 'unknown') AS category,
         0, 0, 0, 0,
-        CASE WHEN pp.size_shares > 0 THEN 1 ELSE 0 END,
+        1,
         0, 0, 0,
         0, 0, 0, 0,
         pp.unrealized_pnl_usd,
@@ -3305,6 +3305,7 @@ WITH event_rows AS (
         LIMIT 1
     ) gm ON true
     WHERE pp.copied_trader_wallet <> ''
+      AND pp.size_shares > 0
 
     UNION ALL
 

@@ -1379,6 +1379,18 @@ public sealed class StorageTests
             "DELETE FROM paper_copied_trader_performance performance",
             StringComparison.Ordinal);
         var projectionAggregate = refreshSource.IndexOf("WITH event_rows AS (", StringComparison.Ordinal);
+        var positionBranchFrom = refreshSource.IndexOf(
+            "    FROM paper_positions pp",
+            projectionAggregate,
+            StringComparison.Ordinal);
+        var positionBranchStart = refreshSource.LastIndexOf(
+            "    SELECT\n",
+            positionBranchFrom,
+            StringComparison.Ordinal);
+        var positionBranchEnd = refreshSource.IndexOf(
+            "\n\n    UNION ALL",
+            positionBranchFrom,
+            StringComparison.Ordinal);
         var statsBeforeSeed = refreshSource.IndexOf(
             "paperPositionsStatsBeforeSeed = await PostgresPaperPositionsScanTelemetry.ReadAsync",
             StringComparison.Ordinal);
@@ -1401,6 +1413,29 @@ public sealed class StorageTests
             && selectionAnalyze > selectedWalletCount
             && projectionDelete > selectionAnalyze
             && projectionAggregate > projectionDelete);
+        Assert.True(
+            positionBranchFrom > projectionAggregate
+            && positionBranchStart >= projectionAggregate
+            && positionBranchEnd > positionBranchFrom);
+        var positionBranch = refreshSource[positionBranchStart..positionBranchEnd];
+        Assert.Contains(
+            """
+                    0, 0, 0, 0,
+                    1,
+                    0, 0, 0,
+                    0, 0, 0, 0,
+                    pp.unrealized_pnl_usd,
+            """,
+            positionBranch,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            """
+                WHERE pp.copied_trader_wallet <> ''
+                  AND pp.size_shares > 0
+            """,
+            positionBranch,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("CASE WHEN pp.size_shares > 0", positionBranch, StringComparison.Ordinal);
         Assert.True(
             statsBeforeSeed >= 0
             && seedProjection > statsBeforeSeed
@@ -1704,6 +1739,12 @@ public sealed class StorageTests
     public void PostgresSchema_HasOpenExposureAndRecentSignalIndexes()
     {
         var source = ReadRepositorySource("src", "PolyCopyTrader.Storage", "PostgresSchema.cs");
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var openWalletIndex = Assert.Single(statements, statement =>
+            statement.StartsWith(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_wallet",
+                StringComparison.Ordinal));
+        openWalletIndex = openWalletIndex.Replace("\r\n", "\n", StringComparison.Ordinal);
 
         Assert.Contains("ix_signals_created_time", source, StringComparison.Ordinal);
         Assert.Contains("ON signals(created_at_utc DESC, id DESC)", source, StringComparison.Ordinal);
@@ -1711,6 +1752,14 @@ public sealed class StorageTests
         Assert.Contains("WHERE status IN ('Pending', 'PartiallyFilled')", source, StringComparison.Ordinal);
         Assert.Contains("ix_paper_positions_open_updated_cover", source, StringComparison.Ordinal);
         Assert.Contains("WHERE size_shares > 0", source, StringComparison.Ordinal);
+        Assert.Equal(
+            """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_positions_open_wallet
+            ON paper_positions(copied_trader_wallet)
+            WHERE size_shares > 0;
+            """,
+            openWalletIndex);
+        Assert.DoesNotContain("INCLUDE", openWalletIndex, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

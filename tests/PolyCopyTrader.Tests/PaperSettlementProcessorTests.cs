@@ -53,7 +53,13 @@ public sealed class PaperSettlementProcessorTests
         Assert.Equal(1, repository.PaperPositionSettlementBatchCalls);
         Assert.Equal(0, repository.RefreshPaperCopiedTraderPerformanceProjectionCalls);
         Assert.Equal(0, result.PerformanceRowsRefreshed);
-        Assert.All(repository.PaperPositions, position => Assert.Equal(0m, position.SizeShares));
+        Assert.All(repository.PaperPositions, position =>
+        {
+            Assert.Equal(0m, position.SizeShares);
+            Assert.Equal(0m, position.AveragePrice);
+            Assert.Equal(0m, position.EstimatedValueUsd);
+            Assert.Equal(0m, position.UnrealizedPnlUsd);
+        });
         var yes = Assert.Single(repository.PaperPositionSettlements, item => item.AssetId == "asset-yes");
         Assert.True(yes.Won);
         Assert.Equal(5m, yes.SettlementValueUsd);
