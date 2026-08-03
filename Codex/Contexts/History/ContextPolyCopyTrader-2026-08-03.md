@@ -18,3 +18,10 @@ Request:
 
 Result:
 После свежего read-only preflight на exact primary `192.168.0.101:5432/polycopytrader` создан единственный одобренный индекс `ix_paper_positions_open_wallet` через `CREATE INDEX CONCURRENTLY`; построение заняло около 1.6 секунды. Postflight подтвердил точную форму и `valid/ready/live=true`, отсутствие invalid/residual объектов и активного build. Независимый production `EXPLAIN ANALYZE` использовал индекс для 25-кошелькового Aggregate-position запроса без `Seq Scan` по `paper_positions` и выполнился за 11.251 ms. Paper, Live и Live-shadow строки не удалялись и не переписывались; сервис остался `Running / Live` без ошибки. Предыдущий вывод о production pg_hba/SSL blocker отозван: его вызвал неверный локальный разбор connection string, а не изменение серверного доступа. Следующий шаг — обычная перевыкладка сервиса с commit `7e92edf6`, затем read-only runtime-проверка.
+
+## 2026-08-03T14:21:21.1470251+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Строго read-only проверена новая production-выкладка на exact primary `192.168.0.101:5432/polycopytrader`. Сервис работает на commit `3d6e9721` с MVID `fa6ca57c8f18`, совпадающим с опубликованной DLL, остаётся `Running / Live` с продвигающимся heartbeat и без ошибок. За чистое окно `482.466517s` при активном обновлении copied-performance новый индекс получил `+3,833` скана, а внешние `paper_positions seq_scan/seq_tup_read` остались `+0/+0`; transaction-local Seed и Aggregate всё время были `last=0/0,total=0/0,lastPositive=none`. Все девять отслеживаемых Paper/Live/live-shadow OID/relfilenode и delete-счётчики остались неизменны, свежие pre-start canary сохранились. Старые June Paper/shadow ID оказались неактуальны из-за отдельно разрешённого Paper-reset 3 июля до cutoff `2026-07-03T06:30:39Z`, а не из-за этой выкладки; соответствующие Live строки и восстановленные Paper-связи существуют. Выкладка принята, rollback не показан.
