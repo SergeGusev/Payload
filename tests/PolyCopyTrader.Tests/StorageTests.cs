@@ -1463,6 +1463,10 @@ public sealed class StorageTests
         Assert.Contains("JOIN temp_paper_copied_trader_performance_wallets selected", source, StringComparison.Ordinal);
         Assert.Contains("LEFT JOIN LATERAL", source, StringComparison.Ordinal);
         Assert.Contains("ORDER BY market.fetched_at_utc DESC, market.market_id", source, StringComparison.Ordinal);
+        Assert.Contains("WHERE NULLIF(ps.category, '') IS NULL", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("CASE WHEN GROUPING(category) = 1 THEN 'OVERALL' ELSE category END AS category", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("GROUP BY GROUPING SETS (", refreshSource, StringComparison.Ordinal);
+        Assert.Equal(1, refreshSource.Split("FROM event_rows", StringSplitOptions.None).Length - 1);
         Assert.Contains("COALESCE((SELECT sum(ps.realized_pnl_usd) FROM paper_position_settlements ps), 0) AS paper_pnl", source, StringComparison.Ordinal);
         Assert.Contains("PaperPositionsSeedSequentialScans", refreshSource, StringComparison.Ordinal);
         Assert.Contains("PaperPositionsSeedSequentialTuplesRead", refreshSource, StringComparison.Ordinal);

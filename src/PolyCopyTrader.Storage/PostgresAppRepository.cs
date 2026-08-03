@@ -3328,14 +3328,17 @@ WITH event_rows AS (
     LEFT JOIN LATERAL (
         SELECT market.category
         FROM polymarket_gamma_markets market
-        WHERE market.condition_id = ps.condition_id
+        WHERE NULLIF(ps.category, '') IS NULL
+          AND market.condition_id = ps.condition_id
         ORDER BY market.fetched_at_utc DESC, market.market_id
         LIMIT 1
     ) gm ON true
     WHERE ps.copied_trader_wallet <> ''
 ),
 grouped AS (
-    SELECT copied_trader_wallet, category,
+    SELECT
+           copied_trader_wallet,
+           CASE WHEN GROUPING(category) = 1 THEN 'OVERALL' ELSE category END AS category,
            SUM(orders_count)::integer AS orders_count,
            SUM(filled_orders_count)::integer AS filled_orders_count,
            SUM(buy_fills_count)::integer AS buy_fills_count,
@@ -3352,28 +3355,10 @@ grouped AS (
            MIN(first_order_utc) AS first_order_utc,
            MAX(last_order_utc) AS last_order_utc
     FROM event_rows
-    GROUP BY copied_trader_wallet, category
-
-    UNION ALL
-
-    SELECT copied_trader_wallet, 'OVERALL',
-           SUM(orders_count)::integer,
-           SUM(filled_orders_count)::integer,
-           SUM(buy_fills_count)::integer,
-           SUM(sell_fills_count)::integer,
-           SUM(open_positions_count)::integer,
-           SUM(settled_positions_count)::integer,
-           SUM(won_positions_count)::integer,
-           SUM(lost_positions_count)::integer,
-           SUM(buy_cost_usd),
-           SUM(sell_proceeds_usd),
-           SUM(settlement_value_usd),
-           SUM(realized_pnl_usd),
-           SUM(unrealized_pnl_usd),
-           MIN(first_order_utc),
-           MAX(last_order_utc)
-    FROM event_rows
-    GROUP BY copied_trader_wallet
+    GROUP BY GROUPING SETS (
+        (copied_trader_wallet, category),
+        (copied_trader_wallet)
+    )
 ),
 scored AS (
     SELECT *,

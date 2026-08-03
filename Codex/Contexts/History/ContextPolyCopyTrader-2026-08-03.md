@@ -25,3 +25,10 @@ Request:
 
 Result:
 Строго read-only проверена новая production-выкладка на exact primary `192.168.0.101:5432/polycopytrader`. Сервис работает на commit `3d6e9721` с MVID `fa6ca57c8f18`, совпадающим с опубликованной DLL, остаётся `Running / Live` с продвигающимся heartbeat и без ошибок. За чистое окно `482.466517s` при активном обновлении copied-performance новый индекс получил `+3,833` скана, а внешние `paper_positions seq_scan/seq_tup_read` остались `+0/+0`; transaction-local Seed и Aggregate всё время были `last=0/0,total=0/0,lastPositive=none`. Все девять отслеживаемых Paper/Live/live-shadow OID/relfilenode и delete-счётчики остались неизменны, свежие pre-start canary сохранились. Старые June Paper/shadow ID оказались неактуальны из-за отдельно разрешённого Paper-reset 3 июля до cutoff `2026-07-03T06:30:39Z`, а не из-за этой выкладки; соответствующие Live строки и восстановленные Paper-связи существуют. Выкладка принята, rollback не показан.
+
+## 2026-08-03T15:40:14.8187839+00:00
+Request:
+Ок, продолжай
+
+Result:
+В read-only production-окне `462.820133s` измерена следующая нагрузка после устранения полного скана `paper_positions`: `30` temp-файлов / `837.88 MiB`, а recurring copied-performance `WITH event_rows AS` наблюдался на `314/721` sampler ticks, с 13 стартами примерно раз в 30 секунд и максимальным наблюдённым возрастом `19.656s`. Локально его category и `OVERALL` расчёты сведены к одному `GROUPING SETS` проходу по `event_rows`; Gamma fallback теперь выполняется только при отсутствующей сохранённой settlement category. Семантика и сохранность истории подтверждены review; `StorageTests` прошли `73/73`, стандартный срез — `816` passed / `21` skipped / `0` failed, Release build — `0` errors. Реальный PostgreSQL integration path не запускался из-за отсутствующей test connection, поэтому снижение temp/I/O будет проверено только после выкладки. Production и Paper/Live история не изменялись; следующий шаг — перевыложить сервис и повторить сопоставимый read-only профиль.
