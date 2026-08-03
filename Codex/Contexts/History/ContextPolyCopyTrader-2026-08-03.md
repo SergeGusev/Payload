@@ -32,3 +32,10 @@ Request:
 
 Result:
 В read-only production-окне `462.820133s` измерена следующая нагрузка после устранения полного скана `paper_positions`: `30` temp-файлов / `837.88 MiB`, а recurring copied-performance `WITH event_rows AS` наблюдался на `314/721` sampler ticks, с 13 стартами примерно раз в 30 секунд и максимальным наблюдённым возрастом `19.656s`. Локально его category и `OVERALL` расчёты сведены к одному `GROUPING SETS` проходу по `event_rows`; Gamma fallback теперь выполняется только при отсутствующей сохранённой settlement category. Семантика и сохранность истории подтверждены review; `StorageTests` прошли `73/73`, стандартный срез — `816` passed / `21` skipped / `0` failed, Release build — `0` errors. Реальный PostgreSQL integration path не запускался из-за отсутствующей test connection, поэтому снижение temp/I/O будет проверено только после выкладки. Production и Paper/Live история не изменялись; следующий шаг — перевыложить сервис и повторить сопоставимый read-only профиль.
+
+## 2026-08-03T16:27:47.2697918+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Строго read-only проверена production-выкладка exact commit `9f2d2e713ce3b8d9b114af5af646a019d7a344dc` / MVID `22486bb4fac0`. За сопоставимое окно `479.946586s` Aggregate presence снизилась `43.551% -> 40.361%`, median observed age `12.400s -> 11.483s`, duration proxy `12.84s -> 11.846s`; database-wide temp-rate снизилась `108.623 -> 55.366 MiB/min`, хотя commit-rate была выше на `24.57%`. Worst observed age почти не изменился, а temp/Gamma counters общие, поэтому доказанный query-specific эффект оценивается умеренно — около `7-8%`, без приписывания всех 49% новому SQL. Projection и heartbeat продвигались, Aggregate worker errors — `0`; 593 свежо обновлённых wallet дали `0` category/`OVERALL` расхождений. Все девять Paper/Live/live-shadow таблиц сохранили OID/relfilenode, имели delete delta `0`, а все девять T0 canary сохранились. Deployment принят, rollback не показан. Следующий кандидат — отдельно approval-gated удаление неиспользуемого индекса `ix_paper_positions_wallet_updated` размером `3.92 GiB`; production в этой проверке не изменялся.
