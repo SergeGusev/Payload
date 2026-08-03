@@ -11,3 +11,10 @@ Request:
 
 Result:
 Локально реализована open-only оптимизация copied-trader performance Aggregate без удаления или переписывания Paper, Live и Live-shadow истории. Добавлен узкий partial index `ix_paper_positions_open_wallet`, точный PostgreSQL regression и unit/source tests; focused suite прошёл 5/5, Release build — без ошибок. Production не изменялся: ручной `CREATE INDEX CONCURRENTLY` и последующий deploy оставлены за отдельным явным разрешением и свежим read-only preflight.
+
+## 2026-08-03T09:51:08.4538053+00:00
+Request:
+Разрешаю
+
+Result:
+После свежего read-only preflight на exact primary `192.168.0.101:5432/polycopytrader` создан единственный одобренный индекс `ix_paper_positions_open_wallet` через `CREATE INDEX CONCURRENTLY`; построение заняло около 1.6 секунды. Postflight подтвердил точную форму и `valid/ready/live=true`, отсутствие invalid/residual объектов и активного build. Независимый production `EXPLAIN ANALYZE` использовал индекс для 25-кошелькового Aggregate-position запроса без `Seq Scan` по `paper_positions` и выполнился за 11.251 ms. Paper, Live и Live-shadow строки не удалялись и не переписывались; сервис остался `Running / Live` без ошибки. Предыдущий вывод о production pg_hba/SSL blocker отозван: его вызвал неверный локальный разбор connection string, а не изменение серверного доступа. Следующий шаг — обычная перевыкладка сервиса с commit `7e92edf6`, затем read-only runtime-проверка.
