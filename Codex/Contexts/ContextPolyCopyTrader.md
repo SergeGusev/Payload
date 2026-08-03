@@ -1,3 +1,14 @@
+## Active Update 2026-08-03 ETH Reference Window Automatic Recovery Clarification
+Goal: Confirm whether the blocked ETH 2bps Reference Average strategy will resume automatically without intervention.
+Status: Completed strictly read-only. Automatic recovery remains expected, conditionally on continuous fresh ETH reference data.
+Done:
+- At production cutoff `2026-08-03T19:39:25.660697Z` / `22:39:25 Europe/Sofia`, the service remained `Running`, `last_error=NULL`; the latest persisted ETH reference tick was `9.783s` old under the configured 10-second write cadence.
+- The exact rolling 24h cache reconstruction still contained `55/60` required buckets, as expected before the five missing buckets age out. The target continued to create future `Observed` runs, confirming no manual start/restart is required.
+- Derived recovery remains approximately `2026-08-04 02:12 Europe/Sofia`; the first scheduled evaluation after that is approximately `02:14:30`. Recovery restores eligibility to evaluate, not a guaranteed order: threshold, direction, current price, book, timing, and execution gates must still pass.
+Next: Recheck the first post-`02:14:30` run if confirmation is needed. No restart is recommended.
+Notes: Production was read-only; no database, service, strategy, order, configuration, deployment, or source state changed. This clarification is committed locally; push remains withheld because local `master` contains the broader accumulated ahead stack.
+Blockers: A new ETH reference-data gap before recovery would move the recovery time later.
+
 ## Active Update 2026-08-03 ETH 2bps Reference Average Missing Bets Diagnosis
 Goal: Determine why `ETH Up or Down 5m 2 bps Reference Average Premarket` placed no Paper bets today and whether the server, scheduler, or betting pipeline was unhealthy.
 Status: Completed strictly read-only. A real strategy-family outage was confirmed: the server and scheduler are healthy, but an incomplete 24-hour ETH reference window intentionally blocks all ordinary ETH Reference Average bps entries.
