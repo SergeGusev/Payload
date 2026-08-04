@@ -302,7 +302,7 @@ public sealed class StrategyRunRetentionTests
     }
 
     [Fact]
-    public void Appsettings_LeavesRetentionAndApplyDisabled()
+    public void Appsettings_EnablesDirectCompactionButLeavesBulkRetentionDisabled()
     {
         var appsettings = ReadRepositorySource(
             "src",
@@ -313,8 +313,8 @@ public sealed class StrategyRunRetentionTests
 
         Assert.False(retention.GetProperty("Enabled").GetBoolean());
         Assert.False(retention.GetProperty("ApplyEnabled").GetBoolean());
-        Assert.False(retention.GetProperty("DirectPaperSkipCompactionEnabled").GetBoolean());
-        Assert.False(retention.GetProperty("DirectPaperSkipCompactionApplyEnabled").GetBoolean());
+        Assert.True(retention.GetProperty("DirectPaperSkipCompactionEnabled").GetBoolean());
+        Assert.True(retention.GetProperty("DirectPaperSkipCompactionApplyEnabled").GetBoolean());
         Assert.True(retention.GetProperty("RawRetentionHours").GetInt32() >= 48);
     }
 

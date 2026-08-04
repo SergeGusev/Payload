@@ -1,3 +1,16 @@
+## Active Update 2026-08-04 Direct Paper-Skip Compaction Activation
+Goal: Enable the already verified direct compaction path for new proven Paper-only/no-bet `Skipped` runs while preserving every actual Paper bet and all Live/live-shadow history.
+Status: Completed locally and ready for the user's normal service deployment. No database, service, deployment, or trading state was changed by Codex.
+Done:
+- Changed only the checked-in service configuration to `StrategyRunRetention:Enabled=false`, `ApplyEnabled=false`, `DirectPaperSkipCompactionEnabled=true`, and `DirectPaperSkipCompactionApplyEnabled=true`. The typed option defaults remain fail-closed `false` when configuration is absent.
+- Confirmed from the current dispatch path that the bulk age-retention worker exits immediately while `Enabled=false`, whereas direct compaction is active only when both direct flags are true.
+- Confirmed from the current PostgreSQL path that only current insert/finalize batches can be considered and only a dependency-free `Skipped / PaperOnly` run with a nonempty reason and no signal, Paper/DryRun/Live order, entry, fill, position, settlement, Live-shadow, copied-leader/on-chain, or diagnostics dependency can be converted atomically into a v1 tombstone plus rollup and removed from the wide raw table. There is no historical scan or backfill in this activation.
+- Updated the checked-in configuration contract test and README to describe the exact `false/false/true/true` rollout and mandatory post-deploy canaries. Existing accumulated raw Skipped rows remain untouched by this step.
+- Focused retention/configuration tests passed `18/18`; the full Release solution build passed with `0` errors and `120` existing nullable warnings. `git diff --check` passed apart from Git's informational LF-to-CRLF notices. Independent read-only source review found no commit blocker.
+Next: User republishes the normal service. Then verify exact deployed build identity and process-effective behavior read-only, observe new direct tombstones/rollups versus raw source rows across at least two snapshots, confirm Dashboard reconciliation, and recheck protected Paper/Live/live-shadow canaries before accepting sustained operation.
+Notes: This rollout reduces retained table/index growth only for newly inserted terminal skips or durable `Observed` rows finalized as eligible skips. It does not eliminate the initial wide `Observed` write/WAL churn and does not compact already accumulated raw history. Runtime overrides can still differ from checked-in JSON, so effective activation is unknown until deployment evidence is collected. Push remains withheld because local `master` contains a broad accumulated ahead stack outside this bounded change.
+Blockers: The local source/config change requires the user's normal service deployment before runtime activation can be claimed.
+
 ## Active Update 2026-08-04 Deployed Recent-Performance Tombstone Bound
 Goal: Verify the deployed `ff624d9e` reader hardening and confirm that default-off retention continues to preserve actual Paper and all Live/live-shadow history.
 Status: Completed strictly read-only. The deployment is accepted; direct compaction remains inactive and separately approval-gated.
