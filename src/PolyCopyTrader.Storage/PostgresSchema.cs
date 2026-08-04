@@ -3014,6 +3014,16 @@ ON strategy_market_paper_skip_tombstones(
     strategy_id, rollup_bucket_start_utc, skip_reason, run_updated_at_utc)
 WHERE archive_format_version = 1;
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_skip_tombstones_strategy_updated_run
+ON strategy_market_paper_skip_tombstones(
+    strategy_id, run_updated_at_utc, archived_run_id)
+WHERE archive_format_version = 1;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_skip_tombstones_updated_strategy_run
+ON strategy_market_paper_skip_tombstones(
+    run_updated_at_utc, strategy_id, archived_run_id)
+WHERE archive_format_version = 1;
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_skip_tombstones_incomplete
 ON strategy_market_paper_skip_tombstones(strategy_id, market_id)
 WHERE archive_format_version IS DISTINCT FROM 1;

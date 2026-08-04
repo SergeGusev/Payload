@@ -360,6 +360,39 @@ public sealed class StrategyRunRetentionTests
     }
 
     [Fact]
+    public void Schema_InstallsDirectCompactionRecentLookupIndexesConcurrently()
+    {
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
+        var strategyUpdatedIndex = Assert.Single(statements, statement =>
+            statement.StartsWith(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS " +
+                "ix_strategy_market_paper_skip_tombstones_strategy_updated_run",
+                StringComparison.Ordinal));
+        var updatedStrategyIndex = Assert.Single(statements, statement =>
+            statement.StartsWith(
+                "CREATE INDEX CONCURRENTLY IF NOT EXISTS " +
+                "ix_strategy_market_paper_skip_tombstones_updated_strategy_run",
+                StringComparison.Ordinal));
+
+        Assert.Equal(
+            """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_skip_tombstones_strategy_updated_run
+            ON strategy_market_paper_skip_tombstones(
+                strategy_id, run_updated_at_utc, archived_run_id)
+            WHERE archive_format_version = 1;
+            """,
+            strategyUpdatedIndex.Replace("\r\n", "\n", StringComparison.Ordinal));
+        Assert.Equal(
+            """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategy_market_paper_skip_tombstones_updated_strategy_run
+            ON strategy_market_paper_skip_tombstones(
+                run_updated_at_utc, strategy_id, archived_run_id)
+            WHERE archive_format_version = 1;
+            """,
+            updatedStrategyIndex.Replace("\r\n", "\n", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Schema_InstallsLiveGuardAtomicallyAndKeepsRetentionScopeMonotonic()
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
