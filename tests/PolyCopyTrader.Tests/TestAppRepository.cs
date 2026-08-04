@@ -52,6 +52,12 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int BulkStrategyMarketPaperRunInsertFailuresToThrow { get; set; }
 
+    public List<bool> DirectPaperSkipBulkInsertFlags { get; } = [];
+
+    public List<(Guid RunId, bool Enabled)> DirectPaperSkipSingleFinalizeCalls { get; } = [];
+
+    public List<(IReadOnlyList<Guid> RunIds, bool Enabled)> DirectPaperSkipBulkFinalizeCalls { get; } = [];
+
     public Queue<StrategyRunRetentionPreview> StrategyRunRetentionPreviews { get; } = [];
 
     public List<(
@@ -802,6 +808,19 @@ internal sealed class TestAppRepository : IAppRepository
         }
     }
 
+    public Task<IReadOnlySet<Guid>> TryAddStrategyMarketPaperRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        bool directPaperSkipCompactionEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            DirectPaperSkipBulkInsertFlags.Add(directPaperSkipCompactionEnabled);
+        }
+
+        return TryAddStrategyMarketPaperRunsAsync(runs, cancellationToken);
+    }
+
     public Task<StrategyRunRetentionPreview> PreviewPaperOnlySkippedRunRetentionAsync(
         DateTimeOffset updatedBeforeUtc,
         int limit,
@@ -1120,6 +1139,19 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.CompletedTask;
     }
 
+    public Task FinalizeStrategyMarketPaperRunAsync(
+        StrategyMarketPaperRun run,
+        bool directPaperSkipCompactionEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            DirectPaperSkipSingleFinalizeCalls.Add((run.Id, directPaperSkipCompactionEnabled));
+        }
+
+        return UpdateStrategyMarketPaperRunAsync(run, cancellationToken);
+    }
+
     public Task UpdateStrategyMarketPaperRunsAsync(
         IReadOnlyList<StrategyMarketPaperRun> runs,
         CancellationToken cancellationToken = default)
@@ -1137,6 +1169,21 @@ internal sealed class TestAppRepository : IAppRepository
             }
         }
         return Task.CompletedTask;
+    }
+
+    public Task FinalizeStrategyMarketPaperRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        bool directPaperSkipCompactionEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            DirectPaperSkipBulkFinalizeCalls.Add((
+                runs.Select(run => run.Id).ToArray(),
+                directPaperSkipCompactionEnabled));
+        }
+
+        return UpdateStrategyMarketPaperRunsAsync(runs, cancellationToken);
     }
 
     private static DateTimeOffset? Max(DateTimeOffset? left, DateTimeOffset? right)

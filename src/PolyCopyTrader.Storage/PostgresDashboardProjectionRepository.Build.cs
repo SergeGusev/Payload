@@ -50,6 +50,7 @@ public sealed partial class PostgresDashboardProjectionRepository
         await AccumulatePaperSettlementsAsync();
         await AccumulateStrategyRunsAsync();
         await AccumulateStrategyPaperSkipRollupsAsync();
+        await AccumulateRecentStrategyPaperSkipTombstonesAsync();
         await AccumulateLiveOrdersAsync();
 
         return new ProjectionBuildResult(descriptors, lifetimeStates, recentStates, recentFactCount);
@@ -312,6 +313,56 @@ ORDER BY rollup.strategy_id;
                     state,
                     DashboardProjectionCalculator.GetLifetimeContribution(payload),
                     1);
+            }
+        }
+
+        async Task AccumulateRecentStrategyPaperSkipTombstonesAsync()
+        {
+            var filter = strategyId is null ? string.Empty : "AND tombstone.strategy_id = @StrategyId";
+            await using var command = CreateSourceCommand(
+                $$"""
+SELECT tombstone.archived_run_id,
+       tombstone.strategy_id,
+       tombstone.stake_usd,
+       tombstone.entry_due_at_utc,
+       tombstone.skip_reason,
+       tombstone.run_updated_at_utc
+FROM strategy_market_paper_skip_tombstones tombstone
+WHERE tombstone.archive_format_version = 1
+  AND tombstone.run_updated_at_utc >= @RecentCutoffUtc
+  AND tombstone.run_updated_at_utc <= @NowUtc
+  {{filter}}
+ORDER BY tombstone.strategy_id, tombstone.run_updated_at_utc, tombstone.archived_run_id;
+""",
+                connection,
+                transaction,
+                strategyId);
+            command.Parameters.AddWithValue("RecentCutoffUtc", UtcDateTime(nowUtc.AddHours(-24)));
+            command.Parameters.AddWithValue("NowUtc", UtcDateTime(nowUtc));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var payload = new StrategyRunProjectionPayload(
+                    reader.GetGuid(0),
+                    reader.GetGuid(1),
+                    StrategyMarketPaperRunStatuses.Skipped,
+                    reader.GetDecimal(2),
+                    null,
+                    UtcNow(reader.GetDateTime(3)),
+                    null,
+                    null,
+                    null,
+                    reader.GetString(4),
+                    UtcNow(reader.GetDateTime(5)),
+                    null);
+                if (!descriptors.ContainsKey(payload.StrategyId))
+                {
+                    continue;
+                }
+
+                // The matching rollup is the sole lifetime contribution. Tombstones
+                // retain exact per-run timestamps and reasons only for recent windows.
+                await AddFactsAsync(DashboardProjectionCalculator.GetRecentFacts(payload));
             }
         }
 

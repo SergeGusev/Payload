@@ -1163,6 +1163,8 @@ public sealed class ConfigurationTests
         Assert.Contains("Market WebSocket side-effect max pending updates per asset:", summary);
         Assert.Contains("BTC Up or Down 5m persists Diff counter snapshots:", summary);
         Assert.Contains("Gamma market persistence scope:", summary);
+        Assert.Contains("Strategy run direct Paper skip compaction enabled: False", summary);
+        Assert.Contains("Strategy run direct Paper skip compaction apply enabled: False", summary);
         Assert.Contains("Dashboard projection event batch size:", summary);
         Assert.Contains("Dashboard projection reconciliation interval seconds:", summary);
         Assert.DoesNotContain("private", summary, StringComparison.OrdinalIgnoreCase);

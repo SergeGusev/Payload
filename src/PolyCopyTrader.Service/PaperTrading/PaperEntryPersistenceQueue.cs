@@ -180,8 +180,24 @@ public sealed class PaperEntryPersistenceQueue(
         }
     }
 
-    private static PaperEntryPersistenceBatch MergeBatches(IReadOnlyCollection<PaperEntryPersistenceBatch> batches)
+    internal static PaperEntryPersistenceBatch MergeBatches(
+        IReadOnlyCollection<PaperEntryPersistenceBatch> batches)
     {
+        if (batches.Count == 0)
+        {
+            throw new ArgumentException("At least one paper entry persistence batch is required.", nameof(batches));
+        }
+
+        var directPaperSkipCompactionValues = batches
+            .Select(batch => batch.DirectPaperSkipCompactionEnabled)
+            .Distinct()
+            .ToArray();
+        if (directPaperSkipCompactionValues.Length != 1)
+        {
+            throw new InvalidOperationException(
+                "Cannot merge paper entry persistence batches with different direct Paper skip compaction modes.");
+        }
+
         return new PaperEntryPersistenceBatch(
             batches.SelectMany(batch => batch.Signals).ToArray(),
             batches.SelectMany(batch => batch.PaperOrders).ToArray(),
@@ -190,6 +206,7 @@ public sealed class PaperEntryPersistenceQueue(
             batches.SelectMany(batch => batch.CopiedLeaderPositionActivations).ToArray(),
             batches.SelectMany(batch => batch.StrategyRuns).ToArray())
         {
+            DirectPaperSkipCompactionEnabled = directPaperSkipCompactionValues[0],
             PaperPositionMaterializations = batches
                 .SelectMany(batch => batch.PaperPositionMaterializations)
                 .ToArray()

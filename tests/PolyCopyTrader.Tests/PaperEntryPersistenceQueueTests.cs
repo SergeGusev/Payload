@@ -113,6 +113,32 @@ public sealed class PaperEntryPersistenceQueueTests
         Assert.Equal(1.40m, position.EstimatedValueUsd);
     }
 
+    [Fact]
+    public void MergeBatches_PreservesDirectPaperSkipCompactionMode()
+    {
+        var merged = PaperEntryPersistenceQueue.MergeBatches(
+        [
+            CreateBatch(Guid.NewGuid(), directPaperSkipCompactionEnabled: true),
+            CreateBatch(Guid.NewGuid(), directPaperSkipCompactionEnabled: true)
+        ]);
+
+        Assert.True(merged.DirectPaperSkipCompactionEnabled);
+        Assert.Equal(2, merged.StrategyRuns.Count);
+    }
+
+    [Fact]
+    public void MergeBatches_RejectsInconsistentDirectPaperSkipCompactionModes()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            PaperEntryPersistenceQueue.MergeBatches(
+            [
+                CreateBatch(Guid.NewGuid(), directPaperSkipCompactionEnabled: false),
+                CreateBatch(Guid.NewGuid(), directPaperSkipCompactionEnabled: true)
+            ]));
+
+        Assert.Contains("different direct Paper skip compaction modes", exception.Message);
+    }
+
     private static PaperEntryPersistenceQueue CreateQueue(TestAppRepository repository)
     {
         var exposureCache = new ExposureSnapshotCache(repository);
@@ -123,7 +149,9 @@ public sealed class PaperEntryPersistenceQueueTests
             exposureCache);
     }
 
-    private static PaperEntryPersistenceBatch CreateBatch(Guid runId)
+    private static PaperEntryPersistenceBatch CreateBatch(
+        Guid runId,
+        bool directPaperSkipCompactionEnabled = false)
     {
         var now = DateTimeOffset.UtcNow;
         return new PaperEntryPersistenceBatch(
@@ -162,6 +190,9 @@ public sealed class PaperEntryPersistenceQueueTests
                     now.AddMinutes(-4),
                     now,
                     null)
-            ]);
+            ])
+        {
+            DirectPaperSkipCompactionEnabled = directPaperSkipCompactionEnabled
+        };
     }
 }

@@ -76,6 +76,8 @@ public static class AppOptionsValidator
             $"Polymarket HTTP log cleanup enabled: {configuration.PolymarketHttpLogging.CleanupEnabled}",
             $"Strategy run retention enabled: {configuration.StrategyRunRetention.Enabled}",
             $"Strategy run retention apply enabled: {configuration.StrategyRunRetention.ApplyEnabled}",
+            $"Strategy run direct Paper skip compaction enabled: {configuration.StrategyRunRetention.DirectPaperSkipCompactionEnabled}",
+            $"Strategy run direct Paper skip compaction apply enabled: {configuration.StrategyRunRetention.DirectPaperSkipCompactionApplyEnabled}",
             $"Strategy run raw retention hours: {configuration.StrategyRunRetention.RawRetentionHours}",
             $"Auth enabled: {configuration.PolymarketAuth.Enabled}",
             $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
@@ -1129,6 +1131,14 @@ public static class AppOptionsValidator
         if (options.ApplyEnabled && !options.Enabled)
         {
             errors.Add("StrategyRunRetention.ApplyEnabled requires StrategyRunRetention.Enabled.");
+        }
+
+        if (options.DirectPaperSkipCompactionApplyEnabled &&
+            !options.DirectPaperSkipCompactionEnabled)
+        {
+            errors.Add(
+                "StrategyRunRetention.DirectPaperSkipCompactionApplyEnabled requires " +
+                "StrategyRunRetention.DirectPaperSkipCompactionEnabled.");
         }
 
         if (options.RawRetentionHours < 48)

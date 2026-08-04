@@ -254,6 +254,15 @@ public interface IAppRepository
         return insertedIds;
     }
 
+    Task<IReadOnlySet<Guid>> TryAddStrategyMarketPaperRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        bool directPaperSkipCompactionEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        _ = directPaperSkipCompactionEnabled;
+        return TryAddStrategyMarketPaperRunsAsync(runs, cancellationToken);
+    }
+
     Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAsync(
         Guid strategyId,
         string status,
@@ -375,6 +384,15 @@ public interface IAppRepository
         return Task.CompletedTask;
     }
 
+    Task FinalizeStrategyMarketPaperRunAsync(
+        StrategyMarketPaperRun run,
+        bool directPaperSkipCompactionEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        _ = directPaperSkipCompactionEnabled;
+        return UpdateStrategyMarketPaperRunAsync(run, cancellationToken);
+    }
+
     async Task UpdateStrategyMarketPaperRunsAsync(
         IReadOnlyList<StrategyMarketPaperRun> runs,
         CancellationToken cancellationToken = default)
@@ -383,6 +401,15 @@ public interface IAppRepository
         {
             await UpdateStrategyMarketPaperRunAsync(run, cancellationToken);
         }
+    }
+
+    Task FinalizeStrategyMarketPaperRunsAsync(
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        bool directPaperSkipCompactionEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        _ = directPaperSkipCompactionEnabled;
+        return UpdateStrategyMarketPaperRunsAsync(runs, cancellationToken);
     }
 
     Task AddSignalAsync(Signal signal, CancellationToken cancellationToken = default);
@@ -1341,6 +1368,8 @@ public sealed record PaperEntryPersistenceBatch(
     public static PaperEntryPersistenceBatch Empty { get; } = new([], [], [], [], [], []);
 
     public IReadOnlyList<PaperPositionMaterialization> PaperPositionMaterializations { get; init; } = [];
+
+    public bool DirectPaperSkipCompactionEnabled { get; init; }
 
     public bool IsEmpty =>
         Signals.Count == 0 &&

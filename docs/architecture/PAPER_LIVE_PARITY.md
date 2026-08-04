@@ -140,3 +140,13 @@ payload.
 Audit records must not contain private keys, signatures, credentials, or other
 secrets. If the required market evidence was not retained, the result must be
 marked non-reproducible; it must not be represented as an exact replay.
+
+A pre-intent strategy observation that terminates without a signal, execution
+intent, Paper/DryRun/Live order, fill, position, settlement, or Live-shadow
+decision is not a Paper execution record. Such a proven `PaperOnly` no-bet
+`Skipped` observation may be replaced atomically by a durable deduplication and
+restoration marker plus an aggregate skip count. The marker must retain the exact
+strategy, market, condition, timestamps, stake, and skip reason needed by runtime
+deduplication and Dashboard accounting. Any execution or accounting dependency,
+and every `LiveOrShadow` run, keeps the complete raw run and all execution audit
+evidence.

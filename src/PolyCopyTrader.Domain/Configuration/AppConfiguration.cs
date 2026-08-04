@@ -243,6 +243,10 @@ public sealed class StrategyRunRetentionOptions
 
     public bool ApplyEnabled { get; init; }
 
+    public bool DirectPaperSkipCompactionEnabled { get; init; }
+
+    public bool DirectPaperSkipCompactionApplyEnabled { get; init; }
+
     public int RawRetentionHours { get; init; } = 48;
 
     public int CleanupIntervalMinutes { get; init; } = 10;

@@ -270,6 +270,8 @@ public sealed class StrategyRunRetentionTests
 
         Assert.False(defaults.Enabled);
         Assert.False(defaults.ApplyEnabled);
+        Assert.False(defaults.DirectPaperSkipCompactionEnabled);
+        Assert.False(defaults.DirectPaperSkipCompactionApplyEnabled);
         Assert.Equal(48, defaults.RawRetentionHours);
 
         var errors = AppOptionsValidator.Validate(new AppConfiguration
@@ -278,6 +280,8 @@ public sealed class StrategyRunRetentionTests
             {
                 Enabled = false,
                 ApplyEnabled = true,
+                DirectPaperSkipCompactionEnabled = false,
+                DirectPaperSkipCompactionApplyEnabled = true,
                 RawRetentionHours = 24,
                 CleanupIntervalMinutes = 0,
                 CleanupBatchSize = 25_001,
@@ -286,6 +290,11 @@ public sealed class StrategyRunRetentionTests
         });
 
         Assert.Contains(errors, error => error.Contains("ApplyEnabled requires", StringComparison.Ordinal));
+        Assert.Contains(
+            errors,
+            error => error.Contains(
+                "DirectPaperSkipCompactionApplyEnabled requires",
+                StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("RawRetentionHours", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("CleanupIntervalMinutes", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("CleanupBatchSize", StringComparison.Ordinal));
@@ -304,7 +313,23 @@ public sealed class StrategyRunRetentionTests
 
         Assert.False(retention.GetProperty("Enabled").GetBoolean());
         Assert.False(retention.GetProperty("ApplyEnabled").GetBoolean());
+        Assert.False(retention.GetProperty("DirectPaperSkipCompactionEnabled").GetBoolean());
+        Assert.False(retention.GetProperty("DirectPaperSkipCompactionApplyEnabled").GetBoolean());
         Assert.True(retention.GetProperty("RawRetentionHours").GetInt32() >= 48);
+    }
+
+    [Fact]
+    public void DirectCompactionSql_FailsClosedWhenDiagnosticsArePersisted()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.DirectSkipCompaction.cs");
+
+        Assert.Contains(
+            "AND run.skip_diagnostics_json IS NULL",
+            source,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -485,6 +510,93 @@ public sealed class StrategyRunRetentionTests
             CountOccurrences(
                 projectionSchema,
                 "EXECUTE FUNCTION public.restore_strategy_runs_after_dependency_write();"));
+    }
+
+    [Fact]
+    public void DashboardBuild_UsesFreshV1TombstonesOnlyForRecentPaperSkipFacts()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresDashboardProjectionRepository.Build.cs");
+        const string recentMethodName = "async Task AccumulateRecentStrategyPaperSkipTombstonesAsync()";
+        var recentStart = source.IndexOf(recentMethodName, StringComparison.Ordinal);
+        Assert.True(recentStart >= 0);
+        var recentEnd = source.IndexOf(
+            "async Task AccumulateLiveOrdersAsync()",
+            recentStart,
+            StringComparison.Ordinal);
+
+        Assert.True(recentEnd > recentStart);
+        var recentSource = source[recentStart..recentEnd];
+        Assert.Contains(
+            "FROM strategy_market_paper_skip_tombstones tombstone",
+            recentSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tombstone.archive_format_version = 1",
+            recentSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tombstone.run_updated_at_utc >= @RecentCutoffUtc",
+            recentSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tombstone.run_updated_at_utc <= @NowUtc",
+            recentSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "AND tombstone.strategy_id = @StrategyId",
+            recentSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DashboardProjectionCalculator.GetRecentFacts(payload)",
+            recentSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("GetLifetimeContribution", recentSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "await AccumulateStrategyPaperSkipRollupsAsync();",
+            source,
+            StringComparison.Ordinal);
+        Assert.Equal(3, DashboardProjectionVersions.Current);
+    }
+
+    [Fact]
+    public void DirectRecentPerformance_IncludesFreshV1PaperSkipTombstonesWithoutLiveCounts()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.cs");
+        var methodStart = source.IndexOf(
+            "GetStrategyRecentPerformanceAsync",
+            StringComparison.Ordinal);
+        Assert.True(methodStart >= 0);
+        var methodEnd = source.IndexOf(
+            "GetStrategySettledPnlByLookbackHoursAsync",
+            methodStart,
+            StringComparison.Ordinal);
+        Assert.True(methodEnd > methodStart);
+
+        var method = source[methodStart..methodEnd];
+        Assert.Contains("archived_skip_window_rows AS", method, StringComparison.Ordinal);
+        Assert.Contains(
+            "FROM strategy_market_paper_skip_tombstones tombstone",
+            method,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tombstone.archive_format_version = 1",
+            method,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tombstone.run_updated_at_utc >= window_row.window_start_utc",
+            method,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "NULL::timestamptz AS live_enabled_at_utc",
+            method,
+            StringComparison.Ordinal);
+        Assert.Contains("UNION ALL", method, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -52,6 +52,8 @@ public sealed class AppConfigurationLoaderTests
         {
             ["StrategyRunRetention:Enabled"] = "true",
             ["StrategyRunRetention:ApplyEnabled"] = "false",
+            ["StrategyRunRetention:DirectPaperSkipCompactionEnabled"] = "true",
+            ["StrategyRunRetention:DirectPaperSkipCompactionApplyEnabled"] = "false",
             ["StrategyRunRetention:RawRetentionHours"] = "96",
             ["StrategyRunRetention:CleanupIntervalMinutes"] = "15",
             ["StrategyRunRetention:CleanupBatchSize"] = "750",
@@ -65,6 +67,8 @@ public sealed class AppConfigurationLoaderTests
 
         Assert.True(configuration.StrategyRunRetention.Enabled);
         Assert.False(configuration.StrategyRunRetention.ApplyEnabled);
+        Assert.True(configuration.StrategyRunRetention.DirectPaperSkipCompactionEnabled);
+        Assert.False(configuration.StrategyRunRetention.DirectPaperSkipCompactionApplyEnabled);
         Assert.Equal(96, configuration.StrategyRunRetention.RawRetentionHours);
         Assert.Equal(15, configuration.StrategyRunRetention.CleanupIntervalMinutes);
         Assert.Equal(750, configuration.StrategyRunRetention.CleanupBatchSize);

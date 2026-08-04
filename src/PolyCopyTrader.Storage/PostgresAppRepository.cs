@@ -1292,6 +1292,11 @@ RETURNING id;
 				"Every copied-leader activation in an entry persistence batch must reference an order from the same batch.",
 				nameof(batch));
 		}
+		if (batch.DirectPaperSkipCompactionEnabled && ContainsSkippedRun(batch.StrategyRuns))
+		{
+			await AddPaperEntryPersistenceBatchWithDirectCompactionAsync(batch, cancellationToken);
+			return;
+		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -4329,7 +4334,7 @@ fill_agg AS (
         AND fill_row.filled_at_utc <= window_row.window_end_utc
     GROUP BY paper_order.strategy_id, window_row.window_label
 ),
-run_window_rows AS (
+raw_run_window_rows AS (
     SELECT
         run.strategy_id,
         run.status,
@@ -4360,6 +4365,64 @@ run_window_rows AS (
             run.settled_at_utc >= window_row.window_start_utc
             AND run.settled_at_utc <= window_row.window_end_utc
         )
+),
+archived_skip_window_rows AS (
+    SELECT
+        tombstone.strategy_id,
+        'Skipped'::text AS status,
+        tombstone.stake_usd,
+        NULL::numeric AS realized_pnl_usd,
+        NULL::timestamptz AS entered_at_utc,
+        tombstone.entry_due_at_utc,
+        NULL::timestamptz AS settled_at_utc,
+        tombstone.run_updated_at_utc AS updated_at_utc,
+        tombstone.skip_reason,
+        NULL::uuid AS paper_order_id,
+        NULL::timestamptz AS live_enabled_at_utc,
+        window_row.window_label,
+        window_row.window_start_utc,
+        window_row.window_end_utc
+    FROM strategy_market_paper_skip_tombstones tombstone
+    INNER JOIN selected_strategies strategy ON strategy.id = tombstone.strategy_id
+    INNER JOIN windows window_row
+        ON tombstone.run_updated_at_utc >= window_row.window_start_utc
+       AND tombstone.run_updated_at_utc <= window_row.window_end_utc
+    WHERE tombstone.archive_format_version = 1
+),
+run_window_rows AS (
+    SELECT
+        strategy_id,
+        status,
+        stake_usd,
+        realized_pnl_usd,
+        entered_at_utc,
+        entry_due_at_utc,
+        settled_at_utc,
+        updated_at_utc,
+        skip_reason,
+        paper_order_id,
+        live_enabled_at_utc,
+        window_label,
+        window_start_utc,
+        window_end_utc
+    FROM raw_run_window_rows
+    UNION ALL
+    SELECT
+        strategy_id,
+        status,
+        stake_usd,
+        realized_pnl_usd,
+        entered_at_utc,
+        entry_due_at_utc,
+        settled_at_utc,
+        updated_at_utc,
+        skip_reason,
+        paper_order_id,
+        live_enabled_at_utc,
+        window_label,
+        window_start_utc,
+        window_end_utc
+    FROM archived_skip_window_rows
 ),
 run_agg AS (
     SELECT

@@ -25,6 +25,336 @@ public sealed class StrategyRunRetentionPostgresIntegrationTests
 {
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task DirectCompaction_BulkInsertReturnsLogicalIdsAndRetryIsIdempotent()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"direct_skip_{Guid.NewGuid():N}";
+        var nowUtc = DateTimeOffset.UtcNow;
+        var skipped = CreateSkippedRun(strategyId, nowUtc) with
+        {
+            SkipDiagnosticsJson = "{\"discarded\":true}"
+        };
+        var observed = CreateSkippedRun(strategyId, nowUtc.AddSeconds(1)) with
+        {
+            Status = StrategyMarketPaperRunStatuses.Observed,
+            SkipReason = null
+        };
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            var inserted = await repository.TryAddStrategyMarketPaperRunsAsync(
+                [skipped, observed],
+                directPaperSkipCompactionEnabled: true);
+
+            Assert.Equal(
+                new[] { skipped.Id, observed.Id }.OrderBy(id => id),
+                inserted.OrderBy(id => id));
+            Assert.Equal(
+                new RetentionCounts(1, 1, 1, 2, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+            Assert.Equal(
+                StrategyMarketPaperRunStatuses.Observed,
+                await ReadRunStatusAsync(factory, observed.Id));
+            Assert.Null(await ReadRunStatusAsync(factory, skipped.Id));
+
+            var retry = await repository.TryAddStrategyMarketPaperRunsAsync(
+                [skipped, observed],
+                directPaperSkipCompactionEnabled: true);
+
+            Assert.Empty(retry);
+            Assert.Equal(
+                new RetentionCounts(1, 1, 1, 2, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task DirectCompaction_FinalizeObservedToPureSkippedCompactsAtomically()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"direct_finalize_{Guid.NewGuid():N}";
+        var nowUtc = DateTimeOffset.UtcNow;
+        var observed = CreateSkippedRun(strategyId, nowUtc) with
+        {
+            Status = StrategyMarketPaperRunStatuses.Observed,
+            SkipReason = null
+        };
+        var skipped = observed with
+        {
+            Status = StrategyMarketPaperRunStatuses.Skipped,
+            SkipReason = "direct_finalize_skip",
+            SkipDiagnosticsJson = "{\"discarded\":true}",
+            UpdatedAtUtc = nowUtc.AddSeconds(1)
+        };
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(observed));
+
+            await repository.FinalizeStrategyMarketPaperRunAsync(
+                skipped,
+                directPaperSkipCompactionEnabled: true);
+
+            Assert.Equal(
+                new RetentionCounts(0, 1, 1, 2, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+            Assert.Null(await ReadRunStatusAsync(factory, observed.Id));
+
+            await repository.FinalizeStrategyMarketPaperRunAsync(
+                skipped,
+                directPaperSkipCompactionEnabled: true);
+            Assert.Equal(
+                new RetentionCounts(0, 1, 1, 2, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task DirectCompaction_PaperDependencyAndLiveScopeRemainRaw()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var paperStrategyId = Guid.NewGuid();
+        var liveStrategyId = Guid.NewGuid();
+        var nowUtc = DateTimeOffset.UtcNow;
+        var paperRun = CreateSkippedRun(paperStrategyId, nowUtc);
+        var liveRun = CreateSkippedRun(liveStrategyId, nowUtc.AddSeconds(1));
+
+        await InsertStrategyAsync(
+            factory,
+            paperStrategyId,
+            $"direct_paper_guard_{Guid.NewGuid():N}",
+            liveStakes: false);
+        await InsertStrategyAsync(
+            factory,
+            liveStrategyId,
+            $"direct_live_guard_{Guid.NewGuid():N}",
+            liveStakes: true);
+        try
+        {
+            await DeleteProjectionBlockersAsync(factory, paperStrategyId);
+            await DeleteProjectionBlockersAsync(factory, liveStrategyId);
+            await repository.AddPaperOrderAsync(CreatePaperOrder(
+                paperStrategyId,
+                paperRun.ConditionId,
+                nowUtc));
+
+            var inserted = await repository.TryAddStrategyMarketPaperRunsAsync(
+                [paperRun, liveRun],
+                directPaperSkipCompactionEnabled: true);
+
+            Assert.Equal(2, inserted.Count);
+            Assert.Equal(
+                new RetentionCounts(1, 0, 0, 2, 0),
+                await ReadRetentionCountsAsync(factory, paperStrategyId));
+            Assert.Equal(
+                new RetentionCounts(1, 0, 0, 1, 0),
+                await ReadRetentionCountsAsync(factory, liveStrategyId));
+            Assert.Equal(
+                StrategyRunRetentionScopes.PaperOnly,
+                await ReadRetentionScopeAsync(factory, paperRun.Id));
+            Assert.Equal(
+                StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, liveRun.Id));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, paperStrategyId);
+            await DeleteTestStrategyAsync(factory, liveStrategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task DirectCompaction_EntryBatchCompactsPureSkipAndPreservesActualPaperRun()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"direct_batch_{Guid.NewGuid():N}";
+        var nowUtc = DateTimeOffset.UtcNow;
+        var skipped = CreateSkippedRun(strategyId, nowUtc);
+        var enteredBase = CreateSkippedRun(strategyId, nowUtc.AddSeconds(1));
+        var order = CreatePaperOrder(strategyId, enteredBase.ConditionId, nowUtc);
+        var leaderTrade = new LeaderTrade(
+            $"strategy:{strategyCode}",
+            strategyCode,
+            order.ConditionId,
+            order.AssetId,
+            enteredBase.MarketSlug,
+            enteredBase.MarketTitle,
+            order.Outcome,
+            order.Side,
+            order.Price,
+            order.SizeShares,
+            order.NotionalUsd,
+            nowUtc);
+        var signal = new Signal(
+            order.SignalId,
+            leaderTrade,
+            100,
+            true,
+            "direct_batch_entry",
+            [],
+            order.Price,
+            order.SizeShares,
+            order.NotionalUsd,
+            nowUtc);
+        var entered = enteredBase with
+        {
+            Status = StrategyMarketPaperRunStatuses.Entered,
+            SelectedAssetId = order.AssetId,
+            SelectedOutcome = order.Outcome,
+            EntryPrice = order.Price,
+            StakeUsd = order.NotionalUsd,
+            SizeShares = order.SizeShares,
+            SignalId = signal.Id,
+            PaperOrderId = order.Id,
+            EnteredAtUtc = nowUtc,
+            SkipReason = null,
+            UpdatedAtUtc = nowUtc
+        };
+        var batch = new PaperEntryPersistenceBatch(
+            [signal],
+            [order],
+            [],
+            [],
+            [],
+            [skipped, entered])
+        {
+            DirectPaperSkipCompactionEnabled = true
+        };
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await repository.AddPaperEntryPersistenceBatchAsync(batch, timeout.Token);
+
+            Assert.Equal(
+                new RetentionCounts(1, 1, 1, 3, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+            Assert.Equal(
+                StrategyMarketPaperRunStatuses.Entered,
+                await ReadRunStatusAsync(factory, entered.Id));
+            Assert.Null(await ReadRunStatusAsync(factory, skipped.Id));
+            Assert.Equal(1, await ReadPaperOrderCountAsync(factory, order.Id));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task DirectCompaction_EntryBatchLocksWalletBeforeExclusiveRetentionGate()
+    {
+        var factory = await CreateFactoryAsync();
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"direct_lock_order_{Guid.NewGuid():N}";
+        var wallet = $"strategy:{strategyCode}";
+        var nowUtc = DateTimeOffset.UtcNow;
+        var skipped = CreateSkippedRun(strategyId, nowUtc);
+        var position = new PaperPosition(
+            $"asset-{Guid.NewGuid():N}",
+            skipped.ConditionId,
+            "Yes",
+            2m,
+            0.50m,
+            1m,
+            0m,
+            nowUtc,
+            wallet);
+        var batch = new PaperEntryPersistenceBatch(
+            [],
+            [],
+            [],
+            [position],
+            [],
+            [skipped])
+        {
+            DirectPaperSkipCompactionEnabled = true
+        };
+        var directApplicationName = $"direct_lock_order_{Guid.NewGuid():N}";
+        var directFactory = WithApplicationName(factory, directApplicationName);
+        using var raceCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        Task? directTask = null;
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            await using (var blockerConnection = factory.CreateConnection())
+            {
+                await blockerConnection.OpenAsync();
+                await using (var blockerTransaction = await blockerConnection.BeginTransactionAsync())
+                {
+                    await using (var walletLockCommand = new NpgsqlCommand(
+                                     "SELECT pg_advisory_xact_lock(" +
+                                     "hashtextextended(@Wallet, 4937427318840178337));",
+                                     blockerConnection,
+                                     blockerTransaction))
+                    {
+                        walletLockCommand.Parameters.AddWithValue("Wallet", wallet);
+                        await walletLockCommand.ExecuteNonQueryAsync();
+                    }
+
+                    directTask = new PostgresAppRepository(directFactory)
+                        .AddPaperEntryPersistenceBatchAsync(batch, raceCancellation.Token);
+                    var directPid = await WaitForBlockedApplicationAsync(
+                        factory,
+                        directApplicationName,
+                        "advisory");
+                    await AssertBlockedByAsync(factory, directPid, blockerConnection.ProcessID);
+                    Assert.False(await HoldsExclusiveRetentionGateAsync(factory, directPid));
+
+                    await using var sharedGateCommand = new NpgsqlCommand(
+                        "SELECT public.lock_strategy_run_retention_dependency();",
+                        blockerConnection,
+                        blockerTransaction)
+                    {
+                        CommandTimeout = 5
+                    };
+                    await sharedGateCommand.ExecuteNonQueryAsync();
+                    await blockerTransaction.CommitAsync();
+                }
+            }
+
+            await directTask.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Equal(
+                StrategyMarketPaperRunStatuses.Skipped,
+                await ReadRunStatusAsync(factory, skipped.Id));
+        }
+        finally
+        {
+            await DrainRaceTaskAsync(directTask);
+            await DeletePaperPositionAsync(factory, position.CopiedTraderWallet, position.AssetId);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task Transfer_CompactsOnlyPreviewedPaperSkipAndPreservesLifetimeTotals()
     {
         var factory = await CreateFactoryAsync();
@@ -79,6 +409,87 @@ public sealed class StrategyRunRetentionPostgresIntegrationTests
             var bulkInserted = await repository.TryAddStrategyMarketPaperRunsAsync(
                 [run with { Id = Guid.NewGuid() }]);
             Assert.Empty(bulkInserted);
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Bootstrap_FreshV1TombstoneFeedsRecentWhileRollupAloneFeedsLifetime()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var snapshots = new PostgresDashboardSnapshotRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"retention_{Guid.NewGuid():N}";
+        var capturedNowUtc = DateTimeOffset.UtcNow;
+        var secondAlignedNowUtc = capturedNowUtc.AddTicks(
+            -(capturedNowUtc.Ticks % TimeSpan.TicksPerSecond));
+        var recentUpdatedAtUtc = secondAlignedNowUtc.AddMinutes(-30);
+        var expiredUpdatedAtUtc = secondAlignedNowUtc.AddHours(-25);
+        var recentRunId = Guid.NewGuid();
+        var expiredRunId = Guid.NewGuid();
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            await InsertArchivedPaperSkipAsync(
+                factory,
+                strategyId,
+                recentRunId,
+                recentUpdatedAtUtc,
+                "recent_compact_skip");
+            await InsertArchivedPaperSkipAsync(
+                factory,
+                strategyId,
+                expiredRunId,
+                expiredUpdatedAtUtc,
+                "expired_compact_skip");
+
+            await projection.BootstrapAsync();
+
+            var lifetime = (await snapshots.GetStrategyPerformanceSnapshotAsync())
+                .Single(row => row.StrategyId == strategyId);
+            Assert.Equal(0, lifetime.ObservedRunsCount);
+            Assert.Equal(2, lifetime.SkippedRunsCount);
+            Assert.Equal(2, lifetime.PaperConditionSkippedRunsCount);
+            Assert.Equal(0, lifetime.PaperNotAcceptedRunsCount);
+            Assert.Equal(recentUpdatedAtUtc, lifetime.LastRunUtc);
+
+            var recentRows = (await snapshots.GetStrategyRecentPerformanceSnapshotAsync())
+                .Where(row => row.StrategyId == strategyId)
+                .ToDictionary(row => row.WindowHours);
+            Assert.Equal([1, 6, 24], recentRows.Keys.OrderBy(value => value).ToArray());
+            foreach (var windowHours in new[] { 1, 6, 24 })
+            {
+                var row = recentRows[windowHours];
+                Assert.Equal(1, row.SkippedRunsCount);
+                Assert.Equal(1, row.PaperConditionSkippedRunsCount);
+                Assert.Equal(0, row.PaperNotAcceptedRunsCount);
+                Assert.Equal("recent_compact_skip:1", row.TopSkipReason);
+                Assert.Equal(recentUpdatedAtUtc, row.LastRunUtc);
+            }
+
+            var directRecentRows = (await repository.GetStrategyRecentPerformanceAsync())
+                .Where(row => row.StrategyId == strategyId)
+                .ToDictionary(row => row.WindowHours);
+            foreach (var windowHours in new[] { 1, 6, 24 })
+            {
+                var row = directRecentRows[windowHours];
+                Assert.Equal(1, row.SkippedRunsCount);
+                Assert.Equal(1, row.PaperConditionSkippedRunsCount);
+                Assert.Equal(0, row.PaperNotAcceptedRunsCount);
+                Assert.Equal(0, row.LiveSkippedOrdersCount);
+                Assert.Equal("recent_compact_skip:1", row.TopSkipReason);
+                Assert.Equal(recentUpdatedAtUtc, row.LastRunUtc);
+            }
+
+            Assert.Equal(2, await ReadRecentStrategyRunFactCountAsync(factory, recentRunId));
+            Assert.Equal(0, await ReadRecentStrategyRunFactCountAsync(factory, expiredRunId));
         }
         finally
         {
@@ -1721,6 +2132,76 @@ public sealed class StrategyRunRetentionPostgresIntegrationTests
         return factory;
     }
 
+    private static async Task InsertArchivedPaperSkipAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        Guid runId,
+        DateTimeOffset updatedAtUtc,
+        string skipReason)
+    {
+        var marketId = $"retention-archive-{runId:N}";
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+WITH archive_values AS (
+    SELECT
+        date_trunc('day', @UpdatedAtUtc::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+            AS bucket_start_utc
+), rollup AS (
+    INSERT INTO strategy_paper_skip_rollups (
+        strategy_id, bucket_start_utc, skip_reason, run_count,
+        first_updated_at_utc, last_updated_at_utc, created_at_utc, updated_at_utc)
+    SELECT
+        @StrategyId, archive_values.bucket_start_utc, @SkipReason, 1,
+        @UpdatedAtUtc, @UpdatedAtUtc, clock_timestamp(), clock_timestamp()
+    FROM archive_values
+    RETURNING bucket_start_utc
+)
+INSERT INTO strategy_market_paper_skip_tombstones (
+    strategy_id, market_id, archived_run_id, archived_at_utc, archive_format_version,
+    condition_id, market_slug, market_title, category, market_start_utc, market_end_utc,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome, stake_usd,
+    skip_reason, run_created_at_utc, run_updated_at_utc, rollup_bucket_start_utc)
+SELECT
+    @StrategyId, @MarketId, @RunId, clock_timestamp(), 1,
+    @ConditionId, @MarketId, 'Dashboard compact skip integration test', 'Test',
+    @UpdatedAtUtc - interval '5 minutes', @UpdatedAtUtc,
+    @UpdatedAtUtc - interval '10 minutes', @UpdatedAtUtc - interval '5 minutes',
+    NULL, NULL, 6.00,
+    @SkipReason, @UpdatedAtUtc - interval '10 minutes', @UpdatedAtUtc,
+    rollup.bucket_start_utc
+FROM rollup;
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("RunId", runId);
+        command.Parameters.AddWithValue("MarketId", marketId);
+        command.Parameters.AddWithValue("ConditionId", $"condition-{marketId}");
+        command.Parameters.AddWithValue("SkipReason", skipReason);
+        command.Parameters.AddWithValue("UpdatedAtUtc", updatedAtUtc.UtcDateTime);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task<int> ReadRecentStrategyRunFactCountAsync(
+        PostgresConnectionFactory factory,
+        Guid runId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT count(*)::integer
+FROM dashboard_strategy_recent_projection_facts
+WHERE source_kind = @SourceKind
+  AND source_id = @RunId;
+""",
+            connection);
+        command.Parameters.AddWithValue("SourceKind", DashboardProjectionSourceKinds.StrategyRun);
+        command.Parameters.AddWithValue("RunId", runId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync());
+    }
+
     private static StrategyMarketPaperRun CreateSkippedRun(Guid strategyId, DateTimeOffset updatedAtUtc)
     {
         var suffix = Guid.NewGuid().ToString("N");
@@ -2870,6 +3351,19 @@ WHERE id = @Id;
             ?? throw new InvalidOperationException("Strategy run was not found."));
     }
 
+    private static async Task<string?> ReadRunStatusAsync(
+        PostgresConnectionFactory factory,
+        Guid runId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT status FROM strategy_market_paper_runs WHERE id = @Id;",
+            connection);
+        command.Parameters.AddWithValue("Id", runId);
+        return await command.ExecuteScalarAsync() as string;
+    }
+
     private static async Task AddSkipDiagnosticsAsync(
         PostgresConnectionFactory factory,
         Guid runId)
@@ -2881,6 +3375,22 @@ WHERE id = @Id;
             connection);
         command.Parameters.AddWithValue("Id", runId);
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task DeletePaperPositionAsync(
+        PostgresConnectionFactory factory,
+        string copiedTraderWallet,
+        string assetId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "DELETE FROM paper_positions " +
+            "WHERE copied_trader_wallet = @CopiedTraderWallet AND asset_id = @AssetId;",
+            connection);
+        command.Parameters.AddWithValue("CopiedTraderWallet", copiedTraderWallet);
+        command.Parameters.AddWithValue("AssetId", assetId);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task DeleteProjectionBlockersAsync(

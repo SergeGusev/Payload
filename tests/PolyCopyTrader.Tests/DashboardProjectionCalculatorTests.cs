@@ -112,6 +112,51 @@ public sealed class DashboardProjectionCalculatorTests
     }
 
     [Fact]
+    public void PaperOnlySkipTombstoneFacts_UseExact24HourBoundaryAndNeverCountAsLive()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 4, 12, 0, 0, TimeSpan.Zero);
+        var updatedAtUtc = nowUtc.AddHours(-24);
+        var payload = CreateRun(Guid.NewGuid(), updatedAtUtc) with
+        {
+            Status = StrategyMarketPaperRunStatuses.Skipped,
+            SkipReason = "reference_threshold_not_met",
+            LiveEnabledAtUtc = null
+        };
+
+        var facts = DashboardProjectionCalculator.GetRecentFacts(payload)
+            .Select(fact => PostgresDashboardProjectionRepository.PrepareFact(fact, nowUtc))
+            .ToArray();
+
+        Assert.Equal(2, facts.Length);
+        Assert.All(facts, fact =>
+        {
+            Assert.False(fact.Applied1Hour);
+            Assert.False(fact.Applied6Hours);
+            Assert.True(fact.Applied24Hours);
+        });
+
+        var skipped = Assert.Single(facts, fact =>
+            fact.FactKind == DashboardProjectionFactKinds.RunSkipped);
+        Assert.Equal(1, skipped.Contribution.SkippedRunsCount);
+        Assert.Equal(1, skipped.Contribution.PaperConditionSkippedRunsCount);
+        Assert.Equal(0, skipped.Contribution.PaperNotAcceptedRunsCount);
+        Assert.Equal(0, skipped.Contribution.RunLiveConditionSkippedCount);
+        Assert.Equal(0, skipped.Contribution.RunLiveTechnicalSkippedCount);
+        Assert.Equal(0, skipped.Contribution.RunLiveIgnoredGtdCount);
+        Assert.Equal("reference_threshold_not_met", skipped.Contribution.SkipReason);
+
+        var activity = Assert.Single(facts, fact =>
+            fact.FactKind == DashboardProjectionFactKinds.RunActivity);
+        Assert.Equal(updatedAtUtc, activity.Contribution.LastRunUtc);
+
+        var outsideBoundary = DashboardProjectionCalculator.GetRecentFacts(
+                payload with { UpdatedAtUtc = updatedAtUtc.AddTicks(-1) })
+            .Select(fact => PostgresDashboardProjectionRepository.PrepareFact(fact, nowUtc))
+            .ToArray();
+        Assert.All(outsideBoundary, fact => Assert.False(fact.Applied24Hours));
+    }
+
+    [Fact]
     public void RecentCandidateRemoval_CanBeRebuiltFromRemainingFacts()
     {
         var state = new DashboardRecentProjectionState();

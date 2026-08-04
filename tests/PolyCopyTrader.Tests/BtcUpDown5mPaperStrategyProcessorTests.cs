@@ -3511,6 +3511,45 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_DirectSkipCompactionDoesNotCompactPaperSettlementFailure()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var repository = new TestAppRepository();
+        var run = CreateEnteredSettlementRun(
+            UpBps2InstantVariant,
+            "market-1",
+            "condition-1",
+            "asset-up",
+            "Up",
+            now.AddMinutes(-10),
+            paperOrderId: null) with
+        {
+            EntryPrice = null
+        };
+        repository.StrategyMarketPaperRuns.Add(run);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            [],
+            _ => { },
+            [],
+            CreateBtcOptions(paperTakerPricingEnabled: false, [UpBps2InstantVariant.Code]),
+            strategyRunRetentionOptions: new StrategyRunRetentionOptions
+            {
+                DirectPaperSkipCompactionEnabled = true,
+                DirectPaperSkipCompactionApplyEnabled = true
+            });
+
+        await processor.ProcessAsync();
+
+        var updatedRun = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, updatedRun.Status);
+        Assert.Equal("entry_details_missing", updatedRun.SkipReason);
+        Assert.Empty(repository.DirectPaperSkipSingleFinalizeCalls);
+        Assert.Empty(repository.DirectPaperSkipBulkFinalizeCalls);
+    }
+
+    [Fact]
     public async Task ProcessAsync_FillsInitialExecutableOpeningLimitOrderBeforeSkippingUnfilledGtdRun()
     {
         var now = DateTimeOffset.UtcNow;
@@ -10114,6 +10153,33 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"reference_average_trigger_direction\":null", diagnostics, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ProcessAsync_DirectSkipCompactionMarksImmediateNoBetPersistenceBatch()
+    {
+        var queue = new CapturingPaperEntryPersistenceQueue();
+        var scenario = await RunOptimizedAverageScenarioAsync(
+            "eth_up_down_5m_reference_average_bps_9_fak_premarket",
+            3_196m,
+            [3_150m, 3_200m, 3_175m, 3_180m, 3_170m, 3_160m, 3_155m, 3_152m],
+            paperEntryPersistenceQueue: queue,
+            strategyRunRetentionOptions: new StrategyRunRetentionOptions
+            {
+                DirectPaperSkipCompactionEnabled = true,
+                DirectPaperSkipCompactionApplyEnabled = true
+            });
+
+        Assert.Equal(0, scenario.Result.EntriesPlaced);
+        Assert.Equal(1, scenario.Result.RunsSkipped);
+        Assert.Equal([true], scenario.Repository.DirectPaperSkipBulkInsertFlags);
+        var batch = Assert.Single(queue.Batches);
+        Assert.True(batch.DirectPaperSkipCompactionEnabled);
+        var skippedRun = Assert.Single(batch.StrategyRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skippedRun.Status);
+        Assert.Equal("reference_average_move_below_bps_threshold", skippedRun.SkipReason);
+        Assert.Empty(scenario.Repository.DirectPaperSkipSingleFinalizeCalls);
+        Assert.Empty(scenario.Repository.DirectPaperSkipBulkFinalizeCalls);
+    }
+
     [Theory]
     [InlineData(50, true)]
     [InlineData(51, false)]
@@ -11678,6 +11744,30 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_DirectSkipCompactionMarksDeferredActualPaperBatch()
+    {
+        var queue = new CapturingPaperEntryPersistenceQueue();
+        var scenario = await RunOptimizedAverageScenarioAsync(
+            "eth_up_down_5m_optimized_average_bps_9_fak_premarket",
+            3_146m,
+            [3_200m, 3_175m, 3_180m, 3_150m, 3_170m, 3_160m, 3_155m, 3_152m],
+            paperEntryPersistenceQueue: queue,
+            strategyRunRetentionOptions: new StrategyRunRetentionOptions
+            {
+                DirectPaperSkipCompactionEnabled = true,
+                DirectPaperSkipCompactionApplyEnabled = true
+            });
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(0, scenario.Repository.PaperEntryPersistenceBatchAttempts);
+        Assert.Equal(0, scenario.Repository.PaperEntryPersistenceBatchCalls);
+        var batch = Assert.Single(queue.Batches);
+        Assert.Single(batch.PaperOrders);
+        Assert.Single(batch.StrategyRuns);
+        Assert.True(batch.DirectPaperSkipCompactionEnabled);
+    }
+
+    [Fact]
     public async Task ProcessAsync_MiddleBps45InstantLiveStakeCreatesPaperShadowAndFakLiveOrder()
     {
         var now = DateTimeOffset.UtcNow;
@@ -12240,6 +12330,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 DiffCounterInstantMaxPrice = 1.00m,
                 OpeningLimitPriceTickSize = 0.01m
             },
+            new StrategyRunRetentionOptions(),
             marketDataWebSocketOptions,
             new FakeGammaClient([]),
             clobClient ?? new FakeClobClient(orderBooks.Concat(clobOrderBooks).ToArray()),
@@ -12436,7 +12527,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         ICryptoReferencePriceAverageProvider? cryptoReferencePriceAverageProvider = null,
         ICryptoReferencePriceExtremaProvider? cryptoReferencePriceExtremaProvider = null,
         IExposureSnapshotCache? exposureSnapshotCache = null,
-        IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null)
+        IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null,
+        StrategyRunRetentionOptions? strategyRunRetentionOptions = null)
     {
         var marketDataWebSocketOptions = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         var marketDataCache = new MarketDataCache(marketDataWebSocketOptions);
@@ -12474,6 +12566,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             paperTradingOptions ?? new PaperTradingOptions { InitialBankrollUsd = 10_000m },
             liveTradingOptions ?? new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 25m },
             strategyOptions,
+            strategyRunRetentionOptions ?? new StrategyRunRetentionOptions(),
             marketDataWebSocketOptions,
             gammaClient ?? new FakeGammaClient(metadata),
             clobClient ?? new FakeClobClient(clobOrderBooks),
@@ -12508,7 +12601,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         decimal upEntryPrice = 0.41m,
         decimal downEntryPrice = 0.60m,
         IReadOnlyList<OrderBookLevel>? upAskLevels = null,
-        IReadOnlyList<OrderBookLevel>? downAskLevels = null)
+        IReadOnlyList<OrderBookLevel>? downAskLevels = null,
+        IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null,
+        StrategyRunRetentionOptions? strategyRunRetentionOptions = null)
     {
         var now = new DateTimeOffset(2026, 7, 18, 12, 0, 0, TimeSpan.Zero);
         var marketStartUtc = now.AddSeconds(30);
@@ -12628,7 +12723,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             btcUsdReferencePriceCache: CreateBtcUsdReferenceCache(currentPriceUsd),
             cryptoReferencePriceClient: cryptoPriceClient,
             timeProvider: new ManualTimeProvider(now),
-            cryptoReferencePriceAverageProvider: averageProvider);
+            cryptoReferencePriceAverageProvider: averageProvider,
+            paperEntryPersistenceQueue: paperEntryPersistenceQueue,
+            strategyRunRetentionOptions: strategyRunRetentionOptions);
 
         var result = await processor.ProcessAsync();
         return (result, repository, tradingClient);

@@ -24,6 +24,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     PaperTradingOptions paperTradingOptions,
     LiveTradingOptions liveTradingOptions,
     BtcUpDown5mStrategyOptions options,
+    StrategyRunRetentionOptions strategyRunRetentionOptions,
     MarketDataWebSocketOptions marketDataWebSocketOptions,
     IPolymarketGammaClient gammaClient,
     IPolymarketClobPublicClient clobClient,
@@ -139,6 +140,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly EntryDecisionConcurrencyGate entryDecisionConcurrencyGate = new(
         options.MaxConcurrentEntryDecisions,
         options.FastDiffReservedEntryDecisionSlots);
+    private bool DirectPaperSkipCompactionActive =>
+        strategyRunRetentionOptions.DirectPaperSkipCompactionEnabled &&
+        strategyRunRetentionOptions.DirectPaperSkipCompactionApplyEnabled;
     private readonly SemaphoreSlim mainDueEntryProcessingLock = new(1, 1);
     private readonly SemaphoreSlim diffCounterStateLock = new(1, 1);
     private readonly SemaphoreSlim liveStrategyPriorityRefreshLock = new(1, 1);
@@ -1440,6 +1444,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         {
             insertedIds = await repository.TryAddStrategyMarketPaperRunsAsync(
                 reservations.Select(reservation => reservation.Run).ToArray(),
+                DirectPaperSkipCompactionActive,
                 cancellationToken);
         }
         catch
@@ -2181,7 +2186,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             reason,
             rawDecisionJson);
 
-        await repository.TryAddStrategyMarketPaperRunAsync(run, cancellationToken);
+        await repository.TryAddStrategyMarketPaperRunsAsync(
+            [run],
+            DirectPaperSkipCompactionActive,
+            cancellationToken);
         logger.LogInformation(
             "BTC Up or Down 5m maker run skipped. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} Reason={Reason}",
             variant.Code,
@@ -3117,7 +3125,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             if (IsEntryExpired(run.EntryDueAtUtc, nowUtc) &&
                 variantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var variant))
             {
-                await SkipRunAsync(
+                await FinalizeNoBetSkipRunAsync(
                     run,
                     variant,
                     "previous_result_not_ready_by_entry_grace",
@@ -4257,7 +4265,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         CancellationToken cancellationToken)
     {
-        return Task.FromResult(new DeferredPaperEntryPersistence());
+        return Task.FromResult(new DeferredPaperEntryPersistence(
+            DirectPaperSkipCompactionActive));
     }
 
     private async Task PersistDeferredPaperEntryPersistenceAsync(
@@ -4884,7 +4893,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return new MiddleReferenceBulkSkipResult(remainingRuns, 0);
         }
 
-        await repository.UpdateStrategyMarketPaperRunsAsync(skippedRuns, cancellationToken);
+        await repository.FinalizeStrategyMarketPaperRunsAsync(
+            skippedRuns,
+            DirectPaperSkipCompactionActive,
+            cancellationToken);
         foreach (var group in skippedRuns.GroupBy(run => run.SkipReason ?? "unknown", StringComparer.Ordinal))
         {
             logger.LogInformation(
@@ -21419,6 +21431,22 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         LogSkippedRun(skippedRun, variant);
     }
 
+    private async Task FinalizeNoBetSkipRunAsync(
+        StrategyMarketPaperRun run,
+        BtcUpDown5mStrategyVariant variant,
+        string reason,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken,
+        string? diagnosticsJson = null)
+    {
+        var skippedRun = CreateSkippedRun(run, reason, nowUtc, diagnosticsJson);
+        await repository.FinalizeStrategyMarketPaperRunAsync(
+            skippedRun,
+            DirectPaperSkipCompactionActive,
+            cancellationToken);
+        LogSkippedRun(skippedRun, variant);
+    }
+
     private Task RecordEntryRunSkippedAsync(
         StrategyMarketPaperRun run,
         BtcUpDown5mStrategyVariant variant,
@@ -22741,6 +22769,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private sealed class DeferredPaperEntryPersistence
     {
+        private readonly bool directPaperSkipCompactionEnabled;
         private readonly object sync = new();
         private readonly List<Signal> signals = [];
         private readonly List<PaperOrder> paperOrders = [];
@@ -22749,8 +22778,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         private readonly List<PaperCopiedLeaderPositionActivation> copiedLeaderPositionActivations = [];
         private readonly List<StrategyMarketPaperRun> strategyRuns = [];
 
-        public DeferredPaperEntryPersistence()
+        public DeferredPaperEntryPersistence(bool directPaperSkipCompactionEnabled)
         {
+            this.directPaperSkipCompactionEnabled = directPaperSkipCompactionEnabled;
         }
 
         public void AddPendingPaperEntry(
@@ -22812,6 +22842,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     copiedLeaderPositionActivations.ToArray(),
                     strategyRuns.ToArray())
                 {
+                    DirectPaperSkipCompactionEnabled = directPaperSkipCompactionEnabled,
                     PaperPositionMaterializations = paperPositionMaterializations.ToArray()
                 };
             }

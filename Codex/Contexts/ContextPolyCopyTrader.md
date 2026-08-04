@@ -1,3 +1,18 @@
+## Active Update 2026-08-04 Direct Paper-Only Skip Compaction
+Goal: Implement the first safe step toward not retaining terminal no-bet `Skipped` observations while preserving every actual Paper bet and all Live/live-shadow history.
+Status: Completed locally and default-off; no production state was changed.
+Done:
+- Added two independent default-off gates, `DirectPaperSkipCompactionEnabled` and `DirectPaperSkipCompactionApplyEnabled`; the new path is active only when both are true.
+- Routed only terminal no-bet Paper-only skips through direct compaction. Settlement failures and every actual Paper entry, Live result, Live skip, and Live-shadow decision continue through full raw persistence.
+- Implemented an atomic PostgreSQL transaction that finalizes the run, rechecks all Paper/Live/live-shadow/dependency blockers, writes the versioned restoration/deduplication tombstone and UTC-day/reason rollup, suppresses only the raw-delete projection event, queues reconciliation, and deletes the wide raw skip before commit. Retries are idempotent and logical inserted IDs are preserved.
+- Preserved Dashboard lifetime and exact 1h/6h/24h skip metrics by including fresh v1 tombstones in recent projection/direct-performance reads. Added a DB-side `skip_diagnostics_json IS NULL` fail-closed guard; persisted diagnostics remain ineligible.
+- Fixed an independently found lock-order inversion in the direct entry batch. It now takes wallet/position locks before the retention-exclusive gate under `READ COMMITTED`; a concurrent PostgreSQL test proves the order and absence of the prior deadlock cycle.
+- Kept the durable wide `Observed` row as the current scheduler queue. This stage removes the terminal raw `Skipped` row before commit but does not yet eliminate the initial `Observed` insert/WAL/index churn; a narrow pending table remains the later second stage.
+- Updated the Paper/Live parity contract and README rollout requirements. No schema DDL or new production index was added.
+Next: Deploy with all four retention switches still false, then run a read-only production candidate/dependency preview plus `EXPLAIN`/tombstone-size and reconciliation-load checks. Enabling both direct switches requires a separate canary decision; a time-leading tombstone index, if proven necessary, requires separate concurrent-DDL approval.
+Notes: `dotnet build PolyCopyTrader.sln -c Release` passed with 0 errors/120 warnings. Local PostgreSQL 17 integration class passed 27/27, including atomicity, idempotency, Paper/Live preservation, Dashboard recent/lifetime accounting, mixed entry batch, and concurrent lock order. Focused non-processor tests passed 77/77 and the three changed processor tests passed 3/3. Independent review found no remaining correctness blocker. A broader isolated processor-class run is not green (117/230; 113 failures, many fail during pre-path `StrategyIds` variant lookup); this unrelated broader test debt was not changed or hidden. `git diff --check` passed. Temporary PostgreSQL was stopped.
+Blockers: None for the default-off implementation. Production activation remains intentionally blocked on the documented read-only preview, load/plan evidence, and separate approval.
+
 ## Active Update 2026-08-04 Direct Skipped Persistence Feasibility
 Goal: Determine whether terminal `Skipped` strategy evaluations can avoid database persistence while preserving all actual Paper and all Live/live-shadow history and runtime correctness.
 Status: Completed strictly read-only. Full raw `PaperOnly / no-bet / Skipped` rows can be avoided after a storage redesign, but writing nothing at all is unsafe in the current architecture.
