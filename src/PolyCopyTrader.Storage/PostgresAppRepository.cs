@@ -4388,6 +4388,8 @@ archived_skip_window_rows AS (
         ON tombstone.run_updated_at_utc >= window_row.window_start_utc
        AND tombstone.run_updated_at_utc <= window_row.window_end_utc
     WHERE tombstone.archive_format_version = 1
+      AND tombstone.run_updated_at_utc >= CAST(@NowUtc AS timestamptz) - interval '24 hours'
+      AND tombstone.run_updated_at_utc <= CAST(@NowUtc AS timestamptz)
 ),
 run_window_rows AS (
     SELECT

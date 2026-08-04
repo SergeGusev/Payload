@@ -625,6 +625,22 @@ public sealed class StrategyRunRetentionTests
             "tombstone.run_updated_at_utc >= window_row.window_start_utc",
             method,
             StringComparison.Ordinal);
+        var archivedRowsStart = method.IndexOf(
+            "archived_skip_window_rows AS",
+            StringComparison.Ordinal);
+        Assert.True(archivedRowsStart >= 0);
+        var archivedRowsEnd = method.IndexOf(
+            "run_window_rows AS",
+            archivedRowsStart,
+            StringComparison.Ordinal);
+        Assert.True(archivedRowsEnd > archivedRowsStart);
+        var archivedRows = method[archivedRowsStart..archivedRowsEnd];
+        const string overallLowerBound =
+            "tombstone.run_updated_at_utc >= CAST(@NowUtc AS timestamptz) - interval '24 hours'";
+        const string overallUpperBound =
+            "tombstone.run_updated_at_utc <= CAST(@NowUtc AS timestamptz)";
+        Assert.Equal(1, CountOccurrences(archivedRows, overallLowerBound));
+        Assert.Equal(1, CountOccurrences(archivedRows, overallUpperBound));
         Assert.Contains(
             "NULL::timestamptz AS live_enabled_at_utc",
             method,
