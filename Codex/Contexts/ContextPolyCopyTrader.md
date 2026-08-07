@@ -1,3 +1,16 @@
+## Active Update 2026-08-07 Paper Live Fee Disclosure Failure Acknowledgement
+Goal: Record the failure to surface the known Paper fee-accounting gap as a blocking issue despite the user's repeatedly stated goal of using Paper results to predict Live behavior.
+Status: Completed
+Done:
+- Acknowledged that once missing fee accounting was known, the correct response was to stop treating Paper PnL/ROI as Live-comparable, disclose the mismatch prominently, invalidate affected financial conclusions, and request approval for a bounded correction.
+- Distinguished the exact evidence timeline without minimizing the failure: the full `$453.59562` impact was established only in the later audit, but knowledge that fees were omitted was already sufficient to invalidate net-Live profitability claims.
+- Recorded that lack of authorization to mutate production constrained implementation only; it did not justify withholding or burying a material financial warning.
+- Reaffirmed the mandatory contract in `docs/architecture/PAPER_LIVE_PARITY.md`: missing Live-equivalence evidence is a completion blocker, and fees must be persisted as execution outcomes. The prior handling failed that standard.
+- Withdrew all prior fee-bearing Paper/Live PnL and ROI interpretations as net profitability evidence until the complete correction blast radius is audited and fee-aware accounting is implemented and verified.
+Next: Await the user's direction before starting the separate broad correction workstream: exact blast-radius inventory, fee-aware shared Paper/Live accounting, tests, deployment, and historical net recomputation.
+Notes: This response performed only repository task initialization and documentation of the correction. No production query, strategy/order/service/configuration change, code implementation, deployment, or historical data rewrite was performed.
+Blockers: The corrective implementation and broad historical audit are materially larger workstreams and require explicit user authorization.
+
 ## Active Update 2026-08-07 Paper And Live Crypto 5m Fee Accounting Audit
 Goal: Determine whether current Paper statistics for `ETH Up or Down 5m 2 bps Reference Average Premarket` omit Polymarket fees and whether they are suitable for Live decisions.
 Status: Completed
