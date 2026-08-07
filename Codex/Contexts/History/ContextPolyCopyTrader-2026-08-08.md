@@ -25,3 +25,12 @@ Request:
 
 Result:
 Выполнена строгая read-only production-проверка deployed build `092b76c5` на `192.168.0.101/polycopytrader`. Heartbeat свежий, fee schema `45/45` корректна. На фиксированном canary `257/257` новых Paper fills имели `Calculated/Taker`, точный schedule `.07/1/takerOnly`, ненулевую fee и ноль независимых formula mismatches; суммы stored/recomputed fee совпали `$316.95486`. Все exact order/run/position links совпали. Позже `121/121` canary runs закрылись с сохранённой fee и точным `net=gross-fee`. Старая история осталась `LegacyUnknown`. Новых Live orders не было, поэтому production Live canary остаётся Unknown. Fee-related ошибок не найдено; отдельно замечены не связанные доказанно с fee ошибки ProjectionCycle/OKX/reference workers. Никаких production writes/restarts/backfill не выполнялось.
+
+## 2026-08-07T23:32:30.8596844Z
+Request:
+Ок, пройдись по всем сделанным Paper стратегиям и, если они работали в режиме FAK, рассчитай их корректный Pnl и ROI с учётом комиссий
+
+Делай так, чтобы исторические Paper ставки по итогу не отличались от того, что ставится прямо сейчас, с учётом комиссии
+
+Result:
+Выполнен строгий read-only production preview исторического FAK backfill. Доказанный cohort содержит `2,199,628` fills / `2,199,621` orders / `2,217` strategies / `30,658` uniquely mapped crypto markets и gross entry notional `$28,666,682.4052446693649144`; `2,198,742` pre-deploy fills остаются `LegacyUnknown`, `886` post-deploy fills уже `Calculated/Taker`. Из legacy scope `2,196,391` — direct/child pure-Paper FAK, ещё `2,351` — FAK Paper/Live-shadow; `865` GTD shadow fills исключены. Текущий `.07/e1/taker-only` schedule сильно подтверждён, но immutable as-of evidence для каждой старой сделки отсутствует, поэтому допустим только явно помеченный current-Paper-model backfill, не `VenueReported`. Production mutation остановлена до явного разрешения на maintenance stop/trigger guards; shadow cohort требует отдельного расширения на historical Live accounting и balance reconciliation. Никаких production writes, schema/service/trading actions или backfill не выполнялось.
