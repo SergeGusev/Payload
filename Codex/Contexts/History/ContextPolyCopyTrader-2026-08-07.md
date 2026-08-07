@@ -14,3 +14,12 @@ Request:
 
 Result:
 Measured official closed Polymarket Gamma BTC/ETH/SOL 5-minute outcomes on `17,326` synchronized UTC starts from `2026-06-08T14:00:00Z` through `2026-08-07T18:25:00Z`. Same-outcome agreement/phi was BTC-ETH `82.361768%/0.647235`, BTC-SOL `79.193120%/0.583854`, and ETH-SOL `81.663396%/0.633270`; all three matched in `71.609142%`. UTC-day block-bootstrap intervals and chronological halves confirmed that the positive relationship persisted, though it weakened modestly in the second half. Fresh read-only production reconciliation found that every Gamma/ledger conflict belonged to locally inferred result sources, while direct `MarketWebSocket`/`GammaClosedMarket` rows had zero outcome conflicts; Gamma was therefore used as the primary outcome source. Concluded that cross-asset prediction is promising enough to test, but actual transfer of a strategy forecast remains unproved until one exact pre-outcome strategy signal is scored against the other assets on chronological holdout data. Production and application behavior were unchanged.
+
+## 2026-08-07T20:13:25.3304901Z
+Request:
+Смоделируй стратегию BTC ETH 2 bps Reference Average Premarket Copy, логика которой будет следующая: - она каждый раз выбирает то же направление, которое выбрала ETH Up or Down 5m 2 bps Reference Average Premarket, но для BTC.  При моделировании считай, что ставим по той же цене, по которой ставила ETH Up or Down 5m 2 bps Reference Average Premarket.
+
+Посчитай, какой у неё сейчас был бы Pnl и ROI
+
+Result:
+Modeled a ResearchOnly BTC copy on all `2,320` entered and Settled source runs through fixed UTC production cutoff `2026-08-07T20:05:20.131896Z`. The explicit missing-stake assumption was to copy each source run's actual filled ETH VWAP, `stake_usd`, and `size_shares`; payout used the official BTC winner at the exact same `market_start_utc`, with no fees. Official closed Gamma BTC series `10684` covered `2,320/2,320` starts and agreed with all `1,561` direct persisted outcomes; provisional ledger winners were excluded because `50/758` conflicted with Gamma. Result: stake `$13,937.76299918`, `1,244W/1,076L`, PnL `+$52.89033798`, ROI `+0.3794750849%`. The actual ETH source cohort was `+$849.31740063` / `+6.0936421482%`. Production SQL, official Gamma replay, and independent raw-row Decimal aggregation matched exactly. No production, service, strategy, order, application, or schema state changed.
