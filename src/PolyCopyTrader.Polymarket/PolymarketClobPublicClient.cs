@@ -83,4 +83,21 @@ public sealed class PolymarketClobPublicClient : IPolymarketClobPublicClient
 
         return PolymarketJsonParser.ParseClobMarketByToken(json.RootElement);
     }
+
+    public async Task<PolymarketClobMarketInfo> GetClobMarketInfoAsync(
+        string conditionId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(conditionId);
+
+        using var json = await client.GetJsonDocumentAsync(
+            UriBuilderExtensions.WithPathAndQuery(
+                options.ClobBaseUrl,
+                "/clob-markets/" + Uri.EscapeDataString(conditionId),
+                new Dictionary<string, string?>()),
+            "GetClobMarketInfo",
+            cancellationToken);
+
+        return PolymarketJsonParser.ParseClobMarketInfo(json.RootElement, conditionId);
+    }
 }

@@ -112,6 +112,35 @@ public sealed class DashboardProjectionCalculatorTests
     }
 
     [Fact]
+    public void LiveGrossStakeExcludesRecordedFeeFromRoiDenominator()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
+        var payload = new LiveOrderProjectionPayload(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Matched.ToString(),
+            0.50m,
+            100m,
+            0m,
+            50m,
+            51.75m,
+            1.75m,
+            100m,
+            50m,
+            nowUtc,
+            true,
+            nowUtc.AddMinutes(-5),
+            nowUtc);
+
+        var contribution = DashboardProjectionCalculator.GetLifetimeContribution(payload);
+        var recentStake = DashboardProjectionCalculator.GetRecentFacts(payload)
+            .Sum(fact => fact.Contribution.LiveStakeUsd);
+
+        Assert.Equal(50m, contribution.LiveStakeUsd);
+        Assert.Equal(50m, recentStake);
+    }
+
+    [Fact]
     public void PaperOnlySkipTombstoneFacts_UseExact24HourBoundaryAndNeverCountAsLive()
     {
         var nowUtc = new DateTimeOffset(2026, 8, 4, 12, 0, 0, TimeSpan.Zero);

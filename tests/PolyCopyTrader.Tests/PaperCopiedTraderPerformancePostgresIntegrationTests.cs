@@ -910,6 +910,7 @@ SET LOCAL enable_bitmapscan = off;
                 position,
                 estimatedValueUsd: 2m,
                 unrealizedPnlUsd: 1m,
+                netUnrealizedPnlUsd: null,
                 updatedAtUtc: nowUtc.AddMilliseconds(500),
                 operationCancellation.Token);
 
@@ -1141,6 +1142,7 @@ SET LOCAL enable_bitmapscan = off;
                 expectedPosition,
                 estimatedValueUsd: 2m,
                 unrealizedPnlUsd: 1m,
+                netUnrealizedPnlUsd: null,
                 updatedAtUtc: nowUtc.AddSeconds(1),
                 operationCancellation.Token);
 

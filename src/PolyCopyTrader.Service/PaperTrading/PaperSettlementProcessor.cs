@@ -120,6 +120,10 @@ public sealed class PaperSettlementProcessor(
                 var won = IsWinningPosition(position, winningAssetId, winningOutcome);
                 var costBasis = position.AveragePrice * position.SizeShares;
                 var settlementValue = won ? position.SizeShares : 0m;
+                var grossRealizedPnl = settlementValue - costBasis;
+                var netRealizedPnl = FeeAccountingRules.IsAccounted(position.FeeAccountingStatus)
+                    ? grossRealizedPnl - position.FeeUsd
+                    : (decimal?)null;
                 var now = DateTimeOffset.UtcNow;
                 var settlement = new PaperPositionSettlement(
                     Guid.NewGuid(),
@@ -134,17 +138,35 @@ public sealed class PaperSettlementProcessor(
                     position.AveragePrice,
                     costBasis,
                     settlementValue,
-                    settlementValue - costBasis,
+                    grossRealizedPnl,
                     won,
                     settlementSource,
                     settledAtUtc,
-                    now);
+                    now,
+                    position.FeeUsd,
+                    position.FeeAccountingStatus,
+                    position.FeeLiquidityRole,
+                    position.FeeCalculationSource,
+                    position.FeeRate,
+                    position.FeeExponent,
+                    position.FeeTakerOnly,
+                    position.FeeCalculatedAtUtc,
+                    netRealizedPnl);
                 var settledPosition = position with
                 {
                     SizeShares = 0m,
                     AveragePrice = 0m,
                     EstimatedValueUsd = 0m,
                     UnrealizedPnlUsd = 0m,
+                    FeeUsd = 0m,
+                    FeeAccountingStatus = FeeAccountingStatus.Calculated.ToString(),
+                    FeeLiquidityRole = FeeLiquidityRole.Unknown.ToString(),
+                    FeeCalculationSource = "settled",
+                    FeeRate = null,
+                    FeeExponent = null,
+                    FeeTakerOnly = null,
+                    FeeCalculatedAtUtc = now,
+                    NetUnrealizedPnlUsd = 0m,
                     UpdatedAtUtc = now
                 };
                 writes.Add(new PaperPositionSettlementWrite(settlement, settledPosition));

@@ -45,6 +45,7 @@ public sealed class ConservativePaperGtdFillEstimatorTests
         Assert.Contains("ConservativeGtdImmediateFill", result.Fill.Evidence);
         Assert.Contains("ObservedAskVwap=0.48", result.Fill.Evidence);
         Assert.Contains("filled_immediate_marketable", result.Order.RawDecisionJson);
+        Assert.Equal("Taker", result.Fill.FeeLiquidityRole);
     }
 
     [Fact]
@@ -118,6 +119,7 @@ public sealed class ConservativePaperGtdFillEstimatorTests
         Assert.Equal(order.Price, result.Fill.Price);
         Assert.Contains("ConservativeGtdLateFill", result.Fill.Evidence);
         Assert.Contains("filled_late_trade_through_limit", result.Order.RawDecisionJson);
+        Assert.Equal("Maker", result.Fill.FeeLiquidityRole);
     }
 
     [Fact]

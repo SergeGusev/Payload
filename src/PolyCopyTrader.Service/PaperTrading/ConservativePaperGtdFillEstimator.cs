@@ -145,7 +145,14 @@ public sealed class ConservativePaperGtdFillEstimator(BtcUpDown5mStrategyOptions
             " Confidence=High.");
 
         ApplyFillDiagnostics(root, "filled_immediate_marketable", "high", fillPrice, fillShares, nowUtc, null);
-        return new PaperFill(Guid.NewGuid(), order.Id, fillPrice, fillShares, nowUtc, evidence);
+        return new PaperFill(
+            Guid.NewGuid(),
+            order.Id,
+            fillPrice,
+            fillShares,
+            nowUtc,
+            evidence,
+            FeeLiquidityRole: "Taker");
     }
 
     private PaperFill? TryCreateLateFill(
@@ -196,7 +203,14 @@ public sealed class ConservativePaperGtdFillEstimator(BtcUpDown5mStrategyOptions
             " Confidence=High.");
 
         ApplyFillDiagnostics(root, "filled_late_trade_through_limit", "high", order.Price, remainingShares, nowUtc, orderBook);
-        return new PaperFill(Guid.NewGuid(), order.Id, order.Price, remainingShares, nowUtc, evidence);
+        return new PaperFill(
+            Guid.NewGuid(),
+            order.Id,
+            order.Price,
+            remainingShares,
+            nowUtc,
+            evidence,
+            FeeLiquidityRole: "Maker");
     }
 
     private static ConservativePaperGtdBaseline? TryReadInitialBaseline(JsonObject root)

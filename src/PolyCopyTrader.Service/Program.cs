@@ -346,6 +346,7 @@ builder.Services.AddHttpClient<IPolymarketGammaClient, PolymarketGammaClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
+builder.Services.AddSingleton<IPolymarketFeeAccountingService, PolymarketFeeAccountingService>();
 builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddHttpClient<IPolymarketTradingClient, PolymarketTradingClient>()

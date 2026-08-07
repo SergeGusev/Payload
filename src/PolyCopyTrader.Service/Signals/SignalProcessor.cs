@@ -29,7 +29,8 @@ public sealed class SignalProcessor(
     ServiceControlState controlState,
     IExposureSnapshotCache exposureCache,
     IStrategyStateProvider strategyStateProvider,
-    IAppRepository repository) : ISignalProcessor
+    IAppRepository repository,
+    IPolymarketFeeAccountingService? feeAccountingService = null) : ISignalProcessor
 {
     private const int MaxCandidatesPerLoop = 500;
     private static readonly string[] BlockedLiveMarketText =
@@ -383,6 +384,10 @@ public sealed class SignalProcessor(
         }
 
         var liveOrder = ToLiveOrder(signal, trade, price, liveSizeShares, notional, now, result);
+        if (feeAccountingService is not null && liveOrder.FilledSize > 0m)
+        {
+            liveOrder = await feeAccountingService.ApplyToLiveOrderAsync(liveOrder, cancellationToken);
+        }
 
         await PersistLiveOrderAsync(
             liveOrder,

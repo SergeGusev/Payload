@@ -43,6 +43,7 @@ public sealed class PaperSettlementPostgresIntegrationTests
                 expectedSingle,
                 estimatedValueUsd: 3m,
                 unrealizedPnlUsd: 2m,
+                netUnrealizedPnlUsd: null,
                 updatedAtUtc: initialUtc.AddMilliseconds(100)));
             expectedSingle = Assert.IsType<PaperPosition>(
                 await repository.GetPaperPositionAsync(wallet, initialPositions[0].AssetId));
@@ -70,6 +71,7 @@ public sealed class PaperSettlementPostgresIntegrationTests
                 expectedSingle,
                 estimatedValueUsd: 3m,
                 unrealizedPnlUsd: 2m,
+                netUnrealizedPnlUsd: null,
                 updatedAtUtc: settledUtc.AddSeconds(1));
             var batchUpdated = await repository.TryUpdatePaperPositionMarksAsync(
             [

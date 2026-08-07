@@ -372,6 +372,7 @@ public sealed class WatchlistScannerTests
             PaperPosition expectedPosition,
             decimal estimatedValueUsd,
             decimal unrealizedPnlUsd,
+            decimal? netUnrealizedPnlUsd,
             DateTimeOffset updatedAtUtc,
             CancellationToken cancellationToken = default)
         {

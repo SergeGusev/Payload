@@ -45,7 +45,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     IAppRepository repository,
     TimeProvider? timeProvider = null,
     IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null,
-    IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null) : IBtcUpDown5mPaperStrategyProcessor
+    IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null,
+    IPolymarketFeeAccountingService? feeAccountingService = null) : IBtcUpDown5mPaperStrategyProcessor
 {
     private const string GammaOutcomePriceSource = "gamma_outcome_price";
     private const string WebSocketCacheSource = "websocket_cache";
@@ -2056,7 +2057,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     shadowFakEstimate.AverageFillPrice,
                     shadowFakEstimate.SizeShares,
                     nowUtc,
-                    shadowFakFillEvidence ?? string.Empty);
+                    shadowFakFillEvidence ?? string.Empty,
+                    FeeLiquidityRole: "Taker");
+                if (feeAccountingService is not null)
+                {
+                    paperFakFill = await feeAccountingService.ApplyToPaperFillAsync(order, paperFakFill, cancellationToken);
+                    run = ApplyFeeAccounting(run!, [paperFakFill]);
+                }
                 await repository.AddPaperFillAsync(paperFakFill, cancellationToken);
                 var currentPosition = await repository.GetPaperPositionAsync(
                     order.CopiedTraderWallet,
@@ -4281,6 +4288,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         try
         {
+            if (feeAccountingService is not null)
+            {
+                batch = await feeAccountingService.ApplyToEntryBatchAsync(batch, cancellationToken);
+            }
+
             if (paperEntryPersistenceQueue is not null)
             {
                 await paperEntryPersistenceQueue.EnqueueAsync(batch, cancellationToken);
@@ -4635,6 +4647,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal currentBid,
         DateTimeOffset nowUtc,
         string executionSource,
+        string feeLiquidityRole,
         DeferredPaperEntryPersistence deferredPersistence)
     {
         if (!childAssignmentsByParent.TryGetValue(StrategyIds.Normalize(parentVariant.Id), out var childAssignments) ||
@@ -4691,7 +4704,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     parentRun.Id.ToString("D"),
                     " ParentPaperOrderId=",
                     parentOrderId.ToString("D"),
-                    "."));
+                    "."),
+                FeeLiquidityRole: feeLiquidityRole);
             var childRun = CreateChildEnteredRun(
                 parentRun,
                 childVariant,
@@ -5365,7 +5379,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     fakEstimate.AverageFillPrice,
                                     fakEstimate.SizeShares,
                                     nowUtc,
-                                    fillEvidence);
+                                    fillEvidence,
+                                    FeeLiquidityRole: "Taker");
                                 var enteredRun = CreateEnteredRun(
                                     run,
                                     market,
@@ -5398,6 +5413,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     currentBid,
                                     nowUtc,
                                     BtcChildMirrorFakPaperExecutionSource,
+                                    fakFill.FeeLiquidityRole,
                                     deferredPersistence);
                             }
                             finally
@@ -6231,6 +6247,38 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             var settlementRealizedPnl = settlementValue - remainingCostBasisUsd;
             var totalSettlementValue = soldProceedsUsd + settlementValue;
             var realizedPnl = totalSettlementValue - costBasisUsd;
+            var entryFeeAccounting = openingLimitFillSummary?.FeeAccounting ?? new FeeAccountingAggregate(
+                run.FeeUsd,
+                run.FeeAccountingStatus,
+                run.FeeLiquidityRole,
+                run.FeeCalculationSource,
+                run.FeeRate,
+                run.FeeExponent,
+                run.FeeTakerOnly,
+                run.FeeCalculatedAtUtc);
+            var totalFeeAccounting = entryFeeAccounting;
+            if (preOpenSellExitSummary is { SoldSizeShares: > 0m } &&
+                preOpenSellExitSummary.FeeAccounting is { } exitFeeAccounting)
+            {
+                var totalFeeStatus = FeeAccountingRules.Aggregate(
+                    [entryFeeAccounting.Status, exitFeeAccounting.Status]);
+                totalFeeAccounting = new FeeAccountingAggregate(
+                    entryFeeAccounting.FeeUsd + exitFeeAccounting.FeeUsd,
+                    totalFeeStatus.ToString(),
+                    SingleValueOrDefault(
+                        [entryFeeAccounting.LiquidityRole, exitFeeAccounting.LiquidityRole],
+                        "Unknown"),
+                    SingleValueOrDefault(
+                        [entryFeeAccounting.CalculationSource, exitFeeAccounting.CalculationSource],
+                        "mixed"),
+                    SingleNullableValueOrDefault([entryFeeAccounting.Rate, exitFeeAccounting.Rate]),
+                    SingleNullableValueOrDefault([entryFeeAccounting.Exponent, exitFeeAccounting.Exponent]),
+                    SingleNullableValueOrDefault([entryFeeAccounting.TakerOnly, exitFeeAccounting.TakerOnly]),
+                    new[] { entryFeeAccounting.CalculatedAtUtc, exitFeeAccounting.CalculatedAtUtc }.Max());
+            }
+            decimal? netRealizedPnl = totalFeeAccounting.IsFullyAccounted
+                ? realizedPnl - totalFeeAccounting.FeeUsd
+                : null;
             var category = metadata.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Category))?.Category ?? run.Category;
 
             if (!IsFixedOutcomeMaker(runVariant) && remainingSizeShares > 0m)
@@ -6252,7 +6300,22 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     won,
                     "BtcUpDown5mGammaClosedMarket",
                     nowUtc,
-                    nowUtc);
+                    nowUtc,
+                    FeeUsd: entrySizeShares > 0m
+                        ? entryFeeAccounting.FeeUsd * (remainingSizeShares / entrySizeShares)
+                        : 0m,
+                    FeeAccountingStatus: entryFeeAccounting.Status,
+                    FeeLiquidityRole: entryFeeAccounting.LiquidityRole,
+                    FeeCalculationSource: entryFeeAccounting.CalculationSource,
+                    FeeRate: entryFeeAccounting.Rate,
+                    FeeExponent: entryFeeAccounting.Exponent,
+                    FeeTakerOnly: entryFeeAccounting.TakerOnly,
+                    FeeCalculatedAtUtc: entryFeeAccounting.CalculatedAtUtc,
+                    NetRealizedPnlUsd: entryFeeAccounting.IsFullyAccounted
+                        ? settlementRealizedPnl - (entrySizeShares > 0m
+                            ? entryFeeAccounting.FeeUsd * (remainingSizeShares / entrySizeShares)
+                            : 0m)
+                        : null);
 
                 await repository.TryAddPaperPositionSettlementAsync(settlement, cancellationToken);
             }
@@ -6268,7 +6331,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     0m,
                     0m,
                     nowUtc,
-                    runVariant.CopiedTraderWallet);
+                    runVariant.CopiedTraderWallet,
+                    FeeUsd: 0m,
+                    FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString(),
+                    NetUnrealizedPnlUsd: 0m);
                 await repository.UpsertPaperPositionAsync(settledPosition, cancellationToken);
                 exposureCache.ApplyPaperPosition(settledPosition);
             }
@@ -6283,6 +6349,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     SettlementPrice = settlementPrice,
                     SettlementValueUsd = totalSettlementValue,
                     RealizedPnlUsd = realizedPnl,
+                    FeeUsd = totalFeeAccounting.FeeUsd,
+                    FeeAccountingStatus = totalFeeAccounting.Status,
+                    FeeLiquidityRole = totalFeeAccounting.LiquidityRole,
+                    FeeCalculationSource = totalFeeAccounting.CalculationSource,
+                    FeeRate = totalFeeAccounting.Rate,
+                    FeeExponent = totalFeeAccounting.Exponent,
+                    FeeTakerOnly = totalFeeAccounting.TakerOnly,
+                    FeeCalculatedAtUtc = totalFeeAccounting.CalculatedAtUtc,
+                    NetRealizedPnlUsd = netRealizedPnl,
                     SettledAtUtc = nowUtc,
                     UpdatedAtUtc = nowUtc
                 },
@@ -6445,11 +6520,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return null;
         }
 
+        var accountedFill = feeAccountingService is null
+            ? evaluation.Fill
+            : await feeAccountingService.ApplyToPaperFillAsync(
+                evaluation.Order,
+                evaluation.Fill,
+                cancellationToken);
         var filledOrder = paperTradingEngine.ApplyFillStatus(
             evaluation.Order,
-            evaluation.Fill,
+            accountedFill,
             previouslyFilledShares);
-        await repository.AddPaperFillAsync(evaluation.Fill, cancellationToken);
+        await repository.AddPaperFillAsync(accountedFill, cancellationToken);
         await repository.UpdatePaperOrderAsync(filledOrder, cancellationToken);
         exposureCache.ApplyPaperOrder(filledOrder);
 
@@ -6462,21 +6543,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             var updatedPosition = paperTradingEngine.ApplyBuyFill(
                 currentPosition,
                 evaluation.Order,
-                evaluation.Fill,
-                evaluation.Fill.Price,
+                accountedFill,
+                accountedFill.Price,
                 nowUtc);
             await repository.UpsertPaperPositionAsync(updatedPosition, cancellationToken);
             exposureCache.ApplyPaperPosition(updatedPosition);
             await repository.ActivatePaperCopiedLeaderPositionAsync(
                 evaluation.Order.Id,
-                evaluation.Fill.SizeShares,
-                evaluation.Fill.FilledAtUtc,
+                accountedFill.SizeShares,
+                accountedFill.FilledAtUtc,
                 cancellationToken);
         }
 
         return SummarizeOpeningLimitFills(
             filledOrder,
-            [.. existingFills, evaluation.Fill]);
+            [.. existingFills, accountedFill]);
     }
 
     private async Task<PreOpenSellExitSummary> GetPreOpenSellExitSummaryAsync(
@@ -6503,6 +6584,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var soldSizeShares = 0m;
         var proceedsUsd = 0m;
+        var feeSlices = new List<(PaperFill Fill, decimal Fraction)>();
         DateTimeOffset? lastFilledAtUtc = null;
         foreach (var order in orders
             .Where(order => order.Side == TradeSide.Sell)
@@ -6532,11 +6614,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                 soldSizeShares += takeShares;
                 proceedsUsd += takeShares * fill.Price;
+                feeSlices.Add((fill, fillSize > 0m ? takeShares / fillSize : 0m));
                 lastFilledAtUtc = fill.FilledAtUtc;
             }
         }
 
-        return new PreOpenSellExitSummary(soldSizeShares, proceedsUsd, lastFilledAtUtc);
+        return new PreOpenSellExitSummary(
+            soldSizeShares,
+            proceedsUsd,
+            lastFilledAtUtc,
+            SummarizeFeeAccounting(feeSlices));
     }
 
     private static PaperOrder SynchronizeOpeningLimitFilledOrderStatus(
@@ -6564,6 +6651,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         var sizeShares = 0m;
         var notionalUsd = 0m;
+        var feeSlices = new List<(PaperFill Fill, decimal Fraction)>();
         DateTimeOffset? lastFilledAtUtc = null;
 
         foreach (var fill in fills.OrderBy(fill => fill.FilledAtUtc).ThenBy(fill => fill.Id))
@@ -6582,6 +6670,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
             sizeShares += takeShares;
             notionalUsd += takeShares * fill.Price;
+            feeSlices.Add((fill, fillSize > 0m ? takeShares / fillSize : 0m));
             lastFilledAtUtc = fill.FilledAtUtc;
         }
 
@@ -6594,7 +6683,62 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             sizeShares,
             notionalUsd / sizeShares,
             notionalUsd,
-            lastFilledAtUtc);
+            lastFilledAtUtc,
+            SummarizeFeeAccounting(feeSlices));
+    }
+
+    private static StrategyMarketPaperRun ApplyFeeAccounting(
+        StrategyMarketPaperRun run,
+        IReadOnlyList<PaperFill> fills)
+    {
+        var fee = SummarizeFeeAccounting(fills.Select(fill => (fill, 1m)));
+        return run with
+        {
+            FeeUsd = fee.FeeUsd,
+            FeeAccountingStatus = fee.Status,
+            FeeLiquidityRole = fee.LiquidityRole,
+            FeeCalculationSource = fee.CalculationSource,
+            FeeRate = fee.Rate,
+            FeeExponent = fee.Exponent,
+            FeeTakerOnly = fee.TakerOnly,
+            FeeCalculatedAtUtc = fee.CalculatedAtUtc
+        };
+    }
+
+    private static FeeAccountingAggregate SummarizeFeeAccounting(
+        IEnumerable<(PaperFill Fill, decimal Fraction)> feeSlices)
+    {
+        var slices = feeSlices.Where(item => item.Fraction > 0m).ToArray();
+        if (slices.Length == 0)
+        {
+            return FeeAccountingAggregate.LegacyUnknown;
+        }
+
+        var status = FeeAccountingRules.Aggregate(slices.Select(item => item.Fill.FeeAccountingStatus));
+        return new FeeAccountingAggregate(
+            slices.Sum(item => item.Fill.FeeUsd * Math.Min(1m, item.Fraction)),
+            status.ToString(),
+            SingleValueOrDefault(slices.Select(item => item.Fill.FeeLiquidityRole), "Unknown"),
+            SingleValueOrDefault(slices.Select(item => item.Fill.FeeCalculationSource), "mixed"),
+            SingleNullableValueOrDefault(slices.Select(item => item.Fill.FeeRate)),
+            SingleNullableValueOrDefault(slices.Select(item => item.Fill.FeeExponent)),
+            SingleNullableValueOrDefault(slices.Select(item => item.Fill.FeeTakerOnly)),
+            slices.Max(item => item.Fill.FeeCalculatedAtUtc));
+    }
+
+    private static string SingleValueOrDefault(IEnumerable<string> values, string fallback)
+    {
+        var distinct = values
+            .Select(value => string.IsNullOrWhiteSpace(value) ? fallback : value)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return distinct.Length == 1 ? distinct[0] : fallback;
+    }
+
+    private static T? SingleNullableValueOrDefault<T>(IEnumerable<T?> values) where T : struct
+    {
+        var distinct = values.Distinct().ToArray();
+        return distinct.Length == 1 ? distinct[0] : null;
     }
 
     private static decimal GetFilledShares(IReadOnlyList<PaperFill> fills, decimal maxShares)
@@ -20616,6 +20760,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             UpdatedAtUtc = DateTimeOffset.UtcNow
         };
 
+        if (feeAccountingService is not null && updatedLiveOrder.FilledSize > 0m)
+        {
+            updatedLiveOrder = await feeAccountingService.ApplyToLiveOrderAsync(
+                updatedLiveOrder,
+                cancellationToken);
+        }
+
         try
         {
             await repository.UpdateLiveOrderAsync(updatedLiveOrder, cancellationToken);
@@ -20914,7 +21065,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 fillPrice,
                 fillSize,
                 filledAtUtc,
-                evidence);
+                evidence,
+                FeeLiquidityRole: "Taker");
+            if (feeAccountingService is not null)
+            {
+                paperFill = await feeAccountingService.ApplyToPaperFillAsync(
+                    actualPaperOrder,
+                    paperFill,
+                    cancellationToken);
+            }
             await repository.AddPaperFillAsync(paperFill, cancellationToken);
 
             var currentPosition = await repository.GetPaperPositionAsync(
@@ -20938,8 +21097,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         await repository.UpdatePaperOrderAsync(actualPaperOrder, cancellationToken);
         exposureCache.ApplyPaperOrder(actualPaperOrder);
+        var feeAccountedRun = existingFills.Count == 0
+            ? ApplyFeeAccounting(run, await repository.GetPaperFillsForOrderAsync(paperOrder.Id, cancellationToken))
+            : ApplyFeeAccounting(run, existingFills);
         await repository.UpdateStrategyMarketPaperRunAsync(
-            run with
+            feeAccountedRun with
             {
                 Status = StrategyMarketPaperRunStatuses.Entered,
                 EntryPrice = fillPrice,
@@ -20984,9 +21146,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             liveOrder.Id,
             cancellationToken);
         var actualPaperOrder = reconciliation.PaperOrder;
+        var feeAccountedRun = ApplyFeeAccounting(run, [reconciliation.PaperFill]);
         var filledAtUtc = actualPaperOrder.FilledAtUtc ?? liveOrder.SubmittedAtUtc ?? liveOrder.UpdatedAtUtc;
         await repository.UpdateStrategyMarketPaperRunAsync(
-            run with
+            feeAccountedRun with
             {
                 Status = StrategyMarketPaperRunStatuses.Entered,
                 EntryPrice = actualPaperOrder.Price,
@@ -23042,14 +23205,53 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         decimal SizeShares,
         decimal AverageFillPrice,
         decimal NotionalUsd,
-        DateTimeOffset? LastFilledAtUtc);
+        DateTimeOffset? LastFilledAtUtc,
+        FeeAccountingAggregate FeeAccounting);
 
     private sealed record PreOpenSellExitSummary(
         decimal SoldSizeShares,
         decimal ProceedsUsd,
-        DateTimeOffset? LastFilledAtUtc)
+        DateTimeOffset? LastFilledAtUtc,
+        FeeAccountingAggregate FeeAccounting)
     {
-        public static PreOpenSellExitSummary Empty { get; } = new(0m, 0m, null);
+        public static PreOpenSellExitSummary Empty { get; } = new(
+            0m,
+            0m,
+            null,
+            FeeAccountingAggregate.CalculatedZero);
+    }
+
+    private sealed record FeeAccountingAggregate(
+        decimal FeeUsd,
+        string Status,
+        string LiquidityRole,
+        string CalculationSource,
+        decimal? Rate,
+        int? Exponent,
+        bool? TakerOnly,
+        DateTimeOffset? CalculatedAtUtc)
+    {
+        public static FeeAccountingAggregate LegacyUnknown { get; } = new(
+            0m,
+            FeeAccountingStatus.LegacyUnknown.ToString(),
+            FeeLiquidityRole.Unknown.ToString(),
+            string.Empty,
+            null,
+            null,
+            null,
+            null);
+
+        public static FeeAccountingAggregate CalculatedZero { get; } = new(
+            0m,
+            FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole.Unknown.ToString(),
+            "no-fill-no-fee",
+            null,
+            null,
+            null,
+            null);
+
+        public bool IsFullyAccounted => FeeAccountingRules.IsAccounted(Status);
     }
 
     private sealed record BtcOpeningLimitTargetSizingEstimate(

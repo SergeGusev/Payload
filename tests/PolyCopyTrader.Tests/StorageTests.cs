@@ -66,6 +66,73 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresSchema_FeeAccountingColumnsAreBackwardCompatibleAndDoNotBackfillHistory()
+    {
+        var schema = PostgresSchema.SchemaSql.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var feeTables = new[]
+        {
+            "paper_fills",
+            "strategy_market_paper_runs",
+            "paper_positions",
+            "paper_position_settlements",
+            "live_orders"
+        };
+
+        foreach (var table in feeTables)
+        {
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS fee_usd numeric(28,8) NOT NULL DEFAULT 0;", schema, StringComparison.Ordinal);
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown';", schema, StringComparison.Ordinal);
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS fee_liquidity_role text NOT NULL DEFAULT 'Unknown';", schema, StringComparison.Ordinal);
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS fee_calculation_source text NOT NULL DEFAULT '';", schema, StringComparison.Ordinal);
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS fee_rate numeric(28,8) NULL;", schema, StringComparison.Ordinal);
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS fee_exponent integer NULL;", schema, StringComparison.Ordinal);
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS fee_taker_only boolean NULL;", schema, StringComparison.Ordinal);
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS fee_calculated_at_utc timestamptz NULL;", schema, StringComparison.Ordinal);
+        }
+
+        foreach (var table in new[] { "paper_fills", "strategy_market_paper_runs", "paper_position_settlements", "live_orders" })
+        {
+            Assert.Contains($"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS net_realized_pnl_usd numeric(28,8) NULL;", schema, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS net_unrealized_pnl_usd numeric(28,8) NULL;", schema, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET fee_accounting_status = 'Calculated'", schema, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET net_realized_pnl_usd =", schema, StringComparison.Ordinal);
+        Assert.DoesNotContain("SET net_unrealized_pnl_usd =", schema, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_FeeAccountingFieldsFlowThroughSingleBatchReadAndReconciliationMappings()
+    {
+        var source = ReadStorageRepositorySource().Replace("\r\n", "\n", StringComparison.Ordinal);
+        var directCompactionSource = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.DirectSkipCompaction.cs").Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate", source, StringComparison.Ordinal);
+        Assert.Contains("fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd", source, StringComparison.Ordinal);
+        Assert.Contains("fee_exponent, fee_taker_only, fee_calculated_at_utc, net_unrealized_pnl_usd", source, StringComparison.Ordinal);
+
+        Assert.Contains("fee_accounting_status = fill.FeeAccountingStatus", source, StringComparison.Ordinal);
+        Assert.Contains("fee_accounting_status = position.FeeAccountingStatus", source, StringComparison.Ordinal);
+        Assert.Contains("fee_accounting_status = settlement.FeeAccountingStatus", source, StringComparison.Ordinal);
+        Assert.Contains("fee_accounting_status = run.FeeAccountingStatus", source, StringComparison.Ordinal);
+        Assert.Contains("fee_accounting_status = @FeeAccountingStatus", source, StringComparison.Ordinal);
+
+        Assert.Contains("AddWithValue(\"FeeAccountingStatus\", fill.FeeAccountingStatus)", source, StringComparison.Ordinal);
+        Assert.Contains("AddWithValue(\"FeeAccountingStatus\", position.FeeAccountingStatus)", source, StringComparison.Ordinal);
+        Assert.Contains("AddWithValue(\"FeeAccountingStatus\", settlement.FeeAccountingStatus)", source, StringComparison.Ordinal);
+        Assert.Contains("AddWithValue(\"FeeAccountingStatus\", run.FeeAccountingStatus)", source, StringComparison.Ordinal);
+        Assert.Contains("AddWithValue(\"FeeAccountingStatus\", order.FeeAccountingStatus)", source, StringComparison.Ordinal);
+
+        Assert.Contains("reader.GetString(29)", source, StringComparison.Ordinal);
+        Assert.Contains("reader.IsDBNull(46) ? null : reader.GetDecimal(46)", source, StringComparison.Ordinal);
+        Assert.Contains("net_realized_pnl_usd numeric", directCompactionSource, StringComparison.Ordinal);
+        Assert.Contains("fee_accounting_status, fee_liquidity_role, fee_calculation_source", directCompactionSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresSchema_ContainsRequiredTables()
     {
         foreach (var table in PostgresSchema.RequiredTables)
@@ -938,7 +1005,7 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void DashboardDataService_LoadOrderRows_LoadsPaperRunSettlementRows()
+    public void DashboardDataService_LoadOrderRows_LoadsPaperRunAndFillAccountingRows()
     {
         var source = ReadDashboardDataServiceSource();
         var start = source.IndexOf("LoadOrderRowsAsync", StringComparison.Ordinal);
@@ -949,7 +1016,8 @@ public sealed class StorageTests
 
         var method = source[start..end];
         Assert.Contains("GetPaperRunsByOrderIdAsync", method, StringComparison.Ordinal);
-        Assert.Contains("ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId)", method, StringComparison.Ordinal);
+        Assert.Contains("GetPaperFillsByOrderIdAsync", method, StringComparison.Ordinal);
+        Assert.Contains("ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId, paperFillsByOrderId)", method, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1598,6 +1666,62 @@ public sealed class StorageTests
         Assert.True(markTransaction >= 0 && markLock > markTransaction);
         Assert.True(markWrite > markLock && markCommit > markWrite);
         Assert.Contains("command.Transaction = transaction", markMethod, StringComparison.Ordinal);
+        Assert.Contains("net_unrealized_pnl_usd = @NetUnrealizedPnlUsd", markMethod, StringComparison.Ordinal);
+        Assert.Contains("IS NOT DISTINCT FROM @ExpectedNetUnrealizedPnlUsd", markMethod, StringComparison.Ordinal);
+
+        var batchMarkEnd = source.IndexOf("UpsertPaperPositionsAsync", batchMarkStart, StringComparison.Ordinal);
+        Assert.True(batchMarkEnd > batchMarkStart);
+        var batchMarkMethod = source[batchMarkStart..batchMarkEnd];
+        Assert.Contains("net_unrealized_pnl_usd = update.NetUnrealizedPnlUsd", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("net_unrealized_pnl_usd = mark_update.net_unrealized_pnl_usd", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("expected_net_unrealized_pnl_usd numeric", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("IS NOT DISTINCT FROM mark_update.expected_net_unrealized_pnl_usd", batchMarkMethod, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PaperPositionMarkUpdate_PropagatesNullableNetPnlInTestAndNoOpRepositories()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 8, 10, 0, 0, TimeSpan.Zero);
+        var original = new PaperPosition(
+            "asset-net-mark",
+            "condition-net-mark",
+            "Up",
+            2m,
+            0.40m,
+            1m,
+            0.20m,
+            nowUtc,
+            "wallet-net-mark",
+            FeeUsd: 0.01m,
+            FeeAccountingStatus: "Calculated",
+            NetUnrealizedPnlUsd: 0.19m);
+        var update = new PaperPositionMarkUpdate(
+            original,
+            EstimatedValueUsd: 1.20m,
+            UnrealizedPnlUsd: 0.40m,
+            UpdatedAtUtc: nowUtc.AddSeconds(1),
+            NetUnrealizedPnlUsd: 0.39m);
+        var repository = new TestAppRepository();
+        repository.PaperPositions.Add(original);
+
+        var updated = Assert.Single(await repository.TryUpdatePaperPositionMarksAsync([update]));
+
+        Assert.Equal(0.39m, updated.NetUnrealizedPnlUsd);
+        Assert.Equal(0.39m, Assert.Single(repository.PaperPositions).NetUnrealizedPnlUsd);
+        Assert.True(await repository.TryUpdatePaperPositionMarkAsync(
+            updated,
+            estimatedValueUsd: 1.40m,
+            unrealizedPnlUsd: 0.60m,
+            netUnrealizedPnlUsd: 0.59m,
+            updatedAtUtc: nowUtc.AddSeconds(2)));
+        Assert.Equal(0.59m, Assert.Single(repository.PaperPositions).NetUnrealizedPnlUsd);
+        Assert.Empty(await new NoOpAppRepository().TryUpdatePaperPositionMarksAsync([update]));
+        Assert.False(await new NoOpAppRepository().TryUpdatePaperPositionMarkAsync(
+            original,
+            estimatedValueUsd: 1.20m,
+            unrealizedPnlUsd: 0.40m,
+            netUnrealizedPnlUsd: 0.39m,
+            updatedAtUtc: nowUtc.AddSeconds(1)));
     }
 
     [Fact]
@@ -1952,7 +2076,27 @@ public sealed class StorageTests
         Assert.True(end > start);
 
         method = source[start..end];
-        Assert.Contains("LEAST(100.00, GREATEST(0, live_available_balance + @RealizedPnlUsd))", method, StringComparison.Ordinal);
+        Assert.Contains("LEAST(100.00, GREATEST(0, live_available_balance + @BalanceRealizedPnlUsd))", method, StringComparison.Ordinal);
+        Assert.Contains("realized_pnl_usd = @GrossRealizedPnlUsd", method, StringComparison.Ordinal);
+        Assert.Contains("net_realized_pnl_usd = @NetRealizedPnlUsd", method, StringComparison.Ordinal);
+        Assert.Contains("balance_effect_applied = @NetRealizedPnlUsd IS NOT NULL", method, StringComparison.Ordinal);
+        Assert.Contains("netRealizedPnlUsd!.Value", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("netRealizedPnlUsd ?? grossRealizedPnlUsd", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PostgresRepository_GrossLiveRoiDenominatorExcludesFees()
+    {
+        var source = ReadStorageRepositorySource();
+
+        Assert.Contains("WHEN filled_notional_usd > 0 THEN filled_notional_usd", source, StringComparison.Ordinal);
+        Assert.Contains("WHEN filled_size > 0 THEN price * filled_size", source, StringComparison.Ordinal);
+        Assert.Contains("WHEN cost_basis_usd > 0 THEN GREATEST(0, cost_basis_usd - fee_usd)", source, StringComparison.Ordinal);
+        Assert.Contains("WHEN live_order.filled_notional_usd > 0 THEN live_order.filled_notional_usd", source, StringComparison.Ordinal);
+        Assert.Contains("WHEN live_order.filled_size > 0 THEN live_order.price * live_order.filled_size", source, StringComparison.Ordinal);
+        Assert.Contains("WHEN live_order.cost_basis_usd > 0 THEN GREATEST(0, live_order.cost_basis_usd - live_order.fee_usd)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("filled_notional_usd + fee_usd", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("live_order.filled_notional_usd + live_order.fee_usd", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -2287,6 +2431,75 @@ CREATE INDEX first_table_id_idx ON first_table(id);
             SkipReason: null,
             settledAtUtc.AddMinutes(-5),
             settledAtUtc);
+    }
+
+    [Fact]
+    public async Task TestRepository_LiveSettlementWaitsForNetFeeAccountingAndAppliesExactlyOnce()
+    {
+        var repository = new TestAppRepository();
+        var strategyId = StrategyIds.FollowLeader;
+        var now = DateTimeOffset.UtcNow;
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with
+        {
+            LiveAvailableBalance = 50m,
+            LiveStakes = true
+        };
+        var order = CreateLiveOrder(strategyId, now.AddMinutes(-5)) with
+        {
+            Status = LiveOrderStatus.Matched,
+            FilledSize = 2m,
+            RemainingSize = 0m,
+            AverageFillPrice = 0.50m,
+            FilledNotionalUsd = 1m,
+            FeeAccountingStatus = FeeAccountingStatus.CalculationUnavailable.ToString()
+        };
+        repository.LiveOrders.Add(order);
+
+        var pending = await repository.ApplyLiveOrderSettlementToStrategyBalanceAsync(
+            order.Id,
+            strategyId,
+            settlementValueUsd: 2m,
+            grossRealizedPnlUsd: 1m,
+            netRealizedPnlUsd: null,
+            winningAssetId: order.AssetId,
+            winningOutcome: order.Outcome,
+            settledAtUtc: now,
+            updatedAtUtc: now);
+
+        Assert.False(pending.Applied);
+        Assert.Equal(50m, repository.StrategySettings[strategyId].LiveAvailableBalance);
+        var pendingOrder = Assert.Single(repository.LiveOrders);
+        Assert.False(pendingOrder.BalanceEffectApplied);
+        Assert.Equal(1m, pendingOrder.RealizedPnlUsd);
+        Assert.Null(pendingOrder.NetRealizedPnlUsd);
+
+        var applied = await repository.ApplyLiveOrderSettlementToStrategyBalanceAsync(
+            order.Id,
+            strategyId,
+            settlementValueUsd: 2m,
+            grossRealizedPnlUsd: 1m,
+            netRealizedPnlUsd: 0.90m,
+            winningAssetId: order.AssetId,
+            winningOutcome: order.Outcome,
+            settledAtUtc: now,
+            updatedAtUtc: now.AddSeconds(1));
+        var duplicate = await repository.ApplyLiveOrderSettlementToStrategyBalanceAsync(
+            order.Id,
+            strategyId,
+            settlementValueUsd: 2m,
+            grossRealizedPnlUsd: 1m,
+            netRealizedPnlUsd: 0.90m,
+            winningAssetId: order.AssetId,
+            winningOutcome: order.Outcome,
+            settledAtUtc: now,
+            updatedAtUtc: now.AddSeconds(2));
+
+        Assert.True(applied.Applied);
+        Assert.False(duplicate.Applied);
+        Assert.Equal(50.90m, repository.StrategySettings[strategyId].LiveAvailableBalance);
+        var settledOrder = Assert.Single(repository.LiveOrders);
+        Assert.True(settledOrder.BalanceEffectApplied);
+        Assert.Equal(0.90m, settledOrder.NetRealizedPnlUsd);
     }
 
     private static PaperOrder CreatePaperOrder(Guid strategyId, DateTimeOffset createdAtUtc)

@@ -133,14 +133,14 @@
                     <DataGridTextColumn Header="Paper not accepted" Binding="{Binding PaperNotAcceptedRunsCount}" Width="135" />
                     <DataGridTextColumn Header="Won" Binding="{Binding WonRunsCount}" Width="60" />
                     <DataGridTextColumn Header="Lost" Binding="{Binding LostRunsCount}" Width="60" />
-                    <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="85" />
-                    <DataGridTextColumn Header="ClosedRoi" Binding="{Binding RoiPct}" Width="85" />
+                    <DataGridTextColumn Header="Gross realized" Binding="{Binding RealizedPnlUsd}" Width="100" />
+                    <DataGridTextColumn Header="Gross closed ROI" Binding="{Binding RoiPct}" Width="110" />
                     <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
                     <DataGridTextColumn Header="Live cond skip" Binding="{Binding LiveConditionSkippedOrdersCount}" Width="105" />
                     <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
                     <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
-                    <DataGridTextColumn Header="Live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="100" />
-                    <DataGridTextColumn Header="Live ROI" Binding="{Binding LiveRoiPct}" Width="80" />
+                    <DataGridTextColumn Header="Gross live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="120" />
+                    <DataGridTextColumn Header="Gross live ROI" Binding="{Binding LiveRoiPct}" Width="100" />
                     <DataGridTextColumn Header="Orders" Binding="{Binding OrdersCount}" Width="70" />
                     <DataGridTextColumn Header="Filled" Binding="{Binding FilledOrdersCount}" Width="70" />
                     <DataGridTextColumn Header="Expired" Binding="{Binding ExpiredOrdersCount}" Width="75" />
@@ -442,14 +442,14 @@
                         <DataGridTextColumn Header="Paper not accepted" Binding="{Binding PaperNotAcceptedRunsCount}" Width="135" />
                         <DataGridTextColumn Header="Won" Binding="{Binding WonPositionsCount}" Width="60" />
                         <DataGridTextColumn Header="Lost" Binding="{Binding LostPositionsCount}" Width="60" />
-                        <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
-                        <DataGridTextColumn Header="Closed ROI" Binding="{Binding ClosedRoiPct}" Width="95" />
+                        <DataGridTextColumn Header="Gross realized" Binding="{Binding RealizedPnlUsd}" Width="105" />
+                        <DataGridTextColumn Header="Gross closed ROI" Binding="{Binding ClosedRoiPct}" Width="115" />
                         <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
                         <DataGridTextColumn Header="Live cond skip" Binding="{Binding LiveConditionSkippedOrdersCount}" Width="105" />
                         <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
                         <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
-                        <DataGridTextColumn Header="Live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="100" />
-                        <DataGridTextColumn Header="Live ROI" Binding="{Binding LiveRoiPct}" Width="80" />
+                        <DataGridTextColumn Header="Gross live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="120" />
+                        <DataGridTextColumn Header="Gross live ROI" Binding="{Binding LiveRoiPct}" Width="100" />
                         <DataGridTemplateColumn Header="Paper $" Width="80">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
@@ -987,7 +987,10 @@
                             <DataGridTextColumn Header="Expires UTC" Binding="{Binding ExpiresUtc}" Width="150" />
                             <DataGridTextColumn Header="Filled UTC" Binding="{Binding FilledUtc}" Width="150" />
                             <DataGridTextColumn Header="Settlement" Binding="{Binding SettlementValueUsd}" Width="90" />
-                            <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
+                            <DataGridTextColumn Header="Gross realized" Binding="{Binding RealizedPnlUsd}" Width="105" />
+                            <DataGridTextColumn Header="Fee" Binding="{Binding FeeUsd}" Width="75" />
+                            <DataGridTextColumn Header="Fee status" Binding="{Binding FeeAccountingStatus}" Width="150" />
+                            <DataGridTextColumn Header="Net realized" Binding="{Binding NetRealizedPnlUsd}" Width="100" />
                             <DataGridTextColumn Header="Settled UTC" Binding="{Binding SettledUtc}" Width="150" />
                             <DataGridTextColumn Header="Winning" Binding="{Binding WinningOutcome}" Width="90" />
                             <DataGridTextColumn Header="Won" Binding="{Binding Won}" Width="60" />
@@ -1009,7 +1012,10 @@
                         <DataGridTextColumn Header="Bid" Binding="{Binding CurrentBid}" Width="80" />
                         <DataGridTextColumn Header="Ask" Binding="{Binding CurrentAsk}" Width="80" />
                         <DataGridTextColumn Header="Value" Binding="{Binding EstimatedValueUsd}" Width="100" />
-                        <DataGridTextColumn Header="Unrealized PnL" Binding="{Binding UnrealizedPnlUsd}" Width="120" />
+                        <DataGridTextColumn Header="Gross unrealized PnL" Binding="{Binding UnrealizedPnlUsd}" Width="145" />
+                        <DataGridTextColumn Header="Fee" Binding="{Binding FeeUsd}" Width="75" />
+                        <DataGridTextColumn Header="Fee status" Binding="{Binding FeeAccountingStatus}" Width="150" />
+                        <DataGridTextColumn Header="Net unrealized PnL" Binding="{Binding NetUnrealizedPnlUsd}" Width="135" />
                         <DataGridTextColumn Header="Realized PnL" Binding="{Binding RealizedPnlUsd}" Width="110" />
                         <DataGridTextColumn Header="Source trader" Binding="{Binding SourceTrader}" Width="160" />
                     </DataGrid.Columns>
@@ -1120,10 +1126,12 @@
                             <DataGridTextColumn Header="Remaining" Binding="{Binding RemainingSize}" Width="90" />
                             <DataGridTextColumn Header="Avg fill" Binding="{Binding AverageFillPrice}" Width="80" />
                             <DataGridTextColumn Header="Filled $" Binding="{Binding FilledNotionalUsd}" Width="90" />
-                            <DataGridTextColumn Header="Cost basis" Binding="{Binding CostBasisUsd}" Width="90" />
+                            <DataGridTextColumn Header="Cost basis + recorded fee" Binding="{Binding CostBasisUsd}" Width="155" />
                             <DataGridTextColumn Header="Fee" Binding="{Binding FeeUsd}" Width="70" />
+                            <DataGridTextColumn Header="Fee status" Binding="{Binding FeeAccountingStatus}" Width="150" />
                             <DataGridTextColumn Header="Settlement" Binding="{Binding SettlementValueUsd}" Width="90" />
-                            <DataGridTextColumn Header="Realized" Binding="{Binding RealizedPnlUsd}" Width="90" />
+                            <DataGridTextColumn Header="Gross realized" Binding="{Binding RealizedPnlUsd}" Width="105" />
+                            <DataGridTextColumn Header="Net realized" Binding="{Binding NetRealizedPnlUsd}" Width="100" />
                             <DataGridTextColumn Header="Settled UTC" Binding="{Binding SettledUtc}" Width="150" />
                             <DataGridTextColumn Header="Winning" Binding="{Binding WinningOutcome}" Width="90" />
                             <DataGridTextColumn Header="Won" Binding="{Binding Won}" Width="60" />

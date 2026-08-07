@@ -113,7 +113,15 @@ internal static class PaperLiveShadowFillAccounting
             fillPrice,
             canonicalSize,
             filledAtUtc,
-            BuildEvidence(liveOrder, fillPrice, canonicalSize, canonicalNotional, reconciledAtUtc, isFinalAccounting));
+            BuildEvidence(liveOrder, fillPrice, canonicalSize, canonicalNotional, reconciledAtUtc, isFinalAccounting),
+            FeeUsd: liveOrder.FeeUsd,
+            FeeAccountingStatus: liveOrder.FeeAccountingStatus,
+            FeeLiquidityRole: ResolveFeeLiquidityRole(liveOrder),
+            FeeCalculationSource: liveOrder.FeeCalculationSource,
+            FeeRate: liveOrder.FeeRate,
+            FeeExponent: liveOrder.FeeExponent,
+            FeeTakerOnly: liveOrder.FeeTakerOnly,
+            FeeCalculatedAtUtc: liveOrder.FeeCalculatedAtUtc);
         var canonicalPosition = CreateCanonicalPosition(
             currentOrder,
             canonicalFill,
@@ -122,6 +130,31 @@ internal static class PaperLiveShadowFillAccounting
             reconciledAtUtc);
 
         return new CanonicalPaperLiveShadowState(canonicalOrder, canonicalFill, canonicalPosition, isFinalAccounting);
+    }
+
+    private static string ResolveFeeLiquidityRole(LiveOrder liveOrder)
+    {
+        var persistedRole = FeeAccountingRules.ParseLiquidityRole(liveOrder.FeeLiquidityRole);
+        var isImmediateOrder = string.Equals(liveOrder.OrderType, "FAK", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(liveOrder.OrderType, "FOK", StringComparison.OrdinalIgnoreCase);
+        if (liveOrder.PostOnly == true)
+        {
+            if (isImmediateOrder || persistedRole == FeeLiquidityRole.Taker)
+            {
+                return FeeLiquidityRole.Unknown.ToString();
+            }
+
+            return FeeLiquidityRole.Maker.ToString();
+        }
+
+        if (isImmediateOrder)
+        {
+            return persistedRole == FeeLiquidityRole.Maker
+                ? FeeLiquidityRole.Unknown.ToString()
+                : FeeLiquidityRole.Taker.ToString();
+        }
+
+        return persistedRole.ToString();
     }
 
     private static DateTimeOffset ResolveCanonicalFillTimestamp(
@@ -192,6 +225,7 @@ internal static class PaperLiveShadowFillAccounting
     {
         var oldSize = existingFills.Sum(fill => Math.Max(0m, fill.SizeShares));
         var oldCost = existingFills.Sum(fill => Math.Max(0m, fill.SizeShares) * fill.Price);
+        var oldFee = existingFills.Sum(fill => Math.Max(0m, fill.FeeUsd));
         if (oldSize > AccountingTolerance && currentPosition is null)
         {
             throw new InvalidOperationException("Existing Paper shadow fills have no matching aggregate Paper position.");
@@ -208,19 +242,37 @@ internal static class PaperLiveShadowFillAccounting
 
         var currentSize = currentPosition?.SizeShares ?? 0m;
         var currentCost = currentSize * (currentPosition?.AveragePrice ?? 0m);
+        var currentFee = currentPosition?.FeeUsd ?? 0m;
         var baseSize = currentSize - oldSize;
         var baseCost = currentCost - oldCost;
-        if (baseSize < -AccountingTolerance || baseCost < -AccountingTolerance)
+        var baseFee = currentFee - oldFee;
+        if (baseSize < -AccountingTolerance || baseCost < -AccountingTolerance || baseFee < -AccountingTolerance)
         {
             throw new InvalidOperationException("Aggregate Paper position no longer contains the existing shadow fill contribution.");
         }
 
         baseSize = Math.Max(0m, baseSize);
         baseCost = Math.Max(0m, baseCost);
+        baseFee = Math.Max(0m, baseFee);
         var newSize = baseSize + canonicalFill.SizeShares;
         var newCost = baseCost + canonicalFill.Price * canonicalFill.SizeShares;
+        var newFee = baseFee + canonicalFill.FeeUsd;
         var averagePrice = newCost / newSize;
         var estimatedValue = newSize * canonicalFill.Price;
+        var unrealizedPnl = estimatedValue - newCost;
+        // The aggregate position does not persist a versioned pre-shadow component snapshot.
+        // For legacy mixed positions, retaining the existing aggregate provenance is deliberately
+        // conservative: it can keep net unknown, but it must never invent full fee coverage.
+        var feeStatus = baseSize <= AccountingTolerance
+            ? FeeAccountingRules.ParseStatus(canonicalFill.FeeAccountingStatus)
+            : FeeAccountingRules.Aggregate(
+                [currentPosition!.FeeAccountingStatus, canonicalFill.FeeAccountingStatus]);
+        var feeRole = baseSize <= AccountingTolerance
+            ? canonicalFill.FeeLiquidityRole
+            : SameOrDefault(currentPosition!.FeeLiquidityRole, canonicalFill.FeeLiquidityRole, "Unknown");
+        var feeSource = baseSize <= AccountingTolerance
+            ? canonicalFill.FeeCalculationSource
+            : SameOrDefault(currentPosition!.FeeCalculationSource, canonicalFill.FeeCalculationSource, "mixed");
         return new PaperPosition(
             order.AssetId,
             order.ConditionId,
@@ -228,9 +280,44 @@ internal static class PaperLiveShadowFillAccounting
             newSize,
             averagePrice,
             estimatedValue,
-            estimatedValue - newCost,
+            unrealizedPnl,
             reconciledAtUtc,
-            order.CopiedTraderWallet);
+            order.CopiedTraderWallet,
+            newFee,
+            feeStatus.ToString(),
+            feeRole,
+            feeSource,
+            baseSize <= AccountingTolerance ? canonicalFill.FeeRate : SameOrNull(currentPosition!.FeeRate, canonicalFill.FeeRate),
+            baseSize <= AccountingTolerance ? canonicalFill.FeeExponent : SameOrNull(currentPosition!.FeeExponent, canonicalFill.FeeExponent),
+            baseSize <= AccountingTolerance ? canonicalFill.FeeTakerOnly : SameOrNull(currentPosition!.FeeTakerOnly, canonicalFill.FeeTakerOnly),
+            Max(currentPosition?.FeeCalculatedAtUtc, canonicalFill.FeeCalculatedAtUtc),
+            FeeAccountingRules.IsAccounted(feeStatus) ? unrealizedPnl - newFee : null);
+    }
+
+    private static string SameOrDefault(string left, string right, string fallback)
+    {
+        return string.Equals(left, right, StringComparison.OrdinalIgnoreCase) ? left : fallback;
+    }
+
+    private static T? SameOrNull<T>(T? left, T? right)
+        where T : struct
+    {
+        return EqualityComparer<T?>.Default.Equals(left, right) ? left : null;
+    }
+
+    private static DateTimeOffset? Max(DateTimeOffset? left, DateTimeOffset? right)
+    {
+        if (left is null)
+        {
+            return right;
+        }
+
+        if (right is null)
+        {
+            return left;
+        }
+
+        return left > right ? left : right;
     }
 
     private static string AttachLiveFillAccounting(

@@ -22,7 +22,8 @@ public sealed class LiveTradingProcessor(
     ServiceControlState controlState,
     IPolymarketDataApiClient? dataApiClient = null,
     PolymarketAuthOptions? authOptions = null,
-    IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null) : ILiveTradingProcessor
+    IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null,
+    IPolymarketFeeAccountingService? feeAccountingService = null) : ILiveTradingProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const string PaperLiveShadowActualFillSource = "paper_live_shadow_actual_fill";
@@ -75,6 +76,12 @@ public sealed class LiveTradingProcessor(
                     if (status is not null)
                     {
                         var updatedOrder = ApplyStatus(order, status);
+                        if (feeAccountingService is not null && updatedOrder.FilledSize > 0m)
+                        {
+                            updatedOrder = await feeAccountingService.ApplyToLiveOrderAsync(
+                                updatedOrder,
+                                cancellationToken);
+                        }
                         await repository.UpdateLiveOrderAsync(updatedOrder, cancellationToken);
                         exposureCache.ApplyLiveOrder(updatedOrder);
                         await SyncPaperShadowAsync(updatedOrder, cancellationToken);
@@ -259,9 +266,18 @@ public sealed class LiveTradingProcessor(
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                await TrySyncPaperShadowBeforeLiveSettlementAsync(order, cancellationToken);
+                var settlementOrder = order;
+                if (feeAccountingService is not null &&
+                    FeeAccountingRules.ParseStatus(order.FeeAccountingStatus) == FeeAccountingStatus.CalculationUnavailable &&
+                    order.FeeCalculatedAtUtc is not null)
+                {
+                    settlementOrder = await feeAccountingService.ApplyToLiveOrderAsync(order, cancellationToken);
+                    await repository.UpdateLiveOrderAsync(settlementOrder, cancellationToken);
+                }
 
-                var metadata = await GetResolvedMetadataAsync(order, cancellationToken);
+                await TrySyncPaperShadowBeforeLiveSettlementAsync(settlementOrder, cancellationToken);
+
+                var metadata = await GetResolvedMetadataAsync(settlementOrder, cancellationToken);
                 if (metadata.Count == 0)
                 {
                     continue;
@@ -275,18 +291,22 @@ public sealed class LiveTradingProcessor(
 
                 var winningAssetId = metadata.FirstOrDefault(item =>
                     string.Equals(item.Outcome, winningOutcome, StringComparison.OrdinalIgnoreCase))?.TokenId;
-                var settledSizeShares = order.FilledSize > 0m ? order.FilledSize : order.SizeShares;
-                var costBasis = order.CostBasisUsd > 0m
-                    ? order.CostBasisUsd
-                    : (order.AverageFillPrice ?? order.Price) * settledSizeShares + order.FeeUsd;
-                var settlementValue = IsWinningOrder(order, winningAssetId, winningOutcome) ? settledSizeShares : 0m;
-                var realizedPnl = settlementValue - costBasis;
+                var settledSizeShares = settlementOrder.FilledSize > 0m ? settlementOrder.FilledSize : settlementOrder.SizeShares;
+                var grossCostBasis = settlementOrder.FilledNotionalUsd > 0m
+                    ? settlementOrder.FilledNotionalUsd
+                    : (settlementOrder.AverageFillPrice ?? settlementOrder.Price) * settledSizeShares;
+                var settlementValue = IsWinningOrder(settlementOrder, winningAssetId, winningOutcome) ? settledSizeShares : 0m;
+                var grossRealizedPnl = settlementValue - grossCostBasis;
+                var netRealizedPnl = FeeAccountingRules.IsAccounted(settlementOrder.FeeAccountingStatus)
+                    ? grossRealizedPnl - settlementOrder.FeeUsd
+                    : (decimal?)null;
                 var now = DateTimeOffset.UtcNow;
                 var result = await repository.ApplyLiveOrderSettlementToStrategyBalanceAsync(
-                    order.Id,
-                    order.StrategyId,
+                    settlementOrder.Id,
+                    settlementOrder.StrategyId,
                     settlementValue,
-                    realizedPnl,
+                    grossRealizedPnl,
+                    netRealizedPnl,
                     winningAssetId,
                     winningOutcome,
                     now,
@@ -299,14 +319,16 @@ public sealed class LiveTradingProcessor(
 
                 applied++;
                 logger.LogInformation(
-                    "Applied live order settlement to strategy balance. LiveOrderId={LiveOrderId} StrategyId={StrategyId} SettlementValueUsd={SettlementValueUsd} RealizedPnlUsd={RealizedPnlUsd} AvailableBalance={AvailableBalance}.",
-                    order.Id,
-                    StrategyIds.Normalize(order.StrategyId),
+                    "Applied live order settlement to strategy balance. LiveOrderId={LiveOrderId} StrategyId={StrategyId} SettlementValueUsd={SettlementValueUsd} GrossRealizedPnlUsd={GrossRealizedPnlUsd} NetRealizedPnlUsd={NetRealizedPnlUsd} FeeAccountingStatus={FeeAccountingStatus} AvailableBalance={AvailableBalance}.",
+                    settlementOrder.Id,
+                    StrategyIds.Normalize(settlementOrder.StrategyId),
                     settlementValue,
-                    realizedPnl,
+                    grossRealizedPnl,
+                    netRealizedPnl,
+                    settlementOrder.FeeAccountingStatus,
                     result.AvailableBalance);
 
-                await UpdateStrategyLiveLostCounterAfterSettlementAsync(order.StrategyId, settlementValue > 0m, now, cancellationToken);
+                await UpdateStrategyLiveLostCounterAfterSettlementAsync(settlementOrder.StrategyId, settlementValue > 0m, now, cancellationToken);
 
                 if (result.LiveStakesDisabled)
                 {

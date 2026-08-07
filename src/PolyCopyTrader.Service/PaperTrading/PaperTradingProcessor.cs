@@ -20,7 +20,8 @@ public sealed class PaperTradingProcessor(
     PaperTradingOptions paperTradingOptions,
     IExposureSnapshotCache exposureCache,
     ConservativePaperGtdFillEstimator conservativeGtdFillEstimator,
-    IAppRepository repository) : IPaperTradingProcessor
+    IAppRepository repository,
+    IPolymarketFeeAccountingService? feeAccountingService = null) : IPaperTradingProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
@@ -169,12 +170,19 @@ public sealed class PaperTradingProcessor(
                     continue;
                 }
 
+                if (feeAccountingService is not null)
+                {
+                    fill = await feeAccountingService.ApplyToPaperFillAsync(orderForFill, fill, cancellationToken);
+                }
+
                 var currentBid = orderBook?.BestBid ?? currentPosition?.AveragePrice ?? fill.Price;
                 if (orderForFill.Side == TradeSide.Sell && currentPosition is not null)
                 {
+                    var grossRealizedPnlUsd = (fill.Price - currentPosition.AveragePrice) * fill.SizeShares;
                     fill = fill with
                     {
-                        RealizedPnlUsd = (fill.Price - currentPosition.AveragePrice) * fill.SizeShares
+                        RealizedPnlUsd = grossRealizedPnlUsd,
+                        NetRealizedPnlUsd = CalculateNetSellPnl(grossRealizedPnlUsd, currentPosition, fill)
                     };
                 }
 
@@ -353,7 +361,12 @@ public sealed class PaperTradingProcessor(
                     estimate.AverageFillPrice,
                     estimate.SizeShares,
                     estimate.NotionalUsd,
-                    estimate.LevelsUsed));
+                    estimate.LevelsUsed),
+                FeeLiquidityRole: "Taker");
+            if (feeAccountingService is not null)
+            {
+                fill = await feeAccountingService.ApplyToPaperFillAsync(order, fill, cancellationToken);
+            }
             var isPartialFill = FakExecutionRules.IsPartialNotionalFill(
                 estimate.NotionalUsd,
                 executionIntent.TargetNotionalUsd);
@@ -422,6 +435,23 @@ public sealed class PaperTradingProcessor(
             await TryRecordApiErrorAsync("ProcessFakTakerPaperOrder", ex.Message, cancellationToken);
             return new FakPaperOrderProcessingResult(false, false, false);
         }
+    }
+
+    private static decimal? CalculateNetSellPnl(
+        decimal grossRealizedPnlUsd,
+        PaperPosition currentPosition,
+        PaperFill sellFill)
+    {
+        if (!FeeAccountingRules.IsAccounted(currentPosition.FeeAccountingStatus) ||
+            !FeeAccountingRules.IsAccounted(sellFill.FeeAccountingStatus) ||
+            currentPosition.SizeShares <= 0m)
+        {
+            return null;
+        }
+
+        var allocatedEntryFeeUsd = currentPosition.FeeUsd *
+            Math.Min(1m, sellFill.SizeShares / currentPosition.SizeShares);
+        return grossRealizedPnlUsd - allocatedEntryFeeUsd - sellFill.FeeUsd;
     }
 
     private static string AttachFakPaperProcessorJson(
@@ -865,7 +895,12 @@ public sealed class PaperTradingProcessor(
 
                 var estimatedValue = position.SizeShares * bestBid;
                 var unrealizedPnl = estimatedValue - position.SizeShares * position.AveragePrice;
-                if (estimatedValue == position.EstimatedValueUsd && unrealizedPnl == position.UnrealizedPnlUsd)
+                var netUnrealizedPnl = FeeAccountingRules.IsAccounted(position.FeeAccountingStatus)
+                    ? unrealizedPnl - position.FeeUsd
+                    : (decimal?)null;
+                if (estimatedValue == position.EstimatedValueUsd &&
+                    unrealizedPnl == position.UnrealizedPnlUsd &&
+                    netUnrealizedPnl == position.NetUnrealizedPnlUsd)
                 {
                     continue;
                 }
@@ -874,12 +909,14 @@ public sealed class PaperTradingProcessor(
                 {
                     EstimatedValueUsd = estimatedValue,
                     UnrealizedPnlUsd = unrealizedPnl,
+                    NetUnrealizedPnlUsd = netUnrealizedPnl,
                     UpdatedAtUtc = DateTimeOffset.UtcNow
                 };
                 if (!await repository.TryUpdatePaperPositionMarkAsync(
                         position,
                         updatedPosition.EstimatedValueUsd,
                         updatedPosition.UnrealizedPnlUsd,
+                        updatedPosition.NetUnrealizedPnlUsd,
                         updatedPosition.UpdatedAtUtc,
                         cancellationToken))
                 {

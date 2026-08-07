@@ -811,18 +811,18 @@ public static class DashboardProjectionCalculator
 
     private static decimal GetLiveStakeUsd(LiveOrderProjectionPayload payload)
     {
-        if (payload.CostBasisUsd > 0m)
-        {
-            return payload.CostBasisUsd;
-        }
-
         if (payload.FilledNotionalUsd > 0m)
         {
-            return payload.FilledNotionalUsd + payload.FeeUsd;
+            return payload.FilledNotionalUsd;
         }
 
-        return payload.FilledSize > 0m
-            ? (payload.Price * payload.FilledSize) + payload.FeeUsd
+        if (payload.FilledSize > 0m)
+        {
+            return payload.Price * payload.FilledSize;
+        }
+
+        return payload.CostBasisUsd > 0m
+            ? Math.Max(0m, payload.CostBasisUsd - payload.FeeUsd)
             : 0m;
     }
 

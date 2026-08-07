@@ -155,6 +155,7 @@ public sealed class NoOpAppRepository : IAppRepository
         PaperPosition expectedPosition,
         decimal estimatedValueUsd,
         decimal unrealizedPnlUsd,
+        decimal? netUnrealizedPnlUsd,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
@@ -358,7 +359,8 @@ public sealed class NoOpAppRepository : IAppRepository
         Guid liveOrderId,
         Guid strategyId,
         decimal settlementValueUsd,
-        decimal realizedPnlUsd,
+        decimal grossRealizedPnlUsd,
+        decimal? netRealizedPnlUsd,
         string? winningAssetId,
         string winningOutcome,
         DateTimeOffset settledAtUtc,

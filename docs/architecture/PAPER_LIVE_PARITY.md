@@ -90,6 +90,82 @@ the order; explicit reconciliation is required.
 `PaperOnly` means that the intent is not sent externally. It does not relax any
 rule in this contract.
 
+## Fee accounting and performance reporting
+
+Platform fees are execution outcomes, not pre-submit decision inputs. Paper and
+Live retain the existing gross economics separately from `FeeUsd`; fees must not
+be used to authorize, reject, resize, reprice, or undo the originating intent.
+
+The current calculation reads the condition-specific CLOB V2 market record from
+`GET /clob-markets/{condition_id}`. Its `fd` object supplies the fee rate `r`,
+integer exponent `e`, and taker-only flag `to`. For one fill, the modeled platform
+fee is:
+
+`shares * rate * (price * (1 - price))^exponent`
+
+The result is rounded to five decimal places with the versioned local rule
+`MidpointRounding.AwayFromZero`; values below `0.00001` become zero. When `fd` is
+absent, the market is modeled as fee-free only if both maker and taker base-fee
+fields are explicitly present and zero. Missing, invalid, or non-integer schedule
+or base-fee evidence produces unavailable accounting rather than a guessed fee.
+The authoritative API and formula references are:
+
+- [Get CLOB market info](https://docs.polymarket.com/api-reference/markets/get-clob-market-info)
+- [Fees](https://docs.polymarket.com/trading/fees)
+- [CLOB V2 migration](https://docs.polymarket.com/v2-migration)
+
+Each fee-bearing record also retains one liquidity role:
+
+- `Maker`: proven post-only/resting execution. It has a calculated zero platform
+  fee when `fd.to=true`.
+- `Taker`: FAK/FOK or other explicitly persisted taker execution.
+- `Unknown`: ambiguous non-post-only resting execution or contradictory evidence.
+  A non-zero applicable schedule cannot be calculated from this role.
+
+Fee coverage is never inferred from the numeric default of `FeeUsd`:
+
+- `LegacyUnknown`: the row has not been evaluated by the current model. This is
+  the status for retained historical rows unless they are explicitly backfilled.
+- `CalculationUnavailable`: evaluation was attempted, but the required market
+  schedule, liquidity role, price, shares, or other evidence was missing or
+  invalid.
+- `Calculated`: a deterministic result from the stored fill and public per-market
+  schedule, including a calculated zero-fee result.
+- `VenueReported`: an authoritative fee supplied by the venue, not by the local
+  model.
+- `PartiallyCalculated`: an aggregate contains at least one accounted child and
+  at least one legacy, unavailable, or already-partial child.
+
+An aggregate is fully fee-accounted only when every contributing child is
+`Calculated` or `VenueReported`; all-venue children remain `VenueReported`, while
+a fully accounted mix is `Calculated`. A partial aggregate may retain the sum of
+known fee components, but it must not expose that sum as a complete net result.
+
+`RealizedPnlUsd` and existing ROI remain gross, before platform fees.
+`NetRealizedPnlUsd` is nullable and may be populated only under full fee coverage;
+otherwise it remains unknown. No historical fee backfill is part of the current
+implementation, so old rows remain `LegacyUnknown`, not zero-fee rows. Aggregate
+Dashboard PnL/ROI continues to display the existing gross metric until every
+contributing record has full fee coverage and the aggregate can be labeled net
+without mixing modeled fees with unaccounted defaults.
+
+The current model has three material limits:
+
+- a Paper depth sweep can be stored as one aggregate VWAP fill, while the
+  nonlinear curve and per-result rounding can differ from a sum over individual
+  matches;
+- a locally modeled result remains `Calculated`, never `VenueReported`, because
+  the public formula does not independently establish the venue's exact
+  midpoint-tie behavior for every execution;
+- maker rebates and builder-attribution fees are excluded. Rebates need a
+  separate authoritative payout ledger, and builder fees need their own evidence
+  and calculation rather than being folded into the CLOB platform-fee field.
+- legacy Paper/Live-shadow replacement inside an aggregate with additional
+  non-shadow size cannot reconstruct the removed component's provenance because
+  no versioned pre-shadow fee snapshot exists. The aggregate must therefore stay
+  conservatively partial/unknown with nullable net PnL instead of inferring full
+  coverage from a numeric fee subtraction.
+
 ## Research-only algorithms
 
 An algorithm that depends on unavailable Live behavior or hindsight must be

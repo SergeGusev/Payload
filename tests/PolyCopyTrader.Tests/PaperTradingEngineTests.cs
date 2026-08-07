@@ -60,6 +60,49 @@ public sealed class PaperTradingEngineTests
         Assert.Equal(order.Price, fill.Price);
         Assert.Equal(order.SizeShares, fill.SizeShares);
         Assert.Contains("BalancedGtcDepth", fill.Evidence);
+        Assert.Equal("Unknown", fill.FeeLiquidityRole);
+    }
+
+    [Fact]
+    public void TrySimulateFill_GenericObservedTradeLeavesLiquidityRoleUnknown()
+    {
+        var order = PendingOrder(DateTimeOffset.UtcNow.AddMinutes(5));
+        var observedTrade = AcceptedSignal().LeaderTrade with
+        {
+            Price = order.Price,
+            Size = order.SizeShares
+        };
+
+        var fill = engine.TrySimulateFill(
+            order,
+            orderBookSnapshot: null,
+            observedTrade,
+            DateTimeOffset.UtcNow);
+
+        Assert.NotNull(fill);
+        Assert.Contains("BalancedGtcTrade", fill.Evidence);
+        Assert.Equal("Unknown", fill.FeeLiquidityRole);
+    }
+
+    [Theory]
+    [InlineData("btc_updown5m_maker_post_only", "Maker")]
+    [InlineData("btc_preopen_sell_exit", "Taker")]
+    [InlineData("btc_updown5m_fak_taker_paper", "Taker")]
+    [InlineData("btc_updown5m_child_mirror_fak_paper", "Taker")]
+    public void TrySimulateFill_UsesProvenExecutionSourceLiquidityRole(
+        string executionSource,
+        string expectedRole)
+    {
+        var order = PendingOrder(DateTimeOffset.UtcNow.AddMinutes(5)) with
+        {
+            ExecutionSource = executionSource
+        };
+        var orderBook = OrderBook(bestBid: 0.73m, bestAsk: 0.74m);
+
+        var fill = engine.TrySimulateFill(order, orderBook, observedTrade: null, DateTimeOffset.UtcNow);
+
+        Assert.NotNull(fill);
+        Assert.Equal(expectedRole, fill.FeeLiquidityRole);
     }
 
     [Fact]
@@ -198,6 +241,72 @@ public sealed class PaperTradingEngineTests
     }
 
     [Fact]
+    public void ApplyBuyFill_CarriesCalculatedFeeAndPublishesNetUnrealizedPnl()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var order = PendingOrder(now.AddMinutes(5)) with
+        {
+            Price = 0.50m,
+            SizeShares = 100m,
+            NotionalUsd = 50m
+        };
+        var fill = new PaperFill(
+            Guid.NewGuid(),
+            order.Id,
+            0.50m,
+            100m,
+            now,
+            "fee-accounted",
+            FeeUsd: 1.75m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole: FeeLiquidityRole.Taker.ToString(),
+            FeeCalculationSource: "test",
+            FeeRate: 0.07m,
+            FeeExponent: 1,
+            FeeTakerOnly: true,
+            FeeCalculatedAtUtc: now);
+
+        var updated = engine.ApplyBuyFill(null, order, fill, currentBid: 0.60m, now);
+
+        Assert.Equal(1.75m, updated.FeeUsd);
+        Assert.Equal(FeeAccountingStatus.Calculated.ToString(), updated.FeeAccountingStatus);
+        Assert.Equal(10m, updated.UnrealizedPnlUsd);
+        Assert.Equal(8.25m, updated.NetUnrealizedPnlUsd);
+    }
+
+    [Fact]
+    public void ApplyBuyFill_DoesNotPublishNetWhenLegacyAndCalculatedFillsAreMixed()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var order = PendingOrder(now.AddMinutes(5));
+        var currentPosition = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            now.AddMinutes(-1),
+            order.CopiedTraderWallet);
+        var fill = new PaperFill(
+            Guid.NewGuid(),
+            order.Id,
+            0.50m,
+            10m,
+            now,
+            "fee-accounted",
+            FeeUsd: 0.175m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole: FeeLiquidityRole.Taker.ToString());
+
+        var updated = engine.ApplyBuyFill(currentPosition, order, fill, currentBid: 0.50m, now);
+
+        Assert.Equal(FeeAccountingStatus.PartiallyCalculated.ToString(), updated.FeeAccountingStatus);
+        Assert.Null(updated.NetUnrealizedPnlUsd);
+    }
+
+    [Fact]
     public void ApplySellFill_ReducesPositionAndUsesBidForRemainingPnl()
     {
         var now = DateTimeOffset.UtcNow;
@@ -227,6 +336,40 @@ public sealed class PaperTradingEngineTests
         Assert.Equal(42m, updated.EstimatedValueUsd);
         Assert.Equal(6m, updated.UnrealizedPnlUsd);
         Assert.Equal(order.CopiedTraderWallet, updated.CopiedTraderWallet);
+    }
+
+    [Fact]
+    public void ApplySellFill_AllocatesEntryFeeToSoldSharesAndKeepsNetMarkForRemainder()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var order = PendingOrder(now.AddMinutes(5)) with
+        {
+            Side = TradeSide.Sell,
+            Price = 0.80m,
+            SizeShares = 40m,
+            NotionalUsd = 32m
+        };
+        var currentPosition = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            100m,
+            0.60m,
+            70m,
+            10m,
+            now.AddMinutes(-1),
+            order.CopiedTraderWallet,
+            FeeUsd: 2m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole: FeeLiquidityRole.Taker.ToString(),
+            NetUnrealizedPnlUsd: 8m);
+        var fill = new PaperFill(Guid.NewGuid(), order.Id, 0.80m, 40m, now, "sell");
+
+        var updated = engine.ApplySellFill(currentPosition, order, fill, currentBid: 0.70m, now);
+
+        Assert.Equal(1.2m, updated.FeeUsd);
+        Assert.Equal(6m, updated.UnrealizedPnlUsd);
+        Assert.Equal(4.8m, updated.NetUnrealizedPnlUsd);
     }
 
     [Fact]

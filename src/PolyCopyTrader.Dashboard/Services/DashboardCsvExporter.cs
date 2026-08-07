@@ -81,32 +81,56 @@ public sealed class DashboardCsvExporter(
             }),
             cancellationToken);
 
+        var paperOrders = await repository.GetRecentPaperOrdersAsync(ExportLimit, cancellationToken);
+        var paperOrderIds = paperOrders
+            .Select(order => order.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        var paperOrderFills = await repository.GetPaperFillsForOrdersAsync(paperOrderIds, cancellationToken);
+        var paperOrderFeeSummaries = paperOrderFills
+            .GroupBy(fill => fill.PaperOrderId)
+            .ToDictionary(group => group.Key, group => BuildPaperOrderFeeSummary(group.ToArray()));
+
         await WriteAsync(
             Path.Combine(exportDirectory, "PaperOrders.csv"),
-            ["CreatedAtUtc", "OrderId", "SignalId", "CopiedTraderWallet", "Status", "Side", "AssetId", "ConditionId", "Outcome", "Price", "SizeShares", "NotionalUsd", "ExpiresAtUtc", "FilledAtUtc", "CancelledAtUtc"],
-            (await repository.GetRecentPaperOrdersAsync(ExportLimit, cancellationToken)).Select(order => new object?[]
+            ["CreatedAtUtc", "OrderId", "SignalId", "CopiedTraderWallet", "Status", "Side", "AssetId", "ConditionId", "Outcome", "Price", "SizeShares", "NotionalUsd", "ExpiresAtUtc", "FilledAtUtc", "CancelledAtUtc", "FeeUsd", "FeeAccountingStatus", "FeeLiquidityRole", "FeeCalculationSource", "FeeRate", "FeeExponent", "FeeTakerOnly", "FeeCalculatedAtUtc", "NetRealizedPnlUsd"],
+            paperOrders.Select(order =>
             {
-                order.CreatedAtUtc,
-                order.Id,
-                order.SignalId,
-                order.CopiedTraderWallet,
-                order.Status,
-                order.Side,
-                order.AssetId,
-                order.ConditionId,
-                order.Outcome,
-                order.Price,
-                order.SizeShares,
-                order.NotionalUsd,
-                order.ExpiresAtUtc,
-                order.FilledAtUtc,
-                order.CancelledAtUtc
+                var fee = paperOrderFeeSummaries.GetValueOrDefault(order.Id, PaperOrderFeeSummary.LegacyUnknown);
+                return new object?[]
+                {
+                    order.CreatedAtUtc,
+                    order.Id,
+                    order.SignalId,
+                    order.CopiedTraderWallet,
+                    order.Status,
+                    order.Side,
+                    order.AssetId,
+                    order.ConditionId,
+                    order.Outcome,
+                    order.Price,
+                    order.SizeShares,
+                    order.NotionalUsd,
+                    order.ExpiresAtUtc,
+                    order.FilledAtUtc,
+                    order.CancelledAtUtc,
+                    fee.FeeUsd,
+                    fee.FeeAccountingStatus,
+                    fee.FeeLiquidityRole,
+                    fee.FeeCalculationSource,
+                    fee.FeeRate,
+                    fee.FeeExponent,
+                    fee.FeeTakerOnly,
+                    fee.FeeCalculatedAtUtc,
+                    fee.NetRealizedPnlUsd
+                };
             }),
             cancellationToken);
 
         await WriteAsync(
             Path.Combine(exportDirectory, "PaperPositions.csv"),
-            ["UpdatedAtUtc", "CopiedTraderWallet", "AssetId", "ConditionId", "Outcome", "SizeShares", "AveragePrice", "EstimatedValueUsd", "UnrealizedPnlUsd"],
+            ["UpdatedAtUtc", "CopiedTraderWallet", "AssetId", "ConditionId", "Outcome", "SizeShares", "AveragePrice", "EstimatedValueUsd", "GrossUnrealizedPnlUsd", "FeeUsd", "FeeAccountingStatus", "FeeLiquidityRole", "FeeCalculationSource", "FeeRate", "FeeExponent", "FeeTakerOnly", "FeeCalculatedAtUtc", "NetUnrealizedPnlUsd"],
             (await repository.GetPaperPositionsAsync(cancellationToken)).Select(position => new object?[]
             {
                 position.UpdatedAtUtc,
@@ -117,13 +141,22 @@ public sealed class DashboardCsvExporter(
                 position.SizeShares,
                 position.AveragePrice,
                 position.EstimatedValueUsd,
-                position.UnrealizedPnlUsd
+                position.UnrealizedPnlUsd,
+                position.FeeUsd,
+                position.FeeAccountingStatus,
+                position.FeeLiquidityRole,
+                position.FeeCalculationSource,
+                position.FeeRate,
+                position.FeeExponent,
+                position.FeeTakerOnly,
+                position.FeeCalculatedAtUtc,
+                position.NetUnrealizedPnlUsd
             }),
             cancellationToken);
 
         await WriteAsync(
             Path.Combine(exportDirectory, "PaperPositionSettlements.csv"),
-            ["SettledAtUtc", "CopiedTraderWallet", "AssetId", "ConditionId", "Outcome", "WinningAssetId", "WinningOutcome", "Category", "SettledSizeShares", "AveragePrice", "CostBasisUsd", "SettlementValueUsd", "RealizedPnlUsd", "Won", "SettlementSource"],
+            ["SettledAtUtc", "CopiedTraderWallet", "AssetId", "ConditionId", "Outcome", "WinningAssetId", "WinningOutcome", "Category", "SettledSizeShares", "AveragePrice", "GrossCostBasisUsd", "SettlementValueUsd", "GrossRealizedPnlUsd", "FeeUsd", "FeeAccountingStatus", "FeeLiquidityRole", "FeeCalculationSource", "FeeRate", "FeeExponent", "FeeTakerOnly", "FeeCalculatedAtUtc", "NetRealizedPnlUsd", "Won", "SettlementSource"],
             (await repository.GetRecentPaperPositionSettlementsAsync(ExportLimit, cancellationToken)).Select(settlement => new object?[]
             {
                 settlement.SettledAtUtc,
@@ -139,6 +172,15 @@ public sealed class DashboardCsvExporter(
                 settlement.CostBasisUsd,
                 settlement.SettlementValueUsd,
                 settlement.RealizedPnlUsd,
+                settlement.FeeUsd,
+                settlement.FeeAccountingStatus,
+                settlement.FeeLiquidityRole,
+                settlement.FeeCalculationSource,
+                settlement.FeeRate,
+                settlement.FeeExponent,
+                settlement.FeeTakerOnly,
+                settlement.FeeCalculatedAtUtc,
+                settlement.NetRealizedPnlUsd,
                 settlement.Won,
                 settlement.SettlementSource
             }),
@@ -146,7 +188,7 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "PaperCopiedTraderPerformance.csv"),
-            ["CopiedTraderWallet", "Category", "Score", "MarkToMarketPnlUsd", "MarkToMarketRoiPct", "WinRatePct", "OrdersCount", "FilledOrdersCount", "OpenPositionsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "BuyCostUsd", "SellProceedsUsd", "SettlementValueUsd", "RealizedPnlUsd", "UnrealizedPnlUsd", "FirstOrderUtc", "LastOrderUtc", "RefreshedAtUtc"],
+            ["CopiedTraderWallet", "Category", "Score", "GrossMarkToMarketPnlUsd", "GrossMarkToMarketRoiPct", "WinRatePct", "OrdersCount", "FilledOrdersCount", "OpenPositionsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "BuyCostUsd", "SellProceedsUsd", "SettlementValueUsd", "GrossRealizedPnlUsd", "GrossUnrealizedPnlUsd", "FirstOrderUtc", "LastOrderUtc", "RefreshedAtUtc"],
             (await repository.GetPaperCopiedTraderPerformanceAsync(ExportLimit, cancellationToken)).Select(performance => new object?[]
             {
                 performance.CopiedTraderWallet,
@@ -174,7 +216,7 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "Strategies.csv"),
-            ["Name", "Enabled", "LiveStakes", "Paused", "PausedUntilUtc", "PaperStakeAmount", "LiveStakeAmount", "PaperLostCoeff", "LiveLostCoeff", "PaperLostCounter", "LiveLostCounter", "LiveAvailableBalance", "OrdersCount", "FilledOrdersCount", "OpenOrdersCount", "OpenPositionsCount", "ObservedRunsCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "StakeUsd", "RealizedPnlUsd", "OpenUnrealizedPnlUsd", "MarkToMarketPnlUsd", "WinRatePct", "LossRatePct", "AvgWinPnlUsd", "AvgLossPnlUsd", "ProfitFactor", "ExpectancyPnlUsd", "MarkToMarketRoiPct", "ClosedRoiPct", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "AvgCountertrendScoreBps", "AvgCountertrendSignalBps", "LastCountertrendSignalBps", "LiveOrdersCount", "LiveFilledOrdersCount", "LiveOpenOrdersCount", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveStakeUsd", "LiveRealizedPnlUsd", "LiveWinRatePct", "LiveLossRatePct", "LiveAvgWinPnlUsd", "LiveAvgLossPnlUsd", "LiveProfitFactor", "LiveExpectancyPnlUsd", "LiveRoiPct", "LiveLastOrderUtc", "LiveLastSettlementUtc", "LastOrderUtc", "LastRunUtc"],
+            ["Name", "Enabled", "LiveStakes", "Paused", "PausedUntilUtc", "PaperStakeAmount", "LiveStakeAmount", "PaperLostCoeff", "LiveLostCoeff", "PaperLostCounter", "LiveLostCounter", "LiveAvailableBalance", "OrdersCount", "FilledOrdersCount", "OpenOrdersCount", "OpenPositionsCount", "ObservedRunsCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "StakeUsd", "GrossRealizedPnlUsd", "GrossOpenUnrealizedPnlUsd", "GrossMarkToMarketPnlUsd", "WinRatePct", "LossRatePct", "GrossAvgWinPnlUsd", "GrossAvgLossPnlUsd", "GrossProfitFactor", "GrossExpectancyPnlUsd", "GrossMarkToMarketRoiPct", "GrossClosedRoiPct", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "AvgCountertrendScoreBps", "AvgCountertrendSignalBps", "LastCountertrendSignalBps", "LiveOrdersCount", "LiveFilledOrdersCount", "LiveOpenOrdersCount", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveStakeUsd", "GrossLiveRealizedPnlUsd", "LiveWinRatePct", "LiveLossRatePct", "GrossLiveAvgWinPnlUsd", "GrossLiveAvgLossPnlUsd", "GrossLiveProfitFactor", "GrossLiveExpectancyPnlUsd", "GrossLiveRoiPct", "LiveLastOrderUtc", "LiveLastSettlementUtc", "LastOrderUtc", "LastRunUtc"],
             (await dashboardSnapshots.GetStrategyPerformanceSnapshotAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
             {
                 strategy.Name,
@@ -250,7 +292,7 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "StrategyRecentPerformance.csv"),
-            ["Window", "Name", "OrdersCount", "FilledOrdersCount", "ExpiredOrdersCount", "OpenOrdersCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "WonRunsCount", "LostRunsCount", "WinRatePct", "RoiPct", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveRealizedPnlUsd", "LiveRoiPct", "RealizedPnlUsd", "FilledCostUsd", "AvgFillPrice", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "TopSkipReason", "LastOrderUtc", "LastRunUtc"],
+            ["Window", "Name", "OrdersCount", "FilledOrdersCount", "ExpiredOrdersCount", "OpenOrdersCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "WonRunsCount", "LostRunsCount", "WinRatePct", "GrossRoiPct", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "GrossLiveRealizedPnlUsd", "GrossLiveRoiPct", "GrossRealizedPnlUsd", "GrossFilledCostUsd", "AvgFillPrice", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "TopSkipReason", "LastOrderUtc", "LastRunUtc"],
             (await dashboardSnapshots.GetStrategyRecentPerformanceSnapshotAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
             {
                 strategy.Window,
@@ -408,10 +450,66 @@ public sealed class DashboardCsvExporter(
         await File.WriteAllTextAsync(path, builder.ToString(), Encoding.UTF8, cancellationToken);
     }
 
+    private static PaperOrderFeeSummary BuildPaperOrderFeeSummary(IReadOnlyList<PaperFill> fills)
+    {
+        var status = FeeAccountingRules.Aggregate(fills.Select(fill => fill.FeeAccountingStatus));
+        return new PaperOrderFeeSummary(
+            fills.Sum(fill => fill.FeeUsd),
+            status.ToString(),
+            SingleValueOrDefault(fills.Select(fill => fill.FeeLiquidityRole), FeeLiquidityRole.Unknown.ToString()),
+            SingleValueOrDefault(fills.Select(fill => fill.FeeCalculationSource), "mixed"),
+            SingleNullableValueOrDefault(fills.Select(fill => fill.FeeRate)),
+            SingleNullableValueOrDefault(fills.Select(fill => fill.FeeExponent)),
+            SingleNullableValueOrDefault(fills.Select(fill => fill.FeeTakerOnly)),
+            fills.Max(fill => fill.FeeCalculatedAtUtc),
+            FeeAccountingRules.IsAccounted(status) && fills.All(fill => fill.NetRealizedPnlUsd.HasValue)
+                ? fills.Sum(fill => fill.NetRealizedPnlUsd!.Value)
+                : null);
+    }
+
+    private static string SingleValueOrDefault(IEnumerable<string?> values, string fallback)
+    {
+        var distinct = values
+            .Select(value => string.IsNullOrWhiteSpace(value) ? fallback : value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return distinct.Length == 1 ? distinct[0] : fallback;
+    }
+
+    private static T? SingleNullableValueOrDefault<T>(IEnumerable<T?> values)
+        where T : struct
+    {
+        var distinct = values.Distinct().ToArray();
+        return distinct.Length == 1 ? distinct[0] : null;
+    }
+
     private static string ResolveExportRoot(string configuredPath)
     {
         return Path.IsPathRooted(configuredPath)
             ? configuredPath
             : Path.Combine(AppContext.BaseDirectory, configuredPath);
+    }
+
+    private sealed record PaperOrderFeeSummary(
+        decimal FeeUsd,
+        string FeeAccountingStatus,
+        string FeeLiquidityRole,
+        string FeeCalculationSource,
+        decimal? FeeRate,
+        int? FeeExponent,
+        bool? FeeTakerOnly,
+        DateTimeOffset? FeeCalculatedAtUtc,
+        decimal? NetRealizedPnlUsd)
+    {
+        public static readonly PaperOrderFeeSummary LegacyUnknown = new(
+            0m,
+            PolyCopyTrader.Domain.FeeAccountingStatus.LegacyUnknown.ToString(),
+            PolyCopyTrader.Domain.FeeLiquidityRole.Unknown.ToString(),
+            string.Empty,
+            null,
+            null,
+            null,
+            null,
+            null);
     }
 }

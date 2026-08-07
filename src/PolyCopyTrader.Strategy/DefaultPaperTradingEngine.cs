@@ -6,6 +6,13 @@ namespace PolyCopyTrader.Strategy;
 public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
 {
     private const decimal FillEpsilon = 0.00000001m;
+    private const string MakerFeeLiquidityRole = "Maker";
+    private const string TakerFeeLiquidityRole = "Taker";
+    private const string UnknownFeeLiquidityRole = "Unknown";
+    private const string BtcPreOpenSellExitExecutionSource = "btc_preopen_sell_exit";
+    private const string BtcMakerExecutionSource = "btc_updown5m_maker_post_only";
+    private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
+    private const string BtcChildMirrorFakPaperExecutionSource = "btc_updown5m_child_mirror_fak_paper";
 
     public PaperOrder CreateOrder(Signal signal, decimal price, decimal sizeShares, DateTimeOffset expiresAtUtc)
     {
@@ -124,6 +131,26 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
         var averagePrice = newSize <= 0m ? 0m : (existingCost + fillCost) / newSize;
         var estimatedValue = newSize * currentBid;
         var unrealizedPnl = estimatedValue - (newSize * averagePrice);
+        var feeStatus = FeeAccountingRules.Aggregate(currentPosition is null
+            ? [fill.FeeAccountingStatus]
+            : [currentPosition.FeeAccountingStatus, fill.FeeAccountingStatus]);
+        var feeUsd = (currentPosition?.FeeUsd ?? 0m) + fill.FeeUsd;
+        var feeRole = currentPosition is null
+            ? fill.FeeLiquidityRole
+            : SameOrDefault(currentPosition.FeeLiquidityRole, fill.FeeLiquidityRole, "Unknown");
+        var feeSource = currentPosition is null
+            ? fill.FeeCalculationSource
+            : SameOrDefault(currentPosition.FeeCalculationSource, fill.FeeCalculationSource, "mixed");
+        var feeRate = currentPosition is null
+            ? fill.FeeRate
+            : SameOrNull(currentPosition.FeeRate, fill.FeeRate);
+        var feeExponent = currentPosition is null
+            ? fill.FeeExponent
+            : SameOrNull(currentPosition.FeeExponent, fill.FeeExponent);
+        var feeTakerOnly = currentPosition is null
+            ? fill.FeeTakerOnly
+            : SameOrNull(currentPosition.FeeTakerOnly, fill.FeeTakerOnly);
+        var feeCalculatedAtUtc = Max(currentPosition?.FeeCalculatedAtUtc, fill.FeeCalculatedAtUtc);
 
         return new PaperPosition(
             order.AssetId,
@@ -134,7 +161,16 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             estimatedValue,
             unrealizedPnl,
             nowUtc,
-            order.CopiedTraderWallet);
+            order.CopiedTraderWallet,
+            feeUsd,
+            feeStatus.ToString(),
+            feeRole,
+            feeSource,
+            feeRate,
+            feeExponent,
+            feeTakerOnly,
+            feeCalculatedAtUtc,
+            FeeAccountingRules.IsAccounted(feeStatus) ? unrealizedPnl - feeUsd : null);
     }
 
     public PaperPosition ApplySellFill(
@@ -171,6 +207,10 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
         var averagePrice = newSize <= 0m ? 0m : currentPosition.AveragePrice;
         var estimatedValue = newSize * currentBid;
         var unrealizedPnl = estimatedValue - (newSize * averagePrice);
+        var remainingFraction = currentPosition.SizeShares <= 0m
+            ? 0m
+            : Math.Max(0m, Math.Min(1m, newSize / currentPosition.SizeShares));
+        var remainingFeeUsd = currentPosition.FeeUsd * remainingFraction;
 
         return currentPosition with
         {
@@ -178,6 +218,10 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             AveragePrice = averagePrice,
             EstimatedValueUsd = estimatedValue,
             UnrealizedPnlUsd = unrealizedPnl,
+            FeeUsd = remainingFeeUsd,
+            NetUnrealizedPnlUsd = FeeAccountingRules.IsAccounted(currentPosition.FeeAccountingStatus)
+                ? unrealizedPnl - remainingFeeUsd
+                : null,
             UpdatedAtUtc = nowUtc
         };
     }
@@ -221,7 +265,8 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
                 order.Price,
                 fillSize,
                 nowUtc,
-                $"BalancedGtcTrade: BUY limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}. FillPrice={Format(order.Price)}.");
+                $"BalancedGtcTrade: BUY limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}. FillPrice={Format(order.Price)}.",
+                FeeLiquidityRole: ResolveFeeLiquidityRole(order));
         }
 
         return null;
@@ -266,7 +311,8 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
                 order.Price,
                 fillSize,
                 nowUtc,
-                $"BalancedGtcTrade: SELL limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}. FillPrice={Format(order.Price)}.");
+                $"BalancedGtcTrade: SELL limit {Format(order.Price)} filled {Format(fillSize)} of remaining {Format(remainingShares)} from observed trade at {Format(tradePrice)}. FillPrice={Format(order.Price)}.",
+                FeeLiquidityRole: ResolveFeeLiquidityRole(order));
         }
 
         return null;
@@ -325,7 +371,33 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
             levelsUsed.ToString(CultureInfo.InvariantCulture),
             ".");
 
-        return new PaperFill(Guid.NewGuid(), order.Id, fillPrice, filledShares, nowUtc, evidence);
+        return new PaperFill(
+            Guid.NewGuid(),
+            order.Id,
+            fillPrice,
+            filledShares,
+            nowUtc,
+            evidence,
+            FeeLiquidityRole: ResolveFeeLiquidityRole(order));
+    }
+
+    private static string ResolveFeeLiquidityRole(PaperOrder order)
+    {
+        if (string.Equals(order.ExecutionSource, BtcMakerExecutionSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return MakerFeeLiquidityRole;
+        }
+
+        if (string.Equals(order.ExecutionSource, BtcPreOpenSellExitExecutionSource, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(order.ExecutionSource, BtcFakTakerPaperExecutionSource, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(order.ExecutionSource, BtcChildMirrorFakPaperExecutionSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return TakerFeeLiquidityRole;
+        }
+
+        // A later book/trade observation does not prove whether a generic GTC order was
+        // marketable at submission or had already rested, so its liquidity role is unknown.
+        return UnknownFeeLiquidityRole;
     }
 
     private static decimal GetRemainingShares(PaperOrder order, decimal previouslyFilledShares)
@@ -336,5 +408,31 @@ public sealed class DefaultPaperTradingEngine : IPaperTradingEngine
     private static string Format(decimal value)
     {
         return value.ToString("0.########", CultureInfo.InvariantCulture);
+    }
+
+    private static string SameOrDefault(string left, string right, string fallback)
+    {
+        return string.Equals(left, right, StringComparison.OrdinalIgnoreCase) ? left : fallback;
+    }
+
+    private static T? SameOrNull<T>(T? left, T? right)
+        where T : struct
+    {
+        return EqualityComparer<T?>.Default.Equals(left, right) ? left : null;
+    }
+
+    private static DateTimeOffset? Max(DateTimeOffset? left, DateTimeOffset? right)
+    {
+        if (left is null)
+        {
+            return right;
+        }
+
+        if (right is null)
+        {
+            return left;
+        }
+
+        return left > right ? left : right;
     }
 }

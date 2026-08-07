@@ -12,7 +12,8 @@ public sealed class PaperTradingMarketDataUpdater(
     IPaperSettlementProcessor paperSettlementProcessor,
     IExposureSnapshotCache exposureCache,
     ConservativePaperGtdFillEstimator conservativeGtdFillEstimator,
-    IAppRepository repository) : IPaperTradingMarketDataUpdater
+    IAppRepository repository,
+    IPolymarketFeeAccountingService? feeAccountingService = null) : IPaperTradingMarketDataUpdater
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private readonly SemaphoreSlim sync = new(1, 1);
@@ -149,12 +150,19 @@ public sealed class PaperTradingMarketDataUpdater(
                     continue;
                 }
 
+                if (feeAccountingService is not null)
+                {
+                    fill = await feeAccountingService.ApplyToPaperFillAsync(orderForFill, fill, cancellationToken);
+                }
+
                 var currentBid = update.OrderBookSnapshot?.BestBid ?? currentPosition?.AveragePrice ?? 0m;
                 if (orderForFill.Side == TradeSide.Sell && currentPosition is not null)
                 {
+                    var grossRealizedPnlUsd = (fill.Price - currentPosition.AveragePrice) * fill.SizeShares;
                     fill = fill with
                     {
-                        RealizedPnlUsd = (fill.Price - currentPosition.AveragePrice) * fill.SizeShares
+                        RealizedPnlUsd = grossRealizedPnlUsd,
+                        NetRealizedPnlUsd = CalculateNetSellPnl(grossRealizedPnlUsd, currentPosition, fill)
                     };
                 }
 
@@ -230,6 +238,23 @@ public sealed class PaperTradingMarketDataUpdater(
         }
     }
 
+    private static decimal? CalculateNetSellPnl(
+        decimal grossRealizedPnlUsd,
+        PaperPosition currentPosition,
+        PaperFill sellFill)
+    {
+        if (!FeeAccountingRules.IsAccounted(currentPosition.FeeAccountingStatus) ||
+            !FeeAccountingRules.IsAccounted(sellFill.FeeAccountingStatus) ||
+            currentPosition.SizeShares <= 0m)
+        {
+            return null;
+        }
+
+        var allocatedEntryFeeUsd = currentPosition.FeeUsd *
+            Math.Min(1m, sellFill.SizeShares / currentPosition.SizeShares);
+        return grossRealizedPnlUsd - allocatedEntryFeeUsd - sellFill.FeeUsd;
+    }
+
     private async Task UpdatePositionMarksAsync(
         IReadOnlyList<PaperPosition> positions,
         string assetId,
@@ -248,7 +273,12 @@ public sealed class PaperTradingMarketDataUpdater(
 
             var estimatedValue = position.SizeShares * bestBid;
             var unrealizedPnl = estimatedValue - position.SizeShares * position.AveragePrice;
-            if (estimatedValue == position.EstimatedValueUsd && unrealizedPnl == position.UnrealizedPnlUsd)
+            var netUnrealizedPnl = FeeAccountingRules.IsAccounted(position.FeeAccountingStatus)
+                ? unrealizedPnl - position.FeeUsd
+                : (decimal?)null;
+            if (estimatedValue == position.EstimatedValueUsd &&
+                unrealizedPnl == position.UnrealizedPnlUsd &&
+                netUnrealizedPnl == position.NetUnrealizedPnlUsd)
             {
                 continue;
             }
@@ -257,7 +287,8 @@ public sealed class PaperTradingMarketDataUpdater(
                 position,
                 estimatedValue,
                 unrealizedPnl,
-                now));
+                now,
+                netUnrealizedPnl));
         }
 
         if (markUpdates.Count == 0)

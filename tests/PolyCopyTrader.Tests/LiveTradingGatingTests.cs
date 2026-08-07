@@ -517,6 +517,7 @@ public sealed class LiveTradingGatingTests
         var paperFill = Assert.Single(repository.PaperFills);
         Assert.Equal(3m, paperFill.SizeShares);
         Assert.Equal(0.40m, paperFill.Price);
+        Assert.Equal("Taker", paperFill.FeeLiquidityRole);
         var paperOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.PartiallyFilled, paperOrder.Status);
         Assert.Equal(3m, Assert.Single(repository.PaperPositions).SizeShares);
@@ -713,11 +714,15 @@ public sealed class LiveTradingGatingTests
             StrategyId: strategyId,
             AverageFillPrice: 0.50m,
             FilledNotionalUsd: 2m,
-            CostBasisUsd: 2m,
+            CostBasisUsd: 2.07m,
             CorrelationId: correlationId,
             ExecutionSource: "paper_live_shadow_test",
             PostOnly: false,
-            PaperOrderId: paperOrderId));
+            PaperOrderId: paperOrderId,
+            FeeUsd: 0.07m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole: FeeLiquidityRole.Taker.ToString(),
+            FeeCalculationSource: "test"));
         var exposureCache = new ExposureSnapshotCache(repository);
         await exposureCache.RefreshAsync();
         var processor = new LiveTradingProcessor(
@@ -745,10 +750,14 @@ public sealed class LiveTradingGatingTests
         Assert.Equal(0.50m, fill.Price);
         Assert.Equal(4m, fill.SizeShares);
         Assert.Equal(2m, fill.Price * fill.SizeShares);
+        Assert.Equal(0.07m, fill.FeeUsd);
+        Assert.Equal(FeeAccountingStatus.Calculated.ToString(), fill.FeeAccountingStatus);
         var position = Assert.Single(repository.PaperPositions);
         Assert.Equal(4m, position.SizeShares);
         Assert.Equal(0.50m, position.AveragePrice);
         Assert.Equal(2m, position.SizeShares * position.AveragePrice);
+        Assert.Equal(0.07m, position.FeeUsd);
+        Assert.Equal(-0.07m, position.NetUnrealizedPnlUsd);
         Assert.Equal(position, exposureCache.GetPaperPosition(position.CopiedTraderWallet, position.AssetId));
     }
 
@@ -1505,7 +1514,9 @@ public sealed class LiveTradingGatingTests
             CorrelationId: correlationId,
             ExecutionSource: "paper_live_shadow_test",
             PostOnly: false,
-            PaperOrderId: paperOrderId));
+            PaperOrderId: paperOrderId,
+            FeeUsd: 0m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString()));
         var processor = new LiveTradingProcessor(
             NullLogger<LiveTradingProcessor>.Instance,
             new LiveTradingOptions(),
@@ -1568,7 +1579,9 @@ public sealed class LiveTradingGatingTests
             "{}",
             string.Empty,
             now.AddMinutes(-5),
-            StrategyId: StrategyIds.FollowLeader));
+            StrategyId: StrategyIds.FollowLeader,
+            FeeUsd: 0m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString()));
         var processor = new LiveTradingProcessor(
             NullLogger<LiveTradingProcessor>.Instance,
             new LiveTradingOptions(),
@@ -1593,6 +1606,70 @@ public sealed class LiveTradingGatingTests
         Assert.Equal(100m, repository.StrategySettings[StrategyIds.FollowLeader].LiveAvailableBalance);
         Assert.Equal(-1, repository.StrategySettings[StrategyIds.FollowLeader].LiveLostCounter);
         Assert.True(repository.StrategySettings[StrategyIds.FollowLeader].LiveStakes);
+    }
+
+    [Fact]
+    public async Task LiveProcessor_PersistsGrossAndNetSettlementAndAppliesNetToBalance()
+    {
+        var repository = new TestAppRepository();
+        repository.StrategySettings[StrategyIds.FollowLeader] = StrategyRuntimeSettings.Default(StrategyIds.FollowLeader) with
+        {
+            LiveStakes = true,
+            LiveAvailableBalance = 50m,
+            LiveLostCoeff = 2m
+        };
+        var now = DateTimeOffset.UtcNow;
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Matched,
+            "0xfee-accounted",
+            TradeSide.Buy,
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            0.40m,
+            10m,
+            4m,
+            "FAK",
+            now.AddMinutes(-10),
+            now.AddMinutes(-5),
+            now.AddMinutes(-10),
+            "matched",
+            10m,
+            0m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now.AddMinutes(-5),
+            StrategyId: StrategyIds.FollowLeader,
+            AverageFillPrice: 0.40m,
+            FilledNotionalUsd: 4m,
+            CostBasisUsd: 4.28m,
+            FeeUsd: 0.28m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole: FeeLiquidityRole.Taker.ToString()));
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([
+                TokenMetadata("asset-yes", "Yes", "Yes"),
+                TokenMetadata("asset-no", "No", "Yes")
+            ]),
+            new CapturingTradingClient(),
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.BalanceSettlementsApplied);
+        var order = Assert.Single(repository.LiveOrders);
+        Assert.Equal(6m, order.RealizedPnlUsd);
+        Assert.Equal(5.72m, order.NetRealizedPnlUsd);
+        Assert.Equal(55.72m, repository.StrategySettings[StrategyIds.FollowLeader].LiveAvailableBalance);
     }
 
     [Fact]
@@ -1630,7 +1707,9 @@ public sealed class LiveTradingGatingTests
             "{}",
             string.Empty,
             now.AddMinutes(-5),
-            StrategyId: StrategyIds.FollowLeader));
+            StrategyId: StrategyIds.FollowLeader,
+            FeeUsd: 0m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString()));
         var processor = new LiveTradingProcessor(
             NullLogger<LiveTradingProcessor>.Instance,
             new LiveTradingOptions(),

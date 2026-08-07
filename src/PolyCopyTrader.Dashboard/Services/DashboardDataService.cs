@@ -70,6 +70,7 @@ public sealed class DashboardDataService(
             NormalizeStrategyId(paperOrdersStrategyId),
             paperOrdersCreatedAfterUtc);
         var paperRunsByOrderId = await GetPaperRunsByOrderIdAsync(recentPaperOrders, cancellationToken);
+        var paperFillsByOrderId = await GetPaperFillsByOrderIdAsync(recentPaperOrders, cancellationToken);
         var openPaperOrders = await repository.GetOpenPaperOrdersAsync(cancellationToken);
         var paperPositions = await repository.GetPaperPositionsAsync(cancellationToken);
         var paperCopiedTraderPerformance = await repository.GetPaperCopiedTraderPerformanceAsync(250, cancellationToken);
@@ -161,7 +162,7 @@ public sealed class DashboardDataService(
             onChainParticipantDetails.Select(ToOnChainParticipantDetailRow).ToArray(),
             leaderTrades.Select(ToLeaderTradeRow).ToArray(),
             signals.Select(ToSignalRow).ToArray(),
-            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId)).ToArray(),
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId, paperFillsByOrderId)).ToArray(),
             paperPositions.Select(position => ToPaperPositionRow(position, orderBooksByAsset)).ToArray(),
             strategyPerformance.Select(ToStrategyPerformanceRow).ToArray(),
             strategyRecentPerformance.Select(ToStrategyRecentPerformanceRow).ToArray(),
@@ -219,6 +220,7 @@ public sealed class DashboardDataService(
             NormalizeStrategyId(paperOrdersStrategyId),
             paperOrdersCreatedAfterUtc);
         var paperRunsByOrderId = await GetPaperRunsByOrderIdAsync(recentPaperOrders, cancellationToken);
+        var paperFillsByOrderId = await GetPaperFillsByOrderIdAsync(recentPaperOrders, cancellationToken);
         var (liveOrders, hasNextLiveOrdersPage) = await GetRecentLiveOrderPageAsync(
             liveOrdersStrategyId,
             liveOrdersOffset,
@@ -246,7 +248,7 @@ public sealed class DashboardDataService(
             [],
             [],
             [],
-            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId)).ToArray(),
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId, paperFillsByOrderId)).ToArray(),
             [],
             strategyPerformance.Select(ToStrategyPerformanceRow).ToArray(),
             strategyRecentPerformance.Select(ToStrategyRecentPerformanceRow).ToArray(),
@@ -304,9 +306,10 @@ public sealed class DashboardDataService(
             NormalizeStrategyId(paperOrdersStrategyId),
             createdAfterUtc);
         var paperRunsByOrderId = await GetPaperRunsByOrderIdAsync(recentPaperOrders, cancellationToken);
+        var paperFillsByOrderId = await GetPaperFillsByOrderIdAsync(recentPaperOrders, cancellationToken);
 
         return new DashboardPaperOrderSnapshot(
-            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId)).ToArray());
+            recentPaperOrders.Select(order => ToPaperOrderRow(order, strategyNamesById, paperRunsByOrderId, paperFillsByOrderId)).ToArray());
     }
 
     public async Task<DashboardLiveOrderSnapshot> LoadLiveOrderRowsAsync(
@@ -1067,13 +1070,53 @@ public sealed class DashboardDataService(
                     .First());
     }
 
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<PaperFill>>> GetPaperFillsByOrderIdAsync(
+        IReadOnlyList<PaperOrder> paperOrders,
+        CancellationToken cancellationToken)
+    {
+        Guid[] orderIds = paperOrders
+            .Select(order => order.Id)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        if (orderIds.Length == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<PaperFill>>();
+        }
+
+        var fills = await repository.GetPaperFillsForOrdersAsync(orderIds, cancellationToken);
+        return fills
+            .GroupBy(fill => fill.PaperOrderId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<PaperFill>)group
+                    .OrderBy(fill => fill.FilledAtUtc)
+                    .ThenBy(fill => fill.Id)
+                    .ToArray());
+    }
+
     private static PaperOrderRow ToPaperOrderRow(
         PaperOrder order,
         IReadOnlyDictionary<Guid, string> strategyNamesById,
-        IReadOnlyDictionary<Guid, StrategyMarketPaperRun> paperRunsByOrderId)
+        IReadOnlyDictionary<Guid, StrategyMarketPaperRun> paperRunsByOrderId,
+        IReadOnlyDictionary<Guid, IReadOnlyList<PaperFill>> paperFillsByOrderId)
     {
         var strategyId = StrategyIds.Normalize(order.StrategyId);
         paperRunsByOrderId.TryGetValue(order.Id, out var paperRun);
+        paperFillsByOrderId.TryGetValue(order.Id, out var paperFills);
+        var feeStatus = paperRun?.FeeAccountingStatus ??
+            FeeAccountingRules.Aggregate(paperFills?.Select(fill => fill.FeeAccountingStatus) ?? []).ToString();
+        var feeUsd = paperRun?.FeeUsd ?? paperFills?.Sum(fill => fill.FeeUsd) ?? 0m;
+        var grossRealizedPnlUsd = paperRun?.RealizedPnlUsd ??
+            (order.Side == TradeSide.Sell && paperFills is { Count: > 0 }
+                ? (decimal?)paperFills.Sum(fill => fill.RealizedPnlUsd)
+                : null);
+        var netRealizedPnlUsd = paperRun?.NetRealizedPnlUsd ??
+            (order.Side == TradeSide.Sell &&
+             paperFills is { Count: > 0 } &&
+             paperFills.All(fill => fill.NetRealizedPnlUsd.HasValue)
+                ? (decimal?)paperFills.Sum(fill => fill.NetRealizedPnlUsd!.Value)
+                : null);
         return new PaperOrderRow(
             strategyId,
             GetStrategyName(strategyId, strategyNamesById),
@@ -1089,7 +1132,10 @@ public sealed class DashboardDataService(
             FormatDate(order.ExpiresAtUtc),
             FormatDate(order.FilledAtUtc),
             paperRun?.SettlementValueUsd,
-            paperRun?.RealizedPnlUsd,
+            grossRealizedPnlUsd,
+            feeUsd,
+            feeStatus,
+            netRealizedPnlUsd,
             FormatDate(paperRun?.SettledAtUtc),
             InferPaperWinningOutcome(order.Outcome, paperRun),
             InferPaperWon(paperRun),
@@ -1174,6 +1220,9 @@ public sealed class DashboardDataService(
             FormatDecimal(orderBook?.BestAsk),
             position.EstimatedValueUsd,
             position.UnrealizedPnlUsd,
+            position.FeeUsd,
+            position.FeeAccountingStatus,
+            position.NetUnrealizedPnlUsd,
             "n/a",
             string.IsNullOrWhiteSpace(position.CopiedTraderWallet) ? "n/a" : position.CopiedTraderWallet);
     }
@@ -1359,8 +1408,10 @@ public sealed class DashboardDataService(
             order.FilledNotionalUsd,
             order.CostBasisUsd,
             order.FeeUsd,
+            order.FeeAccountingStatus,
             order.SettlementValueUsd,
             order.RealizedPnlUsd,
+            order.NetRealizedPnlUsd,
             FormatDate(order.SettledAtUtc),
             order.WinningOutcome ?? string.Empty,
             order.Won,

@@ -300,6 +300,45 @@ public static class PolymarketJsonParser
             GetString(root, "secondary_token_id") ?? string.Empty);
     }
 
+    public static PolymarketClobMarketInfo ParseClobMarketInfo(
+        JsonElement root,
+        string requestedConditionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(requestedConditionId);
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("CLOB market-info response must be a JSON object.");
+        }
+
+        var responseConditionId = GetString(root, "c");
+        if (!string.IsNullOrWhiteSpace(responseConditionId) &&
+            !string.Equals(responseConditionId, requestedConditionId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new JsonException(
+                $"CLOB market-info condition id '{responseConditionId}' does not match requested id '{requestedConditionId}'.");
+        }
+
+        PolymarketClobFeeSchedule? feeSchedule = null;
+        if (root.TryGetProperty("fd", out var feeDetails) &&
+            feeDetails.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
+        {
+            feeSchedule = feeDetails.ValueKind == JsonValueKind.Object
+                ? new PolymarketClobFeeSchedule(
+                    GetDecimalOrNull(feeDetails, "r"),
+                    GetIntOrNull(feeDetails, "e"),
+                    GetBoolOrNull(feeDetails, "to"))
+                : new PolymarketClobFeeSchedule(null, null, null);
+        }
+
+        return new PolymarketClobMarketInfo(
+            responseConditionId ?? requestedConditionId,
+            GetOptionalInt64Strict(root, "mbf"),
+            GetOptionalInt64Strict(root, "tbf"),
+            feeSchedule,
+            root.GetRawText());
+    }
+
     public static IReadOnlyList<PolymarketGammaMarket> ParseGammaActiveMarkets(JsonElement root)
     {
         return ParseGammaMarkets(root);
@@ -1124,6 +1163,28 @@ public static class PolymarketJsonParser
         return long.TryParse(property.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : 0L;
+    }
+
+    private static long? GetOptionalInt64Strict(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Number && property.TryGetInt64(out var number))
+        {
+            return number;
+        }
+
+        if (property.ValueKind == JsonValueKind.String &&
+            long.TryParse(property.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+        {
+            return parsed;
+        }
+
+        throw new JsonException($"Property '{propertyName}' must be an Int64 when present.");
     }
 
     private static int? GetIntOrNull(JsonElement element, string propertyName)

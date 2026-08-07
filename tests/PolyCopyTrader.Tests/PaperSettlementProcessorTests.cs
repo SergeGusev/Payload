@@ -20,7 +20,11 @@ public sealed class PaperSettlementProcessorTests
             2m,
             0m,
             DateTimeOffset.UtcNow,
-            "0xleader"));
+            "0xleader",
+            FeeUsd: 0.10m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole: FeeLiquidityRole.Taker.ToString(),
+            NetUnrealizedPnlUsd: -0.10m));
         repository.PaperPositions.Add(new PaperPosition(
             "asset-no",
             "condition-1",
@@ -59,15 +63,22 @@ public sealed class PaperSettlementProcessorTests
             Assert.Equal(0m, position.AveragePrice);
             Assert.Equal(0m, position.EstimatedValueUsd);
             Assert.Equal(0m, position.UnrealizedPnlUsd);
+            Assert.Equal(0m, position.FeeUsd);
+            Assert.Equal(0m, position.NetUnrealizedPnlUsd);
         });
         var yes = Assert.Single(repository.PaperPositionSettlements, item => item.AssetId == "asset-yes");
         Assert.True(yes.Won);
         Assert.Equal(5m, yes.SettlementValueUsd);
         Assert.Equal(3m, yes.RealizedPnlUsd);
+        Assert.Equal(0.10m, yes.FeeUsd);
+        Assert.Equal(FeeAccountingStatus.Calculated.ToString(), yes.FeeAccountingStatus);
+        Assert.Equal(2.90m, yes.NetRealizedPnlUsd);
         var no = Assert.Single(repository.PaperPositionSettlements, item => item.AssetId == "asset-no");
         Assert.False(no.Won);
         Assert.Equal(0m, no.SettlementValueUsd);
         Assert.Equal(-1.5m, no.RealizedPnlUsd);
+        Assert.Equal(FeeAccountingStatus.LegacyUnknown.ToString(), no.FeeAccountingStatus);
+        Assert.Null(no.NetRealizedPnlUsd);
     }
 
     [Fact]

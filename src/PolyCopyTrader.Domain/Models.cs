@@ -3882,7 +3882,16 @@ public sealed record PaperPosition(
     decimal EstimatedValueUsd,
     decimal UnrealizedPnlUsd,
     DateTimeOffset UpdatedAtUtc,
-    string CopiedTraderWallet = "");
+    string CopiedTraderWallet = "",
+    decimal FeeUsd = 0m,
+    string FeeAccountingStatus = "LegacyUnknown",
+    string FeeLiquidityRole = "Unknown",
+    string FeeCalculationSource = "",
+    decimal? FeeRate = null,
+    int? FeeExponent = null,
+    bool? FeeTakerOnly = null,
+    DateTimeOffset? FeeCalculatedAtUtc = null,
+    decimal? NetUnrealizedPnlUsd = null);
 
 public sealed record DryRunOrder(
     Guid Id,
@@ -3940,7 +3949,15 @@ public sealed record LiveOrder(
     Guid? CorrelationId = null,
     string ExecutionSource = "",
     bool? PostOnly = null,
-    Guid? PaperOrderId = null);
+    Guid? PaperOrderId = null,
+    string FeeAccountingStatus = "LegacyUnknown",
+    string FeeLiquidityRole = "Unknown",
+    string FeeCalculationSource = "",
+    decimal? FeeRate = null,
+    int? FeeExponent = null,
+    bool? FeeTakerOnly = null,
+    DateTimeOffset? FeeCalculatedAtUtc = null,
+    decimal? NetRealizedPnlUsd = null);
 
 public sealed record PaperLiveShadowDecision(
     Guid CorrelationId,
@@ -4002,7 +4019,16 @@ public sealed record PaperFill(
     decimal SizeShares,
     DateTimeOffset FilledAtUtc,
     string Evidence,
-    decimal RealizedPnlUsd = 0m);
+    decimal RealizedPnlUsd = 0m,
+    decimal FeeUsd = 0m,
+    string FeeAccountingStatus = "LegacyUnknown",
+    string FeeLiquidityRole = "Unknown",
+    string FeeCalculationSource = "",
+    decimal? FeeRate = null,
+    int? FeeExponent = null,
+    bool? FeeTakerOnly = null,
+    DateTimeOffset? FeeCalculatedAtUtc = null,
+    decimal? NetRealizedPnlUsd = null);
 
 public sealed record PaperPositionSettlement(
     Guid Id,
@@ -4021,7 +4047,16 @@ public sealed record PaperPositionSettlement(
     bool Won,
     string SettlementSource,
     DateTimeOffset SettledAtUtc,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    decimal FeeUsd = 0m,
+    string FeeAccountingStatus = "LegacyUnknown",
+    string FeeLiquidityRole = "Unknown",
+    string FeeCalculationSource = "",
+    decimal? FeeRate = null,
+    int? FeeExponent = null,
+    bool? FeeTakerOnly = null,
+    DateTimeOffset? FeeCalculatedAtUtc = null,
+    decimal? NetRealizedPnlUsd = null);
 
 public sealed record PaperCopiedTraderPerformance(
     string CopiedTraderWallet,
@@ -4099,7 +4134,16 @@ public sealed record StrategyMarketPaperRun(
     string? SkipReason,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
-    string? SkipDiagnosticsJson = null);
+    string? SkipDiagnosticsJson = null,
+    decimal FeeUsd = 0m,
+    string FeeAccountingStatus = "LegacyUnknown",
+    string FeeLiquidityRole = "Unknown",
+    string FeeCalculationSource = "",
+    decimal? FeeRate = null,
+    int? FeeExponent = null,
+    bool? FeeTakerOnly = null,
+    DateTimeOffset? FeeCalculatedAtUtc = null,
+    decimal? NetRealizedPnlUsd = null);
 
 public enum PaperCopiedLeaderPositionStatus
 {

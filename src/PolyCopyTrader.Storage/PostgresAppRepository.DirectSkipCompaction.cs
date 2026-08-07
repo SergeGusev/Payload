@@ -149,7 +149,16 @@ WITH run_rows AS (
         skip_reason text,
         created_at_utc timestamptz,
         updated_at_utc timestamptz,
-        skip_diagnostics_json text
+        skip_diagnostics_json text,
+        fee_usd numeric,
+        fee_accounting_status text,
+        fee_liquidity_role text,
+        fee_calculation_source text,
+        fee_rate numeric,
+        fee_exponent integer,
+        fee_taker_only boolean,
+        fee_calculated_at_utc timestamptz,
+        net_realized_pnl_usd numeric
     )
 )
 INSERT INTO strategy_market_paper_runs (
@@ -157,14 +166,18 @@ INSERT INTO strategy_market_paper_runs (
     market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
     selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
     signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
-    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc
+    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 )
 SELECT
     id, strategy_id, market_id, condition_id, market_slug, market_title, category,
     market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
     selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
     signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
-    realized_pnl_usd, settled_at_utc, skip_reason, CAST(skip_diagnostics_json AS jsonb), created_at_utc, updated_at_utc
+    realized_pnl_usd, settled_at_utc, skip_reason, CAST(skip_diagnostics_json AS jsonb), created_at_utc, updated_at_utc,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 FROM run_rows
 WHERE NOT EXISTS (
     SELECT 1

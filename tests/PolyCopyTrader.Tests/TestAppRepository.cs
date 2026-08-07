@@ -1451,6 +1451,22 @@ internal sealed class TestAppRepository : IAppRepository
         }
     }
 
+    public Task<IReadOnlyList<PaperFill>> GetPaperFillsForOrdersAsync(
+        IReadOnlyCollection<Guid> paperOrderIds,
+        CancellationToken cancellationToken = default)
+    {
+        var orderIds = paperOrderIds.Where(id => id != Guid.Empty).ToHashSet();
+        lock (sync)
+        {
+            return Task.FromResult<IReadOnlyList<PaperFill>>(PaperFills
+                .Where(item => orderIds.Contains(item.PaperOrderId))
+                .OrderBy(item => item.PaperOrderId)
+                .ThenBy(item => item.FilledAtUtc)
+                .ThenBy(item => item.Id)
+                .ToArray());
+        }
+    }
+
     public async Task<PaperLiveShadowFillReconciliationResult> ReconcilePaperLiveShadowFillAsync(
         PaperLiveShadowFillReconciliationRequest request,
         CancellationToken cancellationToken = default)
@@ -1549,6 +1565,7 @@ internal sealed class TestAppRepository : IAppRepository
         PaperPosition expectedPosition,
         decimal estimatedValueUsd,
         decimal unrealizedPnlUsd,
+        decimal? netUnrealizedPnlUsd,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default)
     {
@@ -1572,6 +1589,7 @@ internal sealed class TestAppRepository : IAppRepository
             {
                 EstimatedValueUsd = estimatedValueUsd,
                 UnrealizedPnlUsd = unrealizedPnlUsd,
+                NetUnrealizedPnlUsd = netUnrealizedPnlUsd,
                 UpdatedAtUtc = updatedAtUtc
             };
             return Task.FromResult(true);
@@ -1610,6 +1628,7 @@ internal sealed class TestAppRepository : IAppRepository
                 {
                     EstimatedValueUsd = update.EstimatedValueUsd,
                     UnrealizedPnlUsd = update.UnrealizedPnlUsd,
+                    NetUnrealizedPnlUsd = update.NetUnrealizedPnlUsd,
                     UpdatedAtUtc = update.UpdatedAtUtc
                 };
                 PaperPositions[index] = updatedPosition;
@@ -1933,12 +1952,12 @@ internal sealed class TestAppRepository : IAppRepository
             var liveWon = liveSettled.Count(order => order.Won ?? order.SettlementValueUsd > 0m);
             var liveLost = liveSettled.Length - liveWon;
             var liveStake = liveSettled.Sum(order =>
-                order.CostBasisUsd > 0m
-                    ? order.CostBasisUsd
-                    : order.FilledNotionalUsd > 0m
-                        ? order.FilledNotionalUsd + order.FeeUsd
-                        : order.FilledSize > 0m
-                            ? order.Price * order.FilledSize + order.FeeUsd
+                order.FilledNotionalUsd > 0m
+                    ? order.FilledNotionalUsd
+                    : order.FilledSize > 0m
+                        ? order.Price * order.FilledSize
+                        : order.CostBasisUsd > 0m
+                            ? Math.Max(0m, order.CostBasisUsd - order.FeeUsd)
                             : 0m);
             var liveRealized = liveSettled.Sum(order => order.RealizedPnlUsd ?? 0m);
             var liveWinRows = liveSettled
@@ -2195,12 +2214,12 @@ internal sealed class TestAppRepository : IAppRepository
                 var liveWon = liveSettled.Count(order => order.Won ?? order.SettlementValueUsd > 0m);
                 var liveLost = liveSettled.Length - liveWon;
                 var liveStake = liveSettled.Sum(order =>
-                    order.CostBasisUsd > 0m
-                        ? order.CostBasisUsd
-                        : order.FilledNotionalUsd > 0m
-                            ? order.FilledNotionalUsd + order.FeeUsd
-                            : order.FilledSize > 0m
-                                ? order.Price * order.FilledSize + order.FeeUsd
+                    order.FilledNotionalUsd > 0m
+                        ? order.FilledNotionalUsd
+                        : order.FilledSize > 0m
+                            ? order.Price * order.FilledSize
+                            : order.CostBasisUsd > 0m
+                                ? Math.Max(0m, order.CostBasisUsd - order.FeeUsd)
                                 : 0m);
                 var liveRealized = liveSettled.Sum(order => order.RealizedPnlUsd ?? 0m);
                 var filledCost = fills.Sum(fill => fill.Price * fill.SizeShares);
@@ -2761,7 +2780,8 @@ internal sealed class TestAppRepository : IAppRepository
         Guid liveOrderId,
         Guid strategyId,
         decimal settlementValueUsd,
-        decimal realizedPnlUsd,
+        decimal grossRealizedPnlUsd,
+        decimal? netRealizedPnlUsd,
         string? winningAssetId,
         string winningOutcome,
         DateTimeOffset settledAtUtc,
@@ -2781,9 +2801,10 @@ internal sealed class TestAppRepository : IAppRepository
         LiveOrders.Remove(existing);
         LiveOrders.Add(existing with
         {
-            BalanceEffectApplied = true,
+            BalanceEffectApplied = netRealizedPnlUsd.HasValue,
             SettlementValueUsd = settlementValueUsd,
-            RealizedPnlUsd = realizedPnlUsd,
+            RealizedPnlUsd = grossRealizedPnlUsd,
+            NetRealizedPnlUsd = netRealizedPnlUsd,
             SettledAtUtc = settledAtUtc,
             WinningAssetId = winningAssetId,
             WinningOutcome = winningOutcome,
@@ -2792,8 +2813,15 @@ internal sealed class TestAppRepository : IAppRepository
             UpdatedAtUtc = updatedAtUtc
         });
 
+        if (!netRealizedPnlUsd.HasValue)
+        {
+            var currentBalance = GetStrategySettings(normalizedStrategyId).LiveAvailableBalance;
+            return Task.FromResult(new StrategyLiveBalanceAdjustmentResult(false, currentBalance, false));
+        }
+
         var settings = GetStrategySettings(normalizedStrategyId);
-        var availableBalance = Math.Min(100m, Math.Max(0m, settings.LiveAvailableBalance + realizedPnlUsd));
+        var balanceRealizedPnlUsd = netRealizedPnlUsd.Value;
+        var availableBalance = Math.Min(100m, Math.Max(0m, settings.LiveAvailableBalance + balanceRealizedPnlUsd));
         var liveStakes = availableBalance < settings.LiveStakeAmount ? false : settings.LiveStakes;
         StrategySettings[normalizedStrategyId] = settings with
         {

@@ -10336,6 +10336,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.False(root.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
         Assert.Equal(2, root.GetProperty("paper_fak_levels_used").GetInt32());
         Assert.False(root.GetProperty("paper_fak_partial_fill").GetBoolean());
+        Assert.Equal("Taker", Assert.Single(scenario.Repository.PaperFills).FeeLiquidityRole);
     }
 
     [Fact]

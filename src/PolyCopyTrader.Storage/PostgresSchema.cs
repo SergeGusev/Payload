@@ -2719,10 +2719,28 @@ CREATE TABLE IF NOT EXISTS paper_fills (
     size_shares numeric(28,8) NOT NULL,
     filled_at_utc timestamptz NOT NULL,
     evidence text NOT NULL,
-    realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0
+    realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown',
+    fee_liquidity_role text NOT NULL DEFAULT 'Unknown',
+    fee_calculation_source text NOT NULL DEFAULT '',
+    fee_rate numeric(28,8) NULL,
+    fee_exponent integer NULL,
+    fee_taker_only boolean NULL,
+    fee_calculated_at_utc timestamptz NULL,
+    net_realized_pnl_usd numeric(28,8) NULL
 );
 
 ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS realized_pnl_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown';
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_liquidity_role text NOT NULL DEFAULT 'Unknown';
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_calculation_source text NOT NULL DEFAULT '';
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_rate numeric(28,8) NULL;
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_exponent integer NULL;
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_taker_only boolean NULL;
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS fee_calculated_at_utc timestamptz NULL;
+ALTER TABLE paper_fills ADD COLUMN IF NOT EXISTS net_realized_pnl_usd numeric(28,8) NULL;
 
 CREATE INDEX IF NOT EXISTS ix_paper_fills_order_time
 ON paper_fills(paper_order_id, filled_at_utc ASC);
@@ -2758,6 +2776,15 @@ CREATE TABLE IF NOT EXISTS strategy_market_paper_runs (
     settlement_price numeric(18,8) NULL,
     settlement_value_usd numeric(28,8) NULL,
     realized_pnl_usd numeric(28,8) NULL,
+    fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown',
+    fee_liquidity_role text NOT NULL DEFAULT 'Unknown',
+    fee_calculation_source text NOT NULL DEFAULT '',
+    fee_rate numeric(28,8) NULL,
+    fee_exponent integer NULL,
+    fee_taker_only boolean NULL,
+    fee_calculated_at_utc timestamptz NULL,
+    net_realized_pnl_usd numeric(28,8) NULL,
     settled_at_utc timestamptz NULL,
     skip_reason text NULL,
     skip_diagnostics_json jsonb NULL,
@@ -2769,6 +2796,15 @@ CREATE TABLE IF NOT EXISTS strategy_market_paper_runs (
 
 ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS skip_diagnostics_json jsonb NULL;
 ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS retention_scope text NOT NULL DEFAULT 'Unknown';
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown';
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS fee_liquidity_role text NOT NULL DEFAULT 'Unknown';
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS fee_calculation_source text NOT NULL DEFAULT '';
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS fee_rate numeric(28,8) NULL;
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS fee_exponent integer NULL;
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS fee_taker_only boolean NULL;
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS fee_calculated_at_utc timestamptz NULL;
+ALTER TABLE strategy_market_paper_runs ADD COLUMN IF NOT EXISTS net_realized_pnl_usd numeric(28,8) NULL;
 
 DO $$
 BEGIN
@@ -3187,10 +3223,28 @@ CREATE TABLE IF NOT EXISTS paper_positions (
     average_price numeric(18,8) NOT NULL,
     estimated_value_usd numeric(28,8) NOT NULL,
     unrealized_pnl_usd numeric(28,8) NOT NULL,
+    fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown',
+    fee_liquidity_role text NOT NULL DEFAULT 'Unknown',
+    fee_calculation_source text NOT NULL DEFAULT '',
+    fee_rate numeric(28,8) NULL,
+    fee_exponent integer NULL,
+    fee_taker_only boolean NULL,
+    fee_calculated_at_utc timestamptz NULL,
+    net_unrealized_pnl_usd numeric(28,8) NULL,
     updated_at_utc timestamptz NOT NULL
 );
 
 ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS copied_trader_wallet text NOT NULL DEFAULT '';
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown';
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_liquidity_role text NOT NULL DEFAULT 'Unknown';
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_calculation_source text NOT NULL DEFAULT '';
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_rate numeric(28,8) NULL;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_exponent integer NULL;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_taker_only boolean NULL;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS fee_calculated_at_utc timestamptz NULL;
+ALTER TABLE paper_positions ADD COLUMN IF NOT EXISTS net_unrealized_pnl_usd numeric(28,8) NULL;
 
 DROP INDEX IF EXISTS ux_paper_positions_asset;
 
@@ -3237,11 +3291,30 @@ CREATE TABLE IF NOT EXISTS paper_position_settlements (
     cost_basis_usd numeric(28,8) NOT NULL,
     settlement_value_usd numeric(28,8) NOT NULL,
     realized_pnl_usd numeric(28,8) NOT NULL,
+    fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown',
+    fee_liquidity_role text NOT NULL DEFAULT 'Unknown',
+    fee_calculation_source text NOT NULL DEFAULT '',
+    fee_rate numeric(28,8) NULL,
+    fee_exponent integer NULL,
+    fee_taker_only boolean NULL,
+    fee_calculated_at_utc timestamptz NULL,
+    net_realized_pnl_usd numeric(28,8) NULL,
     won boolean NOT NULL,
     settlement_source text NOT NULL,
     settled_at_utc timestamptz NOT NULL,
     created_at_utc timestamptz NOT NULL
 );
+
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown';
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS fee_liquidity_role text NOT NULL DEFAULT 'Unknown';
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS fee_calculation_source text NOT NULL DEFAULT '';
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS fee_rate numeric(28,8) NULL;
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS fee_exponent integer NULL;
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS fee_taker_only boolean NULL;
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS fee_calculated_at_utc timestamptz NULL;
+ALTER TABLE paper_position_settlements ADD COLUMN IF NOT EXISTS net_realized_pnl_usd numeric(28,8) NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_paper_position_settlements_wallet_asset
 ON paper_position_settlements(copied_trader_wallet, asset_id);
@@ -3977,12 +4050,20 @@ CREATE TABLE IF NOT EXISTS live_orders (
     filled_notional_usd numeric(28,8) NOT NULL DEFAULT 0,
     cost_basis_usd numeric(28,8) NOT NULL DEFAULT 0,
     fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown',
+    fee_liquidity_role text NOT NULL DEFAULT 'Unknown',
+    fee_calculation_source text NOT NULL DEFAULT '',
+    fee_rate numeric(28,8) NULL,
+    fee_exponent integer NULL,
+    fee_taker_only boolean NULL,
+    fee_calculated_at_utc timestamptz NULL,
     cancel_status text NOT NULL,
     raw_response_json jsonb NOT NULL,
     validation_summary text NOT NULL,
     balance_effect_applied boolean NOT NULL DEFAULT false,
     settlement_value_usd numeric(28,8) NULL,
     realized_pnl_usd numeric(28,8) NULL,
+    net_realized_pnl_usd numeric(28,8) NULL,
     settled_at_utc timestamptz NULL,
     winning_asset_id text NULL,
     winning_outcome text NULL,
@@ -4001,8 +4082,16 @@ ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS average_fill_price numeric(18,8
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS filled_notional_usd numeric(28,8) NOT NULL DEFAULT 0;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS cost_basis_usd numeric(28,8) NOT NULL DEFAULT 0;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown';
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_liquidity_role text NOT NULL DEFAULT 'Unknown';
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_calculation_source text NOT NULL DEFAULT '';
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_rate numeric(28,8) NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_exponent integer NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_taker_only boolean NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS fee_calculated_at_utc timestamptz NULL;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS settlement_value_usd numeric(28,8) NULL;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS realized_pnl_usd numeric(28,8) NULL;
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS net_realized_pnl_usd numeric(28,8) NULL;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS settled_at_utc timestamptz NULL;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS winning_asset_id text NULL;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS winning_outcome text NULL;

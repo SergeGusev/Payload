@@ -286,7 +286,10 @@ public sealed class ResilienceTests
             5m,
             0m,
             initialUpdatedAtUtc,
-            "0xleader");
+            "0xleader",
+            FeeUsd: 0.10m,
+            FeeAccountingStatus: "Calculated",
+            NetUnrealizedPnlUsd: -0.10m);
         await repository.UpsertPaperPositionAsync(position);
         var exposureCache = new ExposureSnapshotCache(repository);
         await exposureCache.RefreshAsync();
@@ -320,6 +323,7 @@ public sealed class ResilienceTests
         Assert.Equal(position.AveragePrice, updatedPosition.AveragePrice);
         Assert.Equal(7.50m, updatedPosition.EstimatedValueUsd);
         Assert.Equal(2.50m, updatedPosition.UnrealizedPnlUsd);
+        Assert.Equal(2.40m, updatedPosition.NetUnrealizedPnlUsd);
         Assert.True(updatedPosition.UpdatedAtUtc > position.UpdatedAtUtc);
         Assert.Equal(updatedPosition, exposureCache.GetPaperPosition(position.CopiedTraderWallet, position.AssetId));
     }

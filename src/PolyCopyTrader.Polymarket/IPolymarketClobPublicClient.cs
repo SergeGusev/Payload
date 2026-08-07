@@ -13,4 +13,12 @@ public interface IPolymarketClobPublicClient
     Task<decimal?> GetSpreadAsync(string assetId, CancellationToken cancellationToken = default);
 
     Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default);
+
+    Task<PolymarketClobMarketInfo> GetClobMarketInfoAsync(
+        string conditionId,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromException<PolymarketClobMarketInfo>(
+            new NotSupportedException("This CLOB public-client implementation does not support market-info lookup."));
+    }
 }

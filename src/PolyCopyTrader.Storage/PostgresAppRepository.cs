@@ -36,7 +36,7 @@ public sealed partial class PostgresAppRepository(PostgresConnectionFactory conn
 
 	private const string RecentPaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, NULL::text, correlation_id, execution_source";
 
-	private const string LiveOrderSelectColumns = "id, signal_id, strategy_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,\n       notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,\n       filled_size, remaining_size, average_fill_price, filled_notional_usd, cost_basis_usd, fee_usd,\n       cancel_status, raw_response_json::text, validation_summary, updated_at_utc,\n       balance_effect_applied, settlement_value_usd, realized_pnl_usd, settled_at_utc, winning_asset_id, winning_outcome,\n       won, settlement_source, correlation_id, execution_source, post_only, paper_order_id";
+	private const string LiveOrderSelectColumns = "id, signal_id, strategy_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,\n       notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,\n       filled_size, remaining_size, average_fill_price, filled_notional_usd, cost_basis_usd, fee_usd,\n       cancel_status, raw_response_json::text, validation_summary, updated_at_utc,\n       balance_effect_applied, settlement_value_usd, realized_pnl_usd, settled_at_utc, winning_asset_id, winning_outcome,\n       won, settlement_source, correlation_id, execution_source, post_only, paper_order_id,\n       fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate, fee_exponent,\n       fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd";
 
 	public async Task<DateTimeOffset> GetDatabaseNowUtcAsync(CancellationToken cancellationToken = default(CancellationToken))
 	{
@@ -751,7 +751,7 @@ ON CONFLICT (wallet, condition_id) DO UPDATE SET
 	public async Task<bool> TryAddStrategyMarketPaperRunAsync(StrategyMarketPaperRun run, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO strategy_market_paper_runs (\n    id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc\n)\nSELECT\n    @Id, @StrategyId, @MarketId, @ConditionId, @MarketSlug, @MarketTitle, @Category,\n    @MarketStartUtc, @MarketEndUtc, @DetectedAtUtc, @EntryDueAtUtc, @Status,\n    @SelectedAssetId, @SelectedOutcome, @EntryPrice, @StakeUsd, @SizeShares,\n    @SignalId, @PaperOrderId, @EnteredAtUtc, @SettlementPrice, @SettlementValueUsd,\n    @RealizedPnlUsd, @SettledAtUtc, @SkipReason, CAST(@SkipDiagnosticsJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM strategy_market_paper_skip_tombstones tombstone\n    WHERE tombstone.strategy_id = @StrategyId\n      AND tombstone.market_id = @MarketId\n)\nON CONFLICT (strategy_id, market_id) DO NOTHING;");
+		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO strategy_market_paper_runs (\n    id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc,\n    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\n)\nSELECT\n    @Id, @StrategyId, @MarketId, @ConditionId, @MarketSlug, @MarketTitle, @Category,\n    @MarketStartUtc, @MarketEndUtc, @DetectedAtUtc, @EntryDueAtUtc, @Status,\n    @SelectedAssetId, @SelectedOutcome, @EntryPrice, @StakeUsd, @SizeShares,\n    @SignalId, @PaperOrderId, @EnteredAtUtc, @SettlementPrice, @SettlementValueUsd,\n    @RealizedPnlUsd, @SettledAtUtc, @SkipReason, CAST(@SkipDiagnosticsJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc,\n    @FeeUsd, @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate,\n    @FeeExponent, @FeeTakerOnly, @FeeCalculatedAtUtc, @NetRealizedPnlUsd\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM strategy_market_paper_skip_tombstones tombstone\n    WHERE tombstone.strategy_id = @StrategyId\n      AND tombstone.market_id = @MarketId\n)\nON CONFLICT (strategy_id, market_id) DO NOTHING;");
 		AddStrategyMarketPaperRunParameters(command, run);
 		return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
 	}
@@ -812,7 +812,16 @@ WITH run_rows AS (
         skip_reason text,
         created_at_utc timestamptz,
         updated_at_utc timestamptz,
-        skip_diagnostics_json text
+        skip_diagnostics_json text,
+        fee_usd numeric,
+        fee_accounting_status text,
+        fee_liquidity_role text,
+        fee_calculation_source text,
+        fee_rate numeric,
+        fee_exponent integer,
+        fee_taker_only boolean,
+        fee_calculated_at_utc timestamptz,
+        net_realized_pnl_usd numeric
     )
 )
 INSERT INTO strategy_market_paper_runs (
@@ -820,14 +829,18 @@ INSERT INTO strategy_market_paper_runs (
     market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
     selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
     signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
-    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc
+    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 )
 SELECT
     id, strategy_id, market_id, condition_id, market_slug, market_title, category,
     market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
     selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
     signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
-    realized_pnl_usd, settled_at_utc, skip_reason, CAST(skip_diagnostics_json AS jsonb), created_at_utc, updated_at_utc
+    realized_pnl_usd, settled_at_utc, skip_reason, CAST(skip_diagnostics_json AS jsonb), created_at_utc, updated_at_utc,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 FROM run_rows
 WHERE NOT EXISTS (
     SELECT 1
@@ -852,7 +865,7 @@ RETURNING id;
 	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetDueStrategyMarketPaperRunsAsync(Guid strategyId, string status, DateTimeOffset dueBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text\nFROM strategy_market_paper_runs\nWHERE strategy_id = @StrategyId\n  AND status = @Status\n  AND entry_due_at_utc <= @DueBeforeUtc\nORDER BY entry_due_at_utc ASC, detected_at_utc ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\nFROM strategy_market_paper_runs\nWHERE strategy_id = @StrategyId\n  AND status = @Status\n  AND entry_due_at_utc <= @DueBeforeUtc\nORDER BY entry_due_at_utc ASC, detected_at_utc ASC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyId", strategyId);
 		command.Parameters.AddWithValue("Status", status);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -883,7 +896,7 @@ RETURNING id;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.entry_due_at_utc <= @DueBeforeUtc\nORDER BY run.entry_due_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text,\n       run.fee_usd, run.fee_accounting_status, run.fee_liquidity_role, run.fee_calculation_source, run.fee_rate,\n       run.fee_exponent, run.fee_taker_only, run.fee_calculated_at_utc, run.net_realized_pnl_usd\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.entry_due_at_utc <= @DueBeforeUtc\nORDER BY run.entry_due_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", status);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -914,7 +927,7 @@ RETURNING id;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "WITH ordered_runs AS (\n    SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n           run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n           run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n           run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n           run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n           run.skip_diagnostics_json::text AS skip_diagnostics_json,\n           row_number() OVER (\n               ORDER BY run.entry_due_at_utc ASC,\n                        strategy.live_stakes DESC,\n                        run.detected_at_utc ASC,\n                        run.strategy_id ASC\n           ) AS due_row_number\n    FROM strategy_market_paper_runs run\n    INNER JOIN strategies strategy ON strategy.id = run.strategy_id\n    WHERE run.strategy_id = ANY(@StrategyIds)\n      AND run.status = @Status\n      AND run.entry_due_at_utc <= @DueBeforeUtc\n), cutoff AS (\n    SELECT entry_due_at_utc\n    FROM ordered_runs\n    WHERE due_row_number = @Limit\n)\nSELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json\nFROM ordered_runs\nWHERE due_row_number <= @Limit\n   OR ((SELECT entry_due_at_utc FROM cutoff) IS NOT NULL\n       AND entry_due_at_utc = (SELECT entry_due_at_utc FROM cutoff))\nORDER BY due_row_number ASC;");
+		await using NpgsqlCommand command = CreateCommand(connection, "WITH ordered_runs AS (\n    SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n           run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n           run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n           run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n           run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n           run.skip_diagnostics_json::text AS skip_diagnostics_json,\n           run.fee_usd, run.fee_accounting_status, run.fee_liquidity_role, run.fee_calculation_source, run.fee_rate,\n           run.fee_exponent, run.fee_taker_only, run.fee_calculated_at_utc, run.net_realized_pnl_usd,\n           row_number() OVER (\n               ORDER BY run.entry_due_at_utc ASC,\n                        strategy.live_stakes DESC,\n                        run.detected_at_utc ASC,\n                        run.strategy_id ASC\n           ) AS due_row_number\n    FROM strategy_market_paper_runs run\n    INNER JOIN strategies strategy ON strategy.id = run.strategy_id\n    WHERE run.strategy_id = ANY(@StrategyIds)\n      AND run.status = @Status\n      AND run.entry_due_at_utc <= @DueBeforeUtc\n), cutoff AS (\n    SELECT entry_due_at_utc\n    FROM ordered_runs\n    WHERE due_row_number = @Limit\n)\nSELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\nFROM ordered_runs\nWHERE due_row_number <= @Limit\n   OR ((SELECT entry_due_at_utc FROM cutoff) IS NOT NULL\n       AND entry_due_at_utc = (SELECT entry_due_at_utc FROM cutoff))\nORDER BY due_row_number ASC;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", status);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -945,7 +958,7 @@ RETURNING id;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "WITH earliest_due AS (\n    SELECT min(entry_due_at_utc) AS entry_due_at_utc\n    FROM strategy_market_paper_runs\n    WHERE strategy_id = ANY(@StrategyIds)\n      AND status = @Status\n      AND entry_due_at_utc <= @DueBeforeUtc\n)\nSELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nCROSS JOIN earliest_due due\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND due.entry_due_at_utc IS NOT NULL\n  AND run.entry_due_at_utc = due.entry_due_at_utc\nORDER BY run.entry_due_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC;");
+		await using NpgsqlCommand command = CreateCommand(connection, "WITH earliest_due AS (\n    SELECT min(entry_due_at_utc) AS entry_due_at_utc\n    FROM strategy_market_paper_runs\n    WHERE strategy_id = ANY(@StrategyIds)\n      AND status = @Status\n      AND entry_due_at_utc <= @DueBeforeUtc\n)\nSELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text,\n       run.fee_usd, run.fee_accounting_status, run.fee_liquidity_role, run.fee_calculation_source, run.fee_rate,\n       run.fee_exponent, run.fee_taker_only, run.fee_calculated_at_utc, run.net_realized_pnl_usd\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nCROSS JOIN earliest_due due\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND due.entry_due_at_utc IS NOT NULL\n  AND run.entry_due_at_utc = due.entry_due_at_utc\nORDER BY run.entry_due_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", status);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -961,7 +974,7 @@ RETURNING id;
 	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetStrategyMarketPaperRunsForSettlementAsync(Guid strategyId, DateTimeOffset marketEndedBeforeUtc, int limit, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text\nFROM strategy_market_paper_runs\nWHERE strategy_id = @StrategyId\n  AND status = @Status\n  AND market_end_utc IS NOT NULL\n  AND market_end_utc <= @MarketEndedBeforeUtc\nORDER BY market_end_utc ASC, entered_at_utc ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\nFROM strategy_market_paper_runs\nWHERE strategy_id = @StrategyId\n  AND status = @Status\n  AND market_end_utc IS NOT NULL\n  AND market_end_utc <= @MarketEndedBeforeUtc\nORDER BY market_end_utc ASC, entered_at_utc ASC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyId", strategyId);
 		command.Parameters.AddWithValue("Status", StrategyMarketPaperRunStatuses.Entered);
 		command.Parameters.Add("MarketEndedBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(marketEndedBeforeUtc);
@@ -987,7 +1000,7 @@ RETURNING id;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nLEFT JOIN paper_orders paper_order ON paper_order.id = run.paper_order_id\nLEFT JOIN LATERAL (\n    SELECT 1 AS has_fill\n    FROM paper_fills fill_row\n    WHERE fill_row.paper_order_id = run.paper_order_id\n    LIMIT 1\n) fill_row ON true\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_end_utc <= @MarketEndedBeforeUtc\nORDER BY\n  CASE\n    WHEN fill_row.has_fill IS NOT NULL THEN 0\n    WHEN paper_order.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired') THEN 1\n    WHEN paper_order.status = 'Expired' THEN 2\n    WHEN paper_order.id IS NULL THEN 3\n    ELSE 4\n  END ASC,\n  run.market_end_utc ASC,\n  run.entered_at_utc ASC,\n  strategy.live_stakes DESC,\n  run.detected_at_utc ASC,\n  run.strategy_id ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text,\n       run.fee_usd, run.fee_accounting_status, run.fee_liquidity_role, run.fee_calculation_source, run.fee_rate,\n       run.fee_exponent, run.fee_taker_only, run.fee_calculated_at_utc, run.net_realized_pnl_usd\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nLEFT JOIN paper_orders paper_order ON paper_order.id = run.paper_order_id\nLEFT JOIN LATERAL (\n    SELECT 1 AS has_fill\n    FROM paper_fills fill_row\n    WHERE fill_row.paper_order_id = run.paper_order_id\n    LIMIT 1\n) fill_row ON true\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_end_utc <= @MarketEndedBeforeUtc\nORDER BY\n  CASE\n    WHEN fill_row.has_fill IS NOT NULL THEN 0\n    WHEN paper_order.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired') THEN 1\n    WHEN paper_order.status = 'Expired' THEN 2\n    WHEN paper_order.id IS NULL THEN 3\n    ELSE 4\n  END ASC,\n  run.market_end_utc ASC,\n  run.entered_at_utc ASC,\n  strategy.live_stakes DESC,\n  run.detected_at_utc ASC,\n  run.strategy_id ASC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", StrategyMarketPaperRunStatuses.Entered);
 		command.Parameters.Add("MarketEndedBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(marketEndedBeforeUtc);
@@ -1013,7 +1026,7 @@ RETURNING id;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_start_utc IS NOT NULL\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_start_utc < run.market_end_utc\n  AND run.market_end_utc > @DueBeforeUtc\n  AND run.market_start_utc + ((run.market_end_utc - run.market_start_utc) * 0.75) <= @DueBeforeUtc\nORDER BY run.market_end_utc ASC, run.entered_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT run.id, run.strategy_id, run.market_id, run.condition_id, run.market_slug, run.market_title, run.category,\n       run.market_start_utc, run.market_end_utc, run.detected_at_utc, run.entry_due_at_utc, run.status,\n       run.selected_asset_id, run.selected_outcome, run.entry_price, run.stake_usd, run.size_shares,\n       run.signal_id, run.paper_order_id, run.entered_at_utc, run.settlement_price, run.settlement_value_usd,\n       run.realized_pnl_usd, run.settled_at_utc, run.skip_reason, run.created_at_utc, run.updated_at_utc,\n       run.skip_diagnostics_json::text,\n       run.fee_usd, run.fee_accounting_status, run.fee_liquidity_role, run.fee_calculation_source, run.fee_rate,\n       run.fee_exponent, run.fee_taker_only, run.fee_calculated_at_utc, run.net_realized_pnl_usd\nFROM strategy_market_paper_runs run\nINNER JOIN strategies strategy ON strategy.id = run.strategy_id\nWHERE run.strategy_id = ANY(@StrategyIds)\n  AND run.status = @Status\n  AND run.market_start_utc IS NOT NULL\n  AND run.market_end_utc IS NOT NULL\n  AND run.market_start_utc < run.market_end_utc\n  AND run.market_end_utc > @DueBeforeUtc\n  AND run.market_start_utc + ((run.market_end_utc - run.market_start_utc) * 0.75) <= @DueBeforeUtc\nORDER BY run.market_end_utc ASC, run.entered_at_utc ASC, strategy.live_stakes DESC, run.detected_at_utc ASC, run.strategy_id ASC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyIds", normalizedStrategyIds);
 		command.Parameters.AddWithValue("Status", StrategyMarketPaperRunStatuses.Entered);
 		command.Parameters.Add("DueBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(dueBeforeUtc);
@@ -1030,7 +1043,7 @@ RETURNING id;
 	public async Task<IReadOnlyList<StrategyMarketPaperRun>> GetRecentStrategyMarketPaperRunsAsync(Guid strategyId, string status, int limit, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text\nFROM strategy_market_paper_runs\nWHERE strategy_id = @StrategyId\n  AND status = @Status\nORDER BY COALESCE(settled_at_utc, entered_at_utc, updated_at_utc) DESC,\n         COALESCE(market_start_utc, entry_due_at_utc, detected_at_utc) DESC\nLIMIT @Limit;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\nFROM strategy_market_paper_runs\nWHERE strategy_id = @StrategyId\n  AND status = @Status\nORDER BY COALESCE(settled_at_utc, entered_at_utc, updated_at_utc) DESC,\n         COALESCE(market_start_utc, entry_due_at_utc, detected_at_utc) DESC\nLIMIT @Limit;");
 		command.Parameters.AddWithValue("StrategyId", strategyId);
 		command.Parameters.AddWithValue("Status", status);
 		command.Parameters.AddWithValue("Limit", limit);
@@ -1085,7 +1098,7 @@ RETURNING id;
 	public async Task UpdateStrategyMarketPaperRunAsync(StrategyMarketPaperRun run, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc\nWHERE id = @Id;");
+		await using NpgsqlCommand command = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc,\n    fee_usd = @FeeUsd,\n    fee_accounting_status = @FeeAccountingStatus,\n    fee_liquidity_role = @FeeLiquidityRole,\n    fee_calculation_source = @FeeCalculationSource,\n    fee_rate = @FeeRate,\n    fee_exponent = @FeeExponent,\n    fee_taker_only = @FeeTakerOnly,\n    fee_calculated_at_utc = @FeeCalculatedAtUtc,\n    net_realized_pnl_usd = @NetRealizedPnlUsd\nWHERE id = @Id;");
 		AddStrategyMarketPaperRunParameters(command, run);
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
@@ -1101,7 +1114,7 @@ RETURNING id;
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
 		foreach (StrategyMarketPaperRun run in runs)
 		{
-			await using NpgsqlCommand command = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc\nWHERE id = @Id;");
+			await using NpgsqlCommand command = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc,\n    fee_usd = @FeeUsd,\n    fee_accounting_status = @FeeAccountingStatus,\n    fee_liquidity_role = @FeeLiquidityRole,\n    fee_calculation_source = @FeeCalculationSource,\n    fee_rate = @FeeRate,\n    fee_exponent = @FeeExponent,\n    fee_taker_only = @FeeTakerOnly,\n    fee_calculated_at_utc = @FeeCalculatedAtUtc,\n    net_realized_pnl_usd = @NetRealizedPnlUsd\nWHERE id = @Id;");
 			command.Transaction = transaction;
 			AddStrategyMarketPaperRunParameters(command, run);
 			await command.ExecuteNonQueryAsync(cancellationToken);
@@ -1472,12 +1485,27 @@ ORDER BY
 			size_shares = fill.SizeShares,
 			filled_at_utc = UtcDateTime(fill.FilledAtUtc),
 			evidence = fill.Evidence,
-			realized_pnl_usd = fill.RealizedPnlUsd
+			realized_pnl_usd = fill.RealizedPnlUsd,
+			fee_usd = fill.FeeUsd,
+			fee_accounting_status = fill.FeeAccountingStatus,
+			fee_liquidity_role = fill.FeeLiquidityRole,
+			fee_calculation_source = fill.FeeCalculationSource,
+			fee_rate = fill.FeeRate,
+			fee_exponent = fill.FeeExponent,
+			fee_taker_only = fill.FeeTakerOnly,
+			fee_calculated_at_utc = fill.FeeCalculatedAtUtc.HasValue ? UtcDateTime(fill.FeeCalculatedAtUtc.Value) : (DateTime?)null,
+			net_realized_pnl_usd = fill.NetRealizedPnlUsd
 		});
 		await using NpgsqlCommand command = CreateCommand(connection, """
-INSERT INTO paper_fills (id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd)
+INSERT INTO paper_fills (
+    id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
+)
 SELECT
-    fill.id, fill.paper_order_id, fill.price, fill.size_shares, fill.filled_at_utc, fill.evidence, fill.realized_pnl_usd
+    fill.id, fill.paper_order_id, fill.price, fill.size_shares, fill.filled_at_utc, fill.evidence, fill.realized_pnl_usd,
+    fill.fee_usd, fill.fee_accounting_status, fill.fee_liquidity_role, fill.fee_calculation_source, fill.fee_rate,
+    fill.fee_exponent, fill.fee_taker_only, fill.fee_calculated_at_utc, fill.net_realized_pnl_usd
 FROM jsonb_to_recordset(CAST(@PaperFillsJson AS jsonb)) AS fill(
     id uuid,
     paper_order_id uuid,
@@ -1485,7 +1513,16 @@ FROM jsonb_to_recordset(CAST(@PaperFillsJson AS jsonb)) AS fill(
     size_shares numeric,
     filled_at_utc timestamptz,
     evidence text,
-    realized_pnl_usd numeric
+    realized_pnl_usd numeric,
+    fee_usd numeric,
+    fee_accounting_status text,
+    fee_liquidity_role text,
+    fee_calculation_source text,
+    fee_rate numeric,
+    fee_exponent integer,
+    fee_taker_only boolean,
+    fee_calculated_at_utc timestamptz,
+    net_realized_pnl_usd numeric
 )
 ORDER BY
     (
@@ -1523,17 +1560,31 @@ ORDER BY
 			average_price = position.AveragePrice,
 			estimated_value_usd = position.EstimatedValueUsd,
 			unrealized_pnl_usd = position.UnrealizedPnlUsd,
+			fee_usd = position.FeeUsd,
+			fee_accounting_status = position.FeeAccountingStatus,
+			fee_liquidity_role = position.FeeLiquidityRole,
+			fee_calculation_source = position.FeeCalculationSource,
+			fee_rate = position.FeeRate,
+			fee_exponent = position.FeeExponent,
+			fee_taker_only = position.FeeTakerOnly,
+			fee_calculated_at_utc = position.FeeCalculatedAtUtc.HasValue ? UtcDateTime(position.FeeCalculatedAtUtc.Value) : (DateTime?)null,
+			net_unrealized_pnl_usd = position.NetUnrealizedPnlUsd,
 			updated_at_utc = UtcDateTime(position.UpdatedAtUtc)
 		});
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO paper_positions (
     id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares, average_price,
-    estimated_value_usd, unrealized_pnl_usd, updated_at_utc
+    estimated_value_usd, unrealized_pnl_usd, updated_at_utc,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_unrealized_pnl_usd
 )
 SELECT
     position.id, position.copied_trader_wallet, position.asset_id, position.condition_id, position.outcome,
     position.size_shares, position.average_price, position.estimated_value_usd, position.unrealized_pnl_usd,
-    position.updated_at_utc
+    position.updated_at_utc,
+    position.fee_usd, position.fee_accounting_status, position.fee_liquidity_role,
+    position.fee_calculation_source, position.fee_rate, position.fee_exponent,
+    position.fee_taker_only, position.fee_calculated_at_utc, position.net_unrealized_pnl_usd
 FROM jsonb_to_recordset(CAST(@PaperPositionsJson AS jsonb)) AS position(
     id uuid,
     copied_trader_wallet text,
@@ -1544,7 +1595,16 @@ FROM jsonb_to_recordset(CAST(@PaperPositionsJson AS jsonb)) AS position(
     average_price numeric,
     estimated_value_usd numeric,
     unrealized_pnl_usd numeric,
-    updated_at_utc timestamptz
+    updated_at_utc timestamptz,
+    fee_usd numeric,
+    fee_accounting_status text,
+    fee_liquidity_role text,
+    fee_calculation_source text,
+    fee_rate numeric,
+    fee_exponent integer,
+    fee_taker_only boolean,
+    fee_calculated_at_utc timestamptz,
+    net_unrealized_pnl_usd numeric
 )
 ORDER BY
     position.copied_trader_wallet COLLATE "C",
@@ -1557,6 +1617,15 @@ ON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET
     average_price = excluded.average_price,
     estimated_value_usd = excluded.estimated_value_usd,
     unrealized_pnl_usd = excluded.unrealized_pnl_usd,
+    fee_usd = excluded.fee_usd,
+    fee_accounting_status = excluded.fee_accounting_status,
+    fee_liquidity_role = excluded.fee_liquidity_role,
+    fee_calculation_source = excluded.fee_calculation_source,
+    fee_rate = excluded.fee_rate,
+    fee_exponent = excluded.fee_exponent,
+    fee_taker_only = excluded.fee_taker_only,
+    fee_calculated_at_utc = excluded.fee_calculated_at_utc,
+    net_unrealized_pnl_usd = excluded.net_unrealized_pnl_usd,
     updated_at_utc = excluded.updated_at_utc;
 """);
 		command.Transaction = transaction;
@@ -1742,7 +1811,16 @@ WHERE position.entry_paper_order_id = activation_rows.entry_paper_order_id
 			skip_reason = run.SkipReason,
 			skip_diagnostics_json = GetPersistedSkipDiagnosticsJson(run),
 			created_at_utc = UtcDateTime(run.CreatedAtUtc),
-			updated_at_utc = UtcDateTime(run.UpdatedAtUtc)
+			updated_at_utc = UtcDateTime(run.UpdatedAtUtc),
+			fee_usd = run.FeeUsd,
+			fee_accounting_status = run.FeeAccountingStatus,
+			fee_liquidity_role = run.FeeLiquidityRole,
+			fee_calculation_source = run.FeeCalculationSource,
+			fee_rate = run.FeeRate,
+			fee_exponent = run.FeeExponent,
+			fee_taker_only = run.FeeTakerOnly,
+			fee_calculated_at_utc = run.FeeCalculatedAtUtc.HasValue ? UtcDateTime(run.FeeCalculatedAtUtc.Value) : (DateTime?)null,
+			net_realized_pnl_usd = run.NetRealizedPnlUsd
 		});
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH run_rows AS (
@@ -1775,7 +1853,16 @@ WITH run_rows AS (
         skip_reason text,
         skip_diagnostics_json text,
         created_at_utc timestamptz,
-        updated_at_utc timestamptz
+        updated_at_utc timestamptz,
+        fee_usd numeric,
+        fee_accounting_status text,
+        fee_liquidity_role text,
+        fee_calculation_source text,
+        fee_rate numeric,
+        fee_exponent integer,
+        fee_taker_only boolean,
+        fee_calculated_at_utc timestamptz,
+        net_realized_pnl_usd numeric
     )
 ),
 updated_rows AS (
@@ -1806,7 +1893,16 @@ updated_rows AS (
         skip_reason = run_rows.skip_reason,
         skip_diagnostics_json = CAST(run_rows.skip_diagnostics_json AS jsonb),
         created_at_utc = run_rows.created_at_utc,
-        updated_at_utc = run_rows.updated_at_utc
+        updated_at_utc = run_rows.updated_at_utc,
+        fee_usd = run_rows.fee_usd,
+        fee_accounting_status = run_rows.fee_accounting_status,
+        fee_liquidity_role = run_rows.fee_liquidity_role,
+        fee_calculation_source = run_rows.fee_calculation_source,
+        fee_rate = run_rows.fee_rate,
+        fee_exponent = run_rows.fee_exponent,
+        fee_taker_only = run_rows.fee_taker_only,
+        fee_calculated_at_utc = run_rows.fee_calculated_at_utc,
+        net_realized_pnl_usd = run_rows.net_realized_pnl_usd
     FROM run_rows
     WHERE target.id = run_rows.id
     RETURNING target.id
@@ -1816,14 +1912,18 @@ INSERT INTO strategy_market_paper_runs (
     market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
     selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
     signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
-    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc
+    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 )
 SELECT
     run_rows.id, run_rows.strategy_id, run_rows.market_id, run_rows.condition_id, run_rows.market_slug, run_rows.market_title, run_rows.category,
     run_rows.market_start_utc, run_rows.market_end_utc, run_rows.detected_at_utc, run_rows.entry_due_at_utc, run_rows.status,
     run_rows.selected_asset_id, run_rows.selected_outcome, run_rows.entry_price, run_rows.stake_usd, run_rows.size_shares,
     run_rows.signal_id, run_rows.paper_order_id, run_rows.entered_at_utc, run_rows.settlement_price, run_rows.settlement_value_usd,
-    run_rows.realized_pnl_usd, run_rows.settled_at_utc, run_rows.skip_reason, CAST(run_rows.skip_diagnostics_json AS jsonb), run_rows.created_at_utc, run_rows.updated_at_utc
+    run_rows.realized_pnl_usd, run_rows.settled_at_utc, run_rows.skip_reason, CAST(run_rows.skip_diagnostics_json AS jsonb), run_rows.created_at_utc, run_rows.updated_at_utc,
+    run_rows.fee_usd, run_rows.fee_accounting_status, run_rows.fee_liquidity_role, run_rows.fee_calculation_source, run_rows.fee_rate,
+    run_rows.fee_exponent, run_rows.fee_taker_only, run_rows.fee_calculated_at_utc, run_rows.net_realized_pnl_usd
 FROM run_rows
 WHERE NOT EXISTS (
     SELECT 1
@@ -1861,7 +1961,16 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
     skip_reason = excluded.skip_reason,
     skip_diagnostics_json = excluded.skip_diagnostics_json,
     created_at_utc = excluded.created_at_utc,
-    updated_at_utc = excluded.updated_at_utc;
+    updated_at_utc = excluded.updated_at_utc,
+    fee_usd = excluded.fee_usd,
+    fee_accounting_status = excluded.fee_accounting_status,
+    fee_liquidity_role = excluded.fee_liquidity_role,
+    fee_calculation_source = excluded.fee_calculation_source,
+    fee_rate = excluded.fee_rate,
+    fee_exponent = excluded.fee_exponent,
+    fee_taker_only = excluded.fee_taker_only,
+    fee_calculated_at_utc = excluded.fee_calculated_at_utc,
+    net_realized_pnl_usd = excluded.net_realized_pnl_usd;
 """);
 		command.Transaction = transaction;
 		AddJsonbParameter(command, "StrategyRunsJson", JsonSerializer.Serialize(rows));
@@ -2043,7 +2152,7 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text\nFROM strategy_market_paper_runs\nWHERE paper_order_id = ANY(@PaperOrderIds)\nORDER BY COALESCE(settled_at_utc, entered_at_utc, updated_at_utc) DESC,\n         updated_at_utc DESC;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n       market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n       selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n       signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n       realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc,\n       skip_diagnostics_json::text,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\nFROM strategy_market_paper_runs\nWHERE paper_order_id = ANY(@PaperOrderIds)\nORDER BY COALESCE(settled_at_utc, entered_at_utc, updated_at_utc) DESC,\n         updated_at_utc DESC;");
 		command.Parameters.AddWithValue("PaperOrderIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid, normalizedPaperOrderIds);
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		List<StrategyMarketPaperRun> results = [];
@@ -2058,14 +2167,8 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 	public async Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO paper_fills (id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd)\nVALUES (@Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence, @RealizedPnlUsd);");
-		command.Parameters.AddWithValue("Id", fill.Id);
-		command.Parameters.AddWithValue("PaperOrderId", fill.PaperOrderId);
-		command.Parameters.AddWithValue("Price", fill.Price);
-		command.Parameters.AddWithValue("SizeShares", fill.SizeShares);
-		command.Parameters.AddWithValue("FilledAtUtc", UtcDateTime(fill.FilledAtUtc));
-		command.Parameters.AddWithValue("Evidence", fill.Evidence);
-		command.Parameters.AddWithValue("RealizedPnlUsd", fill.RealizedPnlUsd);
+		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO paper_fills (\n    id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd,\n    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\n) VALUES (\n    @Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence, @RealizedPnlUsd,\n    @FeeUsd, @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate,\n    @FeeExponent, @FeeTakerOnly, @FeeCalculatedAtUtc, @NetRealizedPnlUsd\n);");
+		AddPaperFillParameters(command, fill);
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
@@ -2075,7 +2178,7 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<PaperFill> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd\nFROM paper_fills\nORDER BY filled_at_utc DESC\nLIMIT @Limit;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\nFROM paper_fills\nORDER BY filled_at_utc DESC\nLIMIT @Limit;"))
 			{
 				command.Parameters.AddWithValue("Limit", limit);
 				IReadOnlyList<PaperFill> readOnlyList;
@@ -2101,7 +2204,7 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<PaperFill> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd\nFROM paper_fills\nWHERE paper_order_id = @PaperOrderId\nORDER BY filled_at_utc ASC, id ASC;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\nFROM paper_fills\nWHERE paper_order_id = @PaperOrderId\nORDER BY filled_at_utc ASC, id ASC;"))
 			{
 				command.Parameters.AddWithValue("PaperOrderId", paperOrderId);
 				IReadOnlyList<PaperFill> readOnlyList;
@@ -2119,6 +2222,30 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 			result = readOnlyList2;
 		}
 		return result;
+	}
+
+	public async Task<IReadOnlyList<PaperFill>> GetPaperFillsForOrdersAsync(IReadOnlyCollection<Guid> paperOrderIds, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		Guid[] normalizedPaperOrderIds = paperOrderIds
+			.Where(id => id != Guid.Empty)
+			.Distinct()
+			.ToArray();
+		if (normalizedPaperOrderIds.Length == 0)
+		{
+			return Array.Empty<PaperFill>();
+		}
+
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\nFROM paper_fills\nWHERE paper_order_id = ANY(@PaperOrderIds)\nORDER BY paper_order_id, filled_at_utc ASC, id ASC;");
+		command.Parameters.AddWithValue("PaperOrderIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid, normalizedPaperOrderIds);
+		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+		List<PaperFill> results = [];
+		while (await reader.ReadAsync(cancellationToken))
+		{
+			results.Add(ReadPaperFill(reader));
+		}
+
+		return results;
 	}
 
 	public async Task<PaperLiveShadowFillReconciliationResult> ReconcilePaperLiveShadowFillAsync(
@@ -2254,7 +2381,9 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
 	{
 		await using NpgsqlCommand command = CreateCommand(connection, """
 SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd,
-       unrealized_pnl_usd, updated_at_utc, copied_trader_wallet
+       unrealized_pnl_usd, updated_at_utc, copied_trader_wallet,
+       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_unrealized_pnl_usd
 FROM paper_positions
 WHERE copied_trader_wallet = @CopiedTraderWallet
   AND asset_id = @AssetId
@@ -2291,7 +2420,9 @@ FOR UPDATE;
 		CancellationToken cancellationToken)
 	{
 		await using NpgsqlCommand command = CreateCommand(connection, """
-SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd
+SELECT id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd,
+       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 FROM paper_fills
 WHERE paper_order_id = @PaperOrderId
 ORDER BY filled_at_utc, id
@@ -2405,8 +2536,16 @@ WHERE id = @Id;
 		if (existingFills.Count == 0)
 		{
 			await using NpgsqlCommand insertCommand = CreateCommand(connection, """
-INSERT INTO paper_fills (id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd)
-VALUES (@Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence, @RealizedPnlUsd);
+INSERT INTO paper_fills (
+    id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
+)
+VALUES (
+    @Id, @PaperOrderId, @Price, @SizeShares, @FilledAtUtc, @Evidence, @RealizedPnlUsd,
+    @FeeUsd, @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate,
+    @FeeExponent, @FeeTakerOnly, @FeeCalculatedAtUtc, @NetRealizedPnlUsd
+);
 """);
 			insertCommand.Transaction = transaction;
 			AddPaperFillParameters(insertCommand, canonicalFill);
@@ -2420,7 +2559,16 @@ SET price = @Price,
     size_shares = @SizeShares,
     filled_at_utc = @FilledAtUtc,
     evidence = @Evidence,
-    realized_pnl_usd = @RealizedPnlUsd
+    realized_pnl_usd = @RealizedPnlUsd,
+    fee_usd = @FeeUsd,
+    fee_accounting_status = @FeeAccountingStatus,
+    fee_liquidity_role = @FeeLiquidityRole,
+    fee_calculation_source = @FeeCalculationSource,
+    fee_rate = @FeeRate,
+    fee_exponent = @FeeExponent,
+    fee_taker_only = @FeeTakerOnly,
+    fee_calculated_at_utc = @FeeCalculatedAtUtc,
+    net_realized_pnl_usd = @NetRealizedPnlUsd
 WHERE id = @Id
   AND paper_order_id = @PaperOrderId;
 """))
@@ -2471,18 +2619,9 @@ WHERE entry_paper_order_id = @EntryPaperOrderId
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
 		await LockPaperPositionKeysAsync(connection, transaction, [position], [], cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO paper_positions (\n    id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares, average_price,\n    estimated_value_usd, unrealized_pnl_usd, updated_at_utc\n) VALUES (\n    @Id, @CopiedTraderWallet, @AssetId, @ConditionId, @Outcome, @SizeShares, @AveragePrice,\n    @EstimatedValueUsd, @UnrealizedPnlUsd, @UpdatedAtUtc\n)\nON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET\n    condition_id = excluded.condition_id,\n    outcome = excluded.outcome,\n    size_shares = excluded.size_shares,\n    average_price = excluded.average_price,\n    estimated_value_usd = excluded.estimated_value_usd,\n    unrealized_pnl_usd = excluded.unrealized_pnl_usd,\n    updated_at_utc = excluded.updated_at_utc;");
+		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO paper_positions (\n    id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares, average_price,\n    estimated_value_usd, unrealized_pnl_usd, updated_at_utc,\n    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_unrealized_pnl_usd\n) VALUES (\n    @Id, @CopiedTraderWallet, @AssetId, @ConditionId, @Outcome, @SizeShares, @AveragePrice,\n    @EstimatedValueUsd, @UnrealizedPnlUsd, @UpdatedAtUtc,\n    @FeeUsd, @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate,\n    @FeeExponent, @FeeTakerOnly, @FeeCalculatedAtUtc, @NetUnrealizedPnlUsd\n)\nON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET\n    condition_id = excluded.condition_id,\n    outcome = excluded.outcome,\n    size_shares = excluded.size_shares,\n    average_price = excluded.average_price,\n    estimated_value_usd = excluded.estimated_value_usd,\n    unrealized_pnl_usd = excluded.unrealized_pnl_usd,\n    fee_usd = excluded.fee_usd,\n    fee_accounting_status = excluded.fee_accounting_status,\n    fee_liquidity_role = excluded.fee_liquidity_role,\n    fee_calculation_source = excluded.fee_calculation_source,\n    fee_rate = excluded.fee_rate,\n    fee_exponent = excluded.fee_exponent,\n    fee_taker_only = excluded.fee_taker_only,\n    fee_calculated_at_utc = excluded.fee_calculated_at_utc,\n    net_unrealized_pnl_usd = excluded.net_unrealized_pnl_usd,\n    updated_at_utc = excluded.updated_at_utc;");
 		command.Transaction = transaction;
-		command.Parameters.AddWithValue("Id", Guid.NewGuid());
-		command.Parameters.AddWithValue("CopiedTraderWallet", position.CopiedTraderWallet);
-		command.Parameters.AddWithValue("AssetId", position.AssetId);
-		command.Parameters.AddWithValue("ConditionId", position.ConditionId);
-		command.Parameters.AddWithValue("Outcome", position.Outcome);
-		command.Parameters.AddWithValue("SizeShares", position.SizeShares);
-		command.Parameters.AddWithValue("AveragePrice", position.AveragePrice);
-		command.Parameters.AddWithValue("EstimatedValueUsd", position.EstimatedValueUsd);
-		command.Parameters.AddWithValue("UnrealizedPnlUsd", position.UnrealizedPnlUsd);
-		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(position.UpdatedAtUtc));
+		AddPaperPositionParameters(command, position);
 		await command.ExecuteNonQueryAsync(cancellationToken);
 		await transaction.CommitAsync(cancellationToken);
 	}
@@ -2491,6 +2630,7 @@ WHERE entry_paper_order_id = @EntryPaperOrderId
 		PaperPosition expectedPosition,
 		decimal estimatedValueUsd,
 		decimal unrealizedPnlUsd,
+		decimal? netUnrealizedPnlUsd,
 		DateTimeOffset updatedAtUtc,
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
@@ -2501,6 +2641,7 @@ WHERE entry_paper_order_id = @EntryPaperOrderId
 UPDATE paper_positions
 SET estimated_value_usd = @EstimatedValueUsd,
     unrealized_pnl_usd = @UnrealizedPnlUsd,
+    net_unrealized_pnl_usd = @NetUnrealizedPnlUsd,
     updated_at_utc = @UpdatedAtUtc
 WHERE copied_trader_wallet = @CopiedTraderWallet
   AND asset_id = @AssetId
@@ -2510,6 +2651,7 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
   AND average_price = @ExpectedAveragePrice
   AND estimated_value_usd = @ExpectedEstimatedValueUsd
   AND unrealized_pnl_usd = @ExpectedUnrealizedPnlUsd
+  AND net_unrealized_pnl_usd IS NOT DISTINCT FROM @ExpectedNetUnrealizedPnlUsd
   AND updated_at_utc = @ExpectedUpdatedAtUtc;
 """);
 		command.Transaction = transaction;
@@ -2521,9 +2663,11 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
 		command.Parameters.AddWithValue("ExpectedAveragePrice", expectedPosition.AveragePrice);
 		command.Parameters.AddWithValue("ExpectedEstimatedValueUsd", expectedPosition.EstimatedValueUsd);
 		command.Parameters.AddWithValue("ExpectedUnrealizedPnlUsd", expectedPosition.UnrealizedPnlUsd);
+		command.Parameters.AddWithValue("ExpectedNetUnrealizedPnlUsd", NullableDecimal(expectedPosition.NetUnrealizedPnlUsd));
 		command.Parameters.AddWithValue("ExpectedUpdatedAtUtc", UtcDateTime(expectedPosition.UpdatedAtUtc));
 		command.Parameters.AddWithValue("EstimatedValueUsd", estimatedValueUsd);
 		command.Parameters.AddWithValue("UnrealizedPnlUsd", unrealizedPnlUsd);
+		command.Parameters.AddWithValue("NetUnrealizedPnlUsd", NullableDecimal(netUnrealizedPnlUsd));
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
 		var updated = await command.ExecuteNonQueryAsync(cancellationToken) == 1;
 		await transaction.CommitAsync(cancellationToken);
@@ -2549,9 +2693,11 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
 			expected_average_price = update.ExpectedPosition.AveragePrice,
 			expected_estimated_value_usd = update.ExpectedPosition.EstimatedValueUsd,
 			expected_unrealized_pnl_usd = update.ExpectedPosition.UnrealizedPnlUsd,
+			expected_net_unrealized_pnl_usd = update.ExpectedPosition.NetUnrealizedPnlUsd,
 			expected_updated_at_utc = UtcDateTime(update.ExpectedPosition.UpdatedAtUtc),
 			estimated_value_usd = update.EstimatedValueUsd,
 			unrealized_pnl_usd = update.UnrealizedPnlUsd,
+			net_unrealized_pnl_usd = update.NetUnrealizedPnlUsd,
 			updated_at_utc = UtcDateTime(update.UpdatedAtUtc)
 		}).ToArray();
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
@@ -2574,15 +2720,18 @@ WITH mark_updates AS (
         expected_average_price numeric,
         expected_estimated_value_usd numeric,
         expected_unrealized_pnl_usd numeric,
+        expected_net_unrealized_pnl_usd numeric,
         expected_updated_at_utc timestamptz,
         estimated_value_usd numeric,
         unrealized_pnl_usd numeric,
+        net_unrealized_pnl_usd numeric,
         updated_at_utc timestamptz
     )
 ), updated_positions AS (
     UPDATE paper_positions AS target_position
     SET estimated_value_usd = mark_update.estimated_value_usd,
         unrealized_pnl_usd = mark_update.unrealized_pnl_usd,
+        net_unrealized_pnl_usd = mark_update.net_unrealized_pnl_usd,
         updated_at_utc = mark_update.updated_at_utc
     FROM mark_updates AS mark_update
     WHERE target_position.copied_trader_wallet = mark_update.copied_trader_wallet
@@ -2593,6 +2742,7 @@ WITH mark_updates AS (
       AND target_position.average_price = mark_update.expected_average_price
       AND target_position.estimated_value_usd = mark_update.expected_estimated_value_usd
       AND target_position.unrealized_pnl_usd = mark_update.expected_unrealized_pnl_usd
+      AND target_position.net_unrealized_pnl_usd IS NOT DISTINCT FROM mark_update.expected_net_unrealized_pnl_usd
       AND target_position.updated_at_utc = mark_update.expected_updated_at_utc
     RETURNING
         target_position.asset_id,
@@ -2603,7 +2753,16 @@ WITH mark_updates AS (
         target_position.estimated_value_usd,
         target_position.unrealized_pnl_usd,
         target_position.updated_at_utc,
-        target_position.copied_trader_wallet
+        target_position.copied_trader_wallet,
+        target_position.fee_usd,
+        target_position.fee_accounting_status,
+        target_position.fee_liquidity_role,
+        target_position.fee_calculation_source,
+        target_position.fee_rate,
+        target_position.fee_exponent,
+        target_position.fee_taker_only,
+        target_position.fee_calculated_at_utc,
+        target_position.net_unrealized_pnl_usd
 )
 SELECT
     asset_id,
@@ -2614,7 +2773,16 @@ SELECT
     estimated_value_usd,
     unrealized_pnl_usd,
     updated_at_utc,
-    copied_trader_wallet
+    copied_trader_wallet,
+    fee_usd,
+    fee_accounting_status,
+    fee_liquidity_role,
+    fee_calculation_source,
+    fee_rate,
+    fee_exponent,
+    fee_taker_only,
+    fee_calculated_at_utc,
+    net_unrealized_pnl_usd
 FROM updated_positions
 ORDER BY copied_trader_wallet, asset_id;
 """);
@@ -2655,7 +2823,7 @@ ORDER BY copied_trader_wallet, asset_id;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<PaperPosition> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet\nFROM paper_positions\nORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_unrealized_pnl_usd\nFROM paper_positions\nORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;"))
 			{
 				IReadOnlyList<PaperPosition> readOnlyList;
 				await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -2677,7 +2845,7 @@ ORDER BY copied_trader_wallet, asset_id;
 	public async Task<IReadOnlyList<PaperPosition>> GetOpenPaperPositionsAsync(CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet\nFROM paper_positions\nWHERE size_shares > 0\nORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_unrealized_pnl_usd\nFROM paper_positions\nWHERE size_shares > 0\nORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;");
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 		List<PaperPosition> results = new List<PaperPosition>();
 		while (await reader.ReadAsync(cancellationToken))
@@ -2707,7 +2875,9 @@ ORDER BY copied_trader_wallet, asset_id;
 				: "lower(asset_id) = lower(@AssetId)";
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, $"""
-SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet
+SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet,
+       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_unrealized_pnl_usd
 FROM paper_positions
 WHERE size_shares > 0
   AND {marketPredicate}
@@ -2741,7 +2911,7 @@ ORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet\nFROM paper_positions\nWHERE copied_trader_wallet = @CopiedTraderWallet\n  AND asset_id = @AssetId\nLIMIT 1;");
+		await using NpgsqlCommand command = CreateCommand(connection, "SELECT asset_id, condition_id, outcome, size_shares, average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc, copied_trader_wallet,\n       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_unrealized_pnl_usd\nFROM paper_positions\nWHERE copied_trader_wallet = @CopiedTraderWallet\n  AND asset_id = @AssetId\nLIMIT 1;");
 		command.Parameters.AddWithValue("CopiedTraderWallet", copiedTraderWallet ?? string.Empty);
 		command.Parameters.AddWithValue("AssetId", assetId.Trim());
 		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -2755,11 +2925,15 @@ ORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;
 INSERT INTO paper_position_settlements (
     id, copied_trader_wallet, asset_id, condition_id, outcome, winning_asset_id, winning_outcome,
     category, settled_size_shares, average_price, cost_basis_usd, settlement_value_usd,
-    realized_pnl_usd, won, settlement_source, settled_at_utc, created_at_utc
+    realized_pnl_usd, won, settlement_source, settled_at_utc, created_at_utc,
+    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 ) VALUES (
     @Id, @CopiedTraderWallet, @AssetId, @ConditionId, @Outcome, @WinningAssetId, @WinningOutcome,
     @Category, @SettledSizeShares, @AveragePrice, @CostBasisUsd, @SettlementValueUsd,
-    @RealizedPnlUsd, @Won, @SettlementSource, @SettledAtUtc, @CreatedAtUtc
+    @RealizedPnlUsd, @Won, @SettlementSource, @SettledAtUtc, @CreatedAtUtc,
+    @FeeUsd, @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate,
+    @FeeExponent, @FeeTakerOnly, @FeeCalculatedAtUtc, @NetRealizedPnlUsd
 )
 ON CONFLICT (copied_trader_wallet, asset_id) DO NOTHING
 RETURNING 1;
@@ -2781,6 +2955,15 @@ RETURNING 1;
 		command.Parameters.AddWithValue("SettlementSource", settlement.SettlementSource);
 		command.Parameters.AddWithValue("SettledAtUtc", UtcDateTime(settlement.SettledAtUtc));
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(settlement.CreatedAtUtc));
+		command.Parameters.AddWithValue("FeeUsd", settlement.FeeUsd);
+		command.Parameters.AddWithValue("FeeAccountingStatus", settlement.FeeAccountingStatus);
+		command.Parameters.AddWithValue("FeeLiquidityRole", settlement.FeeLiquidityRole);
+		command.Parameters.AddWithValue("FeeCalculationSource", settlement.FeeCalculationSource);
+		command.Parameters.AddWithValue("FeeRate", NullableDecimal(settlement.FeeRate));
+		command.Parameters.AddWithValue("FeeExponent", settlement.FeeExponent.HasValue ? settlement.FeeExponent.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeTakerOnly", settlement.FeeTakerOnly.HasValue ? settlement.FeeTakerOnly.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeCalculatedAtUtc", NullableDateTime(settlement.FeeCalculatedAtUtc));
+		command.Parameters.AddWithValue("NetRealizedPnlUsd", NullableDecimal(settlement.NetRealizedPnlUsd));
 		return await command.ExecuteScalarAsync(cancellationToken) is not null;
 	}
 
@@ -2846,6 +3029,15 @@ RETURNING 1;
 			cost_basis_usd = settlement.CostBasisUsd,
 			settlement_value_usd = settlement.SettlementValueUsd,
 			realized_pnl_usd = settlement.RealizedPnlUsd,
+			fee_usd = settlement.FeeUsd,
+			fee_accounting_status = settlement.FeeAccountingStatus,
+			fee_liquidity_role = settlement.FeeLiquidityRole,
+			fee_calculation_source = settlement.FeeCalculationSource,
+			fee_rate = settlement.FeeRate,
+			fee_exponent = settlement.FeeExponent,
+			fee_taker_only = settlement.FeeTakerOnly,
+			fee_calculated_at_utc = settlement.FeeCalculatedAtUtc.HasValue ? UtcDateTime(settlement.FeeCalculatedAtUtc.Value) : (DateTime?)null,
+			net_realized_pnl_usd = settlement.NetRealizedPnlUsd,
 			won = settlement.Won,
 			settlement_source = settlement.SettlementSource,
 			settled_at_utc = UtcDateTime(settlement.SettledAtUtc),
@@ -2856,14 +3048,19 @@ WITH inserted AS (
     INSERT INTO paper_position_settlements (
         id, copied_trader_wallet, asset_id, condition_id, outcome, winning_asset_id, winning_outcome,
         category, settled_size_shares, average_price, cost_basis_usd, settlement_value_usd,
-        realized_pnl_usd, won, settlement_source, settled_at_utc, created_at_utc
+        realized_pnl_usd, won, settlement_source, settled_at_utc, created_at_utc,
+        fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+        fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
     )
     SELECT
         settlement.id, settlement.copied_trader_wallet, settlement.asset_id, settlement.condition_id,
         settlement.outcome, settlement.winning_asset_id, settlement.winning_outcome, settlement.category,
         settlement.settled_size_shares, settlement.average_price, settlement.cost_basis_usd,
         settlement.settlement_value_usd, settlement.realized_pnl_usd, settlement.won,
-        settlement.settlement_source, settlement.settled_at_utc, settlement.created_at_utc
+        settlement.settlement_source, settlement.settled_at_utc, settlement.created_at_utc,
+        settlement.fee_usd, settlement.fee_accounting_status, settlement.fee_liquidity_role,
+        settlement.fee_calculation_source, settlement.fee_rate, settlement.fee_exponent,
+        settlement.fee_taker_only, settlement.fee_calculated_at_utc, settlement.net_realized_pnl_usd
     FROM jsonb_to_recordset(CAST(@SettlementsJson AS jsonb)) AS settlement(
         id uuid,
         copied_trader_wallet text,
@@ -2881,7 +3078,16 @@ WITH inserted AS (
         won boolean,
         settlement_source text,
         settled_at_utc timestamptz,
-        created_at_utc timestamptz
+        created_at_utc timestamptz,
+        fee_usd numeric,
+        fee_accounting_status text,
+        fee_liquidity_role text,
+        fee_calculation_source text,
+        fee_rate numeric,
+        fee_exponent integer,
+        fee_taker_only boolean,
+        fee_calculated_at_utc timestamptz,
+        net_realized_pnl_usd numeric
     )
     ORDER BY
         settlement.copied_trader_wallet COLLATE "C",
@@ -2903,7 +3109,9 @@ SELECT count(*)::integer FROM inserted;
 		await using NpgsqlCommand command = CreateCommand(connection, """
 SELECT id, copied_trader_wallet, asset_id, condition_id, outcome, winning_asset_id, winning_outcome,
        category, settled_size_shares, average_price, cost_basis_usd, settlement_value_usd,
-       realized_pnl_usd, won, settlement_source, settled_at_utc, created_at_utc
+       realized_pnl_usd, won, settlement_source, settled_at_utc, created_at_utc,
+       fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,
+       fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 FROM paper_position_settlements
 ORDER BY settled_at_utc DESC, created_at_utc DESC
 LIMIT @Limit;
@@ -2930,7 +3138,16 @@ LIMIT @Limit;
 				reader.GetBoolean(13),
 				reader.GetString(14),
 				DateTimeOffsetFromUtc(reader.GetDateTime(15)),
-				DateTimeOffsetFromUtc(reader.GetDateTime(16))));
+				DateTimeOffsetFromUtc(reader.GetDateTime(16)),
+				reader.GetDecimal(17),
+				reader.GetString(18),
+				reader.GetString(19),
+				reader.GetString(20),
+				reader.IsDBNull(21) ? null : reader.GetDecimal(21),
+				reader.IsDBNull(22) ? null : reader.GetInt32(22),
+				reader.IsDBNull(23) ? null : reader.GetBoolean(23),
+				reader.IsDBNull(24) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(24)),
+				reader.IsDBNull(25) ? null : reader.GetDecimal(25)));
 		}
 
 		return results;
@@ -3790,9 +4007,9 @@ live_order_agg AS (
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND COALESCE(won, COALESCE(settlement_value_usd, 0) > 0)))::integer AS live_won_orders_count,
         (count(*) FILTER (WHERE settled_at_utc IS NOT NULL AND NOT COALESCE(won, COALESCE(settlement_value_usd, 0) > 0)))::integer AS live_lost_orders_count,
         COALESCE(sum(CASE
-            WHEN cost_basis_usd > 0 THEN cost_basis_usd
-            WHEN filled_notional_usd > 0 THEN filled_notional_usd + fee_usd
-            WHEN filled_size > 0 THEN price * filled_size + fee_usd
+            WHEN filled_notional_usd > 0 THEN filled_notional_usd
+            WHEN filled_size > 0 THEN price * filled_size
+            WHEN cost_basis_usd > 0 THEN GREATEST(0, cost_basis_usd - fee_usd)
             ELSE 0
         END) FILTER (WHERE settled_at_utc IS NOT NULL), 0) AS live_stake_usd,
         COALESCE(sum(COALESCE(realized_pnl_usd, 0)) FILTER (WHERE settled_at_utc IS NOT NULL), 0) AS live_realized_pnl_usd,
@@ -4624,9 +4841,9 @@ live_order_agg AS (
               AND NOT COALESCE(live_order.won, COALESCE(live_order.settlement_value_usd, 0) > 0)
         ))::integer AS live_lost_orders_count,
         COALESCE(sum(CASE
-            WHEN live_order.cost_basis_usd > 0 THEN live_order.cost_basis_usd
-            WHEN live_order.filled_notional_usd > 0 THEN live_order.filled_notional_usd + live_order.fee_usd
-            WHEN live_order.filled_size > 0 THEN live_order.price * live_order.filled_size + live_order.fee_usd
+            WHEN live_order.filled_notional_usd > 0 THEN live_order.filled_notional_usd
+            WHEN live_order.filled_size > 0 THEN live_order.price * live_order.filled_size
+            WHEN live_order.cost_basis_usd > 0 THEN GREATEST(0, live_order.cost_basis_usd - live_order.fee_usd)
             ELSE 0
         END) FILTER (
             WHERE live_order.settled_at_utc >= live_order.window_start_utc
@@ -5553,6 +5770,8 @@ INSERT INTO live_orders (
     cancel_status, raw_response_json, validation_summary,
     balance_effect_applied, settlement_value_usd, realized_pnl_usd, settled_at_utc, winning_asset_id, winning_outcome,
     won, settlement_source, correlation_id, execution_source, post_only, paper_order_id,
+    fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate, fee_exponent,
+    fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd,
     updated_at_utc
 ) VALUES (
     @Id, @SignalId, @StrategyId, @Status, @OrderId, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares,
@@ -5561,6 +5780,8 @@ INSERT INTO live_orders (
     @CancelStatus, CAST(@RawResponseJson AS jsonb), @ValidationSummary,
     @BalanceEffectApplied, @SettlementValueUsd, @RealizedPnlUsd, @SettledAtUtc, @WinningAssetId, @WinningOutcome,
     @Won, @SettlementSource, @CorrelationId, @ExecutionSource, @PostOnly, @PaperOrderId,
+    @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate, @FeeExponent,
+    @FeeTakerOnly, @FeeCalculatedAtUtc, @NetRealizedPnlUsd,
     @UpdatedAtUtc
 );
 """);
@@ -5584,12 +5805,20 @@ SET status = @Status,
     filled_notional_usd = @FilledNotionalUsd,
     cost_basis_usd = @CostBasisUsd,
     fee_usd = @FeeUsd,
+    fee_accounting_status = @FeeAccountingStatus,
+    fee_liquidity_role = @FeeLiquidityRole,
+    fee_calculation_source = @FeeCalculationSource,
+    fee_rate = @FeeRate,
+    fee_exponent = @FeeExponent,
+    fee_taker_only = @FeeTakerOnly,
+    fee_calculated_at_utc = @FeeCalculatedAtUtc,
     cancel_status = @CancelStatus,
     raw_response_json = CAST(@RawResponseJson AS jsonb),
     validation_summary = @ValidationSummary,
     balance_effect_applied = @BalanceEffectApplied,
     settlement_value_usd = @SettlementValueUsd,
     realized_pnl_usd = @RealizedPnlUsd,
+    net_realized_pnl_usd = @NetRealizedPnlUsd,
     settled_at_utc = @SettledAtUtc,
     winning_asset_id = @WinningAssetId,
     winning_outcome = @WinningOutcome,
@@ -5669,7 +5898,8 @@ WHERE id = @Id;
 		Guid liveOrderId,
 		Guid strategyId,
 		decimal settlementValueUsd,
-		decimal realizedPnlUsd,
+		decimal grossRealizedPnlUsd,
+		decimal? netRealizedPnlUsd,
 		string? winningAssetId,
 		string winningOutcome,
 		DateTimeOffset settledAtUtc,
@@ -5682,9 +5912,10 @@ WHERE id = @Id;
 
 		await using (NpgsqlCommand command = CreateCommand(connection, """
 UPDATE live_orders
-SET balance_effect_applied = true,
+SET balance_effect_applied = @NetRealizedPnlUsd IS NOT NULL,
     settlement_value_usd = @SettlementValueUsd,
-    realized_pnl_usd = @RealizedPnlUsd,
+    realized_pnl_usd = @GrossRealizedPnlUsd,
+    net_realized_pnl_usd = @NetRealizedPnlUsd,
     settled_at_utc = @SettledAtUtc,
     winning_asset_id = @WinningAssetId,
     winning_outcome = @WinningOutcome,
@@ -5694,32 +5925,39 @@ SET balance_effect_applied = true,
 WHERE id = @LiveOrderId
   AND strategy_id = @StrategyId
   AND balance_effect_applied = false
-RETURNING id;
+RETURNING balance_effect_applied;
 """))
 		{
 			command.Transaction = transaction;
 			command.Parameters.AddWithValue("LiveOrderId", liveOrderId);
 			command.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
 			command.Parameters.AddWithValue("SettlementValueUsd", settlementValueUsd);
-			command.Parameters.AddWithValue("RealizedPnlUsd", realizedPnlUsd);
+			command.Parameters.AddWithValue("GrossRealizedPnlUsd", grossRealizedPnlUsd);
+			command.Parameters.AddWithValue("NetRealizedPnlUsd", NullableDecimal(netRealizedPnlUsd));
 			command.Parameters.AddWithValue("SettledAtUtc", UtcDateTime(settledAtUtc));
 			command.Parameters.AddWithValue("WinningAssetId", ((object)winningAssetId) ?? ((object)DBNull.Value));
 			command.Parameters.AddWithValue("WinningOutcome", winningOutcome);
 			command.Parameters.AddWithValue("Won", settlementValueUsd > 0m);
 			command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
-			var appliedOrderId = await command.ExecuteScalarAsync(cancellationToken);
-			if (appliedOrderId is null or DBNull)
+			var balanceEffectApplied = await command.ExecuteScalarAsync(cancellationToken);
+			if (balanceEffectApplied is null or DBNull)
 			{
 				await transaction.RollbackAsync(cancellationToken);
+				return new StrategyLiveBalanceAdjustmentResult(false, 0m, false);
+			}
+
+			if (!(bool)balanceEffectApplied)
+			{
+				await transaction.CommitAsync(cancellationToken);
 				return new StrategyLiveBalanceAdjustmentResult(false, 0m, false);
 			}
 		}
 
 		await using (NpgsqlCommand command = CreateCommand(connection, """
 UPDATE strategies
-SET live_available_balance = LEAST(100.00, GREATEST(0, live_available_balance + @RealizedPnlUsd)),
+SET live_available_balance = LEAST(100.00, GREATEST(0, live_available_balance + @BalanceRealizedPnlUsd)),
     live_stakes = CASE
-        WHEN LEAST(100.00, GREATEST(0, live_available_balance + @RealizedPnlUsd)) < live_stake_amount THEN false
+        WHEN LEAST(100.00, GREATEST(0, live_available_balance + @BalanceRealizedPnlUsd)) < live_stake_amount THEN false
         ELSE live_stakes
     END,
     updated_at_utc = @UpdatedAtUtc
@@ -5729,7 +5967,7 @@ RETURNING live_available_balance, live_stakes, live_stake_amount;
 		{
 			command.Transaction = transaction;
 			command.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
-			command.Parameters.AddWithValue("RealizedPnlUsd", realizedPnlUsd);
+			command.Parameters.AddWithValue("BalanceRealizedPnlUsd", netRealizedPnlUsd!.Value);
 			command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
 			await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
 			if (!await reader.ReadAsync(cancellationToken))
@@ -9501,7 +9739,16 @@ FROM claimed;
 			reader.IsDBNull(24) ? null : reader.GetString(24),
 			DateTimeOffsetFromUtc(reader.GetDateTime(25)),
 			DateTimeOffsetFromUtc(reader.GetDateTime(26)),
-			reader.IsDBNull(27) ? null : reader.GetString(27));
+			reader.IsDBNull(27) ? null : reader.GetString(27),
+			reader.GetDecimal(28),
+			reader.GetString(29),
+			reader.GetString(30),
+			reader.GetString(31),
+			reader.IsDBNull(32) ? null : reader.GetDecimal(32),
+			reader.IsDBNull(33) ? null : reader.GetInt32(33),
+			reader.IsDBNull(34) ? null : reader.GetBoolean(34),
+			reader.IsDBNull(35) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(35)),
+			reader.IsDBNull(36) ? null : reader.GetDecimal(36));
 	}
 
 	private static StrategyChildParentAssignment ReadStrategyChildParentAssignment(NpgsqlDataReader reader)
@@ -9551,6 +9798,15 @@ FROM claimed;
 			((object?)GetPersistedSkipDiagnosticsJson(run)) ?? DBNull.Value;
 		command.Parameters.AddWithValue("CreatedAtUtc", UtcDateTime(run.CreatedAtUtc));
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(run.UpdatedAtUtc));
+		command.Parameters.AddWithValue("FeeUsd", run.FeeUsd);
+		command.Parameters.AddWithValue("FeeAccountingStatus", run.FeeAccountingStatus);
+		command.Parameters.AddWithValue("FeeLiquidityRole", run.FeeLiquidityRole);
+		command.Parameters.AddWithValue("FeeCalculationSource", run.FeeCalculationSource);
+		command.Parameters.AddWithValue("FeeRate", NullableDecimal(run.FeeRate));
+		command.Parameters.AddWithValue("FeeExponent", run.FeeExponent.HasValue ? run.FeeExponent.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeTakerOnly", run.FeeTakerOnly.HasValue ? run.FeeTakerOnly.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeCalculatedAtUtc", NullableDateTime(run.FeeCalculatedAtUtc));
+		command.Parameters.AddWithValue("NetRealizedPnlUsd", NullableDecimal(run.NetRealizedPnlUsd));
 	}
 
 	internal static string? GetPersistedSkipDiagnosticsJson(StrategyMarketPaperRun run)
@@ -9667,6 +9923,15 @@ FROM claimed;
 		command.Parameters.AddWithValue("FilledAtUtc", UtcDateTime(fill.FilledAtUtc));
 		command.Parameters.AddWithValue("Evidence", fill.Evidence);
 		command.Parameters.AddWithValue("RealizedPnlUsd", fill.RealizedPnlUsd);
+		command.Parameters.AddWithValue("FeeUsd", fill.FeeUsd);
+		command.Parameters.AddWithValue("FeeAccountingStatus", fill.FeeAccountingStatus);
+		command.Parameters.AddWithValue("FeeLiquidityRole", fill.FeeLiquidityRole);
+		command.Parameters.AddWithValue("FeeCalculationSource", fill.FeeCalculationSource);
+		command.Parameters.AddWithValue("FeeRate", NullableDecimal(fill.FeeRate));
+		command.Parameters.AddWithValue("FeeExponent", fill.FeeExponent.HasValue ? fill.FeeExponent.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeTakerOnly", fill.FeeTakerOnly.HasValue ? fill.FeeTakerOnly.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeCalculatedAtUtc", NullableDateTime(fill.FeeCalculatedAtUtc));
+		command.Parameters.AddWithValue("NetRealizedPnlUsd", NullableDecimal(fill.NetRealizedPnlUsd));
 	}
 
 	private static void AddPaperPositionParameters(NpgsqlCommand command, PaperPosition position)
@@ -9680,6 +9945,15 @@ FROM claimed;
 		command.Parameters.AddWithValue("AveragePrice", position.AveragePrice);
 		command.Parameters.AddWithValue("EstimatedValueUsd", position.EstimatedValueUsd);
 		command.Parameters.AddWithValue("UnrealizedPnlUsd", position.UnrealizedPnlUsd);
+		command.Parameters.AddWithValue("FeeUsd", position.FeeUsd);
+		command.Parameters.AddWithValue("FeeAccountingStatus", position.FeeAccountingStatus);
+		command.Parameters.AddWithValue("FeeLiquidityRole", position.FeeLiquidityRole);
+		command.Parameters.AddWithValue("FeeCalculationSource", position.FeeCalculationSource);
+		command.Parameters.AddWithValue("FeeRate", NullableDecimal(position.FeeRate));
+		command.Parameters.AddWithValue("FeeExponent", position.FeeExponent.HasValue ? position.FeeExponent.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeTakerOnly", position.FeeTakerOnly.HasValue ? position.FeeTakerOnly.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeCalculatedAtUtc", NullableDateTime(position.FeeCalculatedAtUtc));
+		command.Parameters.AddWithValue("NetUnrealizedPnlUsd", NullableDecimal(position.NetUnrealizedPnlUsd));
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(position.UpdatedAtUtc));
 	}
 
@@ -9824,7 +10098,16 @@ FROM claimed;
 			reader.GetDecimal(3),
 			DateTimeOffsetFromUtc(reader.GetDateTime(4)),
 			reader.GetString(5),
-			reader.GetDecimal(6));
+			reader.GetDecimal(6),
+			reader.GetDecimal(7),
+			reader.GetString(8),
+			reader.GetString(9),
+			reader.GetString(10),
+			reader.IsDBNull(11) ? null : reader.GetDecimal(11),
+			reader.IsDBNull(12) ? null : reader.GetInt32(12),
+			reader.IsDBNull(13) ? null : reader.GetBoolean(13),
+			reader.IsDBNull(14) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(14)),
+			reader.IsDBNull(15) ? null : reader.GetDecimal(15));
 	}
 
 	private static PaperPosition ReadPaperPosition(NpgsqlDataReader reader)
@@ -9838,7 +10121,16 @@ FROM claimed;
 			reader.GetDecimal(5),
 			reader.GetDecimal(6),
 			DateTimeOffsetFromUtc(reader.GetDateTime(7)),
-			reader.GetString(8));
+			reader.GetString(8),
+			reader.GetDecimal(9),
+			reader.GetString(10),
+			reader.GetString(11),
+			reader.GetString(12),
+			reader.IsDBNull(13) ? null : reader.GetDecimal(13),
+			reader.IsDBNull(14) ? null : reader.GetInt32(14),
+			reader.IsDBNull(15) ? null : reader.GetBoolean(15),
+			reader.IsDBNull(16) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(16)),
+			reader.IsDBNull(17) ? null : reader.GetDecimal(17));
 	}
 
 	private static PaperCopiedTraderPerformance ReadPaperCopiedTraderPerformance(NpgsqlDataReader reader)
@@ -11175,12 +11467,20 @@ FROM claimed;
 		command.Parameters.AddWithValue("FilledNotionalUsd", order.FilledNotionalUsd);
 		command.Parameters.AddWithValue("CostBasisUsd", order.CostBasisUsd);
 		command.Parameters.AddWithValue("FeeUsd", order.FeeUsd);
+		command.Parameters.AddWithValue("FeeAccountingStatus", order.FeeAccountingStatus);
+		command.Parameters.AddWithValue("FeeLiquidityRole", order.FeeLiquidityRole);
+		command.Parameters.AddWithValue("FeeCalculationSource", order.FeeCalculationSource);
+		command.Parameters.AddWithValue("FeeRate", NullableDecimal(order.FeeRate));
+		command.Parameters.AddWithValue("FeeExponent", order.FeeExponent.HasValue ? order.FeeExponent.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeTakerOnly", order.FeeTakerOnly.HasValue ? order.FeeTakerOnly.Value : (object)DBNull.Value);
+		command.Parameters.AddWithValue("FeeCalculatedAtUtc", NullableDateTime(order.FeeCalculatedAtUtc));
 		command.Parameters.AddWithValue("CancelStatus", order.CancelStatus);
 		command.Parameters.AddWithValue("RawResponseJson", NormalizeLiveOrderRawResponseJson(order.RawResponseJson));
 		command.Parameters.AddWithValue("ValidationSummary", order.ValidationSummary);
 		command.Parameters.AddWithValue("BalanceEffectApplied", order.BalanceEffectApplied);
 		command.Parameters.AddWithValue("SettlementValueUsd", ((object)order.SettlementValueUsd) ?? ((object)DBNull.Value));
 		command.Parameters.AddWithValue("RealizedPnlUsd", ((object)order.RealizedPnlUsd) ?? ((object)DBNull.Value));
+		command.Parameters.AddWithValue("NetRealizedPnlUsd", ((object)order.NetRealizedPnlUsd) ?? ((object)DBNull.Value));
 		NpgsqlParameterCollection settlementParameters = command.Parameters;
 		DateTimeOffset? settledAtUtc = order.SettledAtUtc;
 		object settlementValue;
@@ -12554,7 +12854,15 @@ FROM claimed;
 				reader.IsDBNull(35) ? null : reader.GetGuid(35),
 				reader.IsDBNull(36) ? string.Empty : reader.GetString(36),
 				reader.IsDBNull(37) ? null : reader.GetBoolean(37),
-				reader.IsDBNull(38) ? null : reader.GetGuid(38)));
+				reader.IsDBNull(38) ? null : reader.GetGuid(38),
+				reader.GetString(39),
+				reader.GetString(40),
+				reader.GetString(41),
+				reader.IsDBNull(42) ? null : reader.GetDecimal(42),
+				reader.IsDBNull(43) ? null : reader.GetInt32(43),
+				reader.IsDBNull(44) ? null : reader.GetBoolean(44),
+				reader.IsDBNull(45) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(45)),
+				reader.IsDBNull(46) ? null : reader.GetDecimal(46)));
 		}
 		return results;
 	}

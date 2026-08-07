@@ -507,6 +507,13 @@ public interface IAppRepository
         return Task.FromResult<IReadOnlyList<PaperFill>>([]);
     }
 
+    Task<IReadOnlyList<PaperFill>> GetPaperFillsForOrdersAsync(
+        IReadOnlyCollection<Guid> paperOrderIds,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<PaperFill>>([]);
+    }
+
     Task<PaperLiveShadowFillReconciliationResult> ReconcilePaperLiveShadowFillAsync(
         PaperLiveShadowFillReconciliationRequest request,
         CancellationToken cancellationToken = default)
@@ -520,6 +527,7 @@ public interface IAppRepository
         PaperPosition expectedPosition,
         decimal estimatedValueUsd,
         decimal unrealizedPnlUsd,
+        decimal? netUnrealizedPnlUsd,
         DateTimeOffset updatedAtUtc,
         CancellationToken cancellationToken = default);
 
@@ -832,7 +840,8 @@ public interface IAppRepository
         Guid liveOrderId,
         Guid strategyId,
         decimal settlementValueUsd,
-        decimal realizedPnlUsd,
+        decimal grossRealizedPnlUsd,
+        decimal? netRealizedPnlUsd,
         string? winningAssetId,
         string winningOutcome,
         DateTimeOffset settledAtUtc,
@@ -1400,7 +1409,8 @@ public sealed record PaperPositionMarkUpdate(
     PaperPosition ExpectedPosition,
     decimal EstimatedValueUsd,
     decimal UnrealizedPnlUsd,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    decimal? NetUnrealizedPnlUsd = null);
 
 public sealed record PaperLiveShadowFillReconciliationRequest(
     Guid PaperOrderId,

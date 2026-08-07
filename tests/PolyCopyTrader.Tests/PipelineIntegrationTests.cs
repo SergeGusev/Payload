@@ -586,6 +586,7 @@ public sealed class PipelineIntegrationTests
         Assert.Equal(0.25m, fill.Price);
         Assert.Equal(20m, fill.SizeShares);
         Assert.Contains("FakTakerPaperFill", fill.Evidence);
+        Assert.Equal("Taker", fill.FeeLiquidityRole);
 
         var updatedOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.Filled, updatedOrder.Status);
