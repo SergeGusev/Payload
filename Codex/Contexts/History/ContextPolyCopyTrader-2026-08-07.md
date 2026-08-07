@@ -23,3 +23,12 @@ Request:
 
 Result:
 Modeled a ResearchOnly BTC copy on all `2,320` entered and Settled source runs through fixed UTC production cutoff `2026-08-07T20:05:20.131896Z`. The explicit missing-stake assumption was to copy each source run's actual filled ETH VWAP, `stake_usd`, and `size_shares`; payout used the official BTC winner at the exact same `market_start_utc`, with no fees. Official closed Gamma BTC series `10684` covered `2,320/2,320` starts and agreed with all `1,561` direct persisted outcomes; provisional ledger winners were excluded because `50/758` conflicted with Gamma. Result: stake `$13,937.76299918`, `1,244W/1,076L`, PnL `+$52.89033798`, ROI `+0.3794750849%`. The actual ETH source cohort was `+$849.31740063` / `+6.0936421482%`. Production SQL, official Gamma replay, and independent raw-row Decimal aggregation matched exactly. No production, service, strategy, order, application, or schema state changed.
+
+## 2026-08-07T20:35:37.2850995Z
+Request:
+Ты написал: Комиссии не учитывались, как и в текущем Paper-учёте
+
+То есть мы сейчас накапливаем Paper статистику, хотим ориентироваться на неё в живых ставках, а на самом деле она не учитывает комиссию и не отражает реальную ситуацию?
+
+Result:
+Confirmed through implementation, production rows, official Polymarket metadata, and independent Decimal aggregation that the concern is correct specifically for economic performance: the exact ETH 2 bps Reference Average FAK strategy's Paper PnL/ROI are gross and omit taker fees. All `2,320/2,320` cohort markets were fee-enabled under one V2 schedule. Stored stake/PnL/ROI were `$13,937.76299918`, `+$849.31740063`, and `6.093642%`; modeled taker fees were `$453.59562`, producing fee-adjusted PnL `+$395.72178063` and ROI `2.749718%` on `$14,391.35861918` total cash spent. Paper has no fee field or deduction. Live has a `fee_usd` field and fee-aware formulas but no fee ingestion path; production had `3,608` crypto-5m Live orders and zero nonzero fee rows. Direction/outcome/win-rate and fill evidence remain useful, but current Paper/Live PnL and ROI must not be treated as net Live profitability. The exact strategy remains Paper-only with `live_stakes=false`; no production or application state changed.
