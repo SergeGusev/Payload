@@ -1,3 +1,14 @@
+## Active Update 2026-08-08 Fee Accounting Deployment Requirement
+Goal: Clarify whether the committed fee-accounting implementation is active in the running Windows Service.
+Status: Completed
+Done:
+- Confirmed that commit `b7b181ed` changes repository source only; the running `PolyCopyTrader.Service` must be stopped, republished from that commit, and restarted before new Paper/Live executions can receive the new fee status, provenance, and net-PnL accounting.
+- Verified the repository deployment path: elevated `deploy/stop-service.ps1`, `deploy/install-service.ps1 -Configuration Release`, and `deploy/start-service.ps1`, followed by heartbeat-version and schema verification. Normal service startup applies the backward-compatible schema additions.
+- Did not deploy, restart the service, query production, or apply schema changes because the user's question requested clarification rather than authorizing a production mutation.
+Next: Await explicit authorization for a bounded deployment of `b7b181ed`; perform read-only preflight first, then stop/publish/start and verify the deployed heartbeat/version and fee-accounting schema. Historical backfill remains out of scope.
+Notes: Repository was already up to date and clean at `b7b181ed` before this documentation update.
+Blockers: Production deployment requires explicit user authorization and an elevated execution context.
+
 ## Active Update 2026-08-08 Fee-Aware Paper And Live Accounting
 Goal: Add forward-looking platform-fee accounting to every Paper and Live strategy execution while making fee-accounted, unavailable, and legacy rows unambiguous for a later historical recalculation.
 Status: Completed

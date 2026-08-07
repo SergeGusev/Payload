@@ -11,3 +11,10 @@ Request:
 
 Result:
 Добавлен единый forward-looking fee-accounting для всех текущих Paper и Live execution paths с market-specific CLOB V2 schedule, явными Maker/Taker/Unknown roles и статусами `LegacyUnknown`, `CalculationUnavailable`, `Calculated`, `VenueReported`, `PartiallyCalculated`. Исторические строки не пересчитывались: они остаются `LegacyUnknown`, fee хранится отдельно от gross PnL, а nullable net PnL появляется только при полной fee coverage. Dashboard/CSV показывают fee/status/net; Live balance ждёт достоверный net, gross ROI исключает fee из denominator. Production/deployment/backfill не выполнялись. Финальная сборка прошла; целевой suite `222/222` green. Broad suite остаётся не green из-за ранее существующих retired-catalog/path-sensitive тестов и зафиксирован без маскировки.
+
+## 2026-08-07T22:42:26.1271107+00:00
+Request:
+Но сервис-то надо перевыложить, чтобы по новому начало считать?
+
+Result:
+Подтверждено: да, commit/push меняют только исходный код. Для начала нового fee-accounting необходимо остановить, republish и запустить Windows Service из commit `b7b181ed`, затем проверить heartbeat version и новые schema columns. Вопрос не трактовался как разрешение на production deployment: сервис не перезапускался, production/schema не изменялись, historical backfill не выполнялся.
