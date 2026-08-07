@@ -18,3 +18,10 @@ Request:
 
 Result:
 Подтверждено: да, commit/push меняют только исходный код. Для начала нового fee-accounting необходимо остановить, republish и запустить Windows Service из commit `b7b181ed`, затем проверить heartbeat version и новые schema columns. Вопрос не трактовался как разрешение на production deployment: сервис не перезапускался, production/schema не изменялись, historical backfill не выполнялся.
+
+## 2026-08-07T22:57:34.5556103+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Выполнена строгая read-only production-проверка deployed build `092b76c5` на `192.168.0.101/polycopytrader`. Heartbeat свежий, fee schema `45/45` корректна. На фиксированном canary `257/257` новых Paper fills имели `Calculated/Taker`, точный schedule `.07/1/takerOnly`, ненулевую fee и ноль независимых formula mismatches; суммы stored/recomputed fee совпали `$316.95486`. Все exact order/run/position links совпали. Позже `121/121` canary runs закрылись с сохранённой fee и точным `net=gross-fee`. Старая история осталась `LegacyUnknown`. Новых Live orders не было, поэтому production Live canary остаётся Unknown. Fee-related ошибок не найдено; отдельно замечены не связанные доказанно с fee ошибки ProjectionCycle/OKX/reference workers. Никаких production writes/restarts/backfill не выполнялось.
