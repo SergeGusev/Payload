@@ -1,3 +1,19 @@
+## Active Update 2026-08-09 ETH 2 bps Net PnL Report And Net-Only Default
+Goal: Repeat the full-history settled Paper PnL plus ETH chart and daily Excel report for exact strategy `b7c50005-0000-4000-8179-000000000102` / `ETH Up or Down 5m 2 bps Reference Average Premarket`, now using only fee-accounted Net PnL, and persist Net as the default for future PnL reporting.
+Status: Completed
+Done:
+- Verified from the current schema, fee service, and focused tests that authoritative settled Net is `strategy_market_paper_runs.net_realized_pnl_usd`, populated only for fully accounted rows, with the per-run identity `Net PnL = Gross PnL - fee`. The report never substitutes legacy Gross `realized_pnl_usd` for Net.
+- Captured one production PostgreSQL `192.168.0.101:5432/polycopytrader` snapshot at cutoff `2026-08-08T23:00:21.799725Z` under server-enforced `REPEATABLE READ`, `READ ONLY`, UTC, and `30s` statement timeout. Exact filters were the exact strategy ID, `status='Settled'`, non-null settlement/Gross/Net fields, and `settled_at_utc <= cutoff`; Live, incomplete, non-accounted, and other strategies were excluded.
+- Reconciled `2,365` unique runs and markets with full fee coverage `2,365/2,365`, zero invalid/incomplete/non-accounted/net-identity/after-cutoff rows, and zero Live orders. Settled stake is `$14,207.76299932`, Net PnL is `+$373.39864314`, fee-inclusive settled Net ROI is `2.545308872208886563%`, and Net W/L/flat is `1,339/1,026/0`.
+- The latest UTC date is `2026-08-08`: `44` settlements and Net PnL `-$27.65999903`. Maximum cumulative Net drawdown, including the initial zero point, is `$144.07010111`, from the `2026-07-13T11:30:36.847018Z` peak to the `2026-07-17T06:04:41.210791Z` trough, recovered at `2026-07-19T14:24:27.956356Z`.
+- ETHUSDT overlay contains `50,539/50,904` UTC minute-last samples (`99.2829640107%`) from `$1,768.97` to `$1,916.55`, with zero samples after cutoff.
+- Created and visually checked `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-reference-average-net-pnl-eth-report-20260808-2300z/eth-2-reference-average-net-paper-pnl-with-eth.png`: `1800x920`, solid true-step cumulative Net PnL, solid ETH line, direct labels, and the maximum Net-drawdown region; Gross is absent.
+- Created and strictly verified `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-reference-average-net-pnl-eth-report-20260808-2300z/eth-2-reference-average-daily-net-paper-pnl-2026-08-08.xlsx`: one `Daily Net PnL` sheet, `36` continuous UTC dates, formula daily/final totals, exact total `373.39864314`, negative values red on white with a visible minus, and exact frozen panes at `B2`. Artifact-tool, OpenXML, Excel COM, formula/error, and visual checks all passed.
+- Independent Decimal CSV and separate fixed-cutoff PostgreSQL checks matched with zero discrepancies. The user preference is now explicit: all future PnL charts/reports default to Net PnL only; do not show Gross unless the user explicitly asks for it.
+Next: Use Net PnL as the default for every future PnL report/chart and label it explicitly.
+Notes: The fresh cutoff is `2026-08-09 02:00:21` Europe/Sofia but `2026-08-08 23:00:21 UTC`; report rows remain UTC, so the last row is `2026-08-08`. This uses stored settled Paper history, not a strategy replay. No production row, strategy setting, service, schema, deployment, or trading state was changed.
+Blockers: None.
+
 ## Active Update 2026-08-09 ETH Reference Average Maker GTD Clone Design
 Goal: Design, without implementing, PaperOnly Maker GTD clones of the neutral `ETH Up or Down 5m N bps Reference Average Premarket` family, with at most ten premarket placement attempts and fill recognition only after the market trades through the resting price.
 Status: Completed
