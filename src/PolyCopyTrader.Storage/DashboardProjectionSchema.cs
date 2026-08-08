@@ -120,8 +120,21 @@ CREATE TABLE IF NOT EXISTS dashboard_strategy_position_projection_facts (
     strategy_id uuid NOT NULL REFERENCES strategies(id) ON DELETE CASCADE,
     size_shares numeric NOT NULL,
     unrealized_pnl_usd numeric NOT NULL,
+    average_price numeric NOT NULL DEFAULT 0,
+    fee_usd numeric NOT NULL DEFAULT 0,
+    fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown',
+    net_unrealized_pnl_usd numeric NULL,
     updated_at_utc timestamptz NOT NULL
 );
+
+ALTER TABLE dashboard_strategy_position_projection_facts
+    ADD COLUMN IF NOT EXISTS average_price numeric NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_position_projection_facts
+    ADD COLUMN IF NOT EXISTS fee_usd numeric NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_position_projection_facts
+    ADD COLUMN IF NOT EXISTS fee_accounting_status text NOT NULL DEFAULT 'LegacyUnknown';
+ALTER TABLE dashboard_strategy_position_projection_facts
+    ADD COLUMN IF NOT EXISTS net_unrealized_pnl_usd numeric NULL;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_position_projection_facts_strategy
 ON dashboard_strategy_position_projection_facts (strategy_id, source_id);
@@ -837,7 +850,10 @@ SELECT jsonb_build_object(
     'price', (row_value).price,
     'size_shares', (row_value).size_shares,
     'realized_pnl_usd', (row_value).realized_pnl_usd,
-    'filled_at_utc', (row_value).filled_at_utc
+    'filled_at_utc', (row_value).filled_at_utc,
+    'fee_usd', (row_value).fee_usd,
+    'fee_accounting_status', (row_value).fee_accounting_status,
+    'net_realized_pnl_usd', (row_value).net_realized_pnl_usd
 );
 $function$;
 
@@ -860,7 +876,10 @@ SELECT jsonb_build_object(
     'settled_at_utc', (row_value).settled_at_utc,
     'skip_reason', (row_value).skip_reason,
     'updated_at_utc', (row_value).updated_at_utc,
-    'live_enabled_at_utc', target_live_enabled_at_utc
+    'live_enabled_at_utc', target_live_enabled_at_utc,
+    'fee_usd', (row_value).fee_usd,
+    'fee_accounting_status', (row_value).fee_accounting_status,
+    'net_realized_pnl_usd', (row_value).net_realized_pnl_usd
 );
 $function$;
 
@@ -875,7 +894,11 @@ SELECT jsonb_build_object(
     'id', (row_value).id,
     'strategy_id', target_strategy_id,
     'size_shares', (row_value).size_shares,
-    'unrealized_pnl_usd', (row_value).unrealized_pnl_usd
+    'unrealized_pnl_usd', (row_value).unrealized_pnl_usd,
+    'average_price', (row_value).average_price,
+    'fee_usd', (row_value).fee_usd,
+    'fee_accounting_status', (row_value).fee_accounting_status,
+    'net_unrealized_pnl_usd', (row_value).net_unrealized_pnl_usd
 );
 $function$;
 
@@ -891,7 +914,10 @@ SELECT jsonb_build_object(
     'strategy_id', target_strategy_id,
     'cost_basis_usd', (row_value).cost_basis_usd,
     'realized_pnl_usd', (row_value).realized_pnl_usd,
-    'won', (row_value).won
+    'won', (row_value).won,
+    'fee_usd', (row_value).fee_usd,
+    'fee_accounting_status', (row_value).fee_accounting_status,
+    'net_realized_pnl_usd', (row_value).net_realized_pnl_usd
 );
 $function$;
 
@@ -915,7 +941,9 @@ SELECT jsonb_build_object(
     'settled_at_utc', (row_value).settled_at_utc,
     'won', (row_value).won,
     'created_at_utc', (row_value).created_at_utc,
-    'updated_at_utc', (row_value).updated_at_utc
+    'updated_at_utc', (row_value).updated_at_utc,
+    'fee_accounting_status', (row_value).fee_accounting_status,
+    'net_realized_pnl_usd', (row_value).net_realized_pnl_usd
 );
 $function$;
 
@@ -980,6 +1008,49 @@ BEGIN
        AND OLD.size_shares IS NOT DISTINCT FROM NEW.size_shares
        AND OLD.realized_pnl_usd IS NOT DISTINCT FROM NEW.realized_pnl_usd
        AND OLD.filled_at_utc IS NOT DISTINCT FROM NEW.filled_at_utc THEN
+        IF OLD.fee_usd IS DISTINCT FROM NEW.fee_usd
+           OR OLD.fee_accounting_status IS DISTINCT FROM NEW.fee_accounting_status
+           OR OLD.fee_liquidity_role IS DISTINCT FROM NEW.fee_liquidity_role
+           OR OLD.fee_calculation_source IS DISTINCT FROM NEW.fee_calculation_source
+           OR OLD.fee_rate IS DISTINCT FROM NEW.fee_rate
+           OR OLD.fee_exponent IS DISTINCT FROM NEW.fee_exponent
+           OR OLD.fee_taker_only IS DISTINCT FROM NEW.fee_taker_only
+           OR OLD.fee_calculated_at_utc IS DISTINCT FROM NEW.fee_calculated_at_utc
+           OR OLD.net_realized_pnl_usd IS DISTINCT FROM NEW.net_realized_pnl_usd THEN
+            SELECT paper_order.strategy_id
+            INTO new_strategy_id
+            FROM paper_orders paper_order
+            WHERE paper_order.id = NEW.paper_order_id;
+
+            IF new_strategy_id IS NOT NULL THEN
+                INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
+                    strategy_id,
+                    priority,
+                    reason,
+                    requested_at_utc,
+                    attempt_count,
+                    next_attempt_at_utc,
+                    last_error)
+                VALUES (
+                    new_strategy_id,
+                    50,
+                    'paper_fill_fee_accounting_changed',
+                    clock_timestamp(),
+                    0,
+                    clock_timestamp(),
+                    NULL)
+                ON CONFLICT (strategy_id) DO UPDATE SET
+                    priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
+                    reason = EXCLUDED.reason,
+                    requested_at_utc = LEAST(
+                        existing_queue.requested_at_utc,
+                        EXCLUDED.requested_at_utc),
+                    next_attempt_at_utc = LEAST(
+                        existing_queue.next_attempt_at_utc,
+                        EXCLUDED.next_attempt_at_utc),
+                    last_error = NULL;
+            END IF;
+        END IF;
         RETURN NEW;
     END IF;
 
@@ -1040,6 +1111,42 @@ BEGIN
        AND OLD.settled_at_utc IS NOT DISTINCT FROM NEW.settled_at_utc
        AND OLD.skip_reason IS NOT DISTINCT FROM NEW.skip_reason
        AND OLD.updated_at_utc IS NOT DISTINCT FROM NEW.updated_at_utc THEN
+        IF OLD.fee_usd IS DISTINCT FROM NEW.fee_usd
+           OR OLD.fee_accounting_status IS DISTINCT FROM NEW.fee_accounting_status
+           OR OLD.fee_liquidity_role IS DISTINCT FROM NEW.fee_liquidity_role
+           OR OLD.fee_calculation_source IS DISTINCT FROM NEW.fee_calculation_source
+           OR OLD.fee_rate IS DISTINCT FROM NEW.fee_rate
+           OR OLD.fee_exponent IS DISTINCT FROM NEW.fee_exponent
+           OR OLD.fee_taker_only IS DISTINCT FROM NEW.fee_taker_only
+           OR OLD.fee_calculated_at_utc IS DISTINCT FROM NEW.fee_calculated_at_utc
+           OR OLD.net_realized_pnl_usd IS DISTINCT FROM NEW.net_realized_pnl_usd THEN
+            INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
+                strategy_id,
+                priority,
+                reason,
+                requested_at_utc,
+                attempt_count,
+                next_attempt_at_utc,
+                last_error)
+            VALUES (
+                NEW.strategy_id,
+                50,
+                'strategy_run_fee_accounting_changed',
+                clock_timestamp(),
+                0,
+                clock_timestamp(),
+                NULL)
+            ON CONFLICT (strategy_id) DO UPDATE SET
+                priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
+                reason = EXCLUDED.reason,
+                requested_at_utc = LEAST(
+                    existing_queue.requested_at_utc,
+                    EXCLUDED.requested_at_utc),
+                next_attempt_at_utc = LEAST(
+                    existing_queue.next_attempt_at_utc,
+                    EXCLUDED.next_attempt_at_utc),
+                last_error = NULL;
+        END IF;
         RETURN NEW;
     END IF;
 
@@ -1108,7 +1215,46 @@ BEGIN
     IF TG_OP = 'UPDATE'
        AND OLD.copied_trader_wallet IS NOT DISTINCT FROM NEW.copied_trader_wallet
        AND OLD.size_shares IS NOT DISTINCT FROM NEW.size_shares
-       AND OLD.unrealized_pnl_usd IS NOT DISTINCT FROM NEW.unrealized_pnl_usd THEN
+       AND OLD.unrealized_pnl_usd IS NOT DISTINCT FROM NEW.unrealized_pnl_usd
+       AND OLD.average_price IS NOT DISTINCT FROM NEW.average_price THEN
+        IF OLD.fee_usd IS DISTINCT FROM NEW.fee_usd
+           OR OLD.fee_accounting_status IS DISTINCT FROM NEW.fee_accounting_status
+           OR OLD.fee_liquidity_role IS DISTINCT FROM NEW.fee_liquidity_role
+           OR OLD.fee_calculation_source IS DISTINCT FROM NEW.fee_calculation_source
+           OR OLD.fee_rate IS DISTINCT FROM NEW.fee_rate
+           OR OLD.fee_exponent IS DISTINCT FROM NEW.fee_exponent
+           OR OLD.fee_taker_only IS DISTINCT FROM NEW.fee_taker_only
+           OR OLD.fee_calculated_at_utc IS DISTINCT FROM NEW.fee_calculated_at_utc
+           OR OLD.net_unrealized_pnl_usd IS DISTINCT FROM NEW.net_unrealized_pnl_usd THEN
+            IF target_strategy_id IS NOT NULL THEN
+                INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
+                    strategy_id,
+                    priority,
+                    reason,
+                    requested_at_utc,
+                    attempt_count,
+                    next_attempt_at_utc,
+                    last_error)
+                VALUES (
+                    target_strategy_id,
+                    50,
+                    'paper_position_fee_accounting_changed',
+                    clock_timestamp(),
+                    0,
+                    clock_timestamp(),
+                    NULL)
+                ON CONFLICT (strategy_id) DO UPDATE SET
+                    priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
+                    reason = EXCLUDED.reason,
+                    requested_at_utc = LEAST(
+                        existing_queue.requested_at_utc,
+                        EXCLUDED.requested_at_utc),
+                    next_attempt_at_utc = LEAST(
+                        existing_queue.next_attempt_at_utc,
+                        EXCLUDED.next_attempt_at_utc),
+                    last_error = NULL;
+            END IF;
+        END IF;
         RETURN NEW;
     END IF;
 
@@ -1153,6 +1299,44 @@ BEGIN
        AND OLD.cost_basis_usd IS NOT DISTINCT FROM NEW.cost_basis_usd
        AND OLD.realized_pnl_usd IS NOT DISTINCT FROM NEW.realized_pnl_usd
        AND OLD.won IS NOT DISTINCT FROM NEW.won THEN
+        IF OLD.fee_usd IS DISTINCT FROM NEW.fee_usd
+           OR OLD.fee_accounting_status IS DISTINCT FROM NEW.fee_accounting_status
+           OR OLD.fee_liquidity_role IS DISTINCT FROM NEW.fee_liquidity_role
+           OR OLD.fee_calculation_source IS DISTINCT FROM NEW.fee_calculation_source
+           OR OLD.fee_rate IS DISTINCT FROM NEW.fee_rate
+           OR OLD.fee_exponent IS DISTINCT FROM NEW.fee_exponent
+           OR OLD.fee_taker_only IS DISTINCT FROM NEW.fee_taker_only
+           OR OLD.fee_calculated_at_utc IS DISTINCT FROM NEW.fee_calculated_at_utc
+           OR OLD.net_realized_pnl_usd IS DISTINCT FROM NEW.net_realized_pnl_usd THEN
+            IF target_strategy_id IS NOT NULL THEN
+                INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
+                    strategy_id,
+                    priority,
+                    reason,
+                    requested_at_utc,
+                    attempt_count,
+                    next_attempt_at_utc,
+                    last_error)
+                VALUES (
+                    target_strategy_id,
+                    50,
+                    'paper_settlement_fee_accounting_changed',
+                    clock_timestamp(),
+                    0,
+                    clock_timestamp(),
+                    NULL)
+                ON CONFLICT (strategy_id) DO UPDATE SET
+                    priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
+                    reason = EXCLUDED.reason,
+                    requested_at_utc = LEAST(
+                        existing_queue.requested_at_utc,
+                        EXCLUDED.requested_at_utc),
+                    next_attempt_at_utc = LEAST(
+                        existing_queue.next_attempt_at_utc,
+                        EXCLUDED.next_attempt_at_utc),
+                    last_error = NULL;
+            END IF;
+        END IF;
         RETURN NEW;
     END IF;
 

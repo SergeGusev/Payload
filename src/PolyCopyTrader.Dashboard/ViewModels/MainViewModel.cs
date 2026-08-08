@@ -1829,7 +1829,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsStrategyPositiveVisible(StrategyPerformanceRow strategy, bool onlyPositive)
     {
-        return !onlyPositive || strategy.ClosedRoiPct >= 0m;
+        return !onlyPositive ||
+            strategy.NetClosedRoiPct is { } netClosedRoiPct && netClosedRoiPct >= 0m;
     }
 
     private static bool IsStrategyProgressVisible(string strategyName, bool hideProgress)
@@ -1850,7 +1851,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsStrategyBigRoiVisible(StrategyPerformanceRow strategy, bool onlyBigRoi)
     {
-        return !onlyBigRoi || strategy.ClosedRoiPct > BigRoiThresholdPct;
+        return !onlyBigRoi ||
+            strategy.NetClosedRoiPct is { } netClosedRoiPct && netClosedRoiPct > BigRoiThresholdPct;
     }
 
     private static bool IsStrategyBigSettlesVisible(StrategyPerformanceRow strategy, bool onlyBigSettles)
@@ -1866,7 +1868,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsStrategyRecentPositiveVisible(StrategyRecentPerformanceRow strategy, bool onlyPositive)
     {
-        return !onlyPositive || strategy.RoiPct >= 0m;
+        return !onlyPositive ||
+            strategy.NetRoiPct is { } netRoiPct && netRoiPct >= 0m;
     }
 
     private static bool IsStrategyRecentEnabledVisible(
@@ -1884,7 +1887,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private static bool IsStrategyRecentBigRoiVisible(StrategyRecentPerformanceRow strategy, bool onlyBigRoi)
     {
-        return !onlyBigRoi || strategy.RoiPct > BigRoiThresholdPct;
+        return !onlyBigRoi ||
+            strategy.NetRoiPct is { } netRoiPct && netRoiPct > BigRoiThresholdPct;
     }
 
     private static bool IsStrategyRecentBigSettlesVisible(

@@ -300,7 +300,22 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         string liveLastOrderUtc,
         string liveLastSettlementUtc,
         string lastOrderUtc,
-        string lastRunUtc)
+        string lastRunUtc,
+        decimal? netRealizedPnlUsd,
+        decimal? netUnrealizedPnlUsd,
+        decimal? netTotalPnlUsd,
+        decimal? netRoiPct,
+        decimal? netClosedRoiPct,
+        decimal accountedFeeUsd,
+        int feeAccountedSettledCount,
+        int feeRequiredSettledCount,
+        int feeAccountedOpenPositionCount,
+        int feeRequiredOpenPositionCount,
+        decimal? liveNetRealizedPnlUsd,
+        decimal? liveNetRoiPct,
+        decimal liveAccountedFeeUsd,
+        int liveFeeAccountedSettledCount,
+        int liveFeeRequiredSettledCount)
     {
         StrategyId = strategyId;
         Name = name;
@@ -371,6 +386,21 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
         LiveLastSettlementUtc = liveLastSettlementUtc;
         LastOrderUtc = lastOrderUtc;
         LastRunUtc = lastRunUtc;
+        NetRealizedPnlUsd = netRealizedPnlUsd;
+        NetUnrealizedPnlUsd = netUnrealizedPnlUsd;
+        NetTotalPnlUsd = netTotalPnlUsd;
+        NetRoiPct = netRoiPct;
+        NetClosedRoiPct = netClosedRoiPct;
+        AccountedFeeUsd = accountedFeeUsd;
+        FeeAccountedSettledCount = feeAccountedSettledCount;
+        FeeRequiredSettledCount = feeRequiredSettledCount;
+        FeeAccountedOpenPositionCount = feeAccountedOpenPositionCount;
+        FeeRequiredOpenPositionCount = feeRequiredOpenPositionCount;
+        LiveNetRealizedPnlUsd = liveNetRealizedPnlUsd;
+        LiveNetRoiPct = liveNetRoiPct;
+        LiveAccountedFeeUsd = liveAccountedFeeUsd;
+        LiveFeeAccountedSettledCount = liveFeeAccountedSettledCount;
+        LiveFeeRequiredSettledCount = liveFeeRequiredSettledCount;
     }
 
     public Guid StrategyId { get; }
@@ -459,6 +489,34 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 
     public decimal ClosedRoiPct { get; }
 
+    public decimal? NetRealizedPnlUsd { get; }
+
+    public decimal? NetUnrealizedPnlUsd { get; }
+
+    public decimal? NetTotalPnlUsd { get; }
+
+    public decimal? NetRoiPct { get; }
+
+    public decimal? NetClosedRoiPct { get; }
+
+    public decimal AccountedFeeUsd { get; }
+
+    public int FeeAccountedSettledCount { get; }
+
+    public int FeeRequiredSettledCount { get; }
+
+    public int FeeAccountedOpenPositionCount { get; }
+
+    public int FeeRequiredOpenPositionCount { get; }
+
+    public string ClosedFeeCoverage => FormatFeeCoverage(
+        FeeAccountedSettledCount,
+        FeeRequiredSettledCount);
+
+    public string MarkToMarketFeeCoverage => FormatFeeCoverage(
+        FeeAccountedSettledCount + FeeAccountedOpenPositionCount,
+        FeeRequiredSettledCount + FeeRequiredOpenPositionCount);
+
     public decimal AvgEntryDelaySeconds { get; }
 
     public decimal MaxEntryDelaySeconds { get; }
@@ -513,6 +571,20 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 
     public decimal LiveRoiPct { get; }
 
+    public decimal? LiveNetRealizedPnlUsd { get; }
+
+    public decimal? LiveNetRoiPct { get; }
+
+    public decimal LiveAccountedFeeUsd { get; }
+
+    public int LiveFeeAccountedSettledCount { get; }
+
+    public int LiveFeeRequiredSettledCount { get; }
+
+    public string LiveFeeCoverage => FormatFeeCoverage(
+        LiveFeeAccountedSettledCount,
+        LiveFeeRequiredSettledCount);
+
     public string LiveLastOrderUtc { get; }
 
     public string LiveLastSettlementUtc { get; }
@@ -520,6 +592,13 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
     public string LastOrderUtc { get; }
 
     public string LastRunUtc { get; }
+
+    private static string FormatFeeCoverage(int accountedCount, int requiredCount)
+    {
+        return accountedCount == 0 && requiredCount == 0
+            ? "N/A"
+            : FormattableString.Invariant($"{accountedCount}/{requiredCount}");
+    }
 }
 
 public sealed record StrategyRecentPerformanceRow(
@@ -560,7 +639,33 @@ public sealed record StrategyRecentPerformanceRow(
     decimal MaxEntryDelaySeconds,
     string TopSkipReason,
     string LastOrderUtc,
-    string LastRunUtc);
+    string LastRunUtc,
+    decimal? NetRealizedPnlUsd,
+    decimal? NetRoiPct,
+    decimal AccountedFeeUsd,
+    int FeeAccountedSettledCount,
+    int FeeRequiredSettledCount,
+    decimal? LiveNetRealizedPnlUsd,
+    decimal? LiveNetRoiPct,
+    decimal LiveAccountedFeeUsd,
+    int LiveFeeAccountedSettledCount,
+    int LiveFeeRequiredSettledCount)
+{
+    public string ClosedFeeCoverage => FormatFeeCoverage(
+        FeeAccountedSettledCount,
+        FeeRequiredSettledCount);
+
+    public string LiveFeeCoverage => FormatFeeCoverage(
+        LiveFeeAccountedSettledCount,
+        LiveFeeRequiredSettledCount);
+
+    private static string FormatFeeCoverage(int accountedCount, int requiredCount)
+    {
+        return accountedCount == 0 && requiredCount == 0
+            ? "N/A"
+            : FormattableString.Invariant($"{accountedCount}/{requiredCount}");
+    }
+}
 
 public sealed record DryRunOrderRow(
     string TimestampUtc,

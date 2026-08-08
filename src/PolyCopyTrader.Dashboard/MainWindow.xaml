@@ -133,14 +133,20 @@
                     <DataGridTextColumn Header="Paper not accepted" Binding="{Binding PaperNotAcceptedRunsCount}" Width="135" />
                     <DataGridTextColumn Header="Won" Binding="{Binding WonRunsCount}" Width="60" />
                     <DataGridTextColumn Header="Lost" Binding="{Binding LostRunsCount}" Width="60" />
-                    <DataGridTextColumn Header="Gross realized" Binding="{Binding RealizedPnlUsd}" Width="100" />
-                    <DataGridTextColumn Header="Gross closed ROI" Binding="{Binding RoiPct}" Width="110" />
+                    <DataGridTextColumn Header="Net realized" Binding="{Binding NetRealizedPnlUsd}" Width="100" />
+                    <DataGridTextColumn Header="Net closed ROI" Binding="{Binding NetRoiPct}" Width="110" />
+                    <DataGridTextColumn Header="Closed fee coverage" Binding="{Binding ClosedFeeCoverage}" Width="130" />
+                    <DataGridTextColumn Header="Gross realized (audit)" Binding="{Binding RealizedPnlUsd}" Width="130" />
+                    <DataGridTextColumn Header="Gross closed ROI (audit)" Binding="{Binding RoiPct}" Width="145" />
                     <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
                     <DataGridTextColumn Header="Live cond skip" Binding="{Binding LiveConditionSkippedOrdersCount}" Width="105" />
                     <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
                     <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
-                    <DataGridTextColumn Header="Gross live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="120" />
-                    <DataGridTextColumn Header="Gross live ROI" Binding="{Binding LiveRoiPct}" Width="100" />
+                    <DataGridTextColumn Header="Net live realized" Binding="{Binding LiveNetRealizedPnlUsd}" Width="115" />
+                    <DataGridTextColumn Header="Net live ROI" Binding="{Binding LiveNetRoiPct}" Width="95" />
+                    <DataGridTextColumn Header="Live fee coverage" Binding="{Binding LiveFeeCoverage}" Width="115" />
+                    <DataGridTextColumn Header="Gross live realized (audit)" Binding="{Binding LiveRealizedPnlUsd}" Width="150" />
+                    <DataGridTextColumn Header="Gross live ROI (audit)" Binding="{Binding LiveRoiPct}" Width="130" />
                     <DataGridTextColumn Header="Orders" Binding="{Binding OrdersCount}" Width="70" />
                     <DataGridTextColumn Header="Filled" Binding="{Binding FilledOrdersCount}" Width="70" />
                     <DataGridTextColumn Header="Expired" Binding="{Binding ExpiredOrdersCount}" Width="75" />
@@ -351,7 +357,7 @@
                                           Margin="8,0,0,0"
                                           ItemsSource="{Binding StrategyCurrencyOptions}"
                                           SelectedItem="{Binding SelectedStrategyCurrency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                <CheckBox Content="Only positive"
+                                <CheckBox Content="Only positive net"
                                           IsChecked="{Binding ShowOnlyPositiveStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
@@ -363,7 +369,7 @@
                                           IsChecked="{Binding ShowOnlyLiveStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
-                                <CheckBox Content="Big ROI"
+                                <CheckBox Content="Big net ROI"
                                           IsChecked="{Binding ShowOnlyBigRoiStrategies, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
@@ -442,14 +448,20 @@
                         <DataGridTextColumn Header="Paper not accepted" Binding="{Binding PaperNotAcceptedRunsCount}" Width="135" />
                         <DataGridTextColumn Header="Won" Binding="{Binding WonPositionsCount}" Width="60" />
                         <DataGridTextColumn Header="Lost" Binding="{Binding LostPositionsCount}" Width="60" />
-                        <DataGridTextColumn Header="Gross realized" Binding="{Binding RealizedPnlUsd}" Width="105" />
-                        <DataGridTextColumn Header="Gross closed ROI" Binding="{Binding ClosedRoiPct}" Width="115" />
+                        <DataGridTextColumn Header="Net realized" Binding="{Binding NetRealizedPnlUsd}" Width="105" />
+                        <DataGridTextColumn Header="Net closed ROI" Binding="{Binding NetClosedRoiPct}" Width="115" />
+                        <DataGridTextColumn Header="Closed fee coverage" Binding="{Binding ClosedFeeCoverage}" Width="130" />
+                        <DataGridTextColumn Header="Gross realized (audit)" Binding="{Binding RealizedPnlUsd}" Width="135" />
+                        <DataGridTextColumn Header="Gross closed ROI (audit)" Binding="{Binding ClosedRoiPct}" Width="150" />
                         <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
                         <DataGridTextColumn Header="Live cond skip" Binding="{Binding LiveConditionSkippedOrdersCount}" Width="105" />
                         <DataGridTextColumn Header="Live won" Binding="{Binding LiveWonOrdersCount}" Width="80" />
                         <DataGridTextColumn Header="Live lost" Binding="{Binding LiveLostOrdersCount}" Width="80" />
-                        <DataGridTextColumn Header="Gross live realized" Binding="{Binding LiveRealizedPnlUsd}" Width="120" />
-                        <DataGridTextColumn Header="Gross live ROI" Binding="{Binding LiveRoiPct}" Width="100" />
+                        <DataGridTextColumn Header="Net live realized" Binding="{Binding LiveNetRealizedPnlUsd}" Width="115" />
+                        <DataGridTextColumn Header="Net live ROI" Binding="{Binding LiveNetRoiPct}" Width="95" />
+                        <DataGridTextColumn Header="Live fee coverage" Binding="{Binding LiveFeeCoverage}" Width="115" />
+                        <DataGridTextColumn Header="Gross live realized (audit)" Binding="{Binding LiveRealizedPnlUsd}" Width="150" />
+                        <DataGridTextColumn Header="Gross live ROI (audit)" Binding="{Binding LiveRoiPct}" Width="130" />
                         <DataGridTemplateColumn Header="Paper $" Width="80">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
@@ -529,16 +541,20 @@
                         <DataGridTextColumn Header="Observed" Binding="{Binding ObservedRunsCount}" Width="80" />
                         <DataGridTextColumn Header="Entered" Binding="{Binding EnteredRunsCount}" Width="70" />
                         <DataGridTextColumn Header="Settled runs" Binding="{Binding SettledRunsCount}" Width="90" />
-                        <DataGridTextColumn Header="Stake" Binding="{Binding StakeUsd}" Width="90" />
-                        <DataGridTextColumn Header="Open unrealized" Binding="{Binding UnrealizedPnlUsd}" Width="110" />
-                        <DataGridTextColumn Header="MtM PnL" Binding="{Binding TotalPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="Gross stake (audit)" Binding="{Binding StakeUsd}" Width="125" />
+                        <DataGridTextColumn Header="Net open" Binding="{Binding NetUnrealizedPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="Net MtM" Binding="{Binding NetTotalPnlUsd}" Width="90" />
+                        <DataGridTextColumn Header="Net MtM ROI" Binding="{Binding NetRoiPct}" Width="95" />
+                        <DataGridTextColumn Header="MtM fee coverage" Binding="{Binding MarkToMarketFeeCoverage}" Width="125" />
+                        <DataGridTextColumn Header="Gross open unrealized (audit)" Binding="{Binding UnrealizedPnlUsd}" Width="165" />
+                        <DataGridTextColumn Header="Gross MtM PnL (audit)" Binding="{Binding TotalPnlUsd}" Width="135" />
                         <DataGridTextColumn Header="Win %" Binding="{Binding WinRatePct}" Width="70" />
                         <DataGridTextColumn Header="Loss %" Binding="{Binding LossRatePct}" Width="70" />
-                        <DataGridTextColumn Header="Avg win" Binding="{Binding AvgWinPnlUsd}" Width="80" />
-                        <DataGridTextColumn Header="Avg loss" Binding="{Binding AvgLossPnlUsd}" Width="80" />
-                        <DataGridTextColumn Header="Profit factor" Binding="{Binding ProfitFactor}" Width="95" />
-                        <DataGridTextColumn Header="Expectancy" Binding="{Binding ExpectancyPnlUsd}" Width="90" />
-                        <DataGridTextColumn Header="MtM ROI %" Binding="{Binding RoiPct}" Width="80" />
+                        <DataGridTextColumn Header="Gross avg win" Binding="{Binding AvgWinPnlUsd}" Width="100" />
+                        <DataGridTextColumn Header="Gross avg loss" Binding="{Binding AvgLossPnlUsd}" Width="100" />
+                        <DataGridTextColumn Header="Gross profit factor" Binding="{Binding ProfitFactor}" Width="120" />
+                        <DataGridTextColumn Header="Gross expectancy" Binding="{Binding ExpectancyPnlUsd}" Width="110" />
+                        <DataGridTextColumn Header="Gross MtM ROI (audit)" Binding="{Binding RoiPct}" Width="135" />
                         <DataGridTextColumn Header="Avg delay s" Binding="{Binding AvgEntryDelaySeconds}" Width="90" />
                         <DataGridTextColumn Header="Max delay s" Binding="{Binding MaxEntryDelaySeconds}" Width="90" />
                         <DataGridTextColumn Header="Avg score bps" Binding="{Binding AvgCountertrendScoreBps}" Width="105" />
@@ -547,13 +563,13 @@
                         <DataGridTextColumn Header="Live orders" Binding="{Binding LiveOrdersCount}" Width="90" />
                         <DataGridTextColumn Header="Live filled" Binding="{Binding LiveFilledOrdersCount}" Width="90" />
                         <DataGridTextColumn Header="Live open" Binding="{Binding LiveOpenOrdersCount}" Width="80" />
-                        <DataGridTextColumn Header="Live stake" Binding="{Binding LiveStakeUsd}" Width="90" />
+                        <DataGridTextColumn Header="Gross live stake (audit)" Binding="{Binding LiveStakeUsd}" Width="145" />
                         <DataGridTextColumn Header="Live win %" Binding="{Binding LiveWinRatePct}" Width="80" />
                         <DataGridTextColumn Header="Live loss %" Binding="{Binding LiveLossRatePct}" Width="80" />
-                        <DataGridTextColumn Header="Live avg win" Binding="{Binding LiveAvgWinPnlUsd}" Width="95" />
-                        <DataGridTextColumn Header="Live avg loss" Binding="{Binding LiveAvgLossPnlUsd}" Width="100" />
-                        <DataGridTextColumn Header="Live profit factor" Binding="{Binding LiveProfitFactor}" Width="120" />
-                        <DataGridTextColumn Header="Live expectancy" Binding="{Binding LiveExpectancyPnlUsd}" Width="115" />
+                        <DataGridTextColumn Header="Gross live avg win" Binding="{Binding LiveAvgWinPnlUsd}" Width="125" />
+                        <DataGridTextColumn Header="Gross live avg loss" Binding="{Binding LiveAvgLossPnlUsd}" Width="130" />
+                        <DataGridTextColumn Header="Gross live profit factor" Binding="{Binding LiveProfitFactor}" Width="150" />
+                        <DataGridTextColumn Header="Gross live expectancy" Binding="{Binding LiveExpectancyPnlUsd}" Width="145" />
                         <DataGridTextColumn Header="Live last order UTC" Binding="{Binding LiveLastOrderUtc}" Width="150" />
                         <DataGridTextColumn Header="Live last settle UTC" Binding="{Binding LiveLastSettlementUtc}" Width="150" />
                         <DataGridTextColumn Header="Last order UTC" Binding="{Binding LastOrderUtc}" Width="150" />
@@ -585,7 +601,7 @@
                                           Margin="8,0,0,0"
                                           ItemsSource="{Binding StrategyCurrencyOptions}"
                                           SelectedItem="{Binding SelectedStrategy24HoursCurrency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                <CheckBox Content="Only positive"
+                                <CheckBox Content="Only positive net"
                                           IsChecked="{Binding ShowOnlyPositiveStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
@@ -597,7 +613,7 @@
                                           IsChecked="{Binding ShowOnlyLiveStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
-                                <CheckBox Content="Big ROI"
+                                <CheckBox Content="Big net ROI"
                                           IsChecked="{Binding ShowOnlyBigRoiStrategy24Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
@@ -637,7 +653,7 @@
                                           Margin="8,0,0,0"
                                           ItemsSource="{Binding StrategyCurrencyOptions}"
                                           SelectedItem="{Binding SelectedStrategy6HoursCurrency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                <CheckBox Content="Only positive"
+                                <CheckBox Content="Only positive net"
                                           IsChecked="{Binding ShowOnlyPositiveStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
@@ -649,7 +665,7 @@
                                           IsChecked="{Binding ShowOnlyLiveStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
-                                <CheckBox Content="Big ROI"
+                                <CheckBox Content="Big net ROI"
                                           IsChecked="{Binding ShowOnlyBigRoiStrategy6Hours, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
@@ -689,7 +705,7 @@
                                           Margin="8,0,0,0"
                                           ItemsSource="{Binding StrategyCurrencyOptions}"
                                           SelectedItem="{Binding SelectedStrategy1HourCurrency, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                <CheckBox Content="Only positive"
+                                <CheckBox Content="Only positive net"
                                           IsChecked="{Binding ShowOnlyPositiveStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
@@ -701,7 +717,7 @@
                                           IsChecked="{Binding ShowOnlyLiveStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />
-                                <CheckBox Content="Big ROI"
+                                <CheckBox Content="Big net ROI"
                                           IsChecked="{Binding ShowOnlyBigRoiStrategy1Hour, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center"
                                           Margin="12,0,0,0" />

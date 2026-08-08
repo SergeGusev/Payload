@@ -1336,7 +1336,22 @@ public sealed class DashboardDataService(
             FormatDate(performance.LiveLastOrderUtc),
             FormatDate(performance.LiveLastSettlementUtc),
             FormatDate(performance.LastOrderUtc),
-            FormatDate(performance.LastRunUtc));
+            FormatDate(performance.LastRunUtc),
+            performance.NetRealizedPnlUsd,
+            performance.NetUnrealizedPnlUsd,
+            performance.NetTotalPnlUsd,
+            performance.NetRoiPct,
+            performance.NetClosedRoiPct,
+            performance.AccountedFeeUsd,
+            performance.FeeAccountedSettledCount,
+            performance.FeeRequiredSettledCount,
+            performance.FeeAccountedOpenPositionCount,
+            performance.FeeRequiredOpenPositionCount,
+            performance.LiveNetRealizedPnlUsd,
+            performance.LiveNetRoiPct,
+            performance.LiveAccountedFeeUsd,
+            performance.LiveFeeAccountedSettledCount,
+            performance.LiveFeeRequiredSettledCount);
     }
 
     private static StrategyRecentPerformanceRow ToStrategyRecentPerformanceRow(StrategyRecentPerformance performance)
@@ -1379,7 +1394,17 @@ public sealed class DashboardDataService(
             performance.MaxEntryDelaySeconds,
             performance.TopSkipReason,
             FormatDate(performance.LastOrderUtc),
-            FormatDate(performance.LastRunUtc));
+            FormatDate(performance.LastRunUtc),
+            performance.NetRealizedPnlUsd,
+            performance.NetRoiPct,
+            performance.AccountedFeeUsd,
+            performance.FeeAccountedSettledCount,
+            performance.FeeRequiredSettledCount,
+            performance.LiveNetRealizedPnlUsd,
+            performance.LiveNetRoiPct,
+            performance.LiveAccountedFeeUsd,
+            performance.LiveFeeAccountedSettledCount,
+            performance.LiveFeeRequiredSettledCount);
     }
 
     private static LiveOrderRow ToLiveOrderRow(

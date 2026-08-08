@@ -626,7 +626,8 @@ FOR UPDATE;
 
         await using var command = new NpgsqlCommand(
             """
-SELECT source_id, strategy_id, size_shares, unrealized_pnl_usd
+SELECT source_id, strategy_id, size_shares, unrealized_pnl_usd,
+       average_price, fee_usd, fee_accounting_status, net_unrealized_pnl_usd
 FROM dashboard_strategy_position_projection_facts
 WHERE source_id = ANY(@SourceIds)
 FOR UPDATE;
@@ -642,7 +643,11 @@ FOR UPDATE;
                 reader.GetGuid(0),
                 reader.GetGuid(1),
                 reader.GetDecimal(2),
-                reader.GetDecimal(3));
+                reader.GetDecimal(3),
+                reader.GetDecimal(4),
+                reader.GetDecimal(5),
+                reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetDecimal(7));
             results[payload.Id] = payload;
         }
 
@@ -858,7 +863,8 @@ VALUES (
         await using var importer = await connection.BeginBinaryImportAsync(
             """
 COPY dashboard_strategy_position_projection_facts (
-    source_id, strategy_id, size_shares, unrealized_pnl_usd, updated_at_utc)
+    source_id, strategy_id, size_shares, unrealized_pnl_usd, average_price,
+    fee_usd, fee_accounting_status, net_unrealized_pnl_usd, updated_at_utc)
 FROM STDIN (FORMAT BINARY)
 """,
             cancellationToken);
@@ -869,6 +875,20 @@ FROM STDIN (FORMAT BINARY)
             await importer.WriteAsync(fact.StrategyId, NpgsqlDbType.Uuid, cancellationToken);
             await importer.WriteAsync(fact.SizeShares, NpgsqlDbType.Numeric, cancellationToken);
             await importer.WriteAsync(fact.UnrealizedPnlUsd, NpgsqlDbType.Numeric, cancellationToken);
+            await importer.WriteAsync(fact.AveragePrice, NpgsqlDbType.Numeric, cancellationToken);
+            await importer.WriteAsync(fact.FeeUsd, NpgsqlDbType.Numeric, cancellationToken);
+            await importer.WriteAsync(fact.FeeAccountingStatus, NpgsqlDbType.Text, cancellationToken);
+            if (fact.NetUnrealizedPnlUsd is null)
+            {
+                await importer.WriteNullAsync(cancellationToken);
+            }
+            else
+            {
+                await importer.WriteAsync(
+                    fact.NetUnrealizedPnlUsd.Value,
+                    NpgsqlDbType.Numeric,
+                    cancellationToken);
+            }
             await importer.WriteAsync(UtcDateTime(nowUtc), NpgsqlDbType.TimestampTz, cancellationToken);
         }
 

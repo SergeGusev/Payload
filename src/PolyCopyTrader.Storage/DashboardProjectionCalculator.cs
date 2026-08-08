@@ -74,12 +74,27 @@ public static class DashboardProjectionCalculator
 
     public static DashboardLifetimeContribution GetLifetimeContribution(PaperFillProjectionPayload payload)
     {
+        var isSell = IsSell(payload.OrderSide);
+        var feeAccounted = isSell && IsSellFeeAccounted(
+            payload.FeeAccountingStatus,
+            payload.FeeUsd,
+            payload.RealizedPnlUsd,
+            payload.NetRealizedPnlUsd);
+
         return new DashboardLifetimeContribution
         {
             FillRealizedPnlUsd = payload.RealizedPnlUsd,
-            FillClosedCostBasisUsd = IsSell(payload.OrderSide)
+            FillClosedCostBasisUsd = isSell
                 ? (payload.Price * payload.SizeShares) - payload.RealizedPnlUsd
-                : 0m
+                : 0m,
+            FillNetRealizedPnlUsd = feeAccounted ? payload.NetRealizedPnlUsd!.Value : 0m,
+            // A SELL fill's stored fee is the exit fee only. Gross minus net also
+            // includes the allocated entry fee and is therefore the complete fee.
+            FillAccountedFeeUsd = feeAccounted
+                ? payload.RealizedPnlUsd - payload.NetRealizedPnlUsd!.Value
+                : 0m,
+            FillFeeAccountedSettledCount = feeAccounted ? 1 : 0,
+            FillFeeRequiredSettledCount = isSell ? 1 : 0
         };
     }
 
@@ -92,6 +107,11 @@ public static class DashboardProjectionCalculator
         var isSettled = IsStatus(payload.Status, StrategyMarketPaperRunStatuses.Settled);
         var isWin = isSettled && realizedPnl > 0m;
         var isLoss = isSettled && realizedPnl < 0m;
+        var feeAccounted = isSettled && IsFeeAccounted(
+            payload.FeeAccountingStatus,
+            payload.FeeUsd,
+            payload.RealizedPnlUsd,
+            payload.NetRealizedPnlUsd);
         var delay = GetEntryDelaySeconds(payload);
         var skipKind = ClassifyLiveSkip(payload);
 
@@ -108,6 +128,10 @@ public static class DashboardProjectionCalculator
             RunLostCount = isLoss ? 1 : 0,
             RunSettledStakeUsd = isSettled ? payload.StakeUsd : 0m,
             RunRealizedPnlUsd = isSettled ? realizedPnl : 0m,
+            RunNetRealizedPnlUsd = feeAccounted ? payload.NetRealizedPnlUsd!.Value : 0m,
+            RunAccountedFeeUsd = feeAccounted ? payload.FeeUsd : 0m,
+            RunFeeAccountedSettledCount = feeAccounted ? 1 : 0,
+            RunFeeRequiredSettledCount = isSettled ? 1 : 0,
             RunWinPnlSumUsd = isWin ? realizedPnl : 0m,
             RunWinCount = isWin ? 1 : 0,
             RunLossPnlSumUsd = isLoss ? realizedPnl : 0m,
@@ -140,15 +164,33 @@ public static class DashboardProjectionCalculator
 
     public static DashboardLifetimeContribution GetLifetimeContribution(PaperPositionProjectionPayload payload)
     {
+        var isOpen = payload.SizeShares > 0m;
+        var feeAccounted = isOpen && IsFeeAccounted(
+            payload.FeeAccountingStatus,
+            payload.FeeUsd,
+            payload.UnrealizedPnlUsd,
+            payload.NetUnrealizedPnlUsd);
+
         return new DashboardLifetimeContribution
         {
-            OpenPositionsCount = payload.SizeShares > 0m ? 1 : 0,
-            UnrealizedPnlUsd = payload.SizeShares > 0m ? payload.UnrealizedPnlUsd : 0m
+            OpenPositionsCount = isOpen ? 1 : 0,
+            UnrealizedPnlUsd = isOpen ? payload.UnrealizedPnlUsd : 0m,
+            OpenPositionCostBasisUsd = isOpen ? payload.AveragePrice * payload.SizeShares : 0m,
+            NetUnrealizedPnlUsd = feeAccounted ? payload.NetUnrealizedPnlUsd!.Value : 0m,
+            OpenPositionAccountedFeeUsd = feeAccounted ? payload.FeeUsd : 0m,
+            FeeAccountedOpenPositionCount = feeAccounted ? 1 : 0,
+            FeeRequiredOpenPositionCount = isOpen ? 1 : 0
         };
     }
 
     public static DashboardLifetimeContribution GetLifetimeContribution(PaperSettlementProjectionPayload payload)
     {
+        var feeAccounted = IsFeeAccounted(
+            payload.FeeAccountingStatus,
+            payload.FeeUsd,
+            payload.RealizedPnlUsd,
+            payload.NetRealizedPnlUsd);
+
         return new DashboardLifetimeContribution
         {
             SettlementCount = 1,
@@ -156,6 +198,10 @@ public static class DashboardProjectionCalculator
             SettlementLostCount = payload.Won ? 0 : 1,
             SettlementCostBasisUsd = payload.CostBasisUsd,
             SettlementRealizedPnlUsd = payload.RealizedPnlUsd,
+            SettlementNetRealizedPnlUsd = feeAccounted ? payload.NetRealizedPnlUsd!.Value : 0m,
+            SettlementAccountedFeeUsd = feeAccounted ? payload.FeeUsd : 0m,
+            SettlementFeeAccountedSettledCount = feeAccounted ? 1 : 0,
+            SettlementFeeRequiredSettledCount = 1,
             SettlementWinPnlSumUsd = payload.Won ? payload.RealizedPnlUsd : 0m,
             SettlementWinCount = payload.Won ? 1 : 0,
             SettlementLossPnlSumUsd = payload.Won ? 0m : payload.RealizedPnlUsd,
@@ -173,6 +219,11 @@ public static class DashboardProjectionCalculator
         var lost = settled && !won;
         var realizedPnl = settled ? payload.RealizedPnlUsd ?? 0m : 0m;
         var stake = settled ? GetLiveStakeUsd(payload) : 0m;
+        var feeAccounted = countedAsSettled && IsFeeAccounted(
+            payload.FeeAccountingStatus,
+            payload.FeeUsd,
+            payload.RealizedPnlUsd,
+            payload.NetRealizedPnlUsd);
 
         return new DashboardLifetimeContribution
         {
@@ -187,6 +238,10 @@ public static class DashboardProjectionCalculator
             LiveLostCount = lost ? 1 : 0,
             LiveStakeUsd = stake,
             LiveRealizedPnlUsd = realizedPnl,
+            LiveNetRealizedPnlUsd = feeAccounted ? payload.NetRealizedPnlUsd!.Value : 0m,
+            LiveAccountedFeeUsd = feeAccounted ? payload.FeeUsd : 0m,
+            LiveFeeAccountedSettledCount = feeAccounted ? 1 : 0,
+            LiveFeeRequiredSettledCount = countedAsSettled ? 1 : 0,
             LiveWinPnlSumUsd = won ? realizedPnl : 0m,
             LiveWinCount = won ? 1 : 0,
             LiveLossPnlSumUsd = lost ? realizedPnl : 0m,
@@ -292,6 +347,11 @@ public static class DashboardProjectionCalculator
         if (IsStatus(payload.Status, StrategyMarketPaperRunStatuses.Settled) && payload.SettledAtUtc is not null)
         {
             var realizedPnl = payload.RealizedPnlUsd ?? 0m;
+            var feeAccounted = IsFeeAccounted(
+                payload.FeeAccountingStatus,
+                payload.FeeUsd,
+                payload.RealizedPnlUsd,
+                payload.NetRealizedPnlUsd);
             facts.Add(CreateFact(
                 DashboardProjectionSourceKinds.StrategyRun,
                 payload.Id,
@@ -304,7 +364,11 @@ public static class DashboardProjectionCalculator
                     WonRunsCount = realizedPnl > 0m ? 1 : 0,
                     LostRunsCount = realizedPnl < 0m ? 1 : 0,
                     SettledStakeUsd = payload.StakeUsd,
-                    RealizedPnlUsd = realizedPnl
+                    RealizedPnlUsd = realizedPnl,
+                    NetRealizedPnlUsd = feeAccounted ? payload.NetRealizedPnlUsd!.Value : 0m,
+                    AccountedFeeUsd = feeAccounted ? payload.FeeUsd : 0m,
+                    FeeAccountedSettledCount = feeAccounted ? 1 : 0,
+                    FeeRequiredSettledCount = 1
                 }));
         }
 
@@ -332,6 +396,12 @@ public static class DashboardProjectionCalculator
         if (payload.SettledAtUtc is not null)
         {
             var won = payload.Won ?? (payload.SettlementValueUsd ?? 0m) > 0m;
+            var countedAsSettled = payload.RealizedPnlUsd is not null;
+            var feeAccounted = countedAsSettled && IsFeeAccounted(
+                payload.FeeAccountingStatus,
+                payload.FeeUsd,
+                payload.RealizedPnlUsd,
+                payload.NetRealizedPnlUsd);
             facts.Add(CreateFact(
                 DashboardProjectionSourceKinds.LiveOrder,
                 payload.Id,
@@ -340,11 +410,15 @@ public static class DashboardProjectionCalculator
                 payload.SettledAtUtc.Value,
                 new DashboardRecentContribution
                 {
-                    LiveSettledOrdersCount = payload.RealizedPnlUsd is null ? 0 : 1,
+                    LiveSettledOrdersCount = countedAsSettled ? 1 : 0,
                     LiveWonCount = won ? 1 : 0,
                     LiveLostCount = won ? 0 : 1,
                     LiveStakeUsd = GetLiveStakeUsd(payload),
-                    LiveRealizedPnlUsd = payload.RealizedPnlUsd ?? 0m
+                    LiveRealizedPnlUsd = payload.RealizedPnlUsd ?? 0m,
+                    LiveNetRealizedPnlUsd = feeAccounted ? payload.NetRealizedPnlUsd!.Value : 0m,
+                    LiveAccountedFeeUsd = feeAccounted ? payload.FeeUsd : 0m,
+                    LiveFeeAccountedSettledCount = feeAccounted ? 1 : 0,
+                    LiveFeeRequiredSettledCount = countedAsSettled ? 1 : 0
                 }));
         }
 
@@ -369,13 +443,26 @@ public static class DashboardProjectionCalculator
         state.CountertrendSignalCount += sign * contribution.CountertrendSignalCount;
         state.FillRealizedPnlUsd += sign * contribution.FillRealizedPnlUsd;
         state.FillClosedCostBasisUsd += sign * contribution.FillClosedCostBasisUsd;
+        state.FillNetRealizedPnlUsd += sign * contribution.FillNetRealizedPnlUsd;
+        state.FillAccountedFeeUsd += sign * contribution.FillAccountedFeeUsd;
+        state.FillFeeAccountedSettledCount += sign * contribution.FillFeeAccountedSettledCount;
+        state.FillFeeRequiredSettledCount += sign * contribution.FillFeeRequiredSettledCount;
         state.OpenPositionsCount += sign * contribution.OpenPositionsCount;
         state.UnrealizedPnlUsd += sign * contribution.UnrealizedPnlUsd;
+        state.OpenPositionCostBasisUsd += sign * contribution.OpenPositionCostBasisUsd;
+        state.NetUnrealizedPnlUsd += sign * contribution.NetUnrealizedPnlUsd;
+        state.OpenPositionAccountedFeeUsd += sign * contribution.OpenPositionAccountedFeeUsd;
+        state.FeeAccountedOpenPositionCount += sign * contribution.FeeAccountedOpenPositionCount;
+        state.FeeRequiredOpenPositionCount += sign * contribution.FeeRequiredOpenPositionCount;
         state.SettlementCount += sign * contribution.SettlementCount;
         state.SettlementWonCount += sign * contribution.SettlementWonCount;
         state.SettlementLostCount += sign * contribution.SettlementLostCount;
         state.SettlementCostBasisUsd += sign * contribution.SettlementCostBasisUsd;
         state.SettlementRealizedPnlUsd += sign * contribution.SettlementRealizedPnlUsd;
+        state.SettlementNetRealizedPnlUsd += sign * contribution.SettlementNetRealizedPnlUsd;
+        state.SettlementAccountedFeeUsd += sign * contribution.SettlementAccountedFeeUsd;
+        state.SettlementFeeAccountedSettledCount += sign * contribution.SettlementFeeAccountedSettledCount;
+        state.SettlementFeeRequiredSettledCount += sign * contribution.SettlementFeeRequiredSettledCount;
         state.SettlementWinPnlSumUsd += sign * contribution.SettlementWinPnlSumUsd;
         state.SettlementWinCount += sign * contribution.SettlementWinCount;
         state.SettlementLossPnlSumUsd += sign * contribution.SettlementLossPnlSumUsd;
@@ -393,6 +480,10 @@ public static class DashboardProjectionCalculator
         state.RunLostCount += sign * contribution.RunLostCount;
         state.RunSettledStakeUsd += sign * contribution.RunSettledStakeUsd;
         state.RunRealizedPnlUsd += sign * contribution.RunRealizedPnlUsd;
+        state.RunNetRealizedPnlUsd += sign * contribution.RunNetRealizedPnlUsd;
+        state.RunAccountedFeeUsd += sign * contribution.RunAccountedFeeUsd;
+        state.RunFeeAccountedSettledCount += sign * contribution.RunFeeAccountedSettledCount;
+        state.RunFeeRequiredSettledCount += sign * contribution.RunFeeRequiredSettledCount;
         state.RunWinPnlSumUsd += sign * contribution.RunWinPnlSumUsd;
         state.RunWinCount += sign * contribution.RunWinCount;
         state.RunLossPnlSumUsd += sign * contribution.RunLossPnlSumUsd;
@@ -415,6 +506,10 @@ public static class DashboardProjectionCalculator
         state.LiveLostCount += sign * contribution.LiveLostCount;
         state.LiveStakeUsd += sign * contribution.LiveStakeUsd;
         state.LiveRealizedPnlUsd += sign * contribution.LiveRealizedPnlUsd;
+        state.LiveNetRealizedPnlUsd += sign * contribution.LiveNetRealizedPnlUsd;
+        state.LiveAccountedFeeUsd += sign * contribution.LiveAccountedFeeUsd;
+        state.LiveFeeAccountedSettledCount += sign * contribution.LiveFeeAccountedSettledCount;
+        state.LiveFeeRequiredSettledCount += sign * contribution.LiveFeeRequiredSettledCount;
         state.LiveWinPnlSumUsd += sign * contribution.LiveWinPnlSumUsd;
         state.LiveWinCount += sign * contribution.LiveWinCount;
         state.LiveLossPnlSumUsd += sign * contribution.LiveLossPnlSumUsd;
@@ -479,6 +574,10 @@ public static class DashboardProjectionCalculator
         state.LostRunsCount += sign * contribution.LostRunsCount;
         state.SettledStakeUsd += sign * contribution.SettledStakeUsd;
         state.RealizedPnlUsd += sign * contribution.RealizedPnlUsd;
+        state.NetRealizedPnlUsd += sign * contribution.NetRealizedPnlUsd;
+        state.AccountedFeeUsd += sign * contribution.AccountedFeeUsd;
+        state.FeeAccountedSettledCount += sign * contribution.FeeAccountedSettledCount;
+        state.FeeRequiredSettledCount += sign * contribution.FeeRequiredSettledCount;
         state.EntryDelayTotalSeconds += sign * contribution.EntryDelayTotalSeconds;
         state.EntryDelayCount += sign * contribution.EntryDelayCount;
         state.LiveSettledOrdersCount += sign * contribution.LiveSettledOrdersCount;
@@ -489,6 +588,10 @@ public static class DashboardProjectionCalculator
         state.LiveLostCount += sign * contribution.LiveLostCount;
         state.LiveStakeUsd += sign * contribution.LiveStakeUsd;
         state.LiveRealizedPnlUsd += sign * contribution.LiveRealizedPnlUsd;
+        state.LiveNetRealizedPnlUsd += sign * contribution.LiveNetRealizedPnlUsd;
+        state.LiveAccountedFeeUsd += sign * contribution.LiveAccountedFeeUsd;
+        state.LiveFeeAccountedSettledCount += sign * contribution.LiveFeeAccountedSettledCount;
+        state.LiveFeeRequiredSettledCount += sign * contribution.LiveFeeRequiredSettledCount;
 
         if (!string.IsNullOrWhiteSpace(contribution.SkipReason))
         {
@@ -596,6 +699,46 @@ public static class DashboardProjectionCalculator
         var realizedPnlUsd = usesRuns
             ? state.RunRealizedPnlUsd
             : state.SettlementRealizedPnlUsd + state.FillRealizedPnlUsd;
+        var feeAccountedSettledCount = usesRuns
+            ? state.RunFeeAccountedSettledCount
+            : state.SettlementFeeAccountedSettledCount + state.FillFeeAccountedSettledCount;
+        var feeRequiredSettledCount = usesRuns
+            ? state.RunFeeRequiredSettledCount
+            : state.SettlementFeeRequiredSettledCount + state.FillFeeRequiredSettledCount;
+        var closedAccountedFeeUsd = usesRuns
+            ? state.RunAccountedFeeUsd
+            : state.SettlementAccountedFeeUsd + state.FillAccountedFeeUsd;
+        var accountedNetRealizedPnlUsd = usesRuns
+            ? state.RunNetRealizedPnlUsd
+            : state.SettlementNetRealizedPnlUsd + state.FillNetRealizedPnlUsd;
+        var closedFeesComplete = feeAccountedSettledCount == feeRequiredSettledCount;
+        var openFeesComplete = state.FeeAccountedOpenPositionCount == state.FeeRequiredOpenPositionCount;
+        decimal? netRealizedPnlUsd = closedFeesComplete ? accountedNetRealizedPnlUsd : null;
+        decimal? netUnrealizedPnlUsd = openFeesComplete ? state.NetUnrealizedPnlUsd : null;
+        decimal? netTotalPnlUsd = netRealizedPnlUsd is not null && netUnrealizedPnlUsd is not null
+            ? netRealizedPnlUsd.Value + netUnrealizedPnlUsd.Value
+            : null;
+        var netClosedDenominatorUsd = closedStakeUsd + closedAccountedFeeUsd;
+        var netOpenDenominatorUsd = state.OpenPositionCostBasisUsd + state.OpenPositionAccountedFeeUsd;
+        var netTotalDenominatorUsd = netClosedDenominatorUsd + netOpenDenominatorUsd;
+        decimal? netClosedRoiPct = netRealizedPnlUsd is null
+            ? null
+            : netClosedDenominatorUsd == 0m
+                ? 0m
+                : netRealizedPnlUsd.Value * 100m / netClosedDenominatorUsd;
+        decimal? netRoiPct = netTotalPnlUsd is null
+            ? null
+            : netTotalDenominatorUsd == 0m
+                ? 0m
+                : netTotalPnlUsd.Value * 100m / netTotalDenominatorUsd;
+        var liveFeesComplete = state.LiveFeeAccountedSettledCount == state.LiveFeeRequiredSettledCount;
+        decimal? liveNetRealizedPnlUsd = liveFeesComplete ? state.LiveNetRealizedPnlUsd : null;
+        var liveNetDenominatorUsd = state.LiveStakeUsd + state.LiveAccountedFeeUsd;
+        decimal? liveNetRoiPct = liveNetRealizedPnlUsd is null
+            ? null
+            : liveNetDenominatorUsd == 0m
+                ? 0m
+                : liveNetRealizedPnlUsd.Value * 100m / liveNetDenominatorUsd;
         var avgWinPnlUsd = usesRuns
             ? Average(state.RunWinPnlSumUsd, state.RunWinCount)
             : Average(state.SettlementWinPnlSumUsd, state.SettlementWinCount);
@@ -686,7 +829,22 @@ public static class DashboardProjectionCalculator
             state.LiveLastOrderUtc,
             state.LiveLastSettlementUtc,
             state.LastOrderUtc,
-            state.LastRunUtc);
+            state.LastRunUtc,
+            netRealizedPnlUsd,
+            netUnrealizedPnlUsd,
+            netTotalPnlUsd,
+            netRoiPct,
+            netClosedRoiPct,
+            closedAccountedFeeUsd + state.OpenPositionAccountedFeeUsd,
+            feeAccountedSettledCount,
+            feeRequiredSettledCount,
+            state.FeeAccountedOpenPositionCount,
+            state.FeeRequiredOpenPositionCount,
+            liveNetRealizedPnlUsd,
+            liveNetRoiPct,
+            state.LiveAccountedFeeUsd,
+            state.LiveFeeAccountedSettledCount,
+            state.LiveFeeRequiredSettledCount);
     }
 
     public static StrategyRecentPerformance ToStrategyRecentPerformance(
@@ -706,6 +864,22 @@ public static class DashboardProjectionCalculator
             .ThenBy(pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => $"{pair.Key}:{pair.Value}")
             .FirstOrDefault() ?? string.Empty;
+        var feesComplete = state.FeeAccountedSettledCount == state.FeeRequiredSettledCount;
+        decimal? netRealizedPnlUsd = feesComplete ? state.NetRealizedPnlUsd : null;
+        var netDenominatorUsd = state.SettledStakeUsd + state.AccountedFeeUsd;
+        decimal? netRoiPct = netRealizedPnlUsd is null
+            ? null
+            : netDenominatorUsd == 0m
+                ? 0m
+                : netRealizedPnlUsd.Value * 100m / netDenominatorUsd;
+        var liveFeesComplete = state.LiveFeeAccountedSettledCount == state.LiveFeeRequiredSettledCount;
+        decimal? liveNetRealizedPnlUsd = liveFeesComplete ? state.LiveNetRealizedPnlUsd : null;
+        var liveNetDenominatorUsd = state.LiveStakeUsd + state.LiveAccountedFeeUsd;
+        decimal? liveNetRoiPct = liveNetRealizedPnlUsd is null
+            ? null
+            : liveNetDenominatorUsd == 0m
+                ? 0m
+                : liveNetRealizedPnlUsd.Value * 100m / liveNetDenominatorUsd;
 
         return new StrategyRecentPerformance(
             strategy.StrategyId,
@@ -752,7 +926,17 @@ public static class DashboardProjectionCalculator
             state.LiveStakeUsd == 0m ? 0m : state.LiveRealizedPnlUsd * 100m / state.LiveStakeUsd,
             topSkip,
             state.LastOrderUtc,
-            state.LastRunUtc);
+            state.LastRunUtc,
+            netRealizedPnlUsd,
+            netRoiPct,
+            state.AccountedFeeUsd,
+            state.FeeAccountedSettledCount,
+            state.FeeRequiredSettledCount,
+            liveNetRealizedPnlUsd,
+            liveNetRoiPct,
+            state.LiveAccountedFeeUsd,
+            state.LiveFeeAccountedSettledCount,
+            state.LiveFeeRequiredSettledCount);
     }
 
     private static DashboardRecentProjectionFact CreateFact(
@@ -824,6 +1008,31 @@ public static class DashboardProjectionCalculator
         return payload.CostBasisUsd > 0m
             ? Math.Max(0m, payload.CostBasisUsd - payload.FeeUsd)
             : 0m;
+    }
+
+    private static bool IsFeeAccounted(
+        string? feeAccountingStatus,
+        decimal feeUsd,
+        decimal? grossPnlUsd,
+        decimal? netPnlUsd)
+    {
+        return FeeAccountingRules.IsAccounted(feeAccountingStatus) &&
+               feeUsd >= 0m &&
+               grossPnlUsd is not null &&
+               netPnlUsd is not null &&
+               netPnlUsd.Value == grossPnlUsd.Value - feeUsd;
+    }
+
+    private static bool IsSellFeeAccounted(
+        string? feeAccountingStatus,
+        decimal exitFeeUsd,
+        decimal grossPnlUsd,
+        decimal? netPnlUsd)
+    {
+        return FeeAccountingRules.IsAccounted(feeAccountingStatus) &&
+               exitFeeUsd >= 0m &&
+               netPnlUsd is not null &&
+               grossPnlUsd - netPnlUsd.Value >= exitFeeUsd;
     }
 
     private static bool IsFilledPaperOrderStatus(string status)
@@ -904,12 +1113,18 @@ public static class DashboardProjectionCalculator
             state.OpenOrdersCount,
             state.CountertrendScoreCount,
             state.CountertrendSignalCount,
+            state.FillFeeAccountedSettledCount,
+            state.FillFeeRequiredSettledCount,
             state.OpenPositionsCount,
+            state.FeeAccountedOpenPositionCount,
+            state.FeeRequiredOpenPositionCount,
             state.SettlementCount,
             state.SettlementWonCount,
             state.SettlementLostCount,
             state.SettlementWinCount,
             state.SettlementLossCount,
+            state.SettlementFeeAccountedSettledCount,
+            state.SettlementFeeRequiredSettledCount,
             state.RunsCount,
             state.ObservedRunsCount,
             state.EnteredRunsCount,
@@ -921,6 +1136,8 @@ public static class DashboardProjectionCalculator
             state.RunLostCount,
             state.RunWinCount,
             state.RunLossCount,
+            state.RunFeeAccountedSettledCount,
+            state.RunFeeRequiredSettledCount,
             state.EntryDelayCount,
             state.RunLiveConditionSkippedCount,
             state.RunLiveTechnicalSkippedCount,
@@ -935,11 +1152,23 @@ public static class DashboardProjectionCalculator
             state.LiveWonCount,
             state.LiveLostCount,
             state.LiveWinCount,
-            state.LiveLossCount
+            state.LiveLossCount,
+            state.LiveFeeAccountedSettledCount,
+            state.LiveFeeRequiredSettledCount
         };
         if (counts.Any(value => value < 0))
         {
             throw new InvalidOperationException("Dashboard lifetime projection count became negative.");
+        }
+
+        if (state.FillFeeAccountedSettledCount > state.FillFeeRequiredSettledCount ||
+            state.SettlementFeeAccountedSettledCount > state.SettlementFeeRequiredSettledCount ||
+            state.RunFeeAccountedSettledCount > state.RunFeeRequiredSettledCount ||
+            state.FeeAccountedOpenPositionCount > state.FeeRequiredOpenPositionCount ||
+            state.LiveFeeAccountedSettledCount > state.LiveFeeRequiredSettledCount)
+        {
+            throw new InvalidOperationException(
+                "Dashboard lifetime fee-accounted count exceeded its required count.");
         }
     }
 
@@ -961,17 +1190,28 @@ public static class DashboardProjectionCalculator
             state.SettledRunsCount,
             state.WonRunsCount,
             state.LostRunsCount,
+            state.FeeAccountedSettledCount,
+            state.FeeRequiredSettledCount,
             state.EntryDelayCount,
             state.LiveSettledOrdersCount,
             state.LiveTechnicalSkippedCount,
             state.LiveIgnoredCancelledCount,
             state.LiveIgnoredRejectedCount,
             state.LiveWonCount,
-            state.LiveLostCount
+            state.LiveLostCount,
+            state.LiveFeeAccountedSettledCount,
+            state.LiveFeeRequiredSettledCount
         };
         if (counts.Any(value => value < 0))
         {
             throw new InvalidOperationException("Dashboard recent projection count became negative.");
+        }
+
+        if (state.FeeAccountedSettledCount > state.FeeRequiredSettledCount ||
+            state.LiveFeeAccountedSettledCount > state.LiveFeeRequiredSettledCount)
+        {
+            throw new InvalidOperationException(
+                "Dashboard recent fee-accounted count exceeded its required count.");
         }
     }
 

@@ -151,7 +151,10 @@ public sealed class DashboardSnapshotTests
             StringComparison.Ordinal);
         Assert.True(start >= 0);
 
-        var end = source.IndexOf("async Task AccumulateLiveOrdersAsync()", start, StringComparison.Ordinal);
+        var end = source.IndexOf(
+            "async Task AccumulateRecentStrategyPaperSkipTombstonesAsync()",
+            start,
+            StringComparison.Ordinal);
         Assert.True(end > start);
 
         var method = source[start..end];
@@ -246,6 +249,142 @@ public sealed class DashboardSnapshotTests
             statsBeforeBuild >= 0
             && buildProjection > statsBeforeBuild
             && statsAfterBuild > buildProjection);
+    }
+
+    [Fact]
+    public void DashboardStrategyPresentation_UsesNullableNetMetricsAndExplicitGrossAuditLabels()
+    {
+        var xaml = ReadRepositorySource("src", "PolyCopyTrader.Dashboard", "MainWindow.xaml");
+
+        Assert.Contains("Header=\"Net realized\" Binding=\"{Binding NetRealizedPnlUsd}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Net closed ROI\" Binding=\"{Binding NetClosedRoiPct}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Net closed ROI\" Binding=\"{Binding NetRoiPct}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Net open\" Binding=\"{Binding NetUnrealizedPnlUsd}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Net MtM\" Binding=\"{Binding NetTotalPnlUsd}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Net MtM ROI\" Binding=\"{Binding NetRoiPct}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Net live realized\" Binding=\"{Binding LiveNetRealizedPnlUsd}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Net live ROI\" Binding=\"{Binding LiveNetRoiPct}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding=\"{Binding ClosedFeeCoverage}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding=\"{Binding MarkToMarketFeeCoverage}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding=\"{Binding LiveFeeCoverage}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross realized (audit)\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross stake (audit)\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross live stake (audit)\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross open unrealized (audit)\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross MtM PnL (audit)\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross avg win\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross avg loss\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross profit factor\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Gross expectancy\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Only positive net\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Content=\"Big net ROI\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DashboardStrategyFilters_RequireAvailableNetRoi()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Dashboard",
+            "ViewModels",
+            "MainViewModel.cs");
+
+        Assert.Equal(
+            2,
+            source.Split("strategy.NetClosedRoiPct is { } netClosedRoiPct", StringSplitOptions.None).Length - 1);
+        Assert.Equal(
+            2,
+            source.Split("strategy.NetRoiPct is { } netRoiPct", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("strategy.ClosedRoiPct >= 0m", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy.ClosedRoiPct > BigRoiThresholdPct", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy.RoiPct >= 0m", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy.RoiPct > BigRoiThresholdPct", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DashboardDataService_MapsNetMetricsFeesAndCoverageCounts()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Dashboard",
+            "Services",
+            "DashboardDataService.cs");
+
+        foreach (var property in new[]
+        {
+            "performance.NetRealizedPnlUsd",
+            "performance.NetUnrealizedPnlUsd",
+            "performance.NetTotalPnlUsd",
+            "performance.NetRoiPct",
+            "performance.NetClosedRoiPct",
+            "performance.AccountedFeeUsd",
+            "performance.FeeAccountedSettledCount",
+            "performance.FeeRequiredSettledCount",
+            "performance.FeeAccountedOpenPositionCount",
+            "performance.FeeRequiredOpenPositionCount",
+            "performance.LiveNetRealizedPnlUsd",
+            "performance.LiveNetRoiPct",
+            "performance.LiveAccountedFeeUsd",
+            "performance.LiveFeeAccountedSettledCount",
+            "performance.LiveFeeRequiredSettledCount"
+        })
+        {
+            Assert.Contains(property, source, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void DashboardCoverageDisplay_UsesAccountedOverRequiredAndEmptyScopeIsNotApplicable()
+    {
+        var rows = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Dashboard",
+            "Models",
+            "DashboardRows.cs");
+
+        Assert.Contains("public string ClosedFeeCoverage", rows, StringComparison.Ordinal);
+        Assert.Contains("public string MarkToMarketFeeCoverage", rows, StringComparison.Ordinal);
+        Assert.Contains("public string LiveFeeCoverage", rows, StringComparison.Ordinal);
+        Assert.Equal(
+            2,
+            rows.Split("accountedCount == 0 && requiredCount == 0", StringSplitOptions.None).Length - 1);
+        Assert.Equal(2, rows.Split("? \"N/A\"", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
+    public void DashboardStrategyCsv_PutsNullableNetFeeAndCoverageBeforeGrossAuditColumns()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Dashboard",
+            "Services",
+            "DashboardCsvExporter.cs");
+        var lifetimeStart = source.IndexOf("Path.Combine(exportDirectory, \"Strategies.csv\")", StringComparison.Ordinal);
+        var recentStart = source.IndexOf("Path.Combine(exportDirectory, \"StrategyRecentPerformance.csv\")", StringComparison.Ordinal);
+        Assert.True(lifetimeStart >= 0);
+        Assert.True(recentStart > lifetimeStart);
+
+        var lifetime = source[lifetimeStart..recentStart];
+        Assert.True(
+            lifetime.IndexOf("\"NetRealizedPnlUsd\"", StringComparison.Ordinal) <
+            lifetime.IndexOf("\"GrossRealizedPnlUsd\"", StringComparison.Ordinal));
+        Assert.True(
+            lifetime.IndexOf("\"LiveNetRealizedPnlUsd\"", StringComparison.Ordinal) <
+            lifetime.IndexOf("\"GrossLiveRealizedPnlUsd\"", StringComparison.Ordinal));
+        Assert.Contains("\"AccountedFeeUsd\"", lifetime, StringComparison.Ordinal);
+        Assert.Contains("\"ClosedFeeCoverage\"", lifetime, StringComparison.Ordinal);
+        Assert.Contains("\"MarkToMarketFeeCoverage\"", lifetime, StringComparison.Ordinal);
+        Assert.Contains("\"LiveFeeCoverage\"", lifetime, StringComparison.Ordinal);
+
+        var recent = source[recentStart..];
+        Assert.True(
+            recent.IndexOf("\"NetRealizedPnlUsd\"", StringComparison.Ordinal) <
+            recent.IndexOf("\"GrossRealizedPnlUsd\"", StringComparison.Ordinal));
+        Assert.True(
+            recent.IndexOf("\"LiveNetRealizedPnlUsd\"", StringComparison.Ordinal) <
+            recent.IndexOf("\"GrossLiveRealizedPnlUsd\"", StringComparison.Ordinal));
+        Assert.Contains("FormatFeeCoverage", recent, StringComparison.Ordinal);
+        Assert.Equal(string.Empty, PolyCopyTrader.Domain.CsvFormatter.FormatValue(null));
     }
 
     private static string ReadRepositorySource(params string[] segments)

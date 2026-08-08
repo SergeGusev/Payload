@@ -141,7 +141,10 @@ SELECT fill_row.id,
        fill_row.price,
        fill_row.size_shares,
        fill_row.realized_pnl_usd,
-       fill_row.filled_at_utc
+       fill_row.filled_at_utc,
+       fill_row.fee_usd,
+       fill_row.fee_accounting_status,
+       fill_row.net_realized_pnl_usd
 FROM paper_fills fill_row
 INNER JOIN paper_orders paper_order ON paper_order.id = fill_row.paper_order_id
 {{filter}}
@@ -160,7 +163,10 @@ ORDER BY paper_order.strategy_id, fill_row.filled_at_utc, fill_row.id;
                     reader.GetDecimal(3),
                     reader.GetDecimal(4),
                     reader.GetDecimal(5),
-                    UtcNow(reader.GetDateTime(6)));
+                    UtcNow(reader.GetDateTime(6)),
+                    reader.GetDecimal(7),
+                    reader.GetString(8),
+                    reader.IsDBNull(9) ? null : reader.GetDecimal(9));
                 if (!lifetimeStates.TryGetValue(payload.StrategyId, out var state))
                 {
                     continue;
@@ -187,14 +193,18 @@ WITH mapped AS (
            END AS strategy_id,
            settlement.cost_basis_usd,
            settlement.realized_pnl_usd,
-           settlement.won
+           settlement.won,
+           settlement.fee_usd,
+           settlement.fee_accounting_status,
+           settlement.net_realized_pnl_usd
     FROM paper_position_settlements settlement
     LEFT JOIN strategies strategy_by_wallet
         ON lower(settlement.copied_trader_wallet) = lower('strategy:' || strategy_by_wallet.code)
     LEFT JOIN strategies follow_leader
         ON follow_leader.id = @FollowLeaderStrategyId
 )
-SELECT mapped.id, mapped.strategy_id, mapped.cost_basis_usd, mapped.realized_pnl_usd, mapped.won
+SELECT mapped.id, mapped.strategy_id, mapped.cost_basis_usd, mapped.realized_pnl_usd, mapped.won,
+       mapped.fee_usd, mapped.fee_accounting_status, mapped.net_realized_pnl_usd
 FROM mapped
 WHERE mapped.strategy_id IS NOT NULL
 ORDER BY mapped.strategy_id, mapped.id;
@@ -216,7 +226,10 @@ ORDER BY mapped.strategy_id, mapped.id;
                     reader.GetGuid(1),
                     reader.GetDecimal(2),
                     reader.GetDecimal(3),
-                    reader.GetBoolean(4));
+                    reader.GetBoolean(4),
+                    reader.GetDecimal(5),
+                    reader.GetString(6),
+                    reader.IsDBNull(7) ? null : reader.GetDecimal(7));
                 if (lifetimeStates.TryGetValue(payload.StrategyId, out var state))
                 {
                     DashboardProjectionCalculator.Apply(
@@ -243,7 +256,10 @@ SELECT run.id,
        run.settled_at_utc,
        run.skip_reason,
        run.updated_at_utc,
-       strategy.live_enabled_at_utc
+       strategy.live_enabled_at_utc,
+       run.fee_usd,
+       run.fee_accounting_status,
+       run.net_realized_pnl_usd
 FROM strategy_market_paper_runs run
 INNER JOIN strategies strategy ON strategy.id = run.strategy_id
 {{filter}}
@@ -267,7 +283,10 @@ ORDER BY run.strategy_id, run.updated_at_utc, run.id;
                     ReadNullableUtc(reader, 8),
                     reader.IsDBNull(9) ? null : reader.GetString(9),
                     UtcNow(reader.GetDateTime(10)),
-                    ReadNullableUtc(reader, 11));
+                    ReadNullableUtc(reader, 11),
+                    reader.GetDecimal(12),
+                    reader.GetString(13),
+                    reader.IsDBNull(14) ? null : reader.GetDecimal(14));
                 if (!lifetimeStates.TryGetValue(payload.StrategyId, out var state))
                 {
                     continue;
@@ -385,7 +404,9 @@ SELECT live_order.id,
        live_order.settled_at_utc,
        live_order.won,
        live_order.created_at_utc,
-       live_order.updated_at_utc
+       live_order.updated_at_utc,
+       live_order.fee_accounting_status,
+       live_order.net_realized_pnl_usd
 FROM live_orders live_order
 {{filter}}
 ORDER BY live_order.strategy_id, live_order.updated_at_utc, live_order.id;
@@ -411,7 +432,9 @@ ORDER BY live_order.strategy_id, live_order.updated_at_utc, live_order.id;
                     ReadNullableUtc(reader, 11),
                     reader.IsDBNull(12) ? null : reader.GetBoolean(12),
                     UtcNow(reader.GetDateTime(13)),
-                    UtcNow(reader.GetDateTime(14)));
+                    UtcNow(reader.GetDateTime(14)),
+                    reader.GetString(15),
+                    reader.IsDBNull(16) ? null : reader.GetDecimal(16));
                 if (!lifetimeStates.TryGetValue(payload.StrategyId, out var state))
                 {
                     continue;
@@ -445,7 +468,11 @@ WITH mapped AS (
                ELSE follow_leader.id
            END AS strategy_id,
            position_row.size_shares,
-           position_row.unrealized_pnl_usd
+           position_row.unrealized_pnl_usd,
+           position_row.average_price,
+           position_row.fee_usd,
+           position_row.fee_accounting_status,
+           position_row.net_unrealized_pnl_usd
     FROM paper_positions position_row
     LEFT JOIN strategies strategy_by_wallet
         ON strategy_by_wallet.code = lower(substring(position_row.copied_trader_wallet from 10))
@@ -453,7 +480,9 @@ WITH mapped AS (
     LEFT JOIN strategies follow_leader
         ON follow_leader.id = @FollowLeaderStrategyId
 )
-SELECT mapped.id, mapped.strategy_id, mapped.size_shares, mapped.unrealized_pnl_usd
+SELECT mapped.id, mapped.strategy_id, mapped.size_shares, mapped.unrealized_pnl_usd,
+       mapped.average_price, mapped.fee_usd, mapped.fee_accounting_status,
+       mapped.net_unrealized_pnl_usd
 FROM mapped
 WHERE mapped.strategy_id IS NOT NULL;
 """,
@@ -473,7 +502,11 @@ WHERE mapped.strategy_id IS NOT NULL;
                 reader.GetGuid(0),
                 reader.GetGuid(1),
                 reader.GetDecimal(2),
-                reader.GetDecimal(3));
+                reader.GetDecimal(3),
+                reader.GetDecimal(4),
+                reader.GetDecimal(5),
+                reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetDecimal(7));
             if (!lifetimeStates.TryGetValue(payload.StrategyId, out var state))
             {
                 continue;
@@ -522,8 +555,8 @@ WHERE mapped.strategy_id IS NOT NULL;
     {
         var selectedColumns = tableName switch
         {
-            "paper_positions" => "size_shares, unrealized_pnl_usd",
-            "paper_position_settlements" => "cost_basis_usd, realized_pnl_usd, won",
+            "paper_positions" => "size_shares, unrealized_pnl_usd, average_price, fee_usd, fee_accounting_status, net_unrealized_pnl_usd",
+            "paper_position_settlements" => "cost_basis_usd, realized_pnl_usd, won, fee_usd, fee_accounting_status, net_realized_pnl_usd",
             _ => throw new ArgumentOutOfRangeException(nameof(tableName))
         };
 

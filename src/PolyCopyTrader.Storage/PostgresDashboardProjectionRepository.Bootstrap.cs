@@ -88,6 +88,10 @@ COPY dashboard_strategy_position_projection_facts (
     strategy_id,
     size_shares,
     unrealized_pnl_usd,
+    average_price,
+    fee_usd,
+    fee_accounting_status,
+    net_unrealized_pnl_usd,
     updated_at_utc)
 FROM STDIN (FORMAT BINARY)
 """,
@@ -106,6 +110,20 @@ FROM STDIN (FORMAT BINARY)
                     await positionImporter.WriteAsync(fact.StrategyId, NpgsqlDbType.Uuid, token);
                     await positionImporter.WriteAsync(fact.SizeShares, NpgsqlDbType.Numeric, token);
                     await positionImporter.WriteAsync(fact.UnrealizedPnlUsd, NpgsqlDbType.Numeric, token);
+                    await positionImporter.WriteAsync(fact.AveragePrice, NpgsqlDbType.Numeric, token);
+                    await positionImporter.WriteAsync(fact.FeeUsd, NpgsqlDbType.Numeric, token);
+                    await positionImporter.WriteAsync(fact.FeeAccountingStatus, NpgsqlDbType.Text, token);
+                    if (fact.NetUnrealizedPnlUsd is null)
+                    {
+                        await positionImporter.WriteNullAsync(token);
+                    }
+                    else
+                    {
+                        await positionImporter.WriteAsync(
+                            fact.NetUnrealizedPnlUsd.Value,
+                            NpgsqlDbType.Numeric,
+                            token);
+                    }
                     await positionImporter.WriteAsync(UtcDateTime(projectionNowUtc), NpgsqlDbType.TimestampTz, token);
                 },
                 cancellationToken);
@@ -140,14 +158,6 @@ FROM STDIN (FORMAT BINARY)
             writeTransaction,
             bootstrapSnapshot,
             cancellationToken);
-        await using (var clearQueue = new NpgsqlCommand(
-            "DELETE FROM dashboard_projection_reconciliation_queue;",
-            writeConnection,
-            writeTransaction))
-        {
-            await clearQueue.ExecuteNonQueryAsync(cancellationToken);
-        }
-
         await using (var completeControl = new NpgsqlCommand(
             """
 UPDATE dashboard_projection_control

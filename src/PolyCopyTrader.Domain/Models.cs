@@ -3769,7 +3769,22 @@ public sealed record StrategyPerformance(
     DateTimeOffset? LiveLastOrderUtc,
     DateTimeOffset? LiveLastSettlementUtc,
     DateTimeOffset? LastOrderUtc,
-    DateTimeOffset? LastRunUtc);
+    DateTimeOffset? LastRunUtc,
+    decimal? NetRealizedPnlUsd = null,
+    decimal? NetUnrealizedPnlUsd = null,
+    decimal? NetTotalPnlUsd = null,
+    decimal? NetRoiPct = null,
+    decimal? NetClosedRoiPct = null,
+    decimal AccountedFeeUsd = 0m,
+    int FeeAccountedSettledCount = 0,
+    int FeeRequiredSettledCount = 0,
+    int FeeAccountedOpenPositionCount = 0,
+    int FeeRequiredOpenPositionCount = 0,
+    decimal? LiveNetRealizedPnlUsd = null,
+    decimal? LiveNetRoiPct = null,
+    decimal LiveAccountedFeeUsd = 0m,
+    int LiveFeeAccountedSettledCount = 0,
+    int LiveFeeRequiredSettledCount = 0);
 
 public sealed record StrategyRecentPerformance(
     Guid StrategyId,
@@ -3812,7 +3827,17 @@ public sealed record StrategyRecentPerformance(
     decimal LiveRoiPct,
     string TopSkipReason,
     DateTimeOffset? LastOrderUtc,
-    DateTimeOffset? LastRunUtc);
+    DateTimeOffset? LastRunUtc,
+    decimal? NetRealizedPnlUsd = null,
+    decimal? NetRoiPct = null,
+    decimal AccountedFeeUsd = 0m,
+    int FeeAccountedSettledCount = 0,
+    int FeeRequiredSettledCount = 0,
+    decimal? LiveNetRealizedPnlUsd = null,
+    decimal? LiveNetRoiPct = null,
+    decimal LiveAccountedFeeUsd = 0m,
+    int LiveFeeAccountedSettledCount = 0,
+    int LiveFeeRequiredSettledCount = 0);
 
 public static class StrategyChildParentAssignmentModes
 {

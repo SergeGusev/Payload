@@ -141,11 +141,19 @@ An aggregate is fully fee-accounted only when every contributing child is
 a fully accounted mix is `Calculated`. A partial aggregate may retain the sum of
 known fee components, but it must not expose that sum as a complete net result.
 
-`RealizedPnlUsd` and existing ROI remain gross, before platform fees.
-`NetRealizedPnlUsd` is nullable and may be populated only under full fee coverage;
-otherwise it remains unknown. Aggregate Dashboard PnL/ROI continues to display
-the existing gross metric; it must not be labeled or interpreted as net
-profitability.
+`RealizedPnlUsd`, `UnrealizedPnlUsd`, and the existing gross ROI fields remain
+unchanged audit values before platform fees. `NetRealizedPnlUsd` and other net
+aggregates are nullable and may be populated only under full fee coverage for
+their exact scope; otherwise they remain unknown. The Dashboard uses those
+nullable net values as the primary strategy metrics, leaves incomplete values
+blank, and displays `accounted/required` coverage. A `0/0` scope is `N/A`, not an
+unknown fee coerced to zero. Known accounted-fee sums may still be shown for a
+partial scope, but they are not a complete fee total.
+
+Net ROI uses fee-inclusive cash outlay as its denominator: the gross stake or
+cost plus the fully accounted platform fee. Gross PnL and gross ROI remain
+explicitly labeled secondary audit columns in the Dashboard and CSV exports;
+they must not be labeled or interpreted as net profitability.
 
 The online `PaperFakFeeBackfill` worker may evaluate retained historical rows only
 when persisted execution evidence proves a pure-Paper BUY FAK. Its allowlist is

@@ -4,7 +4,7 @@ namespace PolyCopyTrader.Storage;
 
 public static class DashboardProjectionVersions
 {
-    public const int Current = 3;
+    public const int Current = 4;
 }
 
 public static class DashboardProjectionSourceKinds
@@ -116,7 +116,10 @@ public sealed record PaperFillProjectionPayload(
     decimal Price,
     decimal SizeShares,
     decimal RealizedPnlUsd,
-    DateTimeOffset FilledAtUtc);
+    DateTimeOffset FilledAtUtc,
+    decimal FeeUsd = 0m,
+    string FeeAccountingStatus = "LegacyUnknown",
+    decimal? NetRealizedPnlUsd = null);
 
 public sealed record StrategyRunProjectionPayload(
     Guid Id,
@@ -130,7 +133,10 @@ public sealed record StrategyRunProjectionPayload(
     DateTimeOffset? SettledAtUtc,
     string? SkipReason,
     DateTimeOffset UpdatedAtUtc,
-    DateTimeOffset? LiveEnabledAtUtc);
+    DateTimeOffset? LiveEnabledAtUtc,
+    decimal FeeUsd = 0m,
+    string FeeAccountingStatus = "LegacyUnknown",
+    decimal? NetRealizedPnlUsd = null);
 
 public sealed record StrategyPaperSkipRollupProjectionPayload(
     Guid StrategyId,
@@ -141,14 +147,21 @@ public sealed record PaperPositionProjectionPayload(
     Guid Id,
     Guid StrategyId,
     decimal SizeShares,
-    decimal UnrealizedPnlUsd);
+    decimal UnrealizedPnlUsd,
+    decimal AveragePrice = 0m,
+    decimal FeeUsd = 0m,
+    string FeeAccountingStatus = "LegacyUnknown",
+    decimal? NetUnrealizedPnlUsd = null);
 
 public sealed record PaperSettlementProjectionPayload(
     Guid Id,
     Guid StrategyId,
     decimal CostBasisUsd,
     decimal RealizedPnlUsd,
-    bool Won);
+    bool Won,
+    decimal FeeUsd = 0m,
+    string FeeAccountingStatus = "LegacyUnknown",
+    decimal? NetRealizedPnlUsd = null);
 
 public sealed record LiveOrderProjectionPayload(
     Guid Id,
@@ -165,7 +178,9 @@ public sealed record LiveOrderProjectionPayload(
     DateTimeOffset? SettledAtUtc,
     bool? Won,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string FeeAccountingStatus = "LegacyUnknown",
+    decimal? NetRealizedPnlUsd = null);
 
 public class DashboardLifetimeContribution
 {
@@ -181,13 +196,26 @@ public class DashboardLifetimeContribution
     public DateTimeOffset? LastCountertrendSignalAtUtc { get; set; }
     public decimal FillRealizedPnlUsd { get; set; }
     public decimal FillClosedCostBasisUsd { get; set; }
+    public decimal FillNetRealizedPnlUsd { get; set; }
+    public decimal FillAccountedFeeUsd { get; set; }
+    public int FillFeeAccountedSettledCount { get; set; }
+    public int FillFeeRequiredSettledCount { get; set; }
     public int OpenPositionsCount { get; set; }
     public decimal UnrealizedPnlUsd { get; set; }
+    public decimal OpenPositionCostBasisUsd { get; set; }
+    public decimal NetUnrealizedPnlUsd { get; set; }
+    public decimal OpenPositionAccountedFeeUsd { get; set; }
+    public int FeeAccountedOpenPositionCount { get; set; }
+    public int FeeRequiredOpenPositionCount { get; set; }
     public int SettlementCount { get; set; }
     public int SettlementWonCount { get; set; }
     public int SettlementLostCount { get; set; }
     public decimal SettlementCostBasisUsd { get; set; }
     public decimal SettlementRealizedPnlUsd { get; set; }
+    public decimal SettlementNetRealizedPnlUsd { get; set; }
+    public decimal SettlementAccountedFeeUsd { get; set; }
+    public int SettlementFeeAccountedSettledCount { get; set; }
+    public int SettlementFeeRequiredSettledCount { get; set; }
     public decimal SettlementWinPnlSumUsd { get; set; }
     public int SettlementWinCount { get; set; }
     public decimal SettlementLossPnlSumUsd { get; set; }
@@ -205,6 +233,10 @@ public class DashboardLifetimeContribution
     public int RunLostCount { get; set; }
     public decimal RunSettledStakeUsd { get; set; }
     public decimal RunRealizedPnlUsd { get; set; }
+    public decimal RunNetRealizedPnlUsd { get; set; }
+    public decimal RunAccountedFeeUsd { get; set; }
+    public int RunFeeAccountedSettledCount { get; set; }
+    public int RunFeeRequiredSettledCount { get; set; }
     public decimal RunWinPnlSumUsd { get; set; }
     public int RunWinCount { get; set; }
     public decimal RunLossPnlSumUsd { get; set; }
@@ -228,6 +260,10 @@ public class DashboardLifetimeContribution
     public int LiveLostCount { get; set; }
     public decimal LiveStakeUsd { get; set; }
     public decimal LiveRealizedPnlUsd { get; set; }
+    public decimal LiveNetRealizedPnlUsd { get; set; }
+    public decimal LiveAccountedFeeUsd { get; set; }
+    public int LiveFeeAccountedSettledCount { get; set; }
+    public int LiveFeeRequiredSettledCount { get; set; }
     public decimal LiveWinPnlSumUsd { get; set; }
     public int LiveWinCount { get; set; }
     public decimal LiveLossPnlSumUsd { get; set; }
@@ -267,6 +303,10 @@ public class DashboardRecentContribution
     public int LostRunsCount { get; set; }
     public decimal SettledStakeUsd { get; set; }
     public decimal RealizedPnlUsd { get; set; }
+    public decimal NetRealizedPnlUsd { get; set; }
+    public decimal AccountedFeeUsd { get; set; }
+    public int FeeAccountedSettledCount { get; set; }
+    public int FeeRequiredSettledCount { get; set; }
     public decimal EntryDelayTotalSeconds { get; set; }
     public int EntryDelayCount { get; set; }
     public decimal? EntryDelayCandidateSeconds { get; set; }
@@ -278,6 +318,10 @@ public class DashboardRecentContribution
     public int LiveLostCount { get; set; }
     public decimal LiveStakeUsd { get; set; }
     public decimal LiveRealizedPnlUsd { get; set; }
+    public decimal LiveNetRealizedPnlUsd { get; set; }
+    public decimal LiveAccountedFeeUsd { get; set; }
+    public int LiveFeeAccountedSettledCount { get; set; }
+    public int LiveFeeRequiredSettledCount { get; set; }
     public string? SkipReason { get; set; }
     public DateTimeOffset? LastOrderUtc { get; set; }
     public DateTimeOffset? LastRunUtc { get; set; }

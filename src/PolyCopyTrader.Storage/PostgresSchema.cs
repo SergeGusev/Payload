@@ -2555,11 +2555,41 @@ CREATE TABLE IF NOT EXISTS dashboard_strategy_performance_snapshots (
     live_last_settlement_utc timestamptz NULL,
     last_order_utc timestamptz NULL,
     last_run_utc timestamptz NULL,
+    net_realized_pnl_usd numeric(28,8) NULL,
+    net_unrealized_pnl_usd numeric(28,8) NULL,
+    net_total_pnl_usd numeric(28,8) NULL,
+    net_roi_pct numeric(28,8) NULL,
+    net_closed_roi_pct numeric(28,8) NULL,
+    accounted_fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_accounted_settled_count integer NOT NULL DEFAULT 0,
+    fee_required_settled_count integer NOT NULL DEFAULT 0,
+    fee_accounted_open_position_count integer NOT NULL DEFAULT 0,
+    fee_required_open_position_count integer NOT NULL DEFAULT 0,
+    live_net_realized_pnl_usd numeric(28,8) NULL,
+    live_net_roi_pct numeric(28,8) NULL,
+    live_accounted_fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    live_fee_accounted_settled_count integer NOT NULL DEFAULT 0,
+    live_fee_required_settled_count integer NOT NULL DEFAULT 0,
     refreshed_at_utc timestamptz NOT NULL
 );
 
 ALTER TABLE dashboard_strategy_performance_snapshots
     ALTER COLUMN auto_live_paused SET DEFAULT false;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS net_realized_pnl_usd numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS net_unrealized_pnl_usd numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS net_total_pnl_usd numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS net_roi_pct numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS net_closed_roi_pct numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS accounted_fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS fee_accounted_settled_count integer NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS fee_required_settled_count integer NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS fee_accounted_open_position_count integer NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS fee_required_open_position_count integer NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS live_net_realized_pnl_usd numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS live_net_roi_pct numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS live_accounted_fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS live_fee_accounted_settled_count integer NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_performance_snapshots ADD COLUMN IF NOT EXISTS live_fee_required_settled_count integer NOT NULL DEFAULT 0;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_strategy_performance_snapshots_code
 ON dashboard_strategy_performance_snapshots (code);
@@ -2609,9 +2639,30 @@ CREATE TABLE IF NOT EXISTS dashboard_strategy_recent_performance_snapshots (
     top_skip_reason text NOT NULL,
     last_order_utc timestamptz NULL,
     last_run_utc timestamptz NULL,
+    net_realized_pnl_usd numeric(28,8) NULL,
+    net_roi_pct numeric(28,8) NULL,
+    accounted_fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    fee_accounted_settled_count integer NOT NULL DEFAULT 0,
+    fee_required_settled_count integer NOT NULL DEFAULT 0,
+    live_net_realized_pnl_usd numeric(28,8) NULL,
+    live_net_roi_pct numeric(28,8) NULL,
+    live_accounted_fee_usd numeric(28,8) NOT NULL DEFAULT 0,
+    live_fee_accounted_settled_count integer NOT NULL DEFAULT 0,
+    live_fee_required_settled_count integer NOT NULL DEFAULT 0,
     refreshed_at_utc timestamptz NOT NULL,
     PRIMARY KEY (strategy_id, window_label)
 );
+
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS net_realized_pnl_usd numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS net_roi_pct numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS accounted_fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS fee_accounted_settled_count integer NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS fee_required_settled_count integer NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS live_net_realized_pnl_usd numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS live_net_roi_pct numeric(28,8) NULL;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS live_accounted_fee_usd numeric(28,8) NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS live_fee_accounted_settled_count integer NOT NULL DEFAULT 0;
+ALTER TABLE dashboard_strategy_recent_performance_snapshots ADD COLUMN IF NOT EXISTS live_fee_required_settled_count integer NOT NULL DEFAULT 0;
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_dashboard_strategy_recent_performance_snapshots_code
 ON dashboard_strategy_recent_performance_snapshots (code);

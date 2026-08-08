@@ -216,7 +216,32 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "Strategies.csv"),
-            ["Name", "Enabled", "LiveStakes", "Paused", "PausedUntilUtc", "PaperStakeAmount", "LiveStakeAmount", "PaperLostCoeff", "LiveLostCoeff", "PaperLostCounter", "LiveLostCounter", "LiveAvailableBalance", "OrdersCount", "FilledOrdersCount", "OpenOrdersCount", "OpenPositionsCount", "ObservedRunsCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "SettledPositionsCount", "WonPositionsCount", "LostPositionsCount", "StakeUsd", "GrossRealizedPnlUsd", "GrossOpenUnrealizedPnlUsd", "GrossMarkToMarketPnlUsd", "WinRatePct", "LossRatePct", "GrossAvgWinPnlUsd", "GrossAvgLossPnlUsd", "GrossProfitFactor", "GrossExpectancyPnlUsd", "GrossMarkToMarketRoiPct", "GrossClosedRoiPct", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "AvgCountertrendScoreBps", "AvgCountertrendSignalBps", "LastCountertrendSignalBps", "LiveOrdersCount", "LiveFilledOrdersCount", "LiveOpenOrdersCount", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveStakeUsd", "GrossLiveRealizedPnlUsd", "LiveWinRatePct", "LiveLossRatePct", "GrossLiveAvgWinPnlUsd", "GrossLiveAvgLossPnlUsd", "GrossLiveProfitFactor", "GrossLiveExpectancyPnlUsd", "GrossLiveRoiPct", "LiveLastOrderUtc", "LiveLastSettlementUtc", "LastOrderUtc", "LastRunUtc"],
+            [
+                "Name", "Enabled", "LiveStakes", "Paused", "PausedUntilUtc", "PaperStakeAmount",
+                "LiveStakeAmount", "PaperLostCoeff", "LiveLostCoeff", "PaperLostCounter", "LiveLostCounter",
+                "LiveAvailableBalance", "OrdersCount", "FilledOrdersCount", "OpenOrdersCount", "OpenPositionsCount",
+                "ObservedRunsCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount",
+                "PaperNotAcceptedRunsCount", "SettledRunsCount", "SettledPositionsCount", "WonPositionsCount",
+                "LostPositionsCount", "StakeUsd",
+                "NetRealizedPnlUsd", "NetOpenUnrealizedPnlUsd", "NetMarkToMarketPnlUsd",
+                "NetMarkToMarketRoiPct", "NetClosedRoiPct", "AccountedFeeUsd",
+                "FeeAccountedSettledCount", "FeeRequiredSettledCount", "ClosedFeeCoverage",
+                "FeeAccountedOpenPositionCount", "FeeRequiredOpenPositionCount", "MarkToMarketFeeCoverage",
+                "GrossRealizedPnlUsd", "GrossOpenUnrealizedPnlUsd", "GrossMarkToMarketPnlUsd",
+                "WinRatePct", "LossRatePct", "GrossAvgWinPnlUsd", "GrossAvgLossPnlUsd", "GrossProfitFactor",
+                "GrossExpectancyPnlUsd", "GrossMarkToMarketRoiPct", "GrossClosedRoiPct",
+                "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "AvgCountertrendScoreBps",
+                "AvgCountertrendSignalBps", "LastCountertrendSignalBps", "LiveOrdersCount",
+                "LiveFilledOrdersCount", "LiveOpenOrdersCount", "LiveSettledOrdersCount", "LiveSkippedOrdersCount",
+                "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount",
+                "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount",
+                "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveStakeUsd",
+                "LiveNetRealizedPnlUsd", "LiveNetRoiPct", "LiveAccountedFeeUsd",
+                "LiveFeeAccountedSettledCount", "LiveFeeRequiredSettledCount", "LiveFeeCoverage",
+                "GrossLiveRealizedPnlUsd", "LiveWinRatePct", "LiveLossRatePct", "GrossLiveAvgWinPnlUsd",
+                "GrossLiveAvgLossPnlUsd", "GrossLiveProfitFactor", "GrossLiveExpectancyPnlUsd", "GrossLiveRoiPct",
+                "LiveLastOrderUtc", "LiveLastSettlementUtc", "LastOrderUtc", "LastRunUtc"
+            ],
             (await dashboardSnapshots.GetStrategyPerformanceSnapshotAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
             {
                 strategy.Name,
@@ -245,6 +270,20 @@ public sealed class DashboardCsvExporter(
                 strategy.WonPositionsCount,
                 strategy.LostPositionsCount,
                 strategy.StakeUsd,
+                strategy.NetRealizedPnlUsd,
+                strategy.NetUnrealizedPnlUsd,
+                strategy.NetTotalPnlUsd,
+                strategy.NetRoiPct,
+                strategy.NetClosedRoiPct,
+                strategy.AccountedFeeUsd,
+                strategy.FeeAccountedSettledCount,
+                strategy.FeeRequiredSettledCount,
+                FormatFeeCoverage(strategy.FeeAccountedSettledCount, strategy.FeeRequiredSettledCount),
+                strategy.FeeAccountedOpenPositionCount,
+                strategy.FeeRequiredOpenPositionCount,
+                FormatFeeCoverage(
+                    strategy.FeeAccountedSettledCount + strategy.FeeAccountedOpenPositionCount,
+                    strategy.FeeRequiredSettledCount + strategy.FeeRequiredOpenPositionCount),
                 strategy.RealizedPnlUsd,
                 strategy.UnrealizedPnlUsd,
                 strategy.TotalPnlUsd,
@@ -275,6 +314,14 @@ public sealed class DashboardCsvExporter(
                 strategy.LiveWonOrdersCount,
                 strategy.LiveLostOrdersCount,
                 strategy.LiveStakeUsd,
+                strategy.LiveNetRealizedPnlUsd,
+                strategy.LiveNetRoiPct,
+                strategy.LiveAccountedFeeUsd,
+                strategy.LiveFeeAccountedSettledCount,
+                strategy.LiveFeeRequiredSettledCount,
+                FormatFeeCoverage(
+                    strategy.LiveFeeAccountedSettledCount,
+                    strategy.LiveFeeRequiredSettledCount),
                 strategy.LiveRealizedPnlUsd,
                 strategy.LiveWinRatePct,
                 strategy.LiveLossRatePct,
@@ -292,7 +339,20 @@ public sealed class DashboardCsvExporter(
 
         await WriteAsync(
             Path.Combine(exportDirectory, "StrategyRecentPerformance.csv"),
-            ["Window", "Name", "OrdersCount", "FilledOrdersCount", "ExpiredOrdersCount", "OpenOrdersCount", "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount", "PaperNotAcceptedRunsCount", "SettledRunsCount", "WonRunsCount", "LostRunsCount", "WinRatePct", "GrossRoiPct", "LiveSettledOrdersCount", "LiveSkippedOrdersCount", "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount", "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount", "LiveWonOrdersCount", "LiveLostOrdersCount", "GrossLiveRealizedPnlUsd", "GrossLiveRoiPct", "GrossRealizedPnlUsd", "GrossFilledCostUsd", "AvgFillPrice", "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "TopSkipReason", "LastOrderUtc", "LastRunUtc"],
+            [
+                "Window", "Name", "OrdersCount", "FilledOrdersCount", "ExpiredOrdersCount", "OpenOrdersCount",
+                "EnteredRunsCount", "SkippedRunsCount", "PaperConditionSkippedRunsCount",
+                "PaperNotAcceptedRunsCount", "SettledRunsCount", "WonRunsCount", "LostRunsCount", "WinRatePct",
+                "NetRealizedPnlUsd", "NetRoiPct", "AccountedFeeUsd", "FeeAccountedSettledCount",
+                "FeeRequiredSettledCount", "FeeCoverage", "GrossRealizedPnlUsd", "GrossRoiPct",
+                "GrossFilledCostUsd", "LiveSettledOrdersCount", "LiveSkippedOrdersCount",
+                "LiveConditionSkippedOrdersCount", "LiveTechnicalSkippedOrdersCount", "LiveIgnoredOrdersCount",
+                "LiveIgnoredGtdUnfilledCount", "LiveIgnoredCancelledOrdersCount", "LiveIgnoredRejectedOrdersCount",
+                "LiveWonOrdersCount", "LiveLostOrdersCount", "LiveNetRealizedPnlUsd", "LiveNetRoiPct",
+                "LiveAccountedFeeUsd", "LiveFeeAccountedSettledCount", "LiveFeeRequiredSettledCount",
+                "LiveFeeCoverage", "GrossLiveRealizedPnlUsd", "GrossLiveRoiPct", "AvgFillPrice",
+                "AvgEntryDelaySeconds", "MaxEntryDelaySeconds", "TopSkipReason", "LastOrderUtc", "LastRunUtc"
+            ],
             (await dashboardSnapshots.GetStrategyRecentPerformanceSnapshotAsync(ExportLimit, cancellationToken)).Select(strategy => new object?[]
             {
                 strategy.Window,
@@ -309,7 +369,15 @@ public sealed class DashboardCsvExporter(
                 strategy.WonRunsCount,
                 strategy.LostRunsCount,
                 strategy.WinRatePct,
+                strategy.NetRealizedPnlUsd,
+                strategy.NetRoiPct,
+                strategy.AccountedFeeUsd,
+                strategy.FeeAccountedSettledCount,
+                strategy.FeeRequiredSettledCount,
+                FormatFeeCoverage(strategy.FeeAccountedSettledCount, strategy.FeeRequiredSettledCount),
+                strategy.RealizedPnlUsd,
                 strategy.RoiPct,
+                strategy.FilledCostUsd,
                 strategy.LiveSettledOrdersCount,
                 strategy.LiveSkippedOrdersCount,
                 strategy.LiveConditionSkippedOrdersCount,
@@ -320,10 +388,16 @@ public sealed class DashboardCsvExporter(
                 strategy.LiveIgnoredRejectedOrdersCount,
                 strategy.LiveWonOrdersCount,
                 strategy.LiveLostOrdersCount,
+                strategy.LiveNetRealizedPnlUsd,
+                strategy.LiveNetRoiPct,
+                strategy.LiveAccountedFeeUsd,
+                strategy.LiveFeeAccountedSettledCount,
+                strategy.LiveFeeRequiredSettledCount,
+                FormatFeeCoverage(
+                    strategy.LiveFeeAccountedSettledCount,
+                    strategy.LiveFeeRequiredSettledCount),
                 strategy.LiveRealizedPnlUsd,
                 strategy.LiveRoiPct,
-                strategy.RealizedPnlUsd,
-                strategy.FilledCostUsd,
                 strategy.AvgFillPrice,
                 strategy.AvgEntryDelaySeconds,
                 strategy.MaxEntryDelaySeconds,
@@ -448,6 +522,13 @@ public sealed class DashboardCsvExporter(
         }
 
         await File.WriteAllTextAsync(path, builder.ToString(), Encoding.UTF8, cancellationToken);
+    }
+
+    private static string FormatFeeCoverage(int accountedCount, int requiredCount)
+    {
+        return accountedCount == 0 && requiredCount == 0
+            ? "N/A"
+            : FormattableString.Invariant($"{accountedCount}/{requiredCount}");
     }
 
     private static PaperOrderFeeSummary BuildPaperOrderFeeSummary(IReadOnlyList<PaperFill> fills)

@@ -83,7 +83,22 @@ SELECT
     snapshot.live_last_order_utc,
     snapshot.live_last_settlement_utc,
     snapshot.last_order_utc,
-    snapshot.last_run_utc
+    snapshot.last_run_utc,
+    snapshot.net_realized_pnl_usd,
+    snapshot.net_unrealized_pnl_usd,
+    snapshot.net_total_pnl_usd,
+    snapshot.net_roi_pct,
+    snapshot.net_closed_roi_pct,
+    snapshot.accounted_fee_usd,
+    snapshot.fee_accounted_settled_count,
+    snapshot.fee_required_settled_count,
+    snapshot.fee_accounted_open_position_count,
+    snapshot.fee_required_open_position_count,
+    snapshot.live_net_realized_pnl_usd,
+    snapshot.live_net_roi_pct,
+    snapshot.live_accounted_fee_usd,
+    snapshot.live_fee_accounted_settled_count,
+    snapshot.live_fee_required_settled_count
 FROM dashboard_strategy_performance_snapshots AS snapshot
 JOIN strategies AS strategy ON strategy.id = snapshot.strategy_id
 ORDER BY
@@ -164,6 +179,21 @@ INSERT INTO dashboard_strategy_performance_snapshots (
     live_last_settlement_utc,
     last_order_utc,
     last_run_utc,
+    net_realized_pnl_usd,
+    net_unrealized_pnl_usd,
+    net_total_pnl_usd,
+    net_roi_pct,
+    net_closed_roi_pct,
+    accounted_fee_usd,
+    fee_accounted_settled_count,
+    fee_required_settled_count,
+    fee_accounted_open_position_count,
+    fee_required_open_position_count,
+    live_net_realized_pnl_usd,
+    live_net_roi_pct,
+    live_accounted_fee_usd,
+    live_fee_accounted_settled_count,
+    live_fee_required_settled_count,
     refreshed_at_utc)
 VALUES (
     @StrategyId,
@@ -236,6 +266,21 @@ VALUES (
     @LiveLastSettlementUtc,
     @LastOrderUtc,
     @LastRunUtc,
+    @NetRealizedPnlUsd,
+    @NetUnrealizedPnlUsd,
+    @NetTotalPnlUsd,
+    @NetRoiPct,
+    @NetClosedRoiPct,
+    @AccountedFeeUsd,
+    @FeeAccountedSettledCount,
+    @FeeRequiredSettledCount,
+    @FeeAccountedOpenPositionCount,
+    @FeeRequiredOpenPositionCount,
+    @LiveNetRealizedPnlUsd,
+    @LiveNetRoiPct,
+    @LiveAccountedFeeUsd,
+    @LiveFeeAccountedSettledCount,
+    @LiveFeeRequiredSettledCount,
     @RefreshedAtUtc)
 ON CONFLICT (strategy_id) DO UPDATE SET
     code = EXCLUDED.code,
@@ -307,6 +352,21 @@ ON CONFLICT (strategy_id) DO UPDATE SET
     live_last_settlement_utc = EXCLUDED.live_last_settlement_utc,
     last_order_utc = EXCLUDED.last_order_utc,
     last_run_utc = EXCLUDED.last_run_utc,
+    net_realized_pnl_usd = EXCLUDED.net_realized_pnl_usd,
+    net_unrealized_pnl_usd = EXCLUDED.net_unrealized_pnl_usd,
+    net_total_pnl_usd = EXCLUDED.net_total_pnl_usd,
+    net_roi_pct = EXCLUDED.net_roi_pct,
+    net_closed_roi_pct = EXCLUDED.net_closed_roi_pct,
+    accounted_fee_usd = EXCLUDED.accounted_fee_usd,
+    fee_accounted_settled_count = EXCLUDED.fee_accounted_settled_count,
+    fee_required_settled_count = EXCLUDED.fee_required_settled_count,
+    fee_accounted_open_position_count = EXCLUDED.fee_accounted_open_position_count,
+    fee_required_open_position_count = EXCLUDED.fee_required_open_position_count,
+    live_net_realized_pnl_usd = EXCLUDED.live_net_realized_pnl_usd,
+    live_net_roi_pct = EXCLUDED.live_net_roi_pct,
+    live_accounted_fee_usd = EXCLUDED.live_accounted_fee_usd,
+    live_fee_accounted_settled_count = EXCLUDED.live_fee_accounted_settled_count,
+    live_fee_required_settled_count = EXCLUDED.live_fee_required_settled_count,
     refreshed_at_utc = EXCLUDED.refreshed_at_utc;
 """;
 
@@ -352,7 +412,17 @@ SELECT
     snapshot.live_roi_pct,
     snapshot.top_skip_reason,
     snapshot.last_order_utc,
-    snapshot.last_run_utc
+    snapshot.last_run_utc,
+    snapshot.net_realized_pnl_usd,
+    snapshot.net_roi_pct,
+    snapshot.accounted_fee_usd,
+    snapshot.fee_accounted_settled_count,
+    snapshot.fee_required_settled_count,
+    snapshot.live_net_realized_pnl_usd,
+    snapshot.live_net_roi_pct,
+    snapshot.live_accounted_fee_usd,
+    snapshot.live_fee_accounted_settled_count,
+    snapshot.live_fee_required_settled_count
 FROM dashboard_strategy_recent_performance_snapshots AS snapshot
 JOIN strategies AS strategy ON strategy.id = snapshot.strategy_id
 ORDER BY
@@ -405,6 +475,16 @@ INSERT INTO dashboard_strategy_recent_performance_snapshots (
     top_skip_reason,
     last_order_utc,
     last_run_utc,
+    net_realized_pnl_usd,
+    net_roi_pct,
+    accounted_fee_usd,
+    fee_accounted_settled_count,
+    fee_required_settled_count,
+    live_net_realized_pnl_usd,
+    live_net_roi_pct,
+    live_accounted_fee_usd,
+    live_fee_accounted_settled_count,
+    live_fee_required_settled_count,
     refreshed_at_utc)
 VALUES (
     @StrategyId,
@@ -448,6 +528,16 @@ VALUES (
     @TopSkipReason,
     @LastOrderUtc,
     @LastRunUtc,
+    @NetRealizedPnlUsd,
+    @NetRoiPct,
+    @AccountedFeeUsd,
+    @FeeAccountedSettledCount,
+    @FeeRequiredSettledCount,
+    @LiveNetRealizedPnlUsd,
+    @LiveNetRoiPct,
+    @LiveAccountedFeeUsd,
+    @LiveFeeAccountedSettledCount,
+    @LiveFeeRequiredSettledCount,
     @RefreshedAtUtc)
 ON CONFLICT (strategy_id, window_label) DO UPDATE SET
     code = EXCLUDED.code,
@@ -489,6 +579,16 @@ ON CONFLICT (strategy_id, window_label) DO UPDATE SET
     top_skip_reason = EXCLUDED.top_skip_reason,
     last_order_utc = EXCLUDED.last_order_utc,
     last_run_utc = EXCLUDED.last_run_utc,
+    net_realized_pnl_usd = EXCLUDED.net_realized_pnl_usd,
+    net_roi_pct = EXCLUDED.net_roi_pct,
+    accounted_fee_usd = EXCLUDED.accounted_fee_usd,
+    fee_accounted_settled_count = EXCLUDED.fee_accounted_settled_count,
+    fee_required_settled_count = EXCLUDED.fee_required_settled_count,
+    live_net_realized_pnl_usd = EXCLUDED.live_net_realized_pnl_usd,
+    live_net_roi_pct = EXCLUDED.live_net_roi_pct,
+    live_accounted_fee_usd = EXCLUDED.live_accounted_fee_usd,
+    live_fee_accounted_settled_count = EXCLUDED.live_fee_accounted_settled_count,
+    live_fee_required_settled_count = EXCLUDED.live_fee_required_settled_count,
     refreshed_at_utc = EXCLUDED.refreshed_at_utc;
 """;
 
@@ -681,6 +781,21 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
         Add(command, "LiveLastSettlementUtc", NullableDateTime(strategy.LiveLastSettlementUtc));
         Add(command, "LastOrderUtc", NullableDateTime(strategy.LastOrderUtc));
         Add(command, "LastRunUtc", NullableDateTime(strategy.LastRunUtc));
+        Add(command, "NetRealizedPnlUsd", NullableDecimal(strategy.NetRealizedPnlUsd));
+        Add(command, "NetUnrealizedPnlUsd", NullableDecimal(strategy.NetUnrealizedPnlUsd));
+        Add(command, "NetTotalPnlUsd", NullableDecimal(strategy.NetTotalPnlUsd));
+        Add(command, "NetRoiPct", NullableDecimal(strategy.NetRoiPct));
+        Add(command, "NetClosedRoiPct", NullableDecimal(strategy.NetClosedRoiPct));
+        Add(command, "AccountedFeeUsd", strategy.AccountedFeeUsd);
+        Add(command, "FeeAccountedSettledCount", strategy.FeeAccountedSettledCount);
+        Add(command, "FeeRequiredSettledCount", strategy.FeeRequiredSettledCount);
+        Add(command, "FeeAccountedOpenPositionCount", strategy.FeeAccountedOpenPositionCount);
+        Add(command, "FeeRequiredOpenPositionCount", strategy.FeeRequiredOpenPositionCount);
+        Add(command, "LiveNetRealizedPnlUsd", NullableDecimal(strategy.LiveNetRealizedPnlUsd));
+        Add(command, "LiveNetRoiPct", NullableDecimal(strategy.LiveNetRoiPct));
+        Add(command, "LiveAccountedFeeUsd", strategy.LiveAccountedFeeUsd);
+        Add(command, "LiveFeeAccountedSettledCount", strategy.LiveFeeAccountedSettledCount);
+        Add(command, "LiveFeeRequiredSettledCount", strategy.LiveFeeRequiredSettledCount);
         Add(command, "RefreshedAtUtc", UtcDateTime(refreshedAtUtc));
         return command;
     }
@@ -731,6 +846,16 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
         Add(command, "TopSkipReason", strategy.TopSkipReason);
         Add(command, "LastOrderUtc", NullableDateTime(strategy.LastOrderUtc));
         Add(command, "LastRunUtc", NullableDateTime(strategy.LastRunUtc));
+        Add(command, "NetRealizedPnlUsd", NullableDecimal(strategy.NetRealizedPnlUsd));
+        Add(command, "NetRoiPct", NullableDecimal(strategy.NetRoiPct));
+        Add(command, "AccountedFeeUsd", strategy.AccountedFeeUsd);
+        Add(command, "FeeAccountedSettledCount", strategy.FeeAccountedSettledCount);
+        Add(command, "FeeRequiredSettledCount", strategy.FeeRequiredSettledCount);
+        Add(command, "LiveNetRealizedPnlUsd", NullableDecimal(strategy.LiveNetRealizedPnlUsd));
+        Add(command, "LiveNetRoiPct", NullableDecimal(strategy.LiveNetRoiPct));
+        Add(command, "LiveAccountedFeeUsd", strategy.LiveAccountedFeeUsd);
+        Add(command, "LiveFeeAccountedSettledCount", strategy.LiveFeeAccountedSettledCount);
+        Add(command, "LiveFeeRequiredSettledCount", strategy.LiveFeeRequiredSettledCount);
         Add(command, "RefreshedAtUtc", UtcDateTime(refreshedAtUtc));
         return command;
     }
@@ -807,7 +932,22 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
             reader.IsDBNull(66) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(66)),
             reader.IsDBNull(67) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(67)),
             reader.IsDBNull(68) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(68)),
-            reader.IsDBNull(69) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(69)));
+            reader.IsDBNull(69) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(69)),
+            reader.IsDBNull(70) ? null : reader.GetDecimal(70),
+            reader.IsDBNull(71) ? null : reader.GetDecimal(71),
+            reader.IsDBNull(72) ? null : reader.GetDecimal(72),
+            reader.IsDBNull(73) ? null : reader.GetDecimal(73),
+            reader.IsDBNull(74) ? null : reader.GetDecimal(74),
+            reader.GetDecimal(75),
+            reader.GetInt32(76),
+            reader.GetInt32(77),
+            reader.GetInt32(78),
+            reader.GetInt32(79),
+            reader.IsDBNull(80) ? null : reader.GetDecimal(80),
+            reader.IsDBNull(81) ? null : reader.GetDecimal(81),
+            reader.GetDecimal(82),
+            reader.GetInt32(83),
+            reader.GetInt32(84));
     }
 
     private static StrategyRecentPerformance ReadStrategyRecentPerformance(NpgsqlDataReader reader)
@@ -853,7 +993,17 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
             reader.GetDecimal(37),
             reader.GetString(38),
             reader.IsDBNull(39) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(39)),
-            reader.IsDBNull(40) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(40)));
+            reader.IsDBNull(40) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(40)),
+            reader.IsDBNull(41) ? null : reader.GetDecimal(41),
+            reader.IsDBNull(42) ? null : reader.GetDecimal(42),
+            reader.GetDecimal(43),
+            reader.GetInt32(44),
+            reader.GetInt32(45),
+            reader.IsDBNull(46) ? null : reader.GetDecimal(46),
+            reader.IsDBNull(47) ? null : reader.GetDecimal(47),
+            reader.GetDecimal(48),
+            reader.GetInt32(49),
+            reader.GetInt32(50));
     }
 
     private static void Add(NpgsqlBatchCommand command, string name, object value)

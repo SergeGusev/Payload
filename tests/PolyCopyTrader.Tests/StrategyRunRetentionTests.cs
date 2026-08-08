@@ -591,7 +591,7 @@ public sealed class StrategyRunRetentionTests
             "await AccumulateStrategyPaperSkipRollupsAsync();",
             source,
             StringComparison.Ordinal);
-        Assert.Equal(3, DashboardProjectionVersions.Current);
+        Assert.Equal(4, DashboardProjectionVersions.Current);
     }
 
     [Fact]
