@@ -82,3 +82,24 @@ Request:
 
 Result:
 Подтверждено, что алгоритм пользователя верен: для каждой фактически settled Paper-ставки рассчитана комиссия текущей FAK/Taker-моделью и применено `Net PnL = Gross PnL - fee`. Exact run-linked production repair охватил все `2,321` валидные pre-cutoff цепочки стратегии `ETH Up or Down 5m 2 bps Reference Average Premarket`; единственный duplicate fill/order без run оставлен неизменным и исключён. После RR/RO preview `2,321/2,321`, одной независимо проверенной MarketWebSocket-canary и свежего плана оставшиеся `2,320` цепочек обновлены атомарными пакетами с нулём конфликтов. Финал: settled coverage `2,365/2,365`, stake `$14,207.76299932`, Gross PnL `$835.70760314`, fee `$462.30896000`, Net PnL `$373.39864314`, fee-inclusive Net ROI `2.5453088722088866%`; все fill/run/position/settlement identities совпали, Gross/orphan digests не изменились. Однострочный CAS повысил приоритет только целевой Dashboard reconciliation queue; штатный worker пересчитал snapshot, удалил очередь/events, и Dashboard теперь показывает те же `2,365/2,365`, Net PnL и Net ROI. Focused fee/backfill tests прошли `60/60`, reconciliation tests `8/8`; service/deploy/trading/product code не менялись. PostgreSQL credential, ранее раскрытый во внутреннем diagnostic transcript, всё ещё необходимо ротировать.
+
+## 2026-08-08T22:59:59.0811371Z
+Request:
+Скажи статус перерасчёта остальных стратегий - идёт ли он и когда примерно закончится
+
+Result:
+Строго read-only подтверждено, что production worker работает: между `22:56:20Z` и `22:57:07Z` применена новая пачка из `50` строк; service `Running/Live`, build `26069ee6`, heartbeat свежий, `last_error=NULL`. Exact other-strategy cohort содержит `2,194,069` historical pure-Paper FAK BUY fills: `19,011 Calculated` (`0.866472%`), `2,175,058 LegacyUnknown`, `0 CalculationUnavailable`. Фактический темп `16..33 fills/min` даёт наивный ориентир `46..92` дня, центрально около двух месяцев; scheduler-only минимум `7.55` дня нереалистичен. Полное достижение нуля не гарантировано: текущий worker оставляет structural conflicts в `LegacyUnknown`, cumulative conflict count не хранится. Никаких production writes/service actions не выполнялось.
+
+## 2026-08-08T23:01:30.0000000Z
+Request:
+А откуда 2,175 миллина? Может, ты по Skipped стратегиям тоже считаешь?
+
+Result:
+Уточнено, что `2,175,058` — число persisted `paper_fills` в exact worker scope, а не число запусков стратегий. `Skipped` runs не имеют fill и в счётчик не входят. Фильтр: pre-cutoff BUY fill с exact direct/child pure-Paper FAK execution source, LegacyUnknown fee status, без отдельно завершённой ETH 2bps стратегии.
+
+## 2026-08-08T23:02:41.9245927Z
+Request:
+А те ставки, которые мы не выиграли, а проиграли, но. тем не менее, комиссию за них заплатили, ты тоже считаешь?
+
+Result:
+Да. Worker считает комиссию по каждому фактически исполненному FAK BUY fill независимо от будущего результата; в selection/apply contract нет фильтра `won=true` или по знаку PnL. Поэтому и выигрыши, и проигрыши входят в cohort: для проигрыша Net PnL становится ещё ниже на размер комиссии (`net = gross realized PnL - fee`). `Skipped` без fill по-прежнему исключены.
