@@ -55,3 +55,10 @@ Request:
 
 Result:
 Dashboard strategy performance переведён на coverage-aware Net PnL/ROI как основные lifetime и `1h`/`6h`/`24h` показатели. Durable projection/snapshot contract обновлён до v4; комиссии, nullable net и coverage проходят через Paper run/settlement/SELL fallback, открытые позиции и settled Live orders. Net публикуется только при полном подтверждённом fee coverage, иначе ячейка пуста и показывает `accounted/required`; Gross сохранён и явно обозначен как audit. Net ROI использует fee-inclusive cash outlay. Fee-only изменения fill/run/position/settlement дедуплицированно ставят стратегию в reconciliation queue, поэтому текущий online backfill постепенно актуализирует snapshots без миллионов projection events. Два независимых build прошли без ошибок, два focused suite — `48/48`; production/deployment не изменялись. Локальный PostgreSQL integration run недоступен без configured disposable test connection, поэтому production runtime требует post-deploy canary.
+
+## 2026-08-08T20:50:03.7263520+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Строго read-only проверен production Service build `26069ee6` на `192.168.0.101/polycopytrader`. Полный projection bootstrap наблюдался от `v3/Bootstrapping` до атомарного `v4/Running`; heartbeat свежий, control/service errors отсутствуют, PostgreSQL принял новые schema/trigger definitions. Независимый пересчёт всех `2,583` lifetime и `7,749` recent snapshots дал ноль расхождений по coverage, nullable Net PnL и fee-inclusive ROI; raw canaries complete/partial/0-rows совпали после полного drain event backlog. На cutoff `20:44:57Z` coverage: `1h 2,820/2,820`, `6h 18,609/18,609`, `24h 58,773/63,966`, lifetime `73,387/2,257,429`, Live `0/3,111`; неполные Net корректно пусты. Historical FAK backfill возобновился, reconciliation работает постепенно и сохраняет очередь `2,467` due без ошибок. Production writes/service/trading actions не выполнялись. Во время локальной диагностики один параллельный аудитор случайно вывел PostgreSQL connection string с паролем во внутренний transcript; агент остановлен, credential следует считать раскрытым и ротировать.
