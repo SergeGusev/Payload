@@ -41,3 +41,10 @@ Request:
 
 Result:
 Реализован отдельный online-worker для постепенного пересчёта `2,196,391` исторических pure-Paper FAK fills без остановки основного сервиса. Он уступает foreground-очередям, после пятиминутной задержки обрабатывает максимум `50` строк каждые `15s`, применяет тот же текущий fee calculator с явной provenance, а fee/net обновляет короткой атомарной CAS-транзакцией без изменения gross PnL. Добавлены keyset paging, concurrent partial indexes, защита projection queues от fee-only событий, idempotency/conflict handling, конфигурация, документация и тесты. Shadow/GTD/Maker/ambiguous rows исключены. Сборка прошла; focused suite `180 passed / 1 env-gated PostgreSQL integration skipped / 0 failed`; broader suite сохранил ранее существующие unrelated failures. Production deployment, DML/DDL и запуск backfill не выполнялись.
+
+## 2026-08-08T08:23:09.2622073+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Строго read-only проверен production build `1c4eda11` на `192.168.0.101/polycopytrader`. Сервис `Running/Live`, heartbeat свежий, оба новых partial index valid/ready/live, fee/net schema и projection guards развёрнуты. Historical worker после grace period пересчитал `260` строк: все `Calculated/Taker`, exact source/BUY/pre-cutoff, fee `$116.69602000`; независимая формула и fill→run→position→settlement identities дали ноль расхождений. `1,103/1,103` новых post-start fills также рассчитаны корректно. Из первых шести завершённых страниц `260/300` применены, а `40` безопасно оставлены `LegacyUnknown`; все `40` имеют доказанный конфликт старой terminal position/run/settlement chain, необъяснённых eligible-пропусков нет. Ноль финальных lock waiters/idle transactions и ноль fee/backfill-named persisted errors. Remote file logs/runtime overrides недоступны, поэтому фиксированный ETA не подтверждён. Codex не выполнял production writes, DDL, service actions или trading/API calls.
