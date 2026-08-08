@@ -1,3 +1,14 @@
+## Active Update 2026-08-09 PaperOnly Versus FAK Terminology Clarification
+Goal: Clarify the relationship between PaperOnly transport mode and FAK immediate-execution semantics.
+Status: Completed
+Done:
+- Corrected the prior explanation: `PaperOnly` and `FAK` are independent dimensions, not alternatives or synonyms. `PaperOnly` determines that no order is sent to Polymarket; `FAK` determines how the modeled order executes.
+- Verified that a BUY FAK is taker-style immediate execution against the currently available ask levels, potentially across multiple prices, up to a hard worst-price cap. It is not guaranteed to fill at the last trade, midpoint, or one displayed price.
+- Verified that any immediately available quantity inside the cap may fill and the unfilled remainder is cancelled. PaperOnly simulates that same behavior from the decision-time snapshot; a Live-capable strategy would submit the equivalent intent externally.
+Next: None.
+Notes: Read-only clarification on clean `master` at `7cb4c5c4`; `git pull --ff-only` was already up to date. Inspected the current parity contract and `FakBuyExecutionIntent`. No product code, configuration, database, service, order, deployment, or production state changed; no tests were required for this terminology clarification.
+Blockers: None.
+
 ## Active Update 2026-08-09 PaperOnly Bet Acceptance Contract Clarification
 Goal: Verify how current PaperOnly bets must be formed so they are not rejected for avoidable execution/parity defects.
 Status: Completed
