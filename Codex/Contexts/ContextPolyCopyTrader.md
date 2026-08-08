@@ -1,3 +1,16 @@
+## Active Update 2026-08-09 Maker-Only Goal Clarification
+Goal: Clarify the gap between the current PaperOnly FAK execution and the user's goal of eliminating Taker BUYs in favor of genuine Maker execution.
+Status: Completed
+Done:
+- Confirmed from current official Polymarket documentation that guaranteed Maker execution requires a resting `GTC` or `GTD` limit with `postOnly=true`; post-only is invalid with `FAK`/`FOK`, and a marketable post-only BUY must be rejected rather than converted to a Taker fill.
+- Verified that the active specialized BTC/ETH/SOL PaperOnly path is Taker: it creates `FakBuyExecutionIntent`, immediately sweeps decision-time asks, persists FAK full/partial fills, and records liquidity role `Taker`. `PaperOnly` suppresses external submission but does not change that execution role.
+- Verified reusable Maker building blocks: CLOB GTC/GTD/post-only request validation and transport, pending Paper-order persistence, expiry/cancel lifecycle, Maker fee accounting, and a conservative later trade-through/queue-clear fill estimator.
+- Verified there is no currently registered end-to-end Maker strategy. The catalog contains zero `FixedOutcomeMaker` variants; the remaining dormant Maker processor changes signal/timing behavior and its Live-shadow branch converts execution back to FAK, so it cannot simply be re-enabled.
+- Established the safe design boundary: preserve each strategy's existing signal, selected outcome, timing, and sizing; replace only the execution policy with a shared immutable Maker BUY intent, pending order, non-crossing price validation, later Maker-fill evidence, and explicit expiry/cancel/no-fill outcomes.
+Next: Resolve the exact strategy allowlist, `GTC` versus `GTD`, Maker price rule, local cancellation deadline, one-shot versus cancel/replace policy, and acceptable Paper queue/fill model before any code edit.
+Notes: Read-only audit on clean `master` at `846638b7`; `git pull --ff-only` was already up to date. Inspected current official Polymarket Create Order, Orders Overview, Order Lifecycle, and error documentation plus current source/tests. No product code, configuration, database, service, Paper/Live order, deployment, or production state changed; tests were not run because no implementation was requested.
+Blockers: None for this assessment. A Maker conversion cannot start without the exact target strategy scope and execution-policy choices listed above.
+
 ## Active Update 2026-08-09 PaperOnly Versus FAK Terminology Clarification
 Goal: Clarify the relationship between PaperOnly transport mode and FAK immediate-execution semantics.
 Status: Completed

@@ -11,3 +11,10 @@ Request:
 
 Result:
 Clarified that PaperOnly and FAK are independent dimensions. PaperOnly suppresses external submission; BUY FAK immediately takes currently available asks up to a hard worst-price cap and cancels the remainder. It may sweep several current ask levels rather than fill at one last-trade or displayed price. No product or production state changed.
+
+## 2026-08-08T22:37:13.3403682Z
+Request:
+Моя цель - как раз отказаться от Taker покупок и перейти на режим Maker
+
+Result:
+Confirmed that the current PaperOnly FAK path is incompatible with the stated Maker-only goal. A genuine Maker path requires GTC/GTD with postOnly=true, a non-crossing resting price, pending-order lifecycle, later queue/trade-through fill evidence, and explicit expiry/cancellation. Existing components are reusable, but no registered end-to-end Maker strategy exists and the dormant Maker branch cannot be enabled unchanged. No product or production state changed; implementation awaits exact strategy scope and execution-policy choices.
