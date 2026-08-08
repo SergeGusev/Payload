@@ -69,3 +69,16 @@ Request:
 
 Result:
 Production mutation остановлена после обязательного read-only preview из-за неожиданного расхождения. Exact strategy `b7c50005-0000-4000-8179-000000000102` имеет `2,322` LegacyUnknown pure-Paper FAK fills, но текущий проверенный atomic contract принимает только `747`. Ещё `1,573` экономически полностью совпадающих chain имеют authoritative settlement source `MarketWebSocket` и более раннее settlement time, поэтому текущий Gamma-only/equal-time gate ложно считает их конфликтами. Два fills дублируют один wallet/asset: только один имеет run/settlement, второй является orphan. Raw settled coverage сейчас `43/2,364`, Gross PnL `$830.59649203`, known fee `$8.31854000`, Net корректно NULL. Частичный apply `747` строк не заполнил бы Dashboard Net, поэтому ни одной production строки не изменено. Для полного результата требуется явный выбор пользователя: частичный existing-contract apply либо рекомендованный exact-strategy repair всех `2,321` valid settled chains с orphan fill, оставленным исключённым.
+
+## 2026-08-08T22:45:03.2760252Z
+Request:
+Я ничего не понял. Что такое Текущий backfill-контракт и почему он принимает только 747 и почему тебе это мешает?
+
+1. У тебя есть все Paper ставки.
+2. Ты знаешь, как считать комиссию.
+3. Пройдись по каждой из ставок, посчитай комиссию и отними его от тегущего Pnl
+
+Это неверный алгоритм?
+
+Result:
+Подтверждено, что алгоритм пользователя верен: для каждой фактически settled Paper-ставки рассчитана комиссия текущей FAK/Taker-моделью и применено `Net PnL = Gross PnL - fee`. Exact run-linked production repair охватил все `2,321` валидные pre-cutoff цепочки стратегии `ETH Up or Down 5m 2 bps Reference Average Premarket`; единственный duplicate fill/order без run оставлен неизменным и исключён. После RR/RO preview `2,321/2,321`, одной независимо проверенной MarketWebSocket-canary и свежего плана оставшиеся `2,320` цепочек обновлены атомарными пакетами с нулём конфликтов. Финал: settled coverage `2,365/2,365`, stake `$14,207.76299932`, Gross PnL `$835.70760314`, fee `$462.30896000`, Net PnL `$373.39864314`, fee-inclusive Net ROI `2.5453088722088866%`; все fill/run/position/settlement identities совпали, Gross/orphan digests не изменились. Однострочный CAS повысил приоритет только целевой Dashboard reconciliation queue; штатный worker пересчитал snapshot, удалил очередь/events, и Dashboard теперь показывает те же `2,365/2,365`, Net PnL и Net ROI. Focused fee/backfill tests прошли `60/60`, reconciliation tests `8/8`; service/deploy/trading/product code не менялись. PostgreSQL credential, ранее раскрытый во внутреннем diagnostic transcript, всё ещё необходимо ротировать.
