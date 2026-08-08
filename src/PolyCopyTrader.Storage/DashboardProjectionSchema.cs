@@ -974,6 +974,15 @@ DECLARE
     new_order_side text;
     target_strategy_id uuid;
 BEGIN
+    IF TG_OP = 'UPDATE'
+       AND OLD.paper_order_id IS NOT DISTINCT FROM NEW.paper_order_id
+       AND OLD.price IS NOT DISTINCT FROM NEW.price
+       AND OLD.size_shares IS NOT DISTINCT FROM NEW.size_shares
+       AND OLD.realized_pnl_usd IS NOT DISTINCT FROM NEW.realized_pnl_usd
+       AND OLD.filled_at_utc IS NOT DISTINCT FROM NEW.filled_at_utc THEN
+        RETURN NEW;
+    END IF;
+
     IF TG_OP <> 'INSERT' THEN
         SELECT paper_order.strategy_id, paper_order.side
         INTO old_strategy_id, old_order_side
@@ -1018,6 +1027,20 @@ BEGIN
     IF TG_OP = 'DELETE'
        AND current_setting('polycopytrader.skip_run_retention_transfer', true) = 'on' THEN
         RETURN OLD;
+    END IF;
+
+    IF TG_OP = 'UPDATE'
+       AND OLD.strategy_id IS NOT DISTINCT FROM NEW.strategy_id
+       AND OLD.status IS NOT DISTINCT FROM NEW.status
+       AND OLD.stake_usd IS NOT DISTINCT FROM NEW.stake_usd
+       AND OLD.paper_order_id IS NOT DISTINCT FROM NEW.paper_order_id
+       AND OLD.entry_due_at_utc IS NOT DISTINCT FROM NEW.entry_due_at_utc
+       AND OLD.entered_at_utc IS NOT DISTINCT FROM NEW.entered_at_utc
+       AND OLD.realized_pnl_usd IS NOT DISTINCT FROM NEW.realized_pnl_usd
+       AND OLD.settled_at_utc IS NOT DISTINCT FROM NEW.settled_at_utc
+       AND OLD.skip_reason IS NOT DISTINCT FROM NEW.skip_reason
+       AND OLD.updated_at_utc IS NOT DISTINCT FROM NEW.updated_at_utc THEN
+        RETURN NEW;
     END IF;
 
     IF source_row_id = ANY(
@@ -1125,6 +1148,14 @@ DECLARE
         ELSE public.dashboard_projection_strategy_id_for_wallet(NEW.copied_trader_wallet) END;
     target_strategy_id uuid := COALESCE(new_strategy_id, old_strategy_id);
 BEGIN
+    IF TG_OP = 'UPDATE'
+       AND OLD.copied_trader_wallet IS NOT DISTINCT FROM NEW.copied_trader_wallet
+       AND OLD.cost_basis_usd IS NOT DISTINCT FROM NEW.cost_basis_usd
+       AND OLD.realized_pnl_usd IS NOT DISTINCT FROM NEW.realized_pnl_usd
+       AND OLD.won IS NOT DISTINCT FROM NEW.won THEN
+        RETURN NEW;
+    END IF;
+
     INSERT INTO dashboard_projection_events (
         source_kind, source_id, strategy_id, operation, old_payload, new_payload, transaction_id)
     VALUES (

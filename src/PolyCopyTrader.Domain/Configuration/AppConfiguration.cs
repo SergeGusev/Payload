@@ -16,6 +16,8 @@ public sealed class AppConfiguration
 
     public StrategyRunRetentionOptions StrategyRunRetention { get; init; } = new();
 
+    public PaperFakFeeBackfillOptions PaperFakFeeBackfill { get; init; } = new();
+
     public PolymarketAuthOptions PolymarketAuth { get; init; } = new();
 
     public PolymarketAutoRedeemOptions PolymarketAutoRedeem { get; init; } = new();
@@ -570,6 +572,28 @@ public sealed class PaperTradingOptions
     public int LeaderActivityExitTrackingErrorDelayMilliseconds { get; init; } = 1_000;
 
     public int LeaderActivityExitTrackingMaxErrorDelayMilliseconds { get; init; } = 30_000;
+}
+
+public sealed class PaperFakFeeBackfillOptions
+{
+    public bool Enabled { get; init; }
+
+    public bool ApplyEnabled { get; init; }
+
+    public DateTimeOffset HistoricalCutoffUtc { get; init; } =
+        new DateTimeOffset(2026, 8, 7, 22, 44, 55, TimeSpan.Zero).AddTicks(2_195_150);
+
+    public int BatchSize { get; init; } = 50;
+
+    public int CycleIntervalSeconds { get; init; } = 15;
+
+    public int InitialDelaySeconds { get; init; } = 300;
+
+    public int IdleDelaySeconds { get; init; } = 900;
+
+    public int ErrorDelaySeconds { get; init; } = 60;
+
+    public int MaxErrorDelaySeconds { get; init; } = 900;
 }
 
 public sealed class LiveTradingOptions

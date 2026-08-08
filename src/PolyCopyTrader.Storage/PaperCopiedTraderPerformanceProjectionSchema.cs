@@ -108,6 +108,15 @@ DECLARE
     old_wallet text;
     new_wallet text;
 BEGIN
+    IF TG_OP = 'UPDATE'
+       AND OLD.paper_order_id IS NOT DISTINCT FROM NEW.paper_order_id
+       AND OLD.price IS NOT DISTINCT FROM NEW.price
+       AND OLD.size_shares IS NOT DISTINCT FROM NEW.size_shares
+       AND OLD.realized_pnl_usd IS NOT DISTINCT FROM NEW.realized_pnl_usd
+       AND OLD.filled_at_utc IS NOT DISTINCT FROM NEW.filled_at_utc THEN
+        RETURN NEW;
+    END IF;
+
     IF TG_OP <> 'INSERT' THEN
         SELECT paper_order.copied_trader_wallet
         INTO old_wallet
@@ -143,6 +152,16 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $function$
 BEGIN
+    IF TG_OP = 'UPDATE'
+       AND OLD.copied_trader_wallet IS NOT DISTINCT FROM NEW.copied_trader_wallet
+       AND OLD.category IS NOT DISTINCT FROM NEW.category
+       AND OLD.condition_id IS NOT DISTINCT FROM NEW.condition_id
+       AND OLD.settlement_value_usd IS NOT DISTINCT FROM NEW.settlement_value_usd
+       AND OLD.realized_pnl_usd IS NOT DISTINCT FROM NEW.realized_pnl_usd
+       AND OLD.won IS NOT DISTINCT FROM NEW.won THEN
+        RETURN NEW;
+    END IF;
+
     IF TG_OP <> 'INSERT' THEN
         PERFORM public.enqueue_paper_copied_trader_performance_wallet(
             OLD.copied_trader_wallet,

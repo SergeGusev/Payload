@@ -290,6 +290,7 @@ builder.Services.AddSingleton(appConfiguration.Signal);
 builder.Services.AddSingleton(appConfiguration.Polymarket);
 builder.Services.AddSingleton(appConfiguration.PolymarketHttpLogging);
 builder.Services.AddSingleton(appConfiguration.StrategyRunRetention);
+builder.Services.AddSingleton(appConfiguration.PaperFakFeeBackfill);
 builder.Services.AddSingleton(appConfiguration.PolymarketAuth);
 builder.Services.AddSingleton(appConfiguration.PolymarketAutoRedeem);
 builder.Services.AddSingleton(appConfiguration.MarketDataWebSocket);
@@ -347,6 +348,7 @@ builder.Services.AddHttpClient<IPolymarketGammaClient, PolymarketGammaClient>()
 builder.Services.AddHttpClient<IPolymarketClobPublicClient, PolymarketClobPublicClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddSingleton<IPolymarketFeeAccountingService, PolymarketFeeAccountingService>();
+builder.Services.AddSingleton<IPaperFakFeeBackfillProcessor, PaperFakFeeBackfillProcessor>();
 builder.Services.AddHttpClient<IPolymarketGeoClient, PolymarketGeoClient>()
     .ConfigurePrimaryHttpMessageHandler(() => CreatePolymarketHttpHandler(appConfiguration.Polymarket));
 builder.Services.AddHttpClient<IPolymarketTradingClient, PolymarketTradingClient>()
@@ -441,6 +443,7 @@ builder.Services.AddHostedService<ExposureSnapshotCacheWarmupService>();
 // builder.Services.AddHostedService<PolymarketHttpLogRetentionWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MarketDataSideEffectQueue>());
+builder.Services.AddHostedService<PaperFakFeeBackfillWorker>();
 builder.Services.AddHostedService<BotWorker>();
 builder.Services.AddHostedService<DashboardStrategyPerformanceSnapshotWorker>();
 builder.Services.AddHostedService<DashboardStrategyProjectionReconciliationWorker>();

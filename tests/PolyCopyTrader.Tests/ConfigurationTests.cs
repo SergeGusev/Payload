@@ -249,6 +249,17 @@ public sealed class ConfigurationTests
         Assert.Equal(0, configuration.PaperTrading.LeaderActivityExitTrackingRequestDelayMilliseconds);
         Assert.Equal(1_000, configuration.PaperTrading.LeaderActivityExitTrackingErrorDelayMilliseconds);
         Assert.Equal(30_000, configuration.PaperTrading.LeaderActivityExitTrackingMaxErrorDelayMilliseconds);
+        Assert.False(configuration.PaperFakFeeBackfill.Enabled);
+        Assert.False(configuration.PaperFakFeeBackfill.ApplyEnabled);
+        Assert.Equal(
+            new DateTimeOffset(2026, 8, 7, 22, 44, 55, TimeSpan.Zero).AddTicks(2_195_150),
+            configuration.PaperFakFeeBackfill.HistoricalCutoffUtc);
+        Assert.Equal(50, configuration.PaperFakFeeBackfill.BatchSize);
+        Assert.Equal(15, configuration.PaperFakFeeBackfill.CycleIntervalSeconds);
+        Assert.Equal(300, configuration.PaperFakFeeBackfill.InitialDelaySeconds);
+        Assert.Equal(900, configuration.PaperFakFeeBackfill.IdleDelaySeconds);
+        Assert.Equal(60, configuration.PaperFakFeeBackfill.ErrorDelaySeconds);
+        Assert.Equal(900, configuration.PaperFakFeeBackfill.MaxErrorDelaySeconds);
         Assert.Equal(5, configuration.LiveTrading.MaintenancePollIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.RefreshIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.StrategyRefreshIntervalSeconds);
@@ -915,6 +926,36 @@ public sealed class ConfigurationTests
     }
 
     [Fact]
+    public void PaperFakFeeBackfillOptions_AreValidated()
+    {
+        var configuration = new AppConfiguration
+        {
+            PaperFakFeeBackfill = new PaperFakFeeBackfillOptions
+            {
+                Enabled = false,
+                ApplyEnabled = true,
+                HistoricalCutoffUtc = new DateTimeOffset(2026, 8, 7, 22, 44, 55, TimeSpan.FromHours(2)),
+                BatchSize = 251,
+                CycleIntervalSeconds = 0,
+                InitialDelaySeconds = -1,
+                IdleDelaySeconds = 0,
+                ErrorDelaySeconds = 60,
+                MaxErrorDelaySeconds = 59
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.ApplyEnabled", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.HistoricalCutoffUtc", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.BatchSize", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.CycleIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.InitialDelaySeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.IdleDelaySeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.MaxErrorDelaySeconds", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void RuntimeModePolicy_AllowsPaperTradingInLiveModeOnlyWhenEnabled()
     {
         var paperOptions = new PaperTradingOptions();
@@ -1165,6 +1206,9 @@ public sealed class ConfigurationTests
         Assert.Contains("Gamma market persistence scope:", summary);
         Assert.Contains("Strategy run direct Paper skip compaction enabled: False", summary);
         Assert.Contains("Strategy run direct Paper skip compaction apply enabled: False", summary);
+        Assert.Contains("Paper FAK fee backfill enabled: False", summary);
+        Assert.Contains("Paper FAK fee backfill apply enabled: False", summary);
+        Assert.Contains("Paper FAK fee backfill historical cutoff UTC: 2026-08-07T22:44:55.2195150+00:00", summary);
         Assert.Contains("Dashboard projection event batch size:", summary);
         Assert.Contains("Dashboard projection reconciliation interval seconds:", summary);
         Assert.DoesNotContain("private", summary, StringComparison.OrdinalIgnoreCase);

@@ -84,6 +84,18 @@ internal sealed class TestAppRepository : IAppRepository
 
     public TimeSpan PaperEntryPersistenceBatchDelay { get; set; } = TimeSpan.Zero;
 
+    public Queue<HistoricalPaperFakFeeBackfillPage> HistoricalPaperFakFeeBackfillPages { get; } = [];
+
+    public List<(
+        DateTimeOffset FilledBeforeUtc,
+        int Limit,
+        HistoricalPaperFakFeeBackfillCursor? AfterCursor)> HistoricalPaperFakFeeBackfillCalls { get; } = [];
+
+    public List<IReadOnlyList<HistoricalPaperFakFeeBackfillUpdate>> HistoricalPaperFakFeeBackfillApplyCalls { get; } = [];
+
+    public HistoricalPaperFakFeeBackfillBatchResult HistoricalPaperFakFeeBackfillApplyResult { get; set; } =
+        new(0, 0, 0, 0, 0, 0, 0, 0);
+
     public int GetPaperPositionsCalls { get; private set; }
 
     public int GetOpenPaperPositionsCalls => Volatile.Read(ref getOpenPaperPositionsCalls);
@@ -1378,6 +1390,37 @@ internal sealed class TestAppRepository : IAppRepository
     public Task<PaperOrder?> GetPaperOrderByCorrelationIdAsync(Guid correlationId, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(PaperOrders.FirstOrDefault(order => order.CorrelationId == correlationId));
+    }
+
+    public Task<HistoricalPaperFakFeeBackfillPage> GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+        DateTimeOffset filledBeforeUtc,
+        int limit,
+        HistoricalPaperFakFeeBackfillCursor? afterCursor = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            HistoricalPaperFakFeeBackfillCalls.Add((filledBeforeUtc, limit, afterCursor));
+            return Task.FromResult(HistoricalPaperFakFeeBackfillPages.Count > 0
+                ? HistoricalPaperFakFeeBackfillPages.Dequeue()
+                : new HistoricalPaperFakFeeBackfillPage([], null, true));
+        }
+    }
+
+    public Task<HistoricalPaperFakFeeBackfillBatchResult> ApplyHistoricalPaperFakFeeBackfillBatchAsync(
+        IReadOnlyList<HistoricalPaperFakFeeBackfillUpdate> updates,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            HistoricalPaperFakFeeBackfillApplyCalls.Add(updates.ToArray());
+            return Task.FromResult(HistoricalPaperFakFeeBackfillApplyResult with
+            {
+                Requested = updates.Count
+            });
+        }
     }
 
     public Task<IReadOnlyList<PaperOrder>> GetPaperOrdersForStrategyAssetAsync(

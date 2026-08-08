@@ -150,6 +150,12 @@ public sealed class PolymarketFeeAccountingServiceTests
         Assert.Equal(FeeAccountingStatus.CalculationUnavailable.ToString(), secondResult.FeeAccountingStatus);
         Assert.Equal(0m, firstResult.FeeUsd);
         Assert.Equal(0m, secondResult.FeeUsd);
+        Assert.Equal(
+            PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource,
+            firstResult.FeeCalculationSource);
+        Assert.Equal(
+            PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource,
+            secondResult.FeeCalculationSource);
         Assert.Equal(1, client.CallCount);
     }
 
@@ -309,7 +315,7 @@ public sealed class PolymarketFeeAccountingServiceTests
         var unavailableFill = Assert.Single(result.PaperFills);
         Assert.Equal(FeeAccountingStatus.CalculationUnavailable.ToString(), unavailableFill.FeeAccountingStatus);
         Assert.Equal(
-            "polymarket-clob-market-info-unavailable-v1",
+            PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource,
             unavailableFill.FeeCalculationSource);
         Assert.Equal(unavailableFill, Assert.Single(result.PaperPositionMaterializations).Fill);
         var unavailableRun = Assert.Single(result.StrategyRuns);

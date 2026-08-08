@@ -33,6 +33,7 @@ public static class AppOptionsValidator
         ValidateWatchlist(configuration.Watchlist, errors);
         ValidatePolymarketHttpLogging(configuration.PolymarketHttpLogging, errors);
         ValidateStrategyRunRetention(configuration.StrategyRunRetention, errors);
+        ValidatePaperFakFeeBackfill(configuration.PaperFakFeeBackfill, errors);
         ValidateLiveTrading(configuration.Bot, configuration.PolymarketAuth, configuration.LiveTrading, errors);
         ValidateDashboard(configuration.Dashboard, errors);
         ValidateAnalytics(configuration.Analytics, errors);
@@ -79,6 +80,15 @@ public static class AppOptionsValidator
             $"Strategy run direct Paper skip compaction enabled: {configuration.StrategyRunRetention.DirectPaperSkipCompactionEnabled}",
             $"Strategy run direct Paper skip compaction apply enabled: {configuration.StrategyRunRetention.DirectPaperSkipCompactionApplyEnabled}",
             $"Strategy run raw retention hours: {configuration.StrategyRunRetention.RawRetentionHours}",
+            $"Paper FAK fee backfill enabled: {configuration.PaperFakFeeBackfill.Enabled}",
+            $"Paper FAK fee backfill apply enabled: {configuration.PaperFakFeeBackfill.ApplyEnabled}",
+            $"Paper FAK fee backfill historical cutoff UTC: {configuration.PaperFakFeeBackfill.HistoricalCutoffUtc:O}",
+            $"Paper FAK fee backfill batch size: {configuration.PaperFakFeeBackfill.BatchSize}",
+            $"Paper FAK fee backfill cycle interval seconds: {configuration.PaperFakFeeBackfill.CycleIntervalSeconds}",
+            $"Paper FAK fee backfill initial delay seconds: {configuration.PaperFakFeeBackfill.InitialDelaySeconds}",
+            $"Paper FAK fee backfill idle delay seconds: {configuration.PaperFakFeeBackfill.IdleDelaySeconds}",
+            $"Paper FAK fee backfill error delay seconds: {configuration.PaperFakFeeBackfill.ErrorDelaySeconds}",
+            $"Paper FAK fee backfill max error delay seconds: {configuration.PaperFakFeeBackfill.MaxErrorDelaySeconds}",
             $"Auth enabled: {configuration.PolymarketAuth.Enabled}",
             $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
             $"Auth configured: {configuration.PolymarketAuth.Enabled && IsAddressLike(configuration.PolymarketAuth.SigningAddress)}",
@@ -1159,6 +1169,53 @@ public static class AppOptionsValidator
         if (options.CleanupMaxBatchesPerCycle is <= 0 or > 100)
         {
             errors.Add("StrategyRunRetention.CleanupMaxBatchesPerCycle must be between 1 and 100.");
+        }
+    }
+
+    private static void ValidatePaperFakFeeBackfill(
+        PaperFakFeeBackfillOptions options,
+        List<string> errors)
+    {
+        if (options.ApplyEnabled && !options.Enabled)
+        {
+            errors.Add("PaperFakFeeBackfill.ApplyEnabled requires PaperFakFeeBackfill.Enabled.");
+        }
+
+        if (options.HistoricalCutoffUtc.Offset != TimeSpan.Zero)
+        {
+            errors.Add("PaperFakFeeBackfill.HistoricalCutoffUtc must use the UTC offset.");
+        }
+
+        if (options.BatchSize is <= 0 or > 250)
+        {
+            errors.Add("PaperFakFeeBackfill.BatchSize must be between 1 and 250.");
+        }
+
+        if (options.CycleIntervalSeconds <= 0)
+        {
+            errors.Add("PaperFakFeeBackfill.CycleIntervalSeconds must be greater than zero.");
+        }
+
+        if (options.InitialDelaySeconds < 0)
+        {
+            errors.Add("PaperFakFeeBackfill.InitialDelaySeconds must not be negative.");
+        }
+
+        if (options.IdleDelaySeconds <= 0)
+        {
+            errors.Add("PaperFakFeeBackfill.IdleDelaySeconds must be greater than zero.");
+        }
+
+        if (options.ErrorDelaySeconds <= 0)
+        {
+            errors.Add("PaperFakFeeBackfill.ErrorDelaySeconds must be greater than zero.");
+        }
+
+        if (options.MaxErrorDelaySeconds < options.ErrorDelaySeconds)
+        {
+            errors.Add(
+                "PaperFakFeeBackfill.MaxErrorDelaySeconds must be greater than or equal to " +
+                "PaperFakFeeBackfill.ErrorDelaySeconds.");
         }
     }
 

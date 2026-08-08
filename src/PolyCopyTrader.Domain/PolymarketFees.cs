@@ -43,6 +43,8 @@ public static class PolymarketFeeCalculationConstants
         "polymarket-clob-v2-fd-shares-rate-price-curve-round5-away-from-zero-v1";
     public const string FeeFreeMarketCalculationSource =
         "polymarket-clob-v2-no-fd-no-base-fees-v1";
+    public const string MarketInfoUnavailableCalculationSource =
+        "polymarket-clob-market-info-unavailable-v1";
 }
 
 public static class PolymarketFeeCalculator

@@ -2712,6 +2712,12 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_open_time_asset
 ON paper_orders(created_at_utc DESC, asset_id)
 WHERE status IN ('Pending', 'PartiallyFilled');
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_orders_historical_fak_wallet_asset
+ON paper_orders(copied_trader_wallet, asset_id)
+WHERE execution_source IN (
+    'btc_updown5m_fak_taker_paper',
+    'btc_updown5m_child_mirror_fak_paper');
+
 CREATE TABLE IF NOT EXISTS paper_fills (
     id uuid PRIMARY KEY,
     paper_order_id uuid NOT NULL REFERENCES paper_orders(id),
@@ -2751,6 +2757,11 @@ ON paper_fills(filled_at_utc, paper_order_id);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_fills_filled_perf_cover
 ON paper_fills(filled_at_utc, paper_order_id)
 INCLUDE (price, size_shares, realized_pnl_usd);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_paper_fills_historical_fak_fee_backfill
+ON paper_fills(filled_at_utc, paper_order_id, id)
+INCLUDE (price, size_shares)
+WHERE fee_accounting_status = 'LegacyUnknown';
 
 CREATE TABLE IF NOT EXISTS strategy_market_paper_runs (
     id uuid PRIMARY KEY,

@@ -143,11 +143,34 @@ known fee components, but it must not expose that sum as a complete net result.
 
 `RealizedPnlUsd` and existing ROI remain gross, before platform fees.
 `NetRealizedPnlUsd` is nullable and may be populated only under full fee coverage;
-otherwise it remains unknown. No historical fee backfill is part of the current
-implementation, so old rows remain `LegacyUnknown`, not zero-fee rows. Aggregate
-Dashboard PnL/ROI continues to display the existing gross metric until every
-contributing record has full fee coverage and the aggregate can be labeled net
-without mixing modeled fees with unaccounted defaults.
+otherwise it remains unknown. Aggregate Dashboard PnL/ROI continues to display
+the existing gross metric; it must not be labeled or interpreted as net
+profitability.
+
+The online `PaperFakFeeBackfill` worker may evaluate retained historical rows only
+when persisted execution evidence proves a pure-Paper BUY FAK. Its allowlist is
+limited to `btc_updown5m_fak_taker_paper` and
+`btc_updown5m_child_mirror_fak_paper`, before the configured fixed historical
+cutoff. It uses the same current fee calculator as new fills, forces the proven
+`Taker` role, and prefixes locally calculated provenance with
+`historical-current-paper-model-v1`. This is a calculation under the current
+Paper model, not a venue-reported historical fee.
+
+Backfill writes are small, atomic, conditional, and idempotent. They may update
+only fee/provenance and nullable net fields on an unchanged fill and its exact
+settled run, zero-size position, and settlement chain. Gross accounting and its
+timestamps remain unchanged. The worker yields to foreground persistence queues,
+does not persist transient market-info failures as zero fees, and reports
+dependency or concurrency mismatches as deferred conflicts. Reaching the end of
+a keyset sweep is not proof that every legacy row was successfully accounted.
+
+Historical GTD, Maker, ambiguous, already-accounted, and every
+`paper_live_shadow_actual_fill` row are outside this worker. Current shadow
+semantics calculate the fee on the aggregate linked Live execution and copy that
+accounting into one canonical Paper fill. Independently recalculating a legacy
+shadow Paper row could disagree with Live cost basis, settlement, balance effects,
+or canonical multi-fill replacement, so those rows require a separate
+Live-accounting reconciliation rather than a Paper-only estimate.
 
 The current model has three material limits:
 

@@ -25,7 +25,6 @@ public sealed class PolymarketFeeAccountingService(
     ILogger<PolymarketFeeAccountingService> logger,
     IPolymarketClobPublicClient clobClient) : IPolymarketFeeAccountingService
 {
-    private const string LookupUnavailableSource = "polymarket-clob-market-info-unavailable-v1";
     private const int MarketInfoCachePruneThreshold = 2048;
     private static readonly TimeSpan MarketInfoCacheDuration = TimeSpan.FromMinutes(1);
     private readonly ConcurrentDictionary<string, MarketInfoCacheEntry> marketInfoCache =
@@ -132,7 +131,7 @@ public sealed class PolymarketFeeAccountingService(
                 return fill with
                 {
                     FeeAccountingStatus = FeeAccountingStatus.CalculationUnavailable.ToString(),
-                    FeeCalculationSource = LookupUnavailableSource,
+                    FeeCalculationSource = PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource,
                     FeeCalculatedAtUtc = DateTimeOffset.UtcNow
                 };
             }
@@ -367,7 +366,7 @@ public sealed class PolymarketFeeAccountingService(
                     FeeAccountingStatus.CalculationUnavailable,
                     null,
                     null,
-                    LookupUnavailableSource,
+                    PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource,
                     reason),
                 null,
                 calculatedAtUtc);

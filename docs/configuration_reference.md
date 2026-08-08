@@ -38,6 +38,35 @@ Do not commit real credentials.
   recorded as `GeoblockCheck` warnings.
 - `CancelAllOnKillSwitch`: documents intended kill-switch behavior.
 
+## PaperFakFeeBackfill
+
+- `Enabled`: starts the low-priority historical pure-Paper FAK fee worker. The
+  typed fallback is `false`; the checked-in service configuration enables the
+  approved migration.
+- `ApplyEnabled`: permits atomic fee/net updates. It cannot be `true` when
+  `Enabled=false`.
+- `HistoricalCutoffUtc`: immutable upper bound for candidates. The approved
+  migration uses `2026-08-07T22:44:55.219515Z`, the start of the first deployed
+  fee-aware service, so current fills are never treated as history.
+- `BatchSize`: maximum rows in one short transaction; default `50`, maximum
+  `250`.
+- `CycleIntervalSeconds`: delay after a non-terminal page or a foreground-queue
+  deferral; default `15`.
+- `InitialDelaySeconds`: startup grace period before the first scan; default
+  `300`.
+- `IdleDelaySeconds`: delay after the end of a keyset sweep; default `900`.
+  Sweep end is not a claim that deferred or unavailable rows are complete.
+- `ErrorDelaySeconds` / `MaxErrorDelaySeconds`: initial and capped exponential
+  retry delays; defaults `60` and `900`.
+
+The worker accepts only BUY orders with exact execution sources
+`btc_updown5m_fak_taker_paper` and
+`btc_updown5m_child_mirror_fak_paper`. It excludes Live-shadow, GTD, Maker,
+ambiguous, and already-accounted rows. It yields while Paper-entry persistence
+or market-data side-effect queues have pending foreground work. Historical gross
+PnL remains unchanged; fee and nullable net PnL are stored separately with
+`historical-current-paper-model-v1` provenance.
+
 ## Polymarket
 
 - `DataApiBaseUrl`: public Data API base URL.

@@ -481,6 +481,31 @@ public interface IAppRepository
         return Task.FromResult<PaperOrder?>(null);
     }
 
+    Task<HistoricalPaperFakFeeBackfillPage> GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+        DateTimeOffset filledBeforeUtc,
+        int limit,
+        HistoricalPaperFakFeeBackfillCursor? afterCursor = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new HistoricalPaperFakFeeBackfillPage([], null, true));
+    }
+
+    Task<HistoricalPaperFakFeeBackfillBatchResult> ApplyHistoricalPaperFakFeeBackfillBatchAsync(
+        IReadOnlyList<HistoricalPaperFakFeeBackfillUpdate> updates,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(
+            new HistoricalPaperFakFeeBackfillBatchResult(
+                updates.Count,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                updates.Count));
+    }
+
     Task<IReadOnlyList<PaperOrder>> GetPaperOrdersForStrategyAssetAsync(
         Guid strategyId,
         string copiedTraderWallet,
