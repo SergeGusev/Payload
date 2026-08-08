@@ -1,3 +1,15 @@
+## Active Update 2026-08-09 PaperOnly Bet Acceptance Contract Clarification
+Goal: Verify how current PaperOnly bets must be formed so they are not rejected for avoidable execution/parity defects.
+Status: Completed
+Done:
+- Verified from the current implementation, parity contract, focused tests, and persisted project evidence that `PaperOnly` is only an external-submit restriction: it preserves the Paper entry and blocks Live/Live-shadow placement, even if the runtime Live flag is enabled.
+- Verified that a valid Paper FAK BUY still uses one immutable pre-submit `FakBuyExecutionIntent` with `postOnly=false`, a tick-aligned hard maximum price, Live-normalized cash amount/size, exact market/token identifiers, and the decision-time order-book snapshot.
+- Verified that Paper consumes only positive ask depth at or below the cap. A nonzero partial fill is accepted as `PartiallyFilledExpired` with the remainder cancelled; zero eligible depth, an absent/stale book, a best ask above the cap, excessive spread, invalid tick/price/amount, or an amount below the venue minimum correctly produces no Paper bet (`Skipped`/no fill).
+- Confirmed that fill price/VWAP is outcome evidence only and cannot authorize, reject, resize, reprice, or roll back the originating intent. Therefore avoidable technical/parity rejection can be eliminated, but a fill cannot be guaranteed without inventing liquidity or weakening the applicable fail-closed strategy, timing, market-data, price, and liquidity gates. The specialized BTC/ETH/SOL PaperOnly FAK processor does not call the separate generic FollowLeader category/portfolio-risk pipeline; whether that separation is intentional or a defect was not established by this clarification.
+Next: None.
+Notes: Repository `master` was clean, tracked `origin/master`, and `git pull --ff-only` was already up to date at `70662f53`. Inspected `docs/architecture/PAPER_LIVE_PARITY.md`, `FakBuyExecutionIntent.cs`, `OrderAmountCalculator.cs`, `TakerBuyFillEstimator.cs`, the active processor dispatch path, and focused parity/processor tests. No product code, configuration, database, service, Paper/Live order, deployment, or production state changed; no test execution was required for this read-only clarification.
+Blockers: None.
+
 ## Active Update 2026-08-08 Targeted ETH 2 bps Fee Backfill Preview
 Goal: Immediately recalculate the full retained Paper FAK history of exact strategy `b7c50005-0000-4000-8179-000000000102` / `ETH Up or Down 5m 2 bps Reference Average Premarket` with current fee accounting.
 Status: Blocked
