@@ -1,3 +1,16 @@
+## Active Update 2026-08-09 PostOnly Early vs T-30 Quote Observation
+Goal: Compare the current Maker PostOnly formula at first accepting and at T-30 seconds for six consecutive BTC/ETH/SOL 5-minute slots and clarify whether 0.50/0.49 already are final limits.
+Status: Completed
+Done:
+- Completed a strictly read-only two-group observation of `72` planned `group × slot × asset × outcome` combinations. EARLY covered six different 2026-08-10 `15:30..15:55Z` markets at first accepting; T-30 covered six 2026-08-09 `16:15..16:40Z` markets at their exact `start-30s` targets. No order was submitted, cancelled, or filled.
+- Strictly deduplicated EARLY watcher restarts and excluded the entire `15:35Z` checkpoint as `MISSED`: `30/36` formula prices remained, `24/36` passed the hypothetical S0/S1 gate, six failed freshness, and six were missed. The modal `Up=0.50 / Down=0.49` pattern matched `26/30` formula prices and `23/24` accepted limits, so it is not universal; observed exceptions included `0.02`.
+- Captured `36/36` unique T-30 formula prices with zero independent recomputation mismatches; `25/36` passed S0/S1. All 11 local failures were `maker_gtd_s0_book_not_current`, which is evidence unavailability rather than a venue rejection. First requests were within `+1.2371..+14.3204ms` of target.
+- Against the modal early benchmark, T-30 Up averaged `0.493333` and early `0.50` was cheaper in `6/18` but more expensive in `12/18`; T-30 Down averaged `0.497222` and early `0.49` was cheaper in `12/18`. Equal-weight combined means were `0.495278` T-30 versus `0.495000` early. The non-paired sample shows price redistribution between outcomes, not a proven causal gain from early placement.
+- Documented that `0.50/0.49` are already final formula limits because `ask-tick` is part of the formula; another tick must not be subtracted. Preserved the exact 72-row canonical dataset and report under `Codex/Tasks`, paused automation `postonly-6`, verified all watcher PIDs stopped, and removed the marked temp lifecycle session.
+Next: If a causal price comparison is desired, capture both first-accepting and T-30 snapshots for the same market IDs and join the original strategy's confirmation signal; fill, queue priority, adverse selection, cancellation race, and PnL remain separate unknowns.
+Notes: Durable artifacts are `Codex/Tasks/POSTONLY_EARLY_VS_TMINUS30_OBSERVATION_2026-08-09.md` and `Codex/Tasks/POSTONLY_EARLY_VS_TMINUS30_OBSERVATIONS_2026-08-09.csv`; canonical CSV SHA-256 is `28F5C540A90C297D1612FFD82D28420129451CA736FD131EF1953776663414E0`. Watcher v4 build completed with zero errors/warnings; no product build/test was required for documentation/data-only changes. Hypothetical S0/S1 acceptance is not Polymarket acceptance or fill evidence.
+Blockers: None for the completed observation; direct economic gain remains unmeasured because the groups contain different market instances and no real orders or strategy signals were observed.
+
 ## Active Update 2026-08-09 Early Maker Up Confirmation Strategy Assessment
 Goal: Assess the prospects of placing a resting Up Maker order near `0.50` when a 5-minute market first becomes tradeable, then keeping its unfilled remainder at the event-window start only when another strategy supports Up.
 Status: Completed read-only conceptual and evidence review; profitability remains unknown
