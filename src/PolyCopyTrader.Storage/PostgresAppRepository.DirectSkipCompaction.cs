@@ -189,6 +189,299 @@ ON CONFLICT (strategy_id, market_id) DO NOTHING
 RETURNING id;
 """;
 
+    private const string DirectNewPaperSkipArchiveSql = $$"""
+WITH input_rows AS MATERIALIZED (
+    SELECT
+        input_row.run_json,
+        input_row.ordinality
+    FROM jsonb_array_elements(@RunsJson) WITH ORDINALITY
+        AS input_row(run_json, ordinality)
+),
+candidate_batch AS MATERIALIZED (
+    SELECT
+        run_row.id,
+        run_row.strategy_id,
+        run_row.market_id,
+        run_row.condition_id,
+        run_row.market_slug,
+        run_row.market_title,
+        run_row.category,
+        run_row.market_start_utc,
+        run_row.market_end_utc,
+        run_row.detected_at_utc,
+        run_row.entry_due_at_utc,
+        run_row.selected_asset_id,
+        run_row.selected_outcome,
+        run_row.stake_usd,
+        run_row.skip_reason,
+        run_row.created_at_utc,
+        run_row.updated_at_utc,
+        input_row.run_json,
+        input_row.ordinality,
+        strategy.live_enabled_at_utc,
+        date_trunc('day', run_row.updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+            AS rollup_bucket_start_utc
+    FROM input_rows input_row
+    CROSS JOIN LATERAL jsonb_to_record(input_row.run_json) AS run_row(
+        id uuid,
+        strategy_id uuid,
+        market_id text,
+        condition_id text,
+        market_slug text,
+        market_title text,
+        category text,
+        market_start_utc timestamptz,
+        market_end_utc timestamptz,
+        detected_at_utc timestamptz,
+        entry_due_at_utc timestamptz,
+        status text,
+        selected_asset_id text,
+        selected_outcome text,
+        entry_price numeric,
+        stake_usd numeric,
+        size_shares numeric,
+        signal_id uuid,
+        paper_order_id uuid,
+        entered_at_utc timestamptz,
+        settlement_price numeric,
+        settlement_value_usd numeric,
+        realized_pnl_usd numeric,
+        settled_at_utc timestamptz,
+        skip_reason text,
+        created_at_utc timestamptz,
+        updated_at_utc timestamptz,
+        skip_diagnostics_json text,
+        fee_usd numeric,
+        fee_accounting_status text,
+        fee_liquidity_role text,
+        fee_calculation_source text,
+        fee_rate numeric,
+        fee_exponent integer,
+        fee_taker_only boolean,
+        fee_calculated_at_utc timestamptz,
+        net_realized_pnl_usd numeric
+    )
+    INNER JOIN public.strategies strategy
+        ON strategy.id = run_row.strategy_id
+    WHERE run_row.status = 'Skipped'
+      AND NOT COALESCE(strategy.live_stakes, false)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.strategy_live_retention_guards live_guard
+          WHERE live_guard.strategy_id = run_row.strategy_id
+      )
+      AND NULLIF(btrim(COALESCE(run_row.skip_reason, '')), '') IS NOT NULL
+      AND run_row.signal_id IS NULL
+      AND run_row.paper_order_id IS NULL
+      AND run_row.entered_at_utc IS NULL
+      AND run_row.entry_price IS NULL
+      AND run_row.size_shares IS NULL
+      AND run_row.settlement_price IS NULL
+      AND run_row.settlement_value_usd IS NULL
+      AND run_row.realized_pnl_usd IS NULL
+      AND run_row.settled_at_utc IS NULL
+      AND run_row.skip_diagnostics_json IS NULL
+      AND run_row.fee_usd = 0
+      AND run_row.fee_accounting_status = 'LegacyUnknown'
+      AND run_row.fee_liquidity_role = 'Unknown'
+      AND run_row.fee_calculation_source = ''
+      AND run_row.fee_rate IS NULL
+      AND run_row.fee_exponent IS NULL
+      AND run_row.fee_taker_only IS NULL
+      AND run_row.fee_calculated_at_utc IS NULL
+      AND run_row.net_realized_pnl_usd IS NULL
+),
+{{DirectPaperSkipBusinessBlockerCtes}},
+candidates AS MATERIALIZED (
+    SELECT DISTINCT ON (candidate.strategy_id, candidate.market_id)
+        candidate.*
+    FROM candidate_batch candidate
+    LEFT JOIN blocked_candidate_ids blocked ON blocked.id = candidate.id
+    WHERE blocked.id IS NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.strategy_market_paper_runs existing_run
+          WHERE existing_run.id = candidate.id
+             OR (existing_run.strategy_id = candidate.strategy_id
+                 AND existing_run.market_id = candidate.market_id)
+      )
+      AND NOT EXISTS (
+          SELECT 1
+          FROM input_rows other_input
+          WHERE other_input.ordinality <> candidate.ordinality
+            AND (
+                (other_input.run_json ->> 'id')::uuid = candidate.id
+                OR (
+                    (other_input.run_json ->> 'strategy_id')::uuid = candidate.strategy_id
+                    AND other_input.run_json ->> 'market_id' = candidate.market_id
+                )
+            )
+      )
+    ORDER BY candidate.strategy_id, candidate.market_id, candidate.ordinality
+),
+tombstones AS (
+    INSERT INTO public.strategy_market_paper_skip_tombstones (
+        strategy_id,
+        market_id,
+        archived_run_id,
+        archived_at_utc,
+        archive_format_version,
+        condition_id,
+        market_slug,
+        market_title,
+        category,
+        market_start_utc,
+        market_end_utc,
+        detected_at_utc,
+        entry_due_at_utc,
+        selected_asset_id,
+        selected_outcome,
+        stake_usd,
+        skip_reason,
+        run_created_at_utc,
+        run_updated_at_utc,
+        rollup_bucket_start_utc)
+    SELECT
+        candidate.strategy_id,
+        candidate.market_id,
+        candidate.id,
+        clock_timestamp(),
+        1,
+        candidate.condition_id,
+        candidate.market_slug,
+        candidate.market_title,
+        candidate.category,
+        candidate.market_start_utc,
+        candidate.market_end_utc,
+        candidate.detected_at_utc,
+        candidate.entry_due_at_utc,
+        candidate.selected_asset_id,
+        candidate.selected_outcome,
+        candidate.stake_usd,
+        candidate.skip_reason,
+        candidate.created_at_utc,
+        candidate.updated_at_utc,
+        candidate.rollup_bucket_start_utc
+    FROM candidates candidate
+    ON CONFLICT (strategy_id, market_id) DO NOTHING
+    RETURNING
+        strategy_id,
+        archived_run_id,
+        rollup_bucket_start_utc,
+        skip_reason,
+        run_updated_at_utc
+),
+rollups AS (
+    INSERT INTO public.strategy_paper_skip_rollups AS existing_rollup (
+        strategy_id,
+        bucket_start_utc,
+        skip_reason,
+        run_count,
+        first_updated_at_utc,
+        last_updated_at_utc,
+        created_at_utc,
+        updated_at_utc)
+    SELECT
+        tombstone.strategy_id,
+        tombstone.rollup_bucket_start_utc,
+        tombstone.skip_reason,
+        count(*)::integer,
+        min(tombstone.run_updated_at_utc),
+        max(tombstone.run_updated_at_utc),
+        clock_timestamp(),
+        clock_timestamp()
+    FROM tombstones tombstone
+    GROUP BY
+        tombstone.strategy_id,
+        tombstone.rollup_bucket_start_utc,
+        tombstone.skip_reason
+    ON CONFLICT (strategy_id, bucket_start_utc, skip_reason) DO UPDATE SET
+        run_count = existing_rollup.run_count + EXCLUDED.run_count,
+        first_updated_at_utc = LEAST(
+            existing_rollup.first_updated_at_utc,
+            EXCLUDED.first_updated_at_utc),
+        last_updated_at_utc = GREATEST(
+            existing_rollup.last_updated_at_utc,
+            EXCLUDED.last_updated_at_utc),
+        updated_at_utc = clock_timestamp()
+    RETURNING 1
+),
+projection_events AS (
+    INSERT INTO public.dashboard_projection_events (
+        source_kind,
+        source_id,
+        strategy_id,
+        operation,
+        old_payload,
+        new_payload,
+        transaction_id)
+    SELECT
+        'StrategyRun',
+        tombstone.archived_run_id,
+        tombstone.strategy_id,
+        'Insert',
+        NULL,
+        public.dashboard_projection_run_payload(
+            jsonb_populate_record(
+                NULL::public.strategy_market_paper_runs,
+                candidate.run_json),
+            candidate.live_enabled_at_utc),
+        pg_current_xact_id()
+    FROM tombstones tombstone
+    INNER JOIN candidates candidate
+        ON candidate.id = tombstone.archived_run_id
+    RETURNING source_id
+),
+queued AS (
+    INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
+        strategy_id,
+        priority,
+        reason,
+        requested_at_utc,
+        attempt_count,
+        next_attempt_at_utc,
+        last_error)
+    SELECT
+        distinct_tombstone.strategy_id,
+        50,
+        'direct_paper_skip_compaction',
+        clock_timestamp(),
+        0,
+        clock_timestamp(),
+        NULL
+    FROM (
+        SELECT DISTINCT tombstone.strategy_id
+        FROM tombstones tombstone
+    ) distinct_tombstone
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
+        reason = EXCLUDED.reason,
+        requested_at_utc = LEAST(
+            existing_queue.requested_at_utc,
+            EXCLUDED.requested_at_utc),
+        next_attempt_at_utc = LEAST(
+            existing_queue.next_attempt_at_utc,
+            EXCLUDED.next_attempt_at_utc),
+        last_error = NULL
+    WHERE existing_queue.priority < EXCLUDED.priority
+       OR existing_queue.reason IS DISTINCT FROM EXCLUDED.reason
+       OR existing_queue.requested_at_utc > EXCLUDED.requested_at_utc
+       OR existing_queue.next_attempt_at_utc > EXCLUDED.next_attempt_at_utc
+       OR existing_queue.last_error IS NOT NULL
+    RETURNING 1
+)
+SELECT
+    COALESCE(
+        array_agg(tombstone.archived_run_id ORDER BY tombstone.archived_run_id),
+        ARRAY[]::uuid[]),
+    (SELECT count(*)::integer FROM candidates),
+    (SELECT count(*)::integer FROM tombstones),
+    (SELECT count(*)::integer FROM projection_events),
+    (SELECT count(*)::integer FROM rollups),
+    (SELECT count(*)::integer FROM queued)
+FROM tombstones tombstone;
+""";
+
     public Task<IReadOnlySet<Guid>> TryAddStrategyMarketPaperRunsAsync(
         IReadOnlyList<StrategyMarketPaperRun> runs,
         bool directPaperSkipCompactionEnabled,
@@ -237,6 +530,8 @@ RETURNING id;
             return new HashSet<Guid>();
         }
 
+        EnsureUnambiguousDirectPaperSkipInput(runs);
+
         return await ExecuteWithExclusiveStrategyRunRetentionGateAsync(
             async (connection, transaction, token) =>
             {
@@ -259,6 +554,13 @@ RETURNING id;
                             skippedIds.Add(run.Id);
                         }
                     }
+
+                    var archivedIds = await ArchiveNewDirectPaperSkippedRunsAsync(
+                        connection,
+                        transaction,
+                        batch,
+                        token);
+                    insertedIds.UnionWith(archivedIds);
 
                     await using var command = CreateCommand(connection, DirectStrategyRunInsertSql);
                     command.Transaction = transaction;
@@ -288,6 +590,67 @@ RETURNING id;
                 return (IReadOnlySet<Guid>)insertedIds;
             },
             cancellationToken);
+    }
+
+    private static void EnsureUnambiguousDirectPaperSkipInput(
+        IReadOnlyList<StrategyMarketPaperRun> runs)
+    {
+        var runIds = new HashSet<Guid>();
+        var strategyMarketKeys = new HashSet<(Guid StrategyId, string MarketId)>();
+        foreach (var run in runs)
+        {
+            var strategyId = StrategyIds.Normalize(run.StrategyId);
+            if (!runIds.Add(run.Id) ||
+                !strategyMarketKeys.Add((strategyId, run.MarketId)))
+            {
+                throw new InvalidOperationException(
+                    "Direct Paper skipped-run compaction requires unique input run IDs " +
+                    "and normalized strategy/market keys.");
+            }
+        }
+    }
+
+    private static async Task<IReadOnlySet<Guid>> ArchiveNewDirectPaperSkippedRunsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IReadOnlyList<StrategyMarketPaperRun> runs,
+        CancellationToken cancellationToken)
+    {
+        if (!runs.Any(IsSkippedRun))
+        {
+            return new HashSet<Guid>();
+        }
+
+        await using var command = CreateCommand(connection, DirectNewPaperSkipArchiveSql);
+        command.Transaction = transaction;
+        command.CommandTimeout = StrategyRunRetentionCommandTimeoutSeconds;
+        command.Parameters.Add("RunsJson", NpgsqlDbType.Jsonb).Value =
+            JsonSerializer.Serialize(runs, BulkInsertJsonOptions);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            throw new InvalidOperationException(
+                "Direct Paper skipped-run archive returned no batch result.");
+        }
+
+        var archivedIds = reader.GetFieldValue<Guid[]>(0).ToHashSet();
+        var candidateCount = reader.GetInt32(1);
+        var tombstoneCount = reader.GetInt32(2);
+        var projectionEventCount = reader.GetInt32(3);
+        await reader.DisposeAsync();
+
+        if (candidateCount != tombstoneCount ||
+            candidateCount != projectionEventCount ||
+            candidateCount != archivedIds.Count)
+        {
+            throw new InvalidOperationException(
+                $"Direct Paper skipped-run archive invariant failed: " +
+                $"candidates={candidateCount}, tombstones={tombstoneCount}, " +
+                $"projection_events={projectionEventCount}, ids={archivedIds.Count}.");
+        }
+
+        return archivedIds;
     }
 
     private async Task FinalizeStrategyMarketPaperRunsWithDirectCompactionAsync(
@@ -457,6 +820,15 @@ WITH candidate_batch AS MATERIALIZED (
       AND run.realized_pnl_usd IS NULL
       AND run.settled_at_utc IS NULL
       AND run.skip_diagnostics_json IS NULL
+      AND run.fee_usd = 0
+      AND run.fee_accounting_status = 'LegacyUnknown'
+      AND run.fee_liquidity_role = 'Unknown'
+      AND run.fee_calculation_source = ''
+      AND run.fee_rate IS NULL
+      AND run.fee_exponent IS NULL
+      AND run.fee_taker_only IS NULL
+      AND run.fee_calculated_at_utc IS NULL
+      AND run.net_realized_pnl_usd IS NULL
     ORDER BY run.strategy_id, run.market_id, run.id
     FOR UPDATE OF run
 ),
@@ -592,6 +964,11 @@ queued AS (
             existing_queue.next_attempt_at_utc,
             EXCLUDED.next_attempt_at_utc),
         last_error = NULL
+    WHERE existing_queue.priority < EXCLUDED.priority
+       OR existing_queue.reason IS DISTINCT FROM EXCLUDED.reason
+       OR existing_queue.requested_at_utc > EXCLUDED.requested_at_utc
+       OR existing_queue.next_attempt_at_utc > EXCLUDED.next_attempt_at_utc
+       OR existing_queue.last_error IS NOT NULL
     RETURNING 1
 )
 SELECT

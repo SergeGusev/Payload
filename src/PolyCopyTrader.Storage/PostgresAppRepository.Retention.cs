@@ -26,6 +26,15 @@ AND run.settlement_value_usd IS NULL
 AND run.realized_pnl_usd IS NULL
 AND run.settled_at_utc IS NULL
 AND run.skip_diagnostics_json IS NULL
+AND run.fee_usd = 0
+AND run.fee_accounting_status = 'LegacyUnknown'
+AND run.fee_liquidity_role = 'Unknown'
+AND run.fee_calculation_source = ''
+AND run.fee_rate IS NULL
+AND run.fee_exponent IS NULL
+AND run.fee_taker_only IS NULL
+AND run.fee_calculated_at_utc IS NULL
+AND run.net_realized_pnl_usd IS NULL
 """;
 
     // Blockers are evaluated against an already materialized candidate relation.

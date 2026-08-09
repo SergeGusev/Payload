@@ -333,6 +333,72 @@ public sealed class StrategyRunRetentionTests
     }
 
     [Fact]
+    public void StrategyRunCompactionSql_FailsClosedWhenFeeShapeIsNotNeutral()
+    {
+        var directSource = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.DirectSkipCompaction.cs");
+        var retentionSource = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.Retention.cs");
+
+        var neutralPredicates = new[]
+        {
+            "fee_usd = 0",
+            "fee_accounting_status = 'LegacyUnknown'",
+            "fee_liquidity_role = 'Unknown'",
+            "fee_calculation_source = ''",
+            "fee_rate IS NULL",
+            "fee_exponent IS NULL",
+            "fee_taker_only IS NULL",
+            "fee_calculated_at_utc IS NULL",
+            "net_realized_pnl_usd IS NULL"
+        };
+        foreach (var predicate in neutralPredicates)
+        {
+            Assert.Equal(2, CountOccurrences(directSource, predicate));
+            Assert.Equal(1, CountOccurrences(retentionSource, predicate));
+        }
+    }
+
+    [Fact]
+    public void DirectCompactionSql_ArchivesBeforeRawInsertAndUsesCanonicalProjectionPayload()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.DirectSkipCompaction.cs");
+
+        Assert.Contains(
+            "var archivedIds = await ArchiveNewDirectPaperSkippedRunsAsync(",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "public.dashboard_projection_run_payload(",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "jsonb_populate_record(",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "other_input.ordinality <> candidate.ordinality",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "WHERE existing_queue.priority < EXCLUDED.priority",
+            source,
+            StringComparison.Ordinal);
+        Assert.Equal(
+            2,
+            CountOccurrences(
+                source,
+                "WHERE existing_queue.priority < EXCLUDED.priority"));
+    }
+
+    [Fact]
     public void Schema_InstallsRetentionDependencyLookupIndexesConcurrently()
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);

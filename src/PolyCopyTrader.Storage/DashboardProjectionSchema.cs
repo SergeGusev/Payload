@@ -704,6 +704,18 @@ SELECT array_remove(ARRAY[
     CASE WHEN (target_run).realized_pnl_usd IS NOT NULL THEN 'realized_pnl_usd' END,
     CASE WHEN (target_run).settled_at_utc IS NOT NULL THEN 'settled_at_utc' END,
     CASE WHEN (target_run).skip_diagnostics_json IS NOT NULL THEN 'skip_diagnostics_json' END,
+    CASE WHEN (target_run).fee_usd <> 0 THEN 'fee_usd' END,
+    CASE WHEN (target_run).fee_accounting_status IS DISTINCT FROM 'LegacyUnknown'
+        THEN 'fee_accounting_status' END,
+    CASE WHEN (target_run).fee_liquidity_role IS DISTINCT FROM 'Unknown'
+        THEN 'fee_liquidity_role' END,
+    CASE WHEN (target_run).fee_calculation_source IS DISTINCT FROM ''
+        THEN 'fee_calculation_source' END,
+    CASE WHEN (target_run).fee_rate IS NOT NULL THEN 'fee_rate' END,
+    CASE WHEN (target_run).fee_exponent IS NOT NULL THEN 'fee_exponent' END,
+    CASE WHEN (target_run).fee_taker_only IS NOT NULL THEN 'fee_taker_only' END,
+    CASE WHEN (target_run).fee_calculated_at_utc IS NOT NULL THEN 'fee_calculated_at_utc' END,
+    CASE WHEN (target_run).net_realized_pnl_usd IS NOT NULL THEN 'net_realized_pnl_usd' END,
     CASE WHEN (target_run).status = 'Skipped' AND EXISTS (
         SELECT 1
         FROM public.strategies strategy
