@@ -9811,9 +9811,59 @@ FROM claimed;
 
 	internal static string? GetPersistedSkipDiagnosticsJson(StrategyMarketPaperRun run)
 	{
-		return string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase)
-			? null
-			: run.SkipDiagnosticsJson;
+		if (!string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase))
+		{
+			return run.SkipDiagnosticsJson;
+		}
+
+		return IsMakerGtdPlacementSkipDiagnostics(run)
+			? run.SkipDiagnosticsJson
+			: null;
+	}
+
+	private static bool IsMakerGtdPlacementSkipDiagnostics(StrategyMarketPaperRun run)
+	{
+		const string executionSource = "eth_reference_average_maker_gtd_paper";
+		if (string.IsNullOrWhiteSpace(run.SkipDiagnosticsJson) ||
+			run.SkipReason is not
+				("maker_gtd_variant_not_paper_only" or
+				 "maker_gtd_market_start_unknown" or
+				 "maker_gtd_market_end_unknown" or
+				 "maker_gtd_effective_expiration_elapsed" or
+				 "maker_gtd_maximum_order_price_invalid" or
+				 "maker_gtd_premarket_entry_window_elapsed" or
+				 "maker_gtd_post_only_attempts_exhausted"))
+		{
+			return false;
+		}
+
+		try
+		{
+			using var document = JsonDocument.Parse(run.SkipDiagnosticsJson);
+			var root = document.RootElement;
+			if (root.ValueKind != JsonValueKind.Object ||
+				!root.TryGetProperty("execution_source", out var rootExecutionSource) ||
+				!string.Equals(rootExecutionSource.GetString(), executionSource, StringComparison.Ordinal) ||
+				!root.TryGetProperty("skip_reason", out var rootSkipReason) ||
+				!string.Equals(rootSkipReason.GetString(), run.SkipReason, StringComparison.Ordinal) ||
+				!root.TryGetProperty("maker_gtd", out var makerGtd) ||
+				makerGtd.ValueKind != JsonValueKind.Object ||
+				!makerGtd.TryGetProperty("execution_source", out var makerExecutionSource) ||
+				!string.Equals(makerExecutionSource.GetString(), executionSource, StringComparison.Ordinal) ||
+				!makerGtd.TryGetProperty("terminal_outcome", out var terminalOutcome) ||
+				!string.Equals(terminalOutcome.GetString(), "skipped", StringComparison.Ordinal) ||
+				!makerGtd.TryGetProperty("terminal_reason", out var terminalReason) ||
+				!string.Equals(terminalReason.GetString(), run.SkipReason, StringComparison.Ordinal))
+			{
+				return false;
+			}
+
+			return true;
+		}
+		catch (JsonException)
+		{
+			return false;
+		}
 	}
 
 	private static PaperCopiedLeaderPosition ReadPaperCopiedLeaderPosition(NpgsqlDataReader reader)

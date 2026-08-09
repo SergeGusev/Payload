@@ -11,6 +11,14 @@ public sealed class ClobV2OrderBuilder(OrderAmountCalculator amountCalculator)
     private const long MaxJsonSafeInteger = 9_007_199_254_740_991L;
     private const int GtdExpirationSecurityThresholdSeconds = 60;
 
+    public static ClobV2OrderRequest FreezeOrderIdentity(ClobV2OrderRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return request.Salt is null
+            ? request with { Salt = GenerateSalt() }
+            : request;
+    }
+
     public ClobV2Order Build(ClobV2OrderRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

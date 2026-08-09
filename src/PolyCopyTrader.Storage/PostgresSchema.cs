@@ -1269,6 +1269,64 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
+WITH thresholds(threshold_bps) AS (
+    SELECT value
+    FROM generate_series(1, 10) AS generated(value)
+    UNION ALL
+    SELECT value
+    FROM generate_series(15, 100, 5) AS generated(value)
+)
+SELECT
+    ('b7c50005-0000-4000-8223-' || lpad((100 + threshold_bps)::text, 12, '0'))::uuid,
+    'eth_up_down_5m_reference_average_bps_' || threshold_bps::text || '_maker_gtd_premarket',
+    'ETH Up or Down 5m ' || threshold_bps::text || ' bps Reference Average Maker GTD Premarket',
+    'Paper-only Maker GTD clone of ETH Up or Down 5m ' || threshold_bps::text || ' bps Reference Average Premarket. It preserves the source ETH reference-average envelope signal, direction, timing, stake sizing, and risk checks. Before market open, make at most ten attempts to create one post-only GTD BUY from fresh current order books with a maximum order price of 0.99; after the first accepted order, stop retrying. The resting order expires one minute before market end. By explicit user approval, this exact family is a closed ordinary-Paper exception. The optimistic, non-Live-equivalent TouchNoDepth model marks the complete order filled at its limit on a later selected-token trade or current best ask at or below the BUY limit while queue position, depth, and observed size are ignored; this may overstate fills. Its records intentionally contribute to ordinary Paper orders, PnL, win rate, and performance. Every result must be labeled optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. Live submission is disabled, and no alias, clone, descendant, future strategy, different execution source, predicate mismatch, or changed execution semantic inherits this exception.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM thresholds
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
 WITH assets(asset_symbol, id_group) AS (
     VALUES
         ('BTC', '8213'),

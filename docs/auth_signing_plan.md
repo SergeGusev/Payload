@@ -167,10 +167,13 @@ maker-only authenticated trading endpoints behind explicit service gates.
 
 14. Post-only/maker-only behavior:
     Use `postOnly: true` with GTC or GTD orders. Do not combine post-only with FOK or
-    FAK. Before creating a post-only order, preflight against fresh order book data:
-    a BUY must not cross the best ask and a SELL must not cross the best bid. The live
-    path should reject any response that reports an immediate match for a maker-only
-    order and should keep the current paper/risk gates in front of signing. Current
+    FAK. A fresh decision book may be used to choose and freeze a non-crossing
+    limit, but the Live adapter must submit that unchanged intent and let the venue
+    perform the authoritative post-only crossing check. A Paper adapter may use a
+    second fresh book only to emulate that venue response; it must not reprice or
+    resize the frozen intent. The live path should treat any immediate match for a
+    maker-only order as an invariant/reconciliation case and should keep the current
+    paper/risk gates in front of signing. Current
     Follow leader Paper signal prices use the leader's historical trade price, so
     the live path must reject them unless a separate live execution policy is
     explicitly added.

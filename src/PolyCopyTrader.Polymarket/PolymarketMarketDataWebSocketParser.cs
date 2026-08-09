@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using PolyCopyTrader.Domain;
 
@@ -7,6 +9,13 @@ namespace PolyCopyTrader.Polymarket;
 public static class PolymarketMarketDataWebSocketParser
 {
     public static IReadOnlyList<MarketDataUpdate> ParseMarketMessage(string message)
+    {
+        return ParseMarketMessage(message, DateTimeOffset.UtcNow);
+    }
+
+    public static IReadOnlyList<MarketDataUpdate> ParseMarketMessage(
+        string message,
+        DateTimeOffset receivedAtUtc)
     {
         if (string.IsNullOrWhiteSpace(message))
         {
@@ -21,26 +30,31 @@ public static class PolymarketMarketDataWebSocketParser
         }
 
         using var json = JsonDocument.Parse(trimmed);
+        var normalizedReceivedAtUtc = receivedAtUtc.ToUniversalTime();
         return json.RootElement.ValueKind switch
         {
-            JsonValueKind.Array => ParseArray(json.RootElement),
-            JsonValueKind.Object => ParseObject(json.RootElement),
+            JsonValueKind.Array => ParseArray(json.RootElement, normalizedReceivedAtUtc),
+            JsonValueKind.Object => ParseObject(json.RootElement, normalizedReceivedAtUtc),
             _ => []
         };
     }
 
-    private static IReadOnlyList<MarketDataUpdate> ParseArray(JsonElement root)
+    private static IReadOnlyList<MarketDataUpdate> ParseArray(
+        JsonElement root,
+        DateTimeOffset receivedAtUtc)
     {
         var updates = new List<MarketDataUpdate>();
         foreach (var item in root.EnumerateArray())
         {
-            updates.AddRange(ParseObject(item));
+            updates.AddRange(ParseObject(item, receivedAtUtc));
         }
 
         return updates;
     }
 
-    private static IReadOnlyList<MarketDataUpdate> ParseObject(JsonElement root)
+    private static IReadOnlyList<MarketDataUpdate> ParseObject(
+        JsonElement root,
+        DateTimeOffset receivedAtUtc)
     {
         if (!root.TryGetProperty("event_type", out var eventTypeProperty))
         {
@@ -50,20 +64,28 @@ public static class PolymarketMarketDataWebSocketParser
         var rawEventType = eventTypeProperty.GetString() ?? string.Empty;
         return rawEventType switch
         {
-            "book" => [ParseBook(root, rawEventType)],
-            "price_change" => ParsePriceChange(root, rawEventType),
-            "last_trade_price" => [ParseLastTradePrice(root, rawEventType)],
-            "best_bid_ask" => [ParseBestBidAsk(root, rawEventType)],
-            "tick_size_change" => [ParseSimple(root, MarketDataEventType.TickSizeChange, rawEventType)],
-            "market_resolved" => ParseMarketResolved(root, rawEventType),
-            _ => [ParseSimple(root, MarketDataEventType.Unknown, rawEventType)]
+            "book" => [ParseBook(root, rawEventType, receivedAtUtc)],
+            "price_change" => ParsePriceChange(root, rawEventType, receivedAtUtc),
+            "last_trade_price" => [ParseLastTradePrice(root, rawEventType, receivedAtUtc)],
+            "best_bid_ask" => [ParseBestBidAsk(root, rawEventType, receivedAtUtc)],
+            "tick_size_change" =>
+                [ParseSimple(root, MarketDataEventType.TickSizeChange, rawEventType, receivedAtUtc)],
+            "market_resolved" => ParseMarketResolved(root, rawEventType, receivedAtUtc),
+            _ => [ParseSimple(root, MarketDataEventType.Unknown, rawEventType, receivedAtUtc)]
         };
     }
 
-    private static MarketDataUpdate ParseBook(JsonElement root, string rawEventType)
+    private static MarketDataUpdate ParseBook(
+        JsonElement root,
+        string rawEventType,
+        DateTimeOffset receivedAtUtc)
     {
-        var orderBook = PolymarketJsonParser.ParseOrderBook(root);
-        return new MarketDataUpdate(
+        var timestamp = ParseTimestamp(GetString(root, "timestamp"), receivedAtUtc);
+        var orderBook = PolymarketJsonParser.ParseOrderBook(root, receivedAtUtc) with
+        {
+            SnapshotAtUtc = timestamp.EffectiveTimestampUtc
+        };
+        var update = new MarketDataUpdate(
             MarketDataEventType.Book,
             rawEventType,
             orderBook.AssetId,
@@ -75,14 +97,18 @@ public static class PolymarketMarketDataWebSocketParser
             null,
             TradeSide.Unknown,
             false,
-            orderBook.SnapshotAtUtc,
+            timestamp.EffectiveTimestampUtc,
             RawJson: root.GetRawText());
+        return AddEvidence(update, root, timestamp, GetSourceEventId(root));
     }
 
-    private static IReadOnlyList<MarketDataUpdate> ParsePriceChange(JsonElement root, string rawEventType)
+    private static IReadOnlyList<MarketDataUpdate> ParsePriceChange(
+        JsonElement root,
+        string rawEventType,
+        DateTimeOffset receivedAtUtc)
     {
         var market = GetString(root, "market");
-        var timestamp = ParseTimestamp(GetString(root, "timestamp"));
+        var timestamp = ParseTimestamp(GetString(root, "timestamp"), receivedAtUtc);
         if (!root.TryGetProperty("price_changes", out var changes) || changes.ValueKind != JsonValueKind.Array)
         {
             return [];
@@ -94,8 +120,13 @@ public static class PolymarketMarketDataWebSocketParser
             var assetId = GetString(change, "asset_id");
             var bestBid = GetDecimalOrNull(change, "best_bid");
             var bestAsk = GetDecimalOrNull(change, "best_ask");
-            var orderBook = BuildTopOfBookSnapshot(assetId, market, bestBid, bestAsk, timestamp);
-            updates.Add(new MarketDataUpdate(
+            var orderBook = BuildTopOfBookSnapshot(
+                assetId,
+                market,
+                bestBid,
+                bestAsk,
+                timestamp.EffectiveTimestampUtc);
+            var update = new MarketDataUpdate(
                 MarketDataEventType.PriceChange,
                 rawEventType,
                 assetId,
@@ -107,16 +138,22 @@ public static class PolymarketMarketDataWebSocketParser
                 GetDecimalOrNull(change, "size"),
                 ParseSide(GetString(change, "side")),
                 false,
-                timestamp,
-                RawJson: change.GetRawText()));
+                timestamp.EffectiveTimestampUtc,
+                RawJson: change.GetRawText());
+            updates.Add(AddEvidence(update, change, timestamp, GetSourceEventId(change)));
         }
 
         return updates;
     }
 
-    private static MarketDataUpdate ParseLastTradePrice(JsonElement root, string rawEventType)
+    private static MarketDataUpdate ParseLastTradePrice(
+        JsonElement root,
+        string rawEventType,
+        DateTimeOffset receivedAtUtc)
     {
-        return new MarketDataUpdate(
+        var timestamp = ParseTimestamp(GetString(root, "timestamp"), receivedAtUtc);
+        var transactionHash = GetString(root, "transaction_hash");
+        var update = new MarketDataUpdate(
             MarketDataEventType.LastTradePrice,
             rawEventType,
             GetString(root, "asset_id"),
@@ -128,20 +165,29 @@ public static class PolymarketMarketDataWebSocketParser
             GetDecimalOrNull(root, "size"),
             ParseSide(GetString(root, "side")),
             false,
-            ParseTimestamp(GetString(root, "timestamp")),
-            GetString(root, "transaction_hash"),
+            timestamp.EffectiveTimestampUtc,
+            transactionHash,
             root.GetRawText());
+        return AddEvidence(update, root, timestamp, transactionHash ?? GetSourceEventId(root));
     }
 
-    private static MarketDataUpdate ParseBestBidAsk(JsonElement root, string rawEventType)
+    private static MarketDataUpdate ParseBestBidAsk(
+        JsonElement root,
+        string rawEventType,
+        DateTimeOffset receivedAtUtc)
     {
         var assetId = GetString(root, "asset_id");
         var market = GetString(root, "market");
-        var timestamp = ParseTimestamp(GetString(root, "timestamp"));
+        var timestamp = ParseTimestamp(GetString(root, "timestamp"), receivedAtUtc);
         var bestBid = GetDecimalOrNull(root, "best_bid");
         var bestAsk = GetDecimalOrNull(root, "best_ask");
-        var orderBook = BuildTopOfBookSnapshot(assetId, market, bestBid, bestAsk, timestamp);
-        return new MarketDataUpdate(
+        var orderBook = BuildTopOfBookSnapshot(
+            assetId,
+            market,
+            bestBid,
+            bestAsk,
+            timestamp.EffectiveTimestampUtc);
+        var update = new MarketDataUpdate(
             MarketDataEventType.BestBidAsk,
             rawEventType,
             assetId,
@@ -153,11 +199,15 @@ public static class PolymarketMarketDataWebSocketParser
             null,
             TradeSide.Unknown,
             false,
-            timestamp,
+            timestamp.EffectiveTimestampUtc,
             RawJson: root.GetRawText());
+        return AddEvidence(update, root, timestamp, GetSourceEventId(root));
     }
 
-    private static IReadOnlyList<MarketDataUpdate> ParseMarketResolved(JsonElement root, string rawEventType)
+    private static IReadOnlyList<MarketDataUpdate> ParseMarketResolved(
+        JsonElement root,
+        string rawEventType,
+        DateTimeOffset receivedAtUtc)
     {
         var assetIds = GetStringArray(root, "assets_ids");
         var winningAssetId = GetString(root, "winning_asset_id");
@@ -179,6 +229,7 @@ public static class PolymarketMarketDataWebSocketParser
                     root,
                     MarketDataEventType.MarketResolved,
                     rawEventType,
+                    receivedAtUtc,
                     marketResolved: true,
                     winningAssetId: winningAssetId,
                     winningOutcome: winningOutcome)
@@ -190,6 +241,7 @@ public static class PolymarketMarketDataWebSocketParser
                 root,
                 MarketDataEventType.MarketResolved,
                 rawEventType,
+                receivedAtUtc,
                 assetId,
                 marketResolved: true,
                 winningAssetId: winningAssetId,
@@ -201,12 +253,14 @@ public static class PolymarketMarketDataWebSocketParser
         JsonElement root,
         MarketDataEventType eventType,
         string rawEventType,
+        DateTimeOffset receivedAtUtc,
         string? assetId = null,
         bool marketResolved = false,
         string? winningAssetId = null,
         string? winningOutcome = null)
     {
-        return new MarketDataUpdate(
+        var timestamp = ParseTimestamp(GetString(root, "timestamp"), receivedAtUtc);
+        var update = new MarketDataUpdate(
             eventType,
             rawEventType,
             assetId ?? GetString(root, "asset_id"),
@@ -218,10 +272,11 @@ public static class PolymarketMarketDataWebSocketParser
             null,
             TradeSide.Unknown,
             marketResolved,
-            ParseTimestamp(GetString(root, "timestamp")),
+            timestamp.EffectiveTimestampUtc,
             RawJson: root.GetRawText(),
             WinningAssetId: winningAssetId,
             WinningOutcome: winningOutcome);
+        return AddEvidence(update, root, timestamp, GetSourceEventId(root));
     }
 
     private static OrderBookSnapshot? BuildTopOfBookSnapshot(
@@ -244,16 +299,104 @@ public static class PolymarketMarketDataWebSocketParser
             market);
     }
 
-    private static DateTimeOffset ParseTimestamp(string? value)
+    private static MarketDataUpdate AddEvidence(
+        MarketDataUpdate update,
+        JsonElement identityElement,
+        ParsedTimestamp timestamp,
+        string? sourceEventId)
+    {
+        var normalizedSourceEventId = string.IsNullOrWhiteSpace(sourceEventId)
+            ? null
+            : sourceEventId.Trim();
+        return update with
+        {
+            SourceTimestampUtc = timestamp.SourceTimestampUtc,
+            TimestampQuality = timestamp.Quality,
+            ReceivedAtUtc = timestamp.ReceivedAtUtc,
+            SourceEventId = normalizedSourceEventId,
+            EventFingerprint = BuildEventFingerprint(
+                update,
+                identityElement,
+                timestamp,
+                normalizedSourceEventId)
+        };
+    }
+
+    private static string BuildEventFingerprint(
+        MarketDataUpdate update,
+        JsonElement identityElement,
+        ParsedTimestamp timestamp,
+        string? sourceEventId)
+    {
+        var sourceTimestamp = timestamp.SourceTimestampUtc?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
+            ?? string.Empty;
+        var canonicalPayload = JsonSerializer.Serialize(identityElement);
+        var identity = string.Join(
+            '\u001f',
+            update.EventType.ToString(),
+            NormalizeIdentityPart(update.RawEventType),
+            NormalizeIdentityPart(update.AssetId),
+            NormalizeIdentityPart(update.ConditionId),
+            sourceTimestamp,
+            timestamp.Quality.ToString(),
+            NormalizeIdentityPart(sourceEventId),
+            update.BestBid?.ToString("G29", CultureInfo.InvariantCulture) ?? string.Empty,
+            update.BestAsk?.ToString("G29", CultureInfo.InvariantCulture) ?? string.Empty,
+            update.Price?.ToString("G29", CultureInfo.InvariantCulture) ?? string.Empty,
+            update.Size?.ToString("G29", CultureInfo.InvariantCulture) ?? string.Empty,
+            update.Side.ToString(),
+            update.MarketResolved.ToString(CultureInfo.InvariantCulture),
+            NormalizeIdentityPart(update.WinningAssetId),
+            NormalizeIdentityPart(update.WinningOutcome),
+            canonicalPayload);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))).ToLowerInvariant();
+    }
+
+    private static ParsedTimestamp ParseTimestamp(
+        string? value,
+        DateTimeOffset receivedAtUtc)
     {
         if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unix))
         {
-            return unix > 99_999_999_999
-                ? DateTimeOffset.FromUnixTimeMilliseconds(unix)
-                : DateTimeOffset.FromUnixTimeSeconds(unix);
+            try
+            {
+                var sourceTimestampUtc = unix > 99_999_999_999
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(unix)
+                    : DateTimeOffset.FromUnixTimeSeconds(unix);
+                return new ParsedTimestamp(
+                    sourceTimestampUtc,
+                    sourceTimestampUtc,
+                    MarketDataTimestampQuality.VenueProvided,
+                    receivedAtUtc);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+            }
         }
 
-        return DateTimeOffset.UtcNow;
+        return new ParsedTimestamp(
+            receivedAtUtc,
+            SourceTimestampUtc: null,
+            MarketDataTimestampQuality.ReceiveTimeFallback,
+            receivedAtUtc);
+    }
+
+    private static string? GetSourceEventId(JsonElement element)
+    {
+        return FirstNonEmpty(
+            GetString(element, "transaction_hash"),
+            GetString(element, "hash"),
+            GetString(element, "id"));
+    }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    private static string NormalizeIdentityPart(string? value)
+    {
+        return (value ?? string.Empty).Trim().ToLowerInvariant();
     }
 
     private static TradeSide ParseSide(string? value)
@@ -338,4 +481,10 @@ public static class PolymarketMarketDataWebSocketParser
             ? parsed
             : null;
     }
+
+    private readonly record struct ParsedTimestamp(
+        DateTimeOffset EffectiveTimestampUtc,
+        DateTimeOffset? SourceTimestampUtc,
+        MarketDataTimestampQuality Quality,
+        DateTimeOffset ReceivedAtUtc);
 }

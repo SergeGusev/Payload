@@ -172,7 +172,8 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
                 null,
                 null,
                 Redact(response.Body),
-                redactedBody);
+                redactedBody,
+                (int)response.StatusCode);
         }
 
         using var json = JsonDocument.Parse(response.Body);
@@ -188,7 +189,8 @@ public sealed class PolymarketTradingClient : IPolymarketTradingClient
             GetString(root, "makingAmount"),
             GetString(root, "takingAmount"),
             Redact(response.Body),
-            redactedBody);
+            redactedBody,
+            (int)response.StatusCode);
     }
 
     public async Task<LiveOrderCancellationResult> CancelOrderAsync(string orderId, CancellationToken ct)

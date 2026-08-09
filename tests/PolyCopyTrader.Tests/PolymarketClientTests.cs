@@ -97,8 +97,9 @@ public sealed class PolymarketClientTests
     public void Parser_ReadsOrderBookAndComputedSpread()
     {
         using var json = JsonDocument.Parse(SampleOrderBookJson);
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
 
-        var orderBook = PolymarketJsonParser.ParseOrderBook(json.RootElement);
+        var orderBook = PolymarketJsonParser.ParseOrderBook(json.RootElement, receivedAtUtc);
 
         Assert.Equal("12345678901234567890", orderBook.AssetId);
         Assert.Equal(0.45m, orderBook.BestBid);
@@ -107,6 +108,36 @@ public sealed class PolymarketClientTests
         Assert.Equal(1m, orderBook.MinOrderSize);
         Assert.Equal(0.01m, orderBook.TickSize);
         Assert.Equal(0.45m, orderBook.LastTradePrice);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1710000000), orderBook.SourceTimestampUtc);
+        Assert.Equal(MarketDataTimestampQuality.VenueProvided, orderBook.TimestampQuality);
+        Assert.Equal(receivedAtUtc, orderBook.ReceivedAtUtc);
+        Assert.Equal("a1b2c3", orderBook.SourceEventId);
+        Assert.True(orderBook.HasAuthoritativeSourceTimestamp);
+    }
+
+    [Fact]
+    public void Parser_MarksMissingOrderBookTimestampAsReceiveTimeFallback()
+    {
+        using var json = JsonDocument.Parse(
+            """
+            {
+              "market": "condition-1",
+              "asset_id": "asset-1",
+              "hash": "book-hash",
+              "bids": [{ "price": "0.45", "size": "100" }],
+              "asks": [{ "price": "0.46", "size": "100" }]
+            }
+            """);
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+
+        var orderBook = PolymarketJsonParser.ParseOrderBook(json.RootElement, receivedAtUtc);
+
+        Assert.Equal(receivedAtUtc, orderBook.SnapshotAtUtc);
+        Assert.Null(orderBook.SourceTimestampUtc);
+        Assert.Equal(MarketDataTimestampQuality.ReceiveTimeFallback, orderBook.TimestampQuality);
+        Assert.Equal(receivedAtUtc, orderBook.ReceivedAtUtc);
+        Assert.Equal("book-hash", orderBook.SourceEventId);
+        Assert.False(orderBook.HasAuthoritativeSourceTimestamp);
     }
 
     [Fact]

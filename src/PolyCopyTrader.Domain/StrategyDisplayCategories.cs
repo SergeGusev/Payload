@@ -222,6 +222,11 @@ public static class StrategyDisplayCategories
 
             if (HasReferenceAverageMarker(suffix))
             {
+                if (HasMakerGtdMarker(suffix))
+                {
+                    return categoryPrefix + "Bps Reference Average Maker GTD Premarket";
+                }
+
                 if (StartsWithBpsThreshold(suffix, "Down"))
                 {
                     return categoryPrefix + "Down Bps Reference Average Premarket";
@@ -396,6 +401,12 @@ public static class StrategyDisplayCategories
     {
         return ContainsStrategyWord(value, "Reference") &&
             ContainsStrategyWord(value, "Average");
+    }
+
+    private static bool HasMakerGtdMarker(string value)
+    {
+        return ContainsStrategyWord(value, "Maker") &&
+            ContainsStrategyWord(value, "GTD");
     }
 
     private static bool HasOptimizedAverageMarker(string value)

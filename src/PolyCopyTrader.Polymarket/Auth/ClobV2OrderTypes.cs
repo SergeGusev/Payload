@@ -83,7 +83,8 @@ public sealed record LiveOrderPlacementResult(
     string? MakingAmount,
     string? TakingAmount,
     string RawResponseJson,
-    string RedactedRequestJson);
+    string RedactedRequestJson,
+    int? HttpStatusCode = null);
 
 public sealed record LiveOrderCancellationResult(
     bool Success,

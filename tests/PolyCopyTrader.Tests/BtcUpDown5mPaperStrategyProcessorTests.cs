@@ -526,8 +526,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_ExcludeCryptoBinanceBpsVariants()
     {
-        Assert.Equal(1771, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(3193, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(1799, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(3221, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(324, StrategyIds.BtcLowerEnterPremarketVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
@@ -535,7 +535,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct().Count());
-        Assert.Equal(984, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(1012, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(787, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)));
@@ -9037,6 +9037,232 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"paper_fak_fill_model\":\"fak_taker_executable_snapshot_v2\"", order.RawDecisionJson, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdAcceptsRestingOrderFromFreshS0AndS1()
+    {
+        var now = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [
+                MakerGtdOrderBook(
+                    now,
+                    bestBid: 0.481m,
+                    bestAsk: 0.505m,
+                    receivedAtUtc: now.AddMilliseconds(-1),
+                    sourceEventId: "same-book-hash"),
+                MakerGtdOrderBook(
+                    now,
+                    bestBid: 0.48m,
+                    bestAsk: 0.50m,
+                    receivedAtUtc: now.AddMilliseconds(1),
+                    sourceEventId: "same-book-hash")
+            ]);
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(0, scenario.Result.RunsSkipped);
+        Assert.Equal(2, scenario.ClobClient.GetOrderBookCalls);
+        Assert.Equal(1, scenario.Repository.PaperEntryPersistenceBatchCalls);
+        Assert.Empty(scenario.PersistenceQueue.Batches);
+        Assert.Empty(scenario.Repository.PaperFills);
+
+        var signal = Assert.Single(scenario.Repository.Signals);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExecutionSource, order.ExecutionSource);
+        Assert.Equal(0.49m, order.Price);
+        Assert.Equal(now, order.CreatedAtUtc);
+        Assert.Equal(scenario.MarketEndUtc.AddMinutes(-1), order.ExpiresAtUtc);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Resting, run.Status);
+        Assert.Equal(order.Id, run.PaperOrderId);
+        Assert.Equal(signal.Id, run.SignalId);
+        Assert.Null(run.EnteredAtUtc);
+        Assert.Equal(0.49m, run.EntryPrice);
+        Assert.Equal("Up", run.SelectedOutcome);
+        Assert.Equal("eth-maker-up", run.SelectedAssetId);
+
+        using var decision = JsonDocument.Parse(order.RawDecisionJson ?? "{}");
+        var root = decision.RootElement;
+        Assert.Equal(
+            "reference_price_average_envelope_bps_premarket_v3",
+            root.GetProperty("decision_source").GetString());
+        Assert.Equal("minimum", root.GetProperty("reference_average_selected_boundary").GetString());
+        Assert.Equal(-12.5m, root.GetProperty("reference_average_move_from_selected_boundary_bps").GetDecimal());
+        var makerGtd = root.GetProperty("maker_gtd");
+        var attempt = Assert.Single(makerGtd.GetProperty("attempts").EnumerateArray());
+        Assert.Equal("accepted_resting", attempt.GetProperty("outcome").GetString());
+        Assert.Equal(0.491m, attempt.GetProperty("raw_limit_price").GetDecimal());
+        Assert.Equal(0.49m, attempt.GetProperty("limit_price").GetDecimal());
+        Assert.Equal("same-book-hash", attempt.GetProperty("s0").GetProperty("source_event_id").GetString());
+        Assert.Equal("same-book-hash", attempt.GetProperty("s1").GetProperty("source_event_id").GetString());
+        Assert.True(attempt.GetProperty("s0").GetProperty("timestamp_is_authoritative").GetBoolean());
+        Assert.True(attempt.GetProperty("s1").GetProperty("timestamp_is_authoritative").GetBoolean());
+        Assert.Equal(1, makerGtd.GetProperty("accepted_attempt_number").GetInt32());
+        Assert.Equal(
+            now.AddMilliseconds(1).ToString("O", CultureInfo.InvariantCulture),
+            makerGtd.GetProperty("s1_received_at_utc").GetString());
+        Assert.Equal(
+            scenario.MarketEndUtc.ToString("O", CultureInfo.InvariantCulture),
+            makerGtd.GetProperty("clob_gtd_expiration_utc").GetString());
+        Assert.Equal(
+            scenario.MarketEndUtc.AddMinutes(-1).ToString("O", CultureInfo.InvariantCulture),
+            makerGtd.GetProperty("effective_expires_at_utc").GetString());
+        var marketDataStatus = root.GetProperty("market_data_status_at_acceptance");
+        Assert.Equal(MarketDataConnectionState.Disabled.ToString(), marketDataStatus.GetProperty("connection_state").GetString());
+        Assert.False(marketDataStatus.GetProperty("stale").GetBoolean());
+        Assert.True(marketDataStatus.GetProperty("asset_subscribed").GetBoolean());
+        Assert.Equal(2, marketDataStatus.GetProperty("subscribed_assets_count").GetInt32());
+        Assert.Equal(
+            now.ToString("O", CultureInfo.InvariantCulture),
+            marketDataStatus.GetProperty("accepted_at_utc").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdRepricesWithNewIntentAfterWouldCross()
+    {
+        var now = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [
+                MakerGtdOrderBook(now, 0.48m, 0.52m, now.AddMilliseconds(-1), "attempt-1"),
+                MakerGtdOrderBook(now, 0.48m, 0.49m, now.AddMilliseconds(1), "attempt-1"),
+                MakerGtdOrderBook(now, 0.47m, 0.48m, now.AddMilliseconds(-1), "attempt-2"),
+                MakerGtdOrderBook(now, 0.47m, 0.51m, now.AddMilliseconds(1), "attempt-2")
+            ]);
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(4, scenario.ClobClient.GetOrderBookCalls);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(0.47m, order.Price);
+
+        using var decision = JsonDocument.Parse(order.RawDecisionJson ?? "{}");
+        var makerGtd = decision.RootElement.GetProperty("maker_gtd");
+        var attempts = makerGtd.GetProperty("attempts").EnumerateArray().ToArray();
+        Assert.Equal(2, attempts.Length);
+        Assert.Equal("post_only_not_accepted", attempts[0].GetProperty("outcome").GetString());
+        Assert.Equal(
+            MakerGtdPaperPostOnlyAcceptanceReasonCodes.WouldCrossAtAcceptance,
+            attempts[0].GetProperty("reason_code").GetString());
+        Assert.Equal("accepted_resting", attempts[1].GetProperty("outcome").GetString());
+        Assert.Equal(2, makerGtd.GetProperty("accepted_attempt_number").GetInt32());
+        Assert.NotEqual(
+            attempts[0].GetProperty("frozen_intent").GetProperty("decision_id").GetString(),
+            attempts[1].GetProperty("frozen_intent").GetProperty("decision_id").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdRecordsExactCaseSubscriptionMembership()
+    {
+        var now = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [
+                MakerGtdOrderBook(now, 0.48m, 0.52m, now.AddMilliseconds(-1), "s0"),
+                MakerGtdOrderBook(now, 0.48m, 0.52m, now.AddMilliseconds(1), "s1")
+            ],
+            subscribedUpAssetId: "ETH-MAKER-UP");
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        using var decision = JsonDocument.Parse(order.RawDecisionJson ?? "{}");
+        Assert.False(decision.RootElement
+            .GetProperty("market_data_status_at_acceptance")
+            .GetProperty("asset_subscribed")
+            .GetBoolean());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdCountsNonAuthoritativeS0AsAttempt()
+    {
+        var now = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var nonAuthoritativeS0 = MakerGtdOrderBook(
+            now,
+            0.48m,
+            0.52m,
+            now.AddMilliseconds(-1),
+            "fallback-time") with
+        {
+            SourceTimestampUtc = null,
+            TimestampQuality = MarketDataTimestampQuality.ReceiveTimeFallback
+        };
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [
+                nonAuthoritativeS0,
+                MakerGtdOrderBook(now, 0.48m, 0.52m, now.AddMilliseconds(-1), "authoritative-s0"),
+                MakerGtdOrderBook(now, 0.48m, 0.52m, now.AddMilliseconds(1), "authoritative-s1")
+            ]);
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(3, scenario.ClobClient.GetOrderBookCalls);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        using var decision = JsonDocument.Parse(order.RawDecisionJson ?? "{}");
+        var attempts = decision.RootElement
+            .GetProperty("maker_gtd")
+            .GetProperty("attempts")
+            .EnumerateArray()
+            .ToArray();
+        Assert.Equal(2, attempts.Length);
+        Assert.Equal("s0_rejected", attempts[0].GetProperty("outcome").GetString());
+        Assert.Equal("maker_gtd_s0_timestamp_not_authoritative", attempts[0].GetProperty("reason_code").GetString());
+        Assert.False(attempts[0].TryGetProperty("s1", out _));
+        Assert.Equal("accepted_resting", attempts[1].GetProperty("outcome").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdSkipsWithAllTenAttemptReceiptsPreserved()
+    {
+        var now = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var orderBooks = Enumerable.Range(1, 10)
+            .SelectMany(attempt => new OrderBookSnapshot?[]
+            {
+                MakerGtdOrderBook(now, 0.48m, 0.52m, now.AddMilliseconds(-1), $"attempt-{attempt}"),
+                MakerGtdOrderBook(now, 0.48m, 0.49m, now.AddMilliseconds(1), $"attempt-{attempt}")
+            })
+            .ToArray();
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            orderBooks,
+            new StrategyRunRetentionOptions
+            {
+                DirectPaperSkipCompactionEnabled = true,
+                DirectPaperSkipCompactionApplyEnabled = true
+            });
+
+        Assert.Equal(0, scenario.Result.EntriesPlaced);
+        Assert.Equal(1, scenario.Result.RunsSkipped);
+        Assert.Equal(20, scenario.ClobClient.GetOrderBookCalls);
+        Assert.Empty(scenario.Repository.Signals);
+        Assert.Empty(scenario.Repository.PaperOrders);
+        Assert.Equal(0, scenario.Repository.PaperEntryPersistenceBatchCalls);
+        Assert.Empty(scenario.PersistenceQueue.Batches);
+        var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal("maker_gtd_post_only_attempts_exhausted", run.SkipReason);
+        Assert.NotNull(run.SkipDiagnosticsJson);
+
+        using var decision = JsonDocument.Parse(run.SkipDiagnosticsJson!);
+        var makerGtd = decision.RootElement.GetProperty("maker_gtd");
+        var attempts = makerGtd.GetProperty("attempts").EnumerateArray().ToArray();
+        Assert.Equal(10, attempts.Length);
+        Assert.Equal(10, makerGtd.GetProperty("attempts_completed").GetInt32());
+        Assert.Equal("skipped", makerGtd.GetProperty("terminal_outcome").GetString());
+        Assert.Equal("maker_gtd_post_only_attempts_exhausted", makerGtd.GetProperty("terminal_reason").GetString());
+        Assert.Equal(
+            10,
+            attempts
+                .Select(attempt => attempt.GetProperty("frozen_intent").GetProperty("decision_id").GetString())
+                .Distinct(StringComparer.Ordinal)
+                .Count());
+        Assert.All(attempts, attempt =>
+        {
+            Assert.Equal("post_only_not_accepted", attempt.GetProperty("outcome").GetString());
+            Assert.Equal(
+                MakerGtdPaperPostOnlyAcceptanceReasonCodes.WouldCrossAtAcceptance,
+                attempt.GetProperty("reason_code").GetString());
+        });
+    }
+
     [Theory]
     [InlineData("eth_up_down_5m_up_optimized_average_bps_9_fak_premarket", 3204, true, "Down", "eth-optimized-down", "maximum")]
     [InlineData("eth_up_down_5m_down_optimized_average_bps_9_fak_premarket", 3146, false, "Up", "eth-optimized-up", "minimum")]
@@ -12732,6 +12958,118 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         return (result, repository, tradingClient);
     }
 
+    private static async Task<(
+        BtcUpDown5mPaperStrategyResult Result,
+        TestAppRepository Repository,
+        SequencedFakeClobClient ClobClient,
+        CapturingPaperEntryPersistenceQueue PersistenceQueue,
+        DateTimeOffset MarketEndUtc)> RunReferenceAverageMakerGtdScenarioAsync(
+        DateTimeOffset nowUtc,
+        IReadOnlyList<OrderBookSnapshot?> directOrderBooks,
+        StrategyRunRetentionOptions? strategyRunRetentionOptions = null,
+        string subscribedUpAssetId = "eth-maker-up")
+    {
+        const string upAssetId = "eth-maker-up";
+        const string downAssetId = "eth-maker-down";
+        const string conditionId = "eth-maker-condition";
+        var marketStartUtc = nowUtc.AddSeconds(30);
+        var marketEndUtc = marketStartUtc.AddMinutes(5);
+        var variant = StrategyIds.UpDown5mStrategyVariants.Single(item =>
+            item.Code == "eth_up_down_5m_reference_average_bps_9_maker_gtd_premarket");
+        var repository = new TestAppRepository();
+        repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
+        {
+            Enabled = true,
+            PaperStakeAmount = 1m
+        };
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketEndUtc,
+            upPrice: 0.50m,
+            downPrice: 0.50m,
+            slug: $"eth-updown-5m-{marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "eth-up-or-down-5m",
+            question: "ETH Up or Down - Maker GTD test",
+            marketId: "eth-maker-market",
+            conditionId,
+            upAssetId,
+            downAssetId));
+
+        var cryptoPriceClient = new FakeCryptoReferencePriceClient();
+        cryptoPriceClient.SetPrice("ETH", 3_196m);
+        var averageProvider = new FakeCryptoReferencePriceAverageProvider();
+        averageProvider.SetFullAverages(
+            "ETH",
+            3_200m,
+            3_250m,
+            3_225m,
+            3_230m,
+            3_215m,
+            3_210m,
+            3_208m,
+            3_205m);
+        OrderBookSnapshot[] subscribedBooks =
+        [
+            new OrderBookSnapshot(
+                subscribedUpAssetId,
+                [new OrderBookLevel(0.48m, 100m)],
+                [new OrderBookLevel(0.52m, 100m)],
+                nowUtc,
+                conditionId),
+            new OrderBookSnapshot(
+                downAssetId,
+                [new OrderBookLevel(0.48m, 100m)],
+                [new OrderBookLevel(0.52m, 100m)],
+                nowUtc,
+                conditionId)
+        ];
+        var clobClient = new SequencedFakeClobClient(directOrderBooks);
+        var persistenceQueue = new CapturingPaperEntryPersistenceQueue();
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            subscribedBooks,
+            _ => { },
+            [],
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                [variant.Code],
+                paperTakerMaxQuoteAgeMilliseconds: 1_500),
+            cryptoReferencePriceClient: cryptoPriceClient,
+            clobClient: clobClient,
+            timeProvider: new ManualTimeProvider(nowUtc),
+            cryptoReferencePriceAverageProvider: averageProvider,
+            paperEntryPersistenceQueue: persistenceQueue,
+            strategyRunRetentionOptions: strategyRunRetentionOptions);
+
+        var result = await processor.ProcessAsync();
+        return (result, repository, clobClient, persistenceQueue, marketEndUtc);
+    }
+
+    private static OrderBookSnapshot MakerGtdOrderBook(
+        DateTimeOffset nowUtc,
+        decimal bestBid,
+        decimal bestAsk,
+        DateTimeOffset receivedAtUtc,
+        string sourceEventId)
+    {
+        var sourceTimestampUtc = nowUtc.AddMilliseconds(-2);
+        return new OrderBookSnapshot(
+            "eth-maker-up",
+            [new OrderBookLevel(bestBid, 100m)],
+            [new OrderBookLevel(bestAsk, 100m)],
+            sourceTimestampUtc,
+            "eth-maker-condition",
+            MinOrderSize: 1m,
+            TickSize: 0.01m,
+            NegativeRisk: false,
+            LastTradePrice: null,
+            SourceTimestampUtc: sourceTimestampUtc,
+            TimestampQuality: MarketDataTimestampQuality.VenueProvided,
+            ReceivedAtUtc: receivedAtUtc,
+            SourceEventId: sourceEventId);
+    }
+
     private static IReadOnlyList<OrderBookSnapshot> ToClobOrderBooks(OrderBookSnapshot? orderBook)
     {
         return orderBook is null ? [] : [orderBook];
@@ -14953,6 +15291,65 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         }
 
         public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(string tokenId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<PolymarketClobMarketByToken?>(null);
+        }
+    }
+
+    private sealed class SequencedFakeClobClient(
+        IReadOnlyList<OrderBookSnapshot?> orderBooks) : IPolymarketClobPublicClient
+    {
+        private readonly object sync = new();
+        private int nextOrderBookIndex;
+
+        public int GetOrderBookCalls
+        {
+            get
+            {
+                lock (sync)
+                {
+                    return nextOrderBookIndex;
+                }
+            }
+        }
+
+        public Task<OrderBookSnapshot?> GetOrderBookAsync(
+            string assetId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (sync)
+            {
+                var orderBook = nextOrderBookIndex < orderBooks.Count
+                    ? orderBooks[nextOrderBookIndex]
+                    : null;
+                nextOrderBookIndex++;
+                return Task.FromResult(orderBook);
+            }
+        }
+
+        public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(DateTimeOffset.UtcNow);
+        }
+
+        public Task<decimal?> GetMidpointAsync(
+            string assetId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<decimal?>(null);
+        }
+
+        public Task<decimal?> GetSpreadAsync(
+            string assetId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<decimal?>(null);
+        }
+
+        public Task<PolymarketClobMarketByToken?> GetMarketByTokenAsync(
+            string tokenId,
+            CancellationToken cancellationToken = default)
         {
             return Task.FromResult<PolymarketClobMarketByToken?>(null);
         }

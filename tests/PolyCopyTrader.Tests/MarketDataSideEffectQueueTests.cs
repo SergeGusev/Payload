@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.MarketData;
+using PolyCopyTrader.Service.PaperTrading;
 
 namespace PolyCopyTrader.Tests;
 
@@ -223,6 +224,132 @@ public sealed class MarketDataSideEffectQueueTests
     }
 
     [Fact]
+    public async Task HasOutstandingPaperOrderUpdate_DetectsMatchingPendingUpdate()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        await queue.StartAsync(CancellationToken.None);
+        var orderId = Guid.NewGuid();
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(1);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+            Enqueue(
+                queue,
+                Quote("asset-maker", 0.49m),
+                new HashSet<Guid> { orderId });
+
+            Assert.True(queue.HasOutstandingPaperOrderUpdate(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc));
+            Assert.False(queue.HasOutstandingPaperOrderUpdate(
+                Guid.NewGuid(),
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc));
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+
+        Assert.False(queue.HasOutstandingPaperOrderUpdate(
+            orderId,
+            "asset-maker",
+            "condition-1",
+            acceptedAtUtc,
+            expiresAtUtc));
+    }
+
+    [Fact]
+    public async Task HasOutstandingPaperOrderUpdate_RemainsTrueWhileUpdateIsInFlight()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        await queue.StartAsync(CancellationToken.None);
+        var orderId = Guid.NewGuid();
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var expiresAtUtc = DateTimeOffset.UtcNow.AddMinutes(1);
+
+        try
+        {
+            Enqueue(
+                queue,
+                Quote("asset-maker", 0.49m),
+                new HashSet<Guid> { orderId });
+            await handler.WaitForFirstUpdateAsync();
+
+            Assert.Equal(0, queue.GetMetrics().PendingUpdates);
+            Assert.True(queue.HasOutstandingPaperOrderUpdate(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc));
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+
+        Assert.False(queue.HasOutstandingPaperOrderUpdate(
+            orderId,
+            "asset-maker",
+            "condition-1",
+            acceptedAtUtc,
+            expiresAtUtc));
+    }
+
+    [Fact]
+    public async Task HandlerFailure_RecordsExactMakerOrderPoisonBeforeInFlightClears()
+    {
+        var handler = new ControlledHandler(throwOnUpdate: true);
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var queue = CreateQueue(handler, makerGtdPaperPlacementHandoff: handoff);
+        var orderId = Guid.NewGuid();
+        handoff.TrackMakerGtdPaperOrder(
+            orderId,
+            MakerGtdPaperExecutionContract.ExecutionSource);
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        await queue.StartAsync(CancellationToken.None);
+
+        queue.EnqueueUpdate(
+            "test-component",
+            Quote("asset-maker", 0.49m),
+            null,
+            receivedAtUtc,
+            new HashSet<Guid> { orderId });
+        await queue.StopAsync(CancellationToken.None);
+
+        Assert.Equal(1, queue.GetMetrics().FailedUpdates);
+        Assert.False(queue.HasOutstandingPaperOrderUpdate(
+            orderId,
+            "asset-maker",
+            "condition-1",
+            receivedAtUtc.AddSeconds(-1),
+            receivedAtUtc.AddSeconds(1)));
+        Assert.True(handoff.TryGetMarketDataFailure(
+            orderId,
+            "asset-maker",
+            "condition-1",
+            receivedAtUtc.AddSeconds(-1),
+            receivedAtUtc.AddSeconds(1),
+            out var failure));
+        Assert.Equal(
+            MakerGtdPaperExecutionContract.MarketDataHandlerFailureCode,
+            Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
+    }
+
+    [Fact]
     public async Task EnqueueFrameDiagnostic_DropsRoutineSamplesBeforeImportantDiagnostics()
     {
         var handler = new ControlledHandler(blockFirstDiagnostic: true);
@@ -306,7 +433,8 @@ public sealed class MarketDataSideEffectQueueTests
         ControlledHandler handler,
         int maxPendingUpdatesPerAsset = 32,
         int diagnosticCapacity = 256,
-        bool persistMarketDataEvents = false)
+        bool persistMarketDataEvents = false,
+        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null)
     {
         return new MarketDataSideEffectQueue(
             NullLogger<MarketDataSideEffectQueue>.Instance,
@@ -318,7 +446,8 @@ public sealed class MarketDataSideEffectQueueTests
                 PersistMarketDataEvents = persistMarketDataEvents
             },
             handler,
-            new TestAppRepository());
+            new TestAppRepository(),
+            makerGtdPaperPlacementHandoff);
     }
 
     private static MarketDataSideEffectEnqueueOutcome Enqueue(
@@ -419,7 +548,8 @@ public sealed class MarketDataSideEffectQueueTests
 
     private sealed class ControlledHandler(
         bool blockFirstUpdate = false,
-        bool blockFirstDiagnostic = false) : IMarketDataSideEffectHandler
+        bool blockFirstDiagnostic = false,
+        bool throwOnUpdate = false) : IMarketDataSideEffectHandler
     {
         private readonly TaskCompletionSource<bool> firstUpdateStarted = NewCompletionSource();
         private readonly TaskCompletionSource<bool> releaseFirstUpdate = NewCompletionSource();
@@ -443,6 +573,11 @@ public sealed class MarketDataSideEffectQueueTests
             {
                 firstUpdateStarted.TrySetResult(true);
                 await releaseFirstUpdate.Task.WaitAsync(cancellationToken);
+            }
+
+            if (throwOnUpdate)
+            {
+                throw new InvalidOperationException("simulated market-data handler failure");
             }
 
             ProcessedUpdates.Enqueue(workItem);

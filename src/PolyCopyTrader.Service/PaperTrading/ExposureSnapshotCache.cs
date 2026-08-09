@@ -3,11 +3,15 @@ using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.PaperTrading;
 
-public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposureSnapshotCache
+public sealed class ExposureSnapshotCache(
+    IAppRepository repository,
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IExposureSnapshotCache
 {
     private static readonly IReadOnlySet<Guid> EmptyPaperOrderIds = new HashSet<Guid>();
     private readonly object updateSync = new();
     private readonly SemaphoreSlim refreshLock = new(1, 1);
+    private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
+        makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
     private readonly Dictionary<Guid, PaperOrder> paperOrderRefreshOverlay = [];
     private readonly Dictionary<PaperPositionKey, PaperPosition> paperPositionRefreshOverlay = [];
     private readonly Dictionary<Guid, LiveOrder> liveOrderRefreshOverlay = [];
@@ -92,6 +96,8 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
         {
             return;
         }
+
+        TrackMakerGtdPaperOrders(orders);
 
         lock (updateSync)
         {
@@ -245,6 +251,7 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
                     refreshedOpenLiveOrders,
                     DateTimeOffset.UtcNow);
 
+                TrackMakerGtdPaperOrders(refreshedSnapshot.OpenPaperOrders);
                 paperPositionIndexes = CreatePaperPositionIndexes(refreshedSnapshot.PaperPositions);
                 openPaperOrderIdsByAsset = CreateOpenPaperOrderIdsByAsset(refreshedSnapshot.OpenPaperOrders);
                 Volatile.Write(ref snapshot, refreshedSnapshot);
@@ -359,6 +366,21 @@ public sealed class ExposureSnapshotCache(IAppRepository repository) : IExposure
             or LiveOrderStatus.Delayed
             or LiveOrderStatus.Unmatched
             or LiveOrderStatus.CancelRequested;
+    }
+
+    private void TrackMakerGtdPaperOrders(IEnumerable<PaperOrder> orders)
+    {
+        foreach (var order in orders.Where(MakerGtdPaperExecutionContract.IsMakerGtdOrder))
+        {
+            if (IsOpenPaperOrder(order))
+            {
+                makerGtdHandoff.TrackMakerGtdPaperOrder(order.Id, order.ExecutionSource);
+            }
+            else
+            {
+                makerGtdHandoff.ClearMarketDataFailures(order.Id);
+            }
+        }
     }
 
     private static Dictionary<PaperPositionKey, int> CreatePaperPositionIndexes(IReadOnlyList<PaperPosition> positions)

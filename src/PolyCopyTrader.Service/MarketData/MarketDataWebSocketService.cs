@@ -22,7 +22,8 @@ public sealed class MarketDataWebSocketService(
     IMarketDataCache marketDataCache,
     IExposureSnapshotCache exposureSnapshotCache,
     IMarketDataSideEffectQueue sideEffectQueue,
-    IAppRepository repository) : BackgroundService
+    IAppRepository repository,
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : BackgroundService
 {
     private const string ComponentName = "PolymarketMarketWebSocket";
     private readonly MarketWebSocketFrameDiagnosticSampler frameDiagnosticSampler = new(options);
@@ -32,6 +33,8 @@ public sealed class MarketDataWebSocketService(
         options.MaxShardConnections));
     private readonly object statusGate = new();
     private readonly Dictionary<string, MarketDataStatusSnapshot> shardStatuses = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
+        makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
     private DateTimeOffset? lastAggregateStatusPersistedUtc;
     private MarketDataConnectionState? lastPersistedAggregateState;
     private int? lastPersistedAggregateSubscribedAssetsCount;
@@ -201,7 +204,8 @@ public sealed class MarketDataWebSocketService(
             polymarketOptions,
             repository,
             ProcessTextMessageAsync,
-            OnShardStatus);
+            OnShardStatus,
+            makerGtdHandoff);
 
         if (!shardRunners.TryAdd(plan.Component, runner))
         {
@@ -252,7 +256,7 @@ public sealed class MarketDataWebSocketService(
         return TimeSpan.FromSeconds(Math.Min(delaySeconds, 10));
     }
 
-    internal Task<bool> ProcessTextMessageAsync(
+    internal async Task<bool> ProcessTextMessageAsync(
         string component,
         string message,
         DateTimeOffset receivedAtUtc,
@@ -261,10 +265,16 @@ public sealed class MarketDataWebSocketService(
         IReadOnlyList<MarketDataUpdate> updates;
         try
         {
-            updates = PolymarketMarketDataWebSocketParser.ParseMarketMessage(message);
+            updates = PolymarketMarketDataWebSocketParser.ParseMarketMessage(message, receivedAtUtc);
         }
         catch (JsonException ex)
         {
+            makerGtdHandoff.RecordMarketDataFailure(
+                assetId: null,
+                conditionId: null,
+                receivedAtUtc,
+                affectedPaperOrderIds: null,
+                MakerGtdPaperExecutionContract.MarketDataParseFailureCode);
             TryQueueCriticalFrameDiagnostic(
                 component,
                 message,
@@ -274,7 +284,7 @@ public sealed class MarketDataWebSocketService(
                 parseError: ex.Message);
             logger.LogWarning(ex, "Market WebSocket shard {Component} message parsing failed.", component);
             TryQueueApiError(component, "ParseMarketMessage", ex.Message);
-            return Task.FromResult(false);
+            return false;
         }
 
         TryQueueCriticalFrameDiagnostic(
@@ -287,7 +297,7 @@ public sealed class MarketDataWebSocketService(
 
         if (updates.Count == 0)
         {
-            return Task.FromResult(false);
+            return false;
         }
 
         var processingStarted = Stopwatch.GetTimestamp();
@@ -297,8 +307,17 @@ public sealed class MarketDataWebSocketService(
         foreach (var update in updates)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            IAsyncDisposable? marketDataAdmission = null;
+            IReadOnlySet<Guid>? eligiblePaperOrderIds = null;
             try
             {
+                if (!string.IsNullOrWhiteSpace(update.AssetId))
+                {
+                    marketDataAdmission = await makerGtdHandoff.EnterMarketDataAdmissionAsync(
+                        update.AssetId,
+                        cancellationToken);
+                }
+
                 ActiveMarketAssetSnapshot? activeMarketSnapshot = null;
                 if (update.MarketResolved &&
                     !string.IsNullOrWhiteSpace(update.AssetId) &&
@@ -310,12 +329,20 @@ public sealed class MarketDataWebSocketService(
                 activeMarketAssetSubscriptionRegistry.ApplyMarketDataUpdate(update);
                 marketDataCache.ApplyUpdate(update);
                 btcOrderBookLagDiagnosticService.RecordPolymarketTopOfBook(update, receivedAtUtc);
-                IReadOnlySet<Guid>? eligiblePaperOrderIds = null;
                 if (exposureSnapshotCache.TryGetOpenPaperOrderIds(
                     update.AssetId ?? string.Empty,
                     out var capturedPaperOrderIds))
                 {
                     eligiblePaperOrderIds = capturedPaperOrderIds;
+                }
+
+                var pendingMakerOrderIds = makerGtdHandoff.GetPendingOrderIds(
+                    update.AssetId ?? string.Empty);
+                if (pendingMakerOrderIds.Count > 0)
+                {
+                    eligiblePaperOrderIds = eligiblePaperOrderIds is { Count: > 0 }
+                        ? eligiblePaperOrderIds.Concat(pendingMakerOrderIds).ToHashSet()
+                        : pendingMakerOrderIds;
                 }
 
                 var outcome = sideEffectQueue.EnqueueUpdate(
@@ -334,6 +361,11 @@ public sealed class MarketDataWebSocketService(
                         break;
                     default:
                         failedUpdates++;
+                        RecordMakerGtdMarketDataFailure(
+                            update,
+                            receivedAtUtc,
+                            eligiblePaperOrderIds,
+                            MakerGtdPaperExecutionContract.MarketDataEnqueueFailureCode);
                         logger.LogWarning(
                             "Market-data side effect was not accepted. Component={Component} EventType={EventType} AssetId={AssetId} Outcome={Outcome}",
                             component,
@@ -350,8 +382,20 @@ public sealed class MarketDataWebSocketService(
             catch (Exception ex)
             {
                 failedUpdates++;
+                RecordMakerGtdMarketDataFailure(
+                    update,
+                    receivedAtUtc,
+                    eligiblePaperOrderIds,
+                    MakerGtdPaperExecutionContract.MarketDataDispatchFailureCode);
                 logger.LogError(ex, "Failed to dispatch market data update {EventType} from {Component}.", update.EventType, component);
                 TryQueueApiError(component, "DispatchMarketDataUpdate", ex.Message);
+            }
+            finally
+            {
+                if (marketDataAdmission is not null)
+                {
+                    await marketDataAdmission.DisposeAsync();
+                }
             }
         }
 
@@ -381,7 +425,30 @@ public sealed class MarketDataWebSocketService(
                 processingDuration.TotalMilliseconds);
         }
 
-        return Task.FromResult(queuedUpdates + coalescedUpdates > 0);
+        return queuedUpdates + coalescedUpdates > 0;
+    }
+
+    private void RecordMakerGtdMarketDataFailure(
+        MarketDataUpdate update,
+        DateTimeOffset receivedAtUtc,
+        IReadOnlySet<Guid>? affectedPaperOrderIds,
+        string failureCode)
+    {
+        if (update.EventType is not (
+                MarketDataEventType.Book or
+                MarketDataEventType.PriceChange or
+                MarketDataEventType.LastTradePrice or
+                MarketDataEventType.BestBidAsk))
+        {
+            return;
+        }
+
+        makerGtdHandoff.RecordMarketDataFailure(
+            update.AssetId,
+            update.ConditionId,
+            receivedAtUtc,
+            affectedPaperOrderIds,
+            failureCode);
     }
 
     private void TryQueueCriticalFrameDiagnostic(

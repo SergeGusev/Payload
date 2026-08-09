@@ -16,6 +16,7 @@ internal sealed class TestAppRepository : IAppRepository
     private int observationGammaMarketCalls;
     private int endingBetweenGammaMarketCalls;
     private int getOpenPaperPositionsCalls;
+    private int makerGtdPaperFullFillAttempts;
 
     public TimeSpan PolymarketGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
     public TimeSpan ObservationGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
@@ -317,6 +318,11 @@ internal sealed class TestAppRepository : IAppRepository
     public Func<Task>? BeforeTryUpdatePaperPositionMarksAsync { get; set; }
 
     public Func<Task>? BeforePaperLiveShadowFillReconciliationAsync { get; set; }
+
+    public Action<MakerGtdPaperFullFillRequest, int>? BeforeTryApplyMakerGtdPaperFullFill { get; set; }
+
+    public int MakerGtdPaperFullFillAttempts =>
+        System.Threading.Volatile.Read(ref makerGtdPaperFullFillAttempts);
 
     public bool ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets { get; set; }
 
@@ -1508,6 +1514,153 @@ internal sealed class TestAppRepository : IAppRepository
                 .ThenBy(item => item.Id)
                 .ToArray());
         }
+    }
+
+    public Task<MakerGtdPaperMutationResult> TryApplyMakerGtdPaperFullFillAsync(
+        MakerGtdPaperFullFillRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        MakerGtdPaperPersistenceTransitions.Validate(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        var attempt = Interlocked.Increment(ref makerGtdPaperFullFillAttempts);
+        BeforeTryApplyMakerGtdPaperFullFill?.Invoke(request, attempt);
+        lock (sync)
+        {
+            var order = PaperOrders.SingleOrDefault(item => item.Id == request.FilledOrder.Id);
+            if (order is null)
+            {
+                return Task.FromResult(MakerNotEligible(MakerGtdPaperMutationReasonCodes.OrderNotFound));
+            }
+
+            var run = StrategyMarketPaperRuns.SingleOrDefault(item => item.Id == request.EnteredRun.Id);
+            if (run is null)
+            {
+                return Task.FromResult(MakerNotEligible(
+                    MakerGtdPaperMutationReasonCodes.StrategyRunNotFound,
+                    order));
+            }
+
+            var fills = PaperFills
+                .Where(item => item.PaperOrderId == order.Id)
+                .OrderBy(item => item.FilledAtUtc)
+                .ThenBy(item => item.Id)
+                .ToArray();
+            var position = PaperPositions.SingleOrDefault(item =>
+                string.Equals(item.CopiedTraderWallet, order.CopiedTraderWallet, StringComparison.Ordinal) &&
+                string.Equals(item.AssetId, order.AssetId, StringComparison.Ordinal));
+            if (MakerGtdPaperPersistenceTransitions.IsAlreadyApplied(order, run, fills, request))
+            {
+                return Task.FromResult(new MakerGtdPaperMutationResult(
+                    MakerGtdPaperMutationOutcome.AlreadyApplied,
+                    MakerGtdPaperMutationReasonCodes.FillAlreadyApplied,
+                    order,
+                    run,
+                    fills[0],
+                    position));
+            }
+
+            var reason = MakerGtdPaperPersistenceTransitions.GetFullFillIneligibilityReason(
+                order,
+                run,
+                fills,
+                position,
+                request);
+            if (reason is not null)
+            {
+                return Task.FromResult(MakerNotEligible(reason, order, run, paperPosition: position));
+            }
+
+            PaperOrders.Remove(order);
+            PaperOrders.Add(request.FilledOrder);
+            PaperFills.Add(request.Fill);
+            PaperPositions.RemoveAll(item =>
+                string.Equals(item.CopiedTraderWallet, request.Position.CopiedTraderWallet, StringComparison.Ordinal) &&
+                string.Equals(item.AssetId, request.Position.AssetId, StringComparison.Ordinal));
+            PaperPositions.Add(request.Position);
+            StrategyMarketPaperRuns.Remove(run);
+            StrategyMarketPaperRuns.Add(request.EnteredRun);
+            return Task.FromResult(new MakerGtdPaperMutationResult(
+                MakerGtdPaperMutationOutcome.Applied,
+                MakerGtdPaperMutationReasonCodes.FillApplied,
+                request.FilledOrder,
+                request.EnteredRun,
+                request.Fill,
+                request.Position));
+        }
+    }
+
+    public Task<MakerGtdPaperMutationResult> TryExpireMakerGtdPaperOrderAsync(
+        MakerGtdPaperExpiryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        MakerGtdPaperPersistenceTransitions.Validate(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            var order = PaperOrders.SingleOrDefault(item => item.Id == request.ExpiredOrder.Id);
+            if (order is null)
+            {
+                return Task.FromResult(MakerNotEligible(MakerGtdPaperMutationReasonCodes.OrderNotFound));
+            }
+
+            var run = StrategyMarketPaperRuns.SingleOrDefault(item => item.Id == request.SkippedRun.Id);
+            if (run is null)
+            {
+                return Task.FromResult(MakerNotEligible(
+                    MakerGtdPaperMutationReasonCodes.StrategyRunNotFound,
+                    order));
+            }
+
+            var fills = PaperFills
+                .Where(item => item.PaperOrderId == order.Id)
+                .OrderBy(item => item.FilledAtUtc)
+                .ThenBy(item => item.Id)
+                .ToArray();
+            if (MakerGtdPaperPersistenceTransitions.IsAlreadyApplied(order, run, fills, request))
+            {
+                return Task.FromResult(new MakerGtdPaperMutationResult(
+                    MakerGtdPaperMutationOutcome.AlreadyApplied,
+                    MakerGtdPaperMutationReasonCodes.ExpiryAlreadyApplied,
+                    order,
+                    run));
+            }
+
+            var reason = MakerGtdPaperPersistenceTransitions.GetExpiryIneligibilityReason(
+                order,
+                run,
+                fills,
+                request);
+            if (reason is not null)
+            {
+                return Task.FromResult(MakerNotEligible(reason, order, run));
+            }
+
+            PaperOrders.Remove(order);
+            PaperOrders.Add(request.ExpiredOrder);
+            StrategyMarketPaperRuns.Remove(run);
+            StrategyMarketPaperRuns.Add(request.SkippedRun);
+            return Task.FromResult(new MakerGtdPaperMutationResult(
+                MakerGtdPaperMutationOutcome.Applied,
+                MakerGtdPaperMutationReasonCodes.ExpiryApplied,
+                request.ExpiredOrder,
+                request.SkippedRun));
+        }
+    }
+
+    private static MakerGtdPaperMutationResult MakerNotEligible(
+        string reasonCode,
+        PaperOrder? paperOrder = null,
+        StrategyMarketPaperRun? strategyRun = null,
+        PaperFill? paperFill = null,
+        PaperPosition? paperPosition = null)
+    {
+        return new MakerGtdPaperMutationResult(
+            MakerGtdPaperMutationOutcome.NotEligible,
+            reasonCode,
+            paperOrder,
+            strategyRun,
+            paperFill,
+            paperPosition);
     }
 
     public async Task<PaperLiveShadowFillReconciliationResult> ReconcilePaperLiveShadowFillAsync(

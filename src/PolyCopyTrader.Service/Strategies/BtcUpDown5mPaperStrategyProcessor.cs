@@ -46,7 +46,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     TimeProvider? timeProvider = null,
     IPaperEntryPersistenceQueue? paperEntryPersistenceQueue = null,
     IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null,
-    IPolymarketFeeAccountingService? feeAccountingService = null) : IBtcUpDown5mPaperStrategyProcessor
+    IPolymarketFeeAccountingService? feeAccountingService = null,
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IBtcUpDown5mPaperStrategyProcessor
 {
     private const string GammaOutcomePriceSource = "gamma_outcome_price";
     private const string WebSocketCacheSource = "websocket_cache";
@@ -98,6 +99,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private static readonly TimeSpan PreviousScoreCounterTrendPremarketCarryoverWindow = TimeSpan.FromMinutes(1);
     private const int MakerDecisionIntervalSeconds = 30;
     private const int MakerMaxDecisionSlot = 9;
+    private const int MakerGtdPaperMaximumPlacementAttempts = 10;
     private const string StakeNotionalRoundingMode = "ceil_usd";
     private const string DiffCounterWebSocketResultSource = "MarketWebSocket";
     private const string DiffCounterReferenceStartEndResultSource = "ReferenceStartEnd";
@@ -162,6 +164,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private readonly IPaperLiveShadowFillReconciler shadowFillReconciler =
         paperLiveShadowFillReconciler ?? new PaperLiveShadowFillReconciler(repository, exposureCache);
+    private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
+        makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
     private LiveStrategyPrioritySnapshot liveStrategyPrioritySnapshot = LiveStrategyPrioritySnapshot.Empty;
     private ObservationMarketSnapshot observationMarketSnapshot = ObservationMarketSnapshot.Empty;
     private DateTimeOffset nextObservedRunCacheCleanupUtc = DateTimeOffset.MinValue;
@@ -5099,6 +5103,38 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             stakeMultiplier = limitDecision.StakeUsdOverride.Value;
                         }
 
+                        if (IsReferenceAverageBpsMakerGtdPremarketEntry(variant))
+                        {
+                            var makerPlacement = await TryPlaceReferenceAverageMakerGtdPaperOrderAsync(
+                                run,
+                                market,
+                                variant,
+                                limitDecision.SelectedOutcome,
+                                limitDecision.RawDecisionJson,
+                                stakeMultiplier,
+                                paperLostCounterAdjustment,
+                                latencyMetrics,
+                                cancellationToken);
+                            if (makerPlacement.Placed)
+                            {
+                                entriesPlaced++;
+                            }
+                            else
+                            {
+                                nowUtc = GetUtcNow();
+                                await PersistReferenceAverageMakerGtdSkippedRunAsync(
+                                    run,
+                                    variant,
+                                    makerPlacement.SkipReason ?? "maker_gtd_post_only_attempts_exhausted",
+                                    nowUtc,
+                                    cancellationToken,
+                                    makerPlacement.RawDecisionJson);
+                                runsSkipped++;
+                            }
+
+                            continue;
+                        }
+
                         var limitPricing = await MeasureEntryLatencyAsync(
                             latencyMetrics,
                             EntryLatencyPhase.OrderBook,
@@ -6095,6 +6131,703 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return (entriesPlaced, runsSkipped);
     }
 
+    private async Task<MakerGtdPaperPlacementResult> TryPlaceReferenceAverageMakerGtdPaperOrderAsync(
+        StrategyMarketPaperRun run,
+        PolymarketGammaMarket market,
+        BtcUpDown5mStrategyVariant variant,
+        BtcUpDown5mOutcomeQuote selectedOutcome,
+        string signalDecisionJson,
+        decimal stakeMultiplier,
+        LostCounterStakeAdjustment paperLostCounterAdjustment,
+        EntryBatchLatencyMetrics latencyMetrics,
+        CancellationToken cancellationToken)
+    {
+        var root = ParseJsonObject(signalDecisionJson);
+        var attempts = new JsonArray();
+        var maxQuoteAge = GetPaperTakerMaxQuoteAge();
+        var maxQuoteAgeMilliseconds = (long)Math.Ceiling(maxQuoteAge.TotalMilliseconds);
+        var marketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market) ?? run.MarketStartUtc;
+        var makerMaximumOrderPrice = variant.MakerMaximumOrderPrice;
+        var makerGtd = new JsonObject
+        {
+            ["contract_version"] = "maker_gtd_paper_v1",
+            ["execution_source"] = MakerGtdPaperExecutionContract.ExecutionSource,
+            ["strategy_run_id"] = run.Id.ToString("D"),
+            ["paper_only"] = true,
+            ["post_only"] = true,
+            ["order_type"] = MakerGtdBuyExecutionIntent.TimeInForce,
+            ["maximum_placement_attempts"] = MakerGtdPaperMaximumPlacementAttempts,
+            ["quote_max_age_ms"] = maxQuoteAgeMilliseconds,
+            ["price_formula"] = "floor_to_tick(min(best_bid + tick_size, best_ask - tick_size, maximum_order_price))",
+            ["maximum_order_price"] = makerMaximumOrderPrice,
+            ["market_start_utc"] = FormatMakerGtdTimestamp(marketStartUtc),
+            ["market_end_utc"] = FormatMakerGtdTimestamp(market.EndDateUtc),
+            ["attempts"] = attempts
+        };
+        root["maker_gtd"] = makerGtd;
+        root["paper_only"] = true;
+        root["post_only"] = true;
+        root["order_type"] = MakerGtdBuyExecutionIntent.TimeInForce;
+        root["order_execution_mode"] = MakerGtdBuyExecutionIntent.TimeInForce;
+        root["execution_source"] = MakerGtdPaperExecutionContract.ExecutionSource;
+
+        if (!variant.PaperOnly)
+        {
+            return CompleteMakerGtdPlacementFailure(
+                root,
+                makerGtd,
+                "maker_gtd_variant_not_paper_only");
+        }
+
+        if (marketStartUtc is null)
+        {
+            return CompleteMakerGtdPlacementFailure(
+                root,
+                makerGtd,
+                "maker_gtd_market_start_unknown");
+        }
+
+        if (market.EndDateUtc is not { } clobGtdExpirationUtc)
+        {
+            return CompleteMakerGtdPlacementFailure(
+                root,
+                makerGtd,
+                "maker_gtd_market_end_unknown");
+        }
+
+        var effectiveExpiresAtUtc = clobGtdExpirationUtc.AddSeconds(
+            -MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds);
+        makerGtd["effective_expires_at_utc"] = FormatMakerGtdTimestamp(effectiveExpiresAtUtc);
+        makerGtd["clob_gtd_expiration_utc"] = FormatMakerGtdTimestamp(clobGtdExpirationUtc);
+        root["gtd_expiration_utc"] = FormatMakerGtdTimestamp(effectiveExpiresAtUtc);
+        root["cancel_deadline_utc"] = FormatMakerGtdTimestamp(effectiveExpiresAtUtc);
+        root["clob_wire_gtd_expiration_utc"] = FormatMakerGtdTimestamp(clobGtdExpirationUtc);
+        root["market_end_expire_before_seconds"] = MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds;
+        if (effectiveExpiresAtUtc <= GetUtcNow())
+        {
+            return CompleteMakerGtdPlacementFailure(
+                root,
+                makerGtd,
+                "maker_gtd_effective_expiration_elapsed");
+        }
+
+        if (makerMaximumOrderPrice is not > 0m or >= 1m)
+        {
+            return CompleteMakerGtdPlacementFailure(
+                root,
+                makerGtd,
+                "maker_gtd_maximum_order_price_invalid");
+        }
+
+        string? entryWindowTerminalReason = null;
+        for (var attemptNumber = 1;
+             attemptNumber <= MakerGtdPaperMaximumPlacementAttempts;
+             attemptNumber++)
+        {
+            var attemptStartedAtUtc = GetUtcNow();
+            if (attemptStartedAtUtc >= marketStartUtc.Value)
+            {
+                entryWindowTerminalReason = "maker_gtd_premarket_entry_window_elapsed";
+                break;
+            }
+
+            var attempt = new JsonObject
+            {
+                ["attempt_number"] = attemptNumber,
+                ["started_at_utc"] = FormatMakerGtdTimestamp(attemptStartedAtUtc)
+            };
+            attempts.Add(attempt);
+
+            var s0Read = await MeasureEntryLatencyAsync(
+                latencyMetrics,
+                EntryLatencyPhase.OrderBook,
+                () => ReadMakerGtdDirectOrderBookAsync(
+                    selectedOutcome.AssetId,
+                    "S0",
+                    cancellationToken));
+            var s0EvaluatedAtUtc = GetUtcNow();
+            attempt["s0"] = BuildMakerGtdBookEvidenceJson(
+                s0Read,
+                s0EvaluatedAtUtc,
+                maxQuoteAge);
+            if (s0Read.OrderBook is not { } s0)
+            {
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "s0_evidence_unavailable",
+                    s0Read.RejectionReason ?? "maker_gtd_s0_order_book_missing");
+                continue;
+            }
+
+            var s0RejectionReason = ValidateMakerGtdS0Book(
+                s0,
+                selectedOutcome.AssetId,
+                market.ConditionId,
+                s0EvaluatedAtUtc,
+                maxQuoteAge);
+            if (s0RejectionReason is not null)
+            {
+                SetMakerGtdAttemptFailure(attempt, "s0_rejected", s0RejectionReason);
+                continue;
+            }
+
+            var bestBid = s0.BestBid!.Value;
+            var bestAsk = s0.BestAsk!.Value;
+            var tickSize = s0.TickSize!.Value;
+            var rawLimitPrice = Math.Min(
+                makerMaximumOrderPrice.Value,
+                Math.Min(bestBid + tickSize, bestAsk - tickSize));
+            var limitPrice = RoundDownToTick(rawLimitPrice, tickSize);
+            attempt["raw_limit_price"] = rawLimitPrice;
+            attempt["limit_price"] = limitPrice;
+            attempt["tick_size"] = tickSize;
+            if (limitPrice <= 0m ||
+                limitPrice >= bestAsk ||
+                limitPrice > makerMaximumOrderPrice.Value)
+            {
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "price_rejected",
+                    "maker_gtd_post_only_limit_price_invalid");
+                continue;
+            }
+
+            var sizing = CreateLimitMinimumStakeSizing(
+                s0,
+                limitPrice,
+                stakeMultiplier,
+                ClobBookSource);
+            attempt["stake_sizing"] = BuildMakerGtdStakeSizingJson(
+                sizing,
+                paperLostCounterAdjustment);
+            if (!sizing.Available)
+            {
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "sizing_rejected",
+                    sizing.RejectionReason ?? "maker_gtd_stake_sizing_rejected");
+                continue;
+            }
+
+            var frozenAtUtc = GetUtcNow();
+            if (frozenAtUtc >= marketStartUtc.Value)
+            {
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "entry_window_elapsed",
+                    "maker_gtd_premarket_entry_window_elapsed_before_freeze");
+                entryWindowTerminalReason = "maker_gtd_premarket_entry_window_elapsed";
+                break;
+            }
+
+            var intentDecisionId = Guid.NewGuid();
+            var intent = MakerGtdBuyExecutionIntent.Create(
+                variant.Id,
+                intentDecisionId,
+                market.ConditionId,
+                selectedOutcome.AssetId,
+                makerMaximumOrderPrice.Value,
+                limitPrice,
+                sizing.TargetNotionalUsd,
+                sizing.TargetSizeShares,
+                s0,
+                frozenAtUtc,
+                effectiveExpiresAtUtc,
+                clobGtdExpirationUtc);
+            var intentJson = BuildMakerGtdFrozenIntentJson(intent);
+            attempt["frozen_intent"] = intentJson;
+            var parity = MakerGtdExecutionParity.Validate(intent);
+            if (!parity.IsValid)
+            {
+                attempt["intent_validation_errors"] = JsonSerializer.SerializeToNode(parity.Errors);
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "intent_rejected",
+                    "maker_gtd_execution_intent_invalid");
+                continue;
+            }
+
+            var admission = await makerGtdHandoff.EnterPlacementAdmissionAsync(
+                selectedOutcome.AssetId,
+                cancellationToken);
+            var paperOrderId = Guid.Empty;
+            var pendingOrderActivated = false;
+            var publicationCompleted = false;
+            try
+            {
+            var s1Read = await MeasureEntryLatencyAsync(
+                latencyMetrics,
+                EntryLatencyPhase.OrderBook,
+                () => ReadMakerGtdDirectOrderBookAsync(
+                    selectedOutcome.AssetId,
+                    "S1",
+                    cancellationToken));
+            var s1EvaluatedAtUtc = GetUtcNow();
+            attempt["s1"] = BuildMakerGtdBookEvidenceJson(
+                s1Read,
+                s1EvaluatedAtUtc,
+                maxQuoteAge);
+            if (s1EvaluatedAtUtc >= marketStartUtc.Value)
+            {
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "entry_window_elapsed",
+                    "maker_gtd_premarket_entry_window_elapsed_before_acceptance");
+                entryWindowTerminalReason = "maker_gtd_premarket_entry_window_elapsed";
+                break;
+            }
+
+            if (s1Read.OrderBook is not { } s1)
+            {
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "s1_evidence_unavailable",
+                    s1Read.RejectionReason ?? "maker_gtd_s1_order_book_missing");
+                continue;
+            }
+
+            var s1IsCurrent = IsMakerGtdBookCurrent(
+                s1,
+                s1EvaluatedAtUtc,
+                maxQuoteAge,
+                out _);
+            var acceptance = MakerGtdPaperPostOnlyAcceptanceEvaluator.Evaluate(
+                new MakerGtdFrozenPostOnlyBuyIntent(
+                    intent.AssetId,
+                    intent.ConditionId,
+                    intent.LimitPrice,
+                    intent.TargetSizeShares,
+                    intent.FrozenAtUtc),
+                new MakerGtdPostOnlyBookEvidence(
+                    s1.AssetId,
+                    s1.ConditionId,
+                    s1.BestAsk,
+                    s1.SourceTimestampUtc ?? s1.SnapshotAtUtc,
+                    s1.ReceivedAtUtc.GetValueOrDefault(),
+                    s1.HasAuthoritativeSourceTimestamp,
+                    s1IsCurrent,
+                    IsDuplicateDelivery: false));
+            attempt["acceptance_outcome"] = acceptance.Outcome.ToString();
+            attempt["s1_received_at_utc"] = FormatMakerGtdTimestamp(acceptance.AcceptedAtUtc);
+            attempt["observed_best_ask"] = acceptance.ObservedBestAsk;
+            if (!acceptance.Accepted || acceptance.AcceptedAtUtc is not { } s1ReceivedAtUtc)
+            {
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "post_only_not_accepted",
+                    acceptance.ReasonCode);
+                continue;
+            }
+
+            if (s1ReceivedAtUtc >= marketStartUtc.Value)
+            {
+                SetMakerGtdAttemptFailure(
+                    attempt,
+                    "entry_window_elapsed",
+                    "maker_gtd_premarket_entry_window_elapsed_at_acceptance");
+                entryWindowTerminalReason = "maker_gtd_premarket_entry_window_elapsed";
+                break;
+            }
+
+                paperOrderId = Guid.NewGuid();
+                admission.ActivatePendingOrder(
+                    paperOrderId,
+                    MakerGtdPaperExecutionContract.ExecutionSource);
+                pendingOrderActivated = true;
+                var acceptedAtUtc = GetUtcNow();
+                attempt["accepted_at_utc"] = FormatMakerGtdTimestamp(acceptedAtUtc);
+                if (acceptedAtUtc >= marketStartUtc.Value)
+                {
+                    SetMakerGtdAttemptFailure(
+                        attempt,
+                        "entry_window_elapsed",
+                        "maker_gtd_premarket_entry_window_elapsed_at_registry_activation");
+                    entryWindowTerminalReason = "maker_gtd_premarket_entry_window_elapsed";
+                    break;
+                }
+
+                attempt["outcome"] = "accepted_resting";
+                attempt["reason_code"] = acceptance.ReasonCode;
+                attempt["completed_at_utc"] = FormatMakerGtdTimestamp(s1EvaluatedAtUtc);
+                makerGtd["terminal_outcome"] = "accepted_resting";
+                makerGtd["accepted_attempt_number"] = attemptNumber;
+                makerGtd["accepted_at_utc"] = FormatMakerGtdTimestamp(acceptedAtUtc);
+                makerGtd["s1_received_at_utc"] = FormatMakerGtdTimestamp(s1ReceivedAtUtc);
+                makerGtd["frozen_intent"] = BuildMakerGtdFrozenIntentJson(intent);
+                makerGtd["attempts_completed"] = attempts.Count;
+
+                var statusAtAcceptance = marketDataCache.Status;
+                var subscribedAssetsAtAcceptance = marketDataCache.SubscribedAssetIds;
+                var assetSubscribed = subscribedAssetsAtAcceptance.Contains(
+                    selectedOutcome.AssetId,
+                    StringComparer.Ordinal);
+                root["market_data_status_at_acceptance"] = new JsonObject
+                {
+                    ["connection_state"] = statusAtAcceptance.ConnectionState.ToString(),
+                    ["stale"] = statusAtAcceptance.Stale,
+                    ["reconnect_count"] = statusAtAcceptance.ReconnectCount,
+                    ["last_connected_utc"] = FormatMakerGtdTimestamp(statusAtAcceptance.LastConnectedUtc),
+                    ["last_disconnected_utc"] = FormatMakerGtdTimestamp(statusAtAcceptance.LastDisconnectedUtc),
+                    ["accepted_at_utc"] = FormatMakerGtdTimestamp(acceptedAtUtc),
+                    ["asset_subscribed"] = assetSubscribed,
+                    ["subscribed_assets_count"] = subscribedAssetsAtAcceptance.Count
+                };
+
+                var rawDecisionJson = root.ToJsonString();
+                var signal = CreateSignal(
+                    market,
+                    selectedOutcome,
+                    variant,
+                    intent.LimitPrice,
+                    intent.TargetSizeShares,
+                    intent.TargetNotionalUsd,
+                    acceptedAtUtc);
+                var order = CreatePendingOpeningLimitPaperOrder(
+                    signal,
+                    selectedOutcome,
+                    variant,
+                    intent.LimitPrice,
+                    intent.TargetSizeShares,
+                    intent.TargetNotionalUsd,
+                    acceptedAtUtc,
+                    intent.EffectiveExpiresAtUtc,
+                    rawDecisionJson,
+                    executionSource: MakerGtdPaperExecutionContract.ExecutionSource,
+                    paperOrderId: paperOrderId);
+                var restingRun = CreateRestingRun(
+                    run,
+                    market,
+                    selectedOutcome,
+                    intent.LimitPrice,
+                    intent.TargetNotionalUsd,
+                    intent.TargetSizeShares,
+                    signal.Id,
+                    order.Id,
+                    acceptedAtUtc);
+                var batch = new PaperEntryPersistenceBatch(
+                    [signal],
+                    [order],
+                    [],
+                    [],
+                    [],
+                    [restingRun]);
+
+                await admission.DisposeAsync();
+                await WaitForEntryPlacementLockAsync(latencyMetrics, cancellationToken);
+                try
+                {
+                    await repository.AddPaperEntryPersistenceBatchAsync(batch, cancellationToken);
+                    MarkLocallyFinalizedEntryRuns(batch.StrategyRuns);
+                    exposureCache.ApplyPaperOrder(order);
+                    makerGtdHandoff.MarkPublished(order.Id);
+                    publicationCompleted = true;
+                }
+                finally
+                {
+                    entryPlacementLock.Release();
+                }
+
+                logger.LogInformation(
+                    "ETH Reference Average Maker GTD Paper order accepted resting. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} Attempt={Attempt} LimitPrice={LimitPrice} StakeUsd={StakeUsd} SizeShares={SizeShares} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
+                    variant.Code,
+                    market.Slug,
+                    selectedOutcome.Outcome,
+                    attemptNumber,
+                    intent.LimitPrice,
+                    intent.TargetNotionalUsd,
+                    intent.TargetSizeShares,
+                    intent.EffectiveExpiresAtUtc);
+                return MakerGtdPaperPlacementResult.Accepted(rawDecisionJson);
+            }
+            finally
+            {
+                await admission.DisposeAsync();
+                if (pendingOrderActivated && !publicationCompleted)
+                {
+                    makerGtdHandoff.MarkFailed(paperOrderId);
+                }
+            }
+        }
+
+        var finalReason = entryWindowTerminalReason ?? "maker_gtd_post_only_attempts_exhausted";
+        return CompleteMakerGtdPlacementFailure(root, makerGtd, finalReason);
+    }
+
+    private async Task<MakerGtdDirectOrderBookRead> ReadMakerGtdDirectOrderBookAsync(
+        string assetId,
+        string evidenceStage,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var orderBook = await clobClient.GetOrderBookAsync(assetId, cancellationToken);
+            return orderBook is null
+                ? MakerGtdDirectOrderBookRead.Reject("maker_gtd_rest_order_book_missing")
+                : MakerGtdDirectOrderBookRead.Found(orderBook);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (PolymarketApiException ex) when (IsMissingOrderBook(ex))
+        {
+            logger.LogInformation(
+                "CLOB /book returned no Maker GTD Paper evidence. Stage={Stage} TokenId={TokenId} Message={Message}",
+                evidenceStage,
+                assetId,
+                ex.Message);
+            return MakerGtdDirectOrderBookRead.Reject(
+                "maker_gtd_rest_order_book_not_found",
+                ex.Message);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "CLOB /book request failed for Maker GTD Paper evidence. Stage={Stage} TokenId={TokenId}",
+                evidenceStage,
+                assetId);
+            await TryRecordApiErrorAsync(
+                "GetMakerGtdOrderBook" + evidenceStage,
+                ex.Message,
+                cancellationToken);
+            return MakerGtdDirectOrderBookRead.Reject(
+                "maker_gtd_rest_order_book_request_failed",
+                ex.Message);
+        }
+    }
+
+    private static string? ValidateMakerGtdS0Book(
+        OrderBookSnapshot orderBook,
+        string expectedAssetId,
+        string expectedConditionId,
+        DateTimeOffset evaluatedAtUtc,
+        TimeSpan maxQuoteAge)
+    {
+        if (!string.Equals(orderBook.AssetId, expectedAssetId, StringComparison.Ordinal))
+        {
+            return "maker_gtd_s0_asset_mismatch";
+        }
+
+        if (!string.Equals(orderBook.ConditionId, expectedConditionId, StringComparison.Ordinal))
+        {
+            return "maker_gtd_s0_condition_mismatch";
+        }
+
+        if (!orderBook.HasAuthoritativeSourceTimestamp)
+        {
+            return "maker_gtd_s0_timestamp_not_authoritative";
+        }
+
+        if (orderBook.ReceivedAtUtc is null)
+        {
+            return "maker_gtd_s0_received_at_missing";
+        }
+
+        if (!IsMakerGtdBookCurrent(orderBook, evaluatedAtUtc, maxQuoteAge, out _))
+        {
+            return "maker_gtd_s0_book_not_current";
+        }
+
+        if (orderBook.BestBid is not > 0m or >= 1m)
+        {
+            return "maker_gtd_s0_best_bid_invalid";
+        }
+
+        if (orderBook.BestAsk is not > 0m or >= 1m)
+        {
+            return "maker_gtd_s0_best_ask_invalid";
+        }
+
+        if (orderBook.IsCrossed)
+        {
+            return "maker_gtd_s0_book_crossed";
+        }
+
+        if (orderBook.TickSize is not > 0m)
+        {
+            return "maker_gtd_s0_tick_size_missing";
+        }
+
+        return orderBook.MinOrderSize is > 0m
+            ? null
+            : "maker_gtd_s0_min_order_size_missing";
+    }
+
+    private static bool IsMakerGtdBookCurrent(
+        OrderBookSnapshot orderBook,
+        DateTimeOffset evaluatedAtUtc,
+        TimeSpan maxQuoteAge,
+        out TimeSpan? age)
+    {
+        if (!orderBook.HasAuthoritativeSourceTimestamp ||
+            orderBook.SourceTimestampUtc is not { } sourceTimestampUtc)
+        {
+            age = null;
+            return false;
+        }
+
+        var calculatedAge = evaluatedAtUtc - sourceTimestampUtc;
+        if (calculatedAge < TimeSpan.Zero)
+        {
+            calculatedAge = TimeSpan.Zero;
+        }
+
+        age = calculatedAge;
+        return calculatedAge <= maxQuoteAge;
+    }
+
+    private static JsonObject BuildMakerGtdBookEvidenceJson(
+        MakerGtdDirectOrderBookRead read,
+        DateTimeOffset evaluatedAtUtc,
+        TimeSpan maxQuoteAge)
+    {
+        var orderBook = read.OrderBook;
+        TimeSpan? age = null;
+        var isCurrent = orderBook is not null && IsMakerGtdBookCurrent(
+            orderBook,
+            evaluatedAtUtc,
+            maxQuoteAge,
+            out age);
+
+        return new JsonObject
+        {
+            ["fetch_rejection_reason"] = read.RejectionReason,
+            ["fetch_error"] = read.Error,
+            ["evaluated_at_utc"] = FormatMakerGtdTimestamp(evaluatedAtUtc),
+            ["max_age_ms"] = (long)Math.Ceiling(maxQuoteAge.TotalMilliseconds),
+            ["age_ms"] = age is { } value ? (long)Math.Ceiling(value.TotalMilliseconds) : null,
+            ["is_current"] = isCurrent,
+            ["asset_id"] = orderBook?.AssetId,
+            ["condition_id"] = orderBook?.ConditionId,
+            ["source_timestamp_utc"] = FormatMakerGtdTimestamp(orderBook?.SourceTimestampUtc),
+            ["received_at_utc"] = FormatMakerGtdTimestamp(orderBook?.ReceivedAtUtc),
+            ["timestamp_quality"] = orderBook?.TimestampQuality.ToString(),
+            ["timestamp_is_authoritative"] = orderBook?.HasAuthoritativeSourceTimestamp ?? false,
+            ["source_event_id"] = orderBook?.SourceEventId,
+            ["best_bid"] = orderBook?.BestBid,
+            ["best_ask"] = orderBook?.BestAsk,
+            ["spread_abs"] = orderBook?.SpreadAbs,
+            ["min_order_size"] = orderBook?.MinOrderSize,
+            ["tick_size"] = orderBook?.TickSize,
+            ["negative_risk"] = orderBook?.NegativeRisk,
+            ["last_trade_price"] = orderBook?.LastTradePrice,
+            ["bids"] = orderBook is null
+                ? new JsonArray()
+                : JsonSerializer.SerializeToNode(orderBook.Bids.Select(level => new
+                {
+                    price = level.Price,
+                    size = level.Size
+                })),
+            ["asks"] = orderBook is null
+                ? new JsonArray()
+                : JsonSerializer.SerializeToNode(orderBook.Asks.Select(level => new
+                {
+                    price = level.Price,
+                    size = level.Size
+                }))
+        };
+    }
+
+    private static JsonObject BuildMakerGtdStakeSizingJson(
+        BtcMinimumStakeSizing sizing,
+        LostCounterStakeAdjustment adjustment)
+    {
+        return new JsonObject
+        {
+            ["available"] = sizing.Available,
+            ["rejection_reason"] = sizing.RejectionReason,
+            ["source"] = sizing.Source,
+            ["stake_multiplier"] = sizing.StakeMultiplier,
+            ["minimum_stake_safety_multiplier"] = sizing.SafetyMultiplier,
+            ["rounding_mode"] = sizing.RoundingMode,
+            ["min_order_size"] = sizing.MinOrderSize,
+            ["minimum_notional_usd"] = sizing.MinimumNotionalUsd,
+            ["raw_target_notional_usd"] = sizing.RawTargetNotionalUsd,
+            ["target_notional_usd"] = sizing.TargetNotionalUsd,
+            ["target_size_shares"] = sizing.TargetSizeShares,
+            ["paper_lost_coeff_configured"] = adjustment.ConfiguredCoeff,
+            ["paper_lost_counter"] = adjustment.LostCounter,
+            ["paper_lost_counter_coeff"] = adjustment.LostCounterCoeff,
+            ["paper_lost_base_stake_usd"] = adjustment.BaseStakeUsd,
+            ["paper_lost_add_stake_usd"] = adjustment.AddStakeUsd,
+            ["paper_lost_effective_stake_usd"] = adjustment.EffectiveStakeUsd
+        };
+    }
+
+    private static JsonObject BuildMakerGtdFrozenIntentJson(MakerGtdBuyExecutionIntent intent)
+    {
+        return new JsonObject
+        {
+            ["strategy_id"] = intent.StrategyId.ToString("D"),
+            ["decision_id"] = intent.DecisionId.ToString("D"),
+            ["condition_id"] = intent.ConditionId,
+            ["asset_id"] = intent.AssetId,
+            ["side"] = intent.Side.ToString(),
+            ["post_only"] = intent.PostOnly,
+            ["order_type"] = MakerGtdBuyExecutionIntent.TimeInForce,
+            ["maximum_order_price"] = intent.MaximumOrderPrice,
+            ["limit_price"] = intent.LimitPrice,
+            ["requested_notional_usd"] = intent.RequestedNotionalUsd,
+            ["requested_size_shares"] = intent.RequestedSizeShares,
+            ["target_notional_usd"] = intent.TargetNotionalUsd,
+            ["target_size_shares"] = intent.TargetSizeShares,
+            ["tick_size"] = intent.TickSize,
+            ["min_order_size"] = intent.MinOrderSize,
+            ["negative_risk"] = intent.NegativeRisk,
+            ["decision_snapshot_at_utc"] = FormatMakerGtdTimestamp(intent.DecisionSnapshotAtUtc),
+            ["frozen_at_utc"] = FormatMakerGtdTimestamp(intent.FrozenAtUtc),
+            ["effective_expires_at_utc"] = FormatMakerGtdTimestamp(intent.EffectiveExpiresAtUtc),
+            ["clob_gtd_expiration_utc"] = FormatMakerGtdTimestamp(intent.ClobGtdExpirationUtc)
+        };
+    }
+
+    private void SetMakerGtdAttemptFailure(
+        JsonObject attempt,
+        string outcome,
+        string reasonCode)
+    {
+        attempt["outcome"] = outcome;
+        attempt["reason_code"] = reasonCode;
+        attempt["completed_at_utc"] = FormatMakerGtdTimestamp(GetUtcNow());
+    }
+
+    private MakerGtdPaperPlacementResult CompleteMakerGtdPlacementFailure(
+        JsonObject root,
+        JsonObject makerGtd,
+        string reason)
+    {
+        var completedAtUtc = GetUtcNow();
+        makerGtd["terminal_outcome"] = "skipped";
+        makerGtd["terminal_reason"] = reason;
+        makerGtd["completed_at_utc"] = FormatMakerGtdTimestamp(completedAtUtc);
+        makerGtd["terminal_evaluated_at_utc"] = FormatMakerGtdTimestamp(completedAtUtc);
+        makerGtd["attempts_completed"] = makerGtd["attempts"] is JsonArray attempts
+            ? attempts.Count
+            : 0;
+        root["skip_reason"] = reason;
+        return MakerGtdPaperPlacementResult.Skipped(reason, root.ToJsonString());
+    }
+
+    private async Task PersistReferenceAverageMakerGtdSkippedRunAsync(
+        StrategyMarketPaperRun run,
+        BtcUpDown5mStrategyVariant variant,
+        string reason,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken,
+        string rawDecisionJson)
+    {
+        var skippedRun = CreateSkippedRun(run, reason, nowUtc, rawDecisionJson);
+        await repository.UpdateStrategyMarketPaperRunAsync(skippedRun, cancellationToken);
+        MarkLocallyFinalizedEntryRuns([skippedRun]);
+        LogSkippedRun(skippedRun, variant);
+    }
+
+    private static string? FormatMakerGtdTimestamp(DateTimeOffset? value)
+    {
+        return value?.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+    }
+
     private Task<PolymarketGammaMarket?> GetPolymarketGammaMarketForEntryAsync(
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<PolymarketGammaMarket?>>> marketLookupTasks,
         string marketId,
@@ -6802,6 +7535,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFak or
             BtcUpDown5mStrategyBehavior.FixedOutcomePreviousResultBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
+            BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdMakerGtdPremarket or
             BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.LowEnterReferenceAverageBpsThresholdFakPremarket or
             BtcUpDown5mStrategyBehavior.ThreeHourReferenceAverageBpsThresholdFakPremarket or
@@ -6900,6 +7634,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.BpsConfirmedAveragePremarket;
     }
 
+    private static bool IsReferenceAverageBpsMakerGtdPremarketEntry(BtcUpDown5mStrategyVariant variant)
+    {
+        return variant.Behavior == BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdMakerGtdPremarket;
+    }
+
     private static bool IsOptimizedReferenceAverageBpsFakPremarketEntry(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior == BtcUpDown5mStrategyBehavior.OptimizedReferenceAverageBpsThresholdFakPremarket;
@@ -6956,6 +7695,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return IsPreOpenFixedDirectionOpeningLimitEntry(variant) ||
             IsFixedOutcomePreviousResultBpsFakPremarketEntry(variant) ||
             IsReferenceAverageBpsFakPremarketEntry(variant) ||
+            IsReferenceAverageBpsMakerGtdPremarketEntry(variant) ||
             IsAbsoluteBpsFakPremarketEntry(variant) ||
             IsFuturesBasisBpsFakPremarketEntry(variant) ||
             IsPreviousScoreCounterTrendFakPremarketEntry(variant) ||
@@ -7391,7 +8131,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     nowUtc,
                     skipBpsStreakMoveSignalTasks,
                     cancellationToken),
-            BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
+            BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket or
+                BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdMakerGtdPremarket => await GetReferenceAverageBpsThresholdEntryDecisionAsync(
                 market,
                 variant,
                 stakeUsd,
@@ -20181,10 +20922,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset expiresAtUtc,
         string? rawDecisionJson,
         Guid? correlationId = null,
-        string executionSource = "")
+        string executionSource = "",
+        Guid? paperOrderId = null)
     {
         return new PaperOrder(
-            Guid.NewGuid(),
+            paperOrderId ?? Guid.NewGuid(),
             signal.Id,
             variant.CopiedTraderWallet,
             PaperOrderStatus.Pending,
@@ -21695,6 +22437,40 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             PaperOrderId = paperOrderId,
             EnteredAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc
+        };
+    }
+
+    private static StrategyMarketPaperRun CreateRestingRun(
+        StrategyMarketPaperRun run,
+        PolymarketGammaMarket market,
+        BtcUpDown5mOutcomeQuote selectedOutcome,
+        decimal limitPrice,
+        decimal reservedNotionalUsd,
+        decimal sizeShares,
+        Guid signalId,
+        Guid paperOrderId,
+        DateTimeOffset acceptedAtUtc)
+    {
+        return run with
+        {
+            ConditionId = market.ConditionId,
+            MarketSlug = market.Slug,
+            MarketTitle = market.Question,
+            Category = market.Category,
+            MarketStartUtc = BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market) ?? run.MarketStartUtc,
+            MarketEndUtc = market.EndDateUtc,
+            Status = StrategyMarketPaperRunStatuses.Resting,
+            SelectedAssetId = selectedOutcome.AssetId,
+            SelectedOutcome = selectedOutcome.Outcome,
+            EntryPrice = limitPrice,
+            StakeUsd = reservedNotionalUsd,
+            SizeShares = sizeShares,
+            SignalId = signalId,
+            PaperOrderId = paperOrderId,
+            EnteredAtUtc = null,
+            SkipReason = null,
+            SkipDiagnosticsJson = null,
+            UpdatedAtUtc = acceptedAtUtc
         };
     }
 
@@ -23431,6 +24207,40 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private sealed record OrderBookFetchResult(
         OrderBookSnapshot? OrderBook,
         string? RejectionReason);
+
+    private sealed record MakerGtdDirectOrderBookRead(
+        OrderBookSnapshot? OrderBook,
+        string? RejectionReason,
+        string? Error)
+    {
+        public static MakerGtdDirectOrderBookRead Found(OrderBookSnapshot orderBook)
+        {
+            return new MakerGtdDirectOrderBookRead(orderBook, null, null);
+        }
+
+        public static MakerGtdDirectOrderBookRead Reject(string reason, string? error = null)
+        {
+            return new MakerGtdDirectOrderBookRead(null, reason, error);
+        }
+    }
+
+    private sealed record MakerGtdPaperPlacementResult(
+        bool Placed,
+        string? SkipReason,
+        string RawDecisionJson)
+    {
+        public static MakerGtdPaperPlacementResult Accepted(string rawDecisionJson)
+        {
+            return new MakerGtdPaperPlacementResult(true, null, rawDecisionJson);
+        }
+
+        public static MakerGtdPaperPlacementResult Skipped(
+            string reason,
+            string rawDecisionJson)
+        {
+            return new MakerGtdPaperPlacementResult(false, reason, rawDecisionJson);
+        }
+    }
 
     private sealed record ObserveMarketsResult(
         int Observed,

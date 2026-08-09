@@ -27,8 +27,19 @@ contains the full safety and project rules.
 - Never re-fetch an order book after freezing a FAK/FOK intent in order to validate
   liquidity, resize, or reprice it. Local request-shape validation may only accept
   or reject the unchanged intent; the venue determines the actual fill.
-- `PaperOnly` is a transport restriction, not a semantic exemption. Logic without
-  a proven Live equivalent is `ResearchOnly` and must not contribute to Paper PnL.
+- `PaperOnly` is a transport restriction, not a general semantic exemption. Logic
+  without a proven Live equivalent is `ResearchOnly` and must not contribute to
+  Paper PnL except for the single closed exception explicitly approved by the user
+  on 2026-08-09: the exact 28 `ETH` neutral Reference Average Maker-GTD strategies
+  at thresholds `1..10` and `15..100` step `5`, behavior
+  `ReferenceAverageBpsThresholdMakerGtdPremarket`, catalog ID
+  `b7c50005-0000-4000-8223-{100+threshold, zero-padded to 12 digits}`, and execution
+  source `eth_reference_average_maker_gtd_paper`, with `PaperOnly=true`. This family
+  intentionally enters ordinary Paper metrics under the mandatory label
+  `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`; Live
+  submission is disabled. No alias, clone, descendant, future strategy, or changed
+  execution semantic inherits the
+  exception, and the broad parity/ResearchOnly rule remains unchanged otherwise.
 - Do not silently ignore API errors; persist/log explicit failure reasons.
 - Run tests before declaring implementation tasks complete.
 - Update README/project memory/task context when behavior changes.

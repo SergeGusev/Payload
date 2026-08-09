@@ -691,6 +691,7 @@ public sealed class AuthPlaceholderTests
         var sent = Assert.Single(handler.Requests);
         var body = handler.Bodies.Single();
         Assert.True(result.Success);
+        Assert.Equal(200, result.HttpStatusCode);
         Assert.Equal(HttpMethod.Post, sent.Method);
         Assert.Equal("/order", sent.RequestUri?.AbsolutePath);
         Assert.True(sent.Headers.Contains(PolymarketAuthHeaderFactory.PolySignature));
@@ -738,11 +739,48 @@ public sealed class AuthPlaceholderTests
         }, CancellationToken.None);
 
         Assert.False(result.Success);
+        Assert.Equal(400, result.HttpStatusCode);
         Assert.Equal(
             LiveOrderRejectionClassifier.InsufficientBalanceOrAllowanceStatus,
             result.ResponseStatus);
         Assert.Contains("insufficient balance or allowance", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("balance: 2514192", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TradingClient_PostOnlyCrossingRejectionAllowsOnlyNewIntentRetry()
+    {
+        var signer = new ClobV2OrderSigner();
+        var privateKey = DeterministicUnfundedTestPrivateKey;
+        var signerAddress = signer.GetAddress(privateKey);
+        var handler = new CapturingHttpMessageHandler(_ => new HttpResponseMessage(System.Net.HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("""{"error":"INVALID_POST_ONLY_ORDER"}""")
+        });
+        var client = CreateLiveClient(handler, new Dictionary<string, string>
+        {
+            ["api-key"] = "fixture-key",
+            ["api-key-owner"] = "fixture-owner",
+            ["api-secret"] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            ["api-passphrase"] = "fixture-passphrase",
+            ["live-private-key"] = privateKey
+        });
+
+        var result = await client.PlaceLiveOrderAsync(FixedOrderRequest() with
+        {
+            MakerAddress = signerAddress,
+            SignerAddress = signerAddress,
+            OrderType = ClobV2OrderType.GTD,
+            GtdExpirationUtc = new DateTimeOffset(2026, 05, 01, 12, 0, 0, TimeSpan.Zero),
+            PostOnly = true
+        }, CancellationToken.None);
+        var classification = MakerGtdLivePlacementClassifier.Classify(result);
+
+        Assert.False(result.Success);
+        Assert.Equal(400, result.HttpStatusCode);
+        Assert.Equal(MakerGtdLivePlacementDisposition.RetryNewIntent, classification.Disposition);
+        Assert.True(classification.CanSubmitNewIntent);
+        Assert.False(classification.RequiresReconciliation);
     }
 
     [Fact]

@@ -25,7 +25,7 @@ public sealed class StorageTests
     }
 
     [Fact]
-    public void GetPersistedSkipDiagnosticsJson_DropsPayloadOnlyForTerminalSkippedRuns()
+    public void GetPersistedSkipDiagnosticsJson_DropsGenericSkippedPayloadAndPreservesExactMakerGtdPlacementReceipt()
     {
         var nowUtc = new DateTimeOffset(2026, 7, 26, 15, 0, 0, TimeSpan.Zero);
         var observed = new StrategyMarketPaperRun(
@@ -61,8 +61,54 @@ public sealed class StorageTests
         Assert.Equal(
             observed.SkipDiagnosticsJson,
             PostgresAppRepository.GetPersistedSkipDiagnosticsJson(observed));
-        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(
-            observed with { Status = StrategyMarketPaperRunStatuses.Skipped }));
+        var skipped = observed with { Status = StrategyMarketPaperRunStatuses.Skipped };
+        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped));
+
+        var makerGtdPlacementReasons = new[]
+        {
+            "maker_gtd_variant_not_paper_only",
+            "maker_gtd_market_start_unknown",
+            "maker_gtd_market_end_unknown",
+            "maker_gtd_effective_expiration_elapsed",
+            "maker_gtd_maximum_order_price_invalid",
+            "maker_gtd_premarket_entry_window_elapsed",
+            "maker_gtd_post_only_attempts_exhausted"
+        };
+        foreach (var reason in makerGtdPlacementReasons)
+        {
+            var diagnostics = JsonSerializer.Serialize(new
+            {
+                execution_source = "eth_reference_average_maker_gtd_paper",
+                skip_reason = reason,
+                maker_gtd = new
+                {
+                    execution_source = "eth_reference_average_maker_gtd_paper",
+                    terminal_outcome = "skipped",
+                    terminal_reason = reason,
+                    attempts = new[] { new { attempt_number = 1 } }
+                }
+            });
+            var makerSkipped = skipped with
+            {
+                SkipReason = reason,
+                SkipDiagnosticsJson = diagnostics
+            };
+
+            Assert.Equal(
+                diagnostics,
+                PostgresAppRepository.GetPersistedSkipDiagnosticsJson(makerSkipped));
+        }
+
+        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped with
+        {
+            SkipReason = "maker_gtd_post_only_attempts_exhausted",
+            SkipDiagnosticsJson = """{"execution_source":"another_source"}"""
+        }));
+        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped with
+        {
+            SkipReason = "unrelated_skip",
+            SkipDiagnosticsJson = """{"execution_source":"eth_reference_average_maker_gtd_paper"}"""
+        }));
     }
 
     [Fact]

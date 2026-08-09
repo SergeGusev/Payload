@@ -2,13 +2,19 @@
 
 ## Purpose
 
-Paper results are valid only when they model behavior that the current Live
-Polymarket integration can perform. This contract is mandatory for every strategy,
-order type, simulator, execution-policy change, replay, and performance claim.
+Except for the single closed user-approved ordinary-Paper exception defined in
+this document, Paper results are valid only when they model behavior that the
+current Live Polymarket integration can perform. This contract is mandatory for
+every strategy, order type, simulator, execution-policy change, replay, and
+performance claim.
 
 The governing rule is:
 
-> No proven Live equivalent means no Paper trade.
+> Default rule: no proven Live equivalent means no Paper trade.
+
+The default has one closed exception, defined under **Closed user-approved
+ordinary-Paper exception** below. That exception is a classification decision, not
+evidence of Live equivalence, and cannot be inferred for any other strategy.
 
 ## Verified Polymarket FAK equivalent
 
@@ -28,6 +34,71 @@ Therefore the supported Live equivalent for a capped Paper FAK BUY is:
 `side=BUY`, `orderType=FAK`, `postOnly=false`, a cash amount, and the same hard
 maximum order price. Paper may fill only snapshot asks at or below that price;
 it must mark an unfilled remainder cancelled immediately.
+
+## Maker post-only GTD intent and Paper approximation
+
+The current official CLOB documentation also supports a share-based `GTD` BUY
+with `postOnly=true`. Post-only is valid only with `GTC` or `GTD`; if the order
+would match immediately, the venue rejects it instead of executing it as a
+Taker. A stated GTD expiration includes the documented one-minute security
+threshold. The ETH Reference Average Maker experiment therefore states market
+end as the CLOB expiration and stops Paper execution one minute before market
+end.
+
+For one placement attempt, a fresh complete decision book `S0` produces the
+tick-aligned limit, size, and immutable intent. Live must submit that unchanged
+intent. Paper obtains a separate fresh book `S1` only to emulate the venue-side
+post-only decision: a BUY limit greater than or equal to `S1.bestAsk` is a
+definitive simulated crossing rejection; a lower limit is accepted as
+`Resting`. `S1` cannot resize or reprice the frozen intent. A rejected attempt
+may create a new intent from a newer `S0`, up to the strategy's explicit limit
+of ten attempts. A Live replacement is allowed only after an unambiguous
+`INVALID_POST_ONLY_ORDER` crossing rejection with no order identifier; an order
+identifier or ambiguous transport/server result requires reconciliation and
+must not be retried blindly.
+
+The named Paper-only Maker experiment uses the deliberately optimistic
+`TouchNoDepth` outcome model after acceptance. For the exact token, the first
+authoritative post-acceptance and pre-expiry `last_trade_price <= limit`, or a
+current reconstructed `bestAsk <= limit`, marks the entire Paper order filled
+at its own limit. Equality is executable. Queue position, depth, observed trade
+size, and aggressor side are ignored by explicit design; consequently this is
+not proof that the equivalent Live order would fill or fill completely. Its
+performance must be labeled as this approximation and must not be presented as
+expected Live execution. Missing/stale timestamp evidence cannot fill an order,
+and a reconnect, restart, or other observable continuity loss prevents an
+unfilled expiry from being represented as proven continuous observation.
+
+### Closed user-approved ordinary-Paper exception
+
+On 2026-08-09 the user explicitly approved one closed exception that permits this
+optimistic model to contribute to ordinary Paper accounting. The exception applies
+only when every predicate below is true:
+
+- asset is `ETH`;
+- the strategy is a neutral Reference Average Maker-GTD threshold in the exact set
+  `1..10` plus `15..100` in steps of `5`;
+- behavior is `ReferenceAverageBpsThresholdMakerGtdPremarket`;
+- catalog ID is
+  `b7c50005-0000-4000-8223-{100+threshold, zero-padded to 12 digits}`;
+- persisted execution source is `eth_reference_average_maker_gtd_paper`;
+- the strategy has `PaperOnly=true`, and no Live submission path is enabled.
+
+For these exact 28 strategies, ordinary Paper orders, positions, fills, PnL, win
+rate, and performance inclusion is intentional. Every result must carry the label
+`optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. The
+exception does not claim that a Live order would fill or fill completely. It does
+not relax immutable-intent, PostOnly acceptance, GTD expiry, atomic persistence,
+evidence, audit, or testing requirements. No alias, clone, descendant, future
+strategy, different execution source, predicate mismatch, or changed execution
+semantic inherits the exception; every other unsupported execution model remains
+`ResearchOnly`.
+
+Authoritative references, verified 2026-08-09:
+
+- [Create Order](https://docs.polymarket.com/trading/orders/create)
+- [Orders Overview](https://docs.polymarket.com/trading/orders/overview)
+- [Market WebSocket channel](https://docs.polymarket.com/api-reference/wss/market)
 
 ## Execution intent
 
@@ -60,11 +131,15 @@ other later information are forbidden inputs.
 
 ## Execution and outcome rules
 
-Paper must model the documented behavior of the matching Live order type:
+Paper must model the documented behavior of the matching Live order type. The exact
+closed exception above may depart only from the two explicitly qualified rules
+below; every other execution and outcome rule still applies:
 
-- enforce the same price boundary, liquidity boundary, time-in-force, partial-fill
-  behavior, and cancellation behavior;
-- never fill liquidity that the admissible market evidence does not contain;
+- enforce the same price boundary, time-in-force, and cancellation behavior;
+- enforce the same liquidity boundary and partial-fill behavior, except for the
+  exact closed `TouchNoDepth` exception above;
+- never fill liquidity that the admissible market evidence does not contain, except
+  for the exact closed `TouchNoDepth` inference above;
 - never model atomicity, rollback, or conditional acceptance that the venue does
   not provide;
 - never treat an aggregate result such as final VWAP as a pre-submit constraint
@@ -88,7 +163,8 @@ processor must neither duplicate uncertain accounting nor terminalize and hide
 the order; explicit reconciliation is required.
 
 `PaperOnly` means that the intent is not sent externally. It does not relax any
-rule in this contract.
+rule in this contract except the ordinary-Paper classification explicitly granted
+to the exact closed exception above; that exception still cannot submit Live.
 
 ## Fee accounting and performance reporting
 
@@ -199,11 +275,11 @@ The current model has three material limits:
 
 ## Research-only algorithms
 
-An algorithm that depends on unavailable Live behavior or hindsight must be
-classified `ResearchOnly`. Its records and metrics must be physically or
-logically separated from Paper trades, Paper PnL, Paper win rate, and any statement
-about expected Live execution. Research output must clearly identify the
-counterfactual assumption.
+Except for the exact closed user-approved ordinary-Paper exception above, an
+algorithm that depends on unavailable Live behavior or hindsight must be classified
+`ResearchOnly`. Its records and metrics must be physically or logically separated
+from Paper trades, Paper PnL, Paper win rate, and any statement about expected Live
+execution. Research output must clearly identify the counterfactual assumption.
 
 A research result may become Paper only after its Live equivalent is documented,
 implemented through the common intent path, and covered by the parity gate below.
@@ -221,8 +297,11 @@ Before completing a new or changed Paper execution feature:
    cancellation.
 4. Add a regression test showing that post-fill data cannot alter acceptance of
    the originating order.
-5. Run the relevant test suite. Missing evidence, an unsupported guarantee, or a
-   failing parity test blocks completion and Paper performance claims.
+5. Run the relevant test suite. Outside the exact closed exception, missing
+   evidence, an unsupported guarantee, or a failing parity test blocks completion
+   and Paper performance claims. For the exception, a predicate mismatch, missing
+   mandatory label, enabled Live path, or failing exception contract test blocks
+   completion and ordinary Paper performance claims.
 
 ## Persistence and audit evidence
 

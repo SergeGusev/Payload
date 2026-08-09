@@ -89,6 +89,13 @@ public enum MarketDataEventType
     MarketResolved
 }
 
+public enum MarketDataTimestampQuality
+{
+    Unknown,
+    VenueProvided,
+    ReceiveTimeFallback
+}
+
 public enum TradeTickTraderMatchStatus
 {
     NotFound = 1,
@@ -1076,7 +1083,11 @@ public sealed record OrderBookSnapshot(
     decimal? MinOrderSize = null,
     decimal? TickSize = null,
     bool NegativeRisk = false,
-    decimal? LastTradePrice = null)
+    decimal? LastTradePrice = null,
+    DateTimeOffset? SourceTimestampUtc = null,
+    MarketDataTimestampQuality TimestampQuality = MarketDataTimestampQuality.Unknown,
+    DateTimeOffset? ReceivedAtUtc = null,
+    string? SourceEventId = null)
 {
     public decimal? BestBid => Bids.Count == 0 ? null : Bids.Max(level => level.Price);
 
@@ -1101,6 +1112,9 @@ public sealed record OrderBookSnapshot(
     public bool IsCrossed => BestBid is { } bid && BestAsk is { } ask && bid >= ask;
 
     public bool HasEnoughDepth => Bids.Any(level => level.Size > 0m) && Asks.Any(level => level.Size > 0m);
+
+    public bool HasAuthoritativeSourceTimestamp =>
+        TimestampQuality == MarketDataTimestampQuality.VenueProvided && SourceTimestampUtc is not null;
 }
 
 public sealed record MarketDataUpdate(
@@ -1119,7 +1133,16 @@ public sealed record MarketDataUpdate(
     string? TransactionHash = null,
     string RawJson = "{}",
     string? WinningAssetId = null,
-    string? WinningOutcome = null);
+    string? WinningOutcome = null,
+    DateTimeOffset? SourceTimestampUtc = null,
+    MarketDataTimestampQuality TimestampQuality = MarketDataTimestampQuality.Unknown,
+    DateTimeOffset? ReceivedAtUtc = null,
+    string? SourceEventId = null,
+    string? EventFingerprint = null)
+{
+    public bool HasAuthoritativeSourceTimestamp =>
+        TimestampQuality == MarketDataTimestampQuality.VenueProvided && SourceTimestampUtc is not null;
+}
 
 public sealed record PolymarketWebSocketTradeTick(
     Guid Id,
@@ -1237,6 +1260,7 @@ public sealed record BtcUpDown5mMarketResult(
 public static class StrategyIds
 {
     public const decimal LowerEnterMaximumOrderPrice = 0.50m;
+    public const decimal ReferenceAverageMakerGtdMaximumOrderPrice = 0.99m;
     public const string FollowLeaderIdValue = "f0110a0d-1ead-4c00-8b01-000000000001";
     public const string FollowLeaderCode = "follow_leader";
     public const string FollowLeaderName = "Follow leader";
@@ -1720,10 +1744,16 @@ public static class StrategyIds
                     GetReferenceAverageBpsPremarketIdGroup(asset.Symbol, isUpTrigger: false),
                     thresholdBps,
                     isUpTrigger: false));
-                variants.Add(CreateReferenceAverageBpsThresholdNeutralFakPremarketVariant(
+                var neutralReferenceAverageVariant = CreateReferenceAverageBpsThresholdNeutralFakPremarketVariant(
                     asset.Symbol,
                     GetReferenceAverageBpsNeutralPremarketIdGroup(asset.Symbol),
-                    thresholdBps));
+                    thresholdBps);
+                variants.Add(neutralReferenceAverageVariant);
+                if (string.Equals(asset.Symbol, "ETH", StringComparison.OrdinalIgnoreCase))
+                {
+                    variants.Add(CreateReferenceAverageBpsThresholdNeutralMakerGtdPremarketVariant(
+                        neutralReferenceAverageVariant));
+                }
                 variants.Add(CreateLowEnterReferenceAverageBpsThresholdFakPremarketVariant(
                     asset.Symbol,
                     GetLowEnterReferenceAverageBpsPremarketIdGroup(asset.Symbol),
@@ -2854,6 +2884,39 @@ public static class StrategyIds
             Category: $"{normalizedAsset} Up/Down 5m Bps Reference Average Premarket");
     }
 
+    private static BtcUpDown5mStrategyVariant CreateReferenceAverageBpsThresholdNeutralMakerGtdPremarketVariant(
+        BtcUpDown5mStrategyVariant sourceVariant)
+    {
+        const int idGroup = 8223;
+        if (sourceVariant.Behavior != BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdFakPremarket ||
+            !string.Equals(sourceVariant.ReferenceAssetSymbol, "ETH", StringComparison.Ordinal) ||
+            sourceVariant.FixedOutcome is not null ||
+            sourceVariant.DiffCounterTriggerOutcome is not null ||
+            sourceVariant.DecisionThresholdBps is not { } thresholdBps ||
+            decimal.Truncate(thresholdBps) != thresholdBps)
+        {
+            throw new InvalidOperationException(
+                $"Strategy '{sourceVariant.Code}' is not a neutral ETH Reference Average Premarket source variant.");
+        }
+
+        var threshold = decimal.ToInt32(thresholdBps);
+        var thresholdName = threshold.ToString(CultureInfo.InvariantCulture);
+        return sourceVariant with
+        {
+            Id = Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{100 + threshold:000000000000}"),
+            Code = $"eth_up_down_5m_reference_average_bps_{thresholdName}_maker_gtd_premarket",
+            Name = $"ETH Up or Down 5m {thresholdName} bps Reference Average Maker GTD Premarket",
+            Description =
+                $"Paper-only Maker GTD clone of {sourceVariant.Name}. It preserves the source ETH reference-average envelope signal, direction, timing, stake sizing, and risk checks. Before market open, make at most ten attempts to create one post-only GTD BUY from a fresh current order book with a maximum order price of {ReferenceAverageMakerGtdMaximumOrderPrice.ToString("0.00", CultureInfo.InvariantCulture)}; after the first accepted order, stop retrying. The resting order expires one minute before market end. By explicit user approval, this exact family is a closed ordinary-Paper exception. The optimistic, non-Live-equivalent TouchNoDepth model fills the full order only on later authoritative exact-token evidence: last_trade_price or current best ask at or below the BUY limit; equality counts, and this may overstate fills. Its records intentionally contribute to ordinary Paper orders, PnL, win rate, and performance. Every result must be labeled optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. Live submission is disabled, and no alias, clone, descendant, future strategy, different execution source, predicate mismatch, or changed execution semantic inherits this exception.",
+            Behavior = BtcUpDown5mStrategyBehavior.ReferenceAverageBpsThresholdMakerGtdPremarket,
+            Category = "ETH Up/Down 5m Bps Reference Average Maker GTD Premarket",
+            PaperOnly = true,
+            FakMaximumOrderPrice = null,
+            LowerEnterSourceStrategyId = null,
+            MakerMaximumOrderPrice = ReferenceAverageMakerGtdMaximumOrderPrice
+        };
+    }
+
     private static BtcUpDown5mStrategyVariant CreateLowEnterReferenceAverageBpsThresholdFakPremarketVariant(
         string assetSymbol,
         int idGroup,
@@ -3564,7 +3627,8 @@ public enum BtcUpDown5mStrategyBehavior
     OptimizedReferenceAverageBpsThresholdFakPremarket,
     LowEnterReferenceAverageBpsThresholdFakPremarket,
     ThreeHourReferenceAverageBpsThresholdFakPremarket,
-    ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket
+    ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket,
+    ReferenceAverageBpsThresholdMakerGtdPremarket
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
@@ -3591,7 +3655,8 @@ public sealed record BtcUpDown5mStrategyVariant(
     string? RequiredReferenceAverageWindow = null,
     bool PaperOnly = false,
     decimal? FakMaximumOrderPrice = null,
-    Guid? LowerEnterSourceStrategyId = null)
+    Guid? LowerEnterSourceStrategyId = null,
+    decimal? MakerMaximumOrderPrice = null)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }
@@ -4126,6 +4191,7 @@ public sealed record PaperCopiedTraderPerformanceRefreshResult(
 public static class StrategyMarketPaperRunStatuses
 {
     public const string Observed = "Observed";
+    public const string Resting = "Resting";
     public const string Entered = "Entered";
     public const string Skipped = "Skipped";
     public const string Settled = "Settled";

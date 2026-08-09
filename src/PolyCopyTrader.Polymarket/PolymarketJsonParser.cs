@@ -258,18 +258,32 @@ public static class PolymarketJsonParser
 
     public static OrderBookSnapshot ParseOrderBook(JsonElement root)
     {
+        return ParseOrderBook(root, DateTimeOffset.UtcNow);
+    }
+
+    public static OrderBookSnapshot ParseOrderBook(
+        JsonElement root,
+        DateTimeOffset receivedAtUtc)
+    {
         var assetId = GetString(root, "asset_id") ?? string.Empty;
-        var timestamp = ParseOrderBookTimestamp(GetString(root, "timestamp"));
+        var normalizedReceivedAtUtc = receivedAtUtc.ToUniversalTime();
+        var timestamp = ParseOrderBookTimestamp(
+            GetString(root, "timestamp"),
+            normalizedReceivedAtUtc);
         return new OrderBookSnapshot(
             assetId,
             ParseLevels(root, "bids"),
             ParseLevels(root, "asks"),
-            timestamp,
+            timestamp.EffectiveTimestampUtc,
             GetString(root, "market"),
             GetDecimalOrNull(root, "min_order_size"),
             GetDecimalOrNull(root, "tick_size"),
             GetBool(root, "neg_risk"),
-            GetDecimalOrNull(root, "last_trade_price"));
+            GetDecimalOrNull(root, "last_trade_price"),
+            timestamp.SourceTimestampUtc,
+            timestamp.Quality,
+            normalizedReceivedAtUtc,
+            GetString(root, "hash"));
     }
 
     public static GeoblockStatus ParseGeoblock(JsonElement root)
@@ -1065,14 +1079,29 @@ public static class PolymarketJsonParser
             : PolymarketDataApiActivityType.Unknown;
     }
 
-    private static DateTimeOffset ParseOrderBookTimestamp(string? value)
+    private static ParsedOrderBookTimestamp ParseOrderBookTimestamp(
+        string? value,
+        DateTimeOffset receivedAtUtc)
     {
         if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unix))
         {
-            return FromUnixMillisecondsOrSeconds(unix);
+            try
+            {
+                var sourceTimestampUtc = FromUnixMillisecondsOrSeconds(unix);
+                return new ParsedOrderBookTimestamp(
+                    sourceTimestampUtc,
+                    sourceTimestampUtc,
+                    MarketDataTimestampQuality.VenueProvided);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+            }
         }
 
-        return DateTimeOffset.UtcNow;
+        return new ParsedOrderBookTimestamp(
+            receivedAtUtc,
+            SourceTimestampUtc: null,
+            MarketDataTimestampQuality.ReceiveTimeFallback);
     }
 
     private static DateTimeOffset FromUnixMillisecondsOrSeconds(long value)
@@ -1086,6 +1115,11 @@ public static class PolymarketJsonParser
     {
         return value <= 0 ? DateTimeOffset.UnixEpoch : DateTimeOffset.FromUnixTimeSeconds(value);
     }
+
+    private readonly record struct ParsedOrderBookTimestamp(
+        DateTimeOffset EffectiveTimestampUtc,
+        DateTimeOffset? SourceTimestampUtc,
+        MarketDataTimestampQuality Quality);
 
     private static DateTimeOffset? GetUnixTimestampOrNull(JsonElement element, string propertyName)
     {

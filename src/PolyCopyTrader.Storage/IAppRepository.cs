@@ -546,6 +546,20 @@ public interface IAppRepository
         throw new NotSupportedException("Atomic Paper/Live shadow fill reconciliation is not supported by this repository.");
     }
 
+    Task<MakerGtdPaperMutationResult> TryApplyMakerGtdPaperFullFillAsync(
+        MakerGtdPaperFullFillRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Atomic Maker-GTD Paper fill persistence is not supported by this repository.");
+    }
+
+    Task<MakerGtdPaperMutationResult> TryExpireMakerGtdPaperOrderAsync(
+        MakerGtdPaperExpiryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Atomic Maker-GTD Paper expiry persistence is not supported by this repository.");
+    }
+
     Task UpsertPaperPositionAsync(PaperPosition position, CancellationToken cancellationToken = default);
 
     Task<bool> TryUpdatePaperPositionMarkAsync(

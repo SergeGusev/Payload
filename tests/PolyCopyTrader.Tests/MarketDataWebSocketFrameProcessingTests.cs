@@ -98,6 +98,116 @@ public sealed class MarketDataWebSocketFrameProcessingTests
     }
 
     [Theory]
+    [InlineData(MarketDataSideEffectEnqueueOutcome.Dropped)]
+    [InlineData(MarketDataSideEffectEnqueueOutcome.Rejected)]
+    public async Task ProcessTextMessageAsync_UnacceptedUpdatePoisonsOnlyMatchingAssetAndWindow(
+        MarketDataSideEffectEnqueueOutcome outcome)
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var queue = new ControlledSideEffectQueue(outcome);
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var order = MakerOrder(receivedAtUtc);
+        var repository = new TestAppRepository();
+        repository.PaperOrders.Add(order);
+        var exposureCache = new ExposureSnapshotCache(repository, handoff);
+        await exposureCache.GetSnapshotAsync();
+        var service = CreateService(queue, handoff, exposureCache, repository);
+        await using var receiptAdmission = await handoff.EnterMarketDataReceiptAsync();
+
+        Assert.False(await service.ProcessTextMessageAsync(
+            Component,
+            ValidMarketUpdateJson,
+            receivedAtUtc,
+            CancellationToken.None));
+
+        Assert.Contains(
+            order.Id,
+            Assert.IsAssignableFrom<IReadOnlySet<Guid>>(queue.LastEligiblePaperOrderIds));
+        Assert.True(handoff.TryGetMarketDataFailure(
+            order.Id,
+            "asset-1",
+            "condition-1",
+            receivedAtUtc.AddSeconds(-1),
+            receivedAtUtc.AddSeconds(1),
+            out var failure));
+        Assert.Equal(
+            MakerGtdPaperExecutionContract.MarketDataEnqueueFailureCode,
+            Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
+        Assert.False(handoff.TryGetMarketDataFailure(
+            Guid.NewGuid(),
+            "asset-2",
+            "condition-1",
+            receivedAtUtc.AddSeconds(-1),
+            receivedAtUtc.AddSeconds(1),
+            out _));
+    }
+
+    [Fact]
+    public async Task ProcessTextMessageAsync_QueueThrowRecordsDispatchFailure()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var queue = new ControlledSideEffectQueue(
+            MarketDataSideEffectEnqueueOutcome.Enqueued,
+            throwOnUpdate: true);
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var order = MakerOrder(receivedAtUtc);
+        var repository = new TestAppRepository();
+        repository.PaperOrders.Add(order);
+        var exposureCache = new ExposureSnapshotCache(repository, handoff);
+        await exposureCache.GetSnapshotAsync();
+        var service = CreateService(queue, handoff, exposureCache, repository);
+        await using var receiptAdmission = await handoff.EnterMarketDataReceiptAsync();
+
+        Assert.False(await service.ProcessTextMessageAsync(
+            Component,
+            ValidMarketUpdateJson,
+            receivedAtUtc,
+            CancellationToken.None));
+
+        Assert.Contains(
+            order.Id,
+            Assert.IsAssignableFrom<IReadOnlySet<Guid>>(queue.LastEligiblePaperOrderIds));
+        Assert.True(handoff.TryGetMarketDataFailure(
+            order.Id,
+            "asset-1",
+            "condition-1",
+            receivedAtUtc.AddSeconds(-1),
+            receivedAtUtc.AddSeconds(1),
+            out var failure));
+        Assert.Equal(
+            MakerGtdPaperExecutionContract.MarketDataDispatchFailureCode,
+            Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
+    }
+
+    [Fact]
+    public async Task ProcessTextMessageAsync_ParseFailureInsideReceiptPoisonsAllMatchingLifetimes()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var service = CreateService(
+            new ControlledSideEffectQueue(MarketDataSideEffectEnqueueOutcome.Enqueued),
+            handoff);
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        await using var receiptAdmission = await handoff.EnterMarketDataReceiptAsync();
+
+        Assert.False(await service.ProcessTextMessageAsync(
+            Component,
+            "{not-json",
+            receivedAtUtc,
+            CancellationToken.None));
+
+        Assert.True(handoff.TryGetMarketDataFailure(
+            Guid.NewGuid(),
+            "any-asset",
+            "any-condition",
+            receivedAtUtc.AddSeconds(-1),
+            receivedAtUtc.AddSeconds(1),
+            out var failure));
+        Assert.Equal(
+            MakerGtdPaperExecutionContract.MarketDataParseFailureCode,
+            Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
+    }
+
+    [Theory]
     [InlineData(MarketDataSideEffectEnqueueOutcome.Enqueued)]
     [InlineData(MarketDataSideEffectEnqueueOutcome.Coalesced)]
     public async Task ProcessTextMessageAndResetBackoffAsync_AcceptedUpdateResets(
@@ -117,6 +227,67 @@ public sealed class MarketDataWebSocketFrameProcessingTests
 
         Assert.Equal(TimeSpan.FromSeconds(2), backoff.CurrentDelay);
         Assert.Equal(1, queue.UpdateCalls);
+    }
+
+    [Fact]
+    public async Task ProcessTextMessageAsync_PropagatesFrameReceiptIntoTimestampEvidence()
+    {
+        var queue = new ControlledSideEffectQueue(MarketDataSideEffectEnqueueOutcome.Enqueued);
+        var service = CreateService(queue);
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 15, 0, TimeSpan.Zero);
+        const string missingTimestampJson =
+            "{\"event_type\":\"last_trade_price\",\"asset_id\":\"asset-1\",\"market\":\"condition-1\",\"price\":\"0.49\",\"size\":\"2\",\"side\":\"SELL\"}";
+
+        var accepted = await service.ProcessTextMessageAsync(
+            Component,
+            missingTimestampJson,
+            receivedAtUtc,
+            CancellationToken.None);
+
+        Assert.True(accepted);
+        Assert.Equal(receivedAtUtc, queue.LastReceivedAtUtc);
+        var update = Assert.IsType<MarketDataUpdate>(queue.LastUpdate);
+        Assert.Equal(receivedAtUtc, update.ReceivedAtUtc);
+        Assert.Equal(receivedAtUtc, update.TimestampUtc);
+        Assert.Null(update.SourceTimestampUtc);
+        Assert.Equal(MarketDataTimestampQuality.ReceiveTimeFallback, update.TimestampQuality);
+        Assert.False(update.HasAuthoritativeSourceTimestamp);
+    }
+
+    [Fact]
+    public async Task ProcessTextMessageAsync_S1ToActivationAdmissionCannotCaptureEmptyMakerEligibility()
+    {
+        var queue = new ControlledSideEffectQueue(MarketDataSideEffectEnqueueOutcome.Enqueued);
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var service = CreateService(queue, handoff);
+        var paperOrderId = Guid.NewGuid();
+        var admission = await handoff.EnterPlacementAdmissionAsync("asset-1");
+
+        var dispatchTask = service.ProcessTextMessageAsync(
+            Component,
+            ValidMarketUpdateJson,
+            new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero),
+            CancellationToken.None);
+
+        Assert.False(dispatchTask.IsCompleted);
+        Assert.Equal(0, queue.UpdateCalls);
+
+        admission.ActivatePendingOrder(
+            paperOrderId,
+            MakerGtdPaperExecutionContract.ExecutionSource);
+        await admission.DisposeAsync();
+
+        Assert.True(await dispatchTask);
+        Assert.Equal(1, queue.UpdateCalls);
+        Assert.Contains(paperOrderId, Assert.IsAssignableFrom<IReadOnlySet<Guid>>(queue.LastEligiblePaperOrderIds));
+
+        var publicationWait = handoff.WaitForPublicationAsync(
+            queue.LastEligiblePaperOrderIds,
+            CancellationToken.None);
+        Assert.False(publicationWait.IsCompleted);
+
+        handoff.MarkPublished(paperOrderId);
+        await publicationWait;
     }
 
     [Fact]
@@ -149,10 +320,14 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         Assert.Equal(TimeSpan.FromSeconds(4), backoff.CurrentDelay);
     }
 
-    private static MarketDataWebSocketService CreateService(IMarketDataSideEffectQueue sideEffectQueue)
+    private static MarketDataWebSocketService CreateService(
+        IMarketDataSideEffectQueue sideEffectQueue,
+        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
+        IExposureSnapshotCache? exposureSnapshotCache = null,
+        IAppRepository? repository = null)
     {
         var options = new MarketDataWebSocketOptions();
-        var repository = new NoOpAppRepository();
+        repository ??= new NoOpAppRepository();
         return new MarketDataWebSocketService(
             NullLogger<MarketDataWebSocketService>.Instance,
             NullLoggerFactory.Instance,
@@ -163,9 +338,29 @@ public sealed class MarketDataWebSocketFrameProcessingTests
             new ActiveMarketAssetSubscriptionRegistry(),
             new NoOpBtcOrderBookLagDiagnosticService(),
             new MarketDataCache(options),
-            new ExposureSnapshotCache(repository),
+            exposureSnapshotCache ?? new ExposureSnapshotCache(repository, makerGtdPaperPlacementHandoff),
             sideEffectQueue,
-            repository);
+            repository,
+            makerGtdPaperPlacementHandoff);
+    }
+
+    private static PaperOrder MakerOrder(DateTimeOffset receivedAtUtc)
+    {
+        return new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "strategy:maker-gtd",
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-1",
+            "condition-1",
+            "Up",
+            Price: 0.50m,
+            SizeShares: 1m,
+            NotionalUsd: 0.50m,
+            CreatedAtUtc: receivedAtUtc.AddMinutes(-1),
+            ExpiresAtUtc: receivedAtUtc.AddMinutes(1),
+            ExecutionSource: MakerGtdPaperExecutionContract.ExecutionSource);
     }
 
     private static async Task<MarketDataWebSocketReconnectBackoff> CreateEscalatedBackoffAsync()
@@ -205,6 +400,12 @@ public sealed class MarketDataWebSocketFrameProcessingTests
     {
         public int UpdateCalls { get; private set; }
 
+        public MarketDataUpdate? LastUpdate { get; private set; }
+
+        public DateTimeOffset? LastReceivedAtUtc { get; private set; }
+
+        public IReadOnlySet<Guid>? LastEligiblePaperOrderIds { get; private set; }
+
         public MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
             string component,
             MarketDataUpdate update,
@@ -213,6 +414,9 @@ public sealed class MarketDataWebSocketFrameProcessingTests
             IReadOnlySet<Guid>? eligiblePaperOrderIds)
         {
             UpdateCalls++;
+            LastUpdate = update;
+            LastReceivedAtUtc = receivedAtUtc;
+            LastEligiblePaperOrderIds = eligiblePaperOrderIds;
             if (throwOnUpdate)
             {
                 throw new InvalidOperationException("simulated update queue failure");

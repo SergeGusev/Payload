@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Text.Json;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
@@ -13,9 +15,16 @@ public sealed class PaperTradingMarketDataUpdater(
     IExposureSnapshotCache exposureCache,
     ConservativePaperGtdFillEstimator conservativeGtdFillEstimator,
     IAppRepository repository,
-    IPolymarketFeeAccountingService? feeAccountingService = null) : IPaperTradingMarketDataUpdater
+    IPolymarketFeeAccountingService? feeAccountingService = null,
+    MarketDataWebSocketOptions? marketDataWebSocketOptions = null,
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IPaperTradingMarketDataUpdater
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
+    private const int MakerPositionCasMaximumAttempts = 3;
+    private readonly TimeSpan makerMaximumEventAge = TimeSpan.FromSeconds(
+        Math.Max(1, (marketDataWebSocketOptions ?? new MarketDataWebSocketOptions()).StaleAfterSeconds));
+    private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
+        makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
     private readonly SemaphoreSlim sync = new(1, 1);
 
     public async Task ApplyUpdateAsync(
@@ -28,6 +37,10 @@ public sealed class PaperTradingMarketDataUpdater(
         {
             return;
         }
+
+        await makerGtdHandoff.WaitForPublicationAsync(
+            eligiblePaperOrderIds,
+            cancellationToken);
 
         var operationStarted = Stopwatch.GetTimestamp();
         var lockWaitStarted = Stopwatch.GetTimestamp();
@@ -45,6 +58,7 @@ public sealed class PaperTradingMarketDataUpdater(
         var phase = "Initialize";
         var operation = "None";
         Guid? paperOrderId = null;
+        HashSet<Guid>? pendingMakerOrderIds = null;
         try
         {
             if (update.MarketResolved)
@@ -73,6 +87,10 @@ public sealed class PaperTradingMarketDataUpdater(
                     !string.Equals(order.ExecutionSource, PaperLiveShadowTestSource, StringComparison.OrdinalIgnoreCase) &&
                     (eligiblePaperOrderIds is null || eligiblePaperOrderIds.Contains(order.Id)))
                 .ToArray();
+            pendingMakerOrderIds = matchingOrders
+                .Where(MakerGtdPaperExecutionContract.IsMakerGtdOrder)
+                .Select(order => order.Id)
+                .ToHashSet();
             var positions = exposure.PaperPositions
                 .Where(position => string.Equals(position.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -80,6 +98,20 @@ public sealed class PaperTradingMarketDataUpdater(
             foreach (var order in matchingOrders)
             {
                 paperOrderId = order.Id;
+                if (MakerGtdPaperExecutionContract.IsMakerGtdOrder(order))
+                {
+                    phase = "ApplyMakerGtdPaperUpdate";
+                    operation = "IAppRepository.TryApplyMakerGtdPaperFullFill";
+                    await TryApplyMakerGtdPaperUpdateAsync(
+                        order,
+                        update,
+                        receivedAtUtc,
+                        positions,
+                        cancellationToken);
+                    pendingMakerOrderIds.Remove(order.Id);
+                    continue;
+                }
+
                 phase = "LoadPaperFills";
                 operation = "IAppRepository.GetPaperFillsForOrder";
                 var existingFills = await repository.GetPaperFillsForOrderAsync(order.Id, cancellationToken);
@@ -217,6 +249,12 @@ public sealed class PaperTradingMarketDataUpdater(
         }
         catch (Exception ex)
         {
+            RecordMakerGtdMarketDataFailure(
+                pendingMakerOrderIds ?? eligiblePaperOrderIds,
+                update,
+                receivedAtUtc ?? update.ReceivedAtUtc,
+                MakerGtdPaperExecutionContract.MarketDataApplyFailureCode);
+
             var duration = Stopwatch.GetElapsedTime(operationStarted);
             logger.LogError(
                 ex,
@@ -253,6 +291,264 @@ public sealed class PaperTradingMarketDataUpdater(
         var allocatedEntryFeeUsd = currentPosition.FeeUsd *
             Math.Min(1m, sellFill.SizeShares / currentPosition.SizeShares);
         return grossRealizedPnlUsd - allocatedEntryFeeUsd - sellFill.FeeUsd;
+    }
+
+    private async Task TryApplyMakerGtdPaperUpdateAsync(
+        PaperOrder order,
+        MarketDataUpdate update,
+        DateTimeOffset? receivedAtUtc,
+        List<PaperPosition> positions,
+        CancellationToken cancellationToken)
+    {
+        if (!MakerGtdPaperOrderEvidenceParser.TryParse(
+                order,
+                out var orderEvidence,
+                out var parseFailure) ||
+            orderEvidence is null)
+        {
+            logger.LogWarning(
+                "Maker-GTD Paper update skipped because acceptance evidence is invalid. PaperOrderId={PaperOrderId} Detail={Detail}",
+                order.Id,
+                parseFailure);
+            return;
+        }
+
+        var processedAtUtc = DateTimeOffset.UtcNow;
+        var eventReceivedAtUtc = receivedAtUtc ?? update.ReceivedAtUtc;
+        if (!update.HasAuthoritativeSourceTimestamp ||
+            update.SourceTimestampUtc is not { } sourceTimestampUtc ||
+            eventReceivedAtUtc is not { } receiptTimestampUtc ||
+            string.IsNullOrWhiteSpace(update.EventFingerprint) ||
+            receiptTimestampUtc <= order.CreatedAtUtc ||
+            receiptTimestampUtc <= orderEvidence.AcceptedAtUtc ||
+            receiptTimestampUtc >= order.ExpiresAtUtc ||
+            receiptTimestampUtc > processedAtUtc)
+        {
+            return;
+        }
+
+        var sourceAge = receiptTimestampUtc - sourceTimestampUtc;
+        if (sourceAge < TimeSpan.Zero)
+        {
+            sourceAge = TimeSpan.Zero;
+        }
+
+        var touchEvidence = new MakerGtdTouchNoDepthEvidence(
+            update.EventType,
+            update.AssetId,
+            update.ConditionId,
+            LastTradePrice: update.EventType == MarketDataEventType.LastTradePrice
+                ? update.Price
+                : null,
+            BestAsk: update.EventType is MarketDataEventType.Book or
+                MarketDataEventType.PriceChange or
+                MarketDataEventType.BestBidAsk
+                    ? update.BestAsk ?? update.OrderBookSnapshot?.BestAsk
+                    : null,
+            TimestampUtc: sourceTimestampUtc,
+            TimestampIsAuthoritative: true,
+            IsCurrent: sourceAge <= makerMaximumEventAge,
+            IsDuplicateEvent: false);
+        var evaluation = MakerGtdTouchNoDepthEvaluator.Evaluate(
+            new MakerGtdRestingBuyOrder(
+                order.AssetId,
+                order.ConditionId,
+                order.Price,
+                order.SizeShares,
+                orderEvidence.AcceptedAtUtc,
+                order.ExpiresAtUtc),
+            touchEvidence);
+        if (!evaluation.Filled)
+        {
+            return;
+        }
+
+        var linkedRuns = await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
+            [order.Id],
+            cancellationToken);
+        var matchingRuns = linkedRuns
+            .Where(run => run.PaperOrderId == order.Id)
+            .ToArray();
+        if (matchingRuns.Length != 1)
+        {
+            RecordMakerGtdMarketDataFailure(
+                order.Id,
+                update,
+                receiptTimestampUtc,
+                MakerGtdPaperExecutionContract.MarketDataApplyFailureCode);
+            logger.LogWarning(
+                "Maker-GTD Paper update skipped because exactly one linked strategy run was not available. PaperOrderId={PaperOrderId} LinkedRunCount={LinkedRunCount}",
+                order.Id,
+                matchingRuns.Length);
+            return;
+        }
+
+        var restingRun = matchingRuns[0];
+
+        var fill = new PaperFill(
+            Guid.NewGuid(),
+            order.Id,
+            order.Price,
+            order.SizeShares,
+            sourceTimestampUtc,
+            JsonSerializer.Serialize(new
+            {
+                model = "touch_no_depth",
+                reason_code = evaluation.ReasonCode,
+                event_type = update.EventType.ToString(),
+                trigger = evaluation.Trigger.ToString(),
+                trigger_price = evaluation.TriggerPrice,
+                source_timestamp_utc = sourceTimestampUtc,
+                received_at_utc = receiptTimestampUtc,
+                processed_at_utc = processedAtUtc,
+                source_event_id = update.SourceEventId,
+                event_fingerprint = update.EventFingerprint
+            }),
+            FeeLiquidityRole: FeeLiquidityRole.Maker.ToString());
+        if (feeAccountingService is not null)
+        {
+            fill = await feeAccountingService.ApplyToPaperFillAsync(order, fill, cancellationToken);
+        }
+
+        var expectedPosition = FindPosition(positions, order);
+        var filledOrder = order with
+        {
+            Status = PaperOrderStatus.Filled,
+            FilledAtUtc = fill.FilledAtUtc,
+            CancelledAtUtc = null
+        };
+        var enteredRun = restingRun with
+        {
+            Status = StrategyMarketPaperRunStatuses.Entered,
+            EntryPrice = fill.Price,
+            StakeUsd = order.NotionalUsd,
+            SizeShares = fill.SizeShares,
+            EnteredAtUtc = fill.FilledAtUtc,
+            SkipReason = null,
+            SkipDiagnosticsJson = null,
+            UpdatedAtUtc = fill.FilledAtUtc,
+            FeeUsd = fill.FeeUsd,
+            FeeAccountingStatus = fill.FeeAccountingStatus,
+            FeeLiquidityRole = fill.FeeLiquidityRole,
+            FeeCalculationSource = fill.FeeCalculationSource,
+            FeeRate = fill.FeeRate,
+            FeeExponent = fill.FeeExponent,
+            FeeTakerOnly = fill.FeeTakerOnly,
+            FeeCalculatedAtUtc = fill.FeeCalculatedAtUtc
+        };
+
+        MakerGtdPaperMutationResult mutation;
+        PaperPosition updatedPosition;
+        var mutationAttempt = 0;
+        var retryPositionConflict = false;
+        do
+        {
+            mutationAttempt++;
+            var positionHasNewerMark = expectedPosition is not null &&
+                expectedPosition.UpdatedAtUtc > receiptTimestampUtc;
+            var currentBid = positionHasNewerMark && expectedPosition!.SizeShares > 0m
+                ? expectedPosition.EstimatedValueUsd / expectedPosition.SizeShares
+                : update.BestBid ??
+                    update.OrderBookSnapshot?.BestBid ??
+                    expectedPosition?.AveragePrice ??
+                    fill.Price;
+            var positionUpdatedAtUtc = positionHasNewerMark
+                ? expectedPosition!.UpdatedAtUtc
+                : receiptTimestampUtc;
+            updatedPosition = paperTradingEngine.ApplyBuyFill(
+                expectedPosition,
+                order,
+                fill,
+                currentBid,
+                positionUpdatedAtUtc);
+            mutation = await repository.TryApplyMakerGtdPaperFullFillAsync(
+                new MakerGtdPaperFullFillRequest(
+                    MakerGtdPaperExecutionContract.ExecutionSource,
+                    filledOrder,
+                    fill,
+                    expectedPosition,
+                    updatedPosition,
+                    enteredRun),
+                cancellationToken);
+            retryPositionConflict =
+                mutation.Outcome == MakerGtdPaperMutationOutcome.NotEligible &&
+                string.Equals(
+                    mutation.ReasonCode,
+                    MakerGtdPaperMutationReasonCodes.PositionConcurrencyConflict,
+                    StringComparison.Ordinal) &&
+                mutationAttempt < MakerPositionCasMaximumAttempts;
+            if (retryPositionConflict)
+            {
+                expectedPosition = mutation.PaperPosition;
+            }
+        }
+        while (retryPositionConflict);
+
+        if (mutation.Outcome == MakerGtdPaperMutationOutcome.NotEligible)
+        {
+            RecordMakerGtdMarketDataFailure(
+                order.Id,
+                update,
+                receiptTimestampUtc,
+                MakerGtdPaperExecutionContract.MarketDataApplyFailureCode);
+            logger.LogWarning(
+                "Maker-GTD Paper full fill was not eligible for atomic persistence. PaperOrderId={PaperOrderId} ReasonCode={ReasonCode} MutationAttempts={MutationAttempts}",
+                order.Id,
+                mutation.ReasonCode,
+                mutationAttempt);
+            return;
+        }
+
+        makerGtdHandoff.ClearMarketDataFailures(order.Id);
+
+        if (mutation.PaperOrder is { } persistedOrder)
+        {
+            exposureCache.ApplyPaperOrder(persistedOrder);
+        }
+
+        if (mutation.PaperPosition is { } persistedPosition)
+        {
+            exposureCache.ApplyPaperPosition(persistedPosition);
+            RemovePosition(positions, persistedPosition);
+            positions.Add(persistedPosition);
+        }
+    }
+
+    private void RecordMakerGtdMarketDataFailure(
+        Guid paperOrderId,
+        MarketDataUpdate update,
+        DateTimeOffset? receivedAtUtc,
+        string failureCode)
+    {
+        RecordMakerGtdMarketDataFailure(
+            new HashSet<Guid> { paperOrderId },
+            update,
+            receivedAtUtc,
+            failureCode);
+    }
+
+    private void RecordMakerGtdMarketDataFailure(
+        IReadOnlySet<Guid>? paperOrderIds,
+        MarketDataUpdate update,
+        DateTimeOffset? receivedAtUtc,
+        string failureCode)
+    {
+        if (receivedAtUtc is not { } failureReceivedAtUtc ||
+            update.EventType is not (
+                MarketDataEventType.Book or
+                MarketDataEventType.PriceChange or
+                MarketDataEventType.LastTradePrice or
+                MarketDataEventType.BestBidAsk))
+        {
+            return;
+        }
+
+        makerGtdHandoff.RecordMarketDataFailure(
+            update.AssetId,
+            update.ConditionId,
+            failureReceivedAtUtc,
+            paperOrderIds,
+            failureCode);
     }
 
     private async Task UpdatePositionMarksAsync(

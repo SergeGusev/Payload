@@ -67,7 +67,8 @@ For substantial or multi-step work:
 
 For every new or changed Paper strategy or execution rule, apply the mandatory
 Paper/live parity gate in `docs/architecture/PAPER_LIVE_PARITY.md` before treating
-the implementation or its results as Paper trading:
+the implementation or its results as Paper trading. The only non-parity path is
+the closed user-approved exception defined below:
 
 - identify and document the exact current Live API order equivalent;
 - verify that Paper and Live consume the same pre-submit `ExecutionIntent` and
@@ -77,11 +78,26 @@ the implementation or its results as Paper trading:
   fill-price guarantees;
 - classify an algorithm as `ResearchOnly`, outside Paper PnL and Paper performance
   claims, when a Live equivalent cannot be proved;
+- allow ordinary Paper classification without proven fill equivalence only for the
+  exact exception approved by the user on 2026-08-09, and only when every predicate
+  matches: asset `ETH`; neutral Reference Average Maker-GTD threshold `1..10` or
+  `15..100` step `5`; behavior
+  `ReferenceAverageBpsThresholdMakerGtdPremarket`; catalog ID
+  `b7c50005-0000-4000-8223-{100+threshold, zero-padded to 12 digits}`; execution
+  source `eth_reference_average_maker_gtd_paper`; and `PaperOnly=true`. Its ordinary
+  Paper orders, PnL, win rate, and performance are intentional, but every result
+  must say
+  `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. Live
+  submission is
+  disabled, and no alias, clone, descendant, future strategy, or changed execution
+  semantic inherits the exception;
 - add or update parity tests and verify that intent, market evidence, fills, and
   outcomes are persisted or otherwise auditable.
 
-Missing Live-equivalence evidence or a failing parity test is a completion blocker,
-not a documentation caveat.
+Except for that exact closed exception, missing Live-equivalence evidence or a
+failing parity test is a completion blocker, not a documentation caveat. A predicate
+mismatch, missing mandatory label, enabled Live path, or failing exception contract
+test is likewise a completion blocker for the exception.
 
 ## 4. Task Finalization
 

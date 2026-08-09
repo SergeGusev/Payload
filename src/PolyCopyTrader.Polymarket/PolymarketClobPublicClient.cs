@@ -29,8 +29,9 @@ public sealed class PolymarketClobPublicClient : IPolymarketClobPublicClient
                 new Dictionary<string, string?> { ["token_id"] = assetId }),
             "GetOrderBook",
             cancellationToken);
+        var receivedAtUtc = DateTimeOffset.UtcNow;
 
-        return PolymarketJsonParser.ParseOrderBook(json.RootElement);
+        return PolymarketJsonParser.ParseOrderBook(json.RootElement, receivedAtUtc);
     }
 
     public async Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)

@@ -403,6 +403,7 @@ builder.Services.AddSingleton<MarketTradeTickDiagnosticService>();
 builder.Services.AddSingleton<IMarketTradeTickDiagnosticService>(sp => sp.GetRequiredService<MarketTradeTickDiagnosticService>());
 builder.Services.AddSingleton<ICryptoUpDown5mMarketResolvedEventRecorder, CryptoUpDown5mMarketResolvedEventRecorder>();
 builder.Services.AddSingleton<IExposureSnapshotCache, ExposureSnapshotCache>();
+builder.Services.AddSingleton<IMakerGtdPaperPlacementHandoff, MakerGtdPaperPlacementHandoff>();
 builder.Services.AddSingleton<PaperEntryPersistenceQueue>();
 builder.Services.AddSingleton<IPaperEntryPersistenceQueue>(sp => sp.GetRequiredService<PaperEntryPersistenceQueue>());
 builder.Services.AddSingleton<IPaperTradingMarketDataUpdater, PaperTradingMarketDataUpdater>();

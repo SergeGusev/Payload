@@ -50,6 +50,52 @@ public sealed class MarketDataWebSocketParserTests
     }
 
     [Fact]
+    public void Parser_RecordsAuthoritativeSourceTimestampReceiptAndDeterministicIdentity()
+    {
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+
+        var first = Assert.Single(
+            PolymarketMarketDataWebSocketParser.ParseMarketMessage(LastTradePriceJson, receivedAtUtc));
+        var replay = Assert.Single(
+            PolymarketMarketDataWebSocketParser.ParseMarketMessage(
+                LastTradePriceJson,
+                receivedAtUtc.AddSeconds(5)));
+
+        var sourceTimestampUtc = DateTimeOffset.FromUnixTimeMilliseconds(1_750_428_146_322);
+        Assert.Equal(sourceTimestampUtc, first.TimestampUtc);
+        Assert.Equal(sourceTimestampUtc, first.SourceTimestampUtc);
+        Assert.Equal(MarketDataTimestampQuality.VenueProvided, first.TimestampQuality);
+        Assert.True(first.HasAuthoritativeSourceTimestamp);
+        Assert.Equal(receivedAtUtc, first.ReceivedAtUtc);
+        Assert.Equal("0xeeefffggghhh", first.SourceEventId);
+        Assert.NotNull(first.EventFingerprint);
+        Assert.Equal(64, first.EventFingerprint.Length);
+        Assert.Equal(first.EventFingerprint, replay.EventFingerprint);
+        Assert.NotEqual(first.ReceivedAtUtc, replay.ReceivedAtUtc);
+    }
+
+    [Fact]
+    public void Parser_MissingTimestampUsesVisibleNonAuthoritativeReceiveFallback()
+    {
+        var receivedAt = new DateTimeOffset(2026, 8, 9, 15, 30, 0, TimeSpan.FromHours(3));
+        const string json =
+            "{\"event_type\":\"best_bid_ask\",\"market\":\"condition-1\",\"asset_id\":\"asset-1\",\"best_bid\":\"0.48\",\"best_ask\":\"0.52\"}";
+
+        var update = Assert.Single(
+            PolymarketMarketDataWebSocketParser.ParseMarketMessage(json, receivedAt));
+
+        var receivedAtUtc = receivedAt.ToUniversalTime();
+        Assert.Equal(receivedAtUtc, update.TimestampUtc);
+        Assert.Null(update.SourceTimestampUtc);
+        Assert.Equal(MarketDataTimestampQuality.ReceiveTimeFallback, update.TimestampQuality);
+        Assert.False(update.HasAuthoritativeSourceTimestamp);
+        Assert.Equal(receivedAtUtc, update.ReceivedAtUtc);
+        Assert.Equal(receivedAtUtc, update.OrderBookSnapshot?.SnapshotAtUtc);
+        Assert.Null(update.SourceEventId);
+        Assert.NotNull(update.EventFingerprint);
+    }
+
+    [Fact]
     public void Parser_ReadsArrayAndIgnoresPong()
     {
         var updates = PolymarketMarketDataWebSocketParser.ParseMarketMessage($"[{BestBidAskJson},{LastTradePriceJson}]");

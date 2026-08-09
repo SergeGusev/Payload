@@ -4,6 +4,7 @@ using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
+using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.MarketData;
@@ -15,12 +16,15 @@ public sealed class MarketDataWebSocketShardRunner(
     PolymarketOptions polymarketOptions,
     IAppRepository repository,
     Func<string, string, DateTimeOffset, CancellationToken, Task<bool>> processTextMessageAsync,
-    Action<MarketDataStatusSnapshot> onStatus)
+    Action<MarketDataStatusSnapshot> onStatus,
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null)
 {
     private static readonly object DisconnectDiagnosticDataKey = new();
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
     private readonly object stateGate = new();
     private readonly object assetGate = new();
+    private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
+        makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
     private HashSet<string> assetIds = plan.AssetIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? runCts;
     private Task? runTask;
@@ -333,15 +337,19 @@ public sealed class MarketDataWebSocketShardRunner(
             }
 
             var message = received.Text ?? string.Empty;
-            DateTimeOffset receivedAtUtc = DateTimeOffset.UtcNow;
-            SetLastMessageUtc(receivedAtUtc);
-            await ProcessTextMessageAndResetBackoffAsync(
-                processTextMessageAsync,
-                Component,
-                message,
-                receivedAtUtc,
-                reconnectBackoff,
-                cancellationToken);
+            await using (await makerGtdHandoff.EnterMarketDataReceiptAsync(cancellationToken))
+            {
+                DateTimeOffset receivedAtUtc = DateTimeOffset.UtcNow;
+                SetLastMessageUtc(receivedAtUtc);
+                await ProcessTextMessageAndResetBackoffAsync(
+                    processTextMessageAsync,
+                    Component,
+                    message,
+                    receivedAtUtc,
+                    reconnectBackoff,
+                    cancellationToken);
+            }
+
             await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);
         }
 

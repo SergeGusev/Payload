@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.MarketData;
@@ -46,19 +47,32 @@ public interface IMarketDataSideEffectQueue
     MarketDataSideEffectEnqueueOutcome EnqueueApiError(ApiError apiError);
 
     MarketDataSideEffectQueueMetrics GetMetrics();
+
+    bool HasOutstandingPaperOrderUpdate(
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc)
+    {
+        return false;
+    }
 }
 
 public sealed class MarketDataSideEffectQueue(
     ILogger<MarketDataSideEffectQueue> logger,
     MarketDataWebSocketOptions options,
     IMarketDataSideEffectHandler handler,
-    IAppRepository repository) : IHostedService, IMarketDataSideEffectQueue
+    IAppRepository repository,
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IHostedService, IMarketDataSideEffectQueue
 {
     private const string ComponentName = "MarketDataSideEffectQueue";
     private static readonly IReadOnlySet<Guid> EmptyPaperOrderIds = new HashSet<Guid>();
     private readonly object lifecycleSync = new();
     private readonly object updateSync = new();
     private readonly object frameDiagnosticSync = new();
+    private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
+        makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
     private readonly Dictionary<string, PendingAssetUpdates> pendingUpdatesByAsset = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<string> readyAssetKeys = new();
     private readonly LinkedList<DiagnosticWorkItem> pendingDiagnostics = [];
@@ -69,6 +83,7 @@ public sealed class MarketDataSideEffectQueue(
     private Task? metricsWorkerTask;
     private Task? stopTask;
     private CancellationTokenSource? metricsCancellation;
+    private MarketDataSideEffectWorkItem? inFlightUpdate;
     private volatile bool accepting;
     private int pendingUpdateCount;
     private int pendingFrameDiagnosticCount;
@@ -336,6 +351,45 @@ public sealed class MarketDataSideEffectQueue(
             Interlocked.Read(ref failedFrameDiagnostics));
     }
 
+    public bool HasOutstandingPaperOrderUpdate(
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc)
+    {
+        if (paperOrderId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(assetId) ||
+            string.IsNullOrWhiteSpace(conditionId) ||
+            acceptedAfterUtc >= expiresBeforeUtc)
+        {
+            return false;
+        }
+
+        lock (updateSync)
+        {
+            if (IsOutstandingPaperOrderUpdate(
+                    inFlightUpdate,
+                    paperOrderId,
+                    assetId,
+                    conditionId,
+                    acceptedAfterUtc,
+                    expiresBeforeUtc))
+            {
+                return true;
+            }
+
+            return pendingUpdatesByAsset.Values.Any(pending =>
+                pending.Items.Any(item => IsOutstandingPaperOrderUpdate(
+                    item,
+                    paperOrderId,
+                    assetId,
+                    conditionId,
+                    acceptedAfterUtc,
+                    expiresBeforeUtc)));
+        }
+    }
+
     private async Task RunUpdateWorkerAsync()
     {
         try
@@ -434,6 +488,7 @@ public sealed class MarketDataSideEffectQueue(
                 workItem = firstNode.Value;
                 pendingAssetUpdates.Items.RemoveFirst();
                 pendingUpdateCount--;
+                inFlightUpdate = workItem;
 
                 if (pendingAssetUpdates.Items.Count > 0)
                 {
@@ -493,6 +548,7 @@ public sealed class MarketDataSideEffectQueue(
         catch (Exception ex)
         {
             Interlocked.Increment(ref failedUpdates);
+            RecordMakerGtdMarketDataFailure(workItem);
             var phase = ex is MarketDataSideEffectPhaseException phaseException
                 ? phaseException.Phase
                 : "ProcessUpdate";
@@ -509,6 +565,10 @@ public sealed class MarketDataSideEffectQueue(
                 $"Component={workItem.Component}; EventType={workItem.Update.EventType}; AssetId={workItem.Update.AssetId ?? "<null>"}; QueueDelayMs={queueDelay.TotalMilliseconds:F0}; Error={ex.Message}")
                 .ConfigureAwait(false);
         }
+        finally
+        {
+            CompleteInFlightUpdate(workItem);
+        }
 
         var processingDuration = Stopwatch.GetElapsedTime(processingStarted);
         if (queueDelay.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds ||
@@ -523,6 +583,25 @@ public sealed class MarketDataSideEffectQueue(
                 processingDuration.TotalMilliseconds,
                 GetPendingUpdateCount());
         }
+    }
+
+    private void RecordMakerGtdMarketDataFailure(MarketDataSideEffectWorkItem workItem)
+    {
+        if (workItem.Update.EventType is not (
+                MarketDataEventType.Book or
+                MarketDataEventType.PriceChange or
+                MarketDataEventType.LastTradePrice or
+                MarketDataEventType.BestBidAsk))
+        {
+            return;
+        }
+
+        makerGtdHandoff.RecordMarketDataFailure(
+            workItem.Update.AssetId,
+            workItem.Update.ConditionId,
+            workItem.ReceivedAtUtc,
+            workItem.EligiblePaperOrderIds,
+            MakerGtdPaperExecutionContract.MarketDataHandlerFailureCode);
     }
 
     private async Task ProcessDiagnosticAsync(DiagnosticWorkItem workItem)
@@ -581,6 +660,43 @@ public sealed class MarketDataSideEffectQueue(
         {
             return pendingFrameDiagnosticCount;
         }
+    }
+
+    private void CompleteInFlightUpdate(MarketDataSideEffectWorkItem workItem)
+    {
+        lock (updateSync)
+        {
+            if (ReferenceEquals(inFlightUpdate, workItem))
+            {
+                inFlightUpdate = null;
+            }
+        }
+    }
+
+    private static bool IsOutstandingPaperOrderUpdate(
+        MarketDataSideEffectWorkItem? workItem,
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc)
+    {
+        if (workItem is null ||
+            workItem.ReceivedAtUtc <= acceptedAfterUtc ||
+            workItem.ReceivedAtUtc >= expiresBeforeUtc ||
+            !string.Equals(workItem.Update.AssetId, assetId, StringComparison.Ordinal) ||
+            !string.Equals(workItem.Update.ConditionId, conditionId, StringComparison.Ordinal) ||
+            workItem.Update.EventType is not (
+                MarketDataEventType.Book or
+                MarketDataEventType.PriceChange or
+                MarketDataEventType.LastTradePrice or
+                MarketDataEventType.BestBidAsk))
+        {
+            return false;
+        }
+
+        return workItem.EligiblePaperOrderIds is null ||
+            workItem.EligiblePaperOrderIds.Contains(paperOrderId);
     }
 
     private bool IsReplaceable(MarketDataUpdate update, IReadOnlySet<Guid>? eligiblePaperOrderIds)
