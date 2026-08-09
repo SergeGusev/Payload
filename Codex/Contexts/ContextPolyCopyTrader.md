@@ -1,3 +1,18 @@
+## Active Update 2026-08-10 Targeted ETH 3 bps Full Fee Repair
+Goal: Recalculate complete fee-aware Net PnL for `ETH Up or Down 5m 3 bps Reference Average Premarket` and publish it in Dashboard without touching any other strategy.
+Status: Completed
+Done:
+- Resolved the exact production strategy as `b7c50005-0000-4000-8179-000000000103` / `eth_up_down_5m_reference_average_bps_3_fak_premarket`; it is enabled, Paper-only, unpaused, and has no Live, shadow, discrepancy, or retention-guard dependencies.
+- Independently previewed the immutable pre-cutoff scope at `2026-08-07T22:44:55.219515Z`: `2,079` unique run/order/fill/position/settlement chains and conditions, comprising `679` Gamma-equal and `1,400` authoritative earlier `MarketWebSocket` settlements, with zero orphans, duplicates, broken links, other sources, or structural conflicts.
+- Built and independently reviewed a disposable exact-ID executor under a marked `D:\CodexTemp` run. It used the current CLOB taker-fee calculator, fresh signed-content plans, exact endpoint/scope/dependency gates, wallet and row locks, xmin CAS, and atomic four-row accounting updates in batches of at most `50`.
+- Applied one latest `MarketWebSocket` canary and independently proved that only its fill/run/position/settlement accounting changed atomically. Applied the remaining `2,045/2,045` historical rows in `41/41` successful transactions; the exact historical scope finished `2,079/2,079` accounted with `LegacyUnknown=0` and zero fee, Net, provenance, schedule, identity, or cross-table mismatches.
+- Preserved exact run-to-settlement Gross equality and the immutable Gross digest. One independently proven `numeric(28,8)` component-rounding case was accepted only at the exact one-quantum `$0.00000001` boundary; a larger difference remains fail-closed.
+- Promoted only the existing exact-strategy Dashboard reconciliation row from priority `50` to `1000` through a one-row CAS. The normal service worker reconciled it without a restart or direct repository call.
+- Final independent production snapshots show all current `2,170/2,170` settled runs accounted, `LegacyUnknown=0`, stake `$13,035.97739963`, Gross PnL `$724.17343265`, platform fee `$422.84702000`, Net PnL `$301.32641265`, and fee-inclusive Net ROI `2.2388761696787470%` (`2.23887617%` in Dashboard). Raw, lifetime state, and Dashboard counts/Gross/fee/Net/ROI agree; formula mismatches are zero.
+Next: None.
+Notes: Final V3 executor build passed with zero warnings/errors, its self-tests passed, and focused product fee/backfill tests passed `60/60`. Projection v4 and the service were Running without recorded errors in the final primary audit. A later ordinary priority-50 `direct_paper_skip_compaction` queue row was created after a new settled run; it does not represent fee drift and current Dashboard parity is exact. No Live order, trading action, service stop/restart, deployment, schema change, or other-strategy mutation occurred.
+Blockers: None.
+
 ## Active Update 2026-08-09 Paired Day-Ahead Direct HTTP Freshness Fix
 Goal: Fix the group-`8224` paired Maker-GTD day-ahead S0/S1 freshness defect that rejected freshly fetched quiet books because their venue snapshot timestamp was old.
 Status: Completed
