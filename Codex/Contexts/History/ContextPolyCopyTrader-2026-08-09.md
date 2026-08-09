@@ -219,3 +219,10 @@ Request:
 
 Result:
 Verified and explained that these are two timestamps for one intended expiry. GTD means Good-Til-Date. Polymarket applies a documented one-minute GTD security threshold, so the wire expiration must be 60 seconds later than the desired effective lifetime. The paired strategy therefore sends/stores market end as the CLOB wire GTD expiration and stops Paper fill eligibility at market end minus one minute. For a `15:30..15:35 UTC` market, the wire value is `15:35`, while an unfilled Paper order expires at `15:34`. No implementation or runtime state changed.
+
+## 2026-08-09T21:16:22.3103210Z
+Request:
+Выложил, проверяй
+
+Result:
+Completed a strict read-only deployment audit on the documented primary database. Verified exact deployed build `f5d6499658dcab8a8c4bef78adf39b52ef4efaf2`, an advancing service heartbeat, all six enabled Paper-only group-`8224` rows, zero Live orders, and functional day-ahead discovery for `36` conditions / `72` legs. One BTC pair successfully reached Resting/Pending at Up `0.50 x 6.13` and Down `0.49 x 6.13`; fills were zero. The other `70` legs skipped after `700` S0 attempts because every fetched book exceeded the current `1500 ms` source-timestamp age limit (`12.645..2576.040 s`). A fresh direct public CLOB request independently returned the same old venue snapshot timestamp on a quiet book, identifying a source-timestamp-versus-response-freshness mismatch rather than a discovery or API-fetch failure. No database, service, configuration, deployment, or trading mutation was performed by the audit.

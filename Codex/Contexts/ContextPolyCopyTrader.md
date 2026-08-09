@@ -1,3 +1,16 @@
+## Active Update 2026-08-09 Paired Day-Ahead Deployment Verification
+Goal: Verify the deployed group-`8224` paired Maker-GTD Paper strategies and their first production lifecycle without changing service, database, configuration, or trading state.
+Status: Completed
+Done:
+- Verified the documented primary database and exact deployed service build `f5d6499658dcab8a8c4bef78adf39b52ef4efaf2`: service status `Running`, heartbeat advanced independently, `last_error` was empty, and no paired worker/processor API errors were recorded.
+- Verified all six exact BTC/ETH/SOL Up/Down strategy rows: enabled, not paused, `live_stakes=false`, and zero Live orders. The day-ahead worker created `72` exact runs for `36` conditions across twelve five-minute slots `2026-08-10 20:10..21:05 UTC`.
+- At cutoff `2026-08-09T21:16:22.310321Z`, one BTC pair was successfully `Resting`: Up `0.50 x 6.13` and Down `0.49 x 6.13`, both Pending, with exact equal shares and effective Paper expiry `2026-08-10T21:09:00Z`; fills remained zero.
+- The other `70/72` legs were terminally Skipped after ten attempts each. All `700/700` attempts were fetched successfully but rejected at S0 as `paired_maker_gtd_s0_book_not_current`: configured maximum source age `1500 ms`, observed source age `12,645..2,576,040 ms`. A separate fresh public CLOB request returned a current HTTP response whose venue book timestamp was still old, confirming the failure mode on quiet day-ahead books.
+- Identified the operational mismatch: the processor treats the venue book-mutation timestamp as quote freshness, so quiet but freshly fetched day-ahead books usually fail before price sizing and S1. Discovery, exact market identity, WebSocket readiness, persistence, and the successful BTC PostOnly path all operated.
+Next: If approved, change the direct CLOB S0/S1 freshness contract to use fresh response receipt plus exact authoritative book identity while preserving the venue timestamp for audit, add focused quiet-book regressions, redeploy, and observe a complete lifecycle.
+Notes: Strict server-enforced READ ONLY database checks used exact six-ID allowlists and UTC cutoffs. No database write, service/configuration change, deployment, Live order, cancellation, or venue action was performed by this audit. The accepted pair used `6.13` shares per leg because the `$1` strategy setting is a sizing multiplier; the venue minimum, `1.10` safety multiplier, and whole-dollar ceiling produced approximately `$3` target notional per leg.
+Blockers: The current `1500 ms` source-timestamp gate makes placement unreliable on quiet day-ahead books; `70/72` observed legs skipped in this deployment sample.
+
 ## Active Update 2026-08-09 GTD Wire vs Effective Paper Expiry Clarification
 Goal: Explain why paired Maker-GTD records use market end as the wire expiration but stop Paper execution one minute earlier.
 Status: Completed
