@@ -1,3 +1,15 @@
+## Active Update 2026-08-09 Official Evidence for Two-Sided Holdings vs Self-Dealing
+Goal: Provide exact current Polymarket documentation supporting the distinction between holding both market outcomes and being both beneficial sides of one transaction.
+Status: Completed
+Done:
+- Verified in official `Positions & Tokens` documentation that splitting collateral creates both Yes and No tokens and is explicitly used to `Obtain both sides of a market`; the same page documents merging equal Yes/No balances back into collateral.
+- Verified in the current official Terms of Use embedded at `polymarket.com/tos` that prohibited conduct includes entering an order that `does not result in a change in beneficial ownership`.
+- Independently corroborated the prohibition on the official Market Integrity page, which expressly lists wash trading and self-dealing, and verified that Maker Rebate eligibility describes liquidity being taken by `another trader`.
+- Kept the conclusion narrow: holding or independently acquiring both outcome tokens is supported; arranging controlled orders to execute against each other is prohibited. No blanket claim about all multi-account use was made.
+Next: None
+Notes: Read-only documentation verification performed on 2026-08-09 against current official Polymarket Terms, Positions & Tokens, Market Integrity, and Maker Rebates pages. No order, account action, production mutation, code/configuration change, build, or test occurred.
+Blockers: None
+
 ## Active Update 2026-08-09 Two-Sided Holdings vs Self-Dealing Clarification
 Goal: Clarify whether one Polymarket account may buy both Up and Down without violating the prohibition on self-dealing.
 Status: Completed read-only clarification

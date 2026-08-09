@@ -150,3 +150,14 @@ Polymarket запрещает self-dealing и wash trading.
 
 Result:
 Clarified that one account may buy and hold both Up and Down outcome tokens or quote both sides; this is a two-sided position, not a trade against oneself. The prohibited conduct is arranging for orders controlled by the same beneficial owner to execute against each other, create fictitious volume, or farm rebates, regardless of whether one or multiple accounts are used. In the proposed setup the Up 0.50 and Down 0.49 orders are separate BUY orders for different tokens, sum to 0.99, cannot match each other, and require unrelated external counterparties to fill them. No order, account action, production access/mutation, or product-code change occurred.
+
+## 2026-08-09T17:55:36.0696720Z
+Request:
+Вот это вот:
+
+Можно владеть обеими сторонами рынка. Нельзя быть обеими сторонами одной сделки.
+
+Найди точные подтверждения в документации Polymarket и скинь сюда по-русски
+
+Result:
+Verified the distinction from current official Polymarket sources. `Positions & Tokens` expressly says splitting can be used to `Obtain both sides of a market` and documents equal Yes/No balances. The current Terms of Use prohibit entering an order that does not change beneficial ownership. The Market Integrity page independently lists wash trading and self-dealing as prohibited, while Maker Rebate eligibility says the maker's liquidity must be taken by another trader. Therefore holding both outcomes is supported, but controlled accounts or orders must not execute against each other. No order, account action, production mutation, code/configuration change, build, or test occurred.
