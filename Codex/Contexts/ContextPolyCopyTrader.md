@@ -1,3 +1,16 @@
+## Active Update 2026-08-09 Paired Early Maker 0.50/0.50 Contract Conflict
+Goal: Implement three ordinary-Paper BTC/ETH/SOL pairs (six Up/Down legs) at first market acceptance, cap `0.50`, equal shares, TouchNoDepth fills, and effective expiry one minute before market end.
+Status: Blocked
+Done:
+- Recorded the user's choices: a second exact ordinary-Paper exception instead of ResearchOnly, three paired BTC/ETH/SOL strategies with six leg identities, retain `0.50+0.50` rather than lower one leg, and keep every unfilled remainder until original effective expiry.
+- Verified from current official Polymarket documentation that complementary BUY Yes/No orders match when their prices sum to `1.00`; therefore `0.50+0.50` are mutually compatible orders. Current official PostOnly semantics reject an order that could match immediately. Documentation does not prove whether same-owner self-match prevention permits both complementary PostOnly orders to remain live, so simultaneous Live acceptance is Unknown and cannot be assumed.
+- Verified that Maker rebate eligibility requires resting liquidity to be taken by another trader. A pair has zero gross price PnL only for equal independently filled shares; any unmatched filled shares remain directional exposure. Orders must never be modeled as filling each other.
+- Verified that current Paper accounting stores platform fee but has no rebate field or payout ledger. Maker fee is calculated as zero for a confirmed taker-only schedule, but this is not a rebate. Paper fills do not earn venue payouts, and exact daily rebates are available only from the authoritative maker rebate ledger/API; current architecture explicitly excludes rebates from Paper PnL.
+- Completed the read-only scope preview: continuous BTC/ETH/SOL 5m coverage means three conditions and six legs per UTC slot, about `864` conditions and `1,728` leg candidates per day. Existing market discovery is near-start only, so first-accepting day-ahead placement requires a dedicated discovery/subscription path and explicit pair/leg audit identity; no catalog IDs or implementation files were changed.
+Next: Obtain one explicit choice among conservative simultaneous `0.50/0.49`, sequential externally filled `0.50` then opposite `0.50`, or a deliberately synthetic ordinary-Paper dual-rest `0.50/0.50` exception; separately decide whether to add a non-PnL estimated-rebate audit metric.
+Notes: Read-only repository and current official Polymarket documentation review. No code/configuration implementation, test/build, deployment, database/service action, order/cancellation, account action, or production mutation occurred.
+Blockers: The selected simultaneous `0.50/0.50` pair is not proven Live-compatible PostOnly behavior, and current Paper PnL cannot represent the stated Maker-rebate return.
+
 ## Active Update 2026-08-09 Maker-GTD Maximum-Resting Pricing v2
 Goal: Apply maximum-resting Maker pricing to both the existing 28 ETH Maker-GTD strategies and the prospective six BTC/ETH/SOL Up/Down strategies, retaining cap `0.99` for the existing family.
 Status: Blocked

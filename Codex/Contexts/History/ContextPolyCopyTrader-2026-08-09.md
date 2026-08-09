@@ -187,3 +187,12 @@ Request:
 
 Result:
 Implemented the pricing correction locally for the exact existing 28 ETH Reference Average Maker-GTD strategies: new `maker_gtd_paper_v2` placements use `floor_to_tick(min(bestAsk-tick,0.99))`, with S0/S1 PostOnly safety unchanged. Grandfathered already persisted `maker_gtd_paper_v1` records under their original formula so active lifecycle/history is not orphaned, and added a fail-closed exact-family placement predicate to prevent future BTC/SOL/day-ahead/cap-0.50 variants from inheriting the existing ordinary-Paper exception. Added a wide-spread `0.01/0.99` regression that produces `0.98`; final Maker-GTD tests passed `138/138`. The six new BTC/ETH/SOL Up/Down strategies were not implemented because their ResearchOnly/ordinary-Paper classification, paired-price/equal-share coordination, and one-sided-fill order lifetime remain user choices. No deployment, database/configuration mutation, order/account action, or production change occurred.
+
+## 2026-08-09T19:11:06.7318443Z
+Request:
+1. Не нужно делать ResearchOnly, пусть это будет полноценная Paper стратегия
+2. Ок, давай сделаем три пары. При 0.50 + 0.50 остаёмся по 0.50, расходимся по нулям и зарабатываем на Maker премии.
+3. Держим до исходного expiry
+
+Result:
+Stopped before implementation after a read-only execution and accounting preview found a material contradiction. Current official Polymarket documentation says complementary BUY Yes/No orders match when their prices sum to `1.00`, while PostOnly rejects an order that could match immediately; the documentation does not establish that two same-owner complementary `0.50/0.50` PostOnly orders can both remain live. The current Paper model also excludes Maker rebates and has no authoritative payout ledger, so equal externally filled `0.50/0.50` shares produce zero recorded gross/net price PnL rather than a rebate profit. Requested a choice between conservative `0.50/0.49`, sequential `0.50` legs, or an explicitly synthetic dual-rest ordinary-Paper exception, plus whether a separate estimated-rebate audit metric is desired. No strategy/catalog/configuration code, order, account, database/service, deployment, or production state was changed.
