@@ -34,7 +34,12 @@ contains the full safety and project rules.
   at thresholds `1..10` and `15..100` step `5`, behavior
   `ReferenceAverageBpsThresholdMakerGtdPremarket`, catalog ID
   `b7c50005-0000-4000-8223-{100+threshold, zero-padded to 12 digits}`, and execution
-  source `eth_reference_average_maker_gtd_paper`, with `PaperOnly=true`. This family
+  source `eth_reference_average_maker_gtd_paper`, and `PaperOnly=true`. New
+  placements use contract `maker_gtd_paper_v2` with S0 pricing exactly
+  `floor_to_tick(min(S0.bestAsk - S0.tickSize, 0.99))`. Exact-family records already
+  persisted under `maker_gtd_paper_v1` remain grandfathered with their original
+  one-tick-improvement formula; persisted version/formula fields separate the two
+  regimes. This family
   intentionally enters ordinary Paper metrics under the mandatory label
   `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`; Live
   submission is disabled. No alias, clone, descendant, future strategy, or changed

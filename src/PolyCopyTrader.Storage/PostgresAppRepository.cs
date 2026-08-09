@@ -9827,6 +9827,7 @@ FROM claimed;
 		if (string.IsNullOrWhiteSpace(run.SkipDiagnosticsJson) ||
 			run.SkipReason is not
 				("maker_gtd_variant_not_paper_only" or
+				 "maker_gtd_variant_outside_closed_exception" or
 				 "maker_gtd_market_start_unknown" or
 				 "maker_gtd_market_end_unknown" or
 				 "maker_gtd_effective_expiration_elapsed" or

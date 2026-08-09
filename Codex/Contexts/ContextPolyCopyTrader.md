@@ -1,3 +1,16 @@
+## Active Update 2026-08-09 Maker-GTD Maximum-Resting Pricing v2
+Goal: Apply maximum-resting Maker pricing to both the existing 28 ETH Maker-GTD strategies and the prospective six BTC/ETH/SOL Up/Down strategies, retaining cap `0.99` for the existing family.
+Status: Blocked
+Done:
+- Changed new placements for the exact existing 28 ETH Reference Average Maker-GTD variants from `floor_to_tick(min(bestBid+tick,bestAsk-tick,0.99))` to `floor_to_tick(min(bestAsk-tick,0.99))`; the S0/S1 freshness, immutable PostOnly intent, ten-attempt retry, sizing, GTD expiry, TouchNoDepth lifecycle, and Live-disabled behavior remain unchanged.
+- Versioned new decisions as `maker_gtd_paper_v2` and preserved the former formula as grandfathered `maker_gtd_paper_v1` history/lifecycle under the existing execution source. Persisted contract version and formula distinguish the regimes instead of reinterpreting old evidence.
+- Added a fail-closed placement guard requiring the exact 28 ETH IDs/codes, neutral thresholds `1..10` or `15..100` step `5`, dynamic direction, `-30s` timing, `PaperOnly`, and cap `0.99`. A BTC/SOL clone, day-ahead variant, cap `0.50`, or any other predicate mismatch cannot reuse the closed ordinary-Paper exception.
+- Added a wide-spread regression proving that S0 bid `0.01`, ask `0.99`, tick `0.01` now produces and accepts candidate `0.98`, whereas the retired one-tick-improvement rule would have produced `0.02`. Updated catalog/schema descriptions, README, parity/governance rules, and preserved the historical observation with a supersession note rather than rewriting captured evidence.
+- Final Maker-GTD filtered verification passed `138/138` with zero failures. Earlier targeted verification passed `16/16`. A broad processor-class run remained red at `123/237` with `114` known stale/unrelated catalog-baseline failures; no Maker-GTD test failed in that run.
+Next: Obtain the three remaining contract choices, then implement the six new BTC/ETH/SOL Up/Down strategies with cap `0.50` in a separate behavior/source/classification path.
+Notes: Local source/documentation/tests only. No deployment, database/configuration mutation, order placement/cancellation, account action, or production state change occurred. Tick-aligned venue books make the approved formula the highest tick-aligned resting price; off-grid synthetic asks retain the exact formula semantics and are not silently normalized differently.
+Blockers: User must choose (1) `ResearchOnly` versus a second explicit closed ordinary-Paper TouchNoDepth exception, (2) six independent legs versus three equal-share coordinated pairs and the `0.50+0.50` tie-break, and (3) how long to keep the unfilled opposite leg after a one-sided fill or second-leg rejection.
+
 ## Active Update 2026-08-09 Maker Maximum-Safe Price Formula Correction
 Goal: Resolve why the current Maker-GTD implementation uses `bestBid + tick` despite the user's invariant of the highest possible fill probability that remains non-marketable PostOnly.
 Status: Completed

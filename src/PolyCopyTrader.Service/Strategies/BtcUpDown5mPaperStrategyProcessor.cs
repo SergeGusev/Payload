@@ -6150,7 +6150,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var makerMaximumOrderPrice = variant.MakerMaximumOrderPrice;
         var makerGtd = new JsonObject
         {
-            ["contract_version"] = "maker_gtd_paper_v1",
+            ["contract_version"] = MakerGtdPaperExecutionContract.CurrentContractVersion,
             ["execution_source"] = MakerGtdPaperExecutionContract.ExecutionSource,
             ["strategy_run_id"] = run.Id.ToString("D"),
             ["paper_only"] = true,
@@ -6158,7 +6158,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             ["order_type"] = MakerGtdBuyExecutionIntent.TimeInForce,
             ["maximum_placement_attempts"] = MakerGtdPaperMaximumPlacementAttempts,
             ["quote_max_age_ms"] = maxQuoteAgeMilliseconds,
-            ["price_formula"] = "floor_to_tick(min(best_bid + tick_size, best_ask - tick_size, maximum_order_price))",
+            ["price_formula"] = MakerGtdPaperExecutionContract.CurrentPriceFormula,
             ["maximum_order_price"] = makerMaximumOrderPrice,
             ["market_start_utc"] = FormatMakerGtdTimestamp(marketStartUtc),
             ["market_end_utc"] = FormatMakerGtdTimestamp(market.EndDateUtc),
@@ -6177,6 +6177,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 root,
                 makerGtd,
                 "maker_gtd_variant_not_paper_only");
+        }
+
+        if (!MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant))
+        {
+            return CompleteMakerGtdPlacementFailure(
+                root,
+                makerGtd,
+                "maker_gtd_variant_outside_closed_exception");
         }
 
         if (marketStartUtc is null)
@@ -6271,12 +6279,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 continue;
             }
 
-            var bestBid = s0.BestBid!.Value;
             var bestAsk = s0.BestAsk!.Value;
             var tickSize = s0.TickSize!.Value;
             var rawLimitPrice = Math.Min(
                 makerMaximumOrderPrice.Value,
-                Math.Min(bestBid + tickSize, bestAsk - tickSize));
+                bestAsk - tickSize);
             var limitPrice = RoundDownToTick(rawLimitPrice, tickSize);
             attempt["raw_limit_price"] = rawLimitPrice;
             attempt["limit_price"] = limitPrice;

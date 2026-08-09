@@ -9091,7 +9091,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var makerGtd = root.GetProperty("maker_gtd");
         var attempt = Assert.Single(makerGtd.GetProperty("attempts").EnumerateArray());
         Assert.Equal("accepted_resting", attempt.GetProperty("outcome").GetString());
-        Assert.Equal(0.491m, attempt.GetProperty("raw_limit_price").GetDecimal());
+        Assert.Equal(0.495m, attempt.GetProperty("raw_limit_price").GetDecimal());
         Assert.Equal(0.49m, attempt.GetProperty("limit_price").GetDecimal());
         Assert.Equal("same-book-hash", attempt.GetProperty("s0").GetProperty("source_event_id").GetString());
         Assert.Equal("same-book-hash", attempt.GetProperty("s1").GetProperty("source_event_id").GetString());
@@ -9115,6 +9115,46 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(
             now.ToString("O", CultureInfo.InvariantCulture),
             marketDataStatus.GetProperty("accepted_at_utc").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdUsesHighestRestingPriceAcrossWideSpread()
+    {
+        var now = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [
+                MakerGtdOrderBook(
+                    now,
+                    bestBid: 0.01m,
+                    bestAsk: 0.99m,
+                    receivedAtUtc: now.AddMilliseconds(-1),
+                    sourceEventId: "wide-spread-s0"),
+                MakerGtdOrderBook(
+                    now,
+                    bestBid: 0.01m,
+                    bestAsk: 0.99m,
+                    receivedAtUtc: now.AddMilliseconds(1),
+                    sourceEventId: "wide-spread-s1")
+            ]);
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(0, scenario.Result.RunsSkipped);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(0.98m, order.Price);
+
+        using var decision = JsonDocument.Parse(order.RawDecisionJson ?? "{}");
+        var makerGtd = decision.RootElement.GetProperty("maker_gtd");
+        Assert.Equal(
+            MakerGtdPaperExecutionContract.CurrentContractVersion,
+            makerGtd.GetProperty("contract_version").GetString());
+        Assert.Equal(
+            MakerGtdPaperExecutionContract.CurrentPriceFormula,
+            makerGtd.GetProperty("price_formula").GetString());
+        var attempt = Assert.Single(makerGtd.GetProperty("attempts").EnumerateArray());
+        Assert.Equal("accepted_resting", attempt.GetProperty("outcome").GetString());
+        Assert.Equal(0.98m, attempt.GetProperty("raw_limit_price").GetDecimal());
+        Assert.Equal(0.98m, attempt.GetProperty("limit_price").GetDecimal());
     }
 
     [Fact]

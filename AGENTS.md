@@ -75,6 +75,12 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
   behavior `ReferenceAverageBpsThresholdMakerGtdPremarket`; catalog ID
   `b7c50005-0000-4000-8223-{100+threshold, zero-padded to 12 digits}`; persisted
   execution source `eth_reference_average_maker_gtd_paper`; and `PaperOnly=true`.
+  New placements use contract `maker_gtd_paper_v2` with S0 pricing exactly
+  `floor_to_tick(min(S0.bestAsk - S0.tickSize, 0.99))`. Exact-family records
+  already persisted under `maker_gtd_paper_v1` remain grandfathered under their
+  original `floor_to_tick(min(S0.bestBid + S0.tickSize, S0.bestAsk - S0.tickSize,
+  0.99))` pricing so their lifecycle and historical accounting are not orphaned;
+  the persisted contract version and formula distinguish the two regimes.
   These exact 28 PaperOnly strategies intentionally contribute orders, positions, PnL, win rate,
   and performance to ordinary Paper metrics even though their optimistic
   `TouchNoDepth` full-fill inference is not Live-equivalent and may overstate

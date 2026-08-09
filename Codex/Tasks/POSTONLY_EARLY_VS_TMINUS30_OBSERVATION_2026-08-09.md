@@ -3,9 +3,14 @@
 Date of capture: 2026-08-09 UTC
 Mode: strictly read-only; no order was submitted, cancelled, or filled
 
+Historical note: this report preserves the one-tick-improvement formula that was
+active when the snapshots were captured. The later user-approved Maker-GTD v2
+policy replaces it with `floor_to_tick(min(bestAsk - tick, cap))`; the tables below
+must not be presented as measurements of that newer maximum-resting policy.
+
 ## Scope
 
-- Formula: `floor_to_tick(min(bestBid + tick, bestAsk - tick, 0.99))`.
+- Formula used during capture: `floor_to_tick(min(bestBid + tick, bestAsk - tick, 0.99))`.
 - Assets and outcomes: `BTC/ETH/SOL × Up/Down`.
 - EARLY group: six markets starting `2026-08-10 15:30..15:55Z`, observed at the first available `acceptingOrders=true` checkpoint. The first computable quotes were captured `23.809593..23.858539` hours before the event-window start, not at exactly 24 hours.
 - T-30 group: six different markets starting `2026-08-09 16:15..16:40Z`, observed at `slot start - 30s`.
@@ -15,7 +20,7 @@ These are two non-paired groups of different market instances. They support a de
 
 ## What 0.50 and 0.49 mean
 
-They are already the final Maker limit prices produced by the current formula. Do not subtract another tick.
+They are the final Maker limit prices produced by the formula used during this capture. Do not subtract another tick from these historical values.
 
 For a one-tick spread:
 

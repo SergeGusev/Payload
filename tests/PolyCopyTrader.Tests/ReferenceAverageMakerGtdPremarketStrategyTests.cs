@@ -1,5 +1,6 @@
 using System.Globalization;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Tests;
@@ -34,6 +35,7 @@ public sealed class ReferenceAverageMakerGtdPremarketStrategyTests
                 variant.LowerEnterSourceStrategyId is null &&
                 variant.DecisionThresholdBps == threshold);
             var maker = Assert.Single(makerVariants, variant => variant.DecisionThresholdBps == threshold);
+            Assert.True(MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(maker));
 
             Assert.Equal(
                 Guid.Parse($"b7c50005-0000-4000-8223-{100 + threshold:000000000000}"),
@@ -59,7 +61,9 @@ public sealed class ReferenceAverageMakerGtdPremarketStrategyTests
             Assert.Equal(0.99m, maker.MakerMaximumOrderPrice);
             Assert.Contains("at most ten attempts", maker.Description, StringComparison.Ordinal);
             Assert.Contains("post-only GTD BUY", maker.Description, StringComparison.Ordinal);
-            Assert.Contains("maximum order price of 0.99", maker.Description, StringComparison.Ordinal);
+            Assert.Contains("maximum-resting formula floor_to_tick(min(bestAsk - tick, cap))", maker.Description, StringComparison.Ordinal);
+            Assert.Contains("for a tick-aligned venue book", maker.Description, StringComparison.Ordinal);
+            Assert.Contains("capped at 0.99", maker.Description, StringComparison.Ordinal);
             Assert.Contains("expires one minute before market end", maker.Description, StringComparison.Ordinal);
             Assert.Contains("By explicit user approval", maker.Description, StringComparison.Ordinal);
             Assert.Contains("closed ordinary-Paper exception", maker.Description, StringComparison.Ordinal);
@@ -106,6 +110,24 @@ public sealed class ReferenceAverageMakerGtdPremarketStrategyTests
     }
 
     [Fact]
+    public void ExecutionContract_RejectsVariantOutsideExactClosedException()
+    {
+        var approved = StrategyIds.UpDown5mStrategyVariants.Single(item =>
+            item.Code == "eth_up_down_5m_reference_average_bps_9_maker_gtd_premarket");
+
+        Assert.False(MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(
+            approved with { Id = Guid.NewGuid() }));
+        Assert.False(MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(
+            approved with { ReferenceAssetSymbol = "BTC" }));
+        Assert.False(MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(
+            approved with { MakerMaximumOrderPrice = 0.50m }));
+        Assert.False(MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(
+            approved with { EntryDelaySeconds = -86_400 }));
+        Assert.False(MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(
+            approved with { MarketInterval = BtcUpDownMarketInterval.FifteenMinutes }));
+    }
+
+    [Fact]
     public void StrategyDisplayCategories_KeepMakerGtdClonesSeparateFromFakSources()
     {
         var categories = StrategyIds.UpDown5mStrategyVariants
@@ -142,7 +164,9 @@ public sealed class ReferenceAverageMakerGtdPremarketStrategyTests
             StringComparison.Ordinal);
         Assert.Contains("at most ten attempts", statement, StringComparison.Ordinal);
         Assert.Contains("post-only GTD BUY", statement, StringComparison.Ordinal);
-        Assert.Contains("maximum order price of 0.99", statement, StringComparison.Ordinal);
+        Assert.Contains("maximum-resting formula floor_to_tick(min(bestAsk - tick, cap))", statement, StringComparison.Ordinal);
+        Assert.Contains("for a tick-aligned venue book", statement, StringComparison.Ordinal);
+        Assert.Contains("capped at 0.99", statement, StringComparison.Ordinal);
         Assert.Contains("expires one minute before market end", statement, StringComparison.Ordinal);
         Assert.Contains("By explicit user approval", statement, StringComparison.Ordinal);
         Assert.Contains("closed ordinary-Paper exception", statement, StringComparison.Ordinal);

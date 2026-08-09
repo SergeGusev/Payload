@@ -84,7 +84,12 @@ the closed user-approved exception defined below:
   `15..100` step `5`; behavior
   `ReferenceAverageBpsThresholdMakerGtdPremarket`; catalog ID
   `b7c50005-0000-4000-8223-{100+threshold, zero-padded to 12 digits}`; execution
-  source `eth_reference_average_maker_gtd_paper`; and `PaperOnly=true`. Its ordinary
+  source `eth_reference_average_maker_gtd_paper`; and `PaperOnly=true`. New
+  placements use contract `maker_gtd_paper_v2` with S0 pricing exactly
+  `floor_to_tick(min(S0.bestAsk - S0.tickSize, 0.99))`. Exact-family records already
+  persisted under `maker_gtd_paper_v1` remain grandfathered with their original
+  one-tick-improvement formula; persisted version/formula fields separate the two
+  regimes. Its ordinary
   Paper orders, PnL, win rate, and performance are intentional, but every result
   must say
   `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. Live

@@ -46,8 +46,12 @@ end as the CLOB expiration and stops Paper execution one minute before market
 end.
 
 For one placement attempt, a fresh complete decision book `S0` produces the
-tick-aligned limit, size, and immutable intent. Live must submit that unchanged
-intent. Paper obtains a separate fresh book `S1` only to emulate the venue-side
+tick-aligned limit, size, and immutable intent. For the exact ETH exception below,
+the approved S0 limit uses the maximum-resting formula
+`floor_to_tick(min(S0.bestAsk - S0.tickSize, 0.99))`; for a tick-aligned venue book
+this is the highest tick-aligned price strictly below `S0.bestAsk`, and `S0.bestBid`
+does not cap it.
+Live must submit that unchanged intent. Paper obtains a separate fresh book `S1` only to emulate the venue-side
 post-only decision: a BUY limit greater than or equal to `S1.bestAsk` is a
 definitive simulated crossing rejection; a lower limit is accepted as
 `Resting`. `S1` cannot resize or reprice the frozen intent. A rejected attempt
@@ -82,7 +86,17 @@ only when every predicate below is true:
 - catalog ID is
   `b7c50005-0000-4000-8223-{100+threshold, zero-padded to 12 digits}`;
 - persisted execution source is `eth_reference_average_maker_gtd_paper`;
+- new placements use `maker_gtd_paper_v2` and S0 pricing exactly
+  `floor_to_tick(min(S0.bestAsk - S0.tickSize, 0.99))`;
 - the strategy has `PaperOnly=true`, and no Live submission path is enabled.
+
+Exact-family orders and results already persisted under `maker_gtd_paper_v1` are
+grandfathered within this same closed exception with their original
+`floor_to_tick(min(S0.bestBid + S0.tickSize, S0.bestAsk - S0.tickSize, 0.99))`
+pricing. They remain eligible for lifecycle completion and historical accounting;
+the persisted contract version and formula distinguish them from v2. Runtime v2
+placement is fail-closed unless the exact asset, behavior, ID, threshold, code,
+timing, Paper-only flag, and `0.99` cap predicates pass.
 
 For these exact 28 strategies, ordinary Paper orders, positions, fills, PnL, win
 rate, and performance inclusion is intentional. Every result must carry the label
