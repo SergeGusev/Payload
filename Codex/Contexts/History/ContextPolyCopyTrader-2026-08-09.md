@@ -161,3 +161,15 @@ Request:
 
 Result:
 Verified the distinction from current official Polymarket sources. `Positions & Tokens` expressly says splitting can be used to `Obtain both sides of a market` and documents equal Yes/No balances. The current Terms of Use prohibit entering an order that does not change beneficial ownership. The Market Integrity page independently lists wash trading and self-dealing as prohibited, while Maker Rebate eligibility says the maker's liquidity must be taken by another trader. Therefore holding both outcomes is supported, but controlled accounts or orders must not execute against each other. No order, account action, production mutation, code/configuration change, build, or test occurred.
+
+## 2026-08-09T18:24:41.8445673Z
+Request:
+Ок, давай тогда сделаем шесть стратегий - Up/Down для каждой из трёх валют. Пока только в Paper режиме. Суть их следующая:
+
+1. Как только открывается рынок (то есть за сутки до начала торгов), они делают Maker ставку по максимально возможной цене, но не дороже 0.5.  Ставка должна автоматически сниматься за 1 минуту до окончания рынка.
+2. В течение всей жизни этой ставки мы следим за стаканом и, как только он пересечёт нашу ставку, считаем её исполненной. Глубину стакана не считаем.
+
+Всё нормально или я чего-то не учёл?
+
+Result:
+Completed a read-only contract and parity review before implementation. The requested depth-free full-fill-on-touch rule is optimistic and not Live-equivalent, so the six new fixed BTC/ETH/SOL Up/Down variants cannot inherit the exact 28-strategy ETH ordinary-Paper exception and must default to `ResearchOnly` unless the user explicitly approves a new closed exception. Identified unresolved choices for literal maximum-resting versus current one-tick-improvement pricing, condition-level `Up+Down<1.00` coordination, equal-share sizing, and acceptance of one-sided fill risk. Also verified that effective end-minus-one-minute expiry maps to wire GTD at market end, and that current near-start market discovery cannot support roughly day-ahead placement across all three assets without a dedicated discovery/subscription path. No product code/configuration, order, account, service, database, or production state was changed; implementation awaits the exact user-approved contract.
