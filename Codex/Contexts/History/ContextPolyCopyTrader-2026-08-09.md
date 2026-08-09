@@ -119,3 +119,17 @@ Request:
 
 Result:
 Completed the confirmed strictly read-only comparison for six consecutive slots per group, BTC/ETH/SOL × Up/Down. EARLY used 2026-08-10 `15:30..15:55Z` first-accepting observations and T-30 used six different 2026-08-09 `16:15..16:40Z` markets at exact `start-30s` targets. Strict deduplication retained `30/36` early formula prices, `24/36` hypothetical S0/S1 acceptances, six freshness failures, and six explicitly missed rows; the modal `0.50/0.49` pattern matched `23/24` accepted limits but was not universal. T-30 captured `36/36` formula prices with zero recomputation mismatch and `25/36` hypothetical acceptances; all 11 local failures were stale-book evidence failures, not venue rejections. Against the modal early benchmark, early Up `0.50` was cheaper in `6/18` T-30 observations and more expensive in `12/18`; T-30 Up averaged `0.493333`. Early Down `0.49` was cheaper in `12/18`; T-30 Down averaged `0.497222`. The equal-weight mean difference was only `+0.000278` per share, so this non-paired sample shows outcome-price redistribution rather than a proven early-placement gain. Confirmed that `0.50/0.49` already are final formula limits and no additional tick should be subtracted. Preserved a 72-row canonical CSV and detailed report, paused the heartbeat automation, stopped all watcher processes, and completed protected temp cleanup. No order, cancellation, fill, production mutation, service/configuration change, or product-code change occurred.
+
+## 2026-08-09T17:12:50.9097409Z
+Request:
+Возвращаюсь к этому результату со ставками за сутки.
+
+Актив	Up	Down
+BTC	0.50	0.49
+ETH	0.50	0.49
+SOL	0.50	0.49
+
+Я правильно понимаю, что если с одного аккаунта я буду ставить по всем трём валютам Up за сутки, а с другого - Down за сутки, то при условии срабатывания обоих сторон сразу я всегда будут в выигрыше и ещё получу комиссию мейкера?
+
+Result:
+Confirmed the conditional complete-set math but rejected the unconditional wording. For equal fully filled shares in the same condition, Up 0.50 plus Down 0.49 costs 0.99 and merges/redeems for 1.00, locking `$0.01` gross per share; 100 shares on each side across BTC/ETH/SOL cost `$297`, return `$300`, and yield `$3` gross before contingent rebates and external costs. PostOnly acceptance is not a fill, and the two 0.99 complementary BUY bids cannot match each other; external counterparties must execute both legs. Any one-sided or unequal fill leaves directional risk. Fresh public checks of all exact 18 EARLY markets found `feesEnabled=true` and identical `0.07 / exponent 1 / taker-only / 20% rebate` schedules. Makers pay zero platform fee; eligible executed liquidity accrues a variable daily rebate, with a nominal current calculation of `$0.69986` per 100-share complete pair and a `$1` payout threshold, but it is not guaranteed at placement. Two accounts are unnecessary, prevent direct merge until positions are consolidated, and must never be intentionally crossed because Polymarket prohibits wash trading and self-dealing. No order, account action, production access/mutation, or product-code change occurred.

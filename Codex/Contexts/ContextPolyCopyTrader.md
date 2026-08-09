@@ -1,3 +1,16 @@
+## Active Update 2026-08-09 Paired Up/Down Maker Economics
+Goal: Determine whether buying equal Up and Down Maker positions at 0.50/0.49 across separate accounts guarantees profit and earns the current Maker rebate.
+Status: Completed read-only analysis
+Done:
+- Proved the conditional complete-set math: for the same condition/slot and exactly equal fully filled share quantities `q`, cost is `0.99q`, merge/redemption value is `1.00q`, and locked gross profit is `0.01q` regardless of outcome. At 100 shares per side this is `$99 -> $100`, or `$1` gross per asset; across BTC/ETH/SOL it is `$297 -> $300`, or `$3` gross.
+- Separated order acceptance from execution. PostOnly rejects an immediately marketable order, and the two complementary BUY bids at `0.50+0.49=0.99` do not cross the exchange's MINT condition. Both sides therefore require external fills; unequal or one-sided fills leave directional inventory and can lose substantially more than the paired spread earns.
+- Verified all exact `18/18` EARLY sampled markets through fresh public Gamma and CLOB reads: `feesEnabled=true`, fee schedule `rate=0.07`, `exponent=1`, `takerOnly=true`, `rebateRate=0.20`, with zero lookup errors. Current official documentation says Maker fee is zero and rebates are paid daily only for executed Maker liquidity, with a `$1` accrued payout threshold.
+- Calculated the current nominal fee-curve rebate for 100 fully filled shares per side: fee-equivalent `$1.75000` at Up 0.50 plus `$1.74930` at Down 0.49; at the current 20% crypto rebate rate this is `$0.69986` per complete market pair. This is a contingent daily rebate, not a fixed commission or an execution guarantee, and current terms/rates can change.
+- Confirmed that two accounts are economically unnecessary: one wallet can hold equal Yes/No positions and merge them. Opposite positions filled by independent external traders are distinct from intentionally trading controlled accounts against each other; Polymarket expressly prohibits wash trading and self-dealing, so no cross-account self-match or rebate farming should be attempted.
+Next: If requested, design a ResearchOnly/Paper measurement of paired-fill frequency, fill imbalance, time-to-second-leg, and net rebate rather than treating two accepted resting orders as a completed arbitrage.
+Notes: Sources were current official Polymarket fee, rebate, order-lifecycle, positions/merge, exchange-v2 matching, and market-integrity pages plus fresh public API reads of the exact saved 18-market sample. No order, account action, service/database access, production mutation, code/configuration change, build, or test occurred.
+Blockers: None for the conditional math. Real strategy profitability remains unknown until both-leg fill frequency and imbalance costs are measured.
+
 ## Active Update 2026-08-09 PostOnly Early vs T-30 Quote Observation
 Goal: Compare the current Maker PostOnly formula at first accepting and at T-30 seconds for six consecutive BTC/ETH/SOL 5-minute slots and clarify whether 0.50/0.49 already are final limits.
 Status: Completed
