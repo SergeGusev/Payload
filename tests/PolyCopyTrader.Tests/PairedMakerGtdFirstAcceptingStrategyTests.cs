@@ -67,6 +67,8 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
             Assert.Contains($"capped at {expected.MaximumOrderPrice:0.00}", variant.Description, StringComparison.Ordinal);
             Assert.Contains("same requested share quantity", variant.Description, StringComparison.Ordinal);
             Assert.Contains("submission is not atomic and there is no rollback", variant.Description, StringComparison.Ordinal);
+            Assert.Contains("bounded ordered direct HTTP request/client-receipt/response/evaluation bracket", variant.Description, StringComparison.Ordinal);
+            Assert.Contains("venue snapshot timestamp remains audit evidence", variant.Description, StringComparison.Ordinal);
             Assert.Contains("original effective expiry one minute before market end", variant.Description, StringComparison.Ordinal);
             Assert.Contains("ordinary Paper orders, PnL, win rate, and performance", variant.Description, StringComparison.Ordinal);
             Assert.Contains(StrategyIds.OptimisticTouchNoDepthPaperLabel, variant.Description, StringComparison.Ordinal);
@@ -129,6 +131,8 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
         Assert.Contains("nominally one day before market start", statement, StringComparison.Ordinal);
         Assert.Contains("same requested share quantity", statement, StringComparison.Ordinal);
         Assert.Contains("submission is not atomic and there is no rollback", statement, StringComparison.Ordinal);
+        Assert.Contains("bounded ordered direct HTTP request/client-receipt/response/evaluation bracket", statement, StringComparison.Ordinal);
+        Assert.Contains("venue snapshot timestamp remains audit evidence", statement, StringComparison.Ordinal);
         Assert.Contains("original effective expiry one minute before market end", statement, StringComparison.Ordinal);
         Assert.Contains("ordinary Paper orders, PnL, win rate, and performance", statement, StringComparison.Ordinal);
         Assert.Contains(StrategyIds.OptimisticTouchNoDepthPaperLabel, statement, StringComparison.Ordinal);
@@ -138,6 +142,28 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
         Assert.DoesNotContain("enabled =", conflictClause, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("live_stakes =", conflictClause, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("paper_stake_amount =", conflictClause, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ExecutionContract_VersionsReceiptFreshnessWithoutOrphaningV1()
+    {
+        Assert.Equal("paired_maker_gtd_paper_v1", PairedMakerGtdPaperExecutionContract.LegacyContractVersion);
+        Assert.Equal("paired_maker_gtd_paper_v2", PairedMakerGtdPaperExecutionContract.CurrentContractVersion);
+        Assert.Equal(
+            PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+            PairedMakerGtdPaperExecutionContract.ContractVersion);
+        Assert.Equal(
+            "direct_http_response_receipt",
+            PairedMakerGtdPaperExecutionContract.DirectHttpReceiptFreshnessBasis);
+        Assert.Equal(
+            60_000,
+            PairedMakerGtdPaperExecutionContract.MaximumDirectHttpQuoteAgeMilliseconds);
+        Assert.True(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
+            PairedMakerGtdPaperExecutionContract.LegacyContractVersion));
+        Assert.True(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
+            PairedMakerGtdPaperExecutionContract.CurrentContractVersion));
+        Assert.False(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
+            "paired_maker_gtd_paper_v0"));
     }
 
     private static Guid Id(int suffix)

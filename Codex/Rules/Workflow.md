@@ -102,6 +102,12 @@ the closed user-approved exception defined below:
   timing, source `crypto_paired_maker_gtd_first_accepting_paper`, Up cap `0.50`,
   Down cap `0.49`, one frozen equal-share quantity per pair, independent S0/S1
   acceptance, no atomic rollback, and expiry one minute before market end. Their
+  new placements use `paired_maker_gtd_paper_v2`: every direct HTTP S0/S1 read
+  must carry a bounded ordered local request/client-receipt/response/evaluation
+  bracket. The authoritative venue snapshot timestamp remains mandatory audit
+  evidence but may be old for a freshly fetched unchanged quiet book. Exact-family
+  v1 orders already persisted under the former venue-source-age rule remain
+  grandfathered for lifecycle completion. Their
   TouchNoDepth fills additionally require the same market-data service session and
   uninterrupted owning-shard subscription component/generation; restart,
   owning-shard reconnect, or asset reassignment fails closed.

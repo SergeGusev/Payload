@@ -51,7 +51,11 @@ contains the full safety and project rules.
   accepting timing, source `crypto_paired_maker_gtd_first_accepting_paper`,
   `PaperOnly=true`, Up cap `0.50`, Down cap `0.49`, equal frozen shares,
   independent S0/S1 acceptance, no pair atomicity/rollback, and expiry at market
-  end minus one minute. Its optimistic TouchNoDepth fills require the same
+  end minus one minute. New `paired_maker_gtd_paper_v2` placements prove direct
+  HTTP freshness with a bounded ordered request/receipt/response/evaluation
+  bracket; the authoritative venue timestamp remains audit evidence and may be
+  old for a quiet unchanged book. Exact v1 orders remain grandfathered for their
+  lifecycle. Its optimistic TouchNoDepth fills require the same
   market-data service session and uninterrupted owning-shard subscription
   component/generation; restart, owning-shard reconnect, or asset reassignment
   fails closed. They carry the same mandatory label and may enter ordinary

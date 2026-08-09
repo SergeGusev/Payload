@@ -579,10 +579,7 @@ internal static class MakerGtdPaperOrderEvidenceParser
         }
 
         if (!TryGetRequiredString(makerGtd, "contract_version", out var contractVersion) ||
-            !string.Equals(
-                contractVersion,
-                PairedMakerGtdPaperExecutionContract.ContractVersion,
-                StringComparison.Ordinal) ||
+            !PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(contractVersion) ||
             !TryGetRequiredString(makerGtd, "execution_source", out var makerExecutionSource) ||
             !string.Equals(
                 makerExecutionSource,
@@ -696,11 +693,33 @@ internal static class MakerGtdPaperOrderEvidenceParser
             return false;
         }
 
+        var intentMinOrderSize = 0m;
+        var intentNegativeRisk = false;
+        if (string.Equals(
+                contractVersion,
+                PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+                StringComparison.Ordinal) &&
+            (!TryGetRequiredPositiveDecimal(
+                 frozenIntent,
+                 "min_order_size",
+                 out intentMinOrderSize) ||
+             !TryGetRequiredBoolean(
+                 frozenIntent,
+                 "negative_risk",
+                 out intentNegativeRisk)))
+        {
+            failureDetail = "paired_frozen_intent_mismatch";
+            return false;
+        }
+
         if (!TryValidatePairedAcceptedAttempt(
                 makerGtd,
                 order,
+                contractVersion,
                 maximumOrderPrice,
                 tickSize,
+                intentMinOrderSize,
+                intentNegativeRisk,
                 attemptsCompleted,
                 frozenAtUtc,
                 acceptedAtUtc))
@@ -775,8 +794,11 @@ internal static class MakerGtdPaperOrderEvidenceParser
     private static bool TryValidatePairedAcceptedAttempt(
         JsonElement makerGtd,
         PaperOrder order,
+        string contractVersion,
         decimal maximumOrderPrice,
         decimal frozenTickSize,
+        decimal intentMinOrderSize,
+        bool intentNegativeRisk,
         int attemptsCompleted,
         DateTimeOffset frozenAtUtc,
         DateTimeOffset acceptedAtUtc)
@@ -859,8 +881,128 @@ internal static class MakerGtdPaperOrderEvidenceParser
         }
 
         var expectedLimit = decimal.Floor(rawExpectedLimit / s0TickSize) * s0TickSize;
-        return attemptLimitPrice == expectedLimit;
+        if (attemptLimitPrice != expectedLimit)
+        {
+            return false;
+        }
+
+        if (string.Equals(
+                contractVersion,
+                PairedMakerGtdPaperExecutionContract.LegacyContractVersion,
+                StringComparison.Ordinal))
+        {
+            return !s0.TryGetProperty("freshness_basis", out _) &&
+                !s1.TryGetProperty("freshness_basis", out _);
+        }
+
+        if (!TryGetRequiredPositiveDecimal(s0, "best_bid", out var s0BestBid) ||
+            s0BestBid >= 1m ||
+            s0BestAsk >= 1m ||
+            s0BestBid >= s0BestAsk ||
+            !TryGetRequiredPositiveDecimal(s0, "min_order_size", out var s0MinOrderSize) ||
+            s0MinOrderSize != intentMinOrderSize ||
+            !TryGetRequiredBoolean(s0, "negative_risk", out var s0NegativeRisk) ||
+            s0NegativeRisk != intentNegativeRisk ||
+            !TryGetRequiredPositiveDecimal(s1, "best_bid", out var s1BestBid) ||
+            s1BestBid >= 1m ||
+            s1BestAsk >= 1m ||
+            s1BestBid >= s1BestAsk ||
+            !TryGetRequiredPositiveDecimal(s1, "tick_size", out var s1TickSize) ||
+            s1TickSize != frozenTickSize ||
+            !TryGetRequiredPositiveDecimal(s1, "min_order_size", out var s1MinOrderSize) ||
+            s1MinOrderSize != intentMinOrderSize ||
+            !TryGetRequiredBoolean(s1, "negative_risk", out var s1NegativeRisk) ||
+            s1NegativeRisk != intentNegativeRisk ||
+            !TryGetRequiredPositiveDecimal(
+                attemptIntent,
+                "min_order_size",
+                out var attemptIntentMinOrderSize) ||
+            attemptIntentMinOrderSize != intentMinOrderSize ||
+            !TryGetRequiredBoolean(
+                attemptIntent,
+                "negative_risk",
+                out var attemptIntentNegativeRisk) ||
+            attemptIntentNegativeRisk != intentNegativeRisk)
+        {
+            return false;
+        }
+
+        if (!TryValidatePairedDirectHttpFreshness(s0, out var s0Freshness) ||
+            !TryValidatePairedDirectHttpFreshness(s1, out var s1Freshness))
+        {
+            return false;
+        }
+
+        return s0Freshness.EvaluatedAtUtc <= frozenAtUtc &&
+            frozenAtUtc - s0Freshness.ReceivedAtUtc <= s0Freshness.MaximumAge &&
+            s1Freshness.RequestStartedAtUtc >= frozenAtUtc &&
+            s1Freshness.EvaluatedAtUtc <= acceptedAtUtc &&
+            acceptedAtUtc - s1Freshness.ReceivedAtUtc <= s1Freshness.MaximumAge &&
+            SameTimestamp(s1Freshness.ReceivedAtUtc, s1ReceivedAtUtc);
     }
+
+    private static bool TryValidatePairedDirectHttpFreshness(
+        JsonElement book,
+        out PairedDirectHttpFreshnessEvidence evidence)
+    {
+        evidence = default;
+        if (!TryGetRequiredString(book, "freshness_basis", out var freshnessBasis) ||
+            !string.Equals(
+                freshnessBasis,
+                PairedMakerGtdPaperExecutionContract.DirectHttpReceiptFreshnessBasis,
+                StringComparison.Ordinal) ||
+            !TryGetRequiredTimestamp(book, "request_started_at_utc", out var requestStartedAtUtc) ||
+            !TryGetRequiredTimestamp(book, "received_at_utc", out var receivedAtUtc) ||
+            !TryGetRequiredTimestamp(book, "response_completed_at_utc", out var responseCompletedAtUtc) ||
+            !TryGetRequiredTimestamp(book, "evaluated_at_utc", out var evaluatedAtUtc) ||
+            !TryGetRequiredTimestamp(book, "source_timestamp_utc", out var sourceTimestampUtc) ||
+            !TryGetRequiredNonNegativeInt64(book, "max_age_ms", out var maxAgeMs) ||
+            maxAgeMs <= 0 ||
+            maxAgeMs > PairedMakerGtdPaperExecutionContract.MaximumDirectHttpQuoteAgeMilliseconds ||
+            !TryGetRequiredNonNegativeInt64(book, "age_ms", out var ageMs) ||
+            !TryGetRequiredNonNegativeInt64(book, "receipt_age_ms", out var receiptAgeMs) ||
+            !TryGetRequiredNonNegativeInt64(book, "request_duration_ms", out var requestDurationMs) ||
+            !TryGetRequiredNonNegativeInt64(book, "source_age_ms", out var sourceAgeMs) ||
+            requestStartedAtUtc > receivedAtUtc ||
+            receivedAtUtc > responseCompletedAtUtc ||
+            responseCompletedAtUtc > evaluatedAtUtc ||
+            sourceTimestampUtc > receivedAtUtc)
+        {
+            return false;
+        }
+
+        var expectedReceiptAgeMs = CeilingMilliseconds(evaluatedAtUtc - receivedAtUtc);
+        var expectedRequestDurationMs = CeilingMilliseconds(responseCompletedAtUtc - requestStartedAtUtc);
+        var expectedSourceAgeMs = CeilingMilliseconds(evaluatedAtUtc - sourceTimestampUtc);
+        var valid = ageMs == receiptAgeMs &&
+            receiptAgeMs == expectedReceiptAgeMs &&
+            requestDurationMs == expectedRequestDurationMs &&
+            sourceAgeMs == expectedSourceAgeMs &&
+            receiptAgeMs <= maxAgeMs &&
+            requestDurationMs <= maxAgeMs;
+        if (!valid)
+        {
+            return false;
+        }
+
+        evidence = new PairedDirectHttpFreshnessEvidence(
+            requestStartedAtUtc,
+            receivedAtUtc,
+            evaluatedAtUtc,
+            TimeSpan.FromMilliseconds(maxAgeMs));
+        return true;
+    }
+
+    private static long CeilingMilliseconds(TimeSpan value)
+    {
+        return checked((long)Math.Ceiling(value.TotalMilliseconds));
+    }
+
+    private readonly record struct PairedDirectHttpFreshnessEvidence(
+        DateTimeOffset RequestStartedAtUtc,
+        DateTimeOffset ReceivedAtUtc,
+        DateTimeOffset EvaluatedAtUtc,
+        TimeSpan MaximumAge);
 
     private static bool TryGetObject(
         JsonElement root,

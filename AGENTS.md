@@ -97,7 +97,13 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
   `EntryTiming=FirstAcceptingOrders`; nominal `EntryDelaySeconds=-86400`;
   execution source `crypto_paired_maker_gtd_first_accepting_paper`; `PaperOnly=true`;
   Up cap `0.50`; Down cap `0.49`; and formula
-  `floor_to_tick(min(bestAsk-tick, cap))`. Each pair freezes one common normalized
+  `floor_to_tick(min(bestAsk-tick, cap))`. New placements use contract
+  `paired_maker_gtd_paper_v2`: direct HTTP S0/S1 freshness is proven by a bounded,
+  ordered local request/client-receipt/response/evaluation bracket, while the
+  authoritative venue snapshot timestamp remains mandatory audit evidence but may
+  be old on an unchanged quiet book. Exact-family `paired_maker_gtd_paper_v1`
+  orders already persisted under the former venue-source-age rule remain
+  grandfathered for lifecycle completion. Each pair freezes one common normalized
   share quantity before either leg is attempted. Each leg then has independent
   fresh S0/S1 PostOnly acceptance and persistence, without atomicity, rollback,
   cancellation, or resizing of an accepted leg when its peer fails. Accepted legs

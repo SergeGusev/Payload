@@ -84,6 +84,121 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
     }
 
     [Fact]
+    public async Task FirstAccepting_QuietBooksWithOldVenueTimestampAndFreshHttpReceipts_AcceptsBothLegs()
+    {
+        var fixture = CreateFixture(
+            downWouldCrossOnS1: false,
+            maxQuoteAgeMilliseconds: 1_500,
+            venueSourceAge: TimeSpan.FromHours(2),
+            freezeVenueTimestampPerAsset: true);
+
+        var result = await fixture.Processor.ProcessFirstAcceptingMarketAsync(fixture.Candidate);
+
+        Assert.Equal(2, result.LegsAccepted);
+        Assert.Equal(2, fixture.Repository.PaperOrders.Count);
+        foreach (var order in fixture.Repository.PaperOrders)
+        {
+            using var document = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
+            var makerGtd = document.RootElement.GetProperty("maker_gtd");
+            Assert.Equal(
+                PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+                makerGtd.GetProperty("contract_version").GetString());
+            var attempts = makerGtd.GetProperty("attempts");
+            var acceptedAttempt = attempts[attempts.GetArrayLength() - 1];
+            var s0 = acceptedAttempt.GetProperty("s0");
+            var s1 = acceptedAttempt.GetProperty("s1");
+            AssertDirectHttpReceiptFreshness(s0);
+            AssertDirectHttpReceiptFreshness(s1);
+            Assert.Equal(
+                s0.GetProperty("source_timestamp_utc").GetDateTimeOffset(),
+                s1.GetProperty("source_timestamp_utc").GetDateTimeOffset());
+            Assert.Equal(
+                s0.GetProperty("source_event_id").GetString(),
+                s1.GetProperty("source_event_id").GetString());
+            Assert.True(s0.GetProperty("source_age_ms").GetInt64() > 7_000_000);
+            Assert.True(s1.GetProperty("source_age_ms").GetInt64() > 7_000_000);
+            Assert.True(
+                MakerGtdPaperOrderEvidenceParser.TryParse(
+                    order,
+                    out _,
+                    out var failureDetail),
+                failureDetail);
+        }
+    }
+
+    [Theory]
+    [InlineData("stale_receipt")]
+    [InlineData("future_receipt")]
+    [InlineData("future_source")]
+    public async Task FirstAccepting_InvalidDirectHttpFreshnessTiming_FailsClosed(string scenario)
+    {
+        var receivedAtOffset = scenario switch
+        {
+            "stale_receipt" => TimeSpan.FromSeconds(-2),
+            "future_receipt" => TimeSpan.FromSeconds(1),
+            _ => (TimeSpan?)null
+        };
+        var venueSourceAge = scenario == "future_source"
+            ? TimeSpan.FromSeconds(-1)
+            : (TimeSpan?)null;
+        var fixture = CreateFixture(
+            downWouldCrossOnS1: false,
+            maxQuoteAgeMilliseconds: 1_000,
+            venueSourceAge: venueSourceAge,
+            receivedAtOffset: receivedAtOffset);
+
+        var result = await fixture.Processor.ProcessFirstAcceptingMarketAsync(fixture.Candidate);
+
+        Assert.Equal(0, result.LegsAccepted);
+        Assert.Equal(2, result.LegsSkipped);
+        Assert.Empty(fixture.Repository.PaperOrders);
+        Assert.All(fixture.Repository.StrategyMarketPaperRuns, run =>
+        {
+            Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+            using var document = JsonDocument.Parse(Assert.IsType<string>(run.SkipDiagnosticsJson));
+            var firstAttempt = document.RootElement
+                .GetProperty("maker_gtd")
+                .GetProperty("attempts")[0];
+            Assert.Equal("s0_rejected", firstAttempt.GetProperty("outcome").GetString());
+            Assert.Equal(
+                "paired_maker_gtd_s0_book_not_current",
+                firstAttempt.GetProperty("reason_code").GetString());
+        });
+    }
+
+    [Theory]
+    [InlineData("crossed_book", "paired_maker_gtd_s1_book_invalid")]
+    [InlineData("changed_tick", "paired_maker_gtd_s1_tick_size_changed")]
+    [InlineData("changed_min_order_size", "paired_maker_gtd_s1_min_order_size_changed")]
+    [InlineData("changed_negative_risk", "paired_maker_gtd_s1_negative_risk_changed")]
+    [InlineData("invalid_price", "paired_maker_gtd_s1_book_invalid")]
+    public async Task FirstAccepting_InvalidS1StructureOrFrozenParameters_FailsClosed(
+        string s1Mutation,
+        string expectedReason)
+    {
+        var fixture = CreateFixture(
+            downWouldCrossOnS1: false,
+            s1Mutation: s1Mutation);
+
+        var result = await fixture.Processor.ProcessFirstAcceptingMarketAsync(fixture.Candidate);
+
+        Assert.Equal(0, result.LegsAccepted);
+        Assert.Equal(2, result.LegsSkipped);
+        Assert.Empty(fixture.Repository.PaperOrders);
+        Assert.All(fixture.Repository.StrategyMarketPaperRuns, run =>
+        {
+            using var document = JsonDocument.Parse(Assert.IsType<string>(run.SkipDiagnosticsJson));
+            var attempts = document.RootElement.GetProperty("maker_gtd").GetProperty("attempts");
+            Assert.Equal(10, attempts.GetArrayLength());
+            Assert.All(attempts.EnumerateArray(), attempt =>
+            {
+                Assert.Equal("s1_evidence_unavailable", attempt.GetProperty("outcome").GetString());
+                Assert.Equal(expectedReason, attempt.GetProperty("reason_code").GetString());
+            });
+        });
+    }
+
+    [Fact]
     public async Task FirstAccepting_PublishesOnlyAfterOrderIsVisibleInExposureCache()
     {
         var fixture = CreateFixture(downWouldCrossOnS1: false);
@@ -167,7 +282,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
     }
 
     [Fact]
-    public async Task FirstAccepting_SequentialS0ReadMakesPeerStale_RevalidatesBeforeCommonFreeze()
+    public async Task FirstAccepting_SlowPeerS0Request_IsRejectedBeforeCommonFreeze()
     {
         var fixture = CreateFixture(
             downWouldCrossOnS1: false,
@@ -177,12 +292,12 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
         var result = await fixture.Processor.ProcessFirstAcceptingMarketAsync(fixture.Candidate);
 
         Assert.Equal(2, result.LegsAccepted);
-        var upOrder = Assert.Single(fixture.Repository.PaperOrders, order => order.Outcome == "Up");
-        using var document = JsonDocument.Parse(Assert.IsType<string>(upOrder.RawDecisionJson));
+        var downOrder = Assert.Single(fixture.Repository.PaperOrders, order => order.Outcome == "Down");
+        using var document = JsonDocument.Parse(Assert.IsType<string>(downOrder.RawDecisionJson));
         var attempts = document.RootElement.GetProperty("maker_gtd").GetProperty("attempts");
         Assert.True(attempts.GetArrayLength() >= 2);
         var firstAttempt = attempts[0];
-        Assert.Equal("s0_rejected_at_common_freeze", firstAttempt.GetProperty("outcome").GetString());
+        Assert.Equal("s0_rejected", firstAttempt.GetProperty("outcome").GetString());
         Assert.Equal("paired_maker_gtd_s0_book_not_current", firstAttempt.GetProperty("reason_code").GetString());
     }
 
@@ -679,6 +794,57 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
     }
 
     [Fact]
+    public async Task FirstAccepting_S1ExpiresDuringAcceptanceCapture_RetriesBeforePersisting()
+    {
+        var fixture = CreateFixture(
+            downWouldCrossOnS1: false,
+            maxQuoteAgeMilliseconds: 1_000);
+        var delayingCache = new RacingConfirmedMarketDataCache(
+            fixture.Cache,
+            "paired-test-shard",
+            fixture.Candidate.Market.ClobTokenIds,
+            triggerConfirmedRead: 15,
+            onTrigger: _ => fixture.TimeProvider.Advance(TimeSpan.FromSeconds(2)));
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var processor = new PairedMakerGtdFirstAcceptingProcessor(
+            NullLogger<PairedMakerGtdFirstAcceptingProcessor>.Instance,
+            new BotOptions { Mode = BotMode.Paper },
+            new PaperTradingOptions(),
+            new BtcUpDown5mStrategyOptions
+            {
+                PaperTakerMaxQuoteAgeMilliseconds = 1_000
+            },
+            fixture.ClobClient,
+            delayingCache,
+            fixture.Registry,
+            new ExposureSnapshotCache(fixture.Repository, handoff),
+            handoff,
+            new StaticStrategyStateProvider(),
+            fixture.Repository,
+            fixture.TimeProvider);
+
+        var result = await processor.ProcessFirstAcceptingMarketAsync(fixture.Candidate);
+
+        Assert.True(delayingCache.RaceTriggered);
+        Assert.Equal(2, result.LegsAccepted);
+        Assert.Equal(2, fixture.Repository.PaperOrders.Count);
+        var staleAtAcceptanceObserved = false;
+        foreach (var order in fixture.Repository.PaperOrders)
+        {
+            using var document = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
+            staleAtAcceptanceObserved |= document.RootElement
+                .GetProperty("maker_gtd")
+                .GetProperty("attempts")
+                .EnumerateArray()
+                .Any(attempt =>
+                    attempt.TryGetProperty("reason_code", out var reason) &&
+                    reason.GetString() == "paired_maker_gtd_s1_book_not_current_at_acceptance");
+        }
+
+        Assert.True(staleAtAcceptanceObserved);
+    }
+
+    [Fact]
     public async Task FirstAccepting_UnrelatedAggregateShardFailureDoesNotBlockConfirmedPairAssets()
     {
         var fixture = CreateFixture(downWouldCrossOnS1: false);
@@ -721,6 +887,34 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
         Assert.Empty(fixture.Repository.StrategyMarketPaperRuns);
     }
 
+    private static void AssertDirectHttpReceiptFreshness(JsonElement book)
+    {
+        Assert.Equal(
+            PairedMakerGtdPaperExecutionContract.DirectHttpReceiptFreshnessBasis,
+            book.GetProperty("freshness_basis").GetString());
+        Assert.True(book.GetProperty("is_current").GetBoolean());
+        var requestStartedAtUtc = book.GetProperty("request_started_at_utc").GetDateTimeOffset();
+        var receivedAtUtc = book.GetProperty("received_at_utc").GetDateTimeOffset();
+        var responseCompletedAtUtc = book.GetProperty("response_completed_at_utc").GetDateTimeOffset();
+        var evaluatedAtUtc = book.GetProperty("evaluated_at_utc").GetDateTimeOffset();
+        var sourceTimestampUtc = book.GetProperty("source_timestamp_utc").GetDateTimeOffset();
+        Assert.True(requestStartedAtUtc <= receivedAtUtc);
+        Assert.True(receivedAtUtc <= responseCompletedAtUtc);
+        Assert.True(responseCompletedAtUtc <= evaluatedAtUtc);
+        Assert.True(sourceTimestampUtc < receivedAtUtc);
+        Assert.Equal(
+            book.GetProperty("receipt_age_ms").GetInt64(),
+            book.GetProperty("age_ms").GetInt64());
+        Assert.InRange(
+            book.GetProperty("receipt_age_ms").GetInt64(),
+            0,
+            book.GetProperty("max_age_ms").GetInt64());
+        Assert.InRange(
+            book.GetProperty("request_duration_ms").GetInt64(),
+            0,
+            book.GetProperty("max_age_ms").GetInt64());
+    }
+
     private static Fixture CreateFixture(
         bool downWouldCrossOnS1,
         bool marketDataReady = true,
@@ -729,7 +923,11 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
         bool cancelDownOnFirstS1 = false,
         bool confirmLiveSubscriptions = true,
         TimeSpan? advanceAfterS1Snapshot = null,
-        BotMode botMode = BotMode.Paper)
+        BotMode botMode = BotMode.Paper,
+        TimeSpan? venueSourceAge = null,
+        TimeSpan? receivedAtOffset = null,
+        bool freezeVenueTimestampPerAsset = false,
+        string? s1Mutation = null)
     {
         var marketStartUtc = new DateTimeOffset(2026, 8, 10, 15, 30, 0, TimeSpan.Zero);
         var nowUtc = marketStartUtc.AddHours(-23).AddMinutes(-50);
@@ -771,7 +969,11 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
             downWouldCrossOnS1,
             advanceBeforeFirstDownRead,
             cancelDownOnFirstS1,
-            advanceAfterS1Snapshot);
+            advanceAfterS1Snapshot,
+            venueSourceAge,
+            receivedAtOffset,
+            freezeVenueTimestampPerAsset,
+            s1Mutation);
         var processor = new PairedMakerGtdFirstAcceptingProcessor(
             NullLogger<PairedMakerGtdFirstAcceptingProcessor>.Instance,
             new BotOptions { Mode = botMode },
@@ -959,11 +1161,16 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
         bool downWouldCrossOnS1,
         TimeSpan? advanceBeforeFirstDownRead,
         bool cancelDownOnFirstS1 = false,
-        TimeSpan? advanceAfterS1Snapshot = null) : IPolymarketClobPublicClient
+        TimeSpan? advanceAfterS1Snapshot = null,
+        TimeSpan? venueSourceAge = null,
+        TimeSpan? receivedAtOffset = null,
+        bool freezeVenueTimestampPerAsset = false,
+        string? s1Mutation = null) : IPolymarketClobPublicClient
     {
         private int upCalls;
         private int downCalls;
         private int downS1CancellationInjected;
+        private readonly Dictionary<string, DateTimeOffset> venueTimestampByAsset = new(StringComparer.Ordinal);
 
         public int DownS1Calls { get; private set; }
 
@@ -1005,18 +1212,49 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
 
             timeProvider.Advance(TimeSpan.FromMilliseconds(1));
             var nowUtc = timeProvider.GetUtcNow();
+            var receivedAtUtc = nowUtc + (receivedAtOffset ?? TimeSpan.Zero);
+            var calculatedSourceTimestampUtc = receivedAtUtc - (venueSourceAge ?? TimeSpan.Zero);
+            var sourceTimestampUtc = freezeVenueTimestampPerAsset
+                ? GetOrAddVenueTimestamp(assetId, calculatedSourceTimestampUtc)
+                : calculatedSourceTimestampUtc;
+            IReadOnlyList<OrderBookLevel> bids = [new OrderBookLevel(0.48m, 100m)];
+            var minOrderSize = 5m;
+            var tickSize = 0.01m;
+            var negativeRisk = false;
+            if (isS1)
+            {
+                switch (s1Mutation)
+                {
+                    case "crossed_book":
+                        bids = [new OrderBookLevel(bestAsk, 100m)];
+                        break;
+                    case "changed_tick":
+                        tickSize = 0.001m;
+                        break;
+                    case "changed_min_order_size":
+                        minOrderSize = 6m;
+                        break;
+                    case "changed_negative_risk":
+                        negativeRisk = true;
+                        break;
+                    case "invalid_price":
+                        bestAsk = 1.20m;
+                        break;
+                }
+            }
 
             OrderBookSnapshot snapshot = new(
                 assetId,
-                [new OrderBookLevel(0.48m, 100m)],
+                bids,
                 [new OrderBookLevel(bestAsk, 100m)],
-                nowUtc,
+                sourceTimestampUtc,
                 conditionId,
-                MinOrderSize: 5m,
-                TickSize: 0.01m,
-                SourceTimestampUtc: nowUtc,
+                MinOrderSize: minOrderSize,
+                TickSize: tickSize,
+                NegativeRisk: negativeRisk,
+                SourceTimestampUtc: sourceTimestampUtc,
                 TimestampQuality: MarketDataTimestampQuality.VenueProvided,
-                ReceivedAtUtc: nowUtc,
+                ReceivedAtUtc: receivedAtUtc,
                 SourceEventId: assetId + "-book");
             if (isS1 && advanceAfterS1Snapshot is { } advanceAfterSnapshot)
             {
@@ -1024,6 +1262,19 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
             }
 
             return Task.FromResult<OrderBookSnapshot?>(snapshot);
+        }
+
+        private DateTimeOffset GetOrAddVenueTimestamp(
+            string assetId,
+            DateTimeOffset sourceTimestampUtc)
+        {
+            if (!venueTimestampByAsset.TryGetValue(assetId, out var persisted))
+            {
+                persisted = sourceTimestampUtc;
+                venueTimestampByAsset.Add(assetId, persisted);
+            }
+
+            return persisted;
         }
 
         public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default) =>
@@ -1045,7 +1296,8 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
         IMarketDataCache inner,
         string component,
         IReadOnlyCollection<string> assetIds,
-        int triggerConfirmedRead) : IMarketDataCache
+        int triggerConfirmedRead,
+        Action<IMarketDataCache>? onTrigger = null) : IMarketDataCache
     {
         private int confirmedReads;
 
@@ -1063,10 +1315,17 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
             var snapshot = inner.GetConfirmedAssetSubscription(assetId);
             if (Interlocked.Increment(ref confirmedReads) == triggerConfirmedRead)
             {
-                inner.InvalidateAssetSubscriptions(component);
-                foreach (var requiredAssetId in assetIds)
+                if (onTrigger is null)
                 {
-                    Assert.True(inner.ConfirmAssetSubscription(component, requiredAssetId));
+                    inner.InvalidateAssetSubscriptions(component);
+                    foreach (var requiredAssetId in assetIds)
+                    {
+                        Assert.True(inner.ConfirmAssetSubscription(component, requiredAssetId));
+                    }
+                }
+                else
+                {
+                    onTrigger(inner);
                 }
 
                 RaceTriggered = true;

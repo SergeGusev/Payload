@@ -412,7 +412,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                     }
 
                     var s0Reason = ValidateS0(
-                        s0,
+                        s0Read,
                         state.AssetId,
                         market.ConditionId,
                         s0EvaluatedAtUtc,
@@ -453,7 +453,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                         continue;
                     }
 
-                    contexts.Add(state, new LegAttemptContext(attempt, s0, limitPrice, sizing));
+                    contexts.Add(state, new LegAttemptContext(attempt, s0Read, limitPrice, sizing));
                 }
 
                 // Persist the completed S0 evidence before any S1 can accept a leg.
@@ -495,7 +495,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                         {
                             Context = entry.Value,
                             Reason = ValidateS0(
-                                entry.Value.S0,
+                                entry.Value.S0Read,
                                 entry.Key.AssetId,
                                 market.ConditionId,
                                 commonFreezeAtUtc,
@@ -551,7 +551,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                     }
 
                     var s0AtIntentFreezeReason = ValidateS0(
-                        context.S0,
+                        context.S0Read,
                         state.AssetId,
                         market.ConditionId,
                         frozenAtUtc,
@@ -637,11 +637,22 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                             continue;
                         }
 
-                        var s1IsCurrent = IsBookCurrent(
-                            s1,
+                        var s1ValidationReason = ValidateS1(
+                            s1Read,
+                            state.AssetId,
+                            market.ConditionId,
                             s1EvaluatedAtUtc,
                             GetMaximumQuoteAge(),
-                            out _);
+                            intent);
+                        if (s1ValidationReason is not null)
+                        {
+                            SetAttemptFailure(
+                                context.Attempt,
+                                "s1_evidence_unavailable",
+                                s1ValidationReason);
+                            continue;
+                        }
+
                         var acceptance = MakerGtdPaperPostOnlyAcceptanceEvaluator.Evaluate(
                             new MakerGtdFrozenPostOnlyBuyIntent(
                                 intent.AssetId,
@@ -656,7 +667,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                                 s1.SourceTimestampUtc ?? s1.SnapshotAtUtc,
                                 s1.ReceivedAtUtc.GetValueOrDefault(),
                                 s1.HasAuthoritativeSourceTimestamp,
-                                s1IsCurrent,
+                                IsCurrent: true,
                                 IsDuplicateDelivery: false));
                         context.Attempt["acceptance_outcome"] = acceptance.Outcome.ToString();
                         context.Attempt["acceptance_reason_code"] = acceptance.ReasonCode;
@@ -695,6 +706,19 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                         }
 
                         var acceptedAtUtc = clock.GetUtcNow();
+                        if (!IsDirectBookCurrent(
+                                s1Read,
+                                acceptedAtUtc,
+                                GetMaximumQuoteAge(),
+                                out _))
+                        {
+                            SetAttemptFailure(
+                                context.Attempt,
+                                "s1_evidence_unavailable",
+                                "paired_maker_gtd_s1_book_not_current_at_acceptance");
+                            continue;
+                        }
+
                         if (acceptedAtUtc >= marketIdentity.MarketStartUtc)
                         {
                             SetAttemptFailure(
@@ -919,12 +943,20 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
         string stage,
         CancellationToken cancellationToken)
     {
+        var requestStartedAtUtc = clock.GetUtcNow();
         try
         {
             var orderBook = await clobClient.GetOrderBookAsync(assetId, cancellationToken);
+            var responseCompletedAtUtc = clock.GetUtcNow();
             return orderBook is null
-                ? DirectBookRead.Reject("paired_maker_gtd_order_book_missing")
-                : DirectBookRead.Found(orderBook);
+                ? DirectBookRead.Reject(
+                    "paired_maker_gtd_order_book_missing",
+                    requestStartedAtUtc,
+                    responseCompletedAtUtc)
+                : DirectBookRead.Found(
+                    orderBook,
+                    requestStartedAtUtc,
+                    responseCompletedAtUtc);
         }
         catch (OperationCanceledException)
         {
@@ -938,7 +970,11 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                 stage,
                 assetId);
             await TryRecordApiErrorAsync(stage, ex.Message, cancellationToken);
-            return DirectBookRead.Reject("paired_maker_gtd_order_book_request_failed", ex.Message);
+            return DirectBookRead.Reject(
+                "paired_maker_gtd_order_book_request_failed",
+                requestStartedAtUtc,
+                clock.GetUtcNow(),
+                ex.Message);
         }
     }
 
@@ -1651,17 +1687,21 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
         TimeSpan maxQuoteAge)
     {
         var orderBook = read.OrderBook;
-        TimeSpan? age = null;
-        var isCurrent = orderBook is not null &&
-            IsBookCurrent(orderBook, evaluatedAtUtc, maxQuoteAge, out age);
+        var freshness = EvaluateDirectBookFreshness(read, evaluatedAtUtc, maxQuoteAge);
         return new JsonObject
         {
             ["fetch_rejection_reason"] = read.RejectionReason,
             ["fetch_error"] = read.Error,
+            ["freshness_basis"] = PairedMakerGtdPaperExecutionContract.DirectHttpReceiptFreshnessBasis,
+            ["request_started_at_utc"] = FormatTimestamp(read.RequestStartedAtUtc),
+            ["response_completed_at_utc"] = FormatTimestamp(read.ResponseCompletedAtUtc),
             ["evaluated_at_utc"] = FormatTimestamp(evaluatedAtUtc),
             ["max_age_ms"] = (long)Math.Ceiling(maxQuoteAge.TotalMilliseconds),
-            ["age_ms"] = age is { } value ? (long)Math.Ceiling(value.TotalMilliseconds) : null,
-            ["is_current"] = isCurrent,
+            ["age_ms"] = ToCeilingMilliseconds(freshness.ReceiptAge),
+            ["receipt_age_ms"] = ToCeilingMilliseconds(freshness.ReceiptAge),
+            ["request_duration_ms"] = ToCeilingMilliseconds(freshness.RequestDuration),
+            ["source_age_ms"] = ToCeilingMilliseconds(freshness.SourceAge),
+            ["is_current"] = freshness.IsCurrent,
             ["asset_id"] = orderBook?.AssetId,
             ["condition_id"] = orderBook?.ConditionId,
             ["source_timestamp_utc"] = FormatTimestamp(orderBook?.SourceTimestampUtc),
@@ -1683,6 +1723,13 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                 ? new JsonArray()
                 : JsonSerializer.SerializeToNode(orderBook.Asks)
         };
+    }
+
+    private static long? ToCeilingMilliseconds(TimeSpan? value)
+    {
+        return value is { } duration
+            ? checked((long)Math.Ceiling(duration.TotalMilliseconds))
+            : null;
     }
 
     private static JsonObject BuildSizingJson(MinimumStakeSizing sizing)
@@ -1760,12 +1807,17 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
     }
 
     private static string? ValidateS0(
-        OrderBookSnapshot orderBook,
+        DirectBookRead read,
         string expectedAssetId,
         string expectedConditionId,
         DateTimeOffset evaluatedAtUtc,
         TimeSpan maxQuoteAge)
     {
+        if (read.OrderBook is not { } orderBook)
+        {
+            return "paired_maker_gtd_s0_missing";
+        }
+
         if (!string.Equals(orderBook.AssetId, expectedAssetId, StringComparison.Ordinal))
         {
             return "paired_maker_gtd_s0_asset_mismatch";
@@ -1781,7 +1833,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
             return "paired_maker_gtd_s0_timestamp_not_authoritative";
         }
 
-        if (!IsBookCurrent(orderBook, evaluatedAtUtc, maxQuoteAge, out _))
+        if (!IsDirectBookCurrent(read, evaluatedAtUtc, maxQuoteAge, out _))
         {
             return "paired_maker_gtd_s0_book_not_current";
         }
@@ -1803,27 +1855,112 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
             : "paired_maker_gtd_s0_min_order_size_missing";
     }
 
-    private static bool IsBookCurrent(
-        OrderBookSnapshot orderBook,
+    private static string? ValidateS1(
+        DirectBookRead read,
+        string expectedAssetId,
+        string expectedConditionId,
         DateTimeOffset evaluatedAtUtc,
         TimeSpan maxQuoteAge,
-        out TimeSpan? age)
+        MakerGtdBuyExecutionIntent intent)
     {
-        if (!orderBook.HasAuthoritativeSourceTimestamp ||
-            orderBook.SourceTimestampUtc is not { } sourceTimestampUtc)
+        if (read.OrderBook is not { } orderBook)
         {
-            age = null;
-            return false;
+            return "paired_maker_gtd_s1_missing";
         }
 
-        var calculatedAge = evaluatedAtUtc - sourceTimestampUtc;
-        if (calculatedAge < TimeSpan.Zero)
+        if (!string.Equals(orderBook.AssetId, expectedAssetId, StringComparison.Ordinal))
         {
-            calculatedAge = TimeSpan.Zero;
+            return "paired_maker_gtd_s1_asset_mismatch";
         }
 
-        age = calculatedAge;
-        return calculatedAge <= maxQuoteAge;
+        if (!string.Equals(orderBook.ConditionId, expectedConditionId, StringComparison.Ordinal))
+        {
+            return "paired_maker_gtd_s1_condition_mismatch";
+        }
+
+        if (read.RequestStartedAtUtc < intent.FrozenAtUtc)
+        {
+            return "paired_maker_gtd_s1_request_before_intent_freeze";
+        }
+
+        if (!orderBook.HasAuthoritativeSourceTimestamp || orderBook.ReceivedAtUtc is null)
+        {
+            return "paired_maker_gtd_s1_timestamp_not_authoritative";
+        }
+
+        if (!IsDirectBookCurrent(read, evaluatedAtUtc, maxQuoteAge, out _))
+        {
+            return "paired_maker_gtd_s1_book_not_current";
+        }
+
+        if (orderBook.BestBid is not > 0m or >= 1m ||
+            orderBook.BestAsk is not > 0m or >= 1m ||
+            orderBook.IsCrossed)
+        {
+            return "paired_maker_gtd_s1_book_invalid";
+        }
+
+        if (orderBook.TickSize != intent.TickSize)
+        {
+            return "paired_maker_gtd_s1_tick_size_changed";
+        }
+
+        if (orderBook.MinOrderSize != intent.MinOrderSize)
+        {
+            return "paired_maker_gtd_s1_min_order_size_changed";
+        }
+
+        return orderBook.NegativeRisk == intent.NegativeRisk
+            ? null
+            : "paired_maker_gtd_s1_negative_risk_changed";
+    }
+
+    private static bool IsDirectBookCurrent(
+        DirectBookRead read,
+        DateTimeOffset evaluatedAtUtc,
+        TimeSpan maxQuoteAge,
+        out DirectBookFreshness freshness)
+    {
+        freshness = EvaluateDirectBookFreshness(read, evaluatedAtUtc, maxQuoteAge);
+        return freshness.IsCurrent;
+    }
+
+    private static DirectBookFreshness EvaluateDirectBookFreshness(
+        DirectBookRead read,
+        DateTimeOffset evaluatedAtUtc,
+        TimeSpan maxQuoteAge)
+    {
+        if (read.OrderBook is not { } orderBook ||
+            !orderBook.HasAuthoritativeSourceTimestamp ||
+            orderBook.SourceTimestampUtc is not { } sourceTimestampUtc ||
+            orderBook.ReceivedAtUtc is not { } receivedAtUtc ||
+            read.RequestStartedAtUtc == default ||
+            read.ResponseCompletedAtUtc == default ||
+            evaluatedAtUtc == default ||
+            maxQuoteAge <= TimeSpan.Zero)
+        {
+            return DirectBookFreshness.Unavailable;
+        }
+
+        var requestDuration = read.ResponseCompletedAtUtc - read.RequestStartedAtUtc;
+        var receiptAge = evaluatedAtUtc - receivedAtUtc;
+        var sourceAge = evaluatedAtUtc - sourceTimestampUtc;
+        var timestampsOrdered =
+            read.RequestStartedAtUtc <= receivedAtUtc &&
+            receivedAtUtc <= read.ResponseCompletedAtUtc &&
+            read.ResponseCompletedAtUtc <= evaluatedAtUtc &&
+            sourceTimestampUtc <= receivedAtUtc;
+        var isCurrent = timestampsOrdered &&
+            requestDuration >= TimeSpan.Zero &&
+            requestDuration <= maxQuoteAge &&
+            receiptAge >= TimeSpan.Zero &&
+            receiptAge <= maxQuoteAge &&
+            sourceAge >= TimeSpan.Zero;
+        return new DirectBookFreshness(
+            isCurrent,
+            requestDuration,
+            receiptAge,
+            sourceAge);
     }
 
     private bool IsMarketDataReady(IReadOnlyCollection<string> assetIds)
@@ -2117,11 +2254,35 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
     private sealed record DirectBookRead(
         OrderBookSnapshot? OrderBook,
         string? RejectionReason,
-        string? Error)
+        string? Error,
+        DateTimeOffset RequestStartedAtUtc,
+        DateTimeOffset ResponseCompletedAtUtc)
     {
-        public static DirectBookRead Found(OrderBookSnapshot orderBook) => new(orderBook, null, null);
+        public static DirectBookRead Found(
+            OrderBookSnapshot orderBook,
+            DateTimeOffset requestStartedAtUtc,
+            DateTimeOffset responseCompletedAtUtc) =>
+            new(orderBook, null, null, requestStartedAtUtc, responseCompletedAtUtc);
 
-        public static DirectBookRead Reject(string reason, string? error = null) => new(null, reason, error);
+        public static DirectBookRead Reject(
+            string reason,
+            DateTimeOffset requestStartedAtUtc,
+            DateTimeOffset responseCompletedAtUtc,
+            string? error = null) =>
+            new(null, reason, error, requestStartedAtUtc, responseCompletedAtUtc);
+    }
+
+    private readonly record struct DirectBookFreshness(
+        bool IsCurrent,
+        TimeSpan? RequestDuration,
+        TimeSpan? ReceiptAge,
+        TimeSpan? SourceAge)
+    {
+        public static DirectBookFreshness Unavailable { get; } = new(
+            IsCurrent: false,
+            RequestDuration: null,
+            ReceiptAge: null,
+            SourceAge: null);
     }
 
     private sealed record MinimumStakeSizing(
@@ -2154,9 +2315,12 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
 
     private sealed record LegAttemptContext(
         JsonObject Attempt,
-        OrderBookSnapshot S0,
+        DirectBookRead S0Read,
         decimal LimitPrice,
-        MinimumStakeSizing Sizing);
+        MinimumStakeSizing Sizing)
+    {
+        public OrderBookSnapshot S0 => S0Read.OrderBook!;
+    }
 
     private sealed record AcceptedLeg(
         Guid PaperOrderId,

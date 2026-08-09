@@ -61,10 +61,20 @@ internal static class MakerGtdPaperExecutionContract
 internal static class PairedMakerGtdPaperExecutionContract
 {
     public const string ExecutionSource = MakerGtdPaperExecutionSources.PairedFirstAccepting;
-    public const string ContractVersion = "paired_maker_gtd_paper_v1";
+    public const string LegacyContractVersion = "paired_maker_gtd_paper_v1";
+    public const string CurrentContractVersion = "paired_maker_gtd_paper_v2";
+    public const string ContractVersion = CurrentContractVersion;
+    public const string DirectHttpReceiptFreshnessBasis = "direct_http_response_receipt";
+    public const long MaximumDirectHttpQuoteAgeMilliseconds = 60_000;
     public const string PriceFormula =
         "floor_to_tick(min(best_ask - tick_size, maximum_order_price))";
     public const string MandatoryLabel = StrategyIds.OptimisticTouchNoDepthPaperLabel;
+
+    public static bool IsSupportedContractVersion(string? contractVersion)
+    {
+        return string.Equals(contractVersion, LegacyContractVersion, StringComparison.Ordinal) ||
+            string.Equals(contractVersion, CurrentContractVersion, StringComparison.Ordinal);
+    }
 
     public static bool IsApprovedStrategyVariant(BtcUpDown5mStrategyVariant variant)
     {

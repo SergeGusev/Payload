@@ -118,10 +118,18 @@ all of these predicates hold:
   and timing is `FirstAcceptingOrders` with nominal metadata delay `-86400` seconds;
 - catalog ID suffixes are exactly `101/102`, `201/202`, and `301/302`, and each pair
   has symmetric `PairedStrategyId` links;
-- persisted source is `crypto_paired_maker_gtd_first_accepting_paper`, contract is
-  `paired_maker_gtd_paper_v1`, and `PaperOnly=true`;
+- persisted source is `crypto_paired_maker_gtd_first_accepting_paper`, new
+  placements use contract `paired_maker_gtd_paper_v2`, and `PaperOnly=true`;
 - S0 price is `floor_to_tick(min(S0.bestAsk-S0.tickSize, cap))`, with Up cap `0.50`
   and Down cap `0.49`, so accepted pair limits cannot exceed `0.99` in total;
+- each v2 direct HTTP S0/S1 read persists and validates one ordered local bracket:
+  request start, client receipt, response completion, and evaluation. Both receipt
+  age and request duration must remain within the configured maximum. The venue
+  snapshot timestamp and hash remain audit evidence and the timestamp must be
+  authoritative and no later than local receipt, but an old unchanged snapshot
+  does not by itself make a freshly fetched quiet book stale. Exact-family v1
+  orders already persisted under the former venue-source-age rule remain
+  grandfathered for fill/expiry and historical accounting;
 - one common CLOB-normalized share quantity is frozen from both valid S0 sizing
   results before either leg is attempted. Each leg then has independent S0/S1
   PostOnly attempts and independent persistence. The venue provides no pair

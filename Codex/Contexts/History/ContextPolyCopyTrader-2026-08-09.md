@@ -226,3 +226,10 @@ Request:
 
 Result:
 Completed a strict read-only deployment audit on the documented primary database. Verified exact deployed build `f5d6499658dcab8a8c4bef78adf39b52ef4efaf2`, an advancing service heartbeat, all six enabled Paper-only group-`8224` rows, zero Live orders, and functional day-ahead discovery for `36` conditions / `72` legs. One BTC pair successfully reached Resting/Pending at Up `0.50 x 6.13` and Down `0.49 x 6.13`; fills were zero. The other `70` legs skipped after `700` S0 attempts because every fetched book exceeded the current `1500 ms` source-timestamp age limit (`12.645..2576.040 s`). A fresh direct public CLOB request independently returned the same old venue snapshot timestamp on a quiet book, identifying a source-timestamp-versus-response-freshness mismatch rather than a discovery or API-fetch failure. No database, service, configuration, deployment, or trading mutation was performed by the audit.
+
+## 2026-08-09T22:02:54.0894895Z
+Request:
+Исправь
+
+Result:
+Fixed the exact group-`8224` paired Maker-GTD day-ahead freshness defect locally. New placements use `paired_maker_gtd_paper_v2` and prove each direct CLOB S0/S1 read with a bounded ordered local request/client-receipt/response/evaluation bracket; an authoritative but old venue snapshot timestamp remains audit evidence and no longer makes a freshly fetched unchanged quiet book stale. Added fail-closed S1 structure/frozen-parameter validation, rechecked receipt freshness at actual acceptance, hardened persisted chronology/range/max-age/downgrade evidence, and preserved the former predicate set for exact persisted v1 orders with an end-to-end legacy full-fill lifecycle theory. The separate 28 ETH Reference Average Maker-GTD processor was unchanged. Focused verification passed `109/109`, supporting old-family/parity/client tests passed `69/69`, the solution built with zero errors and one pre-existing nullable test warning, three independent reviews found no remaining P0/P1, and `git diff --check` passed. No deployment, service restart, database/production mutation, or venue order/cancellation occurred.

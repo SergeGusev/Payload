@@ -237,6 +237,21 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     [InlineData("missing_subscription_session")]
     [InlineData("asset_not_confirmed_live")]
     [InlineData("future_s1_receipt")]
+    [InlineData("wrong_freshness_basis")]
+    [InlineData("tampered_receipt_age")]
+    [InlineData("future_source_timestamp")]
+    [InlineData("s1_request_before_freeze")]
+    [InlineData("s0_evaluated_after_freeze")]
+    [InlineData("s1_evaluated_after_acceptance")]
+    [InlineData("crossed_s1")]
+    [InlineData("changed_s1_tick")]
+    [InlineData("changed_s1_min_order_size")]
+    [InlineData("changed_s1_negative_risk")]
+    [InlineData("invalid_s0_price")]
+    [InlineData("invalid_s1_price")]
+    [InlineData("s1_stale_at_acceptance")]
+    [InlineData("downgraded_v2_shape")]
+    [InlineData("oversized_max_age")]
     [InlineData("post_start_acceptance")]
     public void EvidenceParser_PairedContractMutation_FailsClosed(string mutation)
     {
@@ -311,6 +326,68 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 root["maker_gtd"]!["attempts"]![0]!["s1_received_at_utc"] =
                     order.CreatedAtUtc.AddMilliseconds(1);
                 break;
+            case "wrong_freshness_basis":
+                root["maker_gtd"]!["attempts"]![0]!["s0"]!["freshness_basis"] =
+                    "venue_source_timestamp";
+                break;
+            case "tampered_receipt_age":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["receipt_age_ms"] = 101;
+                break;
+            case "future_source_timestamp":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["source_timestamp_utc"] =
+                    order.CreatedAtUtc;
+                break;
+            case "s1_request_before_freeze":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["request_started_at_utc"] =
+                    order.CreatedAtUtc.AddMilliseconds(-501);
+                break;
+            case "s0_evaluated_after_freeze":
+                root["maker_gtd"]!["attempts"]![0]!["s0"]!["evaluated_at_utc"] =
+                    order.CreatedAtUtc.AddMilliseconds(-450);
+                root["maker_gtd"]!["attempts"]![0]!["s0"]!["age_ms"] = 850L;
+                root["maker_gtd"]!["attempts"]![0]!["s0"]!["receipt_age_ms"] = 850L;
+                root["maker_gtd"]!["attempts"]![0]!["s0"]!["source_age_ms"] = 7_199_550L;
+                break;
+            case "s1_evaluated_after_acceptance":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["evaluated_at_utc"] =
+                    order.CreatedAtUtc.AddMilliseconds(50);
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["age_ms"] = 350L;
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["receipt_age_ms"] = 350L;
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["source_age_ms"] = 7_200_050L;
+                break;
+            case "crossed_s1":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["best_bid"] = 0.51m;
+                break;
+            case "changed_s1_tick":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["tick_size"] = 0.001m;
+                break;
+            case "changed_s1_min_order_size":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["min_order_size"] = 2m;
+                break;
+            case "changed_s1_negative_risk":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["negative_risk"] = true;
+                break;
+            case "invalid_s0_price":
+                root["maker_gtd"]!["attempts"]![0]!["s0"]!["best_ask"] = 1.20m;
+                break;
+            case "invalid_s1_price":
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["best_ask"] = 1.20m;
+                break;
+            case "s1_stale_at_acceptance":
+                var delayedAcceptedAtUtc = order.CreatedAtUtc.AddSeconds(2);
+                order = order with { CreatedAtUtc = delayedAcceptedAtUtc };
+                root["maker_gtd"]!["accepted_at_utc"] = delayedAcceptedAtUtc;
+                root["maker_gtd"]!["attempts"]![0]!["accepted_at_utc"] = delayedAcceptedAtUtc;
+                root["market_data_status_at_acceptance"]!["accepted_at_utc"] = delayedAcceptedAtUtc;
+                break;
+            case "downgraded_v2_shape":
+                root["maker_gtd"]!["contract_version"] =
+                    PairedMakerGtdPaperExecutionContract.LegacyContractVersion;
+                break;
+            case "oversized_max_age":
+                root["maker_gtd"]!["attempts"]![0]!["s0"]!["max_age_ms"] = 60_001L;
+                root["maker_gtd"]!["attempts"]![0]!["s1"]!["max_age_ms"] = 60_001L;
+                break;
             case "post_start_acceptance":
                 var postStartOrder = order with
                 {
@@ -334,6 +411,61 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
 
         Assert.False(parsed);
         Assert.Null(evidence);
+    }
+
+    [Fact]
+    public void EvidenceParser_PairedLegacyV1WithoutReceiptTimingFields_RemainsAccepted()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var order = ConvertPairedOrderToLegacyV1(scenario.Order);
+
+        var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
+            order,
+            out var evidence,
+            out var failureDetail);
+
+        Assert.True(parsed, failureDetail);
+        Assert.NotNull(evidence);
+    }
+
+    [Theory]
+    [InlineData("clean")]
+    [InlineData("missing_s1_best_bid")]
+    [InlineData("changed_s1_tick")]
+    [InlineData("changed_s1_min_order_size")]
+    [InlineData("changed_s1_negative_risk")]
+    public async Task MarketDataUpdater_PairedLegacyV1WithContinuousSubscription_AppliesAtomicFullMakerFill(
+        string legacyS1Shape)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var legacyOrder = ConvertPairedOrderToLegacyV1(scenario.Order, legacyS1Shape);
+        scenario.Repository.PaperOrders[0] = legacyOrder;
+        var cache = CreateHealthyCache(legacyOrder, reconnectCount: 2);
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                legacyOrder,
+                legacyOrder.Price,
+                sourceTimestampUtc,
+                receivedAtUtc),
+            receivedAtUtc);
+
+        Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Entered,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
     }
 
     [Theory]
@@ -1018,6 +1150,55 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, result.ReasonCode);
     }
 
+    private static PaperOrder ConvertPairedOrderToLegacyV1(
+        PaperOrder order,
+        string legacyS1Shape = "clean")
+    {
+        var root = JsonNode.Parse(Assert.IsType<string>(order.RawDecisionJson))!.AsObject();
+        root["maker_gtd"]!["contract_version"] =
+            PairedMakerGtdPaperExecutionContract.LegacyContractVersion;
+        var acceptedAttempt = root["maker_gtd"]!["attempts"]![0]!;
+        foreach (var stage in new[] { "s0", "s1" })
+        {
+            var book = acceptedAttempt[stage]!.AsObject();
+            foreach (var property in new[]
+                     {
+                         "freshness_basis",
+                         "request_started_at_utc",
+                         "response_completed_at_utc",
+                         "receipt_age_ms",
+                         "request_duration_ms",
+                         "source_age_ms"
+                     })
+            {
+                book.Remove(property);
+            }
+        }
+
+        var s1 = acceptedAttempt["s1"]!.AsObject();
+        switch (legacyS1Shape)
+        {
+            case "clean":
+                break;
+            case "missing_s1_best_bid":
+                s1.Remove("best_bid");
+                break;
+            case "changed_s1_tick":
+                s1["tick_size"] = 0.001m;
+                break;
+            case "changed_s1_min_order_size":
+                s1["min_order_size"] = 2m;
+                break;
+            case "changed_s1_negative_risk":
+                s1["negative_risk"] = true;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(legacyS1Shape), legacyS1Shape, null);
+        }
+
+        return order with { RawDecisionJson = root.ToJsonString() };
+    }
+
     private static MakerScenario CreateScenario(
         DateTimeOffset now,
         DateTimeOffset expiresAtUtc,
@@ -1117,6 +1298,15 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             var commonSizeFrozenAtUtc = acceptedAtUtc.AddSeconds(-1);
             var marketEndUtc = order.ExpiresAtUtc.AddMinutes(1);
             var frozenAtUtc = acceptedAtUtc.AddMilliseconds(-500);
+            var sourceTimestampUtc = acceptedAtUtc.AddHours(-2);
+            var s0RequestStartedAtUtc = acceptedAtUtc.AddMilliseconds(-1_500);
+            var s0ReceivedAtUtc = acceptedAtUtc.AddMilliseconds(-1_300);
+            var s0ResponseCompletedAtUtc = acceptedAtUtc.AddMilliseconds(-1_250);
+            var s0EvaluatedAtUtc = acceptedAtUtc.AddMilliseconds(-1_200);
+            var s1RequestStartedAtUtc = acceptedAtUtc.AddMilliseconds(-450);
+            var s1ReceivedAtUtc = acceptedAtUtc.AddMilliseconds(-300);
+            var s1ResponseCompletedAtUtc = acceptedAtUtc.AddMilliseconds(-250);
+            var s1EvaluatedAtUtc = acceptedAtUtc.AddMilliseconds(-200);
             var frozenIntent = new
             {
                 strategy_id = order.StrategyId.ToString("D"),
@@ -1148,10 +1338,24 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 {
                     asset_id = order.AssetId,
                     condition_id = order.ConditionId,
+                    freshness_basis = PairedMakerGtdPaperExecutionContract.DirectHttpReceiptFreshnessBasis,
+                    request_started_at_utc = s0RequestStartedAtUtc,
+                    received_at_utc = s0ReceivedAtUtc,
+                    response_completed_at_utc = s0ResponseCompletedAtUtc,
+                    evaluated_at_utc = s0EvaluatedAtUtc,
+                    source_timestamp_utc = sourceTimestampUtc,
+                    max_age_ms = 1_500L,
+                    age_ms = 100L,
+                    receipt_age_ms = 100L,
+                    request_duration_ms = 250L,
+                    source_age_ms = 7_198_800L,
                     is_current = true,
                     timestamp_is_authoritative = true,
+                    best_bid = 0.49m,
                     best_ask = 0.51m,
-                    tick_size = 0.01m
+                    min_order_size = 1m,
+                    tick_size = 0.01m,
+                    negative_risk = false
                 },
                 raw_limit_price = order.Price,
                 limit_price = order.Price,
@@ -1161,15 +1365,29 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 {
                     asset_id = order.AssetId,
                     condition_id = order.ConditionId,
+                    freshness_basis = PairedMakerGtdPaperExecutionContract.DirectHttpReceiptFreshnessBasis,
+                    request_started_at_utc = s1RequestStartedAtUtc,
+                    received_at_utc = s1ReceivedAtUtc,
+                    response_completed_at_utc = s1ResponseCompletedAtUtc,
+                    evaluated_at_utc = s1EvaluatedAtUtc,
+                    source_timestamp_utc = sourceTimestampUtc,
+                    max_age_ms = 1_500L,
+                    age_ms = 100L,
+                    receipt_age_ms = 100L,
+                    request_duration_ms = 200L,
+                    source_age_ms = 7_199_800L,
                     is_current = true,
                     timestamp_is_authoritative = true,
+                    best_bid = 0.49m,
                     best_ask = 0.51m,
-                    tick_size = 0.01m
+                    min_order_size = 1m,
+                    tick_size = 0.01m,
+                    negative_risk = false
                 },
                 acceptance_outcome = "AcceptedResting",
                 acceptance_reason_code = "paper_post_only_accepted_resting",
                 observed_best_ask = 0.51m,
-                s1_received_at_utc = frozenAtUtc.AddMilliseconds(250),
+                s1_received_at_utc = s1ReceivedAtUtc,
                 accepted_at_utc = acceptedAtUtc
             };
             return JsonSerializer.Serialize(new

@@ -1,3 +1,16 @@
+## Active Update 2026-08-09 Paired Day-Ahead Direct HTTP Freshness Fix
+Goal: Fix the group-`8224` paired Maker-GTD day-ahead S0/S1 freshness defect that rejected freshly fetched quiet books because their venue snapshot timestamp was old.
+Status: Completed
+Done:
+- Changed only the six paired BTC/ETH/SOL Up/Down placements to `paired_maker_gtd_paper_v2`. Each direct CLOB S0/S1 read now persists and validates an ordered local request/client-receipt/response/evaluation bracket; request duration and receipt age are bounded by the configured quote-age limit, while the authoritative venue timestamp remains mandatory audit evidence and may be old for an unchanged quiet book.
+- Preserved fail-closed identity and PostOnly safety: S0/S1 must use the exact token/condition, authoritative timestamps, valid non-crossed prices in `(0,1)`, and unchanged tick size, minimum order size, and negative-risk flag. S1 freshness is rechecked at the actual acceptance timestamp before persistence.
+- Versioned the changed evidence contract without orphaning already persisted exact-family v1 orders. V1 lifecycle parsing retains its former predicate set and is covered end-to-end through updater, full fill, and `Entered`, including legacy S1 shapes that v1 formerly allowed; one-field v2-to-v1 downgrade evidence fails closed.
+- Strengthened persisted v2 evidence validation for S0-before-freeze, S1-after-freeze, S1-before-acceptance, freshness at `acceptedAt`, maximum configured age ceiling, price range, structural parameters, and recomputed timing fields.
+- Updated the exact ordinary-Paper exception contract and strategy/schema descriptions in AGENTS, Workflow, CodingRules, README, and PAPER_LIVE_PARITY. The separate 28 ETH Reference Average Maker-GTD placement processor and its source-timestamp freshness rule were not changed.
+Next: Deploy this commit separately, then repeat the exact six-strategy read-only production observation to confirm quiet day-ahead markets advance past S0 into S1/Resting at the expected rate.
+Notes: Focused paired processor/lifecycle/catalog verification passed `109/109`; supporting Reference Average/parity/PostOnly/client tests passed `69/69`. `PolyCopyTrader.sln` built with `0` errors and one pre-existing nullable warning in `BtcUpDown5mPaperStrategyProcessorTests.cs:7420`. Three independent final read-only reviews found no remaining P0/P1; `git diff --check` passed with line-ending warnings only. No deployment, service restart, database mutation, Paper/Live venue order, cancellation, or production-state change was performed.
+Blockers: None.
+
 ## Active Update 2026-08-09 Paired Day-Ahead Deployment Verification
 Goal: Verify the deployed group-`8224` paired Maker-GTD Paper strategies and their first production lifecycle without changing service, database, configuration, or trading state.
 Status: Completed
