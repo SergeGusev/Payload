@@ -1,3 +1,14 @@
+## Active Update 2026-08-09 Two-Sided Holdings vs Self-Dealing Clarification
+Goal: Clarify whether one Polymarket account may buy both Up and Down without violating the prohibition on self-dealing.
+Status: Completed read-only clarification
+Done:
+- Distinguished position ownership from transaction counterparties. One account may place independent BUY orders for both Up and Down and hold both outcome tokens; official position and market-making documentation explicitly supports obtaining and quoting both sides.
+- Defined the compliance boundary: this is not self-dealing when each resting order is filled by an unrelated external trader. Self-dealing/wash trading is arranging for orders controlled by the same beneficial owner to execute against each other or create fictitious volume/rebates, whether through one account or multiple accounts.
+- Reconfirmed that the proposed Up 0.50 and Down 0.49 orders are different outcome-token BUY orders and do not match each other at a combined price of 0.99. They remain independent resting orders until external liquidity takes each side.
+Next: None.
+Notes: Clarification used the already verified current official Polymarket positions, market-making, order-lifecycle, exchange-v2 matching, maker-rebate, and market-integrity evidence. No order, account action, production access/mutation, code/configuration change, build, or test occurred.
+Blockers: None.
+
 ## Active Update 2026-08-09 Paired Up/Down Maker Economics
 Goal: Determine whether buying equal Up and Down Maker positions at 0.50/0.49 across separate accounts guarantees profit and earns the current Maker rebate.
 Status: Completed read-only analysis

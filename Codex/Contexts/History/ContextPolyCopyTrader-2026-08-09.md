@@ -133,3 +133,20 @@ SOL	0.50	0.49
 
 Result:
 Confirmed the conditional complete-set math but rejected the unconditional wording. For equal fully filled shares in the same condition, Up 0.50 plus Down 0.49 costs 0.99 and merges/redeems for 1.00, locking `$0.01` gross per share; 100 shares on each side across BTC/ETH/SOL cost `$297`, return `$300`, and yield `$3` gross before contingent rebates and external costs. PostOnly acceptance is not a fill, and the two 0.99 complementary BUY bids cannot match each other; external counterparties must execute both legs. Any one-sided or unequal fill leaves directional risk. Fresh public checks of all exact 18 EARLY markets found `feesEnabled=true` and identical `0.07 / exponent 1 / taker-only / 20% rebate` schedules. Makers pay zero platform fee; eligible executed liquidity accrues a variable daily rebate, with a nominal current calculation of `$0.69986` per 100-share complete pair and a `$1` payout threshold, but it is not guaranteed at placement. Two accounts are unnecessary, prevent direct merge until positions are consolidated, and must never be intentionally crossed because Polymarket prohibits wash trading and self-dealing. No order, account action, production access/mutation, or product-code change occurred.
+
+## 2026-08-09T17:20:56.6685894Z
+Request:
+Я не понимаю вот этого.
+
+С одной стороны ты говоришь:
+
+Polymarket запрещает self-dealing и wash trading.
+
+С другой:
+
+Два аккаунта не нужны
+
+Так можно на одном аккаунте делать ставки против самого себя или нет?
+
+Result:
+Clarified that one account may buy and hold both Up and Down outcome tokens or quote both sides; this is a two-sided position, not a trade against oneself. The prohibited conduct is arranging for orders controlled by the same beneficial owner to execute against each other, create fictitious volume, or farm rebates, regardless of whether one or multiple accounts are used. In the proposed setup the Up 0.50 and Down 0.49 orders are separate BUY orders for different tokens, sum to 0.99, cannot match each other, and require unrelated external counterparties to fill them. No order, account action, production access/mutation, or product-code change occurred.
