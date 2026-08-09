@@ -1,3 +1,19 @@
+## Active Update 2026-08-09 Targeted ETH 4 bps Full Fee Repair
+Goal: Recalculate complete fee-aware Net PnL for `ETH Up or Down 5m 4 bps Reference Average Premarket` and publish it in Dashboard without touching any other strategy.
+Status: Completed
+Done:
+- Resolved the exact production strategy as `b7c50005-0000-4000-8179-000000000104` / `eth_up_down_5m_reference_average_bps_4_fak_premarket`; it is enabled, Paper-only, not paused, and has no Live, shadow, discrepancy, or retention-guard dependencies.
+- Performed independent strict RR/READ ONLY previews against `192.168.0.101:5432/polycopytrader`, fixed cutoff `2026-08-07T22:44:55.219515Z`, and deployed build `c6bfcc6862ae69fd9975aa3c7f8ce24ccc59f2c3`. The immutable historical scope is `1,851` unique run/order/fill/position/settlement chains and conditions: `614` Gamma-equal plus `1,237` authoritative earlier `MarketWebSocket`; orphan, duplicate, broken, other-source, and economic-mismatch counts are all zero.
+- Built a disposable exact-ID executor under the marked `D:\CodexTemp` session. It used the current production-equivalent CLOB taker fee calculator, exact `.07 / exponent 1 / taker-only` evidence per condition, fresh hashed plans, strict endpoint/scope/dependency gates, wallet and row locks, xmin CAS, and atomic four-row fee/net updates in batches of at most `50`.
+- Verified and committed one latest `MarketWebSocket` canary: fee `$0.20160`, Gross `$5.53846154`, Net `$5.33686154`; independent postcheck proved the exact four accounting rows changed atomically and coverage moved by exactly one.
+- Applied the remaining `1,825/1,825` historical rows in `37/37` successful transactions. Final executor postcheck returned exit `0`: `1,917/1,917` settled runs accounted, LegacyUnknown `0`, gross digest unchanged at `d083a33d0494b61dfd564b8dfaa940d9c9cbbea44a664ae3d2b174cc90de5e92`, and zero formula, provenance, schedule, identity, dependency, or cross-table mismatches.
+- Final raw totals are stake `$11,516.27549998`, Gross PnL `$741.57830334`, platform fee `$372.65556000`, Net PnL `$368.92274334`, and fee-inclusive Net ROI `3.103077488453538...%` (`3.10307749%` in Dashboard).
+- Promoted only the existing exact-strategy Dashboard reconciliation queue row from priority `50` to `1000` via a one-row CAS. The normal service worker reconciled it at `2026-08-09T19:08:54Z`; lifetime state and Dashboard now exactly publish `1,917/1,917`, fee `$372.65556000`, Net `$368.92274334`, and Net ROI `3.10307749%`.
+- Final independent RR/READ ONLY verification found service `Running / Live`, projection v4 `Running`, no service/projection errors, zero target events, and exact raw/state/snapshot parity. A later ordinary priority-50 `direct_paper_skip_compaction` row appeared after the completed fee reconciliation; it does not represent fee drift and requires no extra manual action.
+Next: None.
+Notes: Disposable executor build and self-test passed with zero warnings/errors. Focused fee/backfill tests passed `63`, with one environment-gated PostgreSQL integration test not executed. The protected temp lifecycle removed the owned marked session (`917` files, `218,277,735` bytes) and the run path no longer exists. Dashboard displayed stake `$11,516.27550000`, a pre-existing `$0.00000002` buy-notional-versus-run-stake basis difference; counts, Gross, fee, Net, and ROI match exactly. No Live order, trading action, service restart, deployment, schema change, or other-strategy mutation occurred.
+Blockers: None.
+
 ## Active Update 2026-08-09 Paired Early Maker 0.50/0.50 Contract Conflict
 Goal: Implement three ordinary-Paper BTC/ETH/SOL pairs (six Up/Down legs) at first market acceptance, cap `0.50`, equal shares, TouchNoDepth fills, and effective expiry one minute before market end.
 Status: Blocked

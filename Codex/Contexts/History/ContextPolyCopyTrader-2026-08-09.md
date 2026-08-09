@@ -196,3 +196,10 @@ Request:
 
 Result:
 Stopped before implementation after a read-only execution and accounting preview found a material contradiction. Current official Polymarket documentation says complementary BUY Yes/No orders match when their prices sum to `1.00`, while PostOnly rejects an order that could match immediately; the documentation does not establish that two same-owner complementary `0.50/0.50` PostOnly orders can both remain live. The current Paper model also excludes Maker rebates and has no authoritative payout ledger, so equal externally filled `0.50/0.50` shares produce zero recorded gross/net price PnL rather than a rebate profit. Requested a choice between conservative `0.50/0.49`, sequential `0.50` legs, or an explicitly synthetic dual-rest ordinary-Paper exception, plus whether a separate estimated-rebate audit metric is desired. No strategy/catalog/configuration code, order, account, database/service, deployment, or production state was changed.
+
+## 2026-08-09T19:12:29.3622519Z
+Request:
+Пересчитай для Net Pnl стратегию ETH Up or Down 5m 4 bps Reference Average Premarket
+
+Result:
+Completed an exact-strategy production fee repair after two independent strict read-only previews. Recalculated all `1,851` historical Paper FAK chains (`614` Gamma plus `1,237` authoritative earlier MarketWebSocket), first with one verified canary and then `1,825` remaining rows in `37` atomic batches of at most `50`. Final raw accounting is `1,917/1,917` covered with Gross PnL `$741.57830334`, fee `$372.65556000`, Net PnL `$368.92274334`, and fee-inclusive Net ROI `3.10307749%`; LegacyUnknown and all structural/formula/provenance mismatches are zero and the Gross digest is unchanged. Promoted only the existing exact-strategy Dashboard reconciliation row; the normal worker published matching lifetime state and Dashboard values. Service and projection v4 remained healthy; no Live/trading action, restart, deployment, schema change, or other-strategy mutation occurred.
