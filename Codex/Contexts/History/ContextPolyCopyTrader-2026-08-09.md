@@ -32,3 +32,26 @@ Request:
 
 Result:
 Repeated the full-history cumulative settled Paper report for exact strategy `b7c50005-0000-4000-8179-000000000102` / `ETH Up or Down 5m 2 bps Reference Average Premarket` from one fresh production PostgreSQL `REPEATABLE READ READ ONLY` UTC snapshot at `2026-08-08T23:00:21.799725Z`, now using authoritative `net_realized_pnl_usd` only. Reconciled `2,365` unique settled runs with full fee coverage and zero invalid, incomplete, non-accounted, net-identity, after-cutoff, or Live rows: Net PnL `+$373.39864314`, fee-inclusive settled Net ROI `2.5453088722%`, Net W/L/flat `1,339/1,026/0`, latest UTC day `44` settlements and `-$27.65999903`, and maximum Net drawdown `$144.07010111`. ETH minute coverage was `50,539/50,904` (`99.282964%`) from `$1,768.97` to `$1,916.55`. Delivered a visually checked solid-line PNG with ETH overlay and max Net-drawdown region plus a one-sheet daily Net Excel workbook with `36` continuous UTC dates, formula totals, red-on-white negatives, and exact freeze `B2`; independent Decimal/SQL and artifact/OpenXML/Excel checks passed. Persisted the default that all future PnL reports and charts show Net PnL only, with Gross shown only on an explicit user request. Production and application state were unchanged; this is stored settled Paper history, not a replay.
+
+## 2026-08-09T10:32:08.7834526Z
+Request:
+Смоделируй для всех BTC стратегий такое поведение:
+
+1. Если стратегия принимает решение по ставке
+2. Она проверяет аналогичное решение по ставке стратегии ETH Up or Down 5m 2 bps Reference Average Premarket
+3. Дальше считаем 2 варианта
+3.1. Направления совпали - ставим.
+3.2. Решения по ETH Up or Down 5m 2 bps Reference Average Premarket нет - ставим.
+4. Решение по ETH Up or Down 5m 2 bps Reference Average Premarket противоположное - не ставим.
+
+Конечная цель - понять, влияет ли корреляция с ETH на эффективность стратегии.
+
+У нас же нет текущих рассчётов Net, считай по Gross. Не понимаю, как решения по ETH может не быть. Мы же считаем по истории, там всё уже есть. Да, берём всю доступную Paper историю
+
+Мне нужно по каждой стратегии две новых цифры:
+
+1. Когда мы сохраняем ставку при совпадении с ETH
+2. Когда мы сохраняем ставку при совпадении с ETH и при отсутствии ETH ставки.
+
+Result:
+Completed a strict read-only full-history Gross simulation for all `1,002` production BTC 5m Paper strategies at fixed cutoff `2026-08-09T09:42:05.826413Z`. Classified `751,776` valid settled BTC bets by the exact same-window settled ETH anchor bet into SAME `153,745`, OPPOSITE `46,733`, and ABSENT `551,298`, with zero invalid rows or duplicate strategy/start groups. Baseline Gross PnL/ROI was `-$320,324.18392232 / -2.6296062030%`; Scenario 1 SAME-only retained `153,745` bets and produced `-$2,409.95003915 / -0.1260969587%`; Scenario 2 SAME+ABSENT retained `705,043` bets and produced `-$278,002.04588725 / -2.5022621845%`, improving baseline by `$42,322.13803507` and `0.1273440185` percentage points while remaining negative. Independent weekly/time-partition and sentinel checks matched exactly. Delivered a visually and formula-verified five-sheet Excel workbook with per-strategy baseline, both requested scenarios, counts, Gross PnL/ROI, absence/timing diagnostics, methodology, raw data, and zero failed audit checks. No production, service, trading, strategy, schema, or product-code state changed.
