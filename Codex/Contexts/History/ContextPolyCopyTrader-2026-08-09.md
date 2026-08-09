@@ -212,3 +212,10 @@ Request:
 
 Result:
 Implemented three exact BTC/ETH/SOL equal-share Paper Maker-GTD pairs (six group-`8224` Up/Down legs) with Up cap `0.50`, Down cap `0.49`, maximum-resting `floor_to_tick(min(bestAsk-tick,cap))` pricing, first service-observed day-ahead `acceptingOrders=true` evidence, independent fresh S0/S1 PostOnly acceptance, cumulative ten-attempt recovery, no pair atomicity/rollback, and effective expiry one minute before market end. Added a dedicated `23..25h` Gamma discovery worker, strict exact-market/catalog/evidence guards, durable common-size recovery, exposure-before-publication ordering, and per-asset owning-shard/service-session continuity that fails closed across restart/reconnect/reassignment. The approved exact TouchNoDepth full-fill model remains optimistic and ignores queue/depth/event size/aggressor; Maker rebates are not modeled in Paper PnL and Live remains disabled. Also completed maximum-resting v2 pricing for the existing exact 28 ETH Maker-GTD strategies while grandfathering exact v1 evidence. Final affected tests passed `160/160`, the aggregate catalog-count test passed `1/1`, and the solution built with zero errors and one pre-existing nullable-test warning. No deployment, service restart, database/production mutation, or venue order occurred.
+
+## 2026-08-09T20:53:22.4854125Z
+Request:
+Поясни, что такое GTD до конца рынка, Paper-expiry — за минуту до конца. ?
+
+Result:
+Verified and explained that these are two timestamps for one intended expiry. GTD means Good-Til-Date. Polymarket applies a documented one-minute GTD security threshold, so the wire expiration must be 60 seconds later than the desired effective lifetime. The paired strategy therefore sends/stores market end as the CLOB wire GTD expiration and stops Paper fill eligibility at market end minus one minute. For a `15:30..15:35 UTC` market, the wire value is `15:35`, while an unfilled Paper order expires at `15:34`. No implementation or runtime state changed.

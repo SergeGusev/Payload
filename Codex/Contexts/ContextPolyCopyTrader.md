@@ -1,3 +1,14 @@
+## Active Update 2026-08-09 GTD Wire vs Effective Paper Expiry Clarification
+Goal: Explain why paired Maker-GTD records use market end as the wire expiration but stop Paper execution one minute earlier.
+Status: Completed
+Done:
+- Verified the exact implementation: `ClobGtdExpirationUtc = market end`, while `EffectiveExpiresAtUtc = market end - 60 seconds`.
+- Confirmed this is one intended expiry expressed in two layers, not two independent cancellation rules: Polymarket documents a one-minute GTD security threshold, so the submitted expiration timestamp is 60 seconds later than the desired effective expiry.
+- Established the concrete five-minute example: for a `15:30..15:35 UTC` market, the wire GTD timestamp is `15:35`, but Paper accepts touch evidence only before `15:34` and expires an unfilled order at `15:34`.
+Next: None.
+Notes: Read-only verification against current source, repository parity documentation, and current official Polymarket order documentation. No code/configuration, deployment, service/database, or trading state changed.
+Blockers: None.
+
 ## Active Update 2026-08-09 Paired Day-Ahead Maker-GTD Paper Strategies
 Goal: Implement three BTC/ETH/SOL equal-share Maker-GTD pairs (six Paper-only legs) at first observed market acceptance, using Up cap `0.50` and Down cap `0.49`, with the closest practical Live order semantics.
 Status: Completed
