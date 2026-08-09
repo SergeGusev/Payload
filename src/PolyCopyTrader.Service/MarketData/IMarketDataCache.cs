@@ -8,7 +8,19 @@ public interface IMarketDataCache
 
     MarketDataStatusSnapshot Status { get; }
 
+    long GetAssetSubscriptionGeneration(string assetId);
+
+    ConfirmedAssetSubscriptionSnapshot GetConfirmedAssetSubscription(string assetId);
+
     void ReplaceSubscribedAssets(IReadOnlyCollection<string> assetIds);
+
+    void AssignAssetSubscriptions(string component, IReadOnlyCollection<string> assetIds);
+
+    void InvalidateAssetSubscriptions(string component);
+
+    void RemoveAssetSubscriptionComponent(string component);
+
+    bool ConfirmAssetSubscription(string component, string assetId);
 
     void ApplyUpdate(MarketDataUpdate update);
 
@@ -18,6 +30,13 @@ public interface IMarketDataCache
 
     void UpdateStatus(MarketDataStatusSnapshot status);
 }
+
+public sealed record ConfirmedAssetSubscriptionSnapshot(
+    string AssetId,
+    string? Component,
+    bool ConfirmedLive,
+    long Generation,
+    string SessionId);
 
 public enum OrderBookCacheLookupStatus
 {

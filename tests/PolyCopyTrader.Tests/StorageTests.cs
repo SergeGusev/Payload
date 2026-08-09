@@ -99,6 +99,84 @@ public sealed class StorageTests
                 PostgresAppRepository.GetPersistedSkipDiagnosticsJson(makerSkipped));
         }
 
+        var pairedPlacementReasons = new[]
+        {
+            "paired_maker_gtd_entry_window_elapsed",
+            "paired_maker_gtd_strategy_disabled_or_paused",
+            "paired_maker_gtd_post_only_attempts_exhausted"
+        };
+        foreach (var reason in pairedPlacementReasons)
+        {
+            var diagnostics = JsonSerializer.Serialize(new
+            {
+                execution_source = MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                skip_reason = reason,
+                maker_gtd = new
+                {
+                    execution_source = MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                    terminal_outcome = "skipped",
+                    terminal_reason = reason,
+                    attempts = new[] { new { attempt_number = 1 } }
+                }
+            });
+            var pairedSkipped = skipped with
+            {
+                SkipReason = reason,
+                SkipDiagnosticsJson = diagnostics
+            };
+
+            Assert.Equal(
+                diagnostics,
+                PostgresAppRepository.GetPersistedSkipDiagnosticsJson(pairedSkipped));
+        }
+
+        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped with
+        {
+            SkipReason = "paired_maker_gtd_entry_window_elapsed",
+            SkipDiagnosticsJson = JsonSerializer.Serialize(new
+            {
+                execution_source = MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                skip_reason = "paired_maker_gtd_entry_window_elapsed",
+                maker_gtd = new
+                {
+                    execution_source = MakerGtdPaperExecutionSources.ReferenceAverage,
+                    terminal_outcome = "skipped",
+                    terminal_reason = "paired_maker_gtd_entry_window_elapsed"
+                }
+            })
+        }));
+
+        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped with
+        {
+            SkipReason = "maker_gtd_post_only_attempts_exhausted",
+            SkipDiagnosticsJson = JsonSerializer.Serialize(new
+            {
+                execution_source = MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                skip_reason = "maker_gtd_post_only_attempts_exhausted",
+                maker_gtd = new
+                {
+                    execution_source = MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                    terminal_outcome = "skipped",
+                    terminal_reason = "maker_gtd_post_only_attempts_exhausted"
+                }
+            })
+        }));
+        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped with
+        {
+            SkipReason = "paired_maker_gtd_post_only_attempts_exhausted",
+            SkipDiagnosticsJson = JsonSerializer.Serialize(new
+            {
+                execution_source = MakerGtdPaperExecutionSources.ReferenceAverage,
+                skip_reason = "paired_maker_gtd_post_only_attempts_exhausted",
+                maker_gtd = new
+                {
+                    execution_source = MakerGtdPaperExecutionSources.ReferenceAverage,
+                    terminal_outcome = "skipped",
+                    terminal_reason = "paired_maker_gtd_post_only_attempts_exhausted"
+                }
+            })
+        }));
+
         Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped with
         {
             SkipReason = "maker_gtd_post_only_attempts_exhausted",

@@ -7,6 +7,106 @@ namespace PolyCopyTrader.Tests;
 public sealed class MarketDataCacheTests
 {
     [Fact]
+    public void UpdateStatus_RecoveredStaleGapAdvancesContinuityGeneration()
+    {
+        var cache = new MarketDataCache(new MarketDataWebSocketOptions());
+        var now = DateTimeOffset.UtcNow;
+        var healthy = new MarketDataStatusSnapshot(
+            "PolymarketMarketWebSocket",
+            MarketDataConnectionState.Connected,
+            "wss://example.test",
+            1,
+            now,
+            now.AddMinutes(-1),
+            null,
+            0,
+            false,
+            null,
+            now);
+        cache.UpdateStatus(healthy);
+
+        cache.UpdateStatus(healthy with { Stale = true, UpdatedAtUtc = now.AddSeconds(1) });
+        cache.UpdateStatus(healthy with { UpdatedAtUtc = now.AddSeconds(2) });
+
+        Assert.Equal(1, cache.Status.ContinuityGeneration);
+        Assert.False(cache.Status.Stale);
+    }
+
+    [Fact]
+    public void ReplaceSubscribedAssets_RemoveAndReaddAdvancesOnlyRemovedAssetGeneration()
+    {
+        var cache = new MarketDataCache(new MarketDataWebSocketOptions());
+        cache.ReplaceSubscribedAssets(["asset-1", "asset-2"]);
+
+        cache.ReplaceSubscribedAssets(["asset-2"]);
+        cache.ReplaceSubscribedAssets(["asset-1", "asset-2"]);
+
+        Assert.Equal(1, cache.GetAssetSubscriptionGeneration("asset-1"));
+        Assert.Equal(0, cache.GetAssetSubscriptionGeneration("asset-2"));
+    }
+
+    [Fact]
+    public void ConfirmedSubscription_AssignedAssetRemainsPendingUntilOwningShardFrame()
+    {
+        var cache = new MarketDataCache(
+            new MarketDataWebSocketOptions(),
+            "market-data-test-session");
+
+        cache.AssignAssetSubscriptions("shard-a", ["asset-1"]);
+        var pending = cache.GetConfirmedAssetSubscription("asset-1");
+        var wrongShardConfirmed = cache.ConfirmAssetSubscription("shard-b", "asset-1");
+        var owningShardConfirmed = cache.ConfirmAssetSubscription("shard-a", "asset-1");
+        var confirmed = cache.GetConfirmedAssetSubscription("asset-1");
+
+        Assert.False(pending.ConfirmedLive);
+        Assert.Equal(0, pending.Generation);
+        Assert.False(wrongShardConfirmed);
+        Assert.True(owningShardConfirmed);
+        Assert.True(confirmed.ConfirmedLive);
+        Assert.Equal("shard-a", confirmed.Component);
+        Assert.Equal(0, confirmed.Generation);
+        Assert.Equal("market-data-test-session", pending.SessionId);
+        Assert.Equal(pending.SessionId, confirmed.SessionId);
+    }
+
+    [Fact]
+    public void ConfirmedSubscription_DisconnectThenFirstReconnectFrameAdvancesGeneration()
+    {
+        var cache = new MarketDataCache(new MarketDataWebSocketOptions());
+        cache.AssignAssetSubscriptions("shard-a", ["asset-1"]);
+        Assert.True(cache.ConfirmAssetSubscription("shard-a", "asset-1"));
+        var accepted = cache.GetConfirmedAssetSubscription("asset-1");
+
+        cache.InvalidateAssetSubscriptions("shard-a");
+        var disconnected = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.True(cache.ConfirmAssetSubscription("shard-a", "asset-1"));
+        var reconnected = cache.GetConfirmedAssetSubscription("asset-1");
+
+        Assert.True(accepted.ConfirmedLive);
+        Assert.Equal(0, accepted.Generation);
+        Assert.False(disconnected.ConfirmedLive);
+        Assert.Equal(1, disconnected.Generation);
+        Assert.True(reconnected.ConfirmedLive);
+        Assert.Equal(1, reconnected.Generation);
+    }
+
+    [Fact]
+    public void ConfirmedSubscription_UnrelatedShardDisconnectDoesNotInvalidateAsset()
+    {
+        var cache = new MarketDataCache(new MarketDataWebSocketOptions());
+        cache.AssignAssetSubscriptions("shard-a", ["asset-1"]);
+        cache.AssignAssetSubscriptions("shard-b", ["asset-2"]);
+        Assert.True(cache.ConfirmAssetSubscription("shard-a", "asset-1"));
+        Assert.True(cache.ConfirmAssetSubscription("shard-b", "asset-2"));
+
+        cache.InvalidateAssetSubscriptions("shard-b");
+
+        var unaffected = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.True(unaffected.ConfirmedLive);
+        Assert.Equal(0, unaffected.Generation);
+    }
+
+    [Fact]
     public void ApplyUpdate_AppliesPriceChangeDeltaWithoutDroppingDepth()
     {
         var cache = new MarketDataCache(new MarketDataWebSocketOptions());

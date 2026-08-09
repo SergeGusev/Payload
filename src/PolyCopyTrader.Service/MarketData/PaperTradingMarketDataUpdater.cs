@@ -17,7 +17,8 @@ public sealed class PaperTradingMarketDataUpdater(
     IAppRepository repository,
     IPolymarketFeeAccountingService? feeAccountingService = null,
     MarketDataWebSocketOptions? marketDataWebSocketOptions = null,
-    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IPaperTradingMarketDataUpdater
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
+    IMarketDataCache? marketDataCache = null) : IPaperTradingMarketDataUpdater
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const int MakerPositionCasMaximumAttempts = 3;
@@ -25,6 +26,7 @@ public sealed class PaperTradingMarketDataUpdater(
         Math.Max(1, (marketDataWebSocketOptions ?? new MarketDataWebSocketOptions()).StaleAfterSeconds));
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
         makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
+    private readonly IMarketDataCache? marketDataCache = marketDataCache;
     private readonly SemaphoreSlim sync = new(1, 1);
 
     public async Task ApplyUpdateAsync(
@@ -313,6 +315,19 @@ public sealed class PaperTradingMarketDataUpdater(
             return;
         }
 
+        if (string.Equals(
+                order.ExecutionSource,
+                MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                StringComparison.Ordinal) &&
+            (marketDataCache is null || !MakerGtdPaperContinuityEvaluator.Evaluate(
+                order,
+                marketDataCache.Status,
+                marketDataCache.SubscribedAssetIds,
+                marketDataCache.GetConfirmedAssetSubscription(order.AssetId)).Continuous))
+        {
+            return;
+        }
+
         var processedAtUtc = DateTimeOffset.UtcNow;
         var eventReceivedAtUtc = receivedAtUtc ?? update.ReceivedAtUtc;
         if (!update.HasAuthoritativeSourceTimestamp ||
@@ -463,7 +478,7 @@ public sealed class PaperTradingMarketDataUpdater(
                 positionUpdatedAtUtc);
             mutation = await repository.TryApplyMakerGtdPaperFullFillAsync(
                 new MakerGtdPaperFullFillRequest(
-                    MakerGtdPaperExecutionContract.ExecutionSource,
+                    order.ExecutionSource,
                     filledOrder,
                     fill,
                     expectedPosition,

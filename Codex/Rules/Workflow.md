@@ -96,6 +96,17 @@ the closed user-approved exception defined below:
   submission is
   disabled, and no alias, clone, descendant, future strategy, or changed execution
   semantic inherits the exception;
+- allow the second exact closed ordinary-Paper exception only for the six
+  group-`8224` BTC/ETH/SOL five-minute paired Maker-GTD legs: fixed Up/Down
+  outcomes, mutually linked pair IDs, first-observed `acceptingOrders=true`
+  timing, source `crypto_paired_maker_gtd_first_accepting_paper`, Up cap `0.50`,
+  Down cap `0.49`, one frozen equal-share quantity per pair, independent S0/S1
+  acceptance, no atomic rollback, and expiry one minute before market end. Their
+  TouchNoDepth fills additionally require the same market-data service session and
+  uninterrupted owning-shard subscription component/generation; restart,
+  owning-shard reconnect, or asset reassignment fails closed.
+  They use the same mandatory label; maker rebates are excluded from Paper PnL;
+  Live is disabled, and no predicate mismatch inherits this exception;
 - add or update parity tests and verify that intent, market evidence, fills, and
   outcomes are persisted or otherwise auditable.
 

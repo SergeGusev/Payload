@@ -50,8 +50,8 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
 
 ## Paper/live execution parity
 
-- Except for the single closed user-approved ordinary-Paper exception enumerated
-  below, a Paper strategy may model only an order and execution sequence that the
+- Except for the closed user-approved ordinary-Paper exceptions enumerated below,
+  a Paper strategy may model only an order and execution sequence that the
   current Live Polymarket API can perform with the same pre-submit constraints and
   order semantics. See `docs/architecture/PAPER_LIVE_PARITY.md`.
 - Strategy logic must produce one pre-submit `ExecutionIntent`. Paper simulation
@@ -89,6 +89,29 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
   submission remains disabled. No
   alias, clone, descendant, future strategy, or changed execution semantic inherits
   this exception; all other unsupported behavior remains `ResearchOnly`.
+- Second closed exception approved explicitly by the user on 2026-08-09: ordinary
+  Paper accounting is also allowed only for the exact six five-minute paired
+  Maker-GTD legs in catalog group `8224`: assets `BTC`, `ETH`, and `SOL`; fixed
+  outcomes `Up` and `Down`; behavior `PairedFixedOutcomeMakerGtdFirstAccepting`;
+  ID suffixes `101/102`, `201/202`, and `301/302`; mutually linked pair IDs;
+  `EntryTiming=FirstAcceptingOrders`; nominal `EntryDelaySeconds=-86400`;
+  execution source `crypto_paired_maker_gtd_first_accepting_paper`; `PaperOnly=true`;
+  Up cap `0.50`; Down cap `0.49`; and formula
+  `floor_to_tick(min(bestAsk-tick, cap))`. Each pair freezes one common normalized
+  share quantity before either leg is attempted. Each leg then has independent
+  fresh S0/S1 PostOnly acceptance and persistence, without atomicity, rollback,
+  cancellation, or resizing of an accepted leg when its peer fails. Accepted legs
+  expire one minute before market end. This exact family may use the optimistic
+  full-fill `TouchNoDepth` inference, but a paired-family fill additionally requires
+  the same market-data service session and uninterrupted healthy owning-shard
+  subscription component/generation since acceptance; service restart, owning-shard
+  reconnect, or asset reassignment fails closed. Queue position,
+  depth, event size, and aggressor remain unmodeled and fills may be overstated.
+  Results enter ordinary Paper orders, positions, PnL, win rate, and performance and
+  must carry `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+  Maker rebates are not modeled or included in Paper PnL. Live submission remains
+  disabled. No alias, clone, changed ID/source/timing/cap/pair link, or other semantic
+  inherits this exception.
 - Never simulate atomicity, rollback, post-fill rejection, or aggregate fill-price
   guarantees unless the Live venue explicitly provides that guarantee for the
   same order type.

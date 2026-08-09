@@ -9823,17 +9823,8 @@ FROM claimed;
 
 	private static bool IsMakerGtdPlacementSkipDiagnostics(StrategyMarketPaperRun run)
 	{
-		const string executionSource = "eth_reference_average_maker_gtd_paper";
 		if (string.IsNullOrWhiteSpace(run.SkipDiagnosticsJson) ||
-			run.SkipReason is not
-				("maker_gtd_variant_not_paper_only" or
-				 "maker_gtd_variant_outside_closed_exception" or
-				 "maker_gtd_market_start_unknown" or
-				 "maker_gtd_market_end_unknown" or
-				 "maker_gtd_effective_expiration_elapsed" or
-				 "maker_gtd_maximum_order_price_invalid" or
-				 "maker_gtd_premarket_entry_window_elapsed" or
-				 "maker_gtd_post_only_attempts_exhausted"))
+			string.IsNullOrWhiteSpace(run.SkipReason))
 		{
 			return false;
 		}
@@ -9844,13 +9835,19 @@ FROM claimed;
 			var root = document.RootElement;
 			if (root.ValueKind != JsonValueKind.Object ||
 				!root.TryGetProperty("execution_source", out var rootExecutionSource) ||
-				!string.Equals(rootExecutionSource.GetString(), executionSource, StringComparison.Ordinal) ||
+				!MakerGtdPaperExecutionSources.IsSupported(rootExecutionSource.GetString()) ||
+				!IsMakerGtdPlacementSkipReasonAllowed(
+					rootExecutionSource.GetString(),
+					run.SkipReason) ||
 				!root.TryGetProperty("skip_reason", out var rootSkipReason) ||
 				!string.Equals(rootSkipReason.GetString(), run.SkipReason, StringComparison.Ordinal) ||
 				!root.TryGetProperty("maker_gtd", out var makerGtd) ||
 				makerGtd.ValueKind != JsonValueKind.Object ||
 				!makerGtd.TryGetProperty("execution_source", out var makerExecutionSource) ||
-				!string.Equals(makerExecutionSource.GetString(), executionSource, StringComparison.Ordinal) ||
+				!string.Equals(
+					makerExecutionSource.GetString(),
+					rootExecutionSource.GetString(),
+					StringComparison.Ordinal) ||
 				!makerGtd.TryGetProperty("terminal_outcome", out var terminalOutcome) ||
 				!string.Equals(terminalOutcome.GetString(), "skipped", StringComparison.Ordinal) ||
 				!makerGtd.TryGetProperty("terminal_reason", out var terminalReason) ||
@@ -9865,6 +9862,29 @@ FROM claimed;
 		{
 			return false;
 		}
+	}
+
+	private static bool IsMakerGtdPlacementSkipReasonAllowed(
+		string? executionSource,
+		string skipReason)
+	{
+		return executionSource switch
+		{
+			MakerGtdPaperExecutionSources.ReferenceAverage => skipReason is
+				("maker_gtd_variant_not_paper_only" or
+				 "maker_gtd_variant_outside_closed_exception" or
+				 "maker_gtd_market_start_unknown" or
+				 "maker_gtd_market_end_unknown" or
+				 "maker_gtd_effective_expiration_elapsed" or
+				 "maker_gtd_maximum_order_price_invalid" or
+				 "maker_gtd_premarket_entry_window_elapsed" or
+				 "maker_gtd_post_only_attempts_exhausted"),
+			MakerGtdPaperExecutionSources.PairedFirstAccepting => skipReason is
+				("paired_maker_gtd_entry_window_elapsed" or
+				 "paired_maker_gtd_strategy_disabled_or_paused" or
+				 "paired_maker_gtd_post_only_attempts_exhausted"),
+			_ => false
+		};
 	}
 
 	private static PaperCopiedLeaderPosition ReadPaperCopiedLeaderPosition(NpgsqlDataReader reader)

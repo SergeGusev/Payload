@@ -1,3 +1,5 @@
+using PolyCopyTrader.Domain;
+
 namespace PolyCopyTrader.Service.PaperTrading;
 
 public interface IMakerGtdPaperPlacementHandoff
@@ -99,10 +101,7 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
             throw new ArgumentException("Maker-GTD pending Paper order ID is required.", nameof(paperOrderId));
         }
 
-        if (!string.Equals(
-                executionSource,
-                MakerGtdPaperExecutionContract.ExecutionSource,
-                StringComparison.Ordinal))
+        if (!MakerGtdPaperExecutionSources.IsSupported(executionSource))
         {
             throw new ArgumentException("Maker-GTD pending execution source is invalid.", nameof(executionSource));
         }
@@ -225,10 +224,7 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
     public void TrackMakerGtdPaperOrder(Guid paperOrderId, string executionSource)
     {
         if (paperOrderId == Guid.Empty ||
-            !string.Equals(
-                executionSource,
-                MakerGtdPaperExecutionContract.ExecutionSource,
-                StringComparison.Ordinal))
+            !MakerGtdPaperExecutionSources.IsSupported(executionSource))
         {
             return;
         }

@@ -4,6 +4,33 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class MakerGtdPaperPlacementHandoffTests
 {
+    [Theory]
+    [InlineData(MakerGtdPaperExecutionContract.ExecutionSource)]
+    [InlineData(PairedMakerGtdPaperExecutionContract.ExecutionSource)]
+    public async Task PlacementAdmission_AcceptsEachClosedMakerGtdExecutionSource(string executionSource)
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var orderId = Guid.NewGuid();
+        await using (var admission = await handoff.EnterPlacementAdmissionAsync("asset-1"))
+        {
+            admission.ActivatePendingOrder(orderId, executionSource);
+        }
+
+        Assert.Contains(orderId, handoff.GetPendingOrderIds("asset-1"));
+        handoff.MarkPublished(orderId);
+        Assert.DoesNotContain(orderId, handoff.GetPendingOrderIds("asset-1"));
+    }
+
+    [Fact]
+    public async Task PlacementAdmission_RejectsUnknownExecutionSource()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        await using var admission = await handoff.EnterPlacementAdmissionAsync("asset-1");
+
+        Assert.Throws<ArgumentException>(() =>
+            admission.ActivatePendingOrder(Guid.NewGuid(), "unknown_maker_source"));
+    }
+
     [Fact]
     public async Task ReceiptAndExpiryAdmissions_ProvideDeterministicNoSleepFence()
     {

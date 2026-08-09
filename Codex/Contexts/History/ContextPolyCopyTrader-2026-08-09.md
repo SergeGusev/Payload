@@ -203,3 +203,12 @@ Request:
 
 Result:
 Completed an exact-strategy production fee repair after two independent strict read-only previews. Recalculated all `1,851` historical Paper FAK chains (`614` Gamma plus `1,237` authoritative earlier MarketWebSocket), first with one verified canary and then `1,825` remaining rows in `37` atomic batches of at most `50`. Final raw accounting is `1,917/1,917` covered with Gross PnL `$741.57830334`, fee `$372.65556000`, Net PnL `$368.92274334`, and fee-inclusive Net ROI `3.10307749%`; LegacyUnknown and all structural/formula/provenance mismatches are zero and the Gross digest is unchanged. Promoted only the existing exact-strategy Dashboard reconciliation row; the normal worker published matching lifetime state and Dashboard values. Service and projection v4 remained healthy; no Live/trading action, restart, deployment, schema change, or other-strategy mutation occurred.
+
+## 2026-08-09T20:46:12.9508636Z
+Request:
+Нам нужно максимально правдоподобно для Live. Ок, делай 0.5 и 0.49
+
+Продолжай
+
+Result:
+Implemented three exact BTC/ETH/SOL equal-share Paper Maker-GTD pairs (six group-`8224` Up/Down legs) with Up cap `0.50`, Down cap `0.49`, maximum-resting `floor_to_tick(min(bestAsk-tick,cap))` pricing, first service-observed day-ahead `acceptingOrders=true` evidence, independent fresh S0/S1 PostOnly acceptance, cumulative ten-attempt recovery, no pair atomicity/rollback, and effective expiry one minute before market end. Added a dedicated `23..25h` Gamma discovery worker, strict exact-market/catalog/evidence guards, durable common-size recovery, exposure-before-publication ordering, and per-asset owning-shard/service-session continuity that fails closed across restart/reconnect/reassignment. The approved exact TouchNoDepth full-fill model remains optimistic and ignores queue/depth/event size/aggressor; Maker rebates are not modeled in Paper PnL and Live remains disabled. Also completed maximum-resting v2 pricing for the existing exact 28 ETH Maker-GTD strategies while grandfathering exact v1 evidence. Final affected tests passed `160/160`, the aggregate catalog-count test passed `1/1`, and the solution built with zero errors and one pre-existing nullable-test warning. No deployment, service restart, database/production mutation, or venue order occurred.

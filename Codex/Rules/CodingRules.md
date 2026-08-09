@@ -29,7 +29,7 @@ contains the full safety and project rules.
   or reject the unchanged intent; the venue determines the actual fill.
 - `PaperOnly` is a transport restriction, not a general semantic exemption. Logic
   without a proven Live equivalent is `ResearchOnly` and must not contribute to
-  Paper PnL except for the single closed exception explicitly approved by the user
+  Paper PnL except for the closed exceptions explicitly approved by the user
   on 2026-08-09: the exact 28 `ETH` neutral Reference Average Maker-GTD strategies
   at thresholds `1..10` and `15..100` step `5`, behavior
   `ReferenceAverageBpsThresholdMakerGtdPremarket`, catalog ID
@@ -45,6 +45,18 @@ contains the full safety and project rules.
   submission is disabled. No alias, clone, descendant, future strategy, or changed
   execution semantic inherits the
   exception, and the broad parity/ResearchOnly rule remains unchanged otherwise.
+- The second exact exception is catalog group `8224`: BTC/ETH/SOL 5m paired
+  Up/Down Maker-GTD legs, behavior `PairedFixedOutcomeMakerGtdFirstAccepting`,
+  mutually linked ID suffixes `101/102`, `201/202`, `301/302`, first-observed
+  accepting timing, source `crypto_paired_maker_gtd_first_accepting_paper`,
+  `PaperOnly=true`, Up cap `0.50`, Down cap `0.49`, equal frozen shares,
+  independent S0/S1 acceptance, no pair atomicity/rollback, and expiry at market
+  end minus one minute. Its optimistic TouchNoDepth fills require the same
+  market-data service session and uninterrupted owning-shard subscription
+  component/generation; restart, owning-shard reconnect, or asset reassignment
+  fails closed. They carry the same mandatory label and may enter ordinary
+  Paper metrics. Maker rebates are never inferred or included in Paper PnL; Live
+  remains disabled. No predicate mismatch inherits this exception.
 - Do not silently ignore API errors; persist/log explicit failure reasons.
 - Run tests before declaring implementation tasks complete.
 - Update README/project memory/task context when behavior changes.

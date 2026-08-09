@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Service.MarketData;
 
 namespace PolyCopyTrader.Service.PaperTrading;
 
@@ -10,7 +11,12 @@ internal sealed record MakerGtdPaperAcceptedMarketDataStatus(
     DateTimeOffset? LastConnectedUtc,
     DateTimeOffset? LastDisconnectedUtc,
     bool AssetSubscribed,
+    bool? AssetConfirmedLive,
+    string? AssetSubscriptionComponent,
     int SubscribedAssetsCount,
+    long? ContinuityGeneration,
+    long? AssetSubscriptionGeneration,
+    string? AssetSubscriptionSessionId,
     DateTimeOffset AcceptedAtUtc);
 
 internal sealed record MakerGtdPaperOrderEvidence(
@@ -27,6 +33,9 @@ internal static class MakerGtdPaperOrderEvidenceParser
 {
     private const string MakerGtdProperty = "maker_gtd";
     private const string MarketDataStatusProperty = "market_data_status_at_acceptance";
+    private const string PairedProperty = "pair";
+    private const string FrozenIntentProperty = "frozen_intent";
+    private const string FirstAcceptingObservationProperty = "first_accepting_observation";
 
     public static bool TryParse(
         PaperOrder order,
@@ -35,6 +44,36 @@ internal static class MakerGtdPaperOrderEvidenceParser
     {
         evidence = null;
         failureDetail = string.Empty;
+        var referenceAverageVariant = StrategyIds.UpDown5mStrategyVariants
+            .SingleOrDefault(variant =>
+                variant.Id == order.StrategyId &&
+                MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant));
+        var hasReferenceAverageSource = string.Equals(
+            order.ExecutionSource,
+            MakerGtdPaperExecutionContract.ExecutionSource,
+            StringComparison.Ordinal);
+        if (hasReferenceAverageSource != (referenceAverageVariant is not null))
+        {
+            failureDetail = hasReferenceAverageSource
+                ? "reference_average_strategy_not_approved"
+                : "reference_average_execution_source_mismatch";
+            return false;
+        }
+
+        var pairedVariant = StrategyIds.PairedMakerGtdFirstAcceptingVariants
+            .SingleOrDefault(variant => variant.Id == order.StrategyId);
+        var hasPairedSource = string.Equals(
+            order.ExecutionSource,
+            PairedMakerGtdPaperExecutionContract.ExecutionSource,
+            StringComparison.Ordinal);
+        if (hasPairedSource != (pairedVariant is not null))
+        {
+            failureDetail = hasPairedSource
+                ? "paired_strategy_not_approved"
+                : "paired_execution_source_mismatch";
+            return false;
+        }
+
         if (!MakerGtdPaperExecutionContract.IsMakerGtdOrder(order))
         {
             failureDetail = "execution_source_mismatch";
@@ -95,10 +134,30 @@ internal static class MakerGtdPaperOrderEvidenceParser
                     statusRoot,
                     "asset_subscribed",
                     out var assetSubscribed) ||
+                !TryGetOptionalBoolean(
+                    statusRoot,
+                    "asset_confirmed_live",
+                    out var assetConfirmedLive) ||
+                !TryGetOptionalString(
+                    statusRoot,
+                    "asset_subscription_component",
+                    out var assetSubscriptionComponent) ||
                 !TryGetRequiredNonNegativeInt32(
                     statusRoot,
                     "subscribed_assets_count",
                     out var subscribedAssetsCount) ||
+                !TryGetOptionalNonNegativeInt64(
+                    statusRoot,
+                    "continuity_generation",
+                    out var continuityGeneration) ||
+                !TryGetOptionalNonNegativeInt64(
+                    statusRoot,
+                    "asset_subscription_generation",
+                    out var assetSubscriptionGeneration) ||
+                !TryGetOptionalString(
+                    statusRoot,
+                    "asset_subscription_session_id",
+                    out var assetSubscriptionSessionId) ||
                 !TryGetRequiredTimestamp(
                     statusRoot,
                     "accepted_at_utc",
@@ -122,6 +181,33 @@ internal static class MakerGtdPaperOrderEvidenceParser
                 return false;
             }
 
+            if (pairedVariant is not null &&
+                !TryValidatePairedContract(
+                    order,
+                    root,
+                    makerGtd,
+                    statusRoot,
+                    pairedVariant,
+                    acceptedAtUtc,
+                    effectiveExpiresAtUtc,
+                    out failureDetail))
+            {
+                return false;
+            }
+
+            if (referenceAverageVariant is not null &&
+                !TryValidateReferenceAverageContract(
+                    order,
+                    root,
+                    makerGtd,
+                    referenceAverageVariant,
+                    acceptedAtUtc,
+                    effectiveExpiresAtUtc,
+                    out failureDetail))
+            {
+                return false;
+            }
+
             evidence = new MakerGtdPaperOrderEvidence(
                 acceptedAtUtc,
                 effectiveExpiresAtUtc,
@@ -132,7 +218,12 @@ internal static class MakerGtdPaperOrderEvidenceParser
                     lastConnectedUtc,
                     lastDisconnectedUtc,
                     assetSubscribed,
+                    assetConfirmedLive,
+                    assetSubscriptionComponent,
                     subscribedAssetsCount,
+                    continuityGeneration,
+                    assetSubscriptionGeneration,
+                    assetSubscriptionSessionId,
                     statusAcceptedAtUtc));
             return true;
         }
@@ -141,6 +232,634 @@ internal static class MakerGtdPaperOrderEvidenceParser
             failureDetail = "raw_decision_json_invalid";
             return false;
         }
+    }
+
+    private static bool TryValidateReferenceAverageContract(
+        PaperOrder order,
+        JsonElement root,
+        JsonElement makerGtd,
+        BtcUpDown5mStrategyVariant variant,
+        DateTimeOffset acceptedAtUtc,
+        DateTimeOffset effectiveExpiresAtUtc,
+        out string failureDetail)
+    {
+        failureDetail = "reference_average_contract_invalid";
+        if (!MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant) ||
+            variant.MakerMaximumOrderPrice != StrategyIds.ReferenceAverageMakerGtdMaximumOrderPrice ||
+            order.Side != TradeSide.Buy ||
+            order.Outcome is not ("Up" or "Down") ||
+            string.IsNullOrWhiteSpace(order.AssetId) ||
+            string.IsNullOrWhiteSpace(order.ConditionId) ||
+            order.Price <= 0m ||
+            order.Price > StrategyIds.ReferenceAverageMakerGtdMaximumOrderPrice ||
+            order.SizeShares <= 0m ||
+            order.NotionalUsd != order.Price * order.SizeShares ||
+            !SameTimestamp(order.CreatedAtUtc, acceptedAtUtc))
+        {
+            failureDetail = "reference_average_order_catalog_mismatch";
+            return false;
+        }
+
+        if (!TryGetRequiredString(root, "execution_source", out var rootExecutionSource) ||
+            !string.Equals(
+                rootExecutionSource,
+                MakerGtdPaperExecutionContract.ExecutionSource,
+                StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(root, "paper_only", out var rootPaperOnly) ||
+            !rootPaperOnly ||
+            !TryGetRequiredBoolean(root, "post_only", out var rootPostOnly) ||
+            !rootPostOnly ||
+            !TryGetRequiredString(root, "order_type", out var rootOrderType) ||
+            !string.Equals(rootOrderType, "GTD", StringComparison.Ordinal))
+        {
+            failureDetail = "reference_average_root_contract_mismatch";
+            return false;
+        }
+
+        if (!TryGetRequiredString(makerGtd, "contract_version", out var contractVersion) ||
+            !TryGetRequiredString(makerGtd, "price_formula", out var priceFormula) ||
+            !IsApprovedReferenceAverageContractAndFormula(contractVersion, priceFormula) ||
+            !TryGetRequiredString(makerGtd, "execution_source", out var makerExecutionSource) ||
+            !string.Equals(
+                makerExecutionSource,
+                MakerGtdPaperExecutionContract.ExecutionSource,
+                StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(makerGtd, "paper_only", out var makerPaperOnly) ||
+            !makerPaperOnly ||
+            !TryGetRequiredBoolean(makerGtd, "post_only", out var makerPostOnly) ||
+            !makerPostOnly ||
+            !TryGetRequiredString(makerGtd, "order_type", out var makerOrderType) ||
+            !string.Equals(makerOrderType, "GTD", StringComparison.Ordinal) ||
+            !TryGetRequiredNonNegativeInt32(
+                makerGtd,
+                "maximum_placement_attempts",
+                out var maximumPlacementAttempts) ||
+            maximumPlacementAttempts != 10 ||
+            !TryGetRequiredNonNegativeInt32(
+                makerGtd,
+                "attempts_completed",
+                out var attemptsCompleted) ||
+            attemptsCompleted is < 1 or > 10 ||
+            !TryGetRequiredDecimal(
+                makerGtd,
+                "maximum_order_price",
+                out var maximumOrderPrice) ||
+            maximumOrderPrice != StrategyIds.ReferenceAverageMakerGtdMaximumOrderPrice ||
+            !TryGetRequiredTimestamp(makerGtd, "market_start_utc", out var marketStartUtc) ||
+            !TryGetRequiredTimestamp(makerGtd, "market_end_utc", out var marketEndUtc) ||
+            !TryGetRequiredTimestamp(
+                makerGtd,
+                "clob_gtd_expiration_utc",
+                out var clobGtdExpirationUtc) ||
+            !SameTimestamp(marketEndUtc, clobGtdExpirationUtc) ||
+            !SameTimestamp(marketEndUtc, marketStartUtc.AddMinutes(5)) ||
+            !SameTimestamp(marketEndUtc, effectiveExpiresAtUtc.AddSeconds(60)))
+        {
+            failureDetail = "reference_average_maker_gtd_contract_mismatch";
+            return false;
+        }
+
+        if (!TryGetObject(makerGtd, FrozenIntentProperty, out var frozenIntent) ||
+            !TryGetRequiredGuid(frozenIntent, "strategy_id", out var intentStrategyId) ||
+            intentStrategyId != order.StrategyId ||
+            !TryGetRequiredString(frozenIntent, "condition_id", out var intentConditionId) ||
+            !string.Equals(intentConditionId, order.ConditionId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(frozenIntent, "asset_id", out var intentAssetId) ||
+            !string.Equals(intentAssetId, order.AssetId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(frozenIntent, "side", out var intentSide) ||
+            !string.Equals(intentSide, TradeSide.Buy.ToString(), StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(frozenIntent, "post_only", out var intentPostOnly) ||
+            !intentPostOnly ||
+            !TryGetRequiredString(frozenIntent, "order_type", out var intentOrderType) ||
+            !string.Equals(intentOrderType, "GTD", StringComparison.Ordinal) ||
+            !TryGetRequiredDecimal(
+                frozenIntent,
+                "maximum_order_price",
+                out var intentMaximumOrderPrice) ||
+            intentMaximumOrderPrice != maximumOrderPrice ||
+            !TryGetRequiredDecimal(frozenIntent, "limit_price", out var intentLimitPrice) ||
+            intentLimitPrice != order.Price ||
+            !TryGetRequiredPositiveDecimal(
+                frozenIntent,
+                "target_size_shares",
+                out var intentTargetSizeShares) ||
+            intentTargetSizeShares != order.SizeShares ||
+            !TryGetRequiredPositiveDecimal(
+                frozenIntent,
+                "target_notional_usd",
+                out var intentTargetNotionalUsd) ||
+            intentTargetNotionalUsd != order.NotionalUsd ||
+            !TryGetRequiredPositiveDecimal(frozenIntent, "tick_size", out var tickSize) ||
+            order.Price % tickSize != 0m ||
+            !TryGetRequiredTimestamp(
+                frozenIntent,
+                "decision_snapshot_at_utc",
+                out var decisionSnapshotAtUtc) ||
+            !TryGetRequiredTimestamp(frozenIntent, "frozen_at_utc", out var frozenAtUtc) ||
+            decisionSnapshotAtUtc > frozenAtUtc ||
+            frozenAtUtc > acceptedAtUtc ||
+            !TryGetRequiredTimestamp(
+                frozenIntent,
+                "effective_expires_at_utc",
+                out var intentEffectiveExpiresAtUtc) ||
+            !SameTimestamp(intentEffectiveExpiresAtUtc, effectiveExpiresAtUtc) ||
+            !TryGetRequiredTimestamp(
+                frozenIntent,
+                "clob_gtd_expiration_utc",
+                out var intentClobGtdExpirationUtc) ||
+            !SameTimestamp(intentClobGtdExpirationUtc, clobGtdExpirationUtc))
+        {
+            failureDetail = "reference_average_frozen_intent_mismatch";
+            return false;
+        }
+
+        if (!TryValidateReferenceAverageAcceptedAttempt(
+                makerGtd,
+                order,
+                contractVersion,
+                maximumOrderPrice,
+                tickSize,
+                attemptsCompleted,
+                acceptedAtUtc))
+        {
+            failureDetail = "reference_average_attempt_evidence_mismatch";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsApprovedReferenceAverageContractAndFormula(
+        string contractVersion,
+        string priceFormula)
+    {
+        return string.Equals(
+                   contractVersion,
+                   MakerGtdPaperExecutionContract.LegacyContractVersion,
+                   StringComparison.Ordinal) &&
+               string.Equals(
+                   priceFormula,
+                   MakerGtdPaperExecutionContract.LegacyPriceFormula,
+                   StringComparison.Ordinal) ||
+            string.Equals(
+                   contractVersion,
+                   MakerGtdPaperExecutionContract.CurrentContractVersion,
+                   StringComparison.Ordinal) &&
+               string.Equals(
+                   priceFormula,
+                   MakerGtdPaperExecutionContract.CurrentPriceFormula,
+                   StringComparison.Ordinal);
+    }
+
+    private static bool TryValidateReferenceAverageAcceptedAttempt(
+        JsonElement makerGtd,
+        PaperOrder order,
+        string contractVersion,
+        decimal maximumOrderPrice,
+        decimal frozenTickSize,
+        int attemptsCompleted,
+        DateTimeOffset acceptedAtUtc)
+    {
+        if (!makerGtd.TryGetProperty("attempts", out var attempts) ||
+            attempts.ValueKind != JsonValueKind.Array ||
+            attempts.GetArrayLength() != attemptsCompleted)
+        {
+            return false;
+        }
+
+        var acceptedAttempt = attempts.EnumerateArray().Last();
+        if (acceptedAttempt.ValueKind != JsonValueKind.Object ||
+            !TryGetRequiredString(acceptedAttempt, "outcome", out var outcome) ||
+            !string.Equals(outcome, "accepted_resting", StringComparison.Ordinal) ||
+            !TryGetRequiredTimestamp(acceptedAttempt, "accepted_at_utc", out var attemptAcceptedAtUtc) ||
+            !SameTimestamp(attemptAcceptedAtUtc, acceptedAtUtc) ||
+            !TryGetRequiredDecimal(acceptedAttempt, "limit_price", out var attemptLimitPrice) ||
+            attemptLimitPrice != order.Price ||
+            !TryGetRequiredPositiveDecimal(acceptedAttempt, "tick_size", out var attemptTickSize) ||
+            attemptTickSize != frozenTickSize ||
+            !TryGetObject(acceptedAttempt, "s0", out var s0) ||
+            !TryGetRequiredString(s0, "asset_id", out var s0AssetId) ||
+            !string.Equals(s0AssetId, order.AssetId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(s0, "condition_id", out var s0ConditionId) ||
+            !string.Equals(s0ConditionId, order.ConditionId, StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(s0, "is_current", out var s0IsCurrent) ||
+            !s0IsCurrent ||
+            !TryGetRequiredBoolean(
+                s0,
+                "timestamp_is_authoritative",
+                out var s0TimestampIsAuthoritative) ||
+            !s0TimestampIsAuthoritative ||
+            !TryGetRequiredPositiveDecimal(s0, "best_bid", out var s0BestBid) ||
+            !TryGetRequiredPositiveDecimal(s0, "best_ask", out var s0BestAsk) ||
+            !TryGetRequiredPositiveDecimal(s0, "tick_size", out var s0TickSize) ||
+            s0TickSize != frozenTickSize ||
+            !TryGetObject(acceptedAttempt, FrozenIntentProperty, out var attemptIntent) ||
+            !TryGetRequiredGuid(attemptIntent, "strategy_id", out var attemptStrategyId) ||
+            attemptStrategyId != order.StrategyId ||
+            !TryGetRequiredDecimal(attemptIntent, "limit_price", out var attemptIntentPrice) ||
+            attemptIntentPrice != order.Price ||
+            !TryGetObject(acceptedAttempt, "s1", out var s1) ||
+            !TryGetRequiredString(s1, "asset_id", out var s1AssetId) ||
+            !string.Equals(s1AssetId, order.AssetId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(s1, "condition_id", out var s1ConditionId) ||
+            !string.Equals(s1ConditionId, order.ConditionId, StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(s1, "is_current", out var s1IsCurrent) ||
+            !s1IsCurrent ||
+            !TryGetRequiredBoolean(
+                s1,
+                "timestamp_is_authoritative",
+                out var s1TimestampIsAuthoritative) ||
+            !s1TimestampIsAuthoritative ||
+            !TryGetRequiredPositiveDecimal(s1, "best_ask", out var s1BestAsk) ||
+            order.Price >= s1BestAsk)
+        {
+            return false;
+        }
+
+        var rawExpectedLimit = string.Equals(
+                contractVersion,
+                MakerGtdPaperExecutionContract.LegacyContractVersion,
+                StringComparison.Ordinal)
+            ? Math.Min(
+                Math.Min(s0BestBid + s0TickSize, s0BestAsk - s0TickSize),
+                maximumOrderPrice)
+            : Math.Min(s0BestAsk - s0TickSize, maximumOrderPrice);
+        if (rawExpectedLimit <= 0m)
+        {
+            return false;
+        }
+
+        var expectedLimit = decimal.Floor(rawExpectedLimit / s0TickSize) * s0TickSize;
+        return attemptLimitPrice == expectedLimit;
+    }
+
+    private static bool TryValidatePairedContract(
+        PaperOrder order,
+        JsonElement root,
+        JsonElement makerGtd,
+        JsonElement statusRoot,
+        BtcUpDown5mStrategyVariant variant,
+        DateTimeOffset acceptedAtUtc,
+        DateTimeOffset effectiveExpiresAtUtc,
+        out string failureDetail)
+    {
+        failureDetail = "paired_contract_invalid";
+        if (!PairedMakerGtdPaperExecutionContract.IsApprovedStrategyVariant(variant) ||
+            variant.FixedOutcome is not { } fixedOutcome ||
+            variant.PairedStrategyId is not { } pairedStrategyId ||
+            variant.MakerMaximumOrderPrice is not { } maximumOrderPrice ||
+            order.Side != TradeSide.Buy ||
+            !string.Equals(order.Outcome, fixedOutcome.ToString(), StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(order.AssetId) ||
+            string.IsNullOrWhiteSpace(order.ConditionId) ||
+            order.Price <= 0m ||
+            order.Price > maximumOrderPrice ||
+            order.SizeShares <= 0m ||
+            order.NotionalUsd != order.Price * order.SizeShares ||
+            !SameTimestamp(order.CreatedAtUtc, acceptedAtUtc))
+        {
+            failureDetail = "paired_order_catalog_mismatch";
+            return false;
+        }
+
+        if (!TryGetRequiredString(root, "execution_source", out var rootExecutionSource) ||
+            !string.Equals(
+                rootExecutionSource,
+                PairedMakerGtdPaperExecutionContract.ExecutionSource,
+                StringComparison.Ordinal) ||
+            !TryGetRequiredString(root, "paper_model_label", out var paperModelLabel) ||
+            !string.Equals(
+                paperModelLabel,
+                PairedMakerGtdPaperExecutionContract.MandatoryLabel,
+                StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(root, "paper_only", out var paperOnly) ||
+            !paperOnly ||
+            !TryGetRequiredBoolean(root, "post_only", out var rootPostOnly) ||
+            !rootPostOnly ||
+            !TryGetRequiredString(root, "order_type", out var rootOrderType) ||
+            !string.Equals(rootOrderType, "GTD", StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(root, "maker_rebate_modeled", out var makerRebateModeled) ||
+            makerRebateModeled)
+        {
+            failureDetail = "paired_root_contract_mismatch";
+            return false;
+        }
+
+        if (!TryGetObject(root, PairedProperty, out var pair) ||
+            !TryGetRequiredString(pair, "pair_id", out var pairId) ||
+            !string.Equals(
+                pairId,
+                $"{variant.ReferenceAssetSymbol}:{order.ConditionId}",
+                StringComparison.Ordinal) ||
+            !TryGetRequiredGuid(pair, "strategy_id", out var pairStrategyId) ||
+            pairStrategyId != order.StrategyId ||
+            !TryGetRequiredGuid(pair, "paired_strategy_id", out var actualPairedStrategyId) ||
+            actualPairedStrategyId != pairedStrategyId ||
+            !TryGetExactPairStrategyIds(
+                pair,
+                order.StrategyId,
+                pairedStrategyId) ||
+            !TryGetRequiredPositiveDecimal(
+                pair,
+                "common_requested_size_shares",
+                out var commonRequestedSizeShares) ||
+            commonRequestedSizeShares != order.SizeShares ||
+            !TryGetRequiredTimestamp(
+                pair,
+                "common_size_frozen_at_utc",
+                out var commonSizeFrozenAtUtc) ||
+            commonSizeFrozenAtUtc > acceptedAtUtc ||
+            !TryGetRequiredBoolean(pair, "atomic", out var atomic) ||
+            atomic ||
+            !TryGetRequiredBoolean(pair, "rollback", out var rollback) ||
+            rollback)
+        {
+            failureDetail = "paired_linkage_mismatch";
+            return false;
+        }
+
+        if (!TryGetRequiredString(makerGtd, "contract_version", out var contractVersion) ||
+            !string.Equals(
+                contractVersion,
+                PairedMakerGtdPaperExecutionContract.ContractVersion,
+                StringComparison.Ordinal) ||
+            !TryGetRequiredString(makerGtd, "execution_source", out var makerExecutionSource) ||
+            !string.Equals(
+                makerExecutionSource,
+                PairedMakerGtdPaperExecutionContract.ExecutionSource,
+                StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(makerGtd, "paper_only", out var makerPaperOnly) ||
+            !makerPaperOnly ||
+            !TryGetRequiredBoolean(makerGtd, "post_only", out var makerPostOnly) ||
+            !makerPostOnly ||
+            !TryGetRequiredString(makerGtd, "order_type", out var makerOrderType) ||
+            !string.Equals(makerOrderType, "GTD", StringComparison.Ordinal) ||
+            !TryGetRequiredNonNegativeInt32(
+                makerGtd,
+                "maximum_placement_attempts",
+                out var maximumPlacementAttempts) ||
+            maximumPlacementAttempts != 10 ||
+            !TryGetRequiredNonNegativeInt32(
+                makerGtd,
+                "attempts_completed",
+                out var attemptsCompleted) ||
+            attemptsCompleted is < 1 or > 10 ||
+            !TryGetRequiredString(makerGtd, "price_formula", out var priceFormula) ||
+            !string.Equals(
+                priceFormula,
+                PairedMakerGtdPaperExecutionContract.PriceFormula,
+                StringComparison.Ordinal) ||
+            !TryGetRequiredDecimal(
+                makerGtd,
+                "maximum_order_price",
+                out var makerMaximumOrderPrice) ||
+            makerMaximumOrderPrice != maximumOrderPrice ||
+            !TryGetRequiredTimestamp(makerGtd, "market_start_utc", out var marketStartUtc) ||
+            !TryGetRequiredTimestamp(makerGtd, "market_end_utc", out var marketEndUtc) ||
+            !TryGetRequiredTimestamp(
+                makerGtd,
+                "clob_gtd_expiration_utc",
+                out var clobGtdExpirationUtc) ||
+            !SameTimestamp(marketEndUtc, clobGtdExpirationUtc) ||
+            !SameTimestamp(marketEndUtc, marketStartUtc.AddMinutes(5)) ||
+            !SameTimestamp(
+                clobGtdExpirationUtc,
+                effectiveExpiresAtUtc.AddSeconds(60)) ||
+            marketStartUtc >= effectiveExpiresAtUtc ||
+            acceptedAtUtc >= marketStartUtc)
+        {
+            failureDetail = "paired_maker_gtd_contract_mismatch";
+            return false;
+        }
+
+        if (!TryGetObject(makerGtd, FrozenIntentProperty, out var frozenIntent) ||
+            !TryGetRequiredGuid(frozenIntent, "strategy_id", out var intentStrategyId) ||
+            intentStrategyId != order.StrategyId ||
+            !TryGetRequiredString(frozenIntent, "condition_id", out var intentConditionId) ||
+            !string.Equals(intentConditionId, order.ConditionId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(frozenIntent, "asset_id", out var intentAssetId) ||
+            !string.Equals(intentAssetId, order.AssetId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(frozenIntent, "side", out var intentSide) ||
+            !string.Equals(intentSide, TradeSide.Buy.ToString(), StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(frozenIntent, "post_only", out var intentPostOnly) ||
+            !intentPostOnly ||
+            !TryGetRequiredString(frozenIntent, "order_type", out var intentOrderType) ||
+            !string.Equals(intentOrderType, "GTD", StringComparison.Ordinal) ||
+            !TryGetRequiredDecimal(
+                frozenIntent,
+                "maximum_order_price",
+                out var intentMaximumOrderPrice) ||
+            intentMaximumOrderPrice != maximumOrderPrice ||
+            !TryGetRequiredDecimal(frozenIntent, "limit_price", out var intentLimitPrice) ||
+            intentLimitPrice != order.Price ||
+            !TryGetRequiredPositiveDecimal(
+                frozenIntent,
+                "requested_notional_usd",
+                out var intentRequestedNotionalUsd) ||
+            intentRequestedNotionalUsd != order.NotionalUsd ||
+            !TryGetRequiredPositiveDecimal(
+                frozenIntent,
+                "requested_size_shares",
+                out var intentRequestedSizeShares) ||
+            intentRequestedSizeShares != commonRequestedSizeShares ||
+            !TryGetRequiredPositiveDecimal(
+                frozenIntent,
+                "target_size_shares",
+                out var intentTargetSizeShares) ||
+            intentTargetSizeShares != order.SizeShares ||
+            !TryGetRequiredPositiveDecimal(
+                frozenIntent,
+                "target_notional_usd",
+                out var intentTargetNotionalUsd) ||
+            intentTargetNotionalUsd != order.NotionalUsd ||
+            !TryGetRequiredPositiveDecimal(frozenIntent, "tick_size", out var tickSize) ||
+            order.Price % tickSize != 0m ||
+            !TryGetRequiredTimestamp(
+                frozenIntent,
+                "decision_snapshot_at_utc",
+                out var decisionSnapshotAtUtc) ||
+            !TryGetRequiredTimestamp(frozenIntent, "frozen_at_utc", out var frozenAtUtc) ||
+            decisionSnapshotAtUtc > frozenAtUtc ||
+            frozenAtUtc > acceptedAtUtc ||
+            !TryGetRequiredTimestamp(
+                frozenIntent,
+                "effective_expires_at_utc",
+                out var intentEffectiveExpiresAtUtc) ||
+            !SameTimestamp(intentEffectiveExpiresAtUtc, effectiveExpiresAtUtc) ||
+            !TryGetRequiredTimestamp(
+                frozenIntent,
+                "clob_gtd_expiration_utc",
+                out var intentClobGtdExpirationUtc) ||
+            !SameTimestamp(intentClobGtdExpirationUtc, clobGtdExpirationUtc))
+        {
+            failureDetail = "paired_frozen_intent_mismatch";
+            return false;
+        }
+
+        if (!TryValidatePairedAcceptedAttempt(
+                makerGtd,
+                order,
+                maximumOrderPrice,
+                tickSize,
+                attemptsCompleted,
+                frozenAtUtc,
+                acceptedAtUtc))
+        {
+            failureDetail = "paired_attempt_evidence_mismatch";
+            return false;
+        }
+
+        if (!TryGetObject(root, FirstAcceptingObservationProperty, out var observation) ||
+            !TryGetRequiredString(observation, "phase", out var observationPhase) ||
+            !string.Equals(
+                observationPhase,
+                "first_accepting_observed",
+                StringComparison.Ordinal) ||
+            !TryGetRequiredTimestamp(
+                observation,
+                "request_started_at_utc",
+                out var requestStartedAtUtc) ||
+            !TryGetRequiredTimestamp(
+                observation,
+                "response_completed_at_utc",
+                out var responseCompletedAtUtc) ||
+            !TryGetRequiredTimestamp(
+                observation,
+                "first_observed_accepting_at_utc",
+                out var firstObservedAcceptingAtUtc) ||
+            requestStartedAtUtc > responseCompletedAtUtc ||
+            responseCompletedAtUtc > firstObservedAcceptingAtUtc ||
+            firstObservedAcceptingAtUtc > acceptedAtUtc ||
+            !TryGetRequiredString(observation, "condition_id", out var observationConditionId) ||
+            !string.Equals(observationConditionId, order.ConditionId, StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(observation, "accepting_orders", out var acceptingOrders) ||
+            !acceptingOrders ||
+            !TryGetRequiredStringArray(observation, "clob_token_ids", out var clobTokenIds) ||
+            clobTokenIds.Count != 2 ||
+            clobTokenIds.Distinct(StringComparer.Ordinal).Count() != 2 ||
+            !clobTokenIds.Contains(order.AssetId, StringComparer.Ordinal))
+        {
+            failureDetail = "paired_first_accepting_evidence_mismatch";
+            return false;
+        }
+
+        if (!TryGetRequiredNonNegativeInt64(
+                statusRoot,
+                "continuity_generation",
+                out _) ||
+            !TryGetRequiredBoolean(
+                statusRoot,
+                "asset_confirmed_live",
+                out var assetConfirmedLive) ||
+            !assetConfirmedLive ||
+            !TryGetRequiredString(
+                statusRoot,
+                "asset_subscription_component",
+                out _) ||
+            !TryGetRequiredNonNegativeInt64(
+                statusRoot,
+                "asset_subscription_generation",
+                out _) ||
+            !TryGetRequiredString(
+                statusRoot,
+                "asset_subscription_session_id",
+                out _))
+        {
+            failureDetail = "paired_continuity_evidence_missing";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryValidatePairedAcceptedAttempt(
+        JsonElement makerGtd,
+        PaperOrder order,
+        decimal maximumOrderPrice,
+        decimal frozenTickSize,
+        int attemptsCompleted,
+        DateTimeOffset frozenAtUtc,
+        DateTimeOffset acceptedAtUtc)
+    {
+        if (!makerGtd.TryGetProperty("attempts", out var attempts) ||
+            attempts.ValueKind != JsonValueKind.Array ||
+            attempts.GetArrayLength() != attemptsCompleted)
+        {
+            return false;
+        }
+
+        var acceptedAttempt = attempts.EnumerateArray().Last();
+        if (acceptedAttempt.ValueKind != JsonValueKind.Object ||
+            !TryGetRequiredDecimal(acceptedAttempt, "limit_price", out var attemptLimitPrice) ||
+            attemptLimitPrice != order.Price ||
+            !TryGetRequiredPositiveDecimal(acceptedAttempt, "tick_size", out var attemptTickSize) ||
+            attemptTickSize != frozenTickSize ||
+            !TryGetRequiredString(
+                acceptedAttempt,
+                "acceptance_outcome",
+                out var acceptanceOutcome) ||
+            !string.Equals(acceptanceOutcome, "AcceptedResting", StringComparison.Ordinal) ||
+            !TryGetRequiredTimestamp(
+                acceptedAttempt,
+                "accepted_at_utc",
+                out var attemptAcceptedAtUtc) ||
+            !SameTimestamp(attemptAcceptedAtUtc, acceptedAtUtc) ||
+            !TryGetRequiredTimestamp(
+                acceptedAttempt,
+                "s1_received_at_utc",
+                out var s1ReceivedAtUtc) ||
+            s1ReceivedAtUtc <= frozenAtUtc ||
+            s1ReceivedAtUtc > acceptedAtUtc ||
+            !TryGetObject(acceptedAttempt, "s0", out var s0) ||
+            !TryGetRequiredString(s0, "asset_id", out var s0AssetId) ||
+            !string.Equals(s0AssetId, order.AssetId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(s0, "condition_id", out var s0ConditionId) ||
+            !string.Equals(s0ConditionId, order.ConditionId, StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(s0, "is_current", out var s0IsCurrent) ||
+            !s0IsCurrent ||
+            !TryGetRequiredBoolean(
+                s0,
+                "timestamp_is_authoritative",
+                out var s0TimestampIsAuthoritative) ||
+            !s0TimestampIsAuthoritative ||
+            !TryGetRequiredPositiveDecimal(s0, "best_ask", out var s0BestAsk) ||
+            !TryGetRequiredPositiveDecimal(s0, "tick_size", out var s0TickSize) ||
+            s0TickSize != frozenTickSize ||
+            !TryGetObject(acceptedAttempt, FrozenIntentProperty, out var attemptIntent) ||
+            !TryGetRequiredGuid(attemptIntent, "strategy_id", out var attemptStrategyId) ||
+            attemptStrategyId != order.StrategyId ||
+            !TryGetRequiredString(attemptIntent, "asset_id", out var attemptAssetId) ||
+            !string.Equals(attemptAssetId, order.AssetId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(attemptIntent, "condition_id", out var attemptConditionId) ||
+            !string.Equals(attemptConditionId, order.ConditionId, StringComparison.Ordinal) ||
+            !TryGetRequiredDecimal(attemptIntent, "limit_price", out var attemptIntentPrice) ||
+            attemptIntentPrice != order.Price ||
+            !TryGetObject(acceptedAttempt, "s1", out var s1) ||
+            !TryGetRequiredString(s1, "asset_id", out var s1AssetId) ||
+            !string.Equals(s1AssetId, order.AssetId, StringComparison.Ordinal) ||
+            !TryGetRequiredString(s1, "condition_id", out var s1ConditionId) ||
+            !string.Equals(s1ConditionId, order.ConditionId, StringComparison.Ordinal) ||
+            !TryGetRequiredBoolean(s1, "is_current", out var s1IsCurrent) ||
+            !s1IsCurrent ||
+            !TryGetRequiredBoolean(
+                s1,
+                "timestamp_is_authoritative",
+                out var s1TimestampIsAuthoritative) ||
+            !s1TimestampIsAuthoritative ||
+            !TryGetRequiredPositiveDecimal(s1, "best_ask", out var s1BestAsk) ||
+            order.Price >= s1BestAsk)
+        {
+            return false;
+        }
+
+        var rawExpectedLimit = Math.Min(s0BestAsk - s0TickSize, maximumOrderPrice);
+        if (rawExpectedLimit <= 0m)
+        {
+            return false;
+        }
+
+        var expectedLimit = decimal.Floor(rawExpectedLimit / s0TickSize) * s0TickSize;
+        return attemptLimitPrice == expectedLimit;
     }
 
     private static bool TryGetObject(
@@ -205,6 +924,160 @@ internal static class MakerGtdPaperOrderEvidenceParser
         return true;
     }
 
+    private static bool TryGetOptionalBoolean(
+        JsonElement root,
+        string propertyName,
+        out bool? value)
+    {
+        value = null;
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return true;
+        }
+
+        if (element.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            return false;
+        }
+
+        value = element.GetBoolean();
+        return true;
+    }
+
+    private static bool TryGetOptionalString(
+        JsonElement root,
+        string propertyName,
+        out string? value)
+    {
+        value = null;
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return true;
+        }
+
+        if (element.ValueKind == JsonValueKind.Null)
+        {
+            return true;
+        }
+
+        if (element.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = element.GetString();
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryGetRequiredString(
+        JsonElement root,
+        string propertyName,
+        out string value)
+    {
+        value = string.Empty;
+        if (!root.TryGetProperty(propertyName, out var element) ||
+            element.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = element.GetString() ?? string.Empty;
+        return !string.IsNullOrWhiteSpace(value);
+    }
+
+    private static bool TryGetRequiredGuid(
+        JsonElement root,
+        string propertyName,
+        out Guid value)
+    {
+        value = default;
+        return TryGetRequiredString(root, propertyName, out var text) &&
+            Guid.TryParseExact(text, "D", out value);
+    }
+
+    private static bool TryGetRequiredDecimal(
+        JsonElement root,
+        string propertyName,
+        out decimal value)
+    {
+        value = default;
+        return root.TryGetProperty(propertyName, out var element) &&
+            element.ValueKind == JsonValueKind.Number &&
+            element.TryGetDecimal(out value);
+    }
+
+    private static bool TryGetRequiredPositiveDecimal(
+        JsonElement root,
+        string propertyName,
+        out decimal value)
+    {
+        return TryGetRequiredDecimal(root, propertyName, out value) && value > 0m;
+    }
+
+    private static bool TryGetRequiredNonNegativeInt64(
+        JsonElement root,
+        string propertyName,
+        out long value)
+    {
+        value = default;
+        return root.TryGetProperty(propertyName, out var element) &&
+            element.ValueKind == JsonValueKind.Number &&
+            element.TryGetInt64(out value) &&
+            value >= 0;
+    }
+
+    private static bool TryGetRequiredStringArray(
+        JsonElement root,
+        string propertyName,
+        out IReadOnlyList<string> values)
+    {
+        values = [];
+        if (!root.TryGetProperty(propertyName, out var element) ||
+            element.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        var parsed = new List<string>();
+        foreach (var item in element.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(item.GetString()))
+            {
+                return false;
+            }
+
+            parsed.Add(item.GetString()!);
+        }
+
+        values = parsed;
+        return true;
+    }
+
+    private static bool TryGetExactPairStrategyIds(
+        JsonElement pair,
+        Guid strategyId,
+        Guid pairedStrategyId)
+    {
+        if (!TryGetRequiredStringArray(pair, "pair_strategy_ids", out var rawIds) ||
+            rawIds.Count != 2)
+        {
+            return false;
+        }
+
+        var parsedIds = new HashSet<Guid>();
+        foreach (var rawId in rawIds)
+        {
+            if (!Guid.TryParseExact(rawId, "D", out var parsedId) ||
+                !parsedIds.Add(parsedId))
+            {
+                return false;
+            }
+        }
+
+        return parsedIds.SetEquals([strategyId, pairedStrategyId]);
+    }
+
     private static bool TryGetRequiredNonNegativeInt32(
         JsonElement root,
         string propertyName,
@@ -215,6 +1088,28 @@ internal static class MakerGtdPaperOrderEvidenceParser
             element.ValueKind == JsonValueKind.Number &&
             element.TryGetInt32(out value) &&
             value >= 0;
+    }
+
+    private static bool TryGetOptionalNonNegativeInt64(
+        JsonElement root,
+        string propertyName,
+        out long? value)
+    {
+        value = null;
+        if (!root.TryGetProperty(propertyName, out var element))
+        {
+            return true;
+        }
+
+        if (element.ValueKind != JsonValueKind.Number ||
+            !element.TryGetInt64(out var parsed) ||
+            parsed < 0)
+        {
+            return false;
+        }
+
+        value = parsed;
+        return true;
     }
 
     private static bool TryGetRequiredEnum<TEnum>(
@@ -241,7 +1136,8 @@ internal static class MakerGtdPaperContinuityEvaluator
     public static MakerGtdPaperContinuityEvaluation Evaluate(
         PaperOrder order,
         MarketDataStatusSnapshot currentStatus,
-        IReadOnlyCollection<string> currentSubscribedAssetIds)
+        IReadOnlyCollection<string> currentSubscribedAssetIds,
+        ConfirmedAssetSubscriptionSnapshot? currentConfirmedAssetSubscription = null)
     {
         if (!MakerGtdPaperOrderEvidenceParser.TryParse(
                 order,
@@ -253,6 +1149,50 @@ internal static class MakerGtdPaperContinuityEvaluator
         }
 
         var acceptedStatus = orderEvidence.AcceptedMarketDataStatus;
+        if (string.Equals(
+                order.ExecutionSource,
+                MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                StringComparison.Ordinal))
+        {
+            if (!acceptedStatus.AssetSubscribed ||
+                acceptedStatus.SubscribedAssetsCount != 2 ||
+                acceptedStatus.AssetConfirmedLive != true ||
+                string.IsNullOrWhiteSpace(acceptedStatus.AssetSubscriptionComponent))
+            {
+                return Unavailable("asset_not_confirmed_live_at_acceptance");
+            }
+
+            if (currentConfirmedAssetSubscription is not { ConfirmedLive: true } currentConfirmed ||
+                !string.Equals(currentConfirmed.AssetId, order.AssetId, StringComparison.Ordinal))
+            {
+                return Unavailable("asset_not_currently_confirmed_live");
+            }
+
+            if (!string.Equals(
+                    currentConfirmed.Component,
+                    acceptedStatus.AssetSubscriptionComponent,
+                    StringComparison.Ordinal) ||
+                acceptedStatus.AssetSubscriptionGeneration is not { } acceptedSubscriptionGeneration ||
+                currentConfirmed.Generation != acceptedSubscriptionGeneration)
+            {
+                return Unavailable("confirmed_asset_subscription_generation_changed");
+            }
+
+            if (string.IsNullOrWhiteSpace(acceptedStatus.AssetSubscriptionSessionId) ||
+                !string.Equals(
+                    currentConfirmed.SessionId,
+                    acceptedStatus.AssetSubscriptionSessionId,
+                    StringComparison.Ordinal))
+            {
+                return Unavailable("confirmed_asset_subscription_session_changed");
+            }
+
+            return new MakerGtdPaperContinuityEvaluation(
+                Continuous: true,
+                MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode,
+                "continuous_confirmed_asset_subscription_evidence");
+        }
+
         if (acceptedStatus.ConnectionState != MarketDataConnectionState.Connected ||
             acceptedStatus.Stale)
         {

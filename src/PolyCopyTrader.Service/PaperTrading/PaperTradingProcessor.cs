@@ -900,7 +900,8 @@ public sealed class PaperTradingProcessor(
             ? MakerGtdPaperContinuityEvaluator.Evaluate(
                 order,
                 currentStatus,
-                marketDataCache.SubscribedAssetIds)
+                marketDataCache.SubscribedAssetIds,
+                marketDataCache.GetConfirmedAssetSubscription(order.AssetId))
             : new MakerGtdPaperContinuityEvaluation(
                 Continuous: false,
                 MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode,
@@ -949,7 +950,7 @@ public sealed class PaperTradingProcessor(
 
         var mutation = await repository.TryExpireMakerGtdPaperOrderAsync(
             new MakerGtdPaperExpiryRequest(
-                MakerGtdPaperExecutionContract.ExecutionSource,
+                order.ExecutionSource,
                 evaluatedAtUtc,
                 expiredOrder,
                 skippedRun),

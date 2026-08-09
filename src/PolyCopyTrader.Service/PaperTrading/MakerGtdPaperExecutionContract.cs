@@ -4,7 +4,7 @@ namespace PolyCopyTrader.Service.PaperTrading;
 
 internal static class MakerGtdPaperExecutionContract
 {
-    public const string ExecutionSource = "eth_reference_average_maker_gtd_paper";
+    public const string ExecutionSource = MakerGtdPaperExecutionSources.ReferenceAverage;
     public const string LegacyContractVersion = "maker_gtd_paper_v1";
     public const string CurrentContractVersion = "maker_gtd_paper_v2";
     public const string LegacyPriceFormula =
@@ -22,10 +22,7 @@ internal static class MakerGtdPaperExecutionContract
 
     public static bool IsMakerGtdOrder(PaperOrder order)
     {
-        return string.Equals(
-            order.ExecutionSource,
-            ExecutionSource,
-            StringComparison.Ordinal);
+        return MakerGtdPaperExecutionSources.IsSupported(order.ExecutionSource);
     }
 
     public static bool IsApprovedCurrentStrategyVariant(BtcUpDown5mStrategyVariant variant)
@@ -57,6 +54,61 @@ internal static class MakerGtdPaperExecutionContract
             string.Equals(
                 variant.Code,
                 $"eth_up_down_5m_reference_average_bps_{threshold}_maker_gtd_premarket",
+                StringComparison.Ordinal);
+    }
+}
+
+internal static class PairedMakerGtdPaperExecutionContract
+{
+    public const string ExecutionSource = MakerGtdPaperExecutionSources.PairedFirstAccepting;
+    public const string ContractVersion = "paired_maker_gtd_paper_v1";
+    public const string PriceFormula =
+        "floor_to_tick(min(best_ask - tick_size, maximum_order_price))";
+    public const string MandatoryLabel = StrategyIds.OptimisticTouchNoDepthPaperLabel;
+
+    public static bool IsApprovedStrategyVariant(BtcUpDown5mStrategyVariant variant)
+    {
+        if (variant.Behavior != BtcUpDown5mStrategyBehavior.PairedFixedOutcomeMakerGtdFirstAccepting ||
+            !variant.PaperOnly ||
+            variant.Direction != BtcUpDown5mStrategyDirection.Dynamic ||
+            variant.EntryTiming != BtcUpDown5mStrategyEntryTiming.FirstAcceptingOrders ||
+            variant.EntryDelaySeconds != StrategyIds.PairedMakerGtdNominalEntryDelaySeconds ||
+            variant.MarketInterval != BtcUpDownMarketInterval.FiveMinutes ||
+            variant.FixedOutcome is not { } outcome ||
+            variant.PairedStrategyId is not { } pairedStrategyId ||
+            variant.MakerMaximumOrderPrice is not { } maximumOrderPrice)
+        {
+            return false;
+        }
+
+        var assetOffset = variant.ReferenceAssetSymbol switch
+        {
+            "BTC" => 100,
+            "ETH" => 200,
+            "SOL" => 300,
+            _ => 0
+        };
+        if (assetOffset == 0)
+        {
+            return false;
+        }
+
+        var outcomeOffset = outcome == BtcUpDownFixedOutcome.Up ? 1 : 2;
+        var pairedOutcomeOffset = outcome == BtcUpDownFixedOutcome.Up ? 2 : 1;
+        var expectedCap = outcome == BtcUpDownFixedOutcome.Up
+            ? StrategyIds.PairedMakerGtdUpMaximumOrderPrice
+            : StrategyIds.PairedMakerGtdDownMaximumOrderPrice;
+        var assetCode = variant.ReferenceAssetSymbol.ToLowerInvariant();
+        var outcomeCode = outcome.ToString().ToLowerInvariant();
+
+        return maximumOrderPrice == expectedCap &&
+            variant.Id == Guid.Parse(
+                $"b7c50005-0000-4000-8224-{assetOffset + outcomeOffset:000000000000}") &&
+            pairedStrategyId == Guid.Parse(
+                $"b7c50005-0000-4000-8224-{assetOffset + pairedOutcomeOffset:000000000000}") &&
+            string.Equals(
+                variant.Code,
+                $"{assetCode}_up_down_5m_{outcomeCode}_paired_maker_gtd_first_accepting",
                 StringComparison.Ordinal);
     }
 }

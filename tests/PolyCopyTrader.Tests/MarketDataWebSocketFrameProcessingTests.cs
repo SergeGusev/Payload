@@ -33,6 +33,67 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         Assert.Equal(0, queue.UpdateCalls);
     }
 
+    [Fact]
+    public async Task ProcessTextMessageAsync_FirstOwningShardFrameConfirmsAndReconnectInvalidatesBeforeAggregatePublish()
+    {
+        var queue = new ControlledSideEffectQueue(MarketDataSideEffectEnqueueOutcome.Enqueued);
+        var options = new MarketDataWebSocketOptions();
+        var cache = new MarketDataCache(options);
+        cache.AssignAssetSubscriptions(Component, ["asset-1"]);
+        var service = CreateService(queue, marketDataCache: cache);
+        var now = DateTimeOffset.UtcNow;
+        var connected = new MarketDataStatusSnapshot(
+            Component,
+            MarketDataConnectionState.Connected,
+            "wss://example.test",
+            1,
+            now,
+            now,
+            null,
+            0,
+            false,
+            null,
+            now);
+        service.OnShardStatus(connected);
+        Assert.False(cache.GetConfirmedAssetSubscription("asset-1").ConfirmedLive);
+
+        await service.ProcessTextMessageAsync(
+            Component,
+            ValidMarketUpdateJson,
+            now,
+            CancellationToken.None);
+        var accepted = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.True(accepted.ConfirmedLive);
+        Assert.Equal(0, accepted.Generation);
+
+        service.OnShardStatus(connected with
+        {
+            ConnectionState = MarketDataConnectionState.Reconnecting,
+            LastDisconnectedUtc = now.AddSeconds(1),
+            ReconnectCount = 1,
+            UpdatedAtUtc = now.AddSeconds(1)
+        });
+        var disconnected = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.False(disconnected.ConfirmedLive);
+        Assert.Equal(1, disconnected.Generation);
+
+        service.OnShardStatus(connected with
+        {
+            LastConnectedUtc = now.AddSeconds(2),
+            LastDisconnectedUtc = now.AddSeconds(1),
+            ReconnectCount = 1,
+            UpdatedAtUtc = now.AddSeconds(2)
+        });
+        await service.ProcessTextMessageAsync(
+            Component,
+            ValidMarketUpdateJson,
+            now.AddSeconds(2),
+            CancellationToken.None);
+        var reconnected = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.True(reconnected.ConfirmedLive);
+        Assert.Equal(1, reconnected.Generation);
+    }
+
     [Theory]
     [InlineData("PONG")]
     [InlineData("{\"status\":\"ok\"}")]
@@ -324,7 +385,8 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         IMarketDataSideEffectQueue sideEffectQueue,
         IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
         IExposureSnapshotCache? exposureSnapshotCache = null,
-        IAppRepository? repository = null)
+        IAppRepository? repository = null,
+        IMarketDataCache? marketDataCache = null)
     {
         var options = new MarketDataWebSocketOptions();
         repository ??= new NoOpAppRepository();
@@ -337,7 +399,7 @@ public sealed class MarketDataWebSocketFrameProcessingTests
             new EmptyRelevantMarketAssetProvider(),
             new ActiveMarketAssetSubscriptionRegistry(),
             new NoOpBtcOrderBookLagDiagnosticService(),
-            new MarketDataCache(options),
+            marketDataCache ?? new MarketDataCache(options),
             exposureSnapshotCache ?? new ExposureSnapshotCache(repository, makerGtdPaperPlacementHandoff),
             sideEffectQueue,
             repository,

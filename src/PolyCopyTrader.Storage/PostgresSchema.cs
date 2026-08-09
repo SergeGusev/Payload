@@ -1327,6 +1327,66 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
+WITH legs(asset_symbol, outcome_name, outcome_code, id_suffix, paired_outcome_name, maximum_order_price) AS (
+    VALUES
+        ('BTC', 'Up',   'up',   101, 'Down', '0.50'),
+        ('BTC', 'Down', 'down', 102, 'Up',   '0.49'),
+        ('ETH', 'Up',   'up',   201, 'Down', '0.50'),
+        ('ETH', 'Down', 'down', 202, 'Up',   '0.49'),
+        ('SOL', 'Up',   'up',   301, 'Down', '0.50'),
+        ('SOL', 'Down', 'down', 302, 'Up',   '0.49')
+)
+SELECT
+    ('b7c50005-0000-4000-8224-' || lpad(id_suffix::text, 12, '0'))::uuid,
+    lower(asset_symbol) || '_up_down_5m_' || outcome_code || '_paired_maker_gtd_first_accepting',
+    asset_symbol || ' Up or Down 5m ' || outcome_name || ' Paired Maker GTD First Accepting',
+    'Paper-only ' || outcome_name || ' leg of the ' || asset_symbol || ' 5m equal-share paired Maker GTD strategy. At the first observed market snapshot with acceptingOrders=true, nominally one day before market start, submit one PostOnly GTD BUY using the maximum-resting formula floor_to_tick(min(bestAsk - tick, cap)), capped at ' || maximum_order_price || '. It is paired with the ' || paired_outcome_name || ' leg, and both independently accepted legs use the same requested share quantity; submission is not atomic and there is no rollback. Keep an accepted resting order until its original effective expiry one minute before market end. The optimistic TouchNoDepth Paper model fills the complete leg at its frozen limit on later authoritative exact-token last_trade_price or current best ask at or below that limit; queue position, depth, and observed size are ignored. By explicit user approval, this exact six-leg family contributes to ordinary Paper orders, PnL, win rate, and performance. Every result must be labeled optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. Maker rebates are not modeled and are not included in Paper PnL. Live submission is disabled.',
+    true,
+    false,
+    1.00,
+    1.00,
+    100.00,
+    false,
+    NULL,
+    false,
+    NULL,
+    NULL,
+    NULL,
+    1.00,
+    1.00,
+    0,
+    0,
+    now(),
+    now()
+FROM legs
+ON CONFLICT (id) DO UPDATE SET
+    code = excluded.code,
+    name = excluded.name,
+    description = excluded.description,
+    updated_at_utc = excluded.updated_at_utc;
+
+INSERT INTO strategies (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
 WITH assets(asset_symbol, id_group) AS (
     VALUES
         ('BTC', '8213'),

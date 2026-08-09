@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -186,6 +187,388 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(FeeLiquidityRole.Maker.ToString(), fill.FeeLiquidityRole);
         Assert.Contains("BestAsk", fill.Evidence, StringComparison.Ordinal);
         Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSourceWithContinuousSubscription_AppliesAtomicFullMakerFill()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                sourceTimestampUtc,
+                receivedAtUtc),
+            receivedAtUtc);
+
+        Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Entered,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+    }
+
+    [Theory]
+    [InlineData("foreign_strategy_id")]
+    [InlineData("wrong_order_source")]
+    [InlineData("wrong_contract_version")]
+    [InlineData("wrong_price_formula")]
+    [InlineData("wrong_root_source")]
+    [InlineData("wrong_maker_source")]
+    [InlineData("wrong_pair_linkage")]
+    [InlineData("wrong_common_size")]
+    [InlineData("wrong_cap")]
+    [InlineData("wrong_price")]
+    [InlineData("wrong_notional")]
+    [InlineData("wrong_requested_notional")]
+    [InlineData("wrong_market_interval")]
+    [InlineData("wrong_outcome")]
+    [InlineData("wrong_asset")]
+    [InlineData("missing_continuity_generation")]
+    [InlineData("missing_subscription_session")]
+    [InlineData("asset_not_confirmed_live")]
+    [InlineData("future_s1_receipt")]
+    [InlineData("post_start_acceptance")]
+    public void EvidenceParser_PairedContractMutation_FailsClosed(string mutation)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var order = scenario.Order;
+        var root = JsonNode.Parse(Assert.IsType<string>(order.RawDecisionJson))!.AsObject();
+
+        switch (mutation)
+        {
+            case "foreign_strategy_id":
+                order = order with { StrategyId = Guid.NewGuid() };
+                break;
+            case "wrong_order_source":
+                order = order with { ExecutionSource = MakerGtdPaperExecutionContract.ExecutionSource };
+                break;
+            case "wrong_contract_version":
+                root["maker_gtd"]!["contract_version"] = "paired_maker_gtd_paper_v0";
+                break;
+            case "wrong_price_formula":
+                root["maker_gtd"]!["price_formula"] = MakerGtdPaperExecutionContract.LegacyPriceFormula;
+                break;
+            case "wrong_root_source":
+                root["execution_source"] = MakerGtdPaperExecutionContract.ExecutionSource;
+                break;
+            case "wrong_maker_source":
+                root["maker_gtd"]!["execution_source"] = MakerGtdPaperExecutionContract.ExecutionSource;
+                break;
+            case "wrong_pair_linkage":
+                root["pair"]!["paired_strategy_id"] = Guid.NewGuid().ToString("D");
+                break;
+            case "wrong_common_size":
+                root["pair"]!["common_requested_size_shares"] = order.SizeShares + 1m;
+                break;
+            case "wrong_cap":
+                root["maker_gtd"]!["maximum_order_price"] = 0.51m;
+                break;
+            case "wrong_price":
+                order = order with { Price = 0.51m };
+                break;
+            case "wrong_notional":
+                order = order with { NotionalUsd = order.NotionalUsd - 0.01m };
+                break;
+            case "wrong_requested_notional":
+                root["maker_gtd"]!["frozen_intent"]!["requested_notional_usd"] =
+                    order.NotionalUsd - 0.01m;
+                break;
+            case "wrong_market_interval":
+                root["maker_gtd"]!["market_start_utc"] = order.ExpiresAtUtc.AddMinutes(-3);
+                break;
+            case "wrong_outcome":
+                order = order with { Outcome = "Down" };
+                break;
+            case "wrong_asset":
+                order = order with { AssetId = "foreign-token" };
+                break;
+            case "missing_continuity_generation":
+                root["market_data_status_at_acceptance"]!.AsObject()
+                    .Remove("continuity_generation");
+                break;
+            case "missing_subscription_session":
+                root["market_data_status_at_acceptance"]!.AsObject()
+                    .Remove("asset_subscription_session_id");
+                break;
+            case "asset_not_confirmed_live":
+                root["market_data_status_at_acceptance"]!["asset_confirmed_live"] = false;
+                break;
+            case "future_s1_receipt":
+                root["maker_gtd"]!["attempts"]![0]!["s1_received_at_utc"] =
+                    order.CreatedAtUtc.AddMilliseconds(1);
+                break;
+            case "post_start_acceptance":
+                var postStartOrder = order with
+                {
+                    CreatedAtUtc = order.ExpiresAtUtc.AddMinutes(-3)
+                };
+                order = postStartOrder;
+                root = JsonNode.Parse(BuildRawDecisionJson(
+                    postStartOrder,
+                    postStartOrder.CreatedAtUtc))!.AsObject();
+                break;
+            default:
+                throw new InvalidOperationException($"Unknown mutation {mutation}.");
+        }
+
+        order = order with { RawDecisionJson = root.ToJsonString() };
+
+        var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
+            order,
+            out var evidence,
+            out _);
+
+        Assert.False(parsed);
+        Assert.Null(evidence);
+    }
+
+    [Theory]
+    [InlineData(
+        MakerGtdPaperExecutionContract.LegacyContractVersion,
+        MakerGtdPaperExecutionContract.LegacyPriceFormula)]
+    [InlineData(
+        MakerGtdPaperExecutionContract.CurrentContractVersion,
+        MakerGtdPaperExecutionContract.CurrentPriceFormula)]
+    public void EvidenceParser_ReferenceAverageV1AndV2RemainAccepted(
+        string contractVersion,
+        string priceFormula)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddMinutes(1));
+        var root = JsonNode.Parse(Assert.IsType<string>(scenario.Order.RawDecisionJson))!.AsObject();
+        root["maker_gtd"]!["contract_version"] = contractVersion;
+        root["maker_gtd"]!["price_formula"] = priceFormula;
+        var order = scenario.Order with { RawDecisionJson = root.ToJsonString() };
+
+        var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
+            order,
+            out var evidence,
+            out var failureDetail);
+
+        Assert.True(parsed, failureDetail);
+        Assert.NotNull(evidence);
+    }
+
+    [Fact]
+    public void EvidenceParser_ReferenceAverageForeignStrategyId_FailsClosed()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddMinutes(1));
+        var order = scenario.Order with { StrategyId = Guid.NewGuid() };
+
+        var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
+            order,
+            out var evidence,
+            out var failureDetail);
+
+        Assert.False(parsed);
+        Assert.Null(evidence);
+        Assert.Equal("reference_average_strategy_not_approved", failureDetail);
+    }
+
+    [Theory]
+    [InlineData("maker_gtd_paper_v0", MakerGtdPaperExecutionContract.CurrentPriceFormula)]
+    [InlineData(
+        MakerGtdPaperExecutionContract.LegacyContractVersion,
+        MakerGtdPaperExecutionContract.CurrentPriceFormula)]
+    [InlineData(
+        MakerGtdPaperExecutionContract.CurrentContractVersion,
+        MakerGtdPaperExecutionContract.LegacyPriceFormula)]
+    public void EvidenceParser_ReferenceAverageUnknownOrCrossedContractFormula_FailsClosed(
+        string contractVersion,
+        string priceFormula)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddMinutes(1));
+        var root = JsonNode.Parse(Assert.IsType<string>(scenario.Order.RawDecisionJson))!.AsObject();
+        root["maker_gtd"]!["contract_version"] = contractVersion;
+        root["maker_gtd"]!["price_formula"] = priceFormula;
+        var order = scenario.Order with { RawDecisionJson = root.ToJsonString() };
+
+        var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
+            order,
+            out var evidence,
+            out _);
+
+        Assert.False(parsed);
+        Assert.Null(evidence);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSourceAfterReconnect_DoesNotInferFill()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 3);
+        cache.InvalidateAssetSubscriptions("test-shard");
+        Assert.True(cache.ConfirmAssetSubscription("test-shard", scenario.Order.AssetId));
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                sourceTimestampUtc,
+                receivedAtUtc),
+            receivedAtUtc);
+
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Resting,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSourceAfterRecoveredStaleGap_DoesNotInferFill()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        var acceptedStatus = cache.Status;
+        cache.UpdateStatus(acceptedStatus with
+        {
+            Stale = true,
+            UpdatedAtUtc = acceptedStatus.UpdatedAtUtc.AddMilliseconds(1)
+        });
+        cache.InvalidateAssetSubscriptions("test-shard");
+        cache.UpdateStatus(acceptedStatus with
+        {
+            UpdatedAtUtc = acceptedStatus.UpdatedAtUtc.AddMilliseconds(2)
+        });
+        Assert.True(cache.ConfirmAssetSubscription("test-shard", scenario.Order.AssetId));
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                sourceTimestampUtc,
+                receivedAtUtc),
+            receivedAtUtc);
+
+        Assert.Equal(1, cache.GetConfirmedAssetSubscription(scenario.Order.AssetId).Generation);
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSourceUnrelatedAggregateShardFailure_StillUsesOwningAssetContinuity()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        var aggregate = cache.Status;
+        cache.UpdateStatus(aggregate with
+        {
+            ConnectionState = MarketDataConnectionState.Reconnecting,
+            Stale = true,
+            ReconnectCount = aggregate.ReconnectCount + 1,
+            LastDisconnectedUtc = now.AddMilliseconds(-30),
+            UpdatedAtUtc = now.AddMilliseconds(-30)
+        });
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                sourceTimestampUtc,
+                receivedAtUtc),
+            receivedAtUtc);
+
+        Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSourceAfterConfirmedSubscriptionGenerationChange_DoesNotInferFill()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        cache.InvalidateAssetSubscriptions("test-shard");
+        Assert.True(cache.ConfirmAssetSubscription("test-shard", scenario.Order.AssetId));
+        var currentSubscription = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
+        Assert.True(currentSubscription.ConfirmedLive);
+        Assert.Equal(1, currentSubscription.Generation);
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                sourceTimestampUtc,
+                receivedAtUtc),
+            receivedAtUtc);
+
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSourceAfterServiceRestart_DoesNotInferFill()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(
+            scenario.Order,
+            reconnectCount: 2,
+            confirmedSubscriptionSessionId: "restarted-market-data-session");
+        var currentSubscription = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
+        Assert.True(currentSubscription.ConfirmedLive);
+        Assert.Equal(0, currentSubscription.Generation);
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                sourceTimestampUtc,
+                receivedAtUtc),
+            receivedAtUtc);
+
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
     }
 
     [Fact]
@@ -637,12 +1020,31 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
 
     private static MakerScenario CreateScenario(
         DateTimeOffset now,
-        DateTimeOffset expiresAtUtc)
+        DateTimeOffset expiresAtUtc,
+        string executionSource = MakerGtdPaperExecutionContract.ExecutionSource)
     {
         var repository = new TestAppRepository();
-        var createdAtUtc = now.AddMinutes(-2);
-        var acceptedAtUtc = createdAtUtc.AddSeconds(1);
-        var strategyId = Guid.NewGuid();
+        var pairedVariant = string.Equals(
+                executionSource,
+                PairedMakerGtdPaperExecutionContract.ExecutionSource,
+                StringComparison.Ordinal)
+            ? StrategyIds.PairedMakerGtdFirstAcceptingVariants.Single(variant =>
+                variant.ReferenceAssetSymbol == "BTC" &&
+                variant.FixedOutcome == BtcUpDownFixedOutcome.Up)
+            : null;
+        var createdAtUtc = pairedVariant is null
+            ? now.AddMinutes(-2)
+            : expiresAtUtc.AddMinutes(-5);
+        var referenceAverageVariant = string.Equals(
+                executionSource,
+                MakerGtdPaperExecutionContract.ExecutionSource,
+                StringComparison.Ordinal)
+            ? StrategyIds.UpDown5mStrategyVariants.Single(variant =>
+                variant.DecisionThresholdBps == 1m &&
+                MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant))
+            : null;
+        var acceptedAtUtc = createdAtUtc;
+        var strategyId = pairedVariant?.Id ?? referenceAverageVariant?.Id ?? Guid.NewGuid();
         var order = new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -658,7 +1060,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             createdAtUtc,
             expiresAtUtc,
             StrategyId: strategyId,
-            ExecutionSource: MakerGtdPaperExecutionContract.ExecutionSource);
+            ExecutionSource: executionSource);
         order = order with
         {
             RawDecisionJson = BuildRawDecisionJson(order, acceptedAtUtc)
@@ -702,13 +1104,243 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         bool assetSubscribed = true,
         bool acceptedStale = false)
     {
+        var pairedVariant = StrategyIds.PairedMakerGtdFirstAcceptingVariants
+            .SingleOrDefault(variant => variant.Id == order.StrategyId);
+        if (string.Equals(
+                order.ExecutionSource,
+                PairedMakerGtdPaperExecutionContract.ExecutionSource,
+                StringComparison.Ordinal) &&
+            pairedVariant is not null)
+        {
+            var pairedStrategyId = Assert.IsType<Guid>(pairedVariant.PairedStrategyId);
+            var maximumOrderPrice = Assert.IsType<decimal>(pairedVariant.MakerMaximumOrderPrice);
+            var commonSizeFrozenAtUtc = acceptedAtUtc.AddSeconds(-1);
+            var marketEndUtc = order.ExpiresAtUtc.AddMinutes(1);
+            var frozenAtUtc = acceptedAtUtc.AddMilliseconds(-500);
+            var frozenIntent = new
+            {
+                strategy_id = order.StrategyId.ToString("D"),
+                decision_id = Guid.NewGuid().ToString("D"),
+                condition_id = order.ConditionId,
+                asset_id = order.AssetId,
+                side = TradeSide.Buy.ToString(),
+                post_only = true,
+                order_type = "GTD",
+                maximum_order_price = maximumOrderPrice,
+                limit_price = order.Price,
+                requested_notional_usd = order.NotionalUsd,
+                requested_size_shares = order.SizeShares,
+                target_notional_usd = order.NotionalUsd,
+                target_size_shares = order.SizeShares,
+                tick_size = 0.01m,
+                min_order_size = 1m,
+                negative_risk = false,
+                decision_snapshot_at_utc = acceptedAtUtc.AddSeconds(-1),
+                frozen_at_utc = frozenAtUtc,
+                effective_expires_at_utc = order.ExpiresAtUtc,
+                clob_gtd_expiration_utc = marketEndUtc
+            };
+            var acceptedAttempt = new
+            {
+                attempt_number = 1,
+                started_at_utc = acceptedAtUtc.AddSeconds(-2),
+                s0 = new
+                {
+                    asset_id = order.AssetId,
+                    condition_id = order.ConditionId,
+                    is_current = true,
+                    timestamp_is_authoritative = true,
+                    best_ask = 0.51m,
+                    tick_size = 0.01m
+                },
+                raw_limit_price = order.Price,
+                limit_price = order.Price,
+                tick_size = 0.01m,
+                frozen_intent = frozenIntent,
+                s1 = new
+                {
+                    asset_id = order.AssetId,
+                    condition_id = order.ConditionId,
+                    is_current = true,
+                    timestamp_is_authoritative = true,
+                    best_ask = 0.51m,
+                    tick_size = 0.01m
+                },
+                acceptance_outcome = "AcceptedResting",
+                acceptance_reason_code = "paper_post_only_accepted_resting",
+                observed_best_ask = 0.51m,
+                s1_received_at_utc = frozenAtUtc.AddMilliseconds(250),
+                accepted_at_utc = acceptedAtUtc
+            };
+            return JsonSerializer.Serialize(new
+            {
+                paper_only = true,
+                post_only = true,
+                order_type = "GTD",
+                execution_source = PairedMakerGtdPaperExecutionContract.ExecutionSource,
+                paper_model_label = PairedMakerGtdPaperExecutionContract.MandatoryLabel,
+                maker_rebate_modeled = false,
+                pair = new
+                {
+                    pair_id = $"{pairedVariant.ReferenceAssetSymbol}:{order.ConditionId}",
+                    strategy_id = order.StrategyId.ToString("D"),
+                    paired_strategy_id = pairedStrategyId.ToString("D"),
+                    pair_strategy_ids = new[]
+                    {
+                        order.StrategyId.ToString("D"),
+                        pairedStrategyId.ToString("D")
+                    }.OrderBy(value => value).ToArray(),
+                    common_requested_size_shares = order.SizeShares,
+                    common_size_frozen_at_utc = commonSizeFrozenAtUtc,
+                    atomic = false,
+                    rollback = false
+                },
+                first_accepting_observation = new
+                {
+                    phase = "first_accepting_observed",
+                    request_started_at_utc = acceptedAtUtc.AddSeconds(-3),
+                    response_completed_at_utc = acceptedAtUtc.AddSeconds(-2),
+                    first_observed_accepting_at_utc = acceptedAtUtc.AddSeconds(-2),
+                    market_id = "market-maker-gtd",
+                    condition_id = order.ConditionId,
+                    market_slug = "market-maker-gtd",
+                    accepting_orders = true,
+                    clob_token_ids = new[] { order.AssetId, "paired-peer-token" }
+                },
+                maker_gtd = new
+                {
+                    contract_version = PairedMakerGtdPaperExecutionContract.ContractVersion,
+                    execution_source = PairedMakerGtdPaperExecutionContract.ExecutionSource,
+                    strategy_run_id = Guid.NewGuid().ToString("D"),
+                    paper_only = true,
+                    post_only = true,
+                    order_type = "GTD",
+                    maximum_placement_attempts = 10,
+                    price_formula = PairedMakerGtdPaperExecutionContract.PriceFormula,
+                    maximum_order_price = maximumOrderPrice,
+                    market_start_utc = order.ExpiresAtUtc.AddMinutes(-4),
+                    market_end_utc = marketEndUtc,
+                    effective_expires_at_utc = order.ExpiresAtUtc,
+                    clob_gtd_expiration_utc = marketEndUtc,
+                    accepted_at_utc = acceptedAtUtc,
+                    frozen_intent = frozenIntent,
+                    attempts_completed = 1,
+                    attempts = new[] { acceptedAttempt }
+                },
+                market_data_status_at_acceptance = new
+                {
+                    connection_state = MarketDataConnectionState.Connected.ToString(),
+                    stale = acceptedStale,
+                    reconnect_count = 2,
+                    last_connected_utc = (DateTimeOffset?)order.CreatedAtUtc.AddMinutes(-1),
+                    last_disconnected_utc = (DateTimeOffset?)null,
+                    asset_subscribed = assetSubscribed,
+                    asset_confirmed_live = true,
+                    asset_subscription_component = "test-shard",
+                    subscribed_assets_count = 2,
+                    continuity_generation = 0,
+                    asset_subscription_generation = 0,
+                    asset_subscription_session_id = "maker-gtd-test-session",
+                    accepted_at_utc = acceptedAtUtc
+                }
+            });
+        }
+
+        var referenceAverageVariant = StrategyIds.UpDown5mStrategyVariants
+            .SingleOrDefault(variant =>
+                variant.Id == order.StrategyId &&
+                MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant));
+        if (!string.Equals(
+                order.ExecutionSource,
+                MakerGtdPaperExecutionContract.ExecutionSource,
+                StringComparison.Ordinal) ||
+            referenceAverageVariant is null)
+        {
+            return "{}";
+        }
+
+        var referenceMarketEndUtc = order.ExpiresAtUtc.AddMinutes(1);
+        var referenceFrozenAtUtc = acceptedAtUtc.AddMilliseconds(-500);
+        var referenceFrozenIntent = new
+        {
+            strategy_id = order.StrategyId.ToString("D"),
+            decision_id = Guid.NewGuid().ToString("D"),
+            condition_id = order.ConditionId,
+            asset_id = order.AssetId,
+            side = TradeSide.Buy.ToString(),
+            post_only = true,
+            order_type = "GTD",
+            maximum_order_price = StrategyIds.ReferenceAverageMakerGtdMaximumOrderPrice,
+            limit_price = order.Price,
+            requested_notional_usd = order.NotionalUsd,
+            requested_size_shares = order.SizeShares,
+            target_notional_usd = order.NotionalUsd,
+            target_size_shares = order.SizeShares,
+            tick_size = 0.01m,
+            min_order_size = 1m,
+            negative_risk = false,
+            decision_snapshot_at_utc = acceptedAtUtc.AddSeconds(-1),
+            frozen_at_utc = referenceFrozenAtUtc,
+            effective_expires_at_utc = order.ExpiresAtUtc,
+            clob_gtd_expiration_utc = referenceMarketEndUtc
+        };
+        var referenceAcceptedAttempt = new
+        {
+            attempt_number = 1,
+            started_at_utc = acceptedAtUtc.AddSeconds(-2),
+            s0 = new
+            {
+                asset_id = order.AssetId,
+                condition_id = order.ConditionId,
+                is_current = true,
+                timestamp_is_authoritative = true,
+                best_bid = 0.49m,
+                best_ask = 0.51m,
+                tick_size = 0.01m
+            },
+            raw_limit_price = order.Price,
+            limit_price = order.Price,
+            tick_size = 0.01m,
+            frozen_intent = referenceFrozenIntent,
+            s1 = new
+            {
+                asset_id = order.AssetId,
+                condition_id = order.ConditionId,
+                is_current = true,
+                timestamp_is_authoritative = true,
+                best_ask = 0.51m,
+                tick_size = 0.01m
+            },
+            outcome = "accepted_resting",
+            reason_code = "paper_post_only_accepted_resting",
+            accepted_at_utc = acceptedAtUtc
+        };
         return JsonSerializer.Serialize(new
         {
+            paper_only = true,
+            post_only = true,
+            order_type = "GTD",
+            order_execution_mode = "GTD",
+            execution_source = MakerGtdPaperExecutionContract.ExecutionSource,
             maker_gtd = new
             {
-                accepted_at_utc = acceptedAtUtc,
+                contract_version = MakerGtdPaperExecutionContract.CurrentContractVersion,
+                execution_source = MakerGtdPaperExecutionContract.ExecutionSource,
+                strategy_run_id = Guid.NewGuid().ToString("D"),
+                paper_only = true,
+                post_only = true,
+                order_type = "GTD",
+                maximum_placement_attempts = 10,
+                price_formula = MakerGtdPaperExecutionContract.CurrentPriceFormula,
+                maximum_order_price = StrategyIds.ReferenceAverageMakerGtdMaximumOrderPrice,
+                market_start_utc = order.ExpiresAtUtc.AddMinutes(-4),
+                market_end_utc = referenceMarketEndUtc,
                 effective_expires_at_utc = order.ExpiresAtUtc,
-                attempts = Array.Empty<object>()
+                clob_gtd_expiration_utc = referenceMarketEndUtc,
+                accepted_at_utc = acceptedAtUtc,
+                frozen_intent = referenceFrozenIntent,
+                attempts_completed = 1,
+                attempts = new[] { referenceAcceptedAttempt }
             },
             market_data_status_at_acceptance = new
             {
@@ -727,7 +1359,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     private static PaperTradingMarketDataUpdater CreateUpdater(
         TestAppRepository repository,
         IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
-        IExposureSnapshotCache? exposureSnapshotCache = null)
+        IExposureSnapshotCache? exposureSnapshotCache = null,
+        IMarketDataCache? marketDataCache = null)
     {
         return new PaperTradingMarketDataUpdater(
             NullLogger<PaperTradingMarketDataUpdater>.Instance,
@@ -738,7 +1371,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             repository,
             feeAccountingService: null,
             marketDataWebSocketOptions: new MarketDataWebSocketOptions { StaleAfterSeconds = 30 },
-            makerGtdPaperPlacementHandoff: makerGtdPaperPlacementHandoff);
+            makerGtdPaperPlacementHandoff: makerGtdPaperPlacementHandoff,
+            marketDataCache: marketDataCache);
     }
 
     private static PaperTradingProcessor CreateProcessor(
@@ -764,10 +1398,17 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             makerGtdPaperPlacementHandoff: makerGtdPaperPlacementHandoff);
     }
 
-    private static MarketDataCache CreateHealthyCache(PaperOrder order, int reconnectCount)
+    private static MarketDataCache CreateHealthyCache(
+        PaperOrder order,
+        int reconnectCount,
+        string confirmedSubscriptionSessionId = "maker-gtd-test-session")
     {
-        var cache = new MarketDataCache(new MarketDataWebSocketOptions());
+        var cache = new MarketDataCache(
+            new MarketDataWebSocketOptions(),
+            confirmedSubscriptionSessionId);
         cache.ReplaceSubscribedAssets([order.AssetId]);
+        cache.AssignAssetSubscriptions("test-shard", [order.AssetId]);
+        Assert.True(cache.ConfirmAssetSubscription("test-shard", order.AssetId));
         cache.UpdateStatus(new MarketDataStatusSnapshot(
             "PolymarketMarketWebSocket",
             MarketDataConnectionState.Connected,

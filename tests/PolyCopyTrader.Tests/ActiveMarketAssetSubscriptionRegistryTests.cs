@@ -150,6 +150,23 @@ public sealed class ActiveMarketAssetSubscriptionRegistryTests
     }
 
     [Fact]
+    public void RetainAssets_PreservesDayAheadAssetsProtectedUntilMarketEnd()
+    {
+        var registry = new ActiveMarketAssetSubscriptionRegistry();
+        var market = GammaMarketIngestionTests.CreateMarketForTests("day-ahead") with
+        {
+            EndDateUtc = DateTimeOffset.UtcNow.AddHours(24)
+        };
+        registry.AddOrUpdateMarkets([market], protectFromFullScanRetention: true);
+
+        var update = registry.RetainAssets([]);
+
+        Assert.Equal(0, update.Removed);
+        Assert.Contains("token-yes-day-ahead", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("token-no-day-ahead", registry.GetAssetIds(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ApplyMarketDataUpdate_UpdatesDecisionPricesInSnapshot()
     {
         var registry = new ActiveMarketAssetSubscriptionRegistry();

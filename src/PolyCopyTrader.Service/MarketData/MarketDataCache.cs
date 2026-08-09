@@ -4,12 +4,23 @@ using PolyCopyTrader.Domain.Configuration;
 
 namespace PolyCopyTrader.Service.MarketData;
 
-public sealed class MarketDataCache(MarketDataWebSocketOptions options) : IMarketDataCache
+public sealed class MarketDataCache(
+    MarketDataWebSocketOptions options,
+    string? confirmedSubscriptionSessionId = null) : IMarketDataCache
 {
     private const string ComponentName = "PolymarketMarketWebSocket";
     private readonly ConcurrentDictionary<string, OrderBookSnapshot> snapshots = new(StringComparer.OrdinalIgnoreCase);
     private readonly object sync = new();
     private HashSet<string> subscribedAssetIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> assetSubscriptionGenerations = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ConfirmedAssetState> confirmedAssetSubscriptions =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HashSet<string>> assignedAssetsByComponent =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly string confirmedSubscriptionSessionId = string.IsNullOrWhiteSpace(confirmedSubscriptionSessionId)
+        ? Guid.NewGuid().ToString("D")
+        : confirmedSubscriptionSessionId.Trim();
+    private long continuityGeneration;
     private MarketDataStatusSnapshot status = new(
         ComponentName,
         MarketDataConnectionState.Disabled,
@@ -49,9 +60,198 @@ public sealed class MarketDataCache(MarketDataWebSocketOptions options) : IMarke
     {
         lock (sync)
         {
-            subscribedAssetIds = assetIds
+            var nextAssetIds = assetIds
                 .Where(assetId => !string.IsNullOrWhiteSpace(assetId))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            foreach (var removedAssetId in subscribedAssetIds.Except(nextAssetIds, StringComparer.OrdinalIgnoreCase))
+            {
+                assetSubscriptionGenerations[removedAssetId] =
+                    GetAssetSubscriptionGenerationUnsafe(removedAssetId) + 1;
+            }
+
+            subscribedAssetIds = nextAssetIds;
+        }
+    }
+
+    public long GetAssetSubscriptionGeneration(string assetId)
+    {
+        if (string.IsNullOrWhiteSpace(assetId))
+        {
+            return -1;
+        }
+
+        lock (sync)
+        {
+            return GetAssetSubscriptionGenerationUnsafe(assetId.Trim());
+        }
+    }
+
+    public ConfirmedAssetSubscriptionSnapshot GetConfirmedAssetSubscription(string assetId)
+    {
+        var normalizedAssetId = assetId?.Trim() ?? string.Empty;
+        if (normalizedAssetId.Length == 0)
+        {
+            return new ConfirmedAssetSubscriptionSnapshot(
+                string.Empty,
+                null,
+                false,
+                -1,
+                confirmedSubscriptionSessionId);
+        }
+
+        lock (sync)
+        {
+            return confirmedAssetSubscriptions.TryGetValue(normalizedAssetId, out var state)
+                ? new ConfirmedAssetSubscriptionSnapshot(
+                    normalizedAssetId,
+                    state.Component,
+                    state.ConfirmedLive,
+                    state.Generation,
+                    confirmedSubscriptionSessionId)
+                : new ConfirmedAssetSubscriptionSnapshot(
+                    normalizedAssetId,
+                    null,
+                    false,
+                    0,
+                    confirmedSubscriptionSessionId);
+        }
+    }
+
+    public void AssignAssetSubscriptions(string component, IReadOnlyCollection<string> assetIds)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(component);
+        ArgumentNullException.ThrowIfNull(assetIds);
+        var normalizedComponent = component.Trim();
+        var nextAssetIds = assetIds
+            .Where(assetId => !string.IsNullOrWhiteSpace(assetId))
+            .Select(assetId => assetId.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        lock (sync)
+        {
+            var previousAssetIds = assignedAssetsByComponent.TryGetValue(normalizedComponent, out var assigned)
+                ? assigned
+                : [];
+            foreach (var removedAssetId in previousAssetIds.Except(nextAssetIds, StringComparer.OrdinalIgnoreCase))
+            {
+                if (confirmedAssetSubscriptions.TryGetValue(removedAssetId, out var state) &&
+                    string.Equals(state.Component, normalizedComponent, StringComparison.OrdinalIgnoreCase))
+                {
+                    confirmedAssetSubscriptions[removedAssetId] = state with
+                    {
+                        Component = null,
+                        ConfirmedLive = false,
+                        Generation = state.Generation + (state.ConfirmedLive ? 1 : 0)
+                    };
+                }
+            }
+
+            foreach (var assetId in nextAssetIds)
+            {
+                if (!confirmedAssetSubscriptions.TryGetValue(assetId, out var state))
+                {
+                    confirmedAssetSubscriptions[assetId] = new ConfirmedAssetState(
+                        normalizedComponent,
+                        ConfirmedLive: false,
+                        Generation: 0);
+                    continue;
+                }
+
+                if (!string.Equals(state.Component, normalizedComponent, StringComparison.OrdinalIgnoreCase))
+                {
+                    confirmedAssetSubscriptions[assetId] = state with
+                    {
+                        Component = normalizedComponent,
+                        ConfirmedLive = false,
+                        Generation = state.Generation + (state.ConfirmedLive ? 1 : 0)
+                    };
+                }
+            }
+
+            assignedAssetsByComponent[normalizedComponent] = nextAssetIds;
+        }
+    }
+
+    public void InvalidateAssetSubscriptions(string component)
+    {
+        if (string.IsNullOrWhiteSpace(component))
+        {
+            return;
+        }
+
+        lock (sync)
+        {
+            if (!assignedAssetsByComponent.TryGetValue(component.Trim(), out var assetIds))
+            {
+                return;
+            }
+
+            foreach (var assetId in assetIds)
+            {
+                if (confirmedAssetSubscriptions.TryGetValue(assetId, out var state) &&
+                    state.ConfirmedLive &&
+                    string.Equals(state.Component, component.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    confirmedAssetSubscriptions[assetId] = state with
+                    {
+                        ConfirmedLive = false,
+                        Generation = state.Generation + 1
+                    };
+                }
+            }
+        }
+    }
+
+    public void RemoveAssetSubscriptionComponent(string component)
+    {
+        if (string.IsNullOrWhiteSpace(component))
+        {
+            return;
+        }
+
+        var normalizedComponent = component.Trim();
+        lock (sync)
+        {
+            if (!assignedAssetsByComponent.Remove(normalizedComponent, out var assetIds))
+            {
+                return;
+            }
+
+            foreach (var assetId in assetIds)
+            {
+                if (confirmedAssetSubscriptions.TryGetValue(assetId, out var state) &&
+                    string.Equals(state.Component, normalizedComponent, StringComparison.OrdinalIgnoreCase))
+                {
+                    confirmedAssetSubscriptions[assetId] = state with
+                    {
+                        Component = null,
+                        ConfirmedLive = false,
+                        Generation = state.Generation + (state.ConfirmedLive ? 1 : 0)
+                    };
+                }
+            }
+        }
+    }
+
+    public bool ConfirmAssetSubscription(string component, string assetId)
+    {
+        if (string.IsNullOrWhiteSpace(component) || string.IsNullOrWhiteSpace(assetId))
+        {
+            return false;
+        }
+
+        var normalizedComponent = component.Trim();
+        var normalizedAssetId = assetId.Trim();
+        lock (sync)
+        {
+            if (!confirmedAssetSubscriptions.TryGetValue(normalizedAssetId, out var state) ||
+                !string.Equals(state.Component, normalizedComponent, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            confirmedAssetSubscriptions[normalizedAssetId] = state with { ConfirmedLive = true };
+            return true;
         }
     }
 
@@ -108,9 +308,39 @@ public sealed class MarketDataCache(MarketDataWebSocketOptions options) : IMarke
     {
         lock (sync)
         {
-            status = nextStatus;
+            var wasHealthy = IsHealthy(status);
+            var isHealthy = IsHealthy(nextStatus);
+            var disconnectedTimestampChanged =
+                nextStatus.LastDisconnectedUtc is { } nextDisconnectedAtUtc &&
+                nextDisconnectedAtUtc != status.LastDisconnectedUtc;
+            if (wasHealthy &&
+                (!isHealthy ||
+                 nextStatus.ReconnectCount != status.ReconnectCount ||
+                 disconnectedTimestampChanged))
+            {
+                continuityGeneration++;
+            }
+
+            status = nextStatus with { ContinuityGeneration = continuityGeneration };
         }
     }
+
+    private long GetAssetSubscriptionGenerationUnsafe(string assetId)
+    {
+        return assetSubscriptionGenerations.TryGetValue(assetId, out var generation)
+            ? generation
+            : 0;
+    }
+
+    private static bool IsHealthy(MarketDataStatusSnapshot candidate)
+    {
+        return candidate.ConnectionState == MarketDataConnectionState.Connected && !candidate.Stale;
+    }
+
+    private sealed record ConfirmedAssetState(
+        string? Component,
+        bool ConfirmedLive,
+        long Generation);
 
     private static OrderBookSnapshot? BuildInitialSnapshot(string assetId, MarketDataUpdate update)
     {

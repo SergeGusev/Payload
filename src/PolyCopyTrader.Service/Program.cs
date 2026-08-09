@@ -302,6 +302,7 @@ builder.Services.AddSingleton(appConfiguration.Dashboard);
 builder.Services.AddSingleton(appConfiguration.Analytics);
     builder.Services.AddSingleton(appConfiguration.TraderDiscovery);
     builder.Services.AddSingleton(appConfiguration.GammaMarketIngestion);
+    builder.Services.AddSingleton(appConfiguration.PairedMakerGtdDayAheadDiscovery);
     builder.Services.AddSingleton(appConfiguration.BtcUpDown5mStrategy);
     builder.Services.AddSingleton(appConfiguration.CoinbaseExchange);
     builder.Services.AddSingleton(appConfiguration.BinanceBtcUsdReference);
@@ -419,6 +420,7 @@ builder.Services.AddSingleton<ILiveTradingProcessor, LiveTradingProcessor>();
 builder.Services.AddSingleton<IPolymarketAutoRedeemProcessor, PolymarketAutoRedeemProcessor>();
 builder.Services.AddSingleton<ITraderDiscoveryProcessor, TraderDiscoveryProcessor>();
 builder.Services.AddSingleton<IGammaMarketIngestionProcessor, GammaMarketIngestionProcessor>();
+builder.Services.AddSingleton<IPairedMakerGtdFirstAcceptingProcessor, PairedMakerGtdFirstAcceptingProcessor>();
 builder.Services.AddSingleton<IStrategyStateProvider, StrategyStateProvider>();
 builder.Services.AddSingleton<IBtcUpDown5mPaperStrategyProcessor, BtcUpDown5mPaperStrategyProcessor>();
 builder.Services.AddSingleton<IBtcUpDown5mOddsArchiveProcessor, BtcUpDown5mOddsArchiveProcessor>();
@@ -456,6 +458,7 @@ builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();
 builder.Services.AddHostedService<PolymarketAutoRedeemWorker>();
 builder.Services.AddHostedService<LocalControlServer>();
 builder.Services.AddHostedService<GammaMarketIngestionWorker>();
+builder.Services.AddHostedService<PairedMakerGtdDayAheadDiscoveryWorker>();
 if (appConfiguration.BtcOrderBookLagDiagnostics.Enabled)
 {
     builder.Services.AddHostedService(sp => sp.GetRequiredService<BtcOrderBookLagDiagnosticService>());

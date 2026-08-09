@@ -1,3 +1,18 @@
+## Active Update 2026-08-09 Paired Day-Ahead Maker-GTD Paper Strategies
+Goal: Implement three BTC/ETH/SOL equal-share Maker-GTD pairs (six Paper-only legs) at first observed market acceptance, using Up cap `0.50` and Down cap `0.49`, with the closest practical Live order semantics.
+Status: Completed
+Done:
+- Added exact group-`8224` BTC/ETH/SOL Up/Down variants with symmetric pair IDs, `FirstAcceptingOrders` timing, nominal `-86400s` metadata, Up/Down caps `0.50/0.49`, ordinary-Paper-only classification, and Live submission disabled.
+- Added a dedicated Paper-gated day-ahead Gamma worker that polls exact five-minute BTC/ETH/SOL slugs in the configurable `23..25h` lead band, validates exact `Up`/`Down` outcomes and token/condition/window identity, persists the market, protects both assets from normal registry retention, and records the first service-observed `acceptingOrders=true` evidence.
+- Added an independent paired placement processor: both authoritative fresh S0 books determine one durable common normalized share quantity; each leg then receives at most ten cumulative S0/S1 PostOnly attempts using `floor_to_tick(min(bestAsk-tick,cap))`; accepted legs are persisted and published independently with no pair atomicity, rollback, cancellation, repricing, or resizing when the peer fails.
+- Generalized the Maker-GTD Paper lifecycle to the exact new source while preserving the exact 28-strategy ETH v1/v2 family. New paired evidence fails closed on any catalog/source/version/formula/cap/pair/size/notional/five-minute/timestamp/observation mismatch.
+- Added per-asset confirmed WebSocket ownership, service-session ID, component, and monotonic generation evidence. A paired TouchNoDepth fill is eligible only in the same service session with uninterrupted owning-shard continuity; restart, owning-shard reconnect, asset move, stale/malformed evidence, or a pre-publication race fails closed.
+- Preserved the approved optimistic full fill at the frozen limit when a later authoritative exact-token trade or current best ask touches/crosses the order, without depth/queue/event-size/aggressor modeling. Effective Paper expiry is market end minus one minute; Maker rebates remain unmodeled and excluded from Paper PnL.
+- Corrected the existing 28 ETH Maker-GTD placements to maximum-resting v2 pricing `floor_to_tick(min(bestAsk-tick,0.99))`, while grandfathering exact v1 evidence and rejecting all foreign IDs/semantics.
+Next: A separately approved Paper service deployment and prospective observation of the first complete day-ahead lifecycle; no deployment was performed in this task.
+Notes: Final affected verification passed `160/160`; the exact aggregate catalog-count test passed `1/1`; the full solution build completed with `0` errors and one pre-existing nullable-test warning. A broad suite attempt still contains unrelated pre-existing tests for retired More/Middle catalog variants; independent history/catalog review traced those failures to removals predating this change, so production variants were not restored. `git diff --check` passed. No Live order, Paper order against a venue, deployment, service restart, database mutation, or production-state change occurred.
+Blockers: None.
+
 ## Active Update 2026-08-09 Targeted ETH 4 bps Full Fee Repair
 Goal: Recalculate complete fee-aware Net PnL for `ETH Up or Down 5m 4 bps Reference Average Premarket` and publish it in Dashboard without touching any other strategy.
 Status: Completed

@@ -55,6 +55,7 @@ public static class AppConfigurationLoader
             Analytics = configuration.GetSection("Analytics").Get<AnalyticsOptions>() ?? new AnalyticsOptions(),
             TraderDiscovery = configuration.GetSection("TraderDiscovery").Get<TraderDiscoveryOptions>() ?? new TraderDiscoveryOptions(),
             GammaMarketIngestion = configuration.GetSection("GammaMarketIngestion").Get<GammaMarketIngestionOptions>() ?? new GammaMarketIngestionOptions(),
+            PairedMakerGtdDayAheadDiscovery = configuration.GetSection("PairedMakerGtdDayAheadDiscovery").Get<PairedMakerGtdDayAheadDiscoveryOptions>() ?? new PairedMakerGtdDayAheadDiscoveryOptions(),
             BtcUpDown5mStrategy = configuration.GetSection("BtcUpDown5mStrategy").Get<BtcUpDown5mStrategyOptions>() ?? new BtcUpDown5mStrategyOptions(),
             CoinbaseExchange = configuration.GetSection("CoinbaseExchange").Get<CoinbaseExchangeOptions>() ?? new CoinbaseExchangeOptions(),
             BinanceBtcUsdReference = configuration.GetSection("BinanceBtcUsdReference").Get<BinanceBtcUsdReferenceOptions>() ?? new BinanceBtcUsdReferenceOptions(),
