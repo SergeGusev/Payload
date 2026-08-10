@@ -47,3 +47,12 @@ Request:
 
 Result:
 Counted official BTC, ETH, and SOL Up/Down five-minute outcomes for the rolling UTC market-end window `[2026-07-11T18:57:02Z, 2026-08-10T18:57:02Z)`, fixed from the official CLOB server clock. The expected grid was `8,640` markets per asset. Final official resolved counts were BTC `4,263 Up / 4,376 Down`, ETH `4,277 Up / 4,362 Down`, and SOL `4,255 Up / 4,384 Down`, combined `12,795 Up / 13,122 Down`. Coverage was `25,917/25,920`: the exact BTC, ETH, and SOL markets starting `2026-08-05T14:55:00Z` remain officially open/unresolved and were excluded. Two closed-list omissions, one BTC and one ETH at `2026-07-12T02:25:00Z`, were restored only after their exact official detail endpoints independently confirmed resolved `Down`. Full alternate Gamma pagination passes agreed with zero duplicate, conflict, or invalid resolved rows. Production and trading state were unchanged.
+
+## 2026-08-10T19:27:24.2046276Z
+Request:
+Посчитай Pnl для каждой валюты, если мы каждый раз ставили 0.5 на Up и 0.49 на Down и обе ставки срабатывали. Отдельно посчитай заработок на rebate
+
+По минимальной ставке. Там около 3 евро было, по-моему
+
+Result:
+Verified against the current exact BTC/ETH/SOL five-minute Gamma markets and all six CLOB books that the venue minimum is `5` shares per leg, not a fixed euro amount. With fully filled `5 shares Up @ 0.50` and `5 shares Down @ 0.49`, each pair costs `$4.95`, pays `$5.00` after resolution, and produces exactly `$0.05` Gross PnL regardless of outcome. On `8,639` resolved markets per asset, each of BTC, ETH, and SOL models `$42,763.05` turnover and `$431.95` Gross PnL; all three total `$1,295.85`. The current fee-equivalent formula gives an unrounded estimated Maker rebate of `$302.304527` per asset and `$906.913581` total, making Gross plus estimated rebate `$734.254527` per asset and `$2,202.763581` total. Rebate remains separate and non-guaranteed because actual daily pool allocation and precision can move the final amount by cents. The premise is hypothetical full execution, not verified trading history, and carries `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.

@@ -1,3 +1,17 @@
+## Active Update 2026-08-10 Minimum-Size Paired 5m PnL And Rebate Model
+Goal: Calculate hypothetical per-asset PnL and separate Maker rebate for fully filled minimum-size Up `0.50` and Down `0.49` orders over the verified rolling 30-day BTC/ETH/SOL outcome window.
+Status: Completed
+Done:
+- Reused the fixed official resolved scope of `8,639` markets per asset (`25,917` total) in the market-end window `[2026-07-11T18:57:02Z, 2026-08-10T18:57:02Z)`; the one unresolved same-slot market per asset remains excluded from realized PnL.
+- At official CLOB time `2026-08-10T19:24:13Z`, checked active BTC `btc-updown-5m-1786389600`, ETH `eth-updown-5m-1786389600`, and SOL `sol-updown-5m-1786389600`. Gamma reported `orderMinSize=5`, and all six exact Up/Down CLOB books independently reported `min_order_size=5`; all three markets had fee rate `0.07`, exponent `1`, and rebate rate `0.20`.
+- Modeled equal `5`-share legs: Up cost `$2.50`, Down cost `$2.45`, pair cost `$4.95`, and the winning leg pays `$5.00`. Gross PnL is therefore exactly `$0.05` per resolved market regardless of whether Up or Down wins.
+- Per asset, modeled turnover is `$42,763.05` and Gross PnL is `$431.95`; all three assets total `$128,289.15` turnover and `$1,295.85` Gross PnL. Gross ROI on turnover is `1.010101...%`.
+- Under the current official fee-equivalent formula, the unrounded Maker rebate estimate is `$0.034993` per pair, `$302.304527` per asset, and `$906.913581` total. Gross plus estimated rebate is `$734.254527` per asset and `$2,202.763581` total; combined modeled ROI is `1.717030...%`.
+- Kept rebate separate from PnL and explicitly non-guaranteed: actual daily pool allocation and fee precision can move the result by cents. The full-fill premise is hypothetical optimistic execution, not verified Live/Paper history; `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Next: None.
+Notes: Official Gamma/CLOB inspection and all calculations were read-only. No order, database row, strategy, service, source, configuration, or trading state changed.
+Blockers: None.
+
 ## Active Update 2026-08-10 BTC ETH SOL 5m Last-30-Day Outcome Counts
 Goal: Count official Up and Down results for BTC, ETH, and SOL five-minute Polymarket markets over the latest rolling 30-day window.
 Status: Completed
