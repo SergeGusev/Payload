@@ -31,3 +31,10 @@ Request:
 
 Result:
 Completed a strict read-only deployment audit of the exact six group-8224 paired Maker-GTD strategies on `192.168.0.101/polycopytrader`. The running service uses exact commit `c78eaee6110bbf70e60c4cad6251ef52c06d4ee8`, heartbeat advanced, all six rows remained Paper-only with zero Live orders, and relevant API errors were zero. At fixed cutoff `2026-08-10T08:11:37.550215Z`, all 251 carried Pending orders remained present (78 v1, 173 v2), while 18 new v3 orders formed nine correct equal-share `0.50/0.49` pairs with zero audited contract/linkage mismatch. A real critical WebSocket reconnect occurred and new v3 acceptance continued on the next generation. No post-start fill or expiry occurred, so actual old-order post-restart fill and persisted fence/no-backfill terminal evidence remain runtime-unobserved rather than disproved. All database transactions were read-only and rolled back. During diagnostics the DB password was exposed to an internal tool log; no system was changed, but the credential should be rotated.
+
+## 2026-08-10T17:46:04.9598540Z
+Request:
+Повтори
+
+Result:
+Repeated the exact `ETH Up or Down 5m 2 bps Reference Average Premarket` report from a fixed production `REPEATABLE READ / READ ONLY / UTC` snapshot at `2026-08-10T17:32:54.723734Z`, using only persisted settled Paper Net PnL. Reconciled `2,512` unique runs/markets, Net PnL `$294.28902997`, fee-inclusive Net ROI `1.888804915866765167%`, Net W/L/flat `1,413/1,099/0`, latest UTC day `79 / -$81.17331006`, and maximum Net drawdown `$144.07010111`. Produced and visually verified a solid-line cumulative Net PnL chart with ETHUSDT overlay and the maximum drawdown region, plus a one-sheet daily Net PnL workbook for `38` continuous UTC dates with exact totals, red-on-white negative values, visible minus signs, and exact `B2` freeze panes. Production and trading state were unchanged; no replay was run. During the independent audit the production database credential appeared in an internal Codex tool log and should be rotated separately.

@@ -1,3 +1,16 @@
+## Active Update 2026-08-10 Repeated ETH 2 bps Net PnL Report
+Goal: Repeat the fresh report for `ETH Up or Down 5m 2 bps Reference Average Premarket`, showing only persisted settled Paper Net PnL, with ETHUSDT overlay and the maximum Net drawdown region, plus a daily Net PnL Excel workbook.
+Status: Completed
+Done:
+- Resolved the exact strategy as `b7c50005-0000-4000-8179-000000000102` / `eth_up_down_5m_reference_average_bps_2_fak_premarket` and fixed the read-only UTC snapshot cutoff at `2026-08-10T17:32:54.723734Z`.
+- Reconciled `2,512` unique settled runs/markets with complete Net accounting and zero invalid, incomplete, after-cutoff, identity-mismatch, non-accounted-fee, or Live rows. Net PnL is `$294.28902997`, fee-inclusive Net ROI is `1.888804915866765167%`, and Net W/L/flat is `1,413/1,099/0`.
+- Reconciled the latest UTC day `2026-08-10`: `79` settlements and Net PnL `-$81.17331006`. Maximum Net drawdown is `$144.07010111`, from the `2026-07-13T11:30:36.847018Z` peak to the `2026-07-17T06:04:41.210791Z` trough, recovered at `2026-07-19T14:24:27.956356Z`.
+- Produced and visually verified the 1800x920 solid-line chart with cumulative Net PnL, ETHUSDT overlay, direct endpoint labels, and the maximum Net drawdown region. ETH coverage is `53,091/53,456` UTC minutes (`99.3171954504639%`), from `$1,768.97` to `$1,875.03`.
+- Produced and independently verified the one-sheet `Daily Net PnL` workbook for `38` continuous UTC dates (`2026-07-04..2026-08-10`): exact Net total `$294.28902997`, formulas and values reconciled, `16` negative days shown red on white with visible minus, and first row/column frozen exactly at `B2`.
+Next: Continue using Net-only values for later repetitions of this report.
+Notes: This was a read-only report over stored settled Paper history, not a replay. Production, service, configuration, database data, strategies, and trading state were unchanged. During the independent read-only audit, the production database credential was exposed to an internal Codex tool log; it was not sent in user chat, but should be rotated separately.
+Blockers: None.
+
 ## Active Update 2026-08-10 Paired Gap-Recovery Post-Deploy Verification
 Goal: Verify the deployed exact group-`8224` restart-safe gap-recovery implementation without changing production, service, configuration, or trading state.
 Status: Completed
