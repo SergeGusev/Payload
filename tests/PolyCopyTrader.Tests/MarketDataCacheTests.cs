@@ -51,11 +51,18 @@ public sealed class MarketDataCacheTests
         var cache = new MarketDataCache(
             new MarketDataWebSocketOptions(),
             "market-data-test-session");
+        var confirmedAtUtc = DateTimeOffset.UtcNow;
+        var sourceTimestampUtc = confirmedAtUtc.AddMilliseconds(-1);
 
         cache.AssignAssetSubscriptions("shard-a", ["asset-1"]);
         var pending = cache.GetConfirmedAssetSubscription("asset-1");
         var wrongShardConfirmed = cache.ConfirmAssetSubscription("shard-b", "asset-1");
-        var owningShardConfirmed = cache.ConfirmAssetSubscription("shard-a", "asset-1");
+        var owningShardConfirmed = cache.ConfirmAssetSubscription(
+            "shard-a",
+            "asset-1",
+            confirmedAtUtc,
+            sourceTimestampUtc,
+            "confirmation-frame-1");
         var confirmed = cache.GetConfirmedAssetSubscription("asset-1");
 
         Assert.False(pending.ConfirmedLive);
@@ -67,19 +74,49 @@ public sealed class MarketDataCacheTests
         Assert.Equal(0, confirmed.Generation);
         Assert.Equal("market-data-test-session", pending.SessionId);
         Assert.Equal(pending.SessionId, confirmed.SessionId);
+        Assert.Equal(confirmedAtUtc, confirmed.ConfirmedAtUtc);
+        Assert.Equal(sourceTimestampUtc, confirmed.ConfirmationSourceTimestampUtc);
+        Assert.Equal("confirmation-frame-1", confirmed.ConfirmationEventFingerprint);
+
+        Assert.True(cache.ConfirmAssetSubscription(
+            "shard-a",
+            "asset-1",
+            confirmedAtUtc.AddSeconds(1),
+            sourceTimestampUtc.AddSeconds(1),
+            "later-frame"));
+        var repeated = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.Equal(confirmed.ConfirmedAtUtc, repeated.ConfirmedAtUtc);
+        Assert.Equal(
+            confirmed.ConfirmationSourceTimestampUtc,
+            repeated.ConfirmationSourceTimestampUtc);
+        Assert.Equal(
+            confirmed.ConfirmationEventFingerprint,
+            repeated.ConfirmationEventFingerprint);
     }
 
     [Fact]
     public void ConfirmedSubscription_DisconnectThenFirstReconnectFrameAdvancesGeneration()
     {
         var cache = new MarketDataCache(new MarketDataWebSocketOptions());
+        var firstConfirmedAtUtc = DateTimeOffset.UtcNow;
+        var secondConfirmedAtUtc = firstConfirmedAtUtc.AddSeconds(1);
         cache.AssignAssetSubscriptions("shard-a", ["asset-1"]);
-        Assert.True(cache.ConfirmAssetSubscription("shard-a", "asset-1"));
+        Assert.True(cache.ConfirmAssetSubscription(
+            "shard-a",
+            "asset-1",
+            firstConfirmedAtUtc,
+            firstConfirmedAtUtc.AddMilliseconds(-1),
+            "confirmation-frame-1"));
         var accepted = cache.GetConfirmedAssetSubscription("asset-1");
 
         cache.InvalidateAssetSubscriptions("shard-a");
         var disconnected = cache.GetConfirmedAssetSubscription("asset-1");
-        Assert.True(cache.ConfirmAssetSubscription("shard-a", "asset-1"));
+        Assert.True(cache.ConfirmAssetSubscription(
+            "shard-a",
+            "asset-1",
+            secondConfirmedAtUtc,
+            secondConfirmedAtUtc.AddMilliseconds(-1),
+            "confirmation-frame-2"));
         var reconnected = cache.GetConfirmedAssetSubscription("asset-1");
 
         Assert.True(accepted.ConfirmedLive);
@@ -88,6 +125,8 @@ public sealed class MarketDataCacheTests
         Assert.Equal(1, disconnected.Generation);
         Assert.True(reconnected.ConfirmedLive);
         Assert.Equal(1, reconnected.Generation);
+        Assert.Equal(secondConfirmedAtUtc, reconnected.ConfirmedAtUtc);
+        Assert.Equal("confirmation-frame-2", reconnected.ConfirmationEventFingerprint);
     }
 
     [Fact]
@@ -104,6 +143,67 @@ public sealed class MarketDataCacheTests
         var unaffected = cache.GetConfirmedAssetSubscription("asset-1");
         Assert.True(unaffected.ConfirmedLive);
         Assert.Equal(0, unaffected.Generation);
+    }
+
+    [Fact]
+    public void ConfirmedSubscription_LateFailureCannotInvalidateNewerSegment()
+    {
+        var cache = new MarketDataCache(
+            new MarketDataWebSocketOptions(),
+            "market-data-test-session");
+        var now = DateTimeOffset.UtcNow;
+        cache.AssignAssetSubscriptions("shard-a", ["asset-1"]);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "shard-a",
+            "asset-1",
+            now,
+            now.AddMilliseconds(-1),
+            "segment-1"));
+        var firstSegment = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.True(cache.TryInvalidateAssetSubscription(firstSegment));
+        Assert.True(cache.ConfirmAssetSubscription(
+            "shard-a",
+            "asset-1",
+            now.AddSeconds(1),
+            now.AddMilliseconds(999),
+            "segment-2"));
+
+        Assert.False(cache.TryInvalidateAssetSubscription(firstSegment));
+        var current = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.True(current.ConfirmedLive);
+        Assert.Equal(1, current.Generation);
+        Assert.Equal("segment-2", current.ConfirmationEventFingerprint);
+    }
+
+    [Fact]
+    public void ConfirmedSubscription_AssetMoveRequiresNewOwningShardFence()
+    {
+        var cache = new MarketDataCache(new MarketDataWebSocketOptions(), "move-test-session");
+        var now = DateTimeOffset.UtcNow;
+        cache.AssignAssetSubscriptions("shard-a", ["asset-1"]);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "shard-a",
+            "asset-1",
+            now,
+            now.AddMilliseconds(-1),
+            "shard-a-fence"));
+
+        cache.AssignAssetSubscriptions("shard-b", ["asset-1"]);
+        var movedPending = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.False(movedPending.ConfirmedLive);
+        Assert.Equal("shard-b", movedPending.Component);
+        Assert.Equal(1, movedPending.Generation);
+        Assert.Null(movedPending.ConfirmedAtUtc);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "shard-b",
+            "asset-1",
+            now.AddSeconds(1),
+            now.AddMilliseconds(999),
+            "shard-b-fence"));
+
+        var movedConfirmed = cache.GetConfirmedAssetSubscription("asset-1");
+        Assert.True(movedConfirmed.ConfirmedLive);
+        Assert.Equal("shard-b-fence", movedConfirmed.ConfirmationEventFingerprint);
     }
 
     [Fact]

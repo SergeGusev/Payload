@@ -67,7 +67,7 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
             Assert.Contains($"capped at {expected.MaximumOrderPrice:0.00}", variant.Description, StringComparison.Ordinal);
             Assert.Contains("same requested share quantity", variant.Description, StringComparison.Ordinal);
             Assert.Contains("submission is not atomic and there is no rollback", variant.Description, StringComparison.Ordinal);
-            Assert.Contains("bounded ordered direct HTTP request/client-receipt/response/evaluation bracket", variant.Description, StringComparison.Ordinal);
+            Assert.Contains("bounded ordered direct HTTP request/client-receipt/response/evaluation S0/S1 freshness proof", variant.Description, StringComparison.Ordinal);
             Assert.Contains("venue snapshot timestamp remains audit evidence", variant.Description, StringComparison.Ordinal);
             Assert.Contains("original effective expiry one minute before market end", variant.Description, StringComparison.Ordinal);
             Assert.Contains("ordinary Paper orders, PnL, win rate, and performance", variant.Description, StringComparison.Ordinal);
@@ -131,7 +131,7 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
         Assert.Contains("nominally one day before market start", statement, StringComparison.Ordinal);
         Assert.Contains("same requested share quantity", statement, StringComparison.Ordinal);
         Assert.Contains("submission is not atomic and there is no rollback", statement, StringComparison.Ordinal);
-        Assert.Contains("bounded ordered direct HTTP request/client-receipt/response/evaluation bracket", statement, StringComparison.Ordinal);
+        Assert.Contains("bounded ordered direct HTTP request/client-receipt/response/evaluation S0/S1 freshness proof", statement, StringComparison.Ordinal);
         Assert.Contains("venue snapshot timestamp remains audit evidence", statement, StringComparison.Ordinal);
         Assert.Contains("original effective expiry one minute before market end", statement, StringComparison.Ordinal);
         Assert.Contains("ordinary Paper orders, PnL, win rate, and performance", statement, StringComparison.Ordinal);
@@ -148,7 +148,10 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
     public void ExecutionContract_VersionsReceiptFreshnessWithoutOrphaningV1()
     {
         Assert.Equal("paired_maker_gtd_paper_v1", PairedMakerGtdPaperExecutionContract.LegacyContractVersion);
-        Assert.Equal("paired_maker_gtd_paper_v2", PairedMakerGtdPaperExecutionContract.CurrentContractVersion);
+        Assert.Equal(
+            "paired_maker_gtd_paper_v2",
+            PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion);
+        Assert.Equal("paired_maker_gtd_paper_v3", PairedMakerGtdPaperExecutionContract.CurrentContractVersion);
         Assert.Equal(
             PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
             PairedMakerGtdPaperExecutionContract.ContractVersion);
@@ -160,6 +163,8 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
             PairedMakerGtdPaperExecutionContract.MaximumDirectHttpQuoteAgeMilliseconds);
         Assert.True(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
             PairedMakerGtdPaperExecutionContract.LegacyContractVersion));
+        Assert.True(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
+            PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion));
         Assert.True(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
             PairedMakerGtdPaperExecutionContract.CurrentContractVersion));
         Assert.False(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(

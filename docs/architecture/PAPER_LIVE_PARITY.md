@@ -119,16 +119,16 @@ all of these predicates hold:
 - catalog ID suffixes are exactly `101/102`, `201/202`, and `301/302`, and each pair
   has symmetric `PairedStrategyId` links;
 - persisted source is `crypto_paired_maker_gtd_first_accepting_paper`, new
-  placements use contract `paired_maker_gtd_paper_v2`, and `PaperOnly=true`;
+  placements use contract `paired_maker_gtd_paper_v3`, and `PaperOnly=true`;
 - S0 price is `floor_to_tick(min(S0.bestAsk-S0.tickSize, cap))`, with Up cap `0.50`
   and Down cap `0.49`, so accepted pair limits cannot exceed `0.99` in total;
-- each v2 direct HTTP S0/S1 read persists and validates one ordered local bracket:
+- each v2/v3 direct HTTP S0/S1 read persists and validates one ordered local bracket:
   request start, client receipt, response completion, and evaluation. Both receipt
   age and request duration must remain within the configured maximum. The venue
   snapshot timestamp and hash remain audit evidence and the timestamp must be
   authoritative and no later than local receipt, but an old unchanged snapshot
-  does not by itself make a freshly fetched quiet book stale. Exact-family v1
-  orders already persisted under the former venue-source-age rule remain
+  does not by itself make a freshly fetched quiet book stale. Exact-family v1 and
+  v2 orders already persisted under their former placement contracts remain
   grandfathered for fill/expiry and historical accounting;
 - one common CLOB-normalized share quantity is frozen from both valid S0 sizing
   results before either leg is attempted. Each leg then has independent S0/S1
@@ -137,15 +137,23 @@ all of these predicates hold:
   an accepted peer;
 - accepted legs use market end as wire GTD expiry and stop Paper execution one
   minute earlier;
-- a TouchNoDepth fill additionally requires the same market-data service session
-  and uninterrupted healthy owning-shard component plus per-asset subscription
-  generation from acceptance through the triggering event; a service restart,
-  owning-shard reconnect, or asset reassignment fails closed as evidence unavailable.
+- lifecycle policy `paired_touch_no_depth_gap_recovery_v1` applies to exact-family
+  outstanding v1/v2 orders and new v3 orders. Restart, owning-shard reconnect,
+  asset reassignment, or a delivery failure invalidates the prior segment and pauses
+  inference. The first later authoritative exact-asset frame freezes a new immutable
+  session/component/generation fence and cannot fill. Only a subsequent event whose
+  receipt and venue timestamp are strictly after that fence, whose fingerprint is
+  different, and whose ingress segment still equals the current segment may fill.
+  No REST/cache/pre-fence event or missing gap event is backfilled. A confirmed
+  pre-expiry recovery segment may expire unfilled; no recovery, or recovery only
+  after expiry, remains evidence unavailable.
 
 For this exact family, ordinary Paper orders, positions, fills, PnL, win rate, and
 performance inclusion is intentional. Queue position, book depth, event size, and
 aggressor remain ignored, so inferred full fills may still be overstated. Every
 result carries `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Paired fill and expiry evidence also carries
+`observation gaps are not backfilled; only future authoritative events after confirmed recovery are eligible`.
 Maker rebates are not modeled, inferred, or included in Paper PnL; eligibility and
 amount require an authoritative venue payout ledger. Live submission remains
 disabled. No alias, clone, different source, changed cap/timing/pair link, or other

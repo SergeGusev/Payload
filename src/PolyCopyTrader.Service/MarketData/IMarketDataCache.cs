@@ -18,9 +18,24 @@ public interface IMarketDataCache
 
     void InvalidateAssetSubscriptions(string component);
 
+    bool TryInvalidateAssetSubscription(
+        ConfirmedAssetSubscriptionSnapshot expectedSubscription) => false;
+
     void RemoveAssetSubscriptionComponent(string component);
 
     bool ConfirmAssetSubscription(string component, string assetId);
+
+    bool ConfirmAssetSubscription(
+        string component,
+        string assetId,
+        DateTimeOffset confirmedAtUtc) => ConfirmAssetSubscription(component, assetId);
+
+    bool ConfirmAssetSubscription(
+        string component,
+        string assetId,
+        DateTimeOffset confirmedAtUtc,
+        DateTimeOffset? sourceTimestampUtc,
+        string? eventFingerprint) => ConfirmAssetSubscription(component, assetId, confirmedAtUtc);
 
     void ApplyUpdate(MarketDataUpdate update);
 
@@ -36,7 +51,10 @@ public sealed record ConfirmedAssetSubscriptionSnapshot(
     string? Component,
     bool ConfirmedLive,
     long Generation,
-    string SessionId);
+    string SessionId,
+    DateTimeOffset? ConfirmedAtUtc = null,
+    DateTimeOffset? ConfirmationSourceTimestampUtc = null,
+    string? ConfirmationEventFingerprint = null);
 
 public enum OrderBookCacheLookupStatus
 {

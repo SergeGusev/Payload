@@ -875,18 +875,6 @@ public sealed class PaperTradingProcessor(
             return false;
         }
 
-        MakerGtdPaperMarketDataFailure? marketDataFailure = null;
-        if (hasOrderEvidence && orderEvidence is not null)
-        {
-            makerGtdHandoff.TryGetMarketDataFailure(
-                order.Id,
-                order.AssetId,
-                order.ConditionId,
-                orderEvidence.AcceptedAtUtc,
-                order.ExpiresAtUtc,
-                out marketDataFailure);
-        }
-
         if (restingRun is null)
         {
             logger.LogWarning(
@@ -896,12 +884,39 @@ public sealed class PaperTradingProcessor(
         }
 
         var currentStatus = marketDataCache.Status;
+        var currentConfirmedAssetSubscription =
+            marketDataCache.GetConfirmedAssetSubscription(order.AssetId);
+        var observedContinuity = MakerGtdPaperContinuityEvaluator.Evaluate(
+            order,
+            currentStatus,
+            marketDataCache.SubscribedAssetIds,
+            currentConfirmedAssetSubscription);
+        MakerGtdPaperMarketDataFailure? marketDataFailure = null;
+        if (hasOrderEvidence && orderEvidence is not null)
+        {
+            var failureWindowStartUtc = orderEvidence.AcceptedAtUtc;
+            if (string.Equals(
+                    order.ExecutionSource,
+                    MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                    StringComparison.Ordinal) &&
+                observedContinuity.Continuous &&
+                currentConfirmedAssetSubscription.ConfirmedAtUtc is { } recoveredAtUtc &&
+                recoveredAtUtc > failureWindowStartUtc)
+            {
+                failureWindowStartUtc = recoveredAtUtc;
+            }
+
+            makerGtdHandoff.TryGetMarketDataFailure(
+                order.Id,
+                order.AssetId,
+                order.ConditionId,
+                failureWindowStartUtc,
+                order.ExpiresAtUtc,
+                out marketDataFailure);
+        }
+
         var continuity = marketDataFailure is null
-            ? MakerGtdPaperContinuityEvaluator.Evaluate(
-                order,
-                currentStatus,
-                marketDataCache.SubscribedAssetIds,
-                marketDataCache.GetConfirmedAssetSubscription(order.AssetId))
+            ? observedContinuity
             : new MakerGtdPaperContinuityEvaluation(
                 Continuous: false,
                 MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode,
@@ -943,7 +958,42 @@ public sealed class PaperTradingProcessor(
                     asset_subscribed = marketDataCache.SubscribedAssetIds.Contains(
                         order.AssetId,
                         StringComparer.Ordinal)
-                }
+                },
+                paired_gap_recovery = string.Equals(
+                        order.ExecutionSource,
+                        MakerGtdPaperExecutionSources.PairedFirstAccepting,
+                        StringComparison.Ordinal)
+                    ? new
+                    {
+                        lifecycle_policy_version =
+                            PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+                        audit_qualifier =
+                            PairedMakerGtdPaperExecutionContract.GapRecoveryAuditQualifier,
+                        no_backfill = true,
+                        continuity_detail = continuity.Detail,
+                        accepted_subscription = orderEvidence is null
+                            ? null
+                            : new
+                            {
+                                session_id = orderEvidence.AcceptedMarketDataStatus
+                                    .AssetSubscriptionSessionId,
+                                component = orderEvidence.AcceptedMarketDataStatus
+                                    .AssetSubscriptionComponent,
+                                generation = orderEvidence.AcceptedMarketDataStatus
+                                    .AssetSubscriptionGeneration
+                            },
+                        current_subscription = new
+                        {
+                            currentConfirmedAssetSubscription.SessionId,
+                            currentConfirmedAssetSubscription.Component,
+                            currentConfirmedAssetSubscription.Generation,
+                            currentConfirmedAssetSubscription.ConfirmedLive,
+                            currentConfirmedAssetSubscription.ConfirmedAtUtc,
+                            currentConfirmedAssetSubscription.ConfirmationSourceTimestampUtc,
+                            currentConfirmedAssetSubscription.ConfirmationEventFingerprint
+                        }
+                    }
+                    : null
             }),
             UpdatedAtUtc = evaluatedAtUtc
         };

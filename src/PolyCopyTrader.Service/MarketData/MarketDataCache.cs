@@ -96,7 +96,8 @@ public sealed class MarketDataCache(
                 null,
                 false,
                 -1,
-                confirmedSubscriptionSessionId);
+                confirmedSubscriptionSessionId,
+                null);
         }
 
         lock (sync)
@@ -107,13 +108,17 @@ public sealed class MarketDataCache(
                     state.Component,
                     state.ConfirmedLive,
                     state.Generation,
-                    confirmedSubscriptionSessionId)
+                    confirmedSubscriptionSessionId,
+                    state.ConfirmedAtUtc,
+                    state.ConfirmationSourceTimestampUtc,
+                    state.ConfirmationEventFingerprint)
                 : new ConfirmedAssetSubscriptionSnapshot(
                     normalizedAssetId,
                     null,
                     false,
                     0,
-                    confirmedSubscriptionSessionId);
+                    confirmedSubscriptionSessionId,
+                    null);
         }
     }
 
@@ -141,6 +146,9 @@ public sealed class MarketDataCache(
                     {
                         Component = null,
                         ConfirmedLive = false,
+                        ConfirmedAtUtc = null,
+                        ConfirmationSourceTimestampUtc = null,
+                        ConfirmationEventFingerprint = null,
                         Generation = state.Generation + (state.ConfirmedLive ? 1 : 0)
                     };
                 }
@@ -153,7 +161,10 @@ public sealed class MarketDataCache(
                     confirmedAssetSubscriptions[assetId] = new ConfirmedAssetState(
                         normalizedComponent,
                         ConfirmedLive: false,
-                        Generation: 0);
+                        Generation: 0,
+                        ConfirmedAtUtc: null,
+                        ConfirmationSourceTimestampUtc: null,
+                        ConfirmationEventFingerprint: null);
                     continue;
                 }
 
@@ -163,6 +174,9 @@ public sealed class MarketDataCache(
                     {
                         Component = normalizedComponent,
                         ConfirmedLive = false,
+                        ConfirmedAtUtc = null,
+                        ConfirmationSourceTimestampUtc = null,
+                        ConfirmationEventFingerprint = null,
                         Generation = state.Generation + (state.ConfirmedLive ? 1 : 0)
                     };
                 }
@@ -195,10 +209,55 @@ public sealed class MarketDataCache(
                     confirmedAssetSubscriptions[assetId] = state with
                     {
                         ConfirmedLive = false,
+                        ConfirmedAtUtc = null,
+                        ConfirmationSourceTimestampUtc = null,
+                        ConfirmationEventFingerprint = null,
                         Generation = state.Generation + 1
                     };
                 }
             }
+        }
+    }
+
+    public bool TryInvalidateAssetSubscription(
+        ConfirmedAssetSubscriptionSnapshot expectedSubscription)
+    {
+        ArgumentNullException.ThrowIfNull(expectedSubscription);
+        if (string.IsNullOrWhiteSpace(expectedSubscription.AssetId) ||
+            !string.Equals(
+                expectedSubscription.SessionId,
+                confirmedSubscriptionSessionId,
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        lock (sync)
+        {
+            if (!confirmedAssetSubscriptions.TryGetValue(expectedSubscription.AssetId, out var state) ||
+                !state.ConfirmedLive ||
+                !string.Equals(state.Component, expectedSubscription.Component, StringComparison.Ordinal) ||
+                state.Generation != expectedSubscription.Generation ||
+                state.ConfirmedAtUtc != expectedSubscription.ConfirmedAtUtc ||
+                state.ConfirmationSourceTimestampUtc !=
+                    expectedSubscription.ConfirmationSourceTimestampUtc ||
+                !string.Equals(
+                    state.ConfirmationEventFingerprint,
+                    expectedSubscription.ConfirmationEventFingerprint,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            confirmedAssetSubscriptions[expectedSubscription.AssetId] = state with
+            {
+                ConfirmedLive = false,
+                ConfirmedAtUtc = null,
+                ConfirmationSourceTimestampUtc = null,
+                ConfirmationEventFingerprint = null,
+                Generation = state.Generation + 1
+            };
+            return true;
         }
     }
 
@@ -226,6 +285,9 @@ public sealed class MarketDataCache(
                     {
                         Component = null,
                         ConfirmedLive = false,
+                        ConfirmedAtUtc = null,
+                        ConfirmationSourceTimestampUtc = null,
+                        ConfirmationEventFingerprint = null,
                         Generation = state.Generation + (state.ConfirmedLive ? 1 : 0)
                     };
                 }
@@ -234,6 +296,29 @@ public sealed class MarketDataCache(
     }
 
     public bool ConfirmAssetSubscription(string component, string assetId)
+    {
+        return ConfirmAssetSubscription(component, assetId, DateTimeOffset.UtcNow);
+    }
+
+    public bool ConfirmAssetSubscription(
+        string component,
+        string assetId,
+        DateTimeOffset confirmedAtUtc)
+    {
+        return ConfirmAssetSubscription(
+            component,
+            assetId,
+            confirmedAtUtc,
+            sourceTimestampUtc: null,
+            eventFingerprint: null);
+    }
+
+    public bool ConfirmAssetSubscription(
+        string component,
+        string assetId,
+        DateTimeOffset confirmedAtUtc,
+        DateTimeOffset? sourceTimestampUtc,
+        string? eventFingerprint)
     {
         if (string.IsNullOrWhiteSpace(component) || string.IsNullOrWhiteSpace(assetId))
         {
@@ -250,7 +335,17 @@ public sealed class MarketDataCache(
                 return false;
             }
 
-            confirmedAssetSubscriptions[normalizedAssetId] = state with { ConfirmedLive = true };
+            confirmedAssetSubscriptions[normalizedAssetId] = state.ConfirmedLive
+                ? state
+                : state with
+                {
+                    ConfirmedLive = true,
+                    ConfirmedAtUtc = confirmedAtUtc.ToUniversalTime(),
+                    ConfirmationSourceTimestampUtc = sourceTimestampUtc?.ToUniversalTime(),
+                    ConfirmationEventFingerprint = string.IsNullOrWhiteSpace(eventFingerprint)
+                        ? null
+                        : eventFingerprint.Trim()
+                };
             return true;
         }
     }
@@ -340,7 +435,10 @@ public sealed class MarketDataCache(
     private sealed record ConfirmedAssetState(
         string? Component,
         bool ConfirmedLive,
-        long Generation);
+        long Generation,
+        DateTimeOffset? ConfirmedAtUtc,
+        DateTimeOffset? ConfirmationSourceTimestampUtc,
+        string? ConfirmationEventFingerprint);
 
     private static OrderBookSnapshot? BuildInitialSnapshot(string assetId, MarketDataUpdate update)
     {

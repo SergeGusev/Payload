@@ -62,9 +62,14 @@ internal static class PairedMakerGtdPaperExecutionContract
 {
     public const string ExecutionSource = MakerGtdPaperExecutionSources.PairedFirstAccepting;
     public const string LegacyContractVersion = "paired_maker_gtd_paper_v1";
-    public const string CurrentContractVersion = "paired_maker_gtd_paper_v2";
+    public const string DirectHttpReceiptContractVersion = "paired_maker_gtd_paper_v2";
+    public const string CurrentContractVersion = "paired_maker_gtd_paper_v3";
     public const string ContractVersion = CurrentContractVersion;
     public const string DirectHttpReceiptFreshnessBasis = "direct_http_response_receipt";
+    public const string GapRecoveryLifecyclePolicyVersion =
+        "paired_touch_no_depth_gap_recovery_v1";
+    public const string GapRecoveryAuditQualifier =
+        "observation gaps are not backfilled; only future authoritative events after confirmed recovery are eligible";
     public const long MaximumDirectHttpQuoteAgeMilliseconds = 60_000;
     public const string PriceFormula =
         "floor_to_tick(min(best_ask - tick_size, maximum_order_price))";
@@ -73,6 +78,7 @@ internal static class PairedMakerGtdPaperExecutionContract
     public static bool IsSupportedContractVersion(string? contractVersion)
     {
         return string.Equals(contractVersion, LegacyContractVersion, StringComparison.Ordinal) ||
+            string.Equals(contractVersion, DirectHttpReceiptContractVersion, StringComparison.Ordinal) ||
             string.Equals(contractVersion, CurrentContractVersion, StringComparison.Ordinal);
     }
 

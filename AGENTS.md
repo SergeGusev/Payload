@@ -98,23 +98,31 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
   execution source `crypto_paired_maker_gtd_first_accepting_paper`; `PaperOnly=true`;
   Up cap `0.50`; Down cap `0.49`; and formula
   `floor_to_tick(min(bestAsk-tick, cap))`. New placements use contract
-  `paired_maker_gtd_paper_v2`: direct HTTP S0/S1 freshness is proven by a bounded,
+  `paired_maker_gtd_paper_v3`; its S0/S1 placement contract retains the bounded,
   ordered local request/client-receipt/response/evaluation bracket, while the
   authoritative venue snapshot timestamp remains mandatory audit evidence but may
-  be old on an unchanged quiet book. Exact-family `paired_maker_gtd_paper_v1`
-  orders already persisted under the former venue-source-age rule remain
-  grandfathered for lifecycle completion. Each pair freezes one common normalized
+  be old on an unchanged quiet book. Exact-family `paired_maker_gtd_paper_v1` and
+  `paired_maker_gtd_paper_v2` orders already persisted under the former placement
+  contracts remain grandfathered for lifecycle completion. Each pair freezes one common normalized
   share quantity before either leg is attempted. Each leg then has independent
   fresh S0/S1 PostOnly acceptance and persistence, without atomicity, rollback,
   cancellation, or resizing of an accepted leg when its peer fails. Accepted legs
   expire one minute before market end. This exact family may use the optimistic
-  full-fill `TouchNoDepth` inference, but a paired-family fill additionally requires
-  the same market-data service session and uninterrupted healthy owning-shard
-  subscription component/generation since acceptance; service restart, owning-shard
-  reconnect, or asset reassignment fails closed. Queue position,
+  full-fill `TouchNoDepth` inference. Under lifecycle policy
+  `paired_touch_no_depth_gap_recovery_v1`, service restart, owning-shard reconnect,
+  asset reassignment, or delivery failure pauses fill inference and creates a new
+  exact-asset observation fence. The first authoritative frame confirms that fence
+  and cannot fill; only a later authoritative event from the same unchanged
+  session/component/generation, with receipt and venue timestamp strictly after the
+  fence and a different fingerprint, may fill. Events missed during the gap, cached
+  state, REST snapshots, and pre-fence queued events are never backfilled. A segment
+  confirmed before expiry may finish as expired-unfilled; absent or post-expiry
+  confirmation remains evidence-unavailable. Queue position,
   depth, event size, and aggressor remain unmodeled and fills may be overstated.
   Results enter ordinary Paper orders, positions, PnL, win rate, and performance and
   must carry `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+  Paired terminal evidence must additionally carry
+  `observation gaps are not backfilled; only future authoritative events after confirmed recovery are eligible`.
   Maker rebates are not modeled or included in Paper PnL. Live submission remains
   disabled. No alias, clone, changed ID/source/timing/cap/pair link, or other semantic
   inherits this exception.

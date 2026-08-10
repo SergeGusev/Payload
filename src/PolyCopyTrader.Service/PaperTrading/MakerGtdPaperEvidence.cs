@@ -629,6 +629,33 @@ internal static class MakerGtdPaperOrderEvidenceParser
             return false;
         }
 
+        var currentLifecycleContract = string.Equals(
+            contractVersion,
+            PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+            StringComparison.Ordinal);
+        var hasExactGapRecoveryPolicy =
+            TryGetRequiredString(
+                makerGtd,
+                "gap_recovery_policy_version",
+                out var gapRecoveryPolicyVersion) &&
+            string.Equals(
+                gapRecoveryPolicyVersion,
+                PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+                StringComparison.Ordinal) &&
+            TryGetRequiredBoolean(
+                makerGtd,
+                "observation_gaps_backfilled",
+                out var observationGapsBackfilled) &&
+            !observationGapsBackfilled;
+        if (currentLifecycleContract != hasExactGapRecoveryPolicy ||
+            !currentLifecycleContract &&
+            (makerGtd.TryGetProperty("gap_recovery_policy_version", out _) ||
+             makerGtd.TryGetProperty("observation_gaps_backfilled", out _)))
+        {
+            failureDetail = "paired_lifecycle_contract_mismatch";
+            return false;
+        }
+
         if (!TryGetObject(makerGtd, FrozenIntentProperty, out var frozenIntent) ||
             !TryGetRequiredGuid(frozenIntent, "strategy_id", out var intentStrategyId) ||
             intentStrategyId != order.StrategyId ||
@@ -695,9 +722,9 @@ internal static class MakerGtdPaperOrderEvidenceParser
 
         var intentMinOrderSize = 0m;
         var intentNegativeRisk = false;
-        if (string.Equals(
+        if (!string.Equals(
                 contractVersion,
-                PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+                PairedMakerGtdPaperExecutionContract.LegacyContractVersion,
                 StringComparison.Ordinal) &&
             (!TryGetRequiredPositiveDecimal(
                  frozenIntent,
@@ -1273,13 +1300,20 @@ internal static class MakerGtdPaperOrderEvidenceParser
     }
 }
 
+internal sealed record MakerGtdPaperObservationSegmentEvent(
+    ConfirmedAssetSubscriptionSnapshot IngressSubscription,
+    DateTimeOffset ReceivedAtUtc,
+    DateTimeOffset SourceTimestampUtc,
+    string EventFingerprint);
+
 internal static class MakerGtdPaperContinuityEvaluator
 {
     public static MakerGtdPaperContinuityEvaluation Evaluate(
         PaperOrder order,
         MarketDataStatusSnapshot currentStatus,
         IReadOnlyCollection<string> currentSubscribedAssetIds,
-        ConfirmedAssetSubscriptionSnapshot? currentConfirmedAssetSubscription = null)
+        ConfirmedAssetSubscriptionSnapshot? currentConfirmedAssetSubscription = null,
+        MakerGtdPaperObservationSegmentEvent? observationSegmentEvent = null)
     {
         if (!MakerGtdPaperOrderEvidenceParser.TryParse(
                 order,
@@ -1310,29 +1344,87 @@ internal static class MakerGtdPaperContinuityEvaluator
                 return Unavailable("asset_not_currently_confirmed_live");
             }
 
-            if (!string.Equals(
-                    currentConfirmed.Component,
-                    acceptedStatus.AssetSubscriptionComponent,
-                    StringComparison.Ordinal) ||
-                acceptedStatus.AssetSubscriptionGeneration is not { } acceptedSubscriptionGeneration ||
-                currentConfirmed.Generation != acceptedSubscriptionGeneration)
+            if (acceptedStatus.AssetSubscriptionGeneration is not { } acceptedGeneration ||
+                string.IsNullOrWhiteSpace(acceptedStatus.AssetSubscriptionSessionId) ||
+                string.IsNullOrWhiteSpace(currentConfirmed.Component) ||
+                currentConfirmed.Generation < 0 ||
+                string.IsNullOrWhiteSpace(currentConfirmed.SessionId) ||
+                currentConfirmed.ConfirmedAtUtc is not { } currentSegmentStartedAtUtc ||
+                currentConfirmed.ConfirmationSourceTimestampUtc is not { } currentSegmentSourceTimestampUtc ||
+                string.IsNullOrWhiteSpace(currentConfirmed.ConfirmationEventFingerprint))
             {
-                return Unavailable("confirmed_asset_subscription_generation_changed");
+                return Unavailable("current_observation_segment_evidence_missing");
             }
 
-            if (string.IsNullOrWhiteSpace(acceptedStatus.AssetSubscriptionSessionId) ||
-                !string.Equals(
+            if (currentSegmentSourceTimestampUtc > currentSegmentStartedAtUtc ||
+                currentSegmentSourceTimestampUtc >= order.ExpiresAtUtc)
+            {
+                return Unavailable("current_observation_segment_timestamp_invalid");
+            }
+
+            var sameAcceptedSegment =
+                string.Equals(
+                    currentConfirmed.Component,
+                    acceptedStatus.AssetSubscriptionComponent,
+                    StringComparison.Ordinal) &&
+                currentConfirmed.Generation == acceptedGeneration &&
+                string.Equals(
                     currentConfirmed.SessionId,
                     acceptedStatus.AssetSubscriptionSessionId,
+                    StringComparison.Ordinal);
+            if (observationSegmentEvent is null)
+            {
+                if (currentSegmentStartedAtUtc >= order.ExpiresAtUtc)
+                {
+                    return Unavailable("observation_segment_confirmed_after_expiry");
+                }
+
+                return new MakerGtdPaperContinuityEvaluation(
+                    Continuous: true,
+                    MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode,
+                    sameAcceptedSegment
+                        ? "continuous_confirmed_asset_subscription_evidence"
+                        : "recovered_confirmed_asset_observation_segment_at_expiry");
+            }
+
+            var ingress = observationSegmentEvent.IngressSubscription;
+            if (!ingress.ConfirmedLive ||
+                !string.Equals(ingress.AssetId, order.AssetId, StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(ingress.Component) ||
+                string.IsNullOrWhiteSpace(ingress.SessionId) ||
+                ingress.ConfirmedAtUtc is not { } ingressSegmentStartedAtUtc ||
+                ingress.ConfirmationSourceTimestampUtc is not { } confirmationSourceTimestampUtc ||
+                string.IsNullOrWhiteSpace(ingress.ConfirmationEventFingerprint) ||
+                !string.Equals(ingress.Component, currentConfirmed.Component, StringComparison.Ordinal) ||
+                ingress.Generation != currentConfirmed.Generation ||
+                !string.Equals(ingress.SessionId, currentConfirmed.SessionId, StringComparison.Ordinal) ||
+                ingress.ConfirmedAtUtc != currentConfirmed.ConfirmedAtUtc ||
+                ingress.ConfirmationSourceTimestampUtc != currentConfirmed.ConfirmationSourceTimestampUtc ||
+                !string.Equals(
+                    ingress.ConfirmationEventFingerprint,
+                    currentConfirmed.ConfirmationEventFingerprint,
                     StringComparison.Ordinal))
             {
-                return Unavailable("confirmed_asset_subscription_session_changed");
+                return Unavailable("market_data_event_observation_segment_changed");
+            }
+
+            if (observationSegmentEvent.ReceivedAtUtc <= ingressSegmentStartedAtUtc ||
+                observationSegmentEvent.SourceTimestampUtc <= ingressSegmentStartedAtUtc ||
+                observationSegmentEvent.SourceTimestampUtc <= confirmationSourceTimestampUtc ||
+                string.Equals(
+                    observationSegmentEvent.EventFingerprint,
+                    ingress.ConfirmationEventFingerprint,
+                    StringComparison.Ordinal))
+            {
+                return Unavailable("market_data_event_not_after_recovery_fence");
             }
 
             return new MakerGtdPaperContinuityEvaluation(
                 Continuous: true,
                 MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode,
-                "continuous_confirmed_asset_subscription_evidence");
+                sameAcceptedSegment
+                    ? "continuous_confirmed_asset_subscription_evidence"
+                    : "recovered_confirmed_asset_observation_segment");
         }
 
         if (acceptedStatus.ConnectionState != MarketDataConnectionState.Connected ||

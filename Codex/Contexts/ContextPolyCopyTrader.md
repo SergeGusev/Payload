@@ -1,3 +1,17 @@
+## Active Update 2026-08-10 Paired Restart-Safe Gap Recovery
+Goal: Keep the exact group-`8224` paired Maker-GTD Paper orders eligible for future TouchNoDepth inference after service restart, owning-shard reconnect, asset reassignment, or delivery failure without backfilling observations missed during the gap.
+Status: Completed
+Done:
+- Replaced the permanent post-restart censor with lifecycle policy `paired_touch_no_depth_gap_recovery_v1`. A gap invalidates the previous exact-asset observation segment; the first later authoritative frame establishes an immutable recovery fence and cannot fill, while only a subsequent authoritative event in the same unchanged segment may fill.
+- Preserved fail-closed no-backfill behavior: cached state, REST snapshots, gap events, pre-fence queued events, the fence frame itself, and events with non-causal receipt/source timestamps or the fence fingerprint cannot authorize a fill.
+- Added exact segment stamping and compare-and-invalidate across WebSocket parsing, queue handoff, updater/application failures, reconnects, and asset moves. A delayed failure cannot invalidate a newer recovered segment.
+- Grandfathered outstanding exact-family v1/v2 orders and continuations under the new recovery lifecycle; new placements use `paired_maker_gtd_paper_v3` and persist the policy/version audit fields. Reference Average Maker-GTD and Live trading behavior were not changed.
+- Made expiry recovery-aware: a valid segment confirmed before expiry may end as ordinary expired-unfilled after a prior gap, while malformed evidence, no recovery, a future-source fence, or recovery only after expiry remains evidence-unavailable. Fill and expiry evidence record the accepted/current segment and the no-backfill policy.
+- Added focused regressions for restart/reconnect/reassignment, immutable queued ingress, first-frame fencing, later-event fill, delivery/apply failures, recovery-aware expiry, malformed evidence, v1/v2/v3 continuation compatibility, and v3 downgrade/shape rejection.
+Next: Deploy this commit separately, then perform a read-only production verification of v1/v2 outstanding-order resumption and new v3 lifecycle evidence.
+Notes: Expanded changed-path verification passed `173/173`; supporting Reference Average/parity/PostOnly/TouchNoDepth/handoff verification passed `68/68`. `PolyCopyTrader.sln` built with `0` errors and one pre-existing nullable warning in `BtcUpDown5mPaperStrategyProcessorTests.cs:7420`. `git diff --check` passed with line-ending warnings only. No deployment, service action, database mutation, Live/Paper venue order, cancellation, or production-state change was performed.
+Blockers: None.
+
 ## Active Update 2026-08-10 Paired Restart Semantics Clarification
 Goal: Determine whether restarting the service loses the paired Maker-GTD strategy or its already-resting Paper orders.
 Status: Completed

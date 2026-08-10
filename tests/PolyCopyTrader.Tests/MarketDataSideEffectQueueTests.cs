@@ -314,7 +314,20 @@ public sealed class MarketDataSideEffectQueueTests
     {
         var handler = new ControlledHandler(throwOnUpdate: true);
         var handoff = new MakerGtdPaperPlacementHandoff();
-        var queue = CreateQueue(handler, makerGtdPaperPlacementHandoff: handoff);
+        var cache = new MarketDataCache(new MarketDataWebSocketOptions(), "queue-test-session");
+        cache.AssignAssetSubscriptions("test-component", ["asset-maker"]);
+        var fenceReceivedAtUtc = new DateTimeOffset(2026, 8, 9, 11, 59, 59, TimeSpan.Zero);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-component",
+            "asset-maker",
+            fenceReceivedAtUtc,
+            fenceReceivedAtUtc.AddMilliseconds(-1),
+            "queue-fence"));
+        var confirmedSubscription = cache.GetConfirmedAssetSubscription("asset-maker");
+        var queue = CreateQueue(
+            handler,
+            makerGtdPaperPlacementHandoff: handoff,
+            marketDataCache: cache);
         var orderId = Guid.NewGuid();
         handoff.TrackMakerGtdPaperOrder(
             orderId,
@@ -327,7 +340,8 @@ public sealed class MarketDataSideEffectQueueTests
             Quote("asset-maker", 0.49m),
             null,
             receivedAtUtc,
-            new HashSet<Guid> { orderId });
+            new HashSet<Guid> { orderId },
+            confirmedSubscription);
         await queue.StopAsync(CancellationToken.None);
 
         Assert.Equal(1, queue.GetMetrics().FailedUpdates);
@@ -347,6 +361,66 @@ public sealed class MarketDataSideEffectQueueTests
         Assert.Equal(
             MakerGtdPaperExecutionContract.MarketDataHandlerFailureCode,
             Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
+        var invalidated = cache.GetConfirmedAssetSubscription("asset-maker");
+        Assert.False(invalidated.ConfirmedLive);
+        Assert.Equal(1, invalidated.Generation);
+    }
+
+    [Fact]
+    public async Task EnqueueUpdate_PreservesIngressSegmentWhenCacheAdvancesBeforeHandling()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var cache = new MarketDataCache(new MarketDataWebSocketOptions(), "queue-test-session");
+        cache.AssignAssetSubscriptions("test-component", ["asset-maker"]);
+        var firstFenceUtc = new DateTimeOffset(2026, 8, 9, 11, 59, 58, TimeSpan.Zero);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-component",
+            "asset-maker",
+            firstFenceUtc,
+            firstFenceUtc.AddMilliseconds(-1),
+            "first-fence"));
+        var ingressSegment = cache.GetConfirmedAssetSubscription("asset-maker");
+        var queue = CreateQueue(handler, marketDataCache: cache);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+            var receivedAtUtc = firstFenceUtc.AddSeconds(1);
+            Assert.Equal(
+                MarketDataSideEffectEnqueueOutcome.Enqueued,
+                queue.EnqueueUpdate(
+                    "test-component",
+                    Quote("asset-maker", 0.49m),
+                    null,
+                    receivedAtUtc,
+                    new HashSet<Guid> { Guid.NewGuid() },
+                    ingressSegment));
+
+            cache.InvalidateAssetSubscriptions("test-component");
+            Assert.True(cache.ConfirmAssetSubscription(
+                "test-component",
+                "asset-maker",
+                receivedAtUtc.AddMilliseconds(1),
+                receivedAtUtc,
+                "second-fence"));
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+
+            var handled = Assert.Single(
+                handler.ProcessedUpdates,
+                item => item.Update.AssetId == "asset-maker");
+            Assert.Equal(ingressSegment, handled.ConfirmedAssetSubscription);
+            Assert.NotEqual(
+                cache.GetConfirmedAssetSubscription("asset-maker"),
+                handled.ConfirmedAssetSubscription);
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -434,7 +508,8 @@ public sealed class MarketDataSideEffectQueueTests
         int maxPendingUpdatesPerAsset = 32,
         int diagnosticCapacity = 256,
         bool persistMarketDataEvents = false,
-        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null)
+        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
+        IMarketDataCache? marketDataCache = null)
     {
         return new MarketDataSideEffectQueue(
             NullLogger<MarketDataSideEffectQueue>.Instance,
@@ -447,7 +522,8 @@ public sealed class MarketDataSideEffectQueueTests
             },
             handler,
             new TestAppRepository(),
-            makerGtdPaperPlacementHandoff);
+            makerGtdPaperPlacementHandoff,
+            marketDataCache);
     }
 
     private static MarketDataSideEffectEnqueueOutcome Enqueue(

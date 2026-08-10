@@ -1209,6 +1209,9 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
             ["maker_gtd"] = new JsonObject
             {
                 ["contract_version"] = PairedMakerGtdPaperExecutionContract.ContractVersion,
+                ["gap_recovery_policy_version"] =
+                    PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+                ["observation_gaps_backfilled"] = false,
                 ["execution_source"] = PairedMakerGtdPaperExecutionContract.ExecutionSource,
                 ["strategy_run_id"] = state.Run.Id.ToString("D"),
                 ["paper_only"] = true,
@@ -1272,6 +1275,9 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
             {
                 ["execution_source"] = PairedMakerGtdPaperExecutionContract.ExecutionSource,
                 ["contract_version"] = PairedMakerGtdPaperExecutionContract.ContractVersion,
+                ["gap_recovery_policy_version"] =
+                    PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+                ["observation_gaps_backfilled"] = false,
                 ["terminal_outcome"] = terminalReason is null ? "observed" : "skipped",
                 ["terminal_reason"] = terminalReason,
                 ["attempts_completed"] = state.Attempts.Count,
@@ -1518,10 +1524,10 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                     makerGtd,
                     "execution_source",
                     PairedMakerGtdPaperExecutionContract.ExecutionSource) ||
-                !HasExactString(
-                    makerGtd,
-                    "contract_version",
-                    PairedMakerGtdPaperExecutionContract.ContractVersion) ||
+                !makerGtd.TryGetProperty("contract_version", out var contractVersionElement) ||
+                contractVersionElement.ValueKind != JsonValueKind.String ||
+                !PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
+                    contractVersionElement.GetString()) ||
                 !HasExactString(makerGtd, "terminal_outcome", "observed") ||
                 !makerGtd.TryGetProperty("terminal_reason", out var terminalReason) ||
                 terminalReason.ValueKind != JsonValueKind.Null ||
@@ -1529,6 +1535,25 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                 attemptsElement.ValueKind != JsonValueKind.Array)
             {
                 rejectionReason = "paired_maker_gtd_continuation_contract_mismatch";
+                return false;
+            }
+
+            var contractVersion = contractVersionElement.GetString();
+            var currentLifecycleContract = string.Equals(
+                contractVersion,
+                PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+                StringComparison.Ordinal);
+            if (currentLifecycleContract !=
+                    (HasExactString(
+                         makerGtd,
+                         "gap_recovery_policy_version",
+                         PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion) &&
+                     HasExactFalse(makerGtd, "observation_gaps_backfilled")) ||
+                !currentLifecycleContract &&
+                (makerGtd.TryGetProperty("gap_recovery_policy_version", out _) ||
+                 makerGtd.TryGetProperty("observation_gaps_backfilled", out _)))
+            {
+                rejectionReason = "paired_maker_gtd_continuation_lifecycle_contract_mismatch";
                 return false;
             }
 

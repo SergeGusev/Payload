@@ -217,6 +217,124 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
     }
 
+    [Fact]
+    public async Task MarketDataUpdater_PairedApplyFailureRequiresNewFenceBeforeLaterFill()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        handoff.TrackMakerGtdPaperOrder(scenario.Order.Id, scenario.Order.ExecutionSource!);
+        scenario.Repository.BeforeTryApplyMakerGtdPaperFullFill = (_, _) =>
+            throw new InvalidOperationException("simulated paired persistence failure");
+        var updater = CreateUpdater(
+            scenario.Repository,
+            handoff,
+            marketDataCache: cache);
+        var failedReceiptUtc = now.AddMilliseconds(-40);
+        var failedSegment = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                now.AddMilliseconds(-50),
+                failedReceiptUtc,
+                "failed-touch"),
+            failedReceiptUtc,
+            eligiblePaperOrderIds: null,
+            failedSegment,
+            CancellationToken.None);
+
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.False(cache.GetConfirmedAssetSubscription(scenario.Order.AssetId).ConfirmedLive);
+        scenario.Repository.BeforeTryApplyMakerGtdPaperFullFill = null;
+
+        var recoveryReceiptUtc = now.AddMilliseconds(-30);
+        var recoverySourceUtc = recoveryReceiptUtc.AddMilliseconds(-1);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            recoveryReceiptUtc,
+            recoverySourceUtc,
+            "recovery-fence"));
+        var recoveredSegment = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                recoverySourceUtc,
+                recoveryReceiptUtc,
+                "recovery-fence"),
+            recoveryReceiptUtc,
+            eligiblePaperOrderIds: null,
+            recoveredSegment,
+            CancellationToken.None);
+        Assert.Empty(scenario.Repository.PaperFills);
+
+        var laterReceiptUtc = now.AddMilliseconds(-10);
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                laterReceiptUtc.AddMilliseconds(-1),
+                laterReceiptUtc,
+                "post-recovery-touch"),
+            laterReceiptUtc,
+            eligiblePaperOrderIds: null,
+            recoveredSegment,
+            CancellationToken.None);
+
+        Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+    }
+
+    [Theory]
+    [InlineData("missing_run")]
+    [InlineData("not_eligible")]
+    public async Task MarketDataUpdater_PairedExplicitApplyFailureInvalidatesSegment(string failure)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        if (string.Equals(failure, "missing_run", StringComparison.Ordinal))
+        {
+            scenario.Repository.StrategyMarketPaperRuns.Clear();
+        }
+        else
+        {
+            scenario.Repository.BeforeTryApplyMakerGtdPaperFullFill = (_, _) =>
+            {
+                scenario.Repository.PaperOrders.Clear();
+                scenario.Repository.PaperOrders.Add(scenario.Order with
+                {
+                    Status = PaperOrderStatus.Expired
+                });
+            };
+        }
+
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                now.AddMilliseconds(-20),
+                receivedAtUtc,
+                $"{failure}-touch"),
+            receivedAtUtc);
+
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.False(cache.GetConfirmedAssetSubscription(scenario.Order.AssetId).ConfirmedLive);
+    }
+
     [Theory]
     [InlineData("foreign_strategy_id")]
     [InlineData("wrong_order_source")]
@@ -251,6 +369,9 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     [InlineData("invalid_s1_price")]
     [InlineData("s1_stale_at_acceptance")]
     [InlineData("downgraded_v2_shape")]
+    [InlineData("missing_gap_recovery_policy")]
+    [InlineData("observation_gaps_backfilled")]
+    [InlineData("v2_with_v3_policy")]
     [InlineData("oversized_max_age")]
     [InlineData("post_start_acceptance")]
     public void EvidenceParser_PairedContractMutation_FailsClosed(string mutation)
@@ -384,6 +505,16 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 root["maker_gtd"]!["contract_version"] =
                     PairedMakerGtdPaperExecutionContract.LegacyContractVersion;
                 break;
+            case "missing_gap_recovery_policy":
+                root["maker_gtd"]!.AsObject().Remove("gap_recovery_policy_version");
+                break;
+            case "observation_gaps_backfilled":
+                root["maker_gtd"]!["observation_gaps_backfilled"] = true;
+                break;
+            case "v2_with_v3_policy":
+                root["maker_gtd"]!["contract_version"] =
+                    PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion;
+                break;
             case "oversized_max_age":
                 root["maker_gtd"]!["attempts"]![0]!["s0"]!["max_age_ms"] = 60_001L;
                 root["maker_gtd"]!["attempts"]![0]!["s1"]!["max_age_ms"] = 60_001L;
@@ -422,6 +553,25 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             expiresAtUtc: now.AddMinutes(1),
             executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
         var order = ConvertPairedOrderToLegacyV1(scenario.Order);
+
+        var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
+            order,
+            out var evidence,
+            out var failureDetail);
+
+        Assert.True(parsed, failureDetail);
+        Assert.NotNull(evidence);
+    }
+
+    [Fact]
+    public void EvidenceParser_PairedDirectHttpV2WithoutGapPolicy_RemainsAccepted()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var order = ConvertPairedOrderToDirectHttpV2(scenario.Order);
 
         var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
             order,
@@ -541,7 +691,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     }
 
     [Fact]
-    public async Task MarketDataUpdater_PairedSourceAfterReconnect_DoesNotInferFill()
+    public async Task MarketDataUpdater_PairedSourceAfterReconnect_SkipsFenceThenInfersFromNextEvent()
     {
         var now = DateTimeOffset.UtcNow;
         var scenario = CreateScenario(
@@ -550,28 +700,53 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
         var cache = CreateHealthyCache(scenario.Order, reconnectCount: 3);
         cache.InvalidateAssetSubscriptions("test-shard");
-        Assert.True(cache.ConfirmAssetSubscription("test-shard", scenario.Order.AssetId));
+        var fenceSourceTimestampUtc = now.AddMilliseconds(-21);
+        var fenceReceivedAtUtc = now.AddMilliseconds(-20);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            fenceReceivedAtUtc,
+            fenceSourceTimestampUtc,
+            "reconnect-fence"));
         var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
-        var sourceTimestampUtc = now.AddMilliseconds(-20);
-        var receivedAtUtc = now.AddMilliseconds(-10);
 
         await updater.ApplyUpdateAsync(
             LastTradeUpdate(
                 scenario.Order,
                 scenario.Order.Price,
-                sourceTimestampUtc,
-                receivedAtUtc),
-            receivedAtUtc);
+                fenceSourceTimestampUtc,
+                fenceReceivedAtUtc,
+                "reconnect-fence"),
+            fenceReceivedAtUtc);
 
         Assert.Empty(scenario.Repository.PaperFills);
         Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
+
+        var sourceTimestampUtc = now.AddMilliseconds(-11);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                sourceTimestampUtc,
+                receivedAtUtc,
+                "post-reconnect-trigger"),
+            receivedAtUtc);
+
+        var fill = Assert.Single(scenario.Repository.PaperFills);
+        Assert.Contains(
+            PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+            fill.Evidence,
+            StringComparison.Ordinal);
+        Assert.Contains("\"no_backfill\":true", fill.Evidence, StringComparison.Ordinal);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
         Assert.Equal(
-            StrategyMarketPaperRunStatuses.Resting,
+            StrategyMarketPaperRunStatuses.Entered,
             Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
     }
 
     [Fact]
-    public async Task MarketDataUpdater_PairedSourceAfterRecoveredStaleGap_DoesNotInferFill()
+    public async Task MarketDataUpdater_PairedSourceAfterRecoveredStaleGap_InfersFromLaterEvent()
     {
         var now = DateTimeOffset.UtcNow;
         var scenario = CreateScenario(
@@ -590,9 +765,15 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         {
             UpdatedAtUtc = acceptedStatus.UpdatedAtUtc.AddMilliseconds(2)
         });
-        Assert.True(cache.ConfirmAssetSubscription("test-shard", scenario.Order.AssetId));
+        var fenceReceivedAtUtc = now.AddMilliseconds(-20);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            fenceReceivedAtUtc,
+            fenceReceivedAtUtc.AddMilliseconds(-1),
+            "stale-gap-fence"));
         var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
-        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var sourceTimestampUtc = now.AddMilliseconds(-11);
         var receivedAtUtc = now.AddMilliseconds(-10);
 
         await updater.ApplyUpdateAsync(
@@ -600,12 +781,13 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 scenario.Order,
                 scenario.Order.Price,
                 sourceTimestampUtc,
-                receivedAtUtc),
+                receivedAtUtc,
+                "post-stale-gap-trigger"),
             receivedAtUtc);
 
         Assert.Equal(1, cache.GetConfirmedAssetSubscription(scenario.Order.AssetId).Generation);
-        Assert.Empty(scenario.Repository.PaperFills);
-        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
     }
 
     [Fact]
@@ -643,7 +825,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     }
 
     [Fact]
-    public async Task MarketDataUpdater_PairedSourceAfterConfirmedSubscriptionGenerationChange_DoesNotInferFill()
+    public async Task MarketDataUpdater_PairedSource_QueuedPreFenceEventRemainsIneligibleAfterRecovery()
     {
         var now = DateTimeOffset.UtcNow;
         var scenario = CreateScenario(
@@ -652,51 +834,219 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
         var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
         cache.InvalidateAssetSubscriptions("test-shard");
-        Assert.True(cache.ConfirmAssetSubscription("test-shard", scenario.Order.AssetId));
+        var fenceReceivedAtUtc = now.AddMilliseconds(-10);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            fenceReceivedAtUtc,
+            fenceReceivedAtUtc.AddMilliseconds(-1),
+            "new-segment-fence"));
         var currentSubscription = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
         Assert.True(currentSubscription.ConfirmedLive);
         Assert.Equal(1, currentSubscription.Generation);
         var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
-        var sourceTimestampUtc = now.AddMilliseconds(-20);
-        var receivedAtUtc = now.AddMilliseconds(-10);
+        var sourceTimestampUtc = now.AddMilliseconds(-21);
+        var receivedAtUtc = now.AddMilliseconds(-20);
 
         await updater.ApplyUpdateAsync(
             LastTradeUpdate(
                 scenario.Order,
                 scenario.Order.Price,
                 sourceTimestampUtc,
-                receivedAtUtc),
+                receivedAtUtc,
+                "queued-old-event"),
             receivedAtUtc);
 
         Assert.Empty(scenario.Repository.PaperFills);
         Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
     }
 
-    [Fact]
-    public async Task MarketDataUpdater_PairedSourceAfterServiceRestart_DoesNotInferFill()
+    [Theory]
+    [InlineData("v1")]
+    [InlineData("v2")]
+    [InlineData("v3")]
+    public async Task MarketDataUpdater_PairedSourceAfterServiceRestart_ResumesFromLaterEvent(
+        string contractVersion)
     {
         var now = DateTimeOffset.UtcNow;
         var scenario = CreateScenario(
             now,
             expiresAtUtc: now.AddMinutes(1),
             executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var order = contractVersion switch
+        {
+            "v1" => ConvertPairedOrderToLegacyV1(scenario.Order),
+            "v2" => ConvertPairedOrderToDirectHttpV2(scenario.Order),
+            "v3" => scenario.Order,
+            _ => throw new InvalidOperationException($"Unknown paired contract {contractVersion}.")
+        };
+        scenario.Repository.PaperOrders[0] = order;
         var cache = CreateHealthyCache(
-            scenario.Order,
+            order,
             reconnectCount: 2,
             confirmedSubscriptionSessionId: "restarted-market-data-session");
-        var currentSubscription = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
+        cache.InvalidateAssetSubscriptions("test-shard");
+        var fenceReceivedAtUtc = now.AddMilliseconds(-20);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            order.AssetId,
+            fenceReceivedAtUtc,
+            fenceReceivedAtUtc.AddMilliseconds(-1),
+            "restart-fence"));
+        var currentSubscription = cache.GetConfirmedAssetSubscription(order.AssetId);
         Assert.True(currentSubscription.ConfirmedLive);
-        Assert.Equal(0, currentSubscription.Generation);
+        Assert.Equal(1, currentSubscription.Generation);
         var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
-        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var sourceTimestampUtc = now.AddMilliseconds(-11);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                order,
+                order.Price,
+                sourceTimestampUtc,
+                receivedAtUtc,
+                "post-restart-trigger"),
+            receivedAtUtc);
+
+        Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSource_EventStampedWithPriorSegmentStaysIneligible()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        cache.InvalidateAssetSubscriptions("test-shard");
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            now.AddMilliseconds(-30),
+            now.AddMilliseconds(-31),
+            "prior-segment-fence"));
+        var priorSegment = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
+        cache.InvalidateAssetSubscriptions("test-shard");
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            now.AddMilliseconds(-20),
+            now.AddMilliseconds(-21),
+            "current-segment-fence"));
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
         var receivedAtUtc = now.AddMilliseconds(-10);
 
         await updater.ApplyUpdateAsync(
             LastTradeUpdate(
                 scenario.Order,
                 scenario.Order.Price,
-                sourceTimestampUtc,
-                receivedAtUtc),
+                now.AddMilliseconds(-11),
+                receivedAtUtc,
+                "queued-prior-segment-event"),
+            receivedAtUtc,
+            eligiblePaperOrderIds: null,
+            confirmedAssetSubscription: priorSegment,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSource_AssetReassignmentSkipsFenceThenUsesLaterEvent()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        var oldSegment = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
+        cache.AssignAssetSubscriptions("replacement-shard", [scenario.Order.AssetId]);
+        var fenceReceivedAtUtc = now.AddMilliseconds(-20);
+        var fenceSourceUtc = fenceReceivedAtUtc.AddMilliseconds(-1);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "replacement-shard",
+            scenario.Order.AssetId,
+            fenceReceivedAtUtc,
+            fenceSourceUtc,
+            "replacement-fence"));
+        var replacementSegment = cache.GetConfirmedAssetSubscription(scenario.Order.AssetId);
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                now.AddMilliseconds(-11),
+                now.AddMilliseconds(-10),
+                "old-component-event"),
+            now.AddMilliseconds(-10),
+            eligiblePaperOrderIds: null,
+            confirmedAssetSubscription: oldSegment,
+            cancellationToken: CancellationToken.None);
+        Assert.Empty(scenario.Repository.PaperFills);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                fenceSourceUtc,
+                fenceReceivedAtUtc,
+                "replacement-fence"),
+            fenceReceivedAtUtc,
+            eligiblePaperOrderIds: null,
+            confirmedAssetSubscription: replacementSegment,
+            cancellationToken: CancellationToken.None);
+        Assert.Empty(scenario.Repository.PaperFills);
+
+        var laterReceivedAtUtc = now.AddMilliseconds(-5);
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                laterReceivedAtUtc.AddMilliseconds(-1),
+                laterReceivedAtUtc,
+                "replacement-later-event"),
+            laterReceivedAtUtc,
+            eligiblePaperOrderIds: null,
+            confirmedAssetSubscription: replacementSegment,
+            cancellationToken: CancellationToken.None);
+
+        Assert.Single(scenario.Repository.PaperFills);
+    }
+
+    [Fact]
+    public async Task MarketDataUpdater_PairedSource_BacklogSourceBeforeLocalFenceStaysIneligible()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        cache.InvalidateAssetSubscriptions("test-shard");
+        var fenceReceivedAtUtc = now.AddMilliseconds(-10);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            fenceReceivedAtUtc,
+            now.AddMilliseconds(-30),
+            "backlog-fence"));
+        var updater = CreateUpdater(scenario.Repository, marketDataCache: cache);
+        var receivedAtUtc = now.AddMilliseconds(-5);
+
+        await updater.ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                now.AddMilliseconds(-20),
+                receivedAtUtc,
+                "backlog-after-recovery"),
             receivedAtUtc);
 
         Assert.Empty(scenario.Repository.PaperFills);
@@ -836,6 +1186,193 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skippedRun.Status);
         Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
         Assert.Contains("continuous_market_websocket_evidence", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_PairedRecoveredSegment_ExpiresUnfilledWithGapAudit()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddSeconds(-1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(
+            scenario.Order,
+            reconnectCount: 3,
+            confirmedSubscriptionSessionId: "restarted-market-data-session");
+        var processor = CreateProcessor(scenario.Repository, cache, new CountingClobClient());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersExpired);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
+        Assert.Contains(
+            "recovered_confirmed_asset_observation_segment_at_expiry",
+            skippedRun.SkipDiagnosticsJson,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+            skippedRun.SkipDiagnosticsJson,
+            StringComparison.Ordinal);
+        Assert.Contains("\"no_backfill\":true", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_PairedDeliveryFailureRecoveredBeforeExpiry_ExpiresUnfilled()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddSeconds(-1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(
+            scenario.Order,
+            reconnectCount: 3,
+            confirmedSubscriptionSessionId: "restarted-market-data-session");
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        handoff.TrackMakerGtdPaperOrder(scenario.Order.Id, scenario.Order.ExecutionSource!);
+        var failureAtUtc = now.AddSeconds(-10);
+        handoff.RecordMarketDataFailure(
+            scenario.Order.AssetId,
+            scenario.Order.ConditionId,
+            failureAtUtc,
+            new HashSet<Guid> { scenario.Order.Id },
+            MakerGtdPaperExecutionContract.MarketDataApplyFailureCode);
+        cache.InvalidateAssetSubscriptions("test-shard");
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            failureAtUtc.AddSeconds(1),
+            failureAtUtc.AddMilliseconds(999),
+            "recovered-before-expiry"));
+        var processor = CreateProcessor(
+            scenario.Repository,
+            cache,
+            new CountingClobClient(),
+            makerGtdPaperPlacementHandoff: handoff);
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersExpired);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
+        Assert.Contains(
+            "recovered_confirmed_asset_observation_segment_at_expiry",
+            skippedRun.SkipDiagnosticsJson,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_PairedRestartWithoutConfirmedRecovery_ExpiresAsEvidenceUnavailable()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddSeconds(-1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(
+            scenario.Order,
+            reconnectCount: 3,
+            confirmedSubscriptionSessionId: "restarted-market-data-session");
+        cache.InvalidateAssetSubscriptions("test-shard");
+        var processor = CreateProcessor(scenario.Repository, cache, new CountingClobClient());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersExpired);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, skippedRun.SkipReason);
+        Assert.Contains("asset_not_currently_confirmed_live", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_PairedMalformedOrderEvidence_ExpiresAsEvidenceUnavailable()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddSeconds(-1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        scenario.Repository.PaperOrders[0] = scenario.Order with { RawDecisionJson = "{}" };
+        var cache = CreateHealthyCache(
+            scenario.Order,
+            reconnectCount: 3,
+            confirmedSubscriptionSessionId: "restarted-market-data-session");
+        var processor = CreateProcessor(scenario.Repository, cache, new CountingClobClient());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersExpired);
+        Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, skippedRun.SkipReason);
+        Assert.Contains("accepted_subscription\":null", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_PairedRecoveryConfirmedAfterExpiry_ExpiresAsEvidenceUnavailable()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddSeconds(-1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(
+            scenario.Order,
+            reconnectCount: 3,
+            confirmedSubscriptionSessionId: "restarted-market-data-session");
+        cache.InvalidateAssetSubscriptions("test-shard");
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            now,
+            scenario.Order.ExpiresAtUtc.AddMilliseconds(-1),
+            "post-expiry-fence"));
+        var processor = CreateProcessor(scenario.Repository, cache, new CountingClobClient());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersExpired);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, skippedRun.SkipReason);
+        Assert.Contains(
+            "observation_segment_confirmed_after_expiry",
+            skippedRun.SkipDiagnosticsJson,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_PairedRecoveryFenceWithPostExpirySource_ExpiresAsEvidenceUnavailable()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddSeconds(-1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var cache = CreateHealthyCache(
+            scenario.Order,
+            reconnectCount: 3,
+            confirmedSubscriptionSessionId: "restarted-market-data-session");
+        cache.InvalidateAssetSubscriptions("test-shard");
+        var preExpiryReceiptUtc = scenario.Order.ExpiresAtUtc.AddMilliseconds(-10);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            scenario.Order.AssetId,
+            preExpiryReceiptUtc,
+            scenario.Order.ExpiresAtUtc.AddMilliseconds(10),
+            "future-source-fence"));
+        var processor = CreateProcessor(scenario.Repository, cache, new CountingClobClient());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersExpired);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, skippedRun.SkipReason);
+        Assert.Contains(
+            "current_observation_segment_timestamp_invalid",
+            skippedRun.SkipDiagnosticsJson,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1157,6 +1694,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         var root = JsonNode.Parse(Assert.IsType<string>(order.RawDecisionJson))!.AsObject();
         root["maker_gtd"]!["contract_version"] =
             PairedMakerGtdPaperExecutionContract.LegacyContractVersion;
+        root["maker_gtd"]!.AsObject().Remove("gap_recovery_policy_version");
+        root["maker_gtd"]!.AsObject().Remove("observation_gaps_backfilled");
         var acceptedAttempt = root["maker_gtd"]!["attempts"]![0]!;
         foreach (var stage in new[] { "s0", "s1" })
         {
@@ -1196,6 +1735,17 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 throw new ArgumentOutOfRangeException(nameof(legacyS1Shape), legacyS1Shape, null);
         }
 
+        return order with { RawDecisionJson = root.ToJsonString() };
+    }
+
+    private static PaperOrder ConvertPairedOrderToDirectHttpV2(PaperOrder order)
+    {
+        var root = JsonNode.Parse(Assert.IsType<string>(order.RawDecisionJson))!.AsObject();
+        var makerGtd = root["maker_gtd"]!.AsObject();
+        makerGtd["contract_version"] =
+            PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion;
+        makerGtd.Remove("gap_recovery_policy_version");
+        makerGtd.Remove("observation_gaps_backfilled");
         return order with { RawDecisionJson = root.ToJsonString() };
     }
 
@@ -1428,6 +1978,9 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 maker_gtd = new
                 {
                     contract_version = PairedMakerGtdPaperExecutionContract.ContractVersion,
+                    gap_recovery_policy_version =
+                        PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+                    observation_gaps_backfilled = false,
                     execution_source = PairedMakerGtdPaperExecutionContract.ExecutionSource,
                     strategy_run_id = Guid.NewGuid().ToString("D"),
                     paper_only = true,
@@ -1626,7 +2179,13 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             confirmedSubscriptionSessionId);
         cache.ReplaceSubscribedAssets([order.AssetId]);
         cache.AssignAssetSubscriptions("test-shard", [order.AssetId]);
-        Assert.True(cache.ConfirmAssetSubscription("test-shard", order.AssetId));
+        var confirmedAtUtc = order.CreatedAtUtc.AddMilliseconds(-10);
+        Assert.True(cache.ConfirmAssetSubscription(
+            "test-shard",
+            order.AssetId,
+            confirmedAtUtc,
+            confirmedAtUtc.AddMilliseconds(-1),
+            "subscription-confirmation-frame"));
         cache.UpdateStatus(new MarketDataStatusSnapshot(
             "PolymarketMarketWebSocket",
             MarketDataConnectionState.Connected,
@@ -1646,7 +2205,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         PaperOrder order,
         decimal price,
         DateTimeOffset sourceTimestampUtc,
-        DateTimeOffset receivedAtUtc)
+        DateTimeOffset receivedAtUtc,
+        string eventFingerprint = "trade-event-fingerprint-1")
     {
         return new MarketDataUpdate(
             MarketDataEventType.LastTradePrice,
@@ -1664,8 +2224,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             SourceTimestampUtc: sourceTimestampUtc,
             TimestampQuality: MarketDataTimestampQuality.VenueProvided,
             ReceivedAtUtc: receivedAtUtc,
-            SourceEventId: "trade-event-1",
-            EventFingerprint: "trade-event-fingerprint-1");
+            SourceEventId: eventFingerprint,
+            EventFingerprint: eventFingerprint);
     }
 
     private sealed record MakerScenario(

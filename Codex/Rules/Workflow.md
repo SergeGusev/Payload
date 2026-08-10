@@ -102,15 +102,16 @@ the closed user-approved exception defined below:
   timing, source `crypto_paired_maker_gtd_first_accepting_paper`, Up cap `0.50`,
   Down cap `0.49`, one frozen equal-share quantity per pair, independent S0/S1
   acceptance, no atomic rollback, and expiry one minute before market end. Their
-  new placements use `paired_maker_gtd_paper_v2`: every direct HTTP S0/S1 read
+  new placements use `paired_maker_gtd_paper_v3`: every direct HTTP S0/S1 read
   must carry a bounded ordered local request/client-receipt/response/evaluation
   bracket. The authoritative venue snapshot timestamp remains mandatory audit
   evidence but may be old for a freshly fetched unchanged quiet book. Exact-family
-  v1 orders already persisted under the former venue-source-age rule remain
-  grandfathered for lifecycle completion. Their
-  TouchNoDepth fills additionally require the same market-data service session and
-  uninterrupted owning-shard subscription component/generation; restart,
-  owning-shard reconnect, or asset reassignment fails closed.
+  v1/v2 orders remain grandfathered for lifecycle completion. Under
+  `paired_touch_no_depth_gap_recovery_v1`, a restart, reconnect, reassignment, or
+  delivery failure creates a new exact-asset fence: the confirming frame cannot
+  fill, only a later authoritative event in that unchanged segment can fill, and
+  missing/cache/REST/pre-fence events are never backfilled. Terminal evidence must
+  persist the acceptance, fence, trigger, policy version, and `no_backfill=true`.
   They use the same mandatory label; maker rebates are excluded from Paper PnL;
   Live is disabled, and no predicate mismatch inherits this exception;
 - add or update parity tests and verify that intent, market evidence, fills, and

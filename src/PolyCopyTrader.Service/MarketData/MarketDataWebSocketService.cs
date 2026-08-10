@@ -274,6 +274,7 @@ public sealed class MarketDataWebSocketService(
         }
         catch (JsonException ex)
         {
+            marketDataCache.InvalidateAssetSubscriptions(component);
             makerGtdHandoff.RecordMarketDataFailure(
                 assetId: null,
                 conditionId: null,
@@ -314,6 +315,7 @@ public sealed class MarketDataWebSocketService(
             cancellationToken.ThrowIfCancellationRequested();
             IAsyncDisposable? marketDataAdmission = null;
             IReadOnlySet<Guid>? eligiblePaperOrderIds = null;
+            ConfirmedAssetSubscriptionSnapshot? confirmedAssetSubscription = null;
             try
             {
                 if (!string.IsNullOrWhiteSpace(update.AssetId))
@@ -321,7 +323,10 @@ public sealed class MarketDataWebSocketService(
                     marketDataAdmission = await makerGtdHandoff.EnterMarketDataAdmissionAsync(
                         update.AssetId,
                         cancellationToken);
-                    TryConfirmLiveAssetSubscription(component, update.AssetId);
+                    confirmedAssetSubscription = TryConfirmLiveAssetSubscription(
+                        component,
+                        update,
+                        receivedAtUtc);
                 }
 
                 ActiveMarketAssetSnapshot? activeMarketSnapshot = null;
@@ -356,7 +361,8 @@ public sealed class MarketDataWebSocketService(
                     update,
                     activeMarketSnapshot,
                     receivedAtUtc,
-                    eligiblePaperOrderIds);
+                    eligiblePaperOrderIds,
+                    confirmedAssetSubscription);
                 switch (outcome)
                 {
                     case MarketDataSideEffectEnqueueOutcome.Enqueued:
@@ -367,6 +373,12 @@ public sealed class MarketDataWebSocketService(
                         break;
                     default:
                         failedUpdates++;
+                        if (confirmedAssetSubscription is not null)
+                        {
+                            marketDataCache.TryInvalidateAssetSubscription(
+                                confirmedAssetSubscription);
+                        }
+
                         RecordMakerGtdMarketDataFailure(
                             update,
                             receivedAtUtc,
@@ -388,6 +400,12 @@ public sealed class MarketDataWebSocketService(
             catch (Exception ex)
             {
                 failedUpdates++;
+                if (confirmedAssetSubscription is not null)
+                {
+                    marketDataCache.TryInvalidateAssetSubscription(
+                        confirmedAssetSubscription);
+                }
+
                 RecordMakerGtdMarketDataFailure(
                     update,
                     receivedAtUtc,
@@ -556,13 +574,47 @@ public sealed class MarketDataWebSocketService(
         }
     }
 
-    private bool TryConfirmLiveAssetSubscription(string component, string assetId)
+    private ConfirmedAssetSubscriptionSnapshot? TryConfirmLiveAssetSubscription(
+        string component,
+        MarketDataUpdate update,
+        DateTimeOffset receivedAtUtc)
     {
+        if (string.IsNullOrWhiteSpace(update.AssetId) ||
+            !update.HasAuthoritativeSourceTimestamp ||
+            update.SourceTimestampUtc is not { } sourceTimestampUtc ||
+            string.IsNullOrWhiteSpace(update.EventFingerprint))
+        {
+            return null;
+        }
+
+        if (sourceTimestampUtc > receivedAtUtc)
+        {
+            var existingSubscription = marketDataCache.GetConfirmedAssetSubscription(
+                update.AssetId);
+            if (existingSubscription.ConfirmedLive &&
+                string.Equals(existingSubscription.Component, component, StringComparison.Ordinal))
+            {
+                marketDataCache.TryInvalidateAssetSubscription(existingSubscription);
+            }
+
+            return null;
+        }
+
         lock (statusGate)
         {
-            return shardStatuses.TryGetValue(component, out var status) &&
-                IsHealthyShardStatus(status) &&
-                marketDataCache.ConfirmAssetSubscription(component, assetId);
+            if (!shardStatuses.TryGetValue(component, out var status) ||
+                !IsHealthyShardStatus(status) ||
+                !marketDataCache.ConfirmAssetSubscription(
+                    component,
+                    update.AssetId,
+                    receivedAtUtc,
+                    sourceTimestampUtc,
+                    update.EventFingerprint))
+            {
+                return null;
+            }
+
+            return marketDataCache.GetConfirmedAssetSubscription(update.AssetId);
         }
     }
 

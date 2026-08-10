@@ -301,8 +301,12 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
         Assert.Equal("paired_maker_gtd_s0_book_not_current", firstAttempt.GetProperty("reason_code").GetString());
     }
 
-    [Fact]
-    public async Task DueRecovery_AfterFirstLegPersistenceAndMissingOpenPeer_ReusesFrozenCommonShares()
+    [Theory]
+    [InlineData(PairedMakerGtdPaperExecutionContract.LegacyContractVersion)]
+    [InlineData(PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion)]
+    [InlineData(PairedMakerGtdPaperExecutionContract.CurrentContractVersion)]
+    public async Task DueRecovery_AfterFirstLegPersistenceAndMissingOpenPeer_ReusesFrozenCommonShares(
+        string persistedContinuationVersion)
     {
         var fixture = CreateFixture(
             downWouldCrossOnS1: false,
@@ -328,6 +332,25 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
                 pair.GetProperty("common_size_frozen_at_utc").GetString());
             Assert.False(string.IsNullOrWhiteSpace(frozenAtUtc));
         }
+
+        var continuationRoot = JsonNode.Parse(
+            Assert.IsType<string>(downRun.SkipDiagnosticsJson))!.AsObject();
+        var continuationMakerGtd = continuationRoot["maker_gtd"]!.AsObject();
+        continuationMakerGtd["contract_version"] = persistedContinuationVersion;
+        if (!string.Equals(
+                persistedContinuationVersion,
+                PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+                StringComparison.Ordinal))
+        {
+            continuationMakerGtd.Remove("gap_recovery_policy_version");
+            continuationMakerGtd.Remove("observation_gaps_backfilled");
+        }
+
+        downRun = downRun with { SkipDiagnosticsJson = continuationRoot.ToJsonString() };
+        var downRunIndex = fixture.Repository.StrategyMarketPaperRuns.FindIndex(run =>
+            run.Id == downRun.Id);
+        Assert.True(downRunIndex >= 0);
+        fixture.Repository.StrategyMarketPaperRuns[downRunIndex] = downRun;
 
         fixture.Repository.PolymarketGammaMarkets.Add(fixture.Candidate.Market);
         fixture.Repository.PaperOrders.Clear();
@@ -367,6 +390,12 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
                 recoveredDecision.RootElement
                     .GetProperty("pair")
                     .GetProperty("common_size_frozen_at_utc")
+                    .GetString());
+            Assert.Equal(
+                PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+                recoveredDecision.RootElement
+                    .GetProperty("maker_gtd")
+                    .GetProperty("contract_version")
                     .GetString());
         }
         Assert.Equal(
@@ -586,6 +615,57 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
                 variants[1],
                 fixture.NowUtc,
                 attemptsCompleted: 1)));
+
+        var result = await fixture.Processor.ProcessDueAsync();
+
+        Assert.Equal(1, result.MarketsProcessed);
+        Assert.Equal(0, result.LegsAccepted);
+        Assert.Equal(0, fixture.ClobClient.TotalOrderBookCalls);
+        Assert.Empty(fixture.Repository.PaperOrders);
+        Assert.All(fixture.Repository.StrategyMarketPaperRuns, run =>
+            Assert.Equal(StrategyMarketPaperRunStatuses.Observed, run.Status));
+    }
+
+    [Theory]
+    [InlineData("missing_gap_recovery_policy")]
+    [InlineData("observation_gaps_backfilled")]
+    [InlineData("v2_with_v3_policy")]
+    public async Task DueRecovery_LifecycleContractMutationFailsClosedWithoutClobRead(
+        string mutation)
+    {
+        var fixture = CreateFixture(downWouldCrossOnS1: false);
+        fixture.Repository.PolymarketGammaMarkets.Add(fixture.Candidate.Market);
+        foreach (var variant in StrategyIds.PairedMakerGtdFirstAcceptingVariants.Where(variant =>
+                     variant.ReferenceAssetSymbol == "BTC"))
+        {
+            var continuation = JsonNode.Parse(CreateContinuationEvidence(
+                fixture.Candidate.Market,
+                variant,
+                fixture.NowUtc,
+                attemptsCompleted: 1))!.AsObject();
+            var makerGtd = continuation["maker_gtd"]!.AsObject();
+            switch (mutation)
+            {
+                case "missing_gap_recovery_policy":
+                    makerGtd.Remove("gap_recovery_policy_version");
+                    break;
+                case "observation_gaps_backfilled":
+                    makerGtd["observation_gaps_backfilled"] = true;
+                    break;
+                case "v2_with_v3_policy":
+                    makerGtd["contract_version"] =
+                        PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion;
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unknown mutation {mutation}.");
+            }
+
+            fixture.Repository.StrategyMarketPaperRuns.Add(CreateObservedRun(
+                fixture.Candidate.Market,
+                variant,
+                fixture.NowUtc,
+                continuation.ToJsonString()));
+        }
 
         var result = await fixture.Processor.ProcessDueAsync();
 
@@ -1112,6 +1192,9 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
             {
                 ["execution_source"] = PairedMakerGtdPaperExecutionContract.ExecutionSource,
                 ["contract_version"] = PairedMakerGtdPaperExecutionContract.ContractVersion,
+                ["gap_recovery_policy_version"] =
+                    PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+                ["observation_gaps_backfilled"] = false,
                 ["terminal_outcome"] = "observed",
                 ["terminal_reason"] = null,
                 ["attempts_completed"] = attemptsCompleted,

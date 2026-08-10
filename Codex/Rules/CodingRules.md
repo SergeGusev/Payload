@@ -51,14 +51,15 @@ contains the full safety and project rules.
   accepting timing, source `crypto_paired_maker_gtd_first_accepting_paper`,
   `PaperOnly=true`, Up cap `0.50`, Down cap `0.49`, equal frozen shares,
   independent S0/S1 acceptance, no pair atomicity/rollback, and expiry at market
-  end minus one minute. New `paired_maker_gtd_paper_v2` placements prove direct
+  end minus one minute. New `paired_maker_gtd_paper_v3` placements prove direct
   HTTP freshness with a bounded ordered request/receipt/response/evaluation
   bracket; the authoritative venue timestamp remains audit evidence and may be
-  old for a quiet unchanged book. Exact v1 orders remain grandfathered for their
-  lifecycle. Its optimistic TouchNoDepth fills require the same
-  market-data service session and uninterrupted owning-shard subscription
-  component/generation; restart, owning-shard reconnect, or asset reassignment
-  fails closed. They carry the same mandatory label and may enter ordinary
+  old for a quiet unchanged book. Exact v1/v2 orders remain grandfathered for their
+  lifecycle. Under `paired_touch_no_depth_gap_recovery_v1`, restart, reconnect,
+  reassignment, or delivery failure pauses inference and installs a new exact-asset
+  fence; the confirming frame cannot fill, only a later authoritative event in the
+  unchanged segment can fill, and gap/cache/REST/pre-fence events are not backfilled.
+  They carry the same mandatory label and may enter ordinary
   Paper metrics. Maker rebates are never inferred or included in Paper PnL; Live
   remains disabled. No predicate mismatch inherits this exception.
 - Do not silently ignore API errors; persist/log explicit failure reasons.
