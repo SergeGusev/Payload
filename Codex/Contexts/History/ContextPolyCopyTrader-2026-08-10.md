@@ -24,3 +24,10 @@ Request:
 
 Result:
 Implemented restart-safe gap recovery for the exact six group-8224 paired Maker-GTD Paper legs. Restart, owning-shard reconnect, asset reassignment, or delivery failure now creates a new immutable observation fence: the first authoritative frame after recovery is deliberately ignored for fill inference, and only a later authoritative event in the same unchanged segment may fill. Missed, cached, REST, pre-fence, and fence-frame observations are never backfilled. Existing exact-family v1/v2 orders and continuations remain eligible under this policy; new placements use v3. Recovery before expiry permits ordinary expired-unfilled completion, while absent or invalid recovery remains evidence-unavailable. Expanded changed-path tests passed 173/173, supporting tests passed 68/68, and the solution built with zero errors and one pre-existing nullable test warning. No deployment, production/service/database action, Live order, venue Paper order, or cancellation was performed.
+
+## 2026-08-10T08:13:34.6585597Z
+Request:
+Выложил, проверяй
+
+Result:
+Completed a strict read-only deployment audit of the exact six group-8224 paired Maker-GTD strategies on `192.168.0.101/polycopytrader`. The running service uses exact commit `c78eaee6110bbf70e60c4cad6251ef52c06d4ee8`, heartbeat advanced, all six rows remained Paper-only with zero Live orders, and relevant API errors were zero. At fixed cutoff `2026-08-10T08:11:37.550215Z`, all 251 carried Pending orders remained present (78 v1, 173 v2), while 18 new v3 orders formed nine correct equal-share `0.50/0.49` pairs with zero audited contract/linkage mismatch. A real critical WebSocket reconnect occurred and new v3 acceptance continued on the next generation. No post-start fill or expiry occurred, so actual old-order post-restart fill and persisted fence/no-backfill terminal evidence remain runtime-unobserved rather than disproved. All database transactions were read-only and rolled back. During diagnostics the DB password was exposed to an internal tool log; no system was changed, but the credential should be rotated.

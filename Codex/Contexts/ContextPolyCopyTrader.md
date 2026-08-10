@@ -1,3 +1,17 @@
+## Active Update 2026-08-10 Paired Gap-Recovery Post-Deploy Verification
+Goal: Verify the deployed exact group-`8224` restart-safe gap-recovery implementation without changing production, service, configuration, or trading state.
+Status: Completed
+Done:
+- Verified the primary `192.168.0.101/polycopytrader` in server-enforced `REPEATABLE READ / READ ONLY / UTC`. The deployed service runs exact commit `c78eaee6110bbf70e60c4cad6251ef52c06d4ee8`, started at `2026-08-10T08:00:01.536217Z`, remained `Running` with empty `last_error`, and advanced its heartbeat independently by `120.054851s`.
+- Verified all six exact strategy rows are enabled, unpaused, `live_stakes=false`, and have zero Live orders. Exact paired discovery/processor API errors were zero in the audited post-start window.
+- At fixed cutoff `2026-08-10T08:11:37.550215Z`, all `251` carried active orders remained present and Pending/Resting: `78` v1 and `173` v2, all with future effective expiry. No duplicate/replacement or mass terminal transition occurred at deployment.
+- Verified `18` post-start v3 orders/runs, all Pending/Resting and grouped into nine exact equal-share pairs. Every contract/policy/source/label/formula/cap/PostOnly/GTD/identity/S0-S1 chronology/run-link mismatch counter was zero; each pair used `6.13` shares, Up `0.50`, and Down `0.49`.
+- Observed a real critical WebSocket disconnect/reconnect at `08:05:14.203..08:05:16.490Z`. Eight v3 orders were accepted on generation `0`, four on recovered generation `1`, and six more v3 orders appeared in the later prospective check; the critical channel was Connected and fresh afterward.
+- Kept the key runtime limitation explicit: the audited window contained zero post-start fills and zero expiries for this family. Therefore actual v1/v2 post-restart fill resumption, fence-frame rejection, later-trigger fill, and persisted no-backfill terminal evidence remain unobserved/Unknown in production; no runtime failure was observed.
+Next: Rotate the production database credential exposed to an internal Codex tool log during this read-only audit, then continue prospective read-only observation until the first post-restart v1/v2 fill or expiry supplies terminal gap-recovery evidence.
+Notes: Three independent read-only audits reconciled the deployed build, heartbeat, exact IDs, raw order/run/fill counts, pair invariants, and runtime reconnect. All database transactions were read-only and rolled back; no service/configuration action, database mutation, Live/Paper venue order, cancellation, or deployment was performed. The password was not printed in the user chat, but it appeared in an internal tool log and should be treated as exposed.
+Blockers: None for deployment health; terminal recovery behavior remains runtime-unobserved pending a naturally eligible fill or expiry.
+
 ## Active Update 2026-08-10 Paired Restart-Safe Gap Recovery
 Goal: Keep the exact group-`8224` paired Maker-GTD Paper orders eligible for future TouchNoDepth inference after service restart, owning-shard reconnect, asset reassignment, or delivery failure without backfilling observations missed during the gap.
 Status: Completed
