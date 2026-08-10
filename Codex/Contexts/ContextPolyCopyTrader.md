@@ -1,3 +1,18 @@
+## Active Update 2026-08-10 BTC Paired Maker-GTD Strategy Logic
+Goal: Explain the exact current implementation of the BTC five-minute Up/Down Paired Maker GTD First Accepting pair and correct the prior minimum-size premise where it does not match this strategy.
+Status: Completed
+Done:
+- Resolved the exact mutually linked Paper-only catalog legs: Up `b7c50005-0000-4000-8224-000000000101` capped at `0.50`, and Down `b7c50005-0000-4000-8224-000000000102` capped at `0.49`. They are two legs of one equal-share pair, not independent directional predictors.
+- Traced discovery and placement end to end. The worker polls exact BTC/ETH/SOL five-minute slugs every five seconds in the configured `23..25` hour lead band and records the first service-observed Gamma response with `acceptingOrders=true`; this is not the venue's exact transition timestamp. Both BTC legs must initially be enabled/unpaused in Paper runtime.
+- Verified S0 pricing as `floor_to_tick(min(bestAsk-tickSize, cap))`. Each S0 sizing result uses `ceil(minOrderSize * limitPrice * 1.10 * PaperStakeAmount)` dollars and then rounds shares up to `0.01`; the pair freezes the larger result as one common share quantity before either leg is accepted.
+- Corrected the earlier mapping from venue minimum to implemented strategy sizing. At `minOrderSize=5`, caps `0.50/0.49`, and default/seed `PaperStakeAmount=1`, Up first sizes to `6.00` shares, Down to `6.13`, and both legs freeze at `6.13` shares. Their notionals are `$3.065` and `$3.0037`, so the pair costs `$6.0687` and a fully filled pair locks `$0.0613` Gross under ordinary binary settlement. The prior `$431.95` per-asset result remains valid only for the separate hypothetical of exactly five shares; it is not the exact default sizing model of this strategy.
+- Verified independent per-leg S1 PostOnly acceptance, up to ten attempts, per-leg persistence, and no atomicity, rollback, cancellation, or resizing when the peer fails. An accepted leg starts Pending/Resting; acceptance of both legs does not guarantee either fill.
+- Verified optimistic Paper fill inference: an authoritative post-acceptance and pre-expiry exact-token last trade or best ask at/below the limit causes a full fill at the frozen limit. Queue position, depth, event size, and aggressor are ignored. A feed gap creates a recovery fence; the first frame cannot fill and missed events are never backfilled.
+- Verified Paper effective expiry at market end minus one minute, wire-GTD expiry at market end, ordinary settlement at `1/0`, mandatory optimistic-model label, exclusion of maker rebates from Paper PnL, and disabled Live submission. Actual current runtime `enabled`/stake settings remain Unknown without a separate production-state query because schema seeding does not overwrite later runtime changes.
+Next: If requested, recalculate the 30-day hypothetical using `6.13` shares or query persisted Paper orders/fills for actual strategy PnL; do not use outcome counts alone as actual execution evidence.
+Notes: Read-only inspection covered the catalog, discovery worker, placement processor, immutable intent, PostOnly evaluator, TouchNoDepth updater, expiry/settlement path, parity contract, and focused tests. No build/test run was needed because no application source changed. No production query, order, database mutation, configuration change, service action, or Live submission occurred.
+Blockers: None.
+
 ## Active Update 2026-08-10 Minimum-Size Paired 5m PnL And Rebate Model
 Goal: Calculate hypothetical per-asset PnL and separate Maker rebate for fully filled minimum-size Up `0.50` and Down `0.49` orders over the verified rolling 30-day BTC/ETH/SOL outcome window.
 Status: Completed
