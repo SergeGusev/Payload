@@ -1,3 +1,17 @@
+## Active Update 2026-08-10 Paired Receipt-Freshness Post-Deploy Verification
+Goal: Verify the deployed group-`8224` paired Maker-GTD receipt-freshness fix and its first production lifecycle without changing production, service, configuration, or trading state.
+Status: Completed
+Done:
+- Verified the exact primary `192.168.0.101/polycopytrader` under server-enforced `REPEATABLE READ / READ ONLY / UTC`. The deployed service build is `69a249a86127f40e4277dc671a35964da613e9a0`, exactly matching `origin/master` and containing fix commit `cc24fc6e`; two independent heartbeats advanced by `60.013015s`, status remained `Running`, and `last_error` stayed empty.
+- At fixed cutoff `2026-08-10T05:43:07.807875Z`, the current service start was `2026-08-10T05:29:10.790987Z`. The exact six strategy rows were enabled, unpaused, `live_stakes=false`, and had zero Live orders all time.
+- Since that service start, the family produced `18` exact v2 runs/orders across three slots and nine conditions: `17 Resting` plus one `Entered`, with zero skips. The first independently audited two slots had `12/12` AcceptedResting attempts, six reciprocal equal-share pairs at `6.13` shares, Up `0.50`, Down `0.49`, and zero identity, chronology, formula, cap, sizing, linkage, or lifecycle mismatch.
+- Proved the quiet-book correction in runtime evidence: all first `24` S0/S1 stages used `freshness_basis=direct_http_response_receipt`; HTTP receipt age was `1..2ms` and request duration `62..90ms`, while authoritative venue source age was `5.606..78.014s`. Every source age exceeded the former `1500ms` gate, yet all attempts passed under the bounded local receipt contract.
+- Observed the first v2 TouchNoDepth lifecycle fill: ETH Up `6.13 @ 0.50` filled fully at `2026-08-10T05:40:38.091Z` after a `BestAsk=0.50` event; its equal-share Down peer remained `Resting @ 0.49`. No partial, off-limit, post-expiry, or duplicate fill was present.
+- Verified zero API errors for `PairedMakerGtdDayAheadDiscoveryWorker` and `PairedMakerGtdFirstAcceptingProcessor`. The service was not globally error-free: unrelated crypto reference-tick and copied-performance projection errors remained outside this exact family.
+Next: Continue normal prospective observation through v2 expiry/settlement; no rollback or code correction is indicated by this deployment audit.
+Notes: The detailed production snapshot was rolled back and no database DML/DDL, service/configuration action, deployment, Live/Paper venue order, or cancellation was performed. Exact pre-deploy v1 orders remain grandfathered; because this deployment restarted the service, their prior continuity session is intentionally fail-closed for later TouchNoDepth fills. Every reported fill remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: None.
+
 ## Active Update 2026-08-10 Targeted ETH 3 bps Full Fee Repair
 Goal: Recalculate complete fee-aware Net PnL for `ETH Up or Down 5m 3 bps Reference Average Premarket` and publish it in Dashboard without touching any other strategy.
 Status: Completed
