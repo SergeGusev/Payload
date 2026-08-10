@@ -1,3 +1,17 @@
+## Active Update 2026-08-10 BTC ETH SOL 5m Last-30-Day Outcome Counts
+Goal: Count official Up and Down results for BTC, ETH, and SOL five-minute Polymarket markets over the latest rolling 30-day window.
+Status: Completed
+Done:
+- Fixed the read-only analysis cutoff from the official CLOB server clock at `2026-08-10T18:57:02Z`; included markets with `market_end_utc` in `[2026-07-11T18:57:02Z, 2026-08-10T18:57:02Z)`.
+- Queried official closed Gamma keyset series BTC `10684`, ETH `10683`, and SOL `10686` against the exact expected grid of `8,640` five-minute markets per asset (`25,920` total), validating exact slugs, timestamps, closed/resolved state, one `Up`/`Down` winner, duplicates, and conflicts.
+- Final official resolved counts are BTC `4,263 Up / 4,376 Down`, ETH `4,277 Up / 4,362 Down`, and SOL `4,255 Up / 4,384 Down`; combined `12,795 Up / 13,122 Down`, or `25,917` resolved markets.
+- Recovered one BTC and one ETH closed `Down` result at `2026-07-12T02:25:00Z` from their exact official event/market endpoints because the Gamma closed-list index omitted them. The detail rows were closed, resolved, and had final prices `[0,1]`.
+- Kept three same-slot markets at `2026-08-05T14:55:00Z` excluded: BTC, ETH, and SOL exact detail endpoints still reported `closed=false` with no resolution status. Thus coverage is `25,917/25,920`, with exactly three unresolved and no duplicate/conflicting/invalid resolved rows.
+- Independent full Gamma traversals with alternate pagination direction/page sizes matched each asset's returned IDs and outcomes. A production-ledger read-only sensitivity check was not used as primary evidence because provisional local result sources are incomplete and can disagree with official Gamma.
+Next: None.
+Notes: Official API and production sensitivity checks were read-only. No database row, service, strategy, order, trading state, application source, or configuration changed.
+Blockers: None.
+
 ## Active Update 2026-08-10 Repeated ETH 2 bps Net PnL Report
 Goal: Repeat the fresh report for `ETH Up or Down 5m 2 bps Reference Average Premarket`, showing only persisted settled Paper Net PnL, with ETHUSDT overlay and the maximum Net drawdown region, plus a daily Net PnL Excel workbook.
 Status: Completed

@@ -38,3 +38,12 @@ Request:
 
 Result:
 Repeated the exact `ETH Up or Down 5m 2 bps Reference Average Premarket` report from a fixed production `REPEATABLE READ / READ ONLY / UTC` snapshot at `2026-08-10T17:32:54.723734Z`, using only persisted settled Paper Net PnL. Reconciled `2,512` unique runs/markets, Net PnL `$294.28902997`, fee-inclusive Net ROI `1.888804915866765167%`, Net W/L/flat `1,413/1,099/0`, latest UTC day `79 / -$81.17331006`, and maximum Net drawdown `$144.07010111`. Produced and visually verified a solid-line cumulative Net PnL chart with ETHUSDT overlay and the maximum drawdown region, plus a one-sheet daily Net PnL workbook for `38` continuous UTC dates with exact totals, red-on-white negative values, visible minus signs, and exact `B2` freeze panes. Production and trading state were unchanged; no replay was run. During the independent audit the production database credential appeared in an internal Codex tool log and should be rotated separately.
+
+## 2026-08-10T19:10:14.1448612Z
+Request:
+Посчитай за последний месяц по этим трем рынкам количество результатов Up и количество Down
+
+Последние 30 дней
+
+Result:
+Counted official BTC, ETH, and SOL Up/Down five-minute outcomes for the rolling UTC market-end window `[2026-07-11T18:57:02Z, 2026-08-10T18:57:02Z)`, fixed from the official CLOB server clock. The expected grid was `8,640` markets per asset. Final official resolved counts were BTC `4,263 Up / 4,376 Down`, ETH `4,277 Up / 4,362 Down`, and SOL `4,255 Up / 4,384 Down`, combined `12,795 Up / 13,122 Down`. Coverage was `25,917/25,920`: the exact BTC, ETH, and SOL markets starting `2026-08-05T14:55:00Z` remain officially open/unresolved and were excluded. Two closed-list omissions, one BTC and one ETH at `2026-07-12T02:25:00Z`, were restored only after their exact official detail endpoints independently confirmed resolved `Down`. Full alternate Gamma pagination passes agreed with zero duplicate, conflict, or invalid resolved rows. Production and trading state were unchanged.
