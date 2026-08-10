@@ -101,3 +101,10 @@ Request:
 
 Result:
 Verified that price and minimum stake are separate CLOB fields. The current `floor_to_tick(min(bestAsk-tick, cap))` policy chooses the highest tick-aligned BUY price that stays below the observed ask and under the `0.50/0.49` caps; the fresh S1 check rejects it if it would cross. `min_order_size` is instead a minimum number of shares. The present paired sizing adds a local `1.10` multiplier, rounds notional up to a whole dollar, converts it back to shares, and freezes the larger leg result, producing `6.13` common shares instead of the exact five-share minimum in the standard fixture. Official Polymarket requirements do not mandate that extra sizing buffer or whole-dollar rounding, and the repository records no paired-specific necessity for them. Recommended retaining the price formula but, if the user wants minimum capital, simplifying only the common size to the maximum of the two fresh leg minimums. No application, production, database, service, configuration, order, or trading state changed.
+
+## 2026-08-10T21:11:34.9502433Z
+Request:
+А почему ни одна стратегия не сработала? Время не пришло?
+
+Result:
+Completed a strict read-only production audit at cutoff `2026-08-10T21:10:28.049Z`. The placement premise was false: all six exact group-8224 strategies were enabled and actively placing, with BTC `430 Pending / 2 Filled`, ETH `369 Pending / 1 Filled`, and SOL `374 Pending`. The three fills were persisted optimistic TouchNoDepth price-touch events, not scheduled-time events. Finalized PnL was still zero because settled runs and position settlements were both zero: two filled positions target future markets on August 11, while the first BTC Down market had only just ended, resolved Up, and had not yet been settled in accounting. Production still runs `c78eaee` and v3; the new v4 market-end lifetime commit `f28cf9dd` has not been deployed and v4 order count is zero. No production, service, database, configuration, deployment, order, or trading state changed.

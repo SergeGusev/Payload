@@ -1,3 +1,16 @@
+## Active Update 2026-08-10 Paired Maker-GTD First Runtime Results
+Goal: Determine why the user sees no completed results for the six group-`8224` BTC/ETH/SOL paired Maker-GTD strategies and whether their scheduled time has arrived.
+Status: Completed
+Done:
+- Captured a strict production `REPEATABLE READ / READ ONLY / UTC` snapshot at `2026-08-10T21:10:28.049Z` on `192.168.0.101/polycopytrader`. The service heartbeat was fresh and advancing, all six exact rows were enabled/unpaused with `paper_stake_amount=1.00` and Live disabled, and paired discovery/processor API errors since service start were zero.
+- Corrected the premise that the strategies have not run. All-time exact-family order state was BTC `430 Pending / 2 Filled`, ETH `369 Pending / 1 Filled`, and SOL `374 Pending / 0 Filled`. Placement continues approximately one day ahead; a separate official Gamma check found `30` active, accepting candidates in the current `23..25h` discovery band.
+- Verified all three fills from persisted trigger evidence: ETH Up `6.13 @ 0.50` from a best-ask touch, BTC Up `6.13 @ 0.50` from a last-trade touch, and BTC Down `6.13 @ 0.49` from a best-ask touch. These are optimistic TouchNoDepth Paper fills; time alone does not fill a resting order.
+- Verified why Dashboard PnL was still zero. Exact-family settled runs and matching position settlements were both `0` at cutoff. ETH Up targets `2026-08-11T05:30..05:35Z` and BTC Up targets `2026-08-11T14:20..14:25Z`, so both were future. The BTC Down target had just ended at `21:10Z` and resolved `Up`, making the Down fill a loss, but its settlement row had not yet been persisted at the cutoff.
+- Verified that production still runs build `c78eaee6110bbf70e60c4cad6251ef52c06d4ee8` and creates only `paired_maker_gtd_paper_v3`. The local market-end lifetime commit `f28cf9dd68efb22e1f4e8931498430af32ef5da5` is not deployed; production v4 order count is zero.
+Next: Deploy/restart the current build when desired, then verify that new exact-family orders use v4; separately allow naturally filled positions to reach resolution/settlement before evaluating PnL.
+Notes: Independent evidence comprised production rows/heartbeat, current official CLOB/Gamma state, and the local discovery/placement/fill dispatch path. Direct local `psql` host override was rejected by production `pg_hba.conf` and SSL is unsupported; no SQL executed through that failed path and production was unaffected. The successful production audit remained read-only. No database, service, configuration, deployment, strategy, order, or trading state changed.
+Blockers: None.
+
 ## Active Update 2026-08-10 Paired Maker Price Versus Minimum Size
 Goal: Explain why the exact six group-`8224` strategies calculate a Maker limit price separately from the venue minimum order size.
 Status: Completed
