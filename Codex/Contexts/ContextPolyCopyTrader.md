@@ -1,3 +1,16 @@
+## Active Update 2026-08-10 Paired Order End-of-Market Expiry Clarification
+Goal: Change the paired five-minute maker orders so they remain eligible through market end, without silently changing the wrong order contract or asset scope.
+Status: Blocked
+Done:
+- Completed a read-only preview of the exact BTC Up/Down pair and the shared group-`8224` BTC/ETH/SOL placement, evidence, and lifecycle paths. No order, strategy, database row, service, configuration, or production state changed.
+- Verified that current paired Paper orders have effective expiry at `marketEnd-60s`, while their conceptual CLOB GTD timestamp is `marketEnd`.
+- Verified from the official Polymarket order specification that PostOnly works with both GTD and GTC, and that GTD uses a 60-second security threshold. Therefore the narrow contract that remains eligible until market end is PostOnly GTD with effective expiry `marketEnd` and CLOB timestamp `marketEnd+60s`.
+- Verified that replacing GTD with GTC is a materially different contract: it requires an explicit, restart-safe cancellation/reconciliation lifecycle at market end and handling cancel/fill races.
+- Verified that the expiry calculation is currently shared by all six group-`8224` BTC/ETH/SOL legs. A BTC-only change requires a new asset-specific contract path; a shared change affects all six legs. Either change is a new execution semantic and must use a new version while grandfathering persisted v1-v3 orders.
+Next: Obtain the user's exact choice of order contract and asset scope, then implement the approved new contract with focused parity/lifecycle tests and documentation.
+Notes: Official evidence: `https://docs.polymarket.com/trading/orders/create`, `https://docs.polymarket.com/trading/orders/overview`, and `https://docs.polymarket.com/trading/orders/cancel`. Read-only source inspection covered the shared paired processor, Maker-GTD intent, evidence parser, market-data fill boundary, terminal processor, subscriptions, catalog descriptions, architecture contract, and tests.
+Blockers: User must choose (1) recommended PostOnly GTD with effective expiry at market end and wire timestamp at market end plus 60 seconds, or literal PostOnly GTC with explicit end-of-market cancellation; and (2) BTC pair only or all six BTC/ETH/SOL group-`8224` legs.
+
 ## Active Update 2026-08-10 BTC Paired Maker-GTD PostOnly Verification
 Goal: Verify whether the exact BTC Up/Down Paired Maker GTD First Accepting legs always use PostOnly.
 Status: Completed

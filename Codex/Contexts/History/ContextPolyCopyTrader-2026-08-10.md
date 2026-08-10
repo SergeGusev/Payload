@@ -80,3 +80,10 @@ Request:
 
 Result:
 Verified that the exact paired Maker-GTD intent hard-codes `PostOnly=true`, persists `post_only=true`, and accepts a Paper resting leg only when its frozen limit remains strictly below the fresh S1 best ask. Equality/crossing is rejected and retried; there is no taker or non-PostOnly fallback. Clarified the transport distinction: the strategies are currently `PaperOnly`, and the repository contains no application-source call that submits the Live-request projection, so no actual Polymarket CLOB order is sent. The tested hypothetical Live projection preserves `PostOnly=true` and `GTD` unchanged.
+
+## 2026-08-10T20:16:31.2438497Z
+Request:
+Давай отменим GTD. Пусть заявки висят до конца рынка
+
+Result:
+Stopped before changing execution semantics because the request has two materially different interpretations and two different asset scopes. Official Polymarket documentation and current code show that the narrow way to keep a PostOnly order eligible through market end is to retain GTD, set Paper effective expiry to `marketEnd`, and set the wire GTD timestamp to `marketEnd+60s`; literal GTC instead requires a new explicit cancellation/reconciliation lifecycle at market end. The existing expiry path is shared by all six group-8224 BTC/ETH/SOL legs, so BTC-only and all-six changes are also distinct contracts. No code, order, database, service, configuration, or production state was changed pending the user's two choices.
