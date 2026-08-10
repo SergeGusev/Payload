@@ -1,3 +1,16 @@
+## Active Update 2026-08-10 Paired Maker Price Versus Minimum Size
+Goal: Explain why the exact six group-`8224` strategies calculate a Maker limit price separately from the venue minimum order size.
+Status: Completed
+Done:
+- Verified that the current price policy is `floor_to_tick(min(S0.bestAsk-S0.tickSize, cap))`, with cap `0.50` for Up and `0.49` for Down. `bestAsk-tick` selects the highest S0 price that remains below the ask, the cap protects the paired economics, and floor-to-tick preserves the venue price increment. A fresh S1 check rejects the frozen price whenever it is at or above the then-current best ask.
+- Separated price from quantity. Official Polymarket documentation defines `min_order_size` as a minimum number of shares; it does not supply a limit price. The strategy must therefore choose both a price and a share quantity.
+- Verified that the implemented sizing is not the exact venue minimum. It applies `minOrderSize * limitPrice * 1.10 * PaperStakeAmount`, rounds the resulting notional up to a whole dollar, converts it back to shares rounded up to `0.01`, and freezes the larger leg result for both legs.
+- Reproduced the focused fixture: with `minOrderSize=5`, `PaperStakeAmount=1`, and limits `0.50/0.49`, the legs independently size to `6.00/6.13` shares and the pair freezes `6.13`. Exact minimum equal-share sizing would instead use `max(Up.minOrderSize, Down.minOrderSize)`, which is `5` shares in this example and costs `$4.95` at the caps.
+- Confirmed from current Polymarket documentation that the venue requires tick-aligned price and size at least `min_order_size`, while PostOnly rejects a price that would match immediately. The extra `1.10` and whole-dollar ceiling are local sizing policy, not a documented CLOB requirement. Repository code, tests, commit metadata, and documentation contain no more specific rationale for needing them in this paired strategy.
+Next: If requested, retain the maximum-resting price formula and change only the paired common-share sizing to the exact maximum of the two fresh CLOB minimum sizes, with focused contract/evidence tests.
+Notes: Read-only source, test, Git-history, and official documentation inspection, independently cross-checked by a second agent. No source, configuration, database, service, production, order, deployment, or trading state changed; no build or tests were needed for this explanatory task.
+Blockers: None.
+
 ## Active Update 2026-08-10 Paired Maker-GTD Market-End Expiry v4
 Goal: Keep all six group-`8224` BTC/ETH/SOL paired PostOnly GTD legs eligible through exact market end.
 Status: Completed
