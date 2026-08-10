@@ -73,3 +73,10 @@ BTC Up or Down 5m Down Paired Maker GTD First Accepting
 
 Result:
 Traced the exact current BTC pair from catalog through day-ahead discovery, S0 sizing/pricing, common-size freeze, independent S1 PostOnly acceptance, optimistic TouchNoDepth fill inference, gap recovery, expiry, and settlement. Confirmed that the two names are mutually linked Paper-only legs, not directional predictors: Up is capped at `0.50`, Down at `0.49`, and both accepted legs use one frozen equal share quantity. Identified a material correction to the prior calculation premise: the implemented sizing does not use exactly the venue minimum of five shares. With `minOrderSize=5`, caps `0.50/0.49`, and seed/default `PaperStakeAmount=1`, the code sizes the individual legs to `6.00/6.13` and freezes both at `6.13` shares, about `$3` per leg. The earlier five-share PnL remains a valid separate hypothetical but does not describe this strategy's default sizing. Verified that legs are non-atomic, may accept/fill independently, expire one minute before market end in Paper, use an optimistic full-fill model that ignores queue/depth/size/aggressor, do not model maker rebates, and never submit Live orders.
+
+## 2026-08-10T20:10:04.5528752Z
+Request:
+Мы отправляем эти заявки строго с флагом PostOnly ?
+
+Result:
+Verified that the exact paired Maker-GTD intent hard-codes `PostOnly=true`, persists `post_only=true`, and accepts a Paper resting leg only when its frozen limit remains strictly below the fresh S1 best ask. Equality/crossing is rejected and retried; there is no taker or non-PostOnly fallback. Clarified the transport distinction: the strategies are currently `PaperOnly`, and the repository contains no application-source call that submits the Live-request projection, so no actual Polymarket CLOB order is sent. The tested hypothetical Live projection preserves `PostOnly=true` and `GTD` unchanged.

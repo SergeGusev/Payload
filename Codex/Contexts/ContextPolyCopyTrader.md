@@ -1,3 +1,15 @@
+## Active Update 2026-08-10 BTC Paired Maker-GTD PostOnly Verification
+Goal: Verify whether the exact BTC Up/Down Paired Maker GTD First Accepting legs always use PostOnly.
+Status: Completed
+Done:
+- Verified that `MakerGtdBuyExecutionIntent.PostOnly` is an unconditional computed `true`; it is not a runtime option for these orders.
+- Verified that intent parity rejects any non-PostOnly Maker-GTD shape and the Live-request projection preserves `PostOnly=true` with order type `GTD`.
+- Verified that each exact paired Paper order persists both root and nested `post_only=true`. The post-freeze S1 evaluator accepts only when `limitPrice < bestAsk`; equality or crossing is rejected and retried, with no taker/non-PostOnly fallback.
+- Kept the transport distinction explicit: these exact strategies are `PaperOnly`. Repository-wide source search found the Live-request projection invoked only by parity tests, not by application source, so no real CLOB order is currently submitted. If Live submission were later implemented from this frozen intent, its proven request shape remains PostOnly.
+Next: None.
+Notes: Read-only source and test inspection; no build/test run because application source did not change. No production query, order, database mutation, configuration change, service action, or Live submission occurred.
+Blockers: None.
+
 ## Active Update 2026-08-10 BTC Paired Maker-GTD Strategy Logic
 Goal: Explain the exact current implementation of the BTC five-minute Up/Down Paired Maker GTD First Accepting pair and correct the prior minimum-size premise where it does not match this strategy.
 Status: Completed
