@@ -69,7 +69,10 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
             Assert.Contains("submission is not atomic and there is no rollback", variant.Description, StringComparison.Ordinal);
             Assert.Contains("bounded ordered direct HTTP request/client-receipt/response/evaluation S0/S1 freshness proof", variant.Description, StringComparison.Ordinal);
             Assert.Contains("venue snapshot timestamp remains audit evidence", variant.Description, StringComparison.Ordinal);
-            Assert.Contains("original effective expiry one minute before market end", variant.Description, StringComparison.Ordinal);
+            Assert.Contains("New v4 placements", variant.Description, StringComparison.Ordinal);
+            Assert.Contains("Exact v1/v2/v3 persisted orders retain their recorded lifetime", variant.Description, StringComparison.Ordinal);
+            Assert.Contains("effective Paper expiry at market end", variant.Description, StringComparison.Ordinal);
+            Assert.Contains("frozen CLOB GTD expiration exactly 60 seconds later", variant.Description, StringComparison.Ordinal);
             Assert.Contains("ordinary Paper orders, PnL, win rate, and performance", variant.Description, StringComparison.Ordinal);
             Assert.Contains(StrategyIds.OptimisticTouchNoDepthPaperLabel, variant.Description, StringComparison.Ordinal);
             Assert.Contains("Maker rebates are not modeled and are not included in Paper PnL", variant.Description, StringComparison.Ordinal);
@@ -133,7 +136,10 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
         Assert.Contains("submission is not atomic and there is no rollback", statement, StringComparison.Ordinal);
         Assert.Contains("bounded ordered direct HTTP request/client-receipt/response/evaluation S0/S1 freshness proof", statement, StringComparison.Ordinal);
         Assert.Contains("venue snapshot timestamp remains audit evidence", statement, StringComparison.Ordinal);
-        Assert.Contains("original effective expiry one minute before market end", statement, StringComparison.Ordinal);
+        Assert.Contains("New v4 placements", statement, StringComparison.Ordinal);
+        Assert.Contains("Exact v1/v2/v3 persisted orders retain their recorded lifetime", statement, StringComparison.Ordinal);
+        Assert.Contains("effective Paper expiry at market end", statement, StringComparison.Ordinal);
+        Assert.Contains("frozen CLOB GTD expiration exactly 60 seconds later", statement, StringComparison.Ordinal);
         Assert.Contains("ordinary Paper orders, PnL, win rate, and performance", statement, StringComparison.Ordinal);
         Assert.Contains(StrategyIds.OptimisticTouchNoDepthPaperLabel, statement, StringComparison.Ordinal);
         Assert.Contains("Maker rebates are not modeled and are not included in Paper PnL", statement, StringComparison.Ordinal);
@@ -145,13 +151,16 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
     }
 
     [Fact]
-    public void ExecutionContract_VersionsReceiptFreshnessWithoutOrphaningV1()
+    public void ExecutionContract_V4UsesMarketEndExpiryWithoutOrphaningV1ThroughV3()
     {
         Assert.Equal("paired_maker_gtd_paper_v1", PairedMakerGtdPaperExecutionContract.LegacyContractVersion);
         Assert.Equal(
             "paired_maker_gtd_paper_v2",
             PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion);
-        Assert.Equal("paired_maker_gtd_paper_v3", PairedMakerGtdPaperExecutionContract.CurrentContractVersion);
+        Assert.Equal(
+            "paired_maker_gtd_paper_v3",
+            PairedMakerGtdPaperExecutionContract.GapRecoveryContractVersion);
+        Assert.Equal("paired_maker_gtd_paper_v4", PairedMakerGtdPaperExecutionContract.CurrentContractVersion);
         Assert.Equal(
             PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
             PairedMakerGtdPaperExecutionContract.ContractVersion);
@@ -166,6 +175,24 @@ public sealed class PairedMakerGtdFirstAcceptingStrategyTests
         Assert.True(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
             PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion));
         Assert.True(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
+            PairedMakerGtdPaperExecutionContract.GapRecoveryContractVersion));
+        Assert.True(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
+            PairedMakerGtdPaperExecutionContract.CurrentContractVersion));
+        Assert.False(PairedMakerGtdPaperExecutionContract.UsesGapRecoveryLifecycle(
+            PairedMakerGtdPaperExecutionContract.LegacyContractVersion));
+        Assert.False(PairedMakerGtdPaperExecutionContract.UsesGapRecoveryLifecycle(
+            PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion));
+        Assert.True(PairedMakerGtdPaperExecutionContract.UsesGapRecoveryLifecycle(
+            PairedMakerGtdPaperExecutionContract.GapRecoveryContractVersion));
+        Assert.True(PairedMakerGtdPaperExecutionContract.UsesGapRecoveryLifecycle(
+            PairedMakerGtdPaperExecutionContract.CurrentContractVersion));
+        Assert.False(PairedMakerGtdPaperExecutionContract.UsesMarketEndEffectiveExpiry(
+            PairedMakerGtdPaperExecutionContract.LegacyContractVersion));
+        Assert.False(PairedMakerGtdPaperExecutionContract.UsesMarketEndEffectiveExpiry(
+            PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion));
+        Assert.False(PairedMakerGtdPaperExecutionContract.UsesMarketEndEffectiveExpiry(
+            PairedMakerGtdPaperExecutionContract.GapRecoveryContractVersion));
+        Assert.True(PairedMakerGtdPaperExecutionContract.UsesMarketEndEffectiveExpiry(
             PairedMakerGtdPaperExecutionContract.CurrentContractVersion));
         Assert.False(PairedMakerGtdPaperExecutionContract.IsSupportedContractVersion(
             "paired_maker_gtd_paper_v0"));

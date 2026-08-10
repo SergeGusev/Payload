@@ -63,7 +63,8 @@ internal static class PairedMakerGtdPaperExecutionContract
     public const string ExecutionSource = MakerGtdPaperExecutionSources.PairedFirstAccepting;
     public const string LegacyContractVersion = "paired_maker_gtd_paper_v1";
     public const string DirectHttpReceiptContractVersion = "paired_maker_gtd_paper_v2";
-    public const string CurrentContractVersion = "paired_maker_gtd_paper_v3";
+    public const string GapRecoveryContractVersion = "paired_maker_gtd_paper_v3";
+    public const string CurrentContractVersion = "paired_maker_gtd_paper_v4";
     public const string ContractVersion = CurrentContractVersion;
     public const string DirectHttpReceiptFreshnessBasis = "direct_http_response_receipt";
     public const string GapRecoveryLifecyclePolicyVersion =
@@ -79,7 +80,19 @@ internal static class PairedMakerGtdPaperExecutionContract
     {
         return string.Equals(contractVersion, LegacyContractVersion, StringComparison.Ordinal) ||
             string.Equals(contractVersion, DirectHttpReceiptContractVersion, StringComparison.Ordinal) ||
+            string.Equals(contractVersion, GapRecoveryContractVersion, StringComparison.Ordinal) ||
             string.Equals(contractVersion, CurrentContractVersion, StringComparison.Ordinal);
+    }
+
+    public static bool UsesGapRecoveryLifecycle(string? contractVersion)
+    {
+        return string.Equals(contractVersion, GapRecoveryContractVersion, StringComparison.Ordinal) ||
+            string.Equals(contractVersion, CurrentContractVersion, StringComparison.Ordinal);
+    }
+
+    public static bool UsesMarketEndEffectiveExpiry(string? contractVersion)
+    {
+        return string.Equals(contractVersion, CurrentContractVersion, StringComparison.Ordinal);
     }
 
     public static bool IsApprovedStrategyVariant(BtcUpDown5mStrategyVariant variant)

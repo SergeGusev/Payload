@@ -89,7 +89,8 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
   submission remains disabled. No
   alias, clone, descendant, future strategy, or changed execution semantic inherits
   this exception; all other unsupported behavior remains `ResearchOnly`.
-- Second closed exception approved explicitly by the user on 2026-08-09: ordinary
+- Second closed exception approved explicitly by the user on 2026-08-09, with the
+  v4 expiration revision approved explicitly on 2026-08-10: ordinary
   Paper accounting is also allowed only for the exact six five-minute paired
   Maker-GTD legs in catalog group `8224`: assets `BTC`, `ETH`, and `SOL`; fixed
   outcomes `Up` and `Down`; behavior `PairedFixedOutcomeMakerGtdFirstAccepting`;
@@ -98,16 +99,21 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
   execution source `crypto_paired_maker_gtd_first_accepting_paper`; `PaperOnly=true`;
   Up cap `0.50`; Down cap `0.49`; and formula
   `floor_to_tick(min(bestAsk-tick, cap))`. New placements use contract
-  `paired_maker_gtd_paper_v3`; its S0/S1 placement contract retains the bounded,
+  `paired_maker_gtd_paper_v4`; its S0/S1 placement contract retains the bounded,
   ordered local request/client-receipt/response/evaluation bracket, while the
   authoritative venue snapshot timestamp remains mandatory audit evidence but may
-  be old on an unchanged quiet book. Exact-family `paired_maker_gtd_paper_v1` and
-  `paired_maker_gtd_paper_v2` orders already persisted under the former placement
-  contracts remain grandfathered for lifecycle completion. Each pair freezes one common normalized
+  be old on an unchanged quiet book. Exact-family `paired_maker_gtd_paper_v1`,
+  `paired_maker_gtd_paper_v2`, and `paired_maker_gtd_paper_v3` orders already
+  persisted under the former effective-expiry-at-market-end-minus-60-seconds and
+  wire-expiration-at-market-end contract remain grandfathered for lifecycle
+  completion. Each pair freezes one common normalized
   share quantity before either leg is attempted. Each leg then has independent
   fresh S0/S1 PostOnly acceptance and persistence, without atomicity, rollback,
-  cancellation, or resizing of an accepted leg when its peer fails. Accepted legs
-  expire one minute before market end. This exact family may use the optimistic
+  cancellation, or resizing of an accepted leg when its peer fails. New v4 PostOnly
+  GTD legs remain eligible for Paper execution through market end; their stated/wire
+  expiration is market end plus 60 seconds because of the venue GTD security
+  threshold. All other approved predicates and lifecycle semantics remain unchanged.
+  This exact family may use the optimistic
   full-fill `TouchNoDepth` inference. Under lifecycle policy
   `paired_touch_no_depth_gap_recovery_v1`, service restart, owning-shard reconnect,
   asset reassignment, or delivery failure pauses fill inference and creates a new

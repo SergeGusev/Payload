@@ -50,12 +50,16 @@ contains the full safety and project rules.
   mutually linked ID suffixes `101/102`, `201/202`, `301/302`, first-observed
   accepting timing, source `crypto_paired_maker_gtd_first_accepting_paper`,
   `PaperOnly=true`, Up cap `0.50`, Down cap `0.49`, equal frozen shares,
-  independent S0/S1 acceptance, no pair atomicity/rollback, and expiry at market
-  end minus one minute. New `paired_maker_gtd_paper_v3` placements prove direct
-  HTTP freshness with a bounded ordered request/receipt/response/evaluation
+  independent S0/S1 acceptance, no pair atomicity/rollback, effective Paper expiry
+  at market end, and stated/wire GTD expiration at market end plus 60 seconds due
+  to the venue security threshold. New `paired_maker_gtd_paper_v4` PostOnly GTD
+  placements prove direct HTTP freshness with a bounded ordered
+  request/receipt/response/evaluation
   bracket; the authoritative venue timestamp remains audit evidence and may be
-  old for a quiet unchanged book. Exact v1/v2 orders remain grandfathered for their
-  lifecycle. Under `paired_touch_no_depth_gap_recovery_v1`, restart, reconnect,
+  old for a quiet unchanged book. Exact v1/v2/v3 orders remain grandfathered under
+  their former effective-expiry-at-end-minus-60-seconds and wire-expiration-at-end
+  semantics for their lifecycle. All other approved predicates and lifecycle
+  semantics remain unchanged. Under `paired_touch_no_depth_gap_recovery_v1`, restart, reconnect,
   reassignment, or delivery failure pauses inference and installs a new exact-asset
   fence; the confirming frame cannot fill, only a later authoritative event in the
   unchanged segment can fill, and gap/cache/REST/pre-fence events are not backfilled.

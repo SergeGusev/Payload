@@ -110,7 +110,9 @@ semantic inherits the exception; every other unsupported execution model remains
 
 On 2026-08-09 the user explicitly approved a second closed exception for the exact
 six five-minute paired Maker-GTD legs in catalog group `8224`. It applies only when
-all of these predicates hold:
+all of these predicates hold. On 2026-08-10 the user explicitly approved the v4
+expiration revision described below; all other approved predicates and lifecycle
+semantics remain unchanged:
 
 - asset is exactly `BTC`, `ETH`, or `SOL`, with one fixed `Up` and one fixed `Down`
   leg per asset;
@@ -118,27 +120,29 @@ all of these predicates hold:
   and timing is `FirstAcceptingOrders` with nominal metadata delay `-86400` seconds;
 - catalog ID suffixes are exactly `101/102`, `201/202`, and `301/302`, and each pair
   has symmetric `PairedStrategyId` links;
-- persisted source is `crypto_paired_maker_gtd_first_accepting_paper`, new
-  placements use contract `paired_maker_gtd_paper_v3`, and `PaperOnly=true`;
+- persisted source is `crypto_paired_maker_gtd_first_accepting_paper`, new PostOnly
+  GTD placements use contract `paired_maker_gtd_paper_v4`, and `PaperOnly=true`;
 - S0 price is `floor_to_tick(min(S0.bestAsk-S0.tickSize, cap))`, with Up cap `0.50`
   and Down cap `0.49`, so accepted pair limits cannot exceed `0.99` in total;
-- each v2/v3 direct HTTP S0/S1 read persists and validates one ordered local bracket:
+- each v2/v3/v4 direct HTTP S0/S1 read persists and validates one ordered local bracket:
   request start, client receipt, response completion, and evaluation. Both receipt
   age and request duration must remain within the configured maximum. The venue
   snapshot timestamp and hash remain audit evidence and the timestamp must be
   authoritative and no later than local receipt, but an old unchanged snapshot
-  does not by itself make a freshly fetched quiet book stale. Exact-family v1 and
-  v2 orders already persisted under their former placement contracts remain
-  grandfathered for fill/expiry and historical accounting;
+  does not by itself make a freshly fetched quiet book stale. Exact-family v1,
+  v2, and v3 orders already persisted under their former placement and expiry
+  contracts remain grandfathered for fill/expiry and historical accounting;
 - one common CLOB-normalized share quantity is frozen from both valid S0 sizing
   results before either leg is attempted. Each leg then has independent S0/S1
   PostOnly attempts and independent persistence. The venue provides no pair
   atomicity: rejection or non-fill of one leg never rolls back, cancels, or resizes
   an accepted peer;
-- accepted legs use market end as wire GTD expiry and stop Paper execution one
-  minute earlier;
+- new v4 accepted PostOnly GTD legs stop Paper execution at market end and use
+  market end plus 60 seconds as their stated/wire expiration because of the venue
+  GTD security threshold. Grandfathered v1/v2/v3 legs retain effective Paper expiry
+  at market end minus 60 seconds and stated/wire expiration at market end;
 - lifecycle policy `paired_touch_no_depth_gap_recovery_v1` applies to exact-family
-  outstanding v1/v2 orders and new v3 orders. Restart, owning-shard reconnect,
+  outstanding v1/v2/v3 orders and new v4 orders. Restart, owning-shard reconnect,
   asset reassignment, or a delivery failure invalidates the prior segment and pauses
   inference. The first later authoritative exact-asset frame freezes a new immutable
   session/component/generation fence and cannot fill. Only a subsequent event whose
@@ -159,9 +163,9 @@ amount require an authoritative venue payout ledger. Live submission remains
 disabled. No alias, clone, different source, changed cap/timing/pair link, or other
 predicate mismatch inherits this exception.
 
-Authoritative references, verified 2026-08-09:
+Authoritative references, verified 2026-08-10:
 
-- [Create Order](https://docs.polymarket.com/trading/orders/create)
+- [Place Orders](https://docs.polymarket.com/trading/place-orders)
 - [Orders Overview](https://docs.polymarket.com/trading/orders/overview)
 - [Market WebSocket channel](https://docs.polymarket.com/api-reference/wss/market)
 

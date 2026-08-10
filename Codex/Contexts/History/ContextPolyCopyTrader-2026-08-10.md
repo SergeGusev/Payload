@@ -87,3 +87,10 @@ Request:
 
 Result:
 Stopped before changing execution semantics because the request has two materially different interpretations and two different asset scopes. Official Polymarket documentation and current code show that the narrow way to keep a PostOnly order eligible through market end is to retain GTD, set Paper effective expiry to `marketEnd`, and set the wire GTD timestamp to `marketEnd+60s`; literal GTC instead requires a new explicit cancellation/reconciliation lifecycle at market end. The existing expiry path is shared by all six group-8224 BTC/ETH/SOL legs, so BTC-only and all-six changes are also distinct contracts. No code, order, database, service, configuration, or production state was changed pending the user's two choices.
+
+## 2026-08-10T20:39:18.3894048Z
+Request:
+Ок, сделай как ты советуешь. Для всех трёх валют
+
+Result:
+Implemented `paired_maker_gtd_paper_v4` for all six exact group-8224 BTC/ETH/SOL Up/Down legs. New orders remain strict PostOnly GTD, with effective Paper expiry at exact market end and stated/wire expiration at market end plus 60 seconds. Persisted v1/v2/v3 orders retain their old end-minus-60/end lifetime; v3 and v4 retain the restart-safe no-backfill gap-recovery lifecycle. Updated version-aware evidence validation, catalog/schema descriptions, closed-exception rules, architecture documentation, README, and focused tests. Related Maker-GTD/subscription tests passed 271/271 and the Service Verify build completed with zero errors. The unfiltered test project was also attempted but remained non-green on current catalog tests outside the changed paths; the solution has no Verify configuration, so the relevant Service project was built directly. Temporary artifacts were fully cleaned. No deployment, service restart, production/database mutation, Live submission, or cancellation was performed.

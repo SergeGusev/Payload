@@ -53,6 +53,26 @@ public sealed class MakerGtdExecutionParityTests
     }
 
     [Fact]
+    public void CreateLiveRequest_MarketEndEffectiveExpiry_PreservesPostOnlyGtdAndWireBuffer()
+    {
+        var marketEndUtc = FrozenAtUtc.AddMinutes(5);
+        var intent = CreateIntent(
+            effectiveExpiresAtUtc: marketEndUtc,
+            clobGtdExpirationUtc: marketEndUtc.AddSeconds(60));
+
+        var request = MakerGtdExecutionParity.CreateLiveRequest(
+            intent,
+            "0x1111111111111111111111111111111111111111",
+            "0x2222222222222222222222222222222222222222",
+            ClobV2SignatureType.EOA);
+
+        Assert.Equal(marketEndUtc, intent.EffectiveExpiresAtUtc);
+        Assert.Equal(marketEndUtc.AddSeconds(60), request.GtdExpirationUtc);
+        Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
+        Assert.True(request.PostOnly);
+    }
+
+    [Fact]
     public void Validate_RejectsLimitAboveMakerCap()
     {
         var result = MakerGtdExecutionParity.Validate(

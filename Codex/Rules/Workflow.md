@@ -101,12 +101,16 @@ the closed user-approved exception defined below:
   outcomes, mutually linked pair IDs, first-observed `acceptingOrders=true`
   timing, source `crypto_paired_maker_gtd_first_accepting_paper`, Up cap `0.50`,
   Down cap `0.49`, one frozen equal-share quantity per pair, independent S0/S1
-  acceptance, no atomic rollback, and expiry one minute before market end. Their
-  new placements use `paired_maker_gtd_paper_v3`: every direct HTTP S0/S1 read
+  acceptance, no atomic rollback, effective Paper expiry at market end, and
+  stated/wire GTD expiration at market end plus 60 seconds because of the venue
+  security threshold. Their new PostOnly GTD placements use
+  `paired_maker_gtd_paper_v4`: every direct HTTP S0/S1 read
   must carry a bounded ordered local request/client-receipt/response/evaluation
   bracket. The authoritative venue snapshot timestamp remains mandatory audit
   evidence but may be old for a freshly fetched unchanged quiet book. Exact-family
-  v1/v2 orders remain grandfathered for lifecycle completion. Under
+  v1/v2/v3 orders remain grandfathered under their former effective Paper expiry at
+  market end minus 60 seconds and stated/wire expiration at market end for lifecycle
+  completion. All other approved predicates and lifecycle semantics remain unchanged. Under
   `paired_touch_no_depth_gap_recovery_v1`, a restart, reconnect, reassignment, or
   delivery failure creates a new exact-asset fence: the confirming frame cannot
   fill, only a later authoritative event in that unchanged segment can fill, and

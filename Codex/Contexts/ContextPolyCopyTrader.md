@@ -1,3 +1,16 @@
+## Active Update 2026-08-10 Paired Maker-GTD Market-End Expiry v4
+Goal: Keep all six group-`8224` BTC/ETH/SOL paired PostOnly GTD legs eligible through exact market end.
+Status: Completed
+Done:
+- Added `paired_maker_gtd_paper_v4` for new placements across BTC, ETH, and SOL Up/Down legs. New intents retain strict `PostOnly=true` and `GTD`, set effective Paper expiry to `marketEnd`, and set the stated/wire CLOB expiration to `marketEnd+60s` for the venue security threshold.
+- Preserved exact-family v1/v2/v3 orders under their persisted `effective=marketEnd-60s` and `wire=marketEnd` lifetime. v3 and v4 both retain `paired_touch_no_depth_gap_recovery_v1`; the parser now validates lifetime and lifecycle policy by contract version and fails closed on cross-version expiry shapes.
+- Left the separate 28-strategy ETH Reference Average Maker-GTD family, pricing, sizing, pair non-atomicity, TouchNoDepth inference, rebate exclusion, and disabled Live submission unchanged.
+- Updated the catalog and PostgreSQL seed descriptions, `AGENTS.md`, workflow/coding rules, Paper/live parity architecture contract, README, and focused placement/parity/evidence/lifecycle tests.
+- Stabilized one paired processor fixture whose fixed 2026 market-end protection had elapsed by moving only the synthetic test market to a future fixed date.
+Next: Deploy/restart the service when desired, then perform a read-only verification that newly created exact group-`8224` orders persist contract v4 with `effective_expires_at_utc=market_end_utc` and `clob_gtd_expiration_utc=market_end_utc+60s`.
+Notes: Official Polymarket `Place Orders` documentation was rechecked on 2026-08-10 and states that GTD expires one minute before its stated expiration. Focused plus adjacent Maker-GTD/subscription regression tests passed `271/271`; the exact four changed-contract classes passed `146/146`. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify` completed with zero errors and 120 nullable warnings from the unchanged storage repository. The unfiltered test project was attempted and remained non-green on current catalog tests outside the changed paths, including `MiddleBpsThresholdCatalogTests` and unrelated `StrategyIds` lookups; when those failures began was not audited. Solution-level `Verify|Any CPU` is not defined (`MSB4126`), so the relevant Service project was built directly. `git diff --check` passed. The marked `D:\CodexTemp` run was fully removed after shutting down the .NET build servers that retained one compiler-cache file. No deployment, service restart, production/database mutation, Live order, venue Paper order, or cancellation occurred.
+Blockers: None.
+
 ## Active Update 2026-08-10 Paired Order End-of-Market Expiry Clarification
 Goal: Change the paired five-minute maker orders so they remain eligible through market end, without silently changing the wrong order contract or asset scope.
 Status: Blocked

@@ -34,12 +34,11 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
         Assert.Equal(0, result.LegsSkipped);
         Assert.Equal(2, fixture.Repository.PaperEntryPersistenceBatchCalls);
         var orders = fixture.Repository.PaperOrders.OrderBy(order => order.Outcome).ToArray();
+        var marketEndUtc = Assert.IsType<DateTimeOffset>(fixture.Candidate.Market.EndDateUtc);
         Assert.Equal(2, orders.Length);
         Assert.Equal(orders[0].SizeShares, orders[1].SizeShares);
         Assert.All(orders, order => Assert.Equal(6.13m, order.SizeShares));
-        Assert.All(orders, order => Assert.Equal(
-            fixture.Candidate.Market.EndDateUtc!.Value.AddMinutes(-1),
-            order.ExpiresAtUtc));
+        Assert.All(orders, order => Assert.Equal(marketEndUtc, order.ExpiresAtUtc));
         Assert.Equal(0.49m, Assert.Single(orders, order => order.Outcome == "Down").Price);
         Assert.Equal(0.50m, Assert.Single(orders, order => order.Outcome == "Up").Price);
         Assert.All(orders, order =>
@@ -50,9 +49,29 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
             var root = document.RootElement;
             Assert.Equal(StrategyIds.OptimisticTouchNoDepthPaperLabel, root.GetProperty("paper_model_label").GetString());
             Assert.False(root.GetProperty("maker_rebate_modeled").GetBoolean());
+            Assert.True(root.GetProperty("post_only").GetBoolean());
+            Assert.Equal("GTD", root.GetProperty("order_type").GetString());
+            var makerGtd = root.GetProperty("maker_gtd");
             Assert.Equal(
                 PairedMakerGtdPaperExecutionContract.ContractVersion,
-                root.GetProperty("maker_gtd").GetProperty("contract_version").GetString());
+                makerGtd.GetProperty("contract_version").GetString());
+            Assert.True(makerGtd.GetProperty("post_only").GetBoolean());
+            Assert.Equal("GTD", makerGtd.GetProperty("order_type").GetString());
+            Assert.Equal(marketEndUtc.AddMinutes(-5), makerGtd.GetProperty("market_start_utc").GetDateTimeOffset());
+            Assert.Equal(marketEndUtc, makerGtd.GetProperty("market_end_utc").GetDateTimeOffset());
+            Assert.Equal(marketEndUtc, makerGtd.GetProperty("effective_expires_at_utc").GetDateTimeOffset());
+            Assert.Equal(
+                marketEndUtc.AddSeconds(MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds),
+                makerGtd.GetProperty("clob_gtd_expiration_utc").GetDateTimeOffset());
+            var frozenIntent = makerGtd.GetProperty("frozen_intent");
+            Assert.True(frozenIntent.GetProperty("post_only").GetBoolean());
+            Assert.Equal("GTD", frozenIntent.GetProperty("order_type").GetString());
+            Assert.Equal(
+                marketEndUtc,
+                frozenIntent.GetProperty("effective_expires_at_utc").GetDateTimeOffset());
+            Assert.Equal(
+                marketEndUtc.AddSeconds(MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds),
+                frozenIntent.GetProperty("clob_gtd_expiration_utc").GetDateTimeOffset());
             Assert.True(root.GetProperty("market_data_status_at_acceptance").TryGetProperty(
                 "continuity_generation",
                 out _));
@@ -304,6 +323,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
     [Theory]
     [InlineData(PairedMakerGtdPaperExecutionContract.LegacyContractVersion)]
     [InlineData(PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion)]
+    [InlineData(PairedMakerGtdPaperExecutionContract.GapRecoveryContractVersion)]
     [InlineData(PairedMakerGtdPaperExecutionContract.CurrentContractVersion)]
     public async Task DueRecovery_AfterFirstLegPersistenceAndMissingOpenPeer_ReusesFrozenCommonShares(
         string persistedContinuationVersion)
@@ -337,10 +357,8 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
             Assert.IsType<string>(downRun.SkipDiagnosticsJson))!.AsObject();
         var continuationMakerGtd = continuationRoot["maker_gtd"]!.AsObject();
         continuationMakerGtd["contract_version"] = persistedContinuationVersion;
-        if (!string.Equals(
-                persistedContinuationVersion,
-                PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
-                StringComparison.Ordinal))
+        if (!PairedMakerGtdPaperExecutionContract.UsesGapRecoveryLifecycle(
+                persistedContinuationVersion))
         {
             continuationMakerGtd.Remove("gap_recovery_policy_version");
             continuationMakerGtd.Remove("observation_gaps_backfilled");
@@ -1009,7 +1027,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessorTests
         bool freezeVenueTimestampPerAsset = false,
         string? s1Mutation = null)
     {
-        var marketStartUtc = new DateTimeOffset(2026, 8, 10, 15, 30, 0, TimeSpan.Zero);
+        var marketStartUtc = new DateTimeOffset(2099, 8, 10, 15, 30, 0, TimeSpan.Zero);
         var nowUtc = marketStartUtc.AddHours(-23).AddMinutes(-50);
         var market = CreateMarket(nowUtc, marketStartUtc);
         var repository = new TestAppRepository();

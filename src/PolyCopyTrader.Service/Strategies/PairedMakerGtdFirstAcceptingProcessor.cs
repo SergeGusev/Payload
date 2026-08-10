@@ -342,8 +342,9 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
         decimal? commonRequestedShares = recoveredFrozenCommonSize?.Shares;
         DateTimeOffset? commonSharesFrozenAtUtc = recoveredFrozenCommonSize?.FrozenAtUtc;
 
-        var effectiveExpiresAtUtc = marketIdentity.MarketEndUtc.AddSeconds(
-            -MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds);
+        var effectiveExpiresAtUtc = marketIdentity.MarketEndUtc;
+        var clobGtdExpirationUtc = marketIdentity.MarketEndUtc.AddSeconds(
+            MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds);
         var activatedOrderIds = new HashSet<Guid>();
         var publishedOrderIds = new HashSet<Guid>();
         var transientStop = false;
@@ -580,7 +581,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                             context.S0,
                             frozenAtUtc,
                             effectiveExpiresAtUtc,
-                            marketIdentity.MarketEndUtc);
+                            clobGtdExpirationUtc);
                     }
                     catch (ArgumentException ex)
                     {
@@ -1223,7 +1224,7 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
                 ["market_start_utc"] = FormatTimestamp(state.Run.MarketStartUtc),
                 ["market_end_utc"] = FormatTimestamp(state.Run.MarketEndUtc),
                 ["effective_expires_at_utc"] = FormatTimestamp(effectiveExpiresAtUtc),
-                ["clob_gtd_expiration_utc"] = FormatTimestamp(state.Run.MarketEndUtc),
+                ["clob_gtd_expiration_utc"] = FormatTimestamp(accepted.Intent.ClobGtdExpirationUtc),
                 ["accepted_at_utc"] = FormatTimestamp(accepted.AcceptedAtUtc),
                 ["frozen_intent"] = BuildFrozenIntentJson(accepted.Intent),
                 ["attempts_completed"] = state.Attempts.Count,
@@ -1539,17 +1540,15 @@ public sealed class PairedMakerGtdFirstAcceptingProcessor(
             }
 
             var contractVersion = contractVersionElement.GetString();
-            var currentLifecycleContract = string.Equals(
-                contractVersion,
-                PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
-                StringComparison.Ordinal);
-            if (currentLifecycleContract !=
+            var usesGapRecoveryLifecycle =
+                PairedMakerGtdPaperExecutionContract.UsesGapRecoveryLifecycle(contractVersion);
+            if (usesGapRecoveryLifecycle !=
                     (HasExactString(
                          makerGtd,
                          "gap_recovery_policy_version",
                          PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion) &&
                      HasExactFalse(makerGtd, "observation_gaps_backfilled")) ||
-                !currentLifecycleContract &&
+                !usesGapRecoveryLifecycle &&
                 (makerGtd.TryGetProperty("gap_recovery_policy_version", out _) ||
                  makerGtd.TryGetProperty("observation_gaps_backfilled", out _)))
             {

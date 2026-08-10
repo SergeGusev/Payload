@@ -6,6 +6,7 @@ using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
+using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
@@ -349,6 +350,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     [InlineData("wrong_notional")]
     [InlineData("wrong_requested_notional")]
     [InlineData("wrong_market_interval")]
+    [InlineData("v4_with_v3_expiration_contract")]
+    [InlineData("v3_with_v4_expiration_contract")]
     [InlineData("wrong_outcome")]
     [InlineData("wrong_asset")]
     [InlineData("missing_continuity_generation")]
@@ -425,6 +428,26 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 break;
             case "wrong_market_interval":
                 root["maker_gtd"]!["market_start_utc"] = order.ExpiresAtUtc.AddMinutes(-3);
+                break;
+            case "v4_with_v3_expiration_contract":
+            {
+                var marketEndUtc = order.ExpiresAtUtc;
+                var grandfatheredEffectiveExpiryUtc = marketEndUtc.AddMinutes(-1);
+                order = order with { ExpiresAtUtc = grandfatheredEffectiveExpiryUtc };
+                root["maker_gtd"]!["effective_expires_at_utc"] = grandfatheredEffectiveExpiryUtc;
+                root["maker_gtd"]!["clob_gtd_expiration_utc"] = marketEndUtc;
+                root["maker_gtd"]!["frozen_intent"]!["effective_expires_at_utc"] =
+                    grandfatheredEffectiveExpiryUtc;
+                root["maker_gtd"]!["frozen_intent"]!["clob_gtd_expiration_utc"] = marketEndUtc;
+                root["maker_gtd"]!["attempts"]![0]!["frozen_intent"]!["effective_expires_at_utc"] =
+                    grandfatheredEffectiveExpiryUtc;
+                root["maker_gtd"]!["attempts"]![0]!["frozen_intent"]!["clob_gtd_expiration_utc"] =
+                    marketEndUtc;
+                break;
+            }
+            case "v3_with_v4_expiration_contract":
+                root["maker_gtd"]!["contract_version"] =
+                    PairedMakerGtdPaperExecutionContract.GapRecoveryContractVersion;
                 break;
             case "wrong_outcome":
                 order = order with { Outcome = "Down" };
@@ -545,6 +568,44 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     }
 
     [Fact]
+    public void EvidenceParser_PairedCurrentV4UsesMarketEndEffectiveExpiryAndWirePlus60()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        using var document = JsonDocument.Parse(Assert.IsType<string>(scenario.Order.RawDecisionJson));
+        var root = document.RootElement;
+        var makerGtd = root.GetProperty("maker_gtd");
+        var frozenIntent = makerGtd.GetProperty("frozen_intent");
+        var marketEndUtc = makerGtd.GetProperty("market_end_utc").GetDateTimeOffset();
+
+        Assert.Equal(
+            PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
+            makerGtd.GetProperty("contract_version").GetString());
+        Assert.Equal(marketEndUtc, scenario.Order.ExpiresAtUtc);
+        Assert.Equal(marketEndUtc, makerGtd.GetProperty("effective_expires_at_utc").GetDateTimeOffset());
+        Assert.Equal(
+            marketEndUtc.AddSeconds(MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds),
+            makerGtd.GetProperty("clob_gtd_expiration_utc").GetDateTimeOffset());
+        Assert.Equal(marketEndUtc, frozenIntent.GetProperty("effective_expires_at_utc").GetDateTimeOffset());
+        Assert.Equal(
+            marketEndUtc.AddSeconds(MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds),
+            frozenIntent.GetProperty("clob_gtd_expiration_utc").GetDateTimeOffset());
+        Assert.True(root.GetProperty("post_only").GetBoolean());
+        Assert.Equal("GTD", root.GetProperty("order_type").GetString());
+
+        var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
+            scenario.Order,
+            out var evidence,
+            out var failureDetail);
+
+        Assert.True(parsed, failureDetail);
+        Assert.NotNull(evidence);
+    }
+
+    [Fact]
     public void EvidenceParser_PairedLegacyV1WithoutReceiptTimingFields_RemainsAccepted()
     {
         var now = DateTimeOffset.UtcNow;
@@ -572,6 +633,38 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             expiresAtUtc: now.AddMinutes(1),
             executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
         var order = ConvertPairedOrderToDirectHttpV2(scenario.Order);
+
+        var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
+            order,
+            out var evidence,
+            out var failureDetail);
+
+        Assert.True(parsed, failureDetail);
+        Assert.NotNull(evidence);
+    }
+
+    [Fact]
+    public void EvidenceParser_PairedGapRecoveryV3WithGrandfatheredExpiry_RemainsAccepted()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            executionSource: PairedMakerGtdPaperExecutionContract.ExecutionSource);
+        var order = ConvertPairedOrderToGapRecoveryV3(scenario.Order);
+        using var document = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
+        var makerGtd = document.RootElement.GetProperty("maker_gtd");
+        var marketEndUtc = makerGtd.GetProperty("market_end_utc").GetDateTimeOffset();
+
+        Assert.Equal(
+            PairedMakerGtdPaperExecutionContract.GapRecoveryContractVersion,
+            makerGtd.GetProperty("contract_version").GetString());
+        Assert.Equal(
+            PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
+            makerGtd.GetProperty("gap_recovery_policy_version").GetString());
+        Assert.Equal(marketEndUtc.AddMinutes(-1), order.ExpiresAtUtc);
+        Assert.Equal(order.ExpiresAtUtc, makerGtd.GetProperty("effective_expires_at_utc").GetDateTimeOffset());
+        Assert.Equal(marketEndUtc, makerGtd.GetProperty("clob_gtd_expiration_utc").GetDateTimeOffset());
 
         var parsed = MakerGtdPaperOrderEvidenceParser.TryParse(
             order,
@@ -865,6 +958,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     [InlineData("v1")]
     [InlineData("v2")]
     [InlineData("v3")]
+    [InlineData("v4")]
     public async Task MarketDataUpdater_PairedSourceAfterServiceRestart_ResumesFromLaterEvent(
         string contractVersion)
     {
@@ -877,7 +971,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         {
             "v1" => ConvertPairedOrderToLegacyV1(scenario.Order),
             "v2" => ConvertPairedOrderToDirectHttpV2(scenario.Order),
-            "v3" => scenario.Order,
+            "v3" => ConvertPairedOrderToGapRecoveryV3(scenario.Order),
+            "v4" => scenario.Order,
             _ => throw new InvalidOperationException($"Unknown paired contract {contractVersion}.")
         };
         scenario.Repository.PaperOrders[0] = order;
@@ -1735,7 +1830,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 throw new ArgumentOutOfRangeException(nameof(legacyS1Shape), legacyS1Shape, null);
         }
 
-        return order with { RawDecisionJson = root.ToJsonString() };
+        return ApplyGrandfatheredPairedExpiration(order, root);
     }
 
     private static PaperOrder ConvertPairedOrderToDirectHttpV2(PaperOrder order)
@@ -1746,7 +1841,40 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             PairedMakerGtdPaperExecutionContract.DirectHttpReceiptContractVersion;
         makerGtd.Remove("gap_recovery_policy_version");
         makerGtd.Remove("observation_gaps_backfilled");
-        return order with { RawDecisionJson = root.ToJsonString() };
+        return ApplyGrandfatheredPairedExpiration(order, root);
+    }
+
+    private static PaperOrder ConvertPairedOrderToGapRecoveryV3(PaperOrder order)
+    {
+        var root = JsonNode.Parse(Assert.IsType<string>(order.RawDecisionJson))!.AsObject();
+        root["maker_gtd"]!["contract_version"] =
+            PairedMakerGtdPaperExecutionContract.GapRecoveryContractVersion;
+        return ApplyGrandfatheredPairedExpiration(order, root);
+    }
+
+    private static PaperOrder ApplyGrandfatheredPairedExpiration(PaperOrder order, JsonObject root)
+    {
+        var marketEndUtc = order.ExpiresAtUtc;
+        var effectiveExpiresAtUtc = marketEndUtc.AddSeconds(
+            -MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds);
+        var makerGtd = root["maker_gtd"]!.AsObject();
+        makerGtd["effective_expires_at_utc"] = effectiveExpiresAtUtc;
+        makerGtd["clob_gtd_expiration_utc"] = marketEndUtc;
+        foreach (var frozenIntent in new[]
+                 {
+                     makerGtd["frozen_intent"]!.AsObject(),
+                     makerGtd["attempts"]![0]!["frozen_intent"]!.AsObject()
+                 })
+        {
+            frozenIntent["effective_expires_at_utc"] = effectiveExpiresAtUtc;
+            frozenIntent["clob_gtd_expiration_utc"] = marketEndUtc;
+        }
+
+        return order with
+        {
+            ExpiresAtUtc = effectiveExpiresAtUtc,
+            RawDecisionJson = root.ToJsonString()
+        };
     }
 
     private static MakerScenario CreateScenario(
@@ -1765,7 +1893,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             : null;
         var createdAtUtc = pairedVariant is null
             ? now.AddMinutes(-2)
-            : expiresAtUtc.AddMinutes(-5);
+            : expiresAtUtc.AddMinutes(-6);
         var referenceAverageVariant = string.Equals(
                 executionSource,
                 MakerGtdPaperExecutionContract.ExecutionSource,
@@ -1775,6 +1903,12 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant))
             : null;
         var acceptedAtUtc = createdAtUtc;
+        var marketStartUtc = pairedVariant is null
+            ? createdAtUtc.AddMinutes(1)
+            : expiresAtUtc.AddMinutes(-5);
+        var marketEndUtc = pairedVariant is null
+            ? expiresAtUtc.AddMinutes(1)
+            : expiresAtUtc;
         var strategyId = pairedVariant?.Id ?? referenceAverageVariant?.Id ?? Guid.NewGuid();
         var order = new PaperOrder(
             Guid.NewGuid(),
@@ -1804,8 +1938,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             "market-maker-gtd",
             "Maker GTD market",
             "Crypto",
-            MarketStartUtc: createdAtUtc.AddMinutes(1),
-            MarketEndUtc: expiresAtUtc.AddMinutes(1),
+            MarketStartUtc: marketStartUtc,
+            MarketEndUtc: marketEndUtc,
             DetectedAtUtc: createdAtUtc.AddSeconds(-1),
             EntryDueAtUtc: createdAtUtc,
             Status: StrategyMarketPaperRunStatuses.Resting,
@@ -1846,7 +1980,9 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             var pairedStrategyId = Assert.IsType<Guid>(pairedVariant.PairedStrategyId);
             var maximumOrderPrice = Assert.IsType<decimal>(pairedVariant.MakerMaximumOrderPrice);
             var commonSizeFrozenAtUtc = acceptedAtUtc.AddSeconds(-1);
-            var marketEndUtc = order.ExpiresAtUtc.AddMinutes(1);
+            var marketEndUtc = order.ExpiresAtUtc;
+            var clobGtdExpirationUtc = marketEndUtc.AddSeconds(
+                MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds);
             var frozenAtUtc = acceptedAtUtc.AddMilliseconds(-500);
             var sourceTimestampUtc = acceptedAtUtc.AddHours(-2);
             var s0RequestStartedAtUtc = acceptedAtUtc.AddMilliseconds(-1_500);
@@ -1878,7 +2014,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 decision_snapshot_at_utc = acceptedAtUtc.AddSeconds(-1),
                 frozen_at_utc = frozenAtUtc,
                 effective_expires_at_utc = order.ExpiresAtUtc,
-                clob_gtd_expiration_utc = marketEndUtc
+                clob_gtd_expiration_utc = clobGtdExpirationUtc
             };
             var acceptedAttempt = new
             {
@@ -1989,10 +2125,10 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                     maximum_placement_attempts = 10,
                     price_formula = PairedMakerGtdPaperExecutionContract.PriceFormula,
                     maximum_order_price = maximumOrderPrice,
-                    market_start_utc = order.ExpiresAtUtc.AddMinutes(-4),
+                    market_start_utc = marketEndUtc.AddMinutes(-5),
                     market_end_utc = marketEndUtc,
                     effective_expires_at_utc = order.ExpiresAtUtc,
-                    clob_gtd_expiration_utc = marketEndUtc,
+                    clob_gtd_expiration_utc = clobGtdExpirationUtc,
                     accepted_at_utc = acceptedAtUtc,
                     frozen_intent = frozenIntent,
                     attempts_completed = 1,

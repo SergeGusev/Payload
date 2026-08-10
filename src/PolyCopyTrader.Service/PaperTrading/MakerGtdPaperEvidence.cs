@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Service.MarketData;
+using PolyCopyTrader.Service.Strategies;
 
 namespace PolyCopyTrader.Service.PaperTrading;
 
@@ -617,7 +618,6 @@ internal static class MakerGtdPaperOrderEvidenceParser
                 makerGtd,
                 "clob_gtd_expiration_utc",
                 out var clobGtdExpirationUtc) ||
-            !SameTimestamp(marketEndUtc, clobGtdExpirationUtc) ||
             !SameTimestamp(marketEndUtc, marketStartUtc.AddMinutes(5)) ||
             !SameTimestamp(
                 clobGtdExpirationUtc,
@@ -629,10 +629,25 @@ internal static class MakerGtdPaperOrderEvidenceParser
             return false;
         }
 
-        var currentLifecycleContract = string.Equals(
-            contractVersion,
-            PairedMakerGtdPaperExecutionContract.CurrentContractVersion,
-            StringComparison.Ordinal);
+        var usesMarketEndEffectiveExpiry =
+            PairedMakerGtdPaperExecutionContract.UsesMarketEndEffectiveExpiry(contractVersion);
+        var expirationContractMatches = usesMarketEndEffectiveExpiry
+            ? SameTimestamp(effectiveExpiresAtUtc, marketEndUtc) &&
+              SameTimestamp(
+                  clobGtdExpirationUtc,
+                  marketEndUtc.AddSeconds(MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds))
+            : SameTimestamp(clobGtdExpirationUtc, marketEndUtc) &&
+              SameTimestamp(
+                  effectiveExpiresAtUtc.AddSeconds(MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds),
+                  marketEndUtc);
+        if (!expirationContractMatches)
+        {
+            failureDetail = "paired_maker_gtd_expiration_contract_mismatch";
+            return false;
+        }
+
+        var usesGapRecoveryLifecycle =
+            PairedMakerGtdPaperExecutionContract.UsesGapRecoveryLifecycle(contractVersion);
         var hasExactGapRecoveryPolicy =
             TryGetRequiredString(
                 makerGtd,
@@ -647,8 +662,8 @@ internal static class MakerGtdPaperOrderEvidenceParser
                 "observation_gaps_backfilled",
                 out var observationGapsBackfilled) &&
             !observationGapsBackfilled;
-        if (currentLifecycleContract != hasExactGapRecoveryPolicy ||
-            !currentLifecycleContract &&
+        if (usesGapRecoveryLifecycle != hasExactGapRecoveryPolicy ||
+            !usesGapRecoveryLifecycle &&
             (makerGtd.TryGetProperty("gap_recovery_policy_version", out _) ||
              makerGtd.TryGetProperty("observation_gaps_backfilled", out _)))
         {
