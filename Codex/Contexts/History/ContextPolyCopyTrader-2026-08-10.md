@@ -56,3 +56,10 @@ Request:
 
 Result:
 Verified against the current exact BTC/ETH/SOL five-minute Gamma markets and all six CLOB books that the venue minimum is `5` shares per leg, not a fixed euro amount. With fully filled `5 shares Up @ 0.50` and `5 shares Down @ 0.49`, each pair costs `$4.95`, pays `$5.00` after resolution, and produces exactly `$0.05` Gross PnL regardless of outcome. On `8,639` resolved markets per asset, each of BTC, ETH, and SOL models `$42,763.05` turnover and `$431.95` Gross PnL; all three total `$1,295.85`. The current fee-equivalent formula gives an unrounded estimated Maker rebate of `$302.304527` per asset and `$906.913581` total, making Gross plus estimated rebate `$734.254527` per asset and `$2,202.763581` total. Rebate remains separate and non-guaranteed because actual daily pool allocation and precision can move the final amount by cents. The premise is hypothetical full execution, not verified trading history, and carries `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+
+## 2026-08-10T19:33:56.5285184Z
+Request:
+Я не понимаю, откуда такой большой Pnl. Ведь если Up выигрывает, то Down проигрывает. Ты при рассчётах использовал то реальное количество Up и Down, которое посчитал на шаге выше?
+
+Result:
+Confirmed by a fresh exact decomposition that the real counts were used: BTC `4,263 Up / 4,376 Down`, ETH `4,277 / 4,362`, and SOL `4,255 / 4,384`. At five shares, an Up result produces `+$2.50` on the Up leg and `-$2.45` on the Down leg, net `$0.05`; a Down result produces `-$2.50` and `+$2.55`, also net `$0.05`. The observed counts therefore alter the per-leg split but not the paired total. Per-leg 30-day PnL was BTC `-$282.50 / +$714.45`, ETH `-$212.50 / +$644.45`, and SOL `-$322.50 / +$754.45`, summing to `$431.95` for every asset. Clarified that the seemingly large total comes from multiplying only five cents by `8,639` resolved five-minute markets and relies on the highly optimistic premise that both maker legs fill on every market.
