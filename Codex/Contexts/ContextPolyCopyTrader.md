@@ -1,3 +1,16 @@
+## Active Update 2026-08-10 Paired Restart Semantics Clarification
+Goal: Determine whether restarting the service loses the paired Maker-GTD strategy or its already-resting Paper orders.
+Status: Completed
+Done:
+- Verified that the strategy catalog, persisted runs, Paper orders, and completed fills/positions are not deleted by a restart. Open Paper orders are reloaded from PostgreSQL, while persisted `Observed` placement continuations can resume.
+- Verified that each process creates a new confirmed-subscription session ID. A paired order accepted under the prior session fails the exact continuity comparison after restart, and the market-data updater therefore refuses every later TouchNoDepth fill for that order.
+- Verified that no duplicate/replacement order is created for a persisted `Resting` run: paired placement recovery selects only `Observed` runs. The old order remains `Pending` until its effective expiry.
+- Verified the expiry result: the order becomes `Expired`; its run becomes `Skipped` with `maker_gtd_evidence_unavailable` and detail `confirmed_asset_subscription_session_changed`, rather than receiving an inferred fill.
+- Clarified the operational consequence: the strategy continues for future markets and already-entered positions continue normally, but every still-resting paired Paper order present at restart is censored from subsequent fill inference. For the experiment, those individual orders are effectively lost as fill candidates.
+Next: If restart-safe behavior is required, design and approve a separate authoritative gap-reconciliation contract; do not merely remove the session guard because events may have been missed while the service was down.
+Notes: Read-only source and focused lifecycle-test inspection. No code/configuration, production/database, service, deployment, or trading action was performed.
+Blockers: None.
+
 ## Active Update 2026-08-10 Paired Receipt-Freshness Post-Deploy Verification
 Goal: Verify the deployed group-`8224` paired Maker-GTD receipt-freshness fix and its first production lifecycle without changing production, service, configuration, or trading state.
 Status: Completed
