@@ -106,3 +106,14 @@ Request:
 
 Result:
 Confirmed from current official Polymarket documentation that the FAK example is correct for SELL asks: a `BUY FAK` capped at `0.52` consumes available asks from the lowest price upward, while a same-token BUY bid is not an ask. A PostOnly Maker `SELL 0.50` is possible only with sufficient outcome-token inventory/allowance and only when it does not cross `bestBid`; otherwise it is rejected. Explained complementary matching: the current `BUY Down 0.49` is economically equivalent to an Up ask at `0.51`, so rising Up demand can fill the losing Down leg. Selling both sides at `0.50/0.49` after creating a `$1` complete set locks a one-cent-per-share loss, reversing rather than repairing the existing BUY-pair edge. Verified that low-level CLOB code supports SELL, but exact group-`8224` remains BUY-only and current end-to-end SELL paths require existing inventory. No production or trading state changed.
+
+## 2026-08-11T21:04:36.8733565Z
+Request:
+Ты написал:
+
+Итог при исполнении обеих: **−$0,05**, независимо от результата.
+
+А rebate какой будет?
+
+Result:
+Verified current official crypto rebate rules and a live public BTC 5m market schedule (`feesEnabled=true`, fee rate `0.07`, maker fee `0`, rebate rate `0.20`). For five maker SELL shares at `0.50` and five at `0.49`, fee-equivalent weights are `0.087500` and `0.087465`; the current nominal rebate is approximately `0.034993`. The complete-set SELL loss therefore changes from `-0.050000` to approximately `-0.015007`, still negative. Clarified that the exact credited amount is calculated daily per market from the final rebate pool and fee-equivalent totals, with rounding and actual fill eligibility, and that at least `$1` must accrue before payout. No production or trading state changed.

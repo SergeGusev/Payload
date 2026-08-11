@@ -1,3 +1,17 @@
+## Active Update 2026-08-11 Maker SELL Pair Rebate Calculation
+Goal: Calculate the current Maker rebate for the five-share `SELL Up 0.50 + SELL Down 0.49` example and its net result.
+Status: Completed
+Done:
+- Verified current official Polymarket rules: fee-enabled crypto markets use `fee_equivalent = C * 0.07 * p * (1-p)`, charge makers zero trading fee, and allocate a 20% fee-curve-weighted Maker rebate pool daily per market. Eligibility requires resting maker liquidity to be actually taken; merely posting an order earns no rebate.
+- Independently sampled public BTC 5m market `btc-updown-5m-1786482000` / Gamma ID `3500740` at `2026-08-11T21:02:55Z`; it was active, accepting orders, `feesEnabled=true`, and carried `feeSchedule={exponent:1, rate:0.07, takerOnly:true, rebateRate:0.2}`. Adjacent BTC 5m markets had the same schedule.
+- Calculated nominal fee-equivalent weights: five shares at `0.50` produce `0.087500`; five at `0.49` produce `0.087465`; combined `0.174965`. At the current 20% crypto rate, the nominal rebate is approximately `0.034993`.
+- Reconciled the economics: the two SELL fills lose `0.050000` on the complete-set inventory before rebate and approximately `0.015007` after the nominal rebate. The rebate offsets about `69.986%` of the loss but does not make the strategy profitable.
+- Preserved the payout qualification: official calculation is `(your_fee_equivalent / total_fee_equivalent) * rebate_pool`, performed daily per market with fee precision/rounding; the exact credited amount is known only after daily allocation and actual eligibility. The current program requires at least `$1` accrued rebate before payout, so one approximately `0.035` result does not trigger a payment.
+- Noted an official terminology inconsistency: the current Maker Program page calls payment `pUSD`, while the rebate API response field remains `rebated_fees_usdc`.
+Next: None.
+Notes: Read-only official-documentation, public Gamma API, and decimal arithmetic audit independently checked by three agents. No production database, source, configuration, strategy, order, or trading state changed.
+Blockers: None.
+
 ## Active Update 2026-08-11 Maker SELL Versus Current Paired BUY Clarification
 Goal: Determine whether a Maker `SELL 0.50` order is possible and relate it to the user's `BUY FAK 0.52` example and the current group-`8224` strategy.
 Status: Completed
