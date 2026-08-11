@@ -1,3 +1,17 @@
+## Active Update 2026-08-11 Paired Strategy Negative-PnL Conditions
+Goal: Determine whether the paired BTC/ETH/SOL Maker-GTD strategy loses only when exactly one filled leg is the losing outcome.
+Status: Completed
+Done:
+- Scoped the answer to the exact six group-`8224` Paper-only legs and distinguished an accepted/resting order from an actual fill. A resting order has not bought shares and creates no entry cost.
+- Verified that the current optimistic TouchNoDepth Paper contract fills each leg completely or not at all, while both legs share one frozen quantity and have limit-price caps totaling at most `0.99`.
+- Derived the fully filled pair result as `q * (1 - UpPrice - DownPrice)`, which is at least `q * 0.01` before rebates. For the prior `5`-share example this is `+$0.05` under either outcome.
+- Confirmed that, within this exact Paper state model, aggregate pair gross PnL is negative only when one leg fills, its peer does not fill, and the filled leg loses. Neither leg filled produces zero; one winning leg produces a profit; both full equal legs produce a profit.
+- Separated this Paper conclusion from real CLOB execution. Official order documentation permits partial fills of resting orders, so a future Live implementation could lose with both sides partially filled in unequal quantities. Live submission for this family remains disabled, and the current Paper model is explicitly optimistic and not Live-equivalent.
+- Rechecked current official Polymarket terms: equal Up/Down shares form a complete set redeemable for `$1`; makers have zero platform fee while takers pay fees. Maker rebates are not modeled or included in this strategy's Paper PnL.
+Next: None.
+Notes: Read-only source, focused-test, arithmetic, and current official-documentation audit, independently cross-checked by two agents. No application source, production, database, service, configuration, strategy, order, or trading state changed.
+Blockers: None.
+
 ## Active Update 2026-08-11 Equal-Share Down-Win Cash Flow Clarification
 Goal: Explain the prior five-share paired PnL example, specifically the cash flow and profit when Down wins.
 Status: Completed

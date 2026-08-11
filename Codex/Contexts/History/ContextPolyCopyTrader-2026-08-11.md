@@ -19,3 +19,10 @@ Request:
 
 Result:
 Explained the mirrored equal-share cash flow for a Down result: the five losing Up shares pay `$0`, producing `-$2.50` PnL; the five winning Down shares pay `$5.00`, producing `+$2.55` PnL after their `$2.45` purchase cost. The paired net is therefore `+$0.05`. Distinguished gross payout (`$5.00`) from Down-leg profit (`+$2.55`). No application or production state changed.
+
+## 2026-08-11T05:27:32.0639711Z
+Request:
+То есть эта стратегия проигрышная только в одном случае - если выкуплено только одно из направлений и оно проиграло, правильно?
+
+Result:
+Confirmed that this statement is exact for the current group-`8224` optimistic Paper model: each leg is full-fill-or-none, quantities are equal, and capped prices total at most `0.99`, so aggregate pair gross PnL is negative only when exactly one leg fills and that leg loses. Clarified that Resting is not a fill and that real CLOB orders can fill partially; therefore the same statement would not be sufficient for a future Live implementation with unequal fills. Rechecked official complete-set payout and zero maker platform-fee rules; rebates remain excluded from Paper PnL. No application or production state changed.
