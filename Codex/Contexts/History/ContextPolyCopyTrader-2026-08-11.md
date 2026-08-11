@@ -131,3 +131,10 @@ Request:
 
 Result:
 Verified that equality remains crossing for complementary SELL orders: `0.50 + 0.50 = 1.00`, and the CTF `MERGE` condition is `pUp + pDown <= 1`. Consequently both cannot simultaneously remain resting PostOnly Maker quotes; after one rests, the other is immediately marketable and PostOnly must reject it. Both may mutually rest only when the sum is strictly above one, such as `0.50 + 0.51 = 1.01`, subject to other book liquidity. Sequential independent Maker fills are possible only after the first order is no longer resting, which introduces one-leg risk. No production or trading state changed.
+
+## 2026-08-11T21:17:54.5464140Z
+Request:
+Ок, тогда посчитай мою логику при Up SELL 0.51 и Down SELL 0.5
+
+Result:
+Using the explicit premise `$5` split into five complete sets, calculated the full independent-fill matrix for SELL 5 Up at `0.51` and SELL 5 Down at `0.50`. Both fills return `$5.05` for `+$0.05`; neither fill returns the intact complete set for `$0`; Up-only produces `-$2.45` if Up wins or `+$2.55` if Down wins; Down-only produces `+$2.50` if Up wins or `-$2.50` if Down wins. Explained that SELLing the token which later wins is the adverse one-leg case, and that underlying zero-line movement does not guarantee book execution. The current generic crypto rebate formula gives an illustrative combined 20%-proxy of `~$0.034993`, so a qualifying both-Maker fill would be about `+$0.084993`, but actual daily rebate is market-specific and current group-`8224` Paper excludes it. No production or trading state changed.

@@ -1,3 +1,17 @@
+## Active Update 2026-08-11 Paired SELL 0.51/0.50 Economics
+Goal: Calculate the user's paired-SELL logic for five Up shares at `0.51` and five Down shares at `0.50`.
+Status: Completed
+Done:
+- Fixed the reproducible premise: split `$5` into five complete sets (`5 Up + 5 Down`), then place independent PostOnly SELL orders for all five Up shares at `0.51` and all five Down shares at `0.50`.
+- Verified that the pair does not cross itself because `0.51 + 0.50 = 1.01 > 1`; both may rest only if each also avoids all other direct/complementary liquidity and has sufficient inventory/allowance.
+- Reconciled the full gross-PnL matrix: both fill `+$0.05` under either outcome; neither fills `$0`; Up-only gives `-$2.45` if Up wins and `+$2.55` if Down wins; Down-only gives `+$2.50` if Up wins and `-$2.50` if Down wins.
+- Identified the central SELL-side reversal: an Up SELL fill disposes of the Up token rather than betting on Up. If that filled token later wins, the retained complementary token is worthless and the one-leg position loses about half the full-set capital. The same applies symmetrically to Down.
+- Preserved the execution caveat: the underlying start/end or zero-line path does not guarantee any fill. SELL execution depends on external bids/trades, queue, depth, and independent leg acceptance/fills.
+- Under the current generic crypto rebate parameters, the fee-equivalent weights are `0.087465` (Up) and `0.087500` (Down). Applying the 20% rate as an illustrative proxy gives `0.017493`, `0.017500`, or `0.034993` for both, making the both-filled illustration `+$0.084993`. Actual daily credited rebate remains market-specific and is not guaranteed ex ante; current group-`8224` Paper PnL excludes rebates.
+Next: None. A strategy decision requires measured joint/one-leg SELL fill frequencies; the payoff table alone does not establish positive expected value.
+Notes: Read-only official-documentation/contract and decimal-arithmetic audit independently checked by two agents. No production, trading, order, strategy, source-code, configuration, or test state changed.
+Blockers: None.
+
 ## Active Update 2026-08-11 Complementary SELL Equality Boundary
 Goal: Determine whether simultaneous PostOnly `SELL Up 0.50` and `SELL Down 0.50` can both rest as Makers.
 Status: Completed
