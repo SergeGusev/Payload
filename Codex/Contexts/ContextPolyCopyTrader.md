@@ -1,3 +1,17 @@
+## Active Update 2026-08-11 BTC Paired Maker-GTD Settled Funnel Audit
+Goal: Explain why the exact BTC Up/Down group-`8224` Paired Maker-GTD strategies show relatively few `Settled` runs.
+Status: Completed
+Done:
+- Audited only IDs `b7c50005-0000-4000-8224-000000000101` (Up) and `...102` (Down) on `192.168.0.101:5432/polycopytrader` under server-enforced `REPEATABLE READ / READ ONLY / UTC`. Both rows were enabled, unpaused, Paper-only, and had `paper_stake_amount=1`; the service was `Running / Live` on deployed build `4743c8f75b2240f1721ebe7f709a94f53414a7c7` with an advancing heartbeat and no service-level error.
+- At the latest fixed cutoff `2026-08-11T05:41:19.374487Z`, each leg had `401` runs but only `113` ended markets. Up was `19 Settled / 94 Skipped / 3 Entered future / 285 Resting future`; Down was `14 Settled / 99 Skipped / 1 Entered future / 287 Resting future`. Thus each leg had exactly `288` future markets, a full 24-hour five-minute day-ahead cohort.
+- Reconciled the ended funnel independently: among `113` ended markets, `89` had no filled leg, `15` had one filled leg, and `9` had both; the resulting `33` ended filled legs exactly matched the final `19 Up + 14 Down Settled`. There were no ended `Entered` rows after the follow-up, no filled-without-fill, settlement-link, duplicate-fill, or Dashboard-count mismatch.
+- Explained the `193` ended Skipped legs. Up `81` and Down `83` exhausted all historical placement attempts, overwhelmingly with `paired_maker_gtd_s0_book_not_current`, so no order was created. A further Up `13` and Down `16` old orders expired fail-closed as `maker_gtd_evidence_unavailable`, so they had no eligible fill and correctly became `Skipped`, not `Settled`.
+- Verified the state contract: accepted orders are `Resting/Pending`; only an eligible authoritative post-acceptance/pre-expiry touch creates `Filled/Entered`; only an ended `Entered` run with Gamma token metadata `Resolved=true` and a non-empty winner becomes `Settled`. Unfilled orders terminate as `Expired/Skipped` and never count as `Settled`.
+- Measured normal run-settlement delay near five minutes: historical medians were about `309.7s` Up and `308.9s` Down after market end. The two just-ended `05:35Z` legs were still `Entered` in the first snapshot but both became `Settled` around `05:40Z`; every remaining `Entered` row then targeted a future market. Two old global `SettleDueRun` deadlocks at `22:02Z` left no stranded exact-strategy row and were not the low-count cause.
+Next: None. If requested separately, compare fill and placement-success rates only for a full post-v4 24-hour cohort after it has completely ended.
+Notes: Three independent read-only production reconciliations plus source/test dispatch-path inspection agreed. No database, service, configuration, deployment, strategy, order, or trading state changed; no build or tests were required for this audit.
+Blockers: None.
+
 ## Active Update 2026-08-11 Paired Strategy Negative-PnL Conditions
 Goal: Determine whether the paired BTC/ETH/SOL Maker-GTD strategy loses only when exactly one filled leg is the losing outcome.
 Status: Completed

@@ -26,3 +26,12 @@ Request:
 
 Result:
 Confirmed that this statement is exact for the current group-`8224` optimistic Paper model: each leg is full-fill-or-none, quantities are equal, and capped prices total at most `0.99`, so aggregate pair gross PnL is negative only when exactly one leg fills and that leg loses. Clarified that Resting is not a fill and that real CLOB orders can fill partially; therefore the same statement would not be sufficient for a future Live implementation with unequal fills. Rechecked official complete-set payout and zero maker platform-fee rules; rebates remain excluded from Paper PnL. No application or production state changed.
+
+## 2026-08-11T05:44:00.8318613Z
+Request:
+Посмотри стратегии BTC Up or Down 5m Down Paired Maker GTD First Accepting и BTC Up or Down 5m Up Paired Maker GTD First Accepting
+
+Почему так мало Setteled ?
+
+Result:
+Audited the exact BTC group-`8224` Up/Down strategies in strict production read-only snapshots. At the final `2026-08-11T05:41:19.374487Z` cutoff, only `113` markets had ended while each leg already held `288` future day-ahead runs. The ended funnel produced exactly `33` filled legs, all reconciled to `19 Up + 14 Down Settled`; no settlement or Dashboard backlog remained. Most ended rows were Skipped because historical placement attempts failed old S0-currentness checks (Up `81`, Down `83`) or old accepted orders expired without eligible continuous evidence (Up `13`, Down `16`). Confirmed that unfilled runs become `Skipped`, not `Settled`, and that normal strategy-run settlement trails market end by about five minutes while awaiting the Gamma metadata path. No production or application state changed.
