@@ -1,3 +1,16 @@
+## Active Update 2026-08-11 Repeated ETH 2 bps Net PnL Report
+Goal: Repeat the fresh report for `ETH Up or Down 5m 2 bps Reference Average Premarket`, showing only persisted settled Paper Net PnL, with ETHUSDT overlay and the maximum Net drawdown region, plus a daily Net PnL Excel workbook.
+Status: Completed
+Done:
+- Resolved the exact neutral strategy as `b7c50005-0000-4000-8179-000000000102` / `eth_up_down_5m_reference_average_bps_2_fak_premarket`, separately enumerated the similarly named Up/Down variants, and fixed the production `REPEATABLE READ / READ ONLY / UTC` snapshot cutoff at `2026-08-11T19:40:22.059276Z`.
+- Reconciled `2,560` unique settled runs/markets with complete Net accounting and zero invalid, incomplete, after-cutoff, non-accounted-fee, Net-identity-mismatch, or Live rows. Net PnL is `$293.67626746`, fee-inclusive Net ROI is `1.849555330808147099%`, and Net W/L/flat is `1,439/1,121/0`.
+- Reconciled the latest UTC day `2026-08-11`: `32` settlements and Net PnL `-$4.58742675`. Maximum Net drawdown is `$146.64675734`, from the cumulative `$423.96710713` peak at `2026-08-10T06:05:07.381208Z` to the `$277.32034979` trough at `2026-08-11T12:43:57.142601Z`; it remained unrecovered at cutoff.
+- Produced and visually verified the `1800x920` solid-line chart with cumulative Net PnL, ETHUSDT overlay, direct endpoint labels, and the ongoing maximum Net drawdown region. ETH coverage is `54,296/55,024` UTC minutes (`98.6769409712%`), from `$1,768.97` to `$1,863.52`.
+- Produced and independently verified the one-sheet `Daily Net PnL` workbook for `39` continuous UTC dates (`2026-07-04..2026-08-11`): exact Net total `$293.67626746`, `41` formulas with zero mismatches/errors, `17` negative days shown red on white with visible minus, and first row/column frozen exactly at `B2`.
+Next: Continue using Net-only values for later repetitions of this report.
+Notes: Root CSV/Decimal checks passed, the independent fixed-cutoff production SQL/CSV audit passed `86/86`, chart checks passed `37/37`, and artifact-tool/OpenXML/Excel COM/visual checks passed. The chart and workbook are under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-reference-average-net-pnl-eth-report-20260811-1940z/`. This was a read-only report over stored settled Paper history, not a replay; production, service, configuration, database data, strategy state, and trading state were unchanged.
+Blockers: None.
+
 ## Active Update 2026-08-11 BTC Paired Maker-GTD S0 Currentness Audit
 Goal: Explain the historical `paired_maker_gtd_s0_book_not_current` failures for the exact BTC group-`8224` Up/Down strategies and determine whether the same defect affects current v4 placement.
 Status: Completed

@@ -44,3 +44,10 @@ Re: 81 Up и 83 Down — исторические попытки размеще�
 
 Result:
 Traced S0 and reconciled every exact BTC terminal occurrence. The `81` Up and `83` Down skipped runs were exclusively v1: ten rapid direct CLOB reads were locally rejected because v1 compared the `1500ms` gate to the venue book timestamp, even when a distinct HTTP response had just been received. All `1,638` S0 failures exceeded the threshold, while client receipt-to-evaluation was normally about `0.091ms` and `162/164` runs saw one unchanged venue timestamp throughout all retries. Verified that v2 replaced this with direct HTTP request/receipt/response freshness while retaining the venue timestamp only as mandatory chronological audit evidence; v3/v4 inherit that fix. The reason code remains valid for genuinely aged/invalid local reads and appeared as one recoverable common-freeze retry in fourteen accepted v3 BTC orders, but no v4 occurrence or post-v1 terminal mass failure was found. No production or application state changed.
+
+## 2026-08-11T19:53:46.5225517Z
+Request:
+Повтори
+
+Result:
+Repeated the exact `ETH Up or Down 5m 2 bps Reference Average Premarket` report from a fixed production `REPEATABLE READ / READ ONLY / UTC` snapshot at `2026-08-11T19:40:22.059276Z`, using only persisted settled Paper Net PnL. Reconciled `2,560` unique runs/markets, Net PnL `$293.67626746`, fee-inclusive Net ROI `1.849555330808147099%`, Net W/L/flat `1,439/1,121/0`, latest UTC day `32 / -$4.58742675`, and an unrecovered maximum Net drawdown of `$146.64675734`. Produced and visually verified a solid-line cumulative Net PnL chart with ETHUSDT overlay and the ongoing maximum-drawdown region, plus a one-sheet daily Net PnL workbook for `39` continuous UTC dates with exact totals, red-on-white negative values, visible minus signs, and exact `B2` freeze panes. Root Decimal checks, independent production SQL/CSV audit `86/86`, chart checks `37/37`, and artifact/OpenXML/Excel checks passed. Production and trading state were unchanged; no replay was run.
