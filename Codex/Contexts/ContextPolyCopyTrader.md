@@ -1,3 +1,15 @@
+## Active Update 2026-08-11 Equal-Share Down-Win Cash Flow Clarification
+Goal: Explain the prior five-share paired PnL example, specifically the cash flow and profit when Down wins.
+Status: Completed
+Done:
+- Kept the same verified hypothetical: `5` Up shares bought at `0.50` for `$2.50` and `5` Down shares bought at `0.49` for `$2.45`, excluding fees and rebates.
+- For a Down result, the losing Up shares pay `$0`, so Up-leg PnL is `$0-$2.50=-$2.50`.
+- The winning Down shares pay `5 * $1.00 = $5.00`; after subtracting their `$2.45` purchase cost, Down-leg PnL is `$5.00-$2.45=+$2.55`.
+- Reconciled the pair as `-$2.50+$2.55=+$0.05`, equivalently `$5.00` total payout minus `$4.95` total pair cost. Clarified that `$5.00` is the gross Down payout and `+$2.55` is the Down leg's profit, not its payout.
+Next: None.
+Notes: Read-only arithmetic explanation using the already verified equal-share premises and official `$1/$0` outcome-token payout contract. No source, production, database, service, configuration, order, or trading state changed.
+Blockers: None.
+
 ## Active Update 2026-08-11 Equal-Share Up-Win Cash Flow Clarification
 Goal: Explain the prior five-share paired PnL example, specifically why the losing Down leg is `-$2.45` when Up wins.
 Status: Completed
