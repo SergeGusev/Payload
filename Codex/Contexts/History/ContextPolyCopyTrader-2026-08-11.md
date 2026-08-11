@@ -97,3 +97,12 @@ Request:
 
 Result:
 Verified that the argument reverses Maker BUY execution: an Up BUY at `0.50` fills when the Up token's ask/trade falls to `0.50` or below, not when Up becomes more likely and rises; the losing Down token can therefore be the only filled leg in a monotonic Up outcome, and vice versa. The underlying zero line is not the fill trigger and its crossing is neither sufficient nor necessary for two token-book fills. Also corrected the sizing mismatch: `+$2.50`, `+$2.55`, and `+$0.05` assume five equal shares costing `$2.50` Up plus `$2.45` Down, whereas literal `$2.50` per side creates unequal shares and asymmetric both-filled PnL. No production or trading state changed.
+
+## 2026-08-11T20:57:14.7173587Z
+Request:
+Я запутался. Вот я, например, тейкер. Я ставлю FAK с максимумом 0.52.  И если есть ставки по 0.5, я сначала покупаю их, потом покупаю 0.51 и т.д.  Разве не так?
+
+А maker заявок SELL 0.5 нельзя сделать?
+
+Result:
+Confirmed from current official Polymarket documentation that the FAK example is correct for SELL asks: a `BUY FAK` capped at `0.52` consumes available asks from the lowest price upward, while a same-token BUY bid is not an ask. A PostOnly Maker `SELL 0.50` is possible only with sufficient outcome-token inventory/allowance and only when it does not cross `bestBid`; otherwise it is rejected. Explained complementary matching: the current `BUY Down 0.49` is economically equivalent to an Up ask at `0.51`, so rising Up demand can fill the losing Down leg. Selling both sides at `0.50/0.49` after creating a `$1` complete set locks a one-cent-per-share loss, reversing rather than repairing the existing BUY-pair edge. Verified that low-level CLOB code supports SELL, but exact group-`8224` remains BUY-only and current end-to-end SELL paths require existing inventory. No production or trading state changed.

@@ -1,3 +1,16 @@
+## Active Update 2026-08-11 Maker SELL Versus Current Paired BUY Clarification
+Goal: Determine whether a Maker `SELL 0.50` order is possible and relate it to the user's `BUY FAK 0.52` example and the current group-`8224` strategy.
+Status: Completed
+Done:
+- Verified from current official Polymarket documentation that a `BUY FAK` with worst price `0.52` consumes available same-token SELL asks from the lowest price upward through `0.52`; it does not consume an ordinary same-token BUY bid.
+- Confirmed that a Maker `SELL 0.50` is supported as a PostOnly GTC/GTD ask only when it does not cross the current best bid. If `bestBid >= 0.50`, PostOnly rejects it. SELL requires sufficient balance and allowance of the exact conditional outcome token; naked shorting is not available through the documented order path.
+- Connected binary complementary matching to the existing pair: `BUY Down 0.49` is economically equivalent to `SELL Up 0.51`, and `BUY Up 0.50` is equivalent to `SELL Down 0.50`. Thus an Up taker can match the complementary Down BUY, explaining why the Down leg can fill as Up demand rises.
+- Verified the inventory economics. Splitting `$5` creates five Up plus five Down shares. Selling both at `0.50/0.49` returns `$4.95`, locking `-$0.05` before any rebate. A one-sided SELL can also lose when the sold token is the winner because the seller gives up its `$1` redemption value while retaining the losing token.
+- Verified current repo support boundaries: the low-level CLOB order builder supports `SELL + GTD + PostOnly`, but exact group-`8224` is hard-coded BUY-only throughout intent, acceptance, evidence, Paper order, and TouchNoDepth lifecycle; generic Paper SELL requires an existing position, and the current Live application gate allows only BUY.
+Next: None. Implementing a SELL variant would be a separate strategy and requires explicit scope plus inventory, pricing, fill, accounting, parity, and lifecycle contracts.
+Notes: Read-only official-documentation, current-source, and arithmetic audit independently checked by three agents. No production query, code change, test, configuration mutation, or trading action occurred.
+Blockers: None.
+
 ## Active Update 2026-08-11 Paired Maker Limit-Fill Logic Clarification
 Goal: Identify the error in the proposed three-case Up/Down paired Maker argument at limits `0.50/0.49`.
 Status: Completed
