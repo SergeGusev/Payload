@@ -1,3 +1,15 @@
+## Active Update 2026-08-11 Outage Cause Evidence Clarification
+Goal: State whether the cause of the August 11 service/betting outage is known and separate proved facts from hypotheses and missing evidence.
+Status: Completed
+Done:
+- Confirmed that the exact root cause is not proved by the available server-DB evidence. The proved failure sequence is: ordinary FAK entries degraded around `14:49:55Z`; later workers emitted repeated `Exception while reading from stream`, long database operations, HTTP timeouts, stale reference-price errors, and WebSocket closures; heartbeat and all BTC/ETH/SOL reference feeds then stopped near `16:36:15Z`.
+- Confirmed that PostgreSQL itself remained reachable with more than 25 days of uptime and no blocking/waiting locks when inspected. A service database backend later existed and repeatedly executed bulk persistence without restoring heartbeat or feeds. Therefore a PostgreSQL server restart or a contemporaneous blocking-lock outage is not supported by the evidence, but an earlier transient connection/network/provider failure is not excluded.
+- Classified the leading explanation only as a hypothesis: the service entered a partially wedged state after widespread stream/connection failures, and the user's host reboot cleared that state. The evidence does not distinguish a .NET/runtime deadlock, connection-pool/socket failure, host resource exhaustion, network-interface problem, or another host-level fault.
+- Identified the missing causal evidence: Windows Service Control and Event Viewer Application/System records, service Serilog/file logs, .NET crash/hang/dump evidence, PostgreSQL server logs, and host/network/resource telemetry for approximately `2026-08-11T14:40Z..16:40Z`. The prior remote SCM query was inaccessible, so OS-level state at the failure time was not independently established.
+Next: If exact attribution is required, collect and correlate those bounded host logs for `14:40Z..16:40Z`; do not infer the cause from the recovery-after-reboot correlation alone.
+Notes: This clarification reuses the already independently reconciled read-only outage and post-reboot evidence. No additional server query, code change, build, test, or system mutation was needed.
+Blockers: Exact causal diagnosis is blocked by unavailable host/service/database logs from the outage interval.
+
 ## Active Update 2026-08-11 Post-Reboot Server And Betting Verification
 Goal: Verify that the user's server reboot restored one healthy service instance, fresh BTC/ETH/SOL data, valid five-minute betting, backlog processing, and Dashboard projections without introducing late or Live orders.
 Status: Completed
