@@ -1,3 +1,16 @@
+## Active Update 2026-08-11 Complementary SELL Equality Boundary
+Goal: Determine whether simultaneous PostOnly `SELL Up 0.50` and `SELL Down 0.50` can both rest as Makers.
+Status: Completed
+Done:
+- Verified that the CTF `MERGE` crossing condition includes equality: complementary SELL orders match when `pUp + pDown <= 1`.
+- Therefore `0.50 + 0.50 = 1.00` is still marketable. The equality boundary is not a safe resting spread: after one leg rests, the other PostOnly leg must be rejected if it would immediately match.
+- Confirmed that both can mutually rest only when their price sum is strictly greater than one, e.g. `0.50 + 0.51 = 1.01`, subject to all other direct and complementary book liquidity.
+- Clarified that sequential Maker fills are a separate possibility: after the first order has been filled or removed, the other may later be posted independently, but this loses simultaneity and leaves one-leg inventory/execution risk.
+- Without PostOnly, an exact `1.00` pair can MERGE immediately; it is not two simultaneous Maker fills or two Maker rebates. Intentional self-matching remains prohibited.
+Next: None.
+Notes: Read-only verification against current official CTF Exchange V2 crossing code and Polymarket PostOnly/market-making documentation. No production, order, trading, source, configuration, or test state changed.
+Blockers: None.
+
 ## Active Update 2026-08-11 Simultaneous Complementary SELL Orders
 Goal: Determine whether SELL orders for Up and Down can be placed simultaneously and whether `0.50/0.49` can both remain PostOnly Maker quotes.
 Status: Completed

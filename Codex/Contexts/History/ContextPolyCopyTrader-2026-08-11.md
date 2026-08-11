@@ -124,3 +124,10 @@ Request:
 
 Result:
 Verified that separate SELL Up and SELL Down orders can be submitted when the wallet owns and approves both outcome-token balances, but complementary SELL orders cross through CTF `MERGE` when their prices sum to at most one. Consequently `0.50 + 0.49 = 0.99` cannot remain as two simultaneous PostOnly Maker quotes: after one rests, the other is immediately marketable and PostOnly must reject it; batch results are independent and ordering is not guaranteed. Both may rest only when their sum is strictly above one, subject also to each order not crossing other book liquidity. Corrected the prior rebate premise: both `0.50/0.49` legs cannot simultaneously earn Maker rebate. Confirmed that current group-`8224` remains BUY-only and has no paired SELL or Live inventory-reservation path. No production or trading state changed.
+
+## 2026-08-11T21:12:48.1918830Z
+Request:
+А если обе по 0.5 ?
+
+Result:
+Verified that equality remains crossing for complementary SELL orders: `0.50 + 0.50 = 1.00`, and the CTF `MERGE` condition is `pUp + pDown <= 1`. Consequently both cannot simultaneously remain resting PostOnly Maker quotes; after one rests, the other is immediately marketable and PostOnly must reject it. Both may mutually rest only when the sum is strictly above one, such as `0.50 + 0.51 = 1.01`, subject to other book liquidity. Sequential independent Maker fills are possible only after the first order is no longer resting, which introduces one-leg risk. No production or trading state changed.
