@@ -35,3 +35,12 @@ Request:
 
 Result:
 Audited the exact BTC group-`8224` Up/Down strategies in strict production read-only snapshots. At the final `2026-08-11T05:41:19.374487Z` cutoff, only `113` markets had ended while each leg already held `288` future day-ahead runs. The ended funnel produced exactly `33` filled legs, all reconciled to `19 Up + 14 Down Settled`; no settlement or Dashboard backlog remained. Most ended rows were Skipped because historical placement attempts failed old S0-currentness checks (Up `81`, Down `83`) or old accepted orders expired without eligible continuous evidence (Up `13`, Down `16`). Confirmed that unfilled runs become `Skipped`, not `Settled`, and that normal strategy-run settlement trails market end by about five minutes while awaiting the Gamma metadata path. No production or application state changed.
+
+## 2026-08-11T06:00:21.6433852+00:00
+Request:
+Re: 81 Up и 83 Down — исторические попытки размещения ранних версий, отклонённые из-за paired_maker_gtd_s0_book_not_current; заявка фактически не была создана;
+
+Давай разберёмся, что это такое
+
+Result:
+Traced S0 and reconciled every exact BTC terminal occurrence. The `81` Up and `83` Down skipped runs were exclusively v1: ten rapid direct CLOB reads were locally rejected because v1 compared the `1500ms` gate to the venue book timestamp, even when a distinct HTTP response had just been received. All `1,638` S0 failures exceeded the threshold, while client receipt-to-evaluation was normally about `0.091ms` and `162/164` runs saw one unchanged venue timestamp throughout all retries. Verified that v2 replaced this with direct HTTP request/receipt/response freshness while retaining the venue timestamp only as mandatory chronological audit evidence; v3/v4 inherit that fix. The reason code remains valid for genuinely aged/invalid local reads and appeared as one recoverable common-freeze retry in fourteen accepted v3 BTC orders, but no v4 occurrence or post-v1 terminal mass failure was found. No production or application state changed.
