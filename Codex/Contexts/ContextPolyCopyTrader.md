@@ -1,3 +1,16 @@
+## Active Update 2026-08-11 Paired Maker Limit-Fill Logic Clarification
+Goal: Identify the error in the proposed three-case Up/Down paired Maker argument at limits `0.50/0.49`.
+Status: Completed
+Done:
+- Verified from the active TouchNoDepth path that a resting outcome-token BUY fills only when a later eligible exact-token last trade or best ask is at or below that leg's limit. The evaluator does not use the BTC-versus-start zero line as a fill trigger.
+- Identified the central reversal: when Up becomes more likely, the Up token normally rises away from the resting `0.50` BUY while the losing Down token falls toward the `0.49` BUY. Thus a monotonic Up outcome can fill only Down, which then loses; a monotonic Down outcome can fill only Up, which then loses. Final resolution does not retroactively fill the winning order.
+- Confirmed that crossing the underlying zero/reference line is neither sufficient nor necessary for two fills. The two token books/trades, spread, exact limits, admissible observation window, and pre-market lifetime determine fills; both orders can fill before market start, or a brief zero crossing can occur without either token touching its limit.
+- Corrected the sizing arithmetic. The stated `+$2.50`, `+$2.55`, and `+$0.05` cases assume five equal shares, costing `$2.50` Up and `$2.45` Down, not `$2.50` cash on each side. Literal `$2.50` notionals buy `5` Up shares and about `5.1020408` Down shares, so a both-filled pair returns `$0` net if Up wins and about `+$0.10204` if Down wins. The implemented pair correctly freezes equal shares rather than equal dollar notionals.
+- Connected the missing cases to the independently audited lifetime data: of 49 one-sided BTC fills, 32 were losing legs and 17 were winning legs.
+Next: None.
+Notes: Read-only current-code and arithmetic audit, independently checked by three agents. No production query, build, test, configuration change, or trading action was needed.
+Blockers: None.
+
 ## Active Update 2026-08-11 BTC Paired Maker-GTD Lifetime Fill And PnL Audit
 Goal: Measure the lifetime fill percentage of the exact BTC group-`8224` Up and Down paired Maker-GTD legs and explain their negative Paper PnL.
 Status: Completed

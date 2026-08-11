@@ -82,3 +82,18 @@ Request:
 
 Result:
 Audited the exact BTC group-`8224` Up and Down Paper legs over their full persisted lifetime through the fixed UTC cutoff `2026-08-11T20:24:29.157523Z`. Among `290` ended markets, Up filled `54` times (`18.62%`) and had not filled `236` times; Down filled `35` (`12.07%`) and had not filled `255`. Conditional on an accepted order, fill rates were `54/209 = 25.84%` Up and `35/207 = 16.91%` Down. Both legs filled only `20` times, while 49 markets had one-sided fills; 32 one-sided losing fills lost `-$97.5896`, overwhelming `+$52.5341` from 17 one-sided winners and `+$1.2260` from both-filled pairs. Raw settled PnL reconciled to Up `-$30.6500`, Down `-$13.1795`, combined `-$43.8295`. Clarified that the `0.99` price sum is a conditional paired-payoff edge, not a 99% execution probability. Legacy v1 no-order failures and v1-v3 evidence-unavailable/overdue orders materially reduced the lifetime funnel; no v4 BTC market had matured yet, so the current v4 revision remains unmeasured. No production or trading state changed.
+
+## 2026-08-11T20:48:53.2020404Z
+Request:
+Найди ошибку в моей логике. Ставим по 2.5 на каждую сторону. Up - 0.5, Down - 0.49
+
+У нас может быть три ситуации:
+
+1. Линия нуля не пересекается, всё время идём Up. В этом случае срабатывает наша Up ставка и обязательно выигрывает. Down ставка не срабатывает.  Мы выиграли 2.5
+2. Линия нуля не пересекается, всё время идём Down. В этом случае срабатывает Down ставки обязательно выигрывает. Up ставка не срабатывает. Мы выиграли 2.55
+3. Линия нуля пересекается, срабатывают обе ставки. Мы выиграли 0.05
+
+Где я ошибаюсь?
+
+Result:
+Verified that the argument reverses Maker BUY execution: an Up BUY at `0.50` fills when the Up token's ask/trade falls to `0.50` or below, not when Up becomes more likely and rises; the losing Down token can therefore be the only filled leg in a monotonic Up outcome, and vice versa. The underlying zero line is not the fill trigger and its crossing is neither sufficient nor necessary for two token-book fills. Also corrected the sizing mismatch: `+$2.50`, `+$2.55`, and `+$0.05` assume five equal shares costing `$2.50` Up plus `$2.45` Down, whereas literal `$2.50` per side creates unequal shares and asymmetric both-filled PnL. No production or trading state changed.
