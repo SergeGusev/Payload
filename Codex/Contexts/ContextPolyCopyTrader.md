@@ -1,3 +1,17 @@
+## Active Update 2026-08-11 Simultaneous Complementary SELL Orders
+Goal: Determine whether SELL orders for Up and Down can be placed simultaneously and whether `0.50/0.49` can both remain PostOnly Maker quotes.
+Status: Completed
+Done:
+- Verified from the current Polymarket CTF Exchange V2 implementation that complementary SELL orders use `MERGE` and cross when `pUp + pDown <= 1`.
+- Therefore `SELL Up 0.50 + SELL Down 0.49` is a marketable pair (`0.99 <= 1`), not two independent passive quotes. Once one order rests, the other PostOnly order would be immediately matchable and must be rejected; batch submission is non-atomic and the documented API does not guarantee which result arrives first.
+- Established the minimum mutual-resting condition `pUp + pDown > 1`, for example `0.51 + 0.50 = 1.01`, in addition to each SELL being strictly above its own direct best bid and not crossing any other direct or complementary liquidity.
+- Confirmed that both exact outcome-token balances and allowances are required. Intentional matching between accounts under the same beneficial owner remains prohibited self-dealing/wash trading.
+- Corrected the prior rebate premise: two `0.50/0.49` SELL legs cannot both simultaneously qualify as resting Makers, so the previously calculated combined two-Maker rebate `~0.034993` is not attainable under that scenario. Without PostOnly, a MERGE can make one side taker; it is not a two-maker execution.
+- Verified the application boundary: Polymarket can represent separate SELL orders, but current group-`8224` is BUY-only, has no paired SELL strategy or batch path, and does not reserve Live Up/Down token inventory.
+Next: None. Implementing a paired SELL strategy would require separate explicit scope and prices whose sum is strictly above one, inventory reservation, independent-leg handling, and Paper/live parity work.
+Notes: Read-only audit of current official Polymarket documentation, CTF Exchange V2 contract code, and the current repository, independently checked by three agents. No production, order, trading, source-code, configuration, or test state changed.
+Blockers: None.
+
 ## Active Update 2026-08-11 Maker SELL Pair Rebate Calculation
 Goal: Calculate the current Maker rebate for the five-share `SELL Up 0.50 + SELL Down 0.49` example and its net result.
 Status: Completed
