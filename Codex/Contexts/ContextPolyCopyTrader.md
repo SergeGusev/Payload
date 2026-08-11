@@ -1,3 +1,16 @@
+## Active Update 2026-08-11 Equal-Share Up-Win Cash Flow Clarification
+Goal: Explain the prior five-share paired PnL example, specifically why the losing Down leg is `-$2.45` when Up wins.
+Status: Completed
+Done:
+- Locked the explanation to the prior hypothetical of equal quantities: `5` Up shares bought at `0.50` and `5` Down shares bought at `0.49`, excluding fees and rebates. This is distinct from the implemented default common size of `6.13` shares.
+- Verified the cash outlay as Up `5 * $0.50 = $2.50` and Down `5 * $0.49 = $2.45`; the pair invests `$4.95`, not `$5.00`. The pair equalizes shares, not dollars.
+- For an Up result, five winning Up shares pay `$5.00`, so Up PnL is `$5.00-$2.50=+$2.50`. The five losing Down shares pay `$0`, so Down PnL is `$0-$2.45=-$2.45`. Net PnL is `+$0.05`.
+- Independently recomputed both outcomes with decimal arithmetic: Up result `+$2.50-$2.45=+$0.05`; Down result `-$2.50+$2.55=+$0.05`. Official Polymarket documentation independently confirms that each winning outcome token redeems for `$1` and each losing token for `$0`.
+- Clarified the alternative: investing exactly `$2.50` into Down at `0.49` would buy approximately `5.10204` Down shares, break the equal-share contract, and no longer produce the same symmetric example.
+Next: None.
+Notes: Read-only documentation and arithmetic verification. The initial PowerShell cross-check used an invalid C# decimal suffix and was discarded; the corrected explicit-decimal calculation matched all totals. No source, production, database, service, configuration, order, or trading state changed.
+Blockers: None.
+
 ## Active Update 2026-08-10 Paired Maker-GTD First Runtime Results
 Goal: Determine why the user sees no completed results for the six group-`8224` BTC/ETH/SOL paired Maker-GTD strategies and whether their scheduled time has arrived.
 Status: Completed
