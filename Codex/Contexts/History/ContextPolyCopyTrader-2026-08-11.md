@@ -72,3 +72,13 @@ Request:
 
 Result:
 Clarified that the exact cause remains unproved. The verified sequence is a partial ordinary-entry degradation followed by widespread database stream-read failures, long operations, external timeouts, stale reference data, WebSocket closure, and finally a frozen heartbeat/feed state. PostgreSQL remained up and no blocking-lock outage was found; a partially active service backend later failed to restore progress. The strongest current explanation is only a hypothesis that the service became wedged after connection/stream failures and was cleared by the user's restart action; the database proves the service restarted, not whether Windows itself rebooted. Exact attribution among runtime deadlock, socket/connection-pool fault, host resource exhaustion, network fault, or another host condition requires bounded Windows service/Event Viewer, Serilog, .NET dump, PostgreSQL, and host/network logs from `14:40Z..16:40Z`. No system or data change was made.
+
+## 2026-08-11T20:26:43.8882390Z
+Request:
+Почему BTC Up or Down 5m Down Paired Maker GTD First Accepting и BTC Up or Down 5m Up Paired Maker GTD First Accepting в таких жестоких минусах? Сколько раз они не сработали?
+
+1. Весь lifetime
+2. Вообще процент срабатывания каждой из ног. Я думал, он будет близок к 99%
+
+Result:
+Audited the exact BTC group-`8224` Up and Down Paper legs over their full persisted lifetime through the fixed UTC cutoff `2026-08-11T20:24:29.157523Z`. Among `290` ended markets, Up filled `54` times (`18.62%`) and had not filled `236` times; Down filled `35` (`12.07%`) and had not filled `255`. Conditional on an accepted order, fill rates were `54/209 = 25.84%` Up and `35/207 = 16.91%` Down. Both legs filled only `20` times, while 49 markets had one-sided fills; 32 one-sided losing fills lost `-$97.5896`, overwhelming `+$52.5341` from 17 one-sided winners and `+$1.2260` from both-filled pairs. Raw settled PnL reconciled to Up `-$30.6500`, Down `-$13.1795`, combined `-$43.8295`. Clarified that the `0.99` price sum is a conditional paired-payoff edge, not a 99% execution probability. Legacy v1 no-order failures and v1-v3 evidence-unavailable/overdue orders materially reduced the lifetime funnel; no v4 BTC market had matured yet, so the current v4 revision remains unmeasured. No production or trading state changed.

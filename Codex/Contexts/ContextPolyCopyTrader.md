@@ -1,3 +1,18 @@
+## Active Update 2026-08-11 BTC Paired Maker-GTD Lifetime Fill And PnL Audit
+Goal: Measure the lifetime fill percentage of the exact BTC group-`8224` Up and Down paired Maker-GTD legs and explain their negative Paper PnL.
+Status: Completed
+Done:
+- Audited only IDs `b7c50005-0000-4000-8224-000000000101` (Up) and `...102` (Down) on primary `192.168.0.101/polycopytrader` in fixed `REPEATABLE READ / READ ONLY / UTC` snapshots. The final independent cutoff was `2026-08-11T20:24:29.157523Z`; no production or trading state changed.
+- Reconciled `290` ended BTC markets per leg. Up filled `54/290` opportunities (`18.62%`) and had not filled in `236/290`; Down filled `35/290` (`12.07%`) and had not filled in `255/290`.
+- Separated placement from fill. Up obtained orders in `209/290` ended markets and filled `54/209` accepted legs (`25.84%`); Down obtained orders in `207/290` and filled `35/207` (`16.91%`). Up non-fills at cutoff were `81` no-order v1 terminal skips, `57` expired orders, and `98` overdue Pending orders; Down was `83 + 81 + 91`. Overdue Pending means not filled by the cutoff, not automatically a definitive terminal failure, because an already admitted pre-expiry queued event may still complete later.
+- Reconciled the pair matrix: both legs filled in `20/290` markets (`6.90%`), Up-only in `34`, Down-only in `15`, and neither in `221`. Among the `207` markets where both orders were accepted, both-fill frequency was `20/207` (`9.66%`).
+- Proved the negative-PnL arithmetic from raw settled runs and `paper_position_settlements`: both-filled pairs earned `+$1.2260`; 17 one-sided winning fills earned `+$52.5341`; 32 one-sided losing fills lost `-$97.5896`; combined pair PnL was therefore `-$43.8295`. Up contributed `-$30.6500` from `54` fills (`22W/32L`); Down contributed `-$13.1795` from `35` fills (`15W/20L`); fees and modeled rebates were `$0`.
+- Clarified that `0.50 + 0.49 = 0.99` guarantees a one-cent-per-share gross pair edge only when equal shares of both legs fill; it does not imply a `99%` fill probability. The implemented TouchNoDepth buy fills only after a later eligible price touch at or below its limit, so the verified one-sided losing fills dominate the small both-fill edge.
+- Confirmed that every matured/settled observation at the cutoff belongs to legacy v1-v3. The new v4 through-market-end expiry contract had zero matured BTC markets, so this lifetime result does not yet measure v4 effectiveness.
+Next: Recalculate the same funnel after a complete v4 day-ahead cohort has ended and all overdue legacy Pending orders have drained, if requested.
+Notes: The totals were independently reconciled from the ended-market funnel, orders/fills/runs, pair matrix, and settlement ledger. The Dashboard snapshot lagged the raw ledger by two Up losing settlements and one Down losing settlement; the raw totals above are authoritative for the fixed cutoff. No build or tests were needed for this read-only financial audit.
+Blockers: Current v4 fill effectiveness is unknown because no v4 market had matured by the cutoff; `98` Up and `91` Down overdue Pending legacy orders were unresolved at the cutoff.
+
 ## Active Update 2026-08-11 Outage Cause Evidence Clarification
 Goal: State whether the cause of the August 11 service/betting outage is known and separate proved facts from hypotheses and missing evidence.
 Status: Completed
