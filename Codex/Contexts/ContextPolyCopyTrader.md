@@ -1,3 +1,29 @@
+## Active Update 2026-08-12 SELL Up Direction And Sign Clarification
+Goal: Confirm the sign and magnitude of the resolved PnL for `SELL 5 Up @ 0.50` under the complete-set premise.
+Status: Completed
+Done:
+- Fixed the premise: `$5` is first split into `5 Up + 5 Down`; only the five Up tokens are sold at `0.50`, and the five retained Down tokens are held through resolution.
+- Reconciled the cash and inventory: the SELL fill returns `$2.50` cash and leaves `5 Down`. If Up wins, Down redeems for zero, so final capital is `$2.50` versus the original `$5`, yielding `-$2.50`. If Up loses, Down wins and redeems for `$5`, so final capital is `$7.50`, yielding `+$2.50`.
+- Corrected the user's proposed signs: the magnitude `$2.50` is correct, but `SELL Up @ 0.50` is economically equivalent to `BUY Down @ 0.50`; it loses when Up wins and gains when Up loses.
+- Reaffirmed that receiving `$2.50` at fill is sale proceeds, not profit, and Maker describes only the order's liquidity role.
+Next: None.
+Notes: Arithmetic clarification based on the already verified official outcome-token split/sell/redeem contract. No production, trading, order, strategy, source-code, configuration, or test state changed.
+Blockers: None.
+
+## Active Update 2026-08-12 Maker SELL Fill Versus Profit Explanation
+Goal: Explain why a Maker SELL fill can lead to a loss in the paired complete-set example without incorrectly claiming that every SELL fill is a loss.
+Status: Completed
+Done:
+- Distinguished Maker status, SELL cash flow, inventory change, mark-to-market value, and final resolved PnL. Maker only means the order rested before another trader took it; it does not change the economics of selling the outcome token.
+- Used one complete set as the canonical ledger: splitting `$1` produces `1 Up + 1 Down`, guaranteed to return `$1` in total. Filling only `SELL Up 0.51` leaves `$0.51 cash + 1 Down`, economically equivalent to buying Down for `$0.49`.
+- Reconciled final outcomes: if Up wins, the retained Down is worth zero and the portfolio ends at `$0.51`, for `-$0.49`; if Down wins, it ends at `$1.51`, for `+$0.51`. At five shares these become `-$2.45` and `+$2.55`.
+- Applied the symmetric identity: `SELL Down 0.50` from a complete set is economically equivalent to buying Up for `$0.50`; it loses `$0.50/share` only when Down wins and gains `$0.50/share` when Up wins.
+- Clarified that a SELL fill is not automatically an immediate loss. Around fair prices, cash plus the remaining token can initially retain approximately the same mark-to-market value; final loss occurs only if the sold token becomes the winner. A token acquired below the SELL price can also realize a gain under a different cost basis.
+- Explained adverse selection as a risk rather than a certainty: a resting Up ask is often taken when new demand favors Up, leaving the seller effectively long Down precisely when Down may be weakening. Maker rebate is much smaller than the approximately `$0.49-$0.50/share` one-leg resolution risk.
+Next: None.
+Notes: Read-only official Polymarket positions/order documentation and arithmetic audit independently checked by a second agent. No production, trading, order, strategy, source-code, configuration, or test state changed. Existing unrelated dirty worktree files were preserved and excluded.
+Blockers: None.
+
 ## Active Update 2026-08-12 ETH Reference Price Gap Diagnosis
 Goal: Explain the recurring ETH reference-price holes, their real scope, calculation impact, and verified cause boundary.
 Status: Completed

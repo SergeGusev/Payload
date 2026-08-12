@@ -106,6 +106,20 @@ Request:
 Result:
 Diagnosed the recurring reference-price gaps through an exact production `REPEATABLE READ / READ ONLY / UTC` audit, deployed-code trace, and retained-log review. The two destructive intervals were not ETH-specific: BTC, ETH, and SOL all stopped persisting within about one second for `2026-08-11T16:36:16Z..20:04:39Z` and `2026-08-11T21:29:09Z..2026-08-12T08:30:46Z`. The deployed worker writes every 10 seconds, fails closed when the latest WebSocket point is older than five seconds, and performs no historical backfill. The 24-hour average requires all 60 aligned 24-minute buckets; the gaps removed eight and 27 buckets. Exact coverage was corrected to 52/60 at the first denominator skip, 32/60 at the report cutoff, and 33/60 at the final snapshot. Short stale skips generally do not empty a 24-minute bucket; all 29 post-recovery buckets were present. The outage/recovery sequence and common local recording failure are proven, but the unique underlying host cause is not because retained logs begin after both large intervals. With uninterrupted writes, projected recovery is `2026-08-13T08:00:02Z`. No production or product source state was changed.
 
+## 2026-08-12T20:04:18.6501332Z
+Request:
+Вот тут я запутался. Объясни подробнее, почему если я делаю Maker ставку в режиме Sell и она срабатывает, то я в минусах?
+
+Result:
+Clarified that a Maker SELL fill is not inherently a loss: Maker describes liquidity role, while SELL transfers an owned outcome token for cash. Under the explicit complete-set premise, `$1` split creates `1 Up + 1 Down`. Filling only `SELL Up 0.51` leaves `$0.51 cash + 1 Down`, economically equivalent to buying Down for `$0.49`: final Up gives `-$0.49`, while final Down gives `+$0.51`; five shares produce `-$2.45` or `+$2.55`. Symmetrically, `SELL Down 0.50` is equivalent to buying Up for `$0.50`. Distinguished receipt of cash from profit, explained that initial mark-to-market need not fall at fill, and described adverse selection as a statistical risk rather than a guaranteed loss. No production or trading state changed; unrelated dirty worktree files were preserved.
+
+## 2026-08-12T20:13:55.1765834Z
+Request:
+Точнее я выигрываю или проигрываю 2.5
+
+Result:
+Confirmed that the `$2.50` magnitude is correct under the explicit complete-set premise, but the signs are reversed from the user's prior formulation. Splitting `$5` creates `5 Up + 5 Down`; filling only `SELL 5 Up @ 0.50` returns `$2.50` cash and leaves five Down tokens. If Up wins, those Down tokens redeem for zero and final capital is `$2.50`, so PnL is `-$2.50`. If Up loses, Down wins and redeems for `$5`, producing `$7.50` final capital and `+$2.50` PnL. No production or trading state changed.
+
 ## 2026-08-12T20:05:08.6936034Z
 Request:
 А ты можешь логи вести в базе? Чтобы мне с флешкой не бегать каждый раз? И чистить устаревшие больше суток.
