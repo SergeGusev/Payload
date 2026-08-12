@@ -1,3 +1,15 @@
+## Active Update 2026-08-12 Maker BUY Fill Direction Versus Outcome Direction
+Goal: Clarify whether a resting `Maker BUY Up @ 0.50` is a bet against the market or a bet on Up.
+Status: Completed
+Done:
+- Separated the execution condition from the directional position: a resting `BUY Up @ 0.50` is filled when a seller accepts the `0.50` bid (or compatible liquidity matches it), so the entry often occurs while the Up token is being sold or weakening.
+- Corrected the strict threshold: the order can fill at exactly `0.50`; it does not require a canonical market price to print below `0.50`, and it does not require BTC itself to cross below its start/reference line.
+- Confirmed that the resulting position is still long Up, not short Up. For five filled shares, Up resolution pays `$5` against a `$2.50` cost for `+$2.50` gross PnL; Down resolution pays zero for `-$2.50`.
+- Characterized the distinction precisely: Maker BUY at `0.50` can be contrarian relative to the immediate token-price move and therefore exposed to adverse selection, while remaining directionally a wager for Up at resolution.
+Next: None.
+Notes: Read-only verification against current official Polymarket order-lifecycle and outcome-token documentation. No production, trading, order, strategy, source-code, configuration, or test state changed.
+Blockers: None.
+
 ## Active Update 2026-08-12 Directional Position Uses BUY
 Goal: Confirm which order side opens a directional Polymarket position when starting with cash.
 Status: Completed

@@ -147,3 +147,10 @@ Request:
 
 Result:
 Implemented a dedicated typed PostgreSQL event journal for the historical Paper FAK fee backfill, without enabling a generic Serilog database sink. It records worker lifecycle, frozen ranking, per-cycle strategy/rank context, completion counters, and failures with build/host/process and cycle/sweep correlation; best-effort writes are separately bounded and cannot roll back financial updates, while rolling file logs remain the database-outage fallback. Added an independently hosted retention worker that immediately and every 10 minutes deletes at most the 500 oldest rows strictly older than 24 hours. A production `REPEATABLE READ / READ ONLY / UTC` preview confirmed the target and that the table did not yet exist; production was not mutated. Added schema/storage/service/unit/source coverage plus an environment-gated PostgreSQL round-trip test, and documented the table and query. Final solution build succeeded; focused tests passed 38, skipped one PostgreSQL test because the disposable test database variable is absent, and failed 0. Independent reviews found no P0/P1/P2 defect. Gross ordering, fee/Net formulas, apply SQL, Live behavior, and generic Serilog configuration were unchanged; deployment remains user-controlled.
+
+## 2026-08-12T20:25:12.607Z
+Request:
+Но если я делаю Maker BUY UP со ставкой 0.5, то она может сработать только тогда, когда рынок опустится меньше 0.5, то есть я фактически делаю ставку против рынка, так?
+
+Result:
+Clarified that the execution timing and the resulting position point in different senses. A resting `Maker BUY Up @ 0.50` may fill when a seller accepts the bid at exactly `0.50` or compatible liquidity matches it; neither a print strictly below `0.50` nor BTC crossing below its reference line is required. The entry is often contrarian to the immediate Up-token move and therefore has adverse-selection risk, but the filled position remains long Up: five shares cost `$2.50`, produce `+$2.50` gross PnL if Up resolves, and `-$2.50` if Down resolves. No production or trading state changed.
