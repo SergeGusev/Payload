@@ -68,15 +68,19 @@ or market-data side-effect queues have pending foreground work. Historical gross
 PnL remains unchanged; fee and nullable net PnL are stored separately with
 `historical-current-paper-model-v1` provenance.
 
-At each sweep start, the worker calculates the Dashboard lifetime Gross realized
-PnL formula directly from retained run/fill/settlement accounting rows and
-freezes one stable ranking of eligible strategies, highest first. Equal Gross
-values use strategy ID as the deterministic tie-break. The worker keyset-pages
-one strategy to its current end before starting the next. Ranking affects
-scheduling only; it does not change Gross PnL, Net PnL or Net ROI formulas,
-candidate filters, or the historical cutoff. Transient fee lookups and
-conditional-apply conflicts remain eligible for a later ranked sweep, while
-lower-ranked strategies continue in the current one.
+At each sweep start, the worker reads the materialized Dashboard lifetime Gross
+realized PnL for strategies that have historical FAK-source orders and freezes
+one stable ranking, highest first. Equal Gross values use strategy ID as the
+deterministic tie-break. A source strategy without a materialized Dashboard
+snapshot falls back to the same retained run/fill/settlement Gross formula.
+Exact `LegacyUnknown`, cutoff, BUY, and two-source eligibility remains in the
+strategy-bound candidate page; it is intentionally not evaluated through a
+global fill/order join during rank loading. The worker keyset-pages one strategy
+to its current end before starting the next. Ranking affects scheduling only; it
+does not change Gross PnL, Net PnL or Net ROI formulas, candidate filters, or the
+historical cutoff. Transient fee lookups and conditional-apply conflicts remain
+eligible for a later ranked sweep, while lower-ranked strategies continue in the
+current one.
 
 ## Polymarket
 

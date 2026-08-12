@@ -148,7 +148,7 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
     }
 
     [Fact]
-    public void StrategyRankQuery_UsesGrossRealizedPnlDescendingAndDeterministicTieBreak()
+    public void StrategyRankQuery_UsesDashboardGrossWithRawFallbackAndAvoidsGlobalFillScan()
     {
         var source = ReadRepositorySource();
         var start = source.IndexOf(
@@ -161,7 +161,22 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
         var rankMethod = source[start..end];
 
         Assert.Contains("FROM public.strategies strategy", rankMethod, StringComparison.Ordinal);
-        Assert.Contains("WHERE EXISTS (", rankMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "LEFT JOIN public.dashboard_strategy_performance_snapshots performance",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "WHEN performance.strategy_id IS NOT NULL",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains("THEN performance.realized_pnl_usd", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("CROSS JOIN LATERAL", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("FROM public.paper_orders source_order", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("source_order.side", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("source_order.execution_source IN", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("HistoricalPaperFakDirectSource", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("HistoricalPaperFakChildSource", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("LIMIT 1", rankMethod, StringComparison.Ordinal);
         Assert.Contains("public.strategy_market_paper_runs", rankMethod, StringComparison.Ordinal);
         Assert.Contains("public.strategy_paper_skip_rollups", rankMethod, StringComparison.Ordinal);
         Assert.Contains("SUM(COALESCE(run.realized_pnl_usd, 0))", rankMethod, StringComparison.Ordinal);
@@ -171,7 +186,8 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
             "ORDER BY gross_realized_pnl_usd DESC, strategy.id",
             rankMethod,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("dashboard_strategy_performance_snapshots", rankMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("fill.fee_accounting_status", rankMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("fill.filled_at_utc < @FilledBeforeUtc", rankMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("performance.total_pnl_usd", rankMethod, StringComparison.Ordinal);
     }
 

@@ -20,12 +20,19 @@ public sealed partial class PostgresAppRepository
             DateTimeOffset filledBeforeUtc,
             CancellationToken cancellationToken = default)
     {
+        // Rank from the materialized lifetime Gross shown by the Dashboard. Exact
+        // LegacyUnknown/cutoff eligibility stays in the strategy-bound page query;
+        // joining it here forces a multi-million-row fill/order scan before every
+        // sweep. The raw accounting formula remains a fail-safe for a source
+        // strategy whose Dashboard snapshot has not been materialized yet.
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, $$"""
 SELECT
     strategy.id,
     strategy.code,
     CASE
+        WHEN performance.strategy_id IS NOT NULL
+        THEN performance.realized_pnl_usd
         WHEN EXISTS (
             SELECT 1
             FROM public.strategy_market_paper_runs run_presence
@@ -59,22 +66,21 @@ SELECT
                         lower('strategy:' || strategy.code))), 0)
     END AS gross_realized_pnl_usd
 FROM public.strategies strategy
-WHERE EXISTS (
+LEFT JOIN public.dashboard_strategy_performance_snapshots performance
+    ON performance.strategy_id = strategy.id
+CROSS JOIN LATERAL (
     SELECT 1
-    FROM public.paper_orders paper_order
-    INNER JOIN public.paper_fills fill ON fill.paper_order_id = paper_order.id
-    WHERE paper_order.strategy_id = strategy.id
-      AND fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
-      AND fill.filled_at_utc < @FilledBeforeUtc
-      AND paper_order.side = '{{TradeSide.Buy}}'
-      AND paper_order.execution_source IN (
-          '{{HistoricalPaperFakDirectSource}}',
-          '{{HistoricalPaperFakChildSource}}'))
+    FROM public.paper_orders source_order
+    WHERE source_order.strategy_id = strategy.id
+      AND source_order.side = '{{TradeSide.Buy}}'
+      AND source_order.execution_source IN (
+           '{{HistoricalPaperFakDirectSource}}',
+           '{{HistoricalPaperFakChildSource}}')
+    LIMIT 1
+) historical_source
 ORDER BY gross_realized_pnl_usd DESC, strategy.id;
 """);
         command.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
-        command.Parameters.Add("FilledBeforeUtc", NpgsqlDbType.TimestampTz).Value =
-            UtcDateTime(filledBeforeUtc);
         command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
 
         var strategies = new List<HistoricalPaperFakFeeBackfillStrategyRank>();
