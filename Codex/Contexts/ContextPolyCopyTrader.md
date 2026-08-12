@@ -1,3 +1,17 @@
+## Active Update 2026-08-12 Gross-PnL Backfill Deployment Verification
+Goal: Verify the deployed Gross-PnL-ordered historical Net PnL and Net ROI backfill on production without changing runtime or data.
+Status: Completed
+Done:
+- Audited only `192.168.0.101:5432/polycopytrader` in bounded UTC `REPEATABLE READ / READ ONLY` sessions from the new service start through the final `2026-08-12T10:58:30.496093Z` snapshot. No service, database, configuration, strategy, order, trading, or deployment state was changed.
+- Proved that the running service is the exact requested build `28f4a60e0596e1e80b51162c15a36e616ccc132b`, with matching MVID prefix `813fd963f831`. It started at `10:42:46.765117Z`; independent heartbeat samples advanced through `10:57:47.287049Z`, status remained `Running / Live`, and heartbeat `last_error` remained empty.
+- Accounted for the configured 300-second worker startup delay, then proved that the deployed backfill had written zero `historical-current-paper-model-v1:` fill rows since service start and zero since the delay expired. The latest historical-provenance fill remained `2026-08-11T05:09:07.315354Z`; 63,048 such fill rows existed in total.
+- Proved eligible work still exists with exact sample strategy `b7c50005-0000-4000-8167-000000000001` / `eth_up_down_5m_1_diff_shift_progress_premarket`, fill `dee9c91a-72d3-4ef9-9e3f-d492368a3bf8`, source `btc_updown5m_fak_taker_paper`, side `Buy`, fill time `2026-07-03T06:34:35.412848Z`, and status `LegacyUnknown`. Therefore the zero post-start writes are not a completed/idle sweep.
+- Executed the exact raw Gross ranking SQL once in a separate read-only transaction with the same 10-second statement timeout. It started at `10:52:32.252290Z` and was canceled by the timeout after approximately `11.020s`, so the current production ranking cannot be accepted as operational within its configured command budget. A broader exact candidate count was also canceled at its separate 15-second audit limit; no exact remaining count is claimed.
+- Did not claim a runtime cause that was not observable. The worker file log is authoritative for `ranking frozen`, cycle, foreground deferral, and failure records, but remote Windows service/SMB access timed out; `pg_stat_statements` is not installed, and a bounded `pg_stat_activity` retry window did not capture the worker query. Thus the immediate runtime state is unresolved between foreground-queue deferral and an attempted ranking timeout. Regardless, no historical Net PnL/Net ROI recalculation attributable to this deployment was advancing at the final cutoff.
+Next: Inspect the VPS `publish/service/logs/polycopytrader-service-*.log` for the post-start backfill startup/failure lines, then optimize or replace the raw ranking query before treating the rollout as successful if the log confirms the 10-second timeout.
+Notes: No build or tests were needed because no product code changed. The read-only verification included repeated heartbeat checks, exact provenance scans, one exact eligible-row sample, one exact ranking timing, and bounded activity monitoring. Failed/timeout diagnostics were canceled or rolled back and changed no production data.
+Blockers: The server-only service log is not accessible from this workstation, so the exact per-cycle reason for zero writes cannot be proven here.
+
 ## Active Update 2026-08-12 Gross-PnL-Ordered Net Backfill
 Goal: Reorder the historical Net PnL and Net ROI backfill so strategies are completed from the highest lifetime Gross realized PnL to the lowest.
 Status: Completed
