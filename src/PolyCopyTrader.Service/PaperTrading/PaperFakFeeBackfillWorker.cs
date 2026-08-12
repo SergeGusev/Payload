@@ -10,7 +10,7 @@ public sealed class PaperFakFeeBackfillWorker(
     IPaperEntryPersistenceQueue paperEntryPersistenceQueue,
     IMarketDataSideEffectQueue marketDataSideEffectQueue) : BackgroundService
 {
-    private bool deferNextCycleForMarketData = true;
+    private bool deferNextCycleForForeground = true;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -101,35 +101,30 @@ public sealed class PaperFakFeeBackfillWorker(
     {
         var pendingPaperEntryBatches = paperEntryPersistenceQueue.PendingBatches;
         var marketDataQueueMetrics = marketDataSideEffectQueue.GetMetrics();
-        if (pendingPaperEntryBatches > 0)
+        var foregroundWorkPending = pendingPaperEntryBatches > 0 ||
+            marketDataQueueMetrics.PendingUpdates > 0;
+        if (foregroundWorkPending && deferNextCycleForForeground)
         {
+            deferNextCycleForForeground = false;
             logger.LogDebug(
-                "Historical Paper FAK fee backfill cycle deferred for foreground queues. " +
+                "Historical Paper FAK fee backfill cycle deferred once for foreground queues. " +
                 "PendingPaperEntryBatches={PendingPaperEntryBatches} PendingMarketDataUpdates={PendingMarketDataUpdates}",
                 pendingPaperEntryBatches,
                 marketDataQueueMetrics.PendingUpdates);
             return PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending;
         }
 
-        if (marketDataQueueMetrics.PendingUpdates > 0 && deferNextCycleForMarketData)
-        {
-            deferNextCycleForMarketData = false;
-            logger.LogDebug(
-                "Historical Paper FAK fee backfill cycle deferred once for the market-data side-effect queue. " +
-                "PendingMarketDataUpdates={PendingMarketDataUpdates}",
-                marketDataQueueMetrics.PendingUpdates);
-            return PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending;
-        }
-
-        if (marketDataQueueMetrics.PendingUpdates > 0)
+        if (foregroundWorkPending)
         {
             logger.LogInformation(
-                "Historical Paper FAK fee backfill is taking one bounded cycle after yielding to a persistent " +
-                "market-data side-effect backlog. PendingMarketDataUpdates={PendingMarketDataUpdates}",
+                "Historical Paper FAK fee backfill is taking one bounded cycle after yielding to persistent " +
+                "foreground queues. PendingPaperEntryBatches={PendingPaperEntryBatches} " +
+                "PendingMarketDataUpdates={PendingMarketDataUpdates}",
+                pendingPaperEntryBatches,
                 marketDataQueueMetrics.PendingUpdates);
         }
 
-        deferNextCycleForMarketData = true;
+        deferNextCycleForForeground = true;
 
         var result = await processor.RunCycleAsync(cancellationToken).ConfigureAwait(false);
         return result.ReachedEnd

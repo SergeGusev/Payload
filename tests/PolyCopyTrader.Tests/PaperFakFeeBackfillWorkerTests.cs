@@ -49,37 +49,27 @@ public sealed class PaperFakFeeBackfillWorkerTests
     }
 
     [Fact]
-    public async Task RunCycle_NeverBypassesPendingPaperEntriesAfterMarketDataYield()
+    public async Task RunCycle_AllowsOneBoundedBackfillTurnAfterYieldingToPersistentPaperEntries()
     {
         var processor = new RecordingProcessor();
-        var paperQueue = new StubPaperEntryPersistenceQueue(0);
+        var paperQueue = new StubPaperEntryPersistenceQueue(1);
         var worker = CreateWorker(
             processor,
             paperQueue,
-            new StubMarketDataSideEffectQueue(1));
+            new StubMarketDataSideEffectQueue(0));
 
-        Assert.Equal(
-            PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending,
-            await worker.RunCycleAsync());
-        paperQueue.PendingBatches = 1;
+        var first = await worker.RunCycleAsync();
+        var second = await worker.RunCycleAsync();
+        var third = await worker.RunCycleAsync();
 
-        Assert.Equal(
-            PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending,
-            await worker.RunCycleAsync());
-        Assert.Equal(
-            PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending,
-            await worker.RunCycleAsync());
-        Assert.Equal(0, processor.Calls);
-
-        paperQueue.PendingBatches = 0;
-        Assert.Equal(
-            PaperFakFeeBackfillWorkerCycleDisposition.Processed,
-            await worker.RunCycleAsync());
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, first);
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.Processed, second);
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, third);
         Assert.Equal(1, processor.Calls);
     }
 
     [Fact]
-    public async Task RunCycle_QueueIdleTurnRearmsMarketDataYield()
+    public async Task RunCycle_QueueIdleTurnRearmsForegroundYield()
     {
         var processor = new RecordingProcessor();
         var marketQueue = new StubMarketDataSideEffectQueue(1);

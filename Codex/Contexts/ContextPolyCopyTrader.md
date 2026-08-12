@@ -1,3 +1,17 @@
+## Active Update 2026-08-12 Combined Foreground Backfill Starvation Fix
+Goal: Verify the deployed queue-starvation fix and make the Gross-ordered historical Net PnL/Net ROI backfill progress under the actual continuous foreground load.
+Status: Completed
+Done:
+- Verified exact production heartbeat build `c5464fe4f8a4b2d017ff35bddac4b6c836524e30`, started at `2026-08-12T13:31:12.172681Z`, `Running / Live`, with an advancing heartbeat and empty `last_error`. This verification was read-only against exact PostgreSQL `192.168.0.101:5432/polycopytrader` in UTC.
+- Waited beyond the configured 300-second backfill startup delay. Through `2026-08-12T13:44:26Z`, the deployment wrote zero new `historical-current-paper-model-v1:` fills; the highest-Gross strategy's first exact candidate remained `LegacyUnknown`. Therefore the deployed first fairness fix was not accepted as operational.
+- Found the remaining starvation path without changing production: a 20-second activity sample observed Paper-entry persistence SQL in 60 of 74 samples (`81.1%`). The queue implementation keeps batches counted through persistence/retry, while the deployed worker still treated any pending Paper-entry batch as an absolute veto. The previous conclusion that this veto could safely remain unconditional is withdrawn for this continuously loaded runtime.
+- Extended bounded fairness only inside `PaperFakFeeBackfillWorker` to both foreground signals together. Pending Paper-entry persistence or market-data side effects receive one complete 15-second cycle first; if foreground work is still pending, the next turn runs exactly one already-bounded historical processor batch (at most 50 candidates), then rearms the foreground yield. The fixed historical cutoff and conditional atomic apply remain unchanged, so this scheduling correction does not overlap current entries or alter financial formulas.
+- Added deterministic liveness tests for permanently pending Paper-entry and market-data queues plus the existing idle rearm/first-yield coverage. Updated README and configuration reference to describe the combined approximately 30-second bounded cadence under permanent foreground load.
+- Focused historical backfill tests passed `23/23`. `PolyCopyTrader.sln` Debug built with `0` errors and the existing `121` nullable warnings. An independent read-only diff review found no blocking/P1/P2 issue.
+Next: Deploy/restart the service on this follow-up commit. After its 300-second startup delay, verify the bounded-turn/ranking/cycle records and new historical provenance rows read-only.
+Notes: `D:\1\logs` was stale for this restart: its newest content ended at `15:57:56.928+03:00`, before the `c5464fe4` service start at approximately `16:31+03:00`, so it was not used as proof of the new runtime. No production row/schema, service, configuration, strategy, order, trading, fee, or Net mutation was performed. Queue internals, Gross ranking, candidate scope, fee/Net formulas, batch size, and Live trading were not changed. Disposable test/build artifacts in `D:\CodexTemp\runs\manual-06a09d19737c4adb881b28e6d4e6936c` were removed through protected cleanup.
+Blockers: None for the local correction; runtime activation requires the user's normal deployment/restart.
+
 ## Active Update 2026-08-12 Historical Backfill Queue-Starvation Fix
 Goal: Make the Gross-PnL-ordered historical Net PnL and Net ROI backfill progress without taking priority over current Paper-entry persistence.
 Status: Completed

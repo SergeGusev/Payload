@@ -63,15 +63,15 @@ Do not commit real credentials.
 The worker accepts only BUY orders with exact execution sources
 `btc_updown5m_fak_taker_paper` and
 `btc_updown5m_child_mirror_fak_paper`. It excludes Live-shadow, GTD, Maker,
-ambiguous, and already-accounted rows. Pending Paper-entry persistence always
-defers the historical worker. A market-data side-effect backlog receives the
-first 15-second cycle, then one bounded historical batch may run before the
-worker yields to that backlog again. This bounded alternation preserves
-foreground priority without requiring the market-data queue to reach zero,
-which may never happen under a continuous feed. With a permanently nonempty
-market-data queue, the effective historical cadence is approximately one batch
-every 30 seconds. Historical gross PnL remains unchanged; fee and nullable net
-PnL are stored separately with `historical-current-paper-model-v1` provenance.
+ambiguous, and already-accounted rows. Pending Paper-entry persistence and
+market-data side effects receive the first 15-second cycle, then one bounded
+historical batch may run before the worker yields to foreground work again. This
+bounded alternation preserves a full-cycle foreground head start without
+requiring either queue to reach zero, which may never happen under continuous
+load. With permanently nonempty foreground queues, the effective historical
+cadence is approximately one batch every 30 seconds. Historical gross PnL
+remains unchanged; fee and nullable net PnL are stored separately with
+`historical-current-paper-model-v1` provenance.
 
 At each sweep start, the worker reads the materialized Dashboard lifetime Gross
 realized PnL for strategies that have historical FAK-source orders and freezes
