@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
@@ -8,40 +9,106 @@ public interface IPaperFakFeeBackfillProcessor
 {
     Task<PaperFakFeeBackfillCycleResult> RunCycleAsync(
         CancellationToken cancellationToken = default);
+
+    Task<PaperFakFeeBackfillCycleResult> RunCycleAsync(
+        Guid cycleId,
+        CancellationToken cancellationToken = default)
+    {
+        return RunCycleAsync(cancellationToken);
+    }
 }
 
 public sealed class PaperFakFeeBackfillProcessor(
     ILogger<PaperFakFeeBackfillProcessor> logger,
     PaperFakFeeBackfillOptions options,
     IAppRepository repository,
-    IPolymarketFeeAccountingService feeAccountingService) : IPaperFakFeeBackfillProcessor
+    IPolymarketFeeAccountingService feeAccountingService,
+    IPaperFakFeeBackfillEventRecorder? eventRecorder = null) : IPaperFakFeeBackfillProcessor
 {
     internal const string HistoricalCalculationSourcePrefix =
         "historical-current-paper-model-v1:";
 
     private IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank>? strategyRanks;
+    private Guid? sweepId;
     private int strategyRankIndex;
     private HistoricalPaperFakFeeBackfillCursor? continuationCursor;
 
-    public async Task<PaperFakFeeBackfillCycleResult> RunCycleAsync(
+    public Task<PaperFakFeeBackfillCycleResult> RunCycleAsync(
         CancellationToken cancellationToken = default)
     {
-        await EnsureStrategyRanksAsync(cancellationToken).ConfigureAwait(false);
+        return RunCycleAsync(Guid.NewGuid(), cancellationToken);
+    }
+
+    public async Task<PaperFakFeeBackfillCycleResult> RunCycleAsync(
+        Guid cycleId,
+        CancellationToken cancellationToken = default)
+    {
+        var cycleStartedTimestamp = Stopwatch.GetTimestamp();
+        await EnsureStrategyRanksAsync(cycleId, cancellationToken).ConfigureAwait(false);
         if (strategyRanks!.Count == 0)
         {
+            var emptyCompletedSweepId = sweepId;
             ResetSweep();
-            return new PaperFakFeeBackfillCycleResult(
+            var emptyResult = new PaperFakFeeBackfillCycleResult(
                 0,
                 0,
                 0,
                 true,
                 options.ApplyEnabled,
                 null);
+            await TryRecordEventAsync(
+                CreateProcessorEvent(
+                    PaperFakFeeBackfillEventTypes.CycleCompleted,
+                    PaperFakFeeBackfillEventLevels.Information,
+                    "Historical Paper FAK fee backfill cycle completed with an empty strategy ranking.") with
+                {
+                    SweepId = emptyCompletedSweepId,
+                    CycleId = cycleId,
+                    StrategyCount = 0,
+                    Candidates = 0,
+                    EvaluatedForApply = 0,
+                    TransientLookupUnavailable = 0,
+                    Requested = 0,
+                    Eligible = 0,
+                    FullChainEligible = 0,
+                    RunOnlyLegacyEligible = 0,
+                    FillsUpdated = 0,
+                    RunsUpdated = 0,
+                    PositionsUpdated = 0,
+                    SettlementsUpdated = 0,
+                    FullChainAlreadyApplied = 0,
+                    RunOnlyLegacyAlreadyApplied = 0,
+                    AlreadyApplied = 0,
+                    StructuralConflicts = 0,
+                    AccountingConflicts = 0,
+                    DeferredByLockTimeout = 0,
+                    DeferredByQueryCancel = 0,
+                    ReachedStrategyEnd = true,
+                    ReachedSweepEnd = true,
+                    DurationMilliseconds = GetElapsedMilliseconds(cycleStartedTimestamp)
+                },
+                cancellationToken).ConfigureAwait(false);
+            return emptyResult;
         }
 
         var activeRank = strategyRanks[strategyRankIndex];
         var activeRankPosition = strategyRankIndex + 1;
         var strategyCount = strategyRanks.Count;
+        await TryRecordEventAsync(
+            CreateProcessorEvent(
+                PaperFakFeeBackfillEventTypes.CycleContext,
+                PaperFakFeeBackfillEventLevels.Information,
+                "Historical Paper FAK fee backfill cycle context resolved.") with
+            {
+                SweepId = sweepId,
+                CycleId = cycleId,
+                StrategyId = activeRank.StrategyId,
+                StrategyCode = activeRank.StrategyCode,
+                StrategyRank = activeRankPosition,
+                StrategyCount = strategyCount,
+                GrossRealizedPnlUsd = activeRank.GrossRealizedPnlUsd
+            },
+            cancellationToken).ConfigureAwait(false);
         var page = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
             options.HistoricalCutoffUtc,
             activeRank.StrategyId,
@@ -101,6 +168,7 @@ public sealed class PaperFakFeeBackfillProcessor(
         }
 
         var wholeBatchDeferred = applyResult?.WholeBatchDeferred == true;
+        var completedSweepId = sweepId;
         var reachedStrategyEnd = !wholeBatchDeferred && page.ReachedEnd;
         var reachedSweepEnd = !wholeBatchDeferred && AdvanceCursor(page);
 
@@ -146,6 +214,43 @@ public sealed class PaperFakFeeBackfillProcessor(
             reachedStrategyEnd,
             reachedSweepEnd);
 
+        await TryRecordEventAsync(
+            CreateProcessorEvent(
+                PaperFakFeeBackfillEventTypes.CycleCompleted,
+                PaperFakFeeBackfillEventLevels.Information,
+                "Historical Paper FAK fee backfill cycle completed.") with
+            {
+                SweepId = completedSweepId,
+                CycleId = cycleId,
+                StrategyId = activeRank.StrategyId,
+                StrategyCode = activeRank.StrategyCode,
+                StrategyRank = activeRankPosition,
+                StrategyCount = strategyCount,
+                GrossRealizedPnlUsd = activeRank.GrossRealizedPnlUsd,
+                Candidates = page.Candidates.Count,
+                EvaluatedForApply = updates.Count,
+                TransientLookupUnavailable = transientLookupUnavailable,
+                Requested = applyResult?.Requested ?? 0,
+                Eligible = applyResult?.Eligible ?? 0,
+                FullChainEligible = applyResult?.FullChainEligible ?? 0,
+                RunOnlyLegacyEligible = applyResult?.RunOnlyLegacyEligible ?? 0,
+                FillsUpdated = applyResult?.FillsUpdated ?? 0,
+                RunsUpdated = applyResult?.RunsUpdated ?? 0,
+                PositionsUpdated = applyResult?.PositionsUpdated ?? 0,
+                SettlementsUpdated = applyResult?.SettlementsUpdated ?? 0,
+                FullChainAlreadyApplied = applyResult?.FullChainAlreadyApplied ?? 0,
+                RunOnlyLegacyAlreadyApplied = applyResult?.RunOnlyLegacyAlreadyApplied ?? 0,
+                AlreadyApplied = applyResult?.AlreadyApplied ?? 0,
+                StructuralConflicts = applyResult?.StructuralConflicts ?? 0,
+                AccountingConflicts = applyResult?.AccountingConflicts ?? 0,
+                DeferredByLockTimeout = applyResult?.DeferredByLockTimeout ?? 0,
+                DeferredByQueryCancel = applyResult?.DeferredByQueryCancel ?? 0,
+                ReachedStrategyEnd = reachedStrategyEnd,
+                ReachedSweepEnd = reachedSweepEnd,
+                DurationMilliseconds = GetElapsedMilliseconds(cycleStartedTimestamp)
+            },
+            cancellationToken).ConfigureAwait(false);
+
         return new PaperFakFeeBackfillCycleResult(
             page.Candidates.Count,
             updates.Count,
@@ -155,7 +260,9 @@ public sealed class PaperFakFeeBackfillProcessor(
             applyResult);
     }
 
-    private async Task EnsureStrategyRanksAsync(CancellationToken cancellationToken)
+    private async Task EnsureStrategyRanksAsync(
+        Guid cycleId,
+        CancellationToken cancellationToken)
     {
         if (strategyRanks is not null)
         {
@@ -166,6 +273,7 @@ public sealed class PaperFakFeeBackfillProcessor(
             options.HistoricalCutoffUtc,
             cancellationToken).ConfigureAwait(false);
         ValidateStrategyRanks(loadedRanks);
+        sweepId = Guid.NewGuid();
         strategyRanks = loadedRanks.ToArray();
         strategyRankIndex = 0;
         continuationCursor = null;
@@ -175,6 +283,17 @@ public sealed class PaperFakFeeBackfillProcessor(
             "CutoffUtc={CutoffUtc:O} StrategyCount={StrategyCount}",
             options.HistoricalCutoffUtc,
             strategyRanks.Count);
+        await TryRecordEventAsync(
+            CreateProcessorEvent(
+                PaperFakFeeBackfillEventTypes.StrategyRankingFrozen,
+                PaperFakFeeBackfillEventLevels.Information,
+                "Historical Paper FAK fee backfill Gross-PnL strategy ranking frozen for this sweep.") with
+            {
+                SweepId = sweepId,
+                CycleId = cycleId,
+                StrategyCount = strategyRanks.Count
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static void ValidateStrategyRanks(
@@ -262,6 +381,7 @@ public sealed class PaperFakFeeBackfillProcessor(
     private void ResetSweep()
     {
         strategyRanks = null;
+        sweepId = null;
         strategyRankIndex = 0;
         continuationCursor = null;
     }
@@ -283,6 +403,51 @@ public sealed class PaperFakFeeBackfillProcessor(
         }
 
         return HistoricalCalculationSourcePrefix + (calculationSource ?? string.Empty);
+    }
+
+    private PaperFakFeeBackfillEvent CreateProcessorEvent(
+        string eventType,
+        string level,
+        string message)
+    {
+        return new PaperFakFeeBackfillEvent
+        {
+            EventType = eventType,
+            Level = level,
+            Message = message,
+            BackfillEnabled = options.Enabled,
+            ApplyEnabled = options.ApplyEnabled,
+            CutoffUtc = options.HistoricalCutoffUtc,
+            BatchSize = options.BatchSize
+        };
+    }
+
+    private async Task TryRecordEventAsync(
+        PaperFakFeeBackfillEvent entry,
+        CancellationToken cancellationToken)
+    {
+        if (eventRecorder is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await eventRecorder.RecordAsync(entry, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "Historical Paper FAK fee backfill database-event recorder failed unexpectedly. " +
+                "EventType={EventType}. File logging remains active.",
+                entry.EventType);
+        }
+    }
+
+    private static long GetElapsedMilliseconds(long startedTimestamp)
+    {
+        return (long)Stopwatch.GetElapsedTime(startedTimestamp).TotalMilliseconds;
     }
 }
 

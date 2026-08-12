@@ -509,6 +509,21 @@ public interface IAppRepository
                 StructuralConflicts: updates.Count));
     }
 
+    Task AddPaperFakFeeBackfillEventAsync(
+        PaperFakFeeBackfillEvent entry,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    Task<int> CleanupPaperFakFeeBackfillEventsAsync(
+        DateTimeOffset occurredBeforeUtc,
+        int batchSize,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(0);
+    }
+
     Task<IReadOnlyList<PaperOrder>> GetPaperOrdersForStrategyAssetAsync(
         Guid strategyId,
         string copiedTraderWallet,

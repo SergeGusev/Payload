@@ -1052,6 +1052,23 @@ Existing `RealizedPnlUsd`, `UnrealizedPnlUsd`, and gross ROI fields remain uncha
 
 `PaperFakFeeBackfill` performs the retained historical pure-Paper FAK migration online. It uses a fixed pre-fee-deployment cutoff, scans only BUY fills whose persisted execution source is exactly `btc_updown5m_fak_taker_paper` or `btc_updown5m_child_mirror_fak_paper`, forces the proven `Taker` role, and evaluates them through the same current fee calculator used for new fills. At the start of each sweep, the worker reads the materialized lifetime `Gross realized (audit)` displayed by the Dashboard for strategies with historical FAK-source orders, freezes them in descending Gross order, and breaks ties by strategy ID. If a source strategy does not yet have a Dashboard snapshot, the rank query falls back to the same retained run/fill/settlement Gross formula. Exact `LegacyUnknown`, cutoff, BUY, and source eligibility is then enforced by the strategy-bound candidate page, avoiding a multi-million-row global fill/order join before every sweep. The worker keyset-pages every eligible fill of one strategy before moving to the next, so the most successful strategy is attempted first and normally reaches complete Net PnL and Net ROI coverage first. This rank changes scheduling only: the Gross values, Gross/Net PnL and Net ROI formulas, cutoff, source allowlist, and candidate filters are not rewritten. The default cadence is one batch of 50 rows every 15 seconds after a five-minute startup delay. Pending Paper-entry persistence and market-data side effects receive one full cycle first, after which one bounded backfill batch may run before yielding again; this prevents continuously nonempty foreground queues from starving the migration forever. At the previewed `2,196,391`-fill scale, the no-contention lower bound is about 7.6 days, while continuously pending foreground work makes the bounded schedule about 15.2 days. Each short apply is atomic, conditional, and idempotent on retry. Gross fields and their timestamps are not rewritten; calculated fee provenance is prefixed with `historical-current-paper-model-v1`.
 
+The dedicated PostgreSQL table `paper_fak_fee_backfill_events` stores only the
+structured lifecycle, strategy-ranking, cycle, and failure events emitted by
+this backfill worker. The existing rolling file log remains the fallback when
+PostgreSQL is unavailable. Event retention is an intentionally fixed contract:
+rows strictly older than 24 hours are removed every 10 minutes, up to the 500
+oldest rows per cleanup cycle. The table is not a reconstruction of earlier
+file logs; it contains only events emitted after the database-event feature is
+deployed. Recent events can be inspected directly:
+
+```sql
+SELECT occurred_at_utc, level, event_type, message,
+       worker_instance_id, sweep_id, cycle_id
+FROM paper_fak_fee_backfill_events
+WHERE occurred_at_utc >= now() - interval '24 hours'
+ORDER BY occurred_at_utc DESC, id DESC;
+```
+
 The conditional apply accepts exactly two dependency shapes. `FullChain` requires the unchanged exact fill/run/zero-size-position/settlement chain and accepts either settlement source `BtcUpDown5mGammaClosedMarket` at exactly the run settlement time or exact `MarketWebSocket` with settlement time at or before the run settlement time; every identity, economic, uniqueness, and accounting guard remains mandatory, and the apply updates fill, run, position, and settlement fee/net fields. `RunOnlyLegacy` requires exactly one unchanged, settled, economically self-consistent run and no position or settlement rows; it updates only the fill and run and never synthesizes missing accounting rows.
 
 The historical worker deliberately excludes GTD, Maker, ambiguous sources, already-accounted rows, and every `paper_live_shadow_actual_fill`. A Live-shadow fee belongs to the linked aggregate Live execution and is copied into Paper by the normal reconciliation path; rewriting only its Paper row would make Paper and Live accounting disagree. Item-level structural or accounting conflicts leave the row unchanged and advance the cursor after the completed SQL batch; they can be reconsidered in a later ranked sweep. A whole-batch lock timeout or query cancellation leaves the cursor unchanged so the same page is retried. Temporary CLOB lookup failures are never persisted as zero fees. `ReachedEnd` means only that one keyset sweep ended; it does not prove that no conflicting, deferred, or unavailable legacy rows remain.

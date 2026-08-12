@@ -104,6 +104,24 @@ cursor; the same page is retried. Gross ordering, Gross/Net PnL and Net ROI
 formulas, the historical cutoff, source allowlist, and candidate filters are
 unchanged.
 
+The dedicated PostgreSQL table `paper_fak_fee_backfill_events` stores only this
+worker's structured lifecycle, strategy-ranking, cycle, and failure events.
+Rolling file logs remain the fallback when PostgreSQL is unavailable. Database
+event retention is deliberately not configurable: the fixed contract deletes
+rows with `occurred_at_utc` strictly older than 24 hours every 10 minutes, up to
+the 500 oldest rows in one cleanup cycle. This retention remains active even
+when the historical migration is disabled. The table contains only events
+emitted after this database-event feature is deployed; earlier file logs are not
+backfilled. Inspect the retained window with:
+
+```sql
+SELECT occurred_at_utc, level, event_type, message,
+       worker_instance_id, sweep_id, cycle_id
+FROM paper_fak_fee_backfill_events
+WHERE occurred_at_utc >= now() - interval '24 hours'
+ORDER BY occurred_at_utc DESC, id DESC;
+```
+
 ## Polymarket
 
 - `DataApiBaseUrl`: public Data API base URL.

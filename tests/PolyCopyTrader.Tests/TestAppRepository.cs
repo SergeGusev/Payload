@@ -102,6 +102,13 @@ internal sealed class TestAppRepository : IAppRepository
     public HistoricalPaperFakFeeBackfillBatchResult HistoricalPaperFakFeeBackfillApplyResult { get; set; } =
         new();
 
+    public List<PaperFakFeeBackfillEvent> PaperFakFeeBackfillEvents { get; } = [];
+
+    public List<(DateTimeOffset OccurredBeforeUtc, int BatchSize)>
+        PaperFakFeeBackfillEventCleanupCalls { get; } = [];
+
+    public int PaperFakFeeBackfillEventFailuresToThrow { get; set; }
+
     public int GetPaperPositionsCalls { get; private set; }
 
     public int GetOpenPaperPositionsCalls => Volatile.Read(ref getOpenPaperPositionsCalls);
@@ -1456,6 +1463,50 @@ internal sealed class TestAppRepository : IAppRepository
             }
 
             return Task.FromResult(result);
+        }
+    }
+
+    public Task AddPaperFakFeeBackfillEventAsync(
+        PaperFakFeeBackfillEvent entry,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            if (PaperFakFeeBackfillEventFailuresToThrow > 0)
+            {
+                PaperFakFeeBackfillEventFailuresToThrow--;
+                throw new InvalidOperationException("temporary backfill event persistence failure");
+            }
+
+            PaperFakFeeBackfillEvents.Add(entry);
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task<int> CleanupPaperFakFeeBackfillEventsAsync(
+        DateTimeOffset occurredBeforeUtc,
+        int batchSize,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            PaperFakFeeBackfillEventCleanupCalls.Add((occurredBeforeUtc, batchSize));
+            if (batchSize <= 0)
+            {
+                return Task.FromResult(0);
+            }
+
+            var selectedIds = PaperFakFeeBackfillEvents
+                .Where(entry => entry.OccurredAtUtc < occurredBeforeUtc)
+                .OrderBy(entry => entry.OccurredAtUtc)
+                .ThenBy(entry => entry.Id)
+                .Take(batchSize)
+                .Select(entry => entry.Id)
+                .ToHashSet();
+            PaperFakFeeBackfillEvents.RemoveAll(entry => selectedIds.Contains(entry.Id));
+            return Task.FromResult(selectedIds.Count);
         }
     }
 

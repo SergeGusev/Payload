@@ -27,6 +27,20 @@ Next: None. Restoring or monitoring a complete rolling 24-hour ETH reference win
 Notes: Root Decimal recomputation, artifact-tool/OpenXML/Excel COM verification, chart visual inspection, and a separate fixed-cutoff production SQL audit all passed; the independent financial audit passed 88/88 checks. Durable artifacts are under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/eth-2-reference-average-net-pnl-eth-report-20260812-1919z`. No source, strategy flag, Paper/Live record, service state, database row, or production configuration was changed.
 Blockers: None for the requested report and diagnosis.
 
+## Active Update 2026-08-12 Paper FAK Backfill Database Event Journal
+Goal: Persist the historical Paper FAK fee-backfill operational log in PostgreSQL so it can be verified remotely, while automatically removing events strictly older than 24 hours.
+Status: Completed
+Done:
+- Verified production `192.168.0.101:5432/polycopytrader` in a bounded `REPEATABLE READ / READ ONLY / UTC` session before editing. At `2026-08-12T19:30:28.282183Z`, the exact new table name was absent and the running service heartbeat identified build `5942392dde0cfd0c0aed53b1948e193473643e64`; no production row, schema, service, or trading state was changed.
+- Added the dedicated typed table `paper_fak_fee_backfill_events` with one recent-event/retention index. This is not a generic Serilog PostgreSQL sink: existing rolling file logs remain active as the fallback when PostgreSQL is unavailable.
+- Added best-effort event persistence with a two-second bound, one worker-instance ID, monotonic sequence, build/host/process identity, bounded exception text, and explicit lifecycle/ranking/cycle-context/completion/failure events. A database-event failure is isolated from the fee-backfill financial transaction and cannot roll it back.
+- Added `cycle_id` and `sweep_id` correlation. `CycleContext` records the active strategy, Gross rank, strategy count, code, and Gross realized PnL before candidate loading, while `CycleCompleted` records the existing candidate, eligibility, update, already-applied, conflict, deferral, and end-of-strategy/sweep counters.
+- Added an always-registered retention worker independent of `PaperFakFeeBackfill.Enabled`. It immediately and then every 10 minutes deletes at most the 500 oldest rows whose `occurred_at_utc` is strictly earlier than the UTC 24-hour cutoff, using an ordered bounded `FOR UPDATE SKIP LOCKED` delete.
+- Added source/unit coverage plus an environment-gated PostgreSQL round-trip test for all 47 typed columns and strict boundary cleanup. Updated README and configuration reference with the fixed retention contract and a direct recent-events SQL query.
+Next: Deploy/restart through the normal user-controlled process; schema initialization will create the empty table and index before hosted workers start. Then verify the exact deployed build and query `paper_fak_fee_backfill_events` remotely without copying VPS files.
+Notes: Final `dotnet build PolyCopyTrader.sln -c Debug` succeeded with zero errors. The final focused matrix passed 38, skipped the one PostgreSQL integration test because `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` is not configured, and failed 0. The first isolated-artifact build attempt used `--no-restore` and stopped before compilation because that new path had no assets file; the corrected restore/build and all later builds passed. `git diff --check` passed, and three independent reviews found no P0/P1/P2 defect. Gross ordering, candidate/apply SQL, fee/Net PnL/Net ROI formulas, Live behavior, and generic Serilog configuration were not changed.
+Blockers: None for local implementation. Runtime activation requires deployment; real PostgreSQL round-trip execution remains unverified locally because the separate disposable test database is not configured.
+
 ## Active Update 2026-08-12 Historical Backfill Legacy-Shape Apply Fix
 Goal: Make the Gross-ordered historical fee backfill account the two proven legacy dependency shapes without inventing rows or weakening financial guards.
 Status: Completed

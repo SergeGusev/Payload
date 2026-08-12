@@ -56,9 +56,15 @@ public sealed class PaperFakFeeBackfillProcessorTests
                 FeeCalculatedAtUtc = FilledAtUtc.AddMinutes(1)
             };
         });
-        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+        var eventRecorder = new RecordingEventRecorder();
+        var processor = CreateProcessor(
+            repository,
+            feeService,
+            applyEnabled: true,
+            eventRecorder);
+        var cycleId = Guid.Parse("50000000-0000-0000-0000-000000000001");
 
-        var result = await processor.RunCycleAsync();
+        var result = await processor.RunCycleAsync(cycleId);
 
         Assert.Equal(
             ["condition-a", "CONDITION-A", "condition-b", "condition-c"],
@@ -88,6 +94,86 @@ public sealed class PaperFakFeeBackfillProcessorTests
                 update.EvaluatedFill.FeeCalculationSource));
         Assert.Equal(CutoffUtc, Assert.Single(repository.HistoricalPaperFakFeeBackfillCalls).FilledBeforeUtc);
         Assert.Equal(50, Assert.Single(repository.HistoricalPaperFakFeeBackfillCalls).Limit);
+
+        var rankingEvent = Assert.Single(
+            eventRecorder.Events,
+            entry => entry.EventType == PaperFakFeeBackfillEventTypes.StrategyRankingFrozen);
+        var contextEvent = Assert.Single(
+            eventRecorder.Events,
+            entry => entry.EventType == PaperFakFeeBackfillEventTypes.CycleContext);
+        var cycleEvent = Assert.Single(
+            eventRecorder.Events,
+            entry => entry.EventType == PaperFakFeeBackfillEventTypes.CycleCompleted);
+        Assert.Equal(cycleId, rankingEvent.CycleId);
+        Assert.Equal(cycleId, contextEvent.CycleId);
+        Assert.Equal(cycleId, cycleEvent.CycleId);
+        Assert.NotNull(rankingEvent.SweepId);
+        Assert.Equal(rankingEvent.SweepId, contextEvent.SweepId);
+        Assert.Equal(rankingEvent.SweepId, cycleEvent.SweepId);
+        Assert.Equal(conditionAFirst.Order.StrategyId, contextEvent.StrategyId);
+        Assert.Equal(1, contextEvent.StrategyRank);
+        Assert.Equal(1, contextEvent.StrategyCount);
+        Assert.Equal(1, cycleEvent.StrategyRank);
+        Assert.Equal(1, cycleEvent.StrategyCount);
+        Assert.Equal(4, cycleEvent.Candidates);
+        Assert.Equal(3, cycleEvent.EvaluatedForApply);
+        Assert.Equal(1, cycleEvent.TransientLookupUnavailable);
+        Assert.Equal(3, cycleEvent.Requested);
+        Assert.Equal(3, cycleEvent.StructuralConflicts);
+        Assert.True(cycleEvent.ReachedStrategyEnd);
+        Assert.True(cycleEvent.ReachedSweepEnd);
+        Assert.True(cycleEvent.DurationMilliseconds >= 0);
+    }
+
+    [Fact]
+    public async Task RunCycle_EmptyRanking_RecordsCompletedSweepAndResetsItForNextCycle()
+    {
+        var repository = new TestAppRepository();
+        var feeService = new RecordingFeeAccountingService((_, _, _) =>
+            throw new InvalidOperationException("Fee evaluation must not run for an empty ranking."));
+        var eventRecorder = new RecordingEventRecorder();
+        var processor = CreateProcessor(
+            repository,
+            feeService,
+            applyEnabled: true,
+            eventRecorder);
+        var firstCycleId = Guid.Parse("51000000-0000-0000-0000-000000000001");
+        var secondCycleId = Guid.Parse("51000000-0000-0000-0000-000000000002");
+
+        var first = await processor.RunCycleAsync(firstCycleId);
+        var second = await processor.RunCycleAsync(secondCycleId);
+
+        Assert.True(first.ReachedEnd);
+        Assert.True(second.ReachedEnd);
+        Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillStrategyRankCalls.Count);
+        Assert.Empty(feeService.Calls);
+        Assert.DoesNotContain(
+            eventRecorder.Events,
+            entry => entry.EventType == PaperFakFeeBackfillEventTypes.CycleContext);
+
+        var rankingEvents = eventRecorder.Events
+            .Where(entry => entry.EventType == PaperFakFeeBackfillEventTypes.StrategyRankingFrozen)
+            .ToArray();
+        var completedEvents = eventRecorder.Events
+            .Where(entry => entry.EventType == PaperFakFeeBackfillEventTypes.CycleCompleted)
+            .ToArray();
+        Assert.Equal(2, rankingEvents.Length);
+        Assert.Equal(2, completedEvents.Length);
+        Assert.Equal([firstCycleId, secondCycleId], rankingEvents.Select(entry => entry.CycleId));
+        Assert.Equal([firstCycleId, secondCycleId], completedEvents.Select(entry => entry.CycleId));
+        Assert.All(rankingEvents, entry => Assert.Equal(0, entry.StrategyCount));
+        Assert.All(completedEvents, entry =>
+        {
+            Assert.Equal(0, entry.StrategyCount);
+            Assert.Equal(0, entry.Candidates);
+            Assert.True(entry.ReachedStrategyEnd);
+            Assert.True(entry.ReachedSweepEnd);
+        });
+        Assert.NotNull(rankingEvents[0].SweepId);
+        Assert.NotNull(rankingEvents[1].SweepId);
+        Assert.NotEqual(rankingEvents[0].SweepId, rankingEvents[1].SweepId);
+        Assert.Equal(rankingEvents[0].SweepId, completedEvents[0].SweepId);
+        Assert.Equal(rankingEvents[1].SweepId, completedEvents[1].SweepId);
     }
 
     [Fact]
@@ -417,7 +503,8 @@ public sealed class PaperFakFeeBackfillProcessorTests
     private static PaperFakFeeBackfillProcessor CreateProcessor(
         TestAppRepository repository,
         IPolymarketFeeAccountingService feeService,
-        bool applyEnabled)
+        bool applyEnabled,
+        IPaperFakFeeBackfillEventRecorder? eventRecorder = null)
     {
         if (repository.HistoricalPaperFakFeeBackfillStrategyRanks.Count == 0)
         {
@@ -443,7 +530,22 @@ public sealed class PaperFakFeeBackfillProcessorTests
                 BatchSize = 50
             },
             repository,
-            feeService);
+            feeService,
+            eventRecorder);
+    }
+
+    private sealed class RecordingEventRecorder : IPaperFakFeeBackfillEventRecorder
+    {
+        public List<PaperFakFeeBackfillEvent> Events { get; } = [];
+
+        public Task RecordAsync(
+            PaperFakFeeBackfillEvent entry,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Events.Add(entry);
+            return Task.CompletedTask;
+        }
     }
 
     private static HistoricalPaperFakFeeBackfillCandidate CreateCandidate(

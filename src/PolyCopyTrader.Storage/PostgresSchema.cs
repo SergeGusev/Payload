@@ -44,6 +44,7 @@ public static class PostgresSchema
         "strategy_child_parent_assignments",
         "paper_positions",
         "paper_position_settlements",
+        "paper_fak_fee_backfill_events",
         "paper_copied_trader_performance",
         "paper_copied_trader_performance_refresh_queue",
         "paper_copied_trader_performance_refresh_inflight",
@@ -4529,6 +4530,59 @@ CREATE TABLE IF NOT EXISTS api_errors (
     message text NOT NULL,
     created_at_utc timestamptz NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS paper_fak_fee_backfill_events (
+    id uuid PRIMARY KEY,
+    worker_instance_id uuid NOT NULL,
+    sweep_id uuid NULL,
+    cycle_id uuid NULL,
+    sequence bigint NOT NULL,
+    occurred_at_utc timestamptz NOT NULL,
+    level text NOT NULL,
+    event_type text NOT NULL,
+    message text NOT NULL,
+    build_version text NOT NULL,
+    host_name text NOT NULL,
+    process_id integer NOT NULL,
+    backfill_enabled boolean NULL,
+    apply_enabled boolean NULL,
+    cutoff_utc timestamptz NULL,
+    batch_size integer NULL,
+    pending_paper_entry_batches integer NULL,
+    pending_market_data_updates integer NULL,
+    delay_seconds integer NULL,
+    strategy_id uuid NULL,
+    strategy_code text NULL,
+    strategy_rank integer NULL,
+    strategy_count integer NULL,
+    gross_realized_pnl_usd numeric(28,8) NULL,
+    candidates integer NULL,
+    evaluated_for_apply integer NULL,
+    transient_lookup_unavailable integer NULL,
+    requested integer NULL,
+    eligible integer NULL,
+    full_chain_eligible integer NULL,
+    run_only_legacy_eligible integer NULL,
+    fills_updated integer NULL,
+    runs_updated integer NULL,
+    positions_updated integer NULL,
+    settlements_updated integer NULL,
+    full_chain_already_applied integer NULL,
+    run_only_legacy_already_applied integer NULL,
+    already_applied integer NULL,
+    structural_conflicts integer NULL,
+    accounting_conflicts integer NULL,
+    deferred_by_lock_timeout integer NULL,
+    deferred_by_query_cancel integer NULL,
+    reached_strategy_end boolean NULL,
+    reached_sweep_end boolean NULL,
+    duration_milliseconds bigint NULL,
+    exception_type text NULL,
+    exception_message text NULL
+);
+
+CREATE INDEX IF NOT EXISTS ix_paper_fak_fee_backfill_events_occurred
+ON paper_fak_fee_backfill_events(occurred_at_utc DESC, id DESC);
 
 CREATE TABLE IF NOT EXISTS polymarket_http_logs (
     id uuid PRIMARY KEY,
