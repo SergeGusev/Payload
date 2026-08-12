@@ -161,3 +161,10 @@ Request:
 
 Result:
 Performed a strictly read-only official Gamma/CLOB inspection of BTC/ETH/SOL five-minute markets in the `23h..25h` lead band. Gamma exposed 30 already-orderable markets across ten slots; the farthest slot started `2026-08-13T20:20:00Z`. Two checks about 50 seconds apart confirmed the same nearest levels for all six token books. BTC Up/Down each showed best bid/ask `0.49 x 56.02 / 0.51 x 56.02`; ETH Up `0.50 x 5 / 0.51 x 122.04`, Down `0.49 x 122.04 / 0.50 x 5`; SOL Up `0.50 x 5 / 0.51 x 25`, Down `0.49 x 25 / 0.50 x 5`. Tick was `0.01` and minimum size five shares. No production, trading, database, service, configuration, strategy, or source state changed.
+
+## 2026-08-12T21:00:01.8695250Z
+Request:
+Выложил, смотри
+
+Result:
+Verified the deployment against exact production `192.168.0.101:5432/polycopytrader` in bounded read-only UTC transactions. The Running/Live heartbeat and new database journal both identify build `c4b34c361e8ae4c1409787b576ccaeb4ece3fd94`, which contains feature commit `67597708`; the 47-column table and recent-event index exist, and `WorkerStarted` plus ranked cycle events prove journal writes work. Rank 1 completed with two candidates, zero eligible, one structural and one accounting conflict. Rank 2 (`b7c50005-0000-4000-8168-000000000003`) then failed four consecutive candidate-read attempts after approximately 10.1 seconds with top-level `NpgsqlException: Exception while reading from stream`. A live `pg_stat_activity` capture showed the exact candidate query active without a wait event or blocker; deployed code gives it a 10-second command timeout, but the stored event lacks the inner exception needed to prove the terminal timeout/transport cause. No row was older than 24 hours, so retention had nothing to delete and its deletion path is not yet runtime-proven. No production or product state was changed.

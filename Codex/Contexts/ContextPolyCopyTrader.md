@@ -1,3 +1,18 @@
+## Active Update 2026-08-13 Paper FAK Database Journal Deployment Verification
+Goal: Verify the deployed Paper FAK backfill database journal and determine whether the Gross-ranked worker is progressing after restart.
+Status: Completed
+Done:
+- Audited exact production PostgreSQL `192.168.0.101:5432/polycopytrader` only through bounded `REPEATABLE READ / READ ONLY / UTC` sessions. The deployed service is `Running/Live`, started at `2026-08-12T20:46:01.795293Z`, and its heartbeat advanced; `last_error` remained empty.
+- Verified deployed build `c4b34c361e8ae4c1409787b576ccaeb4ece3fd94`, which contains journal commit `675977088fe82344dc11f2e26eb3dfb79bd07f21`. The heartbeat and journal rows carry the same build and process identity.
+- Verified `paper_fak_fee_backfill_events` exists with all 47 columns, its primary key, and the ready recent-event index `(occurred_at_utc DESC, id DESC)`. `WorkerStarted` was persisted `0.359s` after service start, proving the new runtime write path works without VPS file-log transfer.
+- After the 300-second startup delay, the worker froze 2,233 strategies in Gross-PnL order. Rank 1 (`b7c50005-0001-4000-8166-000000000003`, Gross `6236.78762304`) completed in 1,955ms: two candidates were evaluated, zero were eligible, one was a structural conflict and one an accounting conflict, with no deferral.
+- Rank 2 (`b7c50005-0000-4000-8168-000000000003`, `sol_up_down_5m_3_diff_shift_progress_premarket`, Gross `5753.58978552`) repeatedly failed before candidate counters were available. Four observed attempts ended after `10076/10106/10082/10084ms` with `Npgsql.NpgsqlException: Exception while reading from stream`; each retry was correctly correlated by cycle/sweep IDs and remained on rank 2.
+- Independently captured the exact candidate `SELECT paper_order.id, ...` active in `pg_stat_activity` for 4.171s with no wait event and no blocking PID. The candidate command has a 10-second timeout in deployed source. This proves the failing stage and rules out a PostgreSQL lock at the captured instant, but the journal currently lacks the inner exception/stack needed to distinguish command timeout from transport/server-I/O failure conclusively.
+- Verified zero rows older than 24 hours and `n_tup_del=0`. This is expected because the table was created at this deployment; it confirms there was nothing eligible for retention, not that deletion has yet been exercised in production.
+Next: A separate requested code task should diagnose/optimize the rank-2 candidate query and persist the inner exception chain; until then, the worker will keep retrying rank 2 and will not progress to lower Gross ranks.
+Notes: Two independent runtime audits agreed on deployment identity, event sequence, counters, repeated failure timings, and the live candidate-query capture. No production row, schema, service, configuration, strategy, order, fee, Net PnL/ROI, or trading state was changed. No source code or tests were changed in this verification task.
+Blockers: Runtime backfill progress is blocked at Gross rank 2 by the repeated candidate-read failure; exact terminal inner cause is not preserved in the database event.
+
 ## Active Update 2026-08-12 Day-Ahead Crypto Order-Book Snapshot
 Goal: Inspect real CLOB liquidity for the farthest already-orderable BTC/ETH/SOL five-minute slot beginning approximately one day later.
 Status: Completed
