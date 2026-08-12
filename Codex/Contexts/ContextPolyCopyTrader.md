@@ -1,3 +1,15 @@
+## Active Update 2026-08-12 Directional Position Uses BUY
+Goal: Confirm which order side opens a directional Polymarket position when starting with cash.
+Status: Completed
+Done:
+- Confirmed that a trader starting with pUSD opens a directional position by buying the desired outcome token: `BUY Up` expresses an Up view and `BUY Down` expresses a Down view.
+- Clarified that SELL does not open a naked opposite wager on Polymarket; it transfers outcome tokens the trader already owns and normally closes or reduces that token position. To bet against Up from cash, buy Down rather than attempt a naked SELL Up.
+- Separated order direction from liquidity role: Maker/Taker determines whether the order rests or executes immediately, while BUY/SELL determines whether outcome-token inventory increases or decreases.
+- Preserved execution risk: a Maker BUY is only a pending directional order until it actually fills; an unfilled order creates no position.
+Next: None.
+Notes: Read-only verification against current official Polymarket positions and order-lifecycle documentation. No production, trading, order, strategy, source-code, configuration, or test state changed.
+Blockers: None.
+
 ## Active Update 2026-08-12 Standalone Maker BUY Versus SELL PnL
 Goal: Answer the standalone `BUY Up` and `SELL Up` questions without importing a complementary position or complete-set assumption.
 Status: Completed

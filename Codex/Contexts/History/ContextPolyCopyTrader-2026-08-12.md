@@ -132,6 +132,13 @@ Request:
 Result:
 Corrected the scope error in the prior SELL explanation. Assuming each order fully fills and Up wins: a standalone BUY of five Up shares at `0.50` costs `$2.50` and redeems for `$5`, producing `+$2.50` gross PnL. A standalone SELL transfers five already-owned Up shares away for `$2.50`; the seller then receives nothing at resolution, so its realized PnL is `$2.50 minus those shares' acquisition cost`, not a fixed amount determined by the Up outcome. Examples are `$0` if acquired for `$2.50`, `+$0.50` if acquired for `$2`, and `-$0.50` if acquired for `$3`. The previous `+/-$2.50` SELL matrix applied only to a complete set with retained Down inventory and is withdrawn for this standalone question. No production or trading state changed.
 
+## 2026-08-12T20:21:54.8475879Z
+Request:
+То есть для того, чтобы поставить на результат, надо ставить BUY, так?
+
+Result:
+Confirmed that a trader starting from cash opens a directional position by BUYing the desired outcome token: BUY Up for an Up view, BUY Down for a Down view. SELL requires already-owned outcome tokens and closes or reduces that token position rather than creating a naked opposite bet. Maker/Taker is only the liquidity role; BUY/SELL is the position direction. A Maker BUY creates exposure only after it actually fills. No production or trading state changed.
+
 ## 2026-08-12T20:05:08.6936034Z
 Request:
 А ты можешь логи вести в базе? Чтобы мне с флешкой не бегать каждый раз? И чистить устаревшие больше суток.
