@@ -1,3 +1,16 @@
+## Active Update 2026-08-12 Standalone Maker BUY Versus SELL PnL
+Goal: Answer the standalone `BUY Up` and `SELL Up` questions without importing a complementary position or complete-set assumption.
+Status: Completed
+Done:
+- Fixed the common premises: each order fully fills for five Up shares at `0.50`, Up later resolves as the winner, Maker trading fee is zero, and rebate is excluded.
+- For BUY, the trader pays `$2.50`, retains five Up shares, and redeems them for `$5`, so gross PnL is exactly `+$2.50`.
+- For SELL, Polymarket requires the trader to already own five Up shares. The fill transfers those shares away and pays `$2.50`; the seller then has zero Up shares and receives nothing at resolution. Standalone realized PnL is therefore `$2.50 minus the acquisition cost of those five shares`, not a fixed result determined by Up winning.
+- Recorded examples: if the five Up shares cost `$2.50`, SELL PnL is `$0`; if they cost `$2`, PnL is `+$0.50`; if they cost `$3`, PnL is `-$0.50`. Relative to continuing to hold a winning five-share Up position, selling at `0.50` forgoes `$2.50`, but opportunity cost is not the same as realized trade PnL.
+- Corrected the prior answer's blast radius: the earlier `SELL Up => +/-$2.50` matrix applied only to `$5` split into a complete set while retaining five Down shares. It does not answer a standalone SELL order after the user explicitly removes the complementary position.
+Next: None.
+Notes: Read-only verification against current official Polymarket outcome-token trading/redemption and Maker-fee documentation. No production, trading, order, strategy, source-code, configuration, or test state changed.
+Blockers: None.
+
 ## Active Update 2026-08-12 SELL Up Direction And Sign Clarification
 Goal: Confirm the sign and magnitude of the resolved PnL for `SELL 5 Up @ 0.50` under the complete-set premise.
 Status: Completed

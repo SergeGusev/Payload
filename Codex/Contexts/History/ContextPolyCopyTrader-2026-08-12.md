@@ -120,6 +120,18 @@ Request:
 Result:
 Confirmed that the `$2.50` magnitude is correct under the explicit complete-set premise, but the signs are reversed from the user's prior formulation. Splitting `$5` creates `5 Up + 5 Down`; filling only `SELL 5 Up @ 0.50` returns `$2.50` cash and leaves five Down tokens. If Up wins, those Down tokens redeem for zero and final capital is `$2.50`, so PnL is `-$2.50`. If Up loses, Down wins and redeems for `$5`, producing `$7.50` final capital and `+$2.50` PnL. No production or trading state changed.
 
+## 2026-08-12T20:18:24.1124855Z
+Request:
+Ты отвечаешь так, что я запутываюсь ещё больше.
+
+1. Если я ставлю Maker BUY UP 5 shares по ставке 0.5 и срабатывает Up, то сколько я выиграю?
+2. Если я ставлю Maker SELL UP 5 shares по ставке 0.5 и срабатывает Up, то сколько я выиграю?
+
+Забудь про симметричные ставки, ответь на эти 2 вопроса
+
+Result:
+Corrected the scope error in the prior SELL explanation. Assuming each order fully fills and Up wins: a standalone BUY of five Up shares at `0.50` costs `$2.50` and redeems for `$5`, producing `+$2.50` gross PnL. A standalone SELL transfers five already-owned Up shares away for `$2.50`; the seller then receives nothing at resolution, so its realized PnL is `$2.50 minus those shares' acquisition cost`, not a fixed amount determined by the Up outcome. Examples are `$0` if acquired for `$2.50`, `+$0.50` if acquired for `$2`, and `-$0.50` if acquired for `$3`. The previous `+/-$2.50` SELL matrix applied only to a complete set with retained Down inventory and is withdrawn for this standalone question. No production or trading state changed.
+
 ## 2026-08-12T20:05:08.6936034Z
 Request:
 А ты можешь логи вести в базе? Чтобы мне с флешкой не бегать каждый раз? И чистить устаревшие больше суток.
