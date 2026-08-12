@@ -1,3 +1,18 @@
+## Active Update 2026-08-12 ETH Reference Price Gap Diagnosis
+Goal: Explain the recurring ETH reference-price holes, their real scope, calculation impact, and verified cause boundary.
+Status: Completed
+Done:
+- Audited exact production PostgreSQL `192.168.0.101:5432/polycopytrader` from `2026-08-04T00:00:00Z` through a fixed `2026-08-12T20:01:02.745558Z` snapshot under server-enforced `REPEATABLE READ / READ ONLY / UTC`; the independent verification passed 33/33 checks.
+- Proved that the two destructive gaps were not ETH-specific. Persisted BTC, ETH, and SOL samples stopped almost simultaneously from `2026-08-11T16:36:16Z` to `20:04:39Z` (about 3h28m) and from `2026-08-11T21:29:09Z` to `2026-08-12T08:30:46Z` (about 11h02m), even though BTC uses a separate Binance WebSocket from the combined ETH/SOL WebSocket.
+- Traced the exact deployed build `5942392d`, MVID prefix `6e3d6c1ce92d`: the history worker polls the latest price every 10 seconds, refuses a point older than five seconds, persists successful points only, and reloads only the preceding 24 hours at startup. No runtime REST/klines backfill repairs missing history.
+- Confirmed the 24-hour cache uses 60 UTC-aligned 24-minute buckets and requires all 60 to be populated. A single successful tick is enough for a bucket, so ordinary short stale skips usually do not matter; an entirely empty 24-minute bucket makes the 24-hour window incomplete. The first long gap removed eight full buckets and the second removed 27.
+- Confirmed exact coverage was 52/60 at the first missing-denominator skip, 32/60 at the report cutoff, and 33/60 at the final audit. The exact Reference Average strategy discards incomplete windows and creates no Paper order without a full 24-hour first-bucket bps denominator. With no new full-bucket gap, deterministic recovery is projected around `2026-08-13T08:00:02Z` (`11:00` Sofia), followed by the next strategy evaluation.
+- Verified that post-recovery sampling is currently healthy at the material bucket level: all 29 expected 24-minute buckets since `2026-08-12T08:24Z` were present, despite isolated stale-price skips and later service starts.
+- Established the causal boundary. The first gap began with simultaneous Binance socket/worker failures and all reference feeds stopping, and the second was followed by a PostgreSQL postmaster restart plus a later service recovery after the user's reboot. This proves common local pipeline outages and recovery sequences, not the unique underlying host cause. The retained file logs do not cover either large interval, so .NET hang, Windows/service failure, network failure, resource exhaustion, or another host cause remains unresolved.
+Next: None. Capturing retained VPS Windows/Event Viewer, service, .NET, PostgreSQL, and host-network evidence plus alerting/backfill changes would be separate requested work.
+Notes: No production row, service, configuration, strategy, order, Paper/Live state, or product source was changed. Repository source was inspected read-only; only context/history were updated. The earlier `53`-bucket statement is corrected to the exact raw reconstruction `52/60` at the first skip.
+Blockers: Exact root-cause attribution is blocked by the absence of retained logs for the two outage intervals.
+
 ## Active Update 2026-08-12 ETH 2 Bps Net Report Repeat And No-Settlement Diagnosis
 Goal: Repeat the full-history Net-only report for exact strategy `b7c50005-0000-4000-8179-000000000102` and prove why it produced no new Settled records after 2026-08-11 16:04:22 UTC.
 Status: Completed
