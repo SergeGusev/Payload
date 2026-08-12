@@ -62,3 +62,14 @@ Request:
 
 Result:
 Verified the refreshed `D:\1\logs` and production DB read-only. Exact build `fb2d9f5d8cbe1f494bc7474712ec1dcf728922a8` started its backfill after the five-minute delay, froze 2,233 strategies, and completed 35/35 logged bounded cycles without backfill/CLOB fee errors. All 1,750 attempted rows belonged to Gross rank 1, strategy `b7c50005-0001-4000-8166-000000000003`; seven chains were atomically updated in the copied log window and 1,743 were conflicts/deferred. A later independent DB check proved 21 exact Calculated fill/run chains for that same rank-1 strategy with populated run Net and no strategy/provenance mismatch. Rank 1 still had 2,831 candidates, so complete lifetime Net PnL/Net ROI was not yet available. The refreshed earlier logs also disproved the prior Paper-queue-starvation explanation: `c5464fe4` had already completed 30 cycles and evaluated 1,500 rank-1 candidates, all conflicts. The previous causal attribution to the `fb2` fairness change was withdrawn. Conflict rows advance out of the current page and retry only on a later sweep; their exact structural/timeout causes remain unclassified. No production, service, database, configuration, trading, fee, Net, or product-code state was changed.
+
+## 2026-08-12T15:18:03.5081742Z
+Request:
+Ты писал:
+
+1 743 из первых 1 750 кандидатов получили ConflictsOrDeferred
+
+А что это значит и как это исправить?
+
+Result:
+Classified the exact first 1,750 attempts read-only on production. The aggregate did not mean 1,743 concurrent conflicts: 1,483 rows have an exact single settled run but no position or settlement, while 260 have a complete and financially matching chain persisted by the legacy `MarketWebSocket` settlement path with a timestamp 3.327554–288.649453 seconds earlier than the run; seven rows match the current narrow full-chain contract. These structural predicates exactly reproduce the runtime 1,743/7 result without invoking lock or statement timeouts. The safe correction is two separately guarded legacy shapes: atomically update fill+run only for exact run-only chains because the Dashboard uses runs for closed Net/coverage/ROI, and permit only the exact WebSocket source with settlement time not later than run time for complete chains while retaining every financial, identity, uniqueness, and CAS check. Also split structural/accounting conflicts from whole-batch lock/query deferrals and retry the same page only for proven batch deferral. Synthetic position/settlement creation and broad predicate relaxation were rejected as financially unsafe. No production, service, database, configuration, trading, fee, Net, or product-code state was changed; implementation remains a separate change task.
