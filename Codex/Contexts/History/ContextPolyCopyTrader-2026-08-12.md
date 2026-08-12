@@ -80,3 +80,21 @@ Request:
 
 Result:
 Implemented the two deployed-database-previewed historical backfill shapes without changing Gross ordering or financial formulas. `RunOnlyLegacy` now atomically updates only an exact fill and unique self-consistent settled run when position and settlement are both absent; `FullChain` now additionally accepts exact `MarketWebSocket` settlements only when their timestamp is not later than the run, while retaining all identity, economics, uniqueness, CAS, and accounting guards. Synthetic rows are never created. Structural/accounting item conflicts and whole-batch lock/query deferrals now have separate counters; only a proven whole-batch deferral retries the same page without advancing its cursor. Exact deployed-database preview closed rank 1 as 2,813 candidates = 1,483 run-only + 19 Gamma full + 1,309 safe WebSocket full + two deliberately unsupported rows. The exact apply SQL passed deployed-database `READ ONLY` `EXPLAIN` without `ANALYZE` or writes. Focused tests passed 37/37, two env-gated PostgreSQL tests were skipped without a configured test DB, and the solution built with zero errors and 121 existing warnings. The broad suite retained 128 pre-existing catalog/infrastructure failures; a representative failure reproduced on clean pre-change HEAD. Documentation was updated and independent review found no blocking/P1/P2 issue. No deployed data/schema, service, configuration, trading, fee, or Net state was mutated; deployment remains user-controlled.
+
+## 2026-08-12T19:42:49.2463482Z
+Request:
+Повтори
+
+Result:
+Repeated the exact full-history Settled Paper report for strategy `b7c50005-0000-4000-8179-000000000102` from one fixed production `REPEATABLE READ / READ ONLY / UTC` snapshot at `2026-08-12T19:19:06.513623Z`, showing authoritative Net only. Reconciled 2,560 unique runs/markets over 39 settlement dates through 2026-08-11: Net PnL `293.67626746`, fee-inclusive Net ROI `1.849555330808147099%`, Net W/L/flat `1,439/1,121/0`, and maximum unrecovered Net drawdown `146.64675734`. Independent Decimal and exact-cutoff production SQL audit passed 88/88 checks. Delivered a visually inspected solid-line Net+ETH PNG and a one-sheet verified Excel workbook with exact B2 freeze, formulas, 17 negative days in red on white, no formula errors/external links, and no user-visible Gross. There is no 2026-08-12 worksheet row because no run was Settled on that UTC date by cutoff. Production and repository source were unchanged.
+
+## 2026-08-12T19:42:50.2463482Z
+Request:
+Ты написал:
+
+Важная свежая деталь: после предыдущего отчёта новых Settled-записей у этой стратегии не появилось — последняя остаётся от 11 августа 16:04 UTC
+
+А почему так? Все skipped или стратегия вообще не работала?
+
+Result:
+Corrected the initial main-table-only statement after a strict read-only audit of raw runs, skip tombstones/rollups, ETH reference ticks/errors, the running heartbeat build, and the exact deployed source path. The strategy was enabled and processing candidates: it created 156 after the last settlement; 154 were Skipped by the report cutoff and two were Observed, and those two later also became Skipped. No new Entered, Paper order, or Settled existed. Direct Paper skip compaction immediately archived finalized skips and deleted their raw run rows, explaining why the first raw-run query did not show them. Of the 154 cutoff skips, 135 lacked the 24-hour start-price denominator; the remainder were seven incomplete-average-window, six already-passed, three expired, and three elapsed-premarket cases. ETH ticks had approximately 3h28m and 11h02m gaps, leaving 53 and later 32 distinct 24-minute buckets rather than the required 60; runtime recorded 55 stale ETH-stream and six no-price errors. Exact deployed commit `5942392d` rejects before Paper-order creation when that full 24-hour denominator is absent, so there was nothing to settle. No production or repository state was changed.
