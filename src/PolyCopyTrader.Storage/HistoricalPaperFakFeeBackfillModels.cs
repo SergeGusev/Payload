@@ -6,7 +6,13 @@ public sealed record HistoricalPaperFakFeeBackfillCandidate(
     PaperOrder Order,
     PaperFill Fill);
 
+public sealed record HistoricalPaperFakFeeBackfillStrategyRank(
+    Guid StrategyId,
+    string StrategyCode,
+    decimal GrossRealizedPnlUsd);
+
 public sealed record HistoricalPaperFakFeeBackfillCursor(
+    Guid StrategyId,
     DateTimeOffset FilledAtUtc,
     Guid PaperOrderId,
     Guid FillId);

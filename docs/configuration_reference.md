@@ -54,8 +54,9 @@ Do not commit real credentials.
   deferral; default `15`.
 - `InitialDelaySeconds`: startup grace period before the first scan; default
   `300`.
-- `IdleDelaySeconds`: delay after the end of a keyset sweep; default `900`.
-  Sweep end is not a claim that deferred or unavailable rows are complete.
+- `IdleDelaySeconds`: delay after the end of a complete ranked-strategy sweep;
+  default `900`. Sweep end is not a claim that deferred or unavailable rows are
+  complete.
 - `ErrorDelaySeconds` / `MaxErrorDelaySeconds`: initial and capped exponential
   retry delays; defaults `60` and `900`.
 
@@ -66,6 +67,16 @@ ambiguous, and already-accounted rows. It yields while Paper-entry persistence
 or market-data side-effect queues have pending foreground work. Historical gross
 PnL remains unchanged; fee and nullable net PnL are stored separately with
 `historical-current-paper-model-v1` provenance.
+
+At each sweep start, the worker calculates the Dashboard lifetime Gross realized
+PnL formula directly from retained run/fill/settlement accounting rows and
+freezes one stable ranking of eligible strategies, highest first. Equal Gross
+values use strategy ID as the deterministic tie-break. The worker keyset-pages
+one strategy to its current end before starting the next. Ranking affects
+scheduling only; it does not change Gross PnL, Net PnL or Net ROI formulas,
+candidate filters, or the historical cutoff. Transient fee lookups and
+conditional-apply conflicts remain eligible for a later ranked sweep, while
+lower-ranked strategies continue in the current one.
 
 ## Polymarket
 

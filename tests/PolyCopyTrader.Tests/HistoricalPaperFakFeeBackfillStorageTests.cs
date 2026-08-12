@@ -132,6 +132,7 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
         Assert.Contains("HistoricalPaperFakDirectSource", candidateMethod, StringComparison.Ordinal);
         Assert.Contains("HistoricalPaperFakChildSource", candidateMethod, StringComparison.Ordinal);
         Assert.Contains("fill.fee_accounting_status", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("paper_order.strategy_id = @StrategyId", candidateMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("paper_order.status IN", candidateMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("fill.fee_usd = 0", candidateMethod, StringComparison.Ordinal);
         Assert.Contains(
@@ -144,6 +145,34 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("paper_live_shadow", candidateMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("btc_updown5m_gtd_limit", candidateMethod, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StrategyRankQuery_UsesGrossRealizedPnlDescendingAndDeterministicTieBreak()
+    {
+        var source = ReadRepositorySource();
+        var start = source.IndexOf(
+            "GetHistoricalPaperFakFeeBackfillStrategyRanksAsync",
+            StringComparison.Ordinal);
+        var end = source.IndexOf(
+            "GetHistoricalPaperFakFeeBackfillCandidatesAsync",
+            start,
+            StringComparison.Ordinal);
+        var rankMethod = source[start..end];
+
+        Assert.Contains("FROM public.strategies strategy", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("WHERE EXISTS (", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("public.strategy_market_paper_runs", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("public.strategy_paper_skip_rollups", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("SUM(COALESCE(run.realized_pnl_usd, 0))", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("SUM(fill_all.realized_pnl_usd)", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("SUM(settlement.realized_pnl_usd)", rankMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "ORDER BY gross_realized_pnl_usd DESC, strategy.id",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("dashboard_strategy_performance_snapshots", rankMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("performance.total_pnl_usd", rankMethod, StringComparison.Ordinal);
     }
 
     [Fact]

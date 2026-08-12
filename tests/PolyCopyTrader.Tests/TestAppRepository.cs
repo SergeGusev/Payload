@@ -87,8 +87,13 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Queue<HistoricalPaperFakFeeBackfillPage> HistoricalPaperFakFeeBackfillPages { get; } = [];
 
+    public List<HistoricalPaperFakFeeBackfillStrategyRank> HistoricalPaperFakFeeBackfillStrategyRanks { get; } = [];
+
+    public List<DateTimeOffset> HistoricalPaperFakFeeBackfillStrategyRankCalls { get; } = [];
+
     public List<(
         DateTimeOffset FilledBeforeUtc,
+        Guid StrategyId,
         int Limit,
         HistoricalPaperFakFeeBackfillCursor? AfterCursor)> HistoricalPaperFakFeeBackfillCalls { get; } = [];
 
@@ -1398,8 +1403,23 @@ internal sealed class TestAppRepository : IAppRepository
         return Task.FromResult(PaperOrders.FirstOrDefault(order => order.CorrelationId == correlationId));
     }
 
+    public Task<IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank>>
+        GetHistoricalPaperFakFeeBackfillStrategyRanksAsync(
+            DateTimeOffset filledBeforeUtc,
+            CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            HistoricalPaperFakFeeBackfillStrategyRankCalls.Add(filledBeforeUtc);
+            return Task.FromResult<IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank>>(
+                HistoricalPaperFakFeeBackfillStrategyRanks.ToArray());
+        }
+    }
+
     public Task<HistoricalPaperFakFeeBackfillPage> GetHistoricalPaperFakFeeBackfillCandidatesAsync(
         DateTimeOffset filledBeforeUtc,
+        Guid strategyId,
         int limit,
         HistoricalPaperFakFeeBackfillCursor? afterCursor = null,
         CancellationToken cancellationToken = default)
@@ -1407,7 +1427,7 @@ internal sealed class TestAppRepository : IAppRepository
         cancellationToken.ThrowIfCancellationRequested();
         lock (sync)
         {
-            HistoricalPaperFakFeeBackfillCalls.Add((filledBeforeUtc, limit, afterCursor));
+            HistoricalPaperFakFeeBackfillCalls.Add((filledBeforeUtc, strategyId, limit, afterCursor));
             return Task.FromResult(HistoricalPaperFakFeeBackfillPages.Count > 0
                 ? HistoricalPaperFakFeeBackfillPages.Dequeue()
                 : new HistoricalPaperFakFeeBackfillPage([], null, true));

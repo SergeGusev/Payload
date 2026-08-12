@@ -95,6 +95,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
     {
         var candidate = CreateCandidate("condition-a");
         var cursor = new HistoricalPaperFakFeeBackfillCursor(
+            candidate.Order.StrategyId,
             candidate.Fill.FilledAtUtc,
             candidate.Order.Id,
             candidate.Fill.Id);
@@ -129,6 +130,9 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.True(sweepEndCycle.ReachedEnd);
         Assert.Equal(1, retryCycle.EvaluatedForApply);
         Assert.Single(repository.HistoricalPaperFakFeeBackfillApplyCalls);
+        Assert.All(
+            repository.HistoricalPaperFakFeeBackfillCalls,
+            call => Assert.Equal(candidate.Order.StrategyId, call.StrategyId));
         Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[0].AfterCursor);
         Assert.Equal(cursor, repository.HistoricalPaperFakFeeBackfillCalls[1].AfterCursor);
         Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[2].AfterCursor);
@@ -209,11 +213,130 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.Empty(repository.HistoricalPaperFakFeeBackfillApplyCalls);
     }
 
+    [Fact]
+    public async Task RunCycle_CompletesStrategiesByGrossRealizedPnlDescendingAcrossConditionGroups()
+    {
+        var winnerStrategyId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+        var loserStrategyId = Guid.Parse("20000000-0000-0000-0000-000000000001");
+        var winnerA = CreateCandidate("condition-a", winnerStrategyId);
+        var winnerB = CreateCandidate("condition-b", winnerStrategyId);
+        var loserA = CreateCandidate("condition-a", loserStrategyId);
+        var winnerCursor = new HistoricalPaperFakFeeBackfillCursor(
+            winnerStrategyId,
+            winnerA.Fill.FilledAtUtc,
+            winnerA.Order.Id,
+            winnerA.Fill.Id);
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.AddRange(
+        [
+            new(winnerStrategyId, "winner", 125m),
+            new(loserStrategyId, "loser", -25m)
+        ]);
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([winnerA], winnerCursor, false));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([winnerB], null, true));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([loserA], null, true));
+        var feeService = new RecordingFeeAccountingService((_, fill, _) =>
+            Task.FromResult(fill with
+            {
+                FeeUsd = 0.01m,
+                FeeAccountingStatus = FeeAccountingStatus.Calculated.ToString(),
+                FeeCalculationSource = PolymarketFeeCalculationConstants.FeeCurveCalculationSource
+            }));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        var winnerFirstPageCycle = await processor.RunCycleAsync();
+        var winnerLastPageCycle = await processor.RunCycleAsync();
+        var loserCycle = await processor.RunCycleAsync();
+
+        Assert.False(winnerFirstPageCycle.ReachedEnd);
+        Assert.False(winnerLastPageCycle.ReachedEnd);
+        Assert.True(loserCycle.ReachedEnd);
+        Assert.Equal(
+            [winnerStrategyId, winnerStrategyId, loserStrategyId],
+            feeService.Calls.Select(call => call.Order.StrategyId).ToArray());
+        Assert.Equal(
+            [winnerStrategyId, winnerStrategyId, loserStrategyId],
+            repository.HistoricalPaperFakFeeBackfillCalls
+                .Select(call => call.StrategyId)
+                .ToArray());
+        Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[0].AfterCursor);
+        Assert.Equal(winnerCursor, repository.HistoricalPaperFakFeeBackfillCalls[1].AfterCursor);
+        Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[2].AfterCursor);
+        Assert.Single(repository.HistoricalPaperFakFeeBackfillStrategyRankCalls);
+    }
+
+    [Fact]
+    public async Task RunCycle_ContinuesPastTransientWinnerAndRetriesItOnNextRankedSweep()
+    {
+        var winnerStrategyId = Guid.Parse("30000000-0000-0000-0000-000000000001");
+        var loserStrategyId = Guid.Parse("40000000-0000-0000-0000-000000000001");
+        var winner = CreateCandidate("condition-winner", winnerStrategyId);
+        var loser = CreateCandidate("condition-loser", loserStrategyId);
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.AddRange(
+        [
+            new(winnerStrategyId, "winner", 10m),
+            new(loserStrategyId, "loser", -10m)
+        ]);
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([winner], null, true));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([loser], null, true));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([winner], null, true));
+        var feeService = new RecordingFeeAccountingService((order, fill, callNumber) =>
+            Task.FromResult(order.StrategyId == winnerStrategyId && callNumber == 1
+                ? fill with
+                {
+                    FeeAccountingStatus = FeeAccountingStatus.CalculationUnavailable.ToString(),
+                    FeeCalculationSource =
+                        PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource
+                }
+                : fill with
+                {
+                    FeeUsd = 0.01m,
+                    FeeAccountingStatus = FeeAccountingStatus.Calculated.ToString(),
+                    FeeCalculationSource = PolymarketFeeCalculationConstants.FeeCurveCalculationSource
+                }));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        var winnerTransientCycle = await processor.RunCycleAsync();
+        var loserCycle = await processor.RunCycleAsync();
+        var winnerRetryCycle = await processor.RunCycleAsync();
+
+        Assert.Equal(1, winnerTransientCycle.TransientLookupUnavailable);
+        Assert.False(winnerTransientCycle.ReachedEnd);
+        Assert.True(loserCycle.ReachedEnd);
+        Assert.False(winnerRetryCycle.ReachedEnd);
+        Assert.Equal(
+            [winnerStrategyId, loserStrategyId, winnerStrategyId],
+            feeService.Calls.Select(call => call.Order.StrategyId).ToArray());
+        Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillStrategyRankCalls.Count);
+        Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillApplyCalls.Count);
+    }
+
     private static PaperFakFeeBackfillProcessor CreateProcessor(
         TestAppRepository repository,
         IPolymarketFeeAccountingService feeService,
         bool applyEnabled)
     {
+        if (repository.HistoricalPaperFakFeeBackfillStrategyRanks.Count == 0)
+        {
+            repository.HistoricalPaperFakFeeBackfillStrategyRanks.AddRange(
+                repository.HistoricalPaperFakFeeBackfillPages
+                    .SelectMany(page => page.Candidates)
+                    .Select(candidate => candidate.Order.StrategyId)
+                    .Distinct()
+                    .Order()
+                    .Select(strategyId => new HistoricalPaperFakFeeBackfillStrategyRank(
+                        strategyId,
+                        $"strategy-{strategyId:N}",
+                        0m)));
+        }
+
         return new PaperFakFeeBackfillProcessor(
             NullLogger<PaperFakFeeBackfillProcessor>.Instance,
             new PaperFakFeeBackfillOptions
@@ -227,7 +350,9 @@ public sealed class PaperFakFeeBackfillProcessorTests
             feeService);
     }
 
-    private static HistoricalPaperFakFeeBackfillCandidate CreateCandidate(string conditionId)
+    private static HistoricalPaperFakFeeBackfillCandidate CreateCandidate(
+        string conditionId,
+        Guid strategyId = default)
     {
         var orderId = Guid.NewGuid();
         var assetId = $"asset-{Guid.NewGuid():N}";
@@ -246,6 +371,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
             FilledAtUtc.AddMinutes(-1),
             FilledAtUtc.AddMinutes(4),
             FilledAtUtc: FilledAtUtc,
+            StrategyId: strategyId,
             ExecutionSource: "btc_updown5m_fak_taker_paper");
         var fill = new PaperFill(
             Guid.NewGuid(),

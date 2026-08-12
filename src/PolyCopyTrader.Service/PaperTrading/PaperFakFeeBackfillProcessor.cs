@@ -19,17 +19,36 @@ public sealed class PaperFakFeeBackfillProcessor(
     internal const string HistoricalCalculationSourcePrefix =
         "historical-current-paper-model-v1:";
 
+    private IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank>? strategyRanks;
+    private int strategyRankIndex;
     private HistoricalPaperFakFeeBackfillCursor? continuationCursor;
 
     public async Task<PaperFakFeeBackfillCycleResult> RunCycleAsync(
         CancellationToken cancellationToken = default)
     {
+        await EnsureStrategyRanksAsync(cancellationToken).ConfigureAwait(false);
+        if (strategyRanks!.Count == 0)
+        {
+            ResetSweep();
+            return new PaperFakFeeBackfillCycleResult(
+                0,
+                0,
+                0,
+                true,
+                options.ApplyEnabled,
+                null);
+        }
+
+        var activeRank = strategyRanks[strategyRankIndex];
+        var activeRankPosition = strategyRankIndex + 1;
+        var strategyCount = strategyRanks.Count;
         var page = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
             options.HistoricalCutoffUtc,
+            activeRank.StrategyId,
             options.BatchSize,
             continuationCursor,
             cancellationToken).ConfigureAwait(false);
-        ValidatePage(page);
+        ValidatePage(activeRank, page);
 
         var updates = new List<HistoricalPaperFakFeeBackfillUpdate>(page.Candidates.Count);
         var transientLookupUnavailable = 0;
@@ -81,17 +100,25 @@ public sealed class PaperFakFeeBackfillProcessor(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        AdvanceCursor(page);
+        var reachedSweepEnd = AdvanceCursor(page);
 
         logger.LogInformation(
             "Historical Paper FAK fee backfill cycle completed. ApplyEnabled={ApplyEnabled} " +
-            "CutoffUtc={CutoffUtc:O} Candidates={Candidates} EvaluatedForApply={EvaluatedForApply} " +
+            "CutoffUtc={CutoffUtc:O} StrategyRank={StrategyRank}/{StrategyCount} " +
+            "StrategyId={StrategyId} StrategyCode={StrategyCode} GrossRealizedPnlUsd={GrossRealizedPnlUsd} " +
+            "Candidates={Candidates} EvaluatedForApply={EvaluatedForApply} " +
             "TransientLookupUnavailable={TransientLookupUnavailable} Requested={Requested} Eligible={Eligible} " +
             "FillsUpdated={FillsUpdated} RunsUpdated={RunsUpdated} PositionsUpdated={PositionsUpdated} " +
             "SettlementsUpdated={SettlementsUpdated} AlreadyApplied={AlreadyApplied} " +
-            "ConflictsOrDeferred={ConflictsOrDeferred} ReachedEnd={ReachedEnd}",
+            "ConflictsOrDeferred={ConflictsOrDeferred} ReachedStrategyEnd={ReachedStrategyEnd} " +
+            "ReachedSweepEnd={ReachedSweepEnd}",
             options.ApplyEnabled,
             options.HistoricalCutoffUtc,
+            activeRankPosition,
+            strategyCount,
+            activeRank.StrategyId,
+            activeRank.StrategyCode,
+            activeRank.GrossRealizedPnlUsd,
             page.Candidates.Count,
             updates.Count,
             transientLookupUnavailable,
@@ -103,24 +130,88 @@ public sealed class PaperFakFeeBackfillProcessor(
             applyResult?.SettlementsUpdated ?? 0,
             applyResult?.AlreadyApplied ?? 0,
             applyResult?.ConflictsOrDeferred ?? 0,
-            page.ReachedEnd);
+            page.ReachedEnd,
+            reachedSweepEnd);
 
         return new PaperFakFeeBackfillCycleResult(
             page.Candidates.Count,
             updates.Count,
             transientLookupUnavailable,
-            page.ReachedEnd,
+            reachedSweepEnd,
             options.ApplyEnabled,
             applyResult);
     }
 
-    private void ValidatePage(HistoricalPaperFakFeeBackfillPage page)
+    private async Task EnsureStrategyRanksAsync(CancellationToken cancellationToken)
+    {
+        if (strategyRanks is not null)
+        {
+            return;
+        }
+
+        var loadedRanks = await repository.GetHistoricalPaperFakFeeBackfillStrategyRanksAsync(
+            options.HistoricalCutoffUtc,
+            cancellationToken).ConfigureAwait(false);
+        ValidateStrategyRanks(loadedRanks);
+        strategyRanks = loadedRanks.ToArray();
+        strategyRankIndex = 0;
+        continuationCursor = null;
+
+        logger.LogInformation(
+            "Historical Paper FAK fee backfill Gross-PnL strategy ranking frozen for this sweep. " +
+            "CutoffUtc={CutoffUtc:O} StrategyCount={StrategyCount}",
+            options.HistoricalCutoffUtc,
+            strategyRanks.Count);
+    }
+
+    private static void ValidateStrategyRanks(
+        IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank> ranks)
+    {
+        ArgumentNullException.ThrowIfNull(ranks);
+        var strategyIds = new HashSet<Guid>();
+        decimal? previousGrossRealizedPnlUsd = null;
+        foreach (var rank in ranks)
+        {
+            if (!strategyIds.Add(rank.StrategyId))
+            {
+                throw new InvalidOperationException(
+                    $"Historical Paper FAK fee backfill strategy ranking contains duplicate strategy {rank.StrategyId}.");
+            }
+
+            if (previousGrossRealizedPnlUsd is not null &&
+                rank.GrossRealizedPnlUsd > previousGrossRealizedPnlUsd.Value)
+            {
+                throw new InvalidOperationException(
+                    "Historical Paper FAK fee backfill strategy ranking is not ordered by " +
+                    "Gross realized PnL descending.");
+            }
+
+            previousGrossRealizedPnlUsd = rank.GrossRealizedPnlUsd;
+        }
+    }
+
+    private void ValidatePage(
+        HistoricalPaperFakFeeBackfillStrategyRank activeRank,
+        HistoricalPaperFakFeeBackfillPage page)
     {
         ArgumentNullException.ThrowIfNull(page);
         if (page.Candidates.Count > options.BatchSize)
         {
             throw new InvalidOperationException(
                 "Historical Paper FAK fee backfill repository returned more candidates than requested.");
+        }
+
+        if (page.Candidates.Any(candidate => candidate.Order.StrategyId != activeRank.StrategyId))
+        {
+            throw new InvalidOperationException(
+                "Historical Paper FAK fee backfill repository returned a candidate for another strategy.");
+        }
+
+        if (page.ContinuationCursor is not null &&
+            page.ContinuationCursor.StrategyId != activeRank.StrategyId)
+        {
+            throw new InvalidOperationException(
+                "Historical Paper FAK fee backfill page returned a cursor for another strategy.");
         }
 
         if (!page.ReachedEnd && page.ContinuationCursor is null)
@@ -136,11 +227,30 @@ public sealed class PaperFakFeeBackfillProcessor(
         }
     }
 
-    private void AdvanceCursor(HistoricalPaperFakFeeBackfillPage page)
+    private bool AdvanceCursor(HistoricalPaperFakFeeBackfillPage page)
     {
-        continuationCursor = page.ReachedEnd
-            ? null
-            : page.ContinuationCursor;
+        if (!page.ReachedEnd)
+        {
+            continuationCursor = page.ContinuationCursor;
+            return false;
+        }
+
+        continuationCursor = null;
+        strategyRankIndex++;
+        if (strategyRankIndex < strategyRanks!.Count)
+        {
+            return false;
+        }
+
+        ResetSweep();
+        return true;
+    }
+
+    private void ResetSweep()
+    {
+        strategyRanks = null;
+        strategyRankIndex = 0;
+        continuationCursor = null;
     }
 
     private static bool IsTransientLookupUnavailable(PaperFill fill)

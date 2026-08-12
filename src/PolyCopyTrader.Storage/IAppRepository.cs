@@ -481,8 +481,17 @@ public interface IAppRepository
         return Task.FromResult<PaperOrder?>(null);
     }
 
+    Task<IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank>>
+        GetHistoricalPaperFakFeeBackfillStrategyRanksAsync(
+            DateTimeOffset filledBeforeUtc,
+            CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank>>([]);
+    }
+
     Task<HistoricalPaperFakFeeBackfillPage> GetHistoricalPaperFakFeeBackfillCandidatesAsync(
         DateTimeOffset filledBeforeUtc,
+        Guid strategyId,
         int limit,
         HistoricalPaperFakFeeBackfillCursor? afterCursor = null,
         CancellationToken cancellationToken = default)

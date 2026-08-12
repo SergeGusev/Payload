@@ -15,8 +15,84 @@ public sealed partial class PostgresAppRepository
     private const string HistoricalPaperFakFeeCalculationSourcePrefix =
         "historical-current-paper-model-v1:";
 
+    public async Task<IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank>>
+        GetHistoricalPaperFakFeeBackfillStrategyRanksAsync(
+            DateTimeOffset filledBeforeUtc,
+            CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = CreateCommand(connection, $$"""
+SELECT
+    strategy.id,
+    strategy.code,
+    CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_runs run_presence
+            WHERE run_presence.strategy_id = strategy.id)
+          OR EXISTS (
+            SELECT 1
+            FROM public.strategy_paper_skip_rollups rollup_presence
+            WHERE rollup_presence.strategy_id = strategy.id)
+        THEN COALESCE((
+            SELECT SUM(COALESCE(run.realized_pnl_usd, 0))
+            FROM public.strategy_market_paper_runs run
+            WHERE run.strategy_id = strategy.id
+              AND run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'), 0)
+        ELSE
+            COALESCE((
+                SELECT SUM(fill_all.realized_pnl_usd)
+                FROM public.paper_orders paper_order_all
+                INNER JOIN public.paper_fills fill_all
+                    ON fill_all.paper_order_id = paper_order_all.id
+                WHERE paper_order_all.strategy_id = strategy.id), 0)
+            +
+            COALESCE((
+                SELECT SUM(settlement.realized_pnl_usd)
+                FROM public.paper_position_settlements settlement
+                WHERE (
+                    strategy.id = @FollowLeaderStrategyId
+                    AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
+                   OR (
+                    strategy.id <> @FollowLeaderStrategyId
+                    AND lower(settlement.copied_trader_wallet) =
+                        lower('strategy:' || strategy.code))), 0)
+    END AS gross_realized_pnl_usd
+FROM public.strategies strategy
+WHERE EXISTS (
+    SELECT 1
+    FROM public.paper_orders paper_order
+    INNER JOIN public.paper_fills fill ON fill.paper_order_id = paper_order.id
+    WHERE paper_order.strategy_id = strategy.id
+      AND fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
+      AND fill.filled_at_utc < @FilledBeforeUtc
+      AND paper_order.side = '{{TradeSide.Buy}}'
+      AND paper_order.execution_source IN (
+          '{{HistoricalPaperFakDirectSource}}',
+          '{{HistoricalPaperFakChildSource}}'))
+ORDER BY gross_realized_pnl_usd DESC, strategy.id;
+""");
+        command.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
+        command.Parameters.Add("FilledBeforeUtc", NpgsqlDbType.TimestampTz).Value =
+            UtcDateTime(filledBeforeUtc);
+        command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+
+        var strategies = new List<HistoricalPaperFakFeeBackfillStrategyRank>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            strategies.Add(new HistoricalPaperFakFeeBackfillStrategyRank(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetDecimal(2)));
+        }
+
+        return strategies;
+    }
+
     public async Task<HistoricalPaperFakFeeBackfillPage> GetHistoricalPaperFakFeeBackfillCandidatesAsync(
         DateTimeOffset filledBeforeUtc,
+        Guid strategyId,
         int limit,
         HistoricalPaperFakFeeBackfillCursor? afterCursor = null,
         CancellationToken cancellationToken = default)
@@ -24,6 +100,13 @@ public sealed partial class PostgresAppRepository
         if (limit <= 0)
         {
             return new HistoricalPaperFakFeeBackfillPage([], null, true);
+        }
+
+        if (afterCursor is not null && afterCursor.StrategyId != strategyId)
+        {
+            throw new ArgumentException(
+                "Historical Paper FAK fee backfill cursor belongs to another strategy.",
+                nameof(afterCursor));
         }
 
         var pageSize = Math.Min(limit, HistoricalPaperFakFeeBackfillMaxPageSize);
@@ -69,6 +152,7 @@ FROM public.paper_fills fill
 INNER JOIN public.paper_orders paper_order ON paper_order.id = fill.paper_order_id
 WHERE fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
   AND fill.filled_at_utc < @FilledBeforeUtc
+  AND paper_order.strategy_id = @StrategyId
   AND paper_order.side = '{{TradeSide.Buy}}'
   AND paper_order.execution_source IN (
       '{{HistoricalPaperFakDirectSource}}',
@@ -89,6 +173,7 @@ LIMIT @FetchLimit;
 """);
         command.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
         command.Parameters.Add("FilledBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(filledBeforeUtc);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
         command.Parameters.AddWithValue("HasCursor", afterCursor is not null);
         command.Parameters.Add("AfterFilledAtUtc", NpgsqlDbType.TimestampTz).Value =
             UtcDateTime(afterCursor?.FilledAtUtc ?? DateTimeOffset.MinValue);
@@ -110,6 +195,7 @@ LIMIT @FetchLimit;
         var continuationCursor = candidates.Length == 0
             ? null
             : new HistoricalPaperFakFeeBackfillCursor(
+                strategyId,
                 candidates[^1].Fill.FilledAtUtc,
                 candidates[^1].Fill.PaperOrderId,
                 candidates[^1].Fill.Id);

@@ -1,3 +1,18 @@
+## Active Update 2026-08-12 Gross-PnL-Ordered Net Backfill
+Goal: Reorder the historical Net PnL and Net ROI backfill so strategies are completed from the highest lifetime Gross realized PnL to the lowest.
+Status: Completed
+Done:
+- Replaced the global chronological fill sweep with a strategy-first sweep. At each sweep start, the worker calculates the exact Dashboard lifetime Gross realized PnL from retained raw accounting, freezes `Gross DESC, strategy_id ASC`, and keyset-pages every eligible fill for one strategy before moving to the next.
+- Kept the existing Dashboard Gross formula exactly: strategies with any raw run or lifetime skip rollup use settled-run Gross; strategies without runs use mapped fill plus settlement Gross. The rank no longer depends on an optional or lagging Dashboard snapshot.
+- Added strategy identity to the fill cursor and repository filter, plus processor guards against mixed-strategy pages, duplicate ranks, and non-descending Gross input. `ReachedEnd` now means the complete ranked sweep ended, so the worker does not take the 15-minute idle delay between strategies.
+- Preserved the fixed cutoff, exact two-source allowlist, BUY/Taker eligibility, batch size/cadence, fee calculation, Net PnL and Net ROI formulas, Gross values/timestamps, foreground yielding, and atomic conditional apply. Transient fee lookups and conflicts advance to lower-ranked strategies and retry on the next freshly ranked sweep.
+- Added processor coverage for multi-page winner-before-loser ordering across condition groups and for a transient winner followed by a loser and then a winner retry. Storage contract coverage checks raw Gross sources, deterministic ordering, exact strategy filtering, and strategy-bound pagination; the env-gated PostgreSQL test now checks raw Gross and one-row pagination when a test database is supplied.
+- Verified the focused backfill set: 20 passed, 1 PostgreSQL integration skipped because `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` was absent. Verified the broad suite excluding three currently stale catalog-dependent classes: 1,220 passed, 32 environment-gated integrations skipped. Full suite result was 1,346 passed, 32 skipped, and 121 failures confined to `BtcUpDown5mPaperStrategyProcessorTests`, `StrategyPerformanceTests`, and `MiddleBpsThresholdCatalogTests`; those failures expect catalog variants absent from the current catalog, and this task does not modify that catalog or processor.
+- Built `PolyCopyTrader.sln` Debug successfully with 0 errors. The 121 nullable warnings are the existing solution-wide warning baseline; the focused build has only the existing `BtcUpDown5mPaperStrategyProcessorTests.cs:7420` nullable warning.
+Next: After deployment is separately approved, restart the service and monitor the new `StrategyRank/StrategyCount`, `StrategyId`, and `GrossRealizedPnlUsd` cycle fields. A read-only production `EXPLAIN`/timing check of the once-per-sweep raw ranking query is recommended before or immediately after activation; no production query or deployment was part of this task.
+Notes: No schema/index change, database access, trading action, configuration mutation, or deployment was performed. Ranking changes scheduling only. The exact production query plan remains unverified because the PostgreSQL integration connection was unavailable.
+Blockers: None for the local implementation. Production activation and query-plan verification require separate operational scope.
+
 ## Active Update 2026-08-12 Post-Restart Server And Betting Verification
 Goal: Verify that the user's latest server restart restored runtime, market data, five-minute Paper betting, backlog processing, exact exception contracts, and Dashboard projections.
 Status: Completed

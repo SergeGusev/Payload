@@ -22,8 +22,33 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
         {
             await SeedScenarioAsync(factory, repository, scenario);
 
+            var strategyRanks = await repository.GetHistoricalPaperFakFeeBackfillStrategyRanksAsync(
+                scenario.CutoffUtc);
+            var scenarioRank = Assert.Single(
+                strategyRanks,
+                rank => rank.StrategyId == scenario.StrategyId);
+            Assert.Equal(2m, scenarioRank.GrossRealizedPnlUsd);
+            AssertGrossRanksDescending(strategyRanks);
+
+            var firstPage = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                scenario.CutoffUtc,
+                scenario.StrategyId,
+                1);
+            Assert.False(firstPage.ReachedEnd);
+            Assert.Equal(scenario.TargetOrderId, Assert.Single(firstPage.Candidates).Order.Id);
+            Assert.Equal(scenario.StrategyId, firstPage.ContinuationCursor?.StrategyId);
+
+            var secondPage = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                scenario.CutoffUtc,
+                scenario.StrategyId,
+                1,
+                firstPage.ContinuationCursor);
+            Assert.True(secondPage.ReachedEnd);
+            Assert.Equal(scenario.ConflictOrderId, Assert.Single(secondPage.Candidates).Order.Id);
+
             var page = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
                 scenario.CutoffUtc,
+                scenario.StrategyId,
                 20);
 
             Assert.True(page.ReachedEnd);
@@ -95,6 +120,21 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
         finally
         {
             await CleanupScenarioAsync(factory, scenario);
+        }
+    }
+
+    private static void AssertGrossRanksDescending(
+        IReadOnlyList<HistoricalPaperFakFeeBackfillStrategyRank> ranks)
+    {
+        decimal? previousGross = null;
+        foreach (var rank in ranks)
+        {
+            if (previousGross is not null)
+            {
+                Assert.True(previousGross.Value >= rank.GrossRealizedPnlUsd);
+            }
+
+            previousGross = rank.GrossRealizedPnlUsd;
         }
     }
 
