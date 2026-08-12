@@ -1,3 +1,17 @@
+## Active Update 2026-08-12 Gross-PnL Backfill Redeployment Verification
+Goal: Verify that the redeployed Gross-PnL-ordered historical Net PnL and Net ROI backfill is running on production.
+Status: Completed
+Done:
+- Audited only exact production PostgreSQL `192.168.0.101:5432/polycopytrader` in bounded UTC `REPEATABLE READ / READ ONLY` sessions. No production, service, configuration, strategy, order, trading, fee, or Net state was changed.
+- Proved that the running service is exact build `18c563cc096425ce9482ee0bf37446f60ca47870`, MVID prefix `f3a415e516d2`, started at `2026-08-12T12:27:19.392783Z`, remained `Running / Live`, advanced its heartbeat through `12:42:19.771993Z`, and kept `last_error` empty.
+- Waited beyond the configured 300-second startup delay. The final atomic snapshot at `2026-08-12T12:43:01.310821Z` still had zero new `historical-current-paper-model-v1:` fills since this service start, total historical rows remained `63,048`, and their latest calculation remained `2026-08-11T05:09:07.315354Z`.
+- Proved that work remains in the highest current displayed-Gross source strategy: fill `a984b91b-4cef-8117-f29e-88d180befba2` in strategy `b7c50005-0001-4000-8166-000000000003` remained exact-scope `LegacyUnknown`. There were zero persisted `PolymarketClobPublicClient.GetClobMarketInfo` errors since service start.
+- Independently ran the exact newly deployed rank SQL shape under its unchanged 10-second limit. It completed in `1.076s`, returned `2,233` source strategies in valid `Gross DESC, strategy_id ASC` order, and selected the same leader. The ranking timeout is fixed; this does not prove the hosted worker invoked the query.
+- A bounded active-session sampler observed only ordinary service fill reads and did not capture the worker rank/candidate statement. PostgreSQL stores neither the worker's enabled/apply options nor foreground-queue deferrals, and those deferrals are logged only at Debug. Therefore the zero writes cannot be attributed from database evidence alone to disabled/apply configuration, queue deferral, or a worker exception.
+Next: On the VPS, return the current service-log lines matching `Historical Paper FAK fee backfill` from the service start onward; use them to distinguish startup configuration, `ranking frozen`, cycle completion, foreground deferral, and failure before any further code or runtime action.
+Notes: One diagnostic query was canceled after referencing a nonexistent `paper_fills.fee_amount_usd` column, and the first passive sampler stopped on a PowerShell reserved-variable formatting error. Both sessions were read-only, closed cleanly, and were replaced by successful corrected checks. No build or tests were needed because no product code changed.
+Blockers: The authoritative service file log is only on the VPS and remains inaccessible from this workstation; database evidence alone cannot prove why the hosted worker has not written a row.
+
 ## Active Update 2026-08-12 Gross-PnL Backfill Rank Timeout Fix
 Goal: Remove the production timeout that prevented the Gross-PnL-ordered historical Net PnL and Net ROI backfill from starting.
 Status: Completed
