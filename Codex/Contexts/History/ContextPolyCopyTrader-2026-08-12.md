@@ -34,3 +34,10 @@ Request:
 
 Result:
 Verified exact production build `18c563cc096425ce9482ee0bf37446f60ca47870` strictly read-only. The new service started at `2026-08-12T12:27:19.392783Z`, remained `Running / Live`, advanced its heartbeat, and had no heartbeat error. The exact new rank SQL independently completed in 1.076 seconds under its 10-second limit and returned 2,233 strategies in valid Gross-descending order, proving the ranking-timeout correction. However, after the five-minute startup delay and through the final `2026-08-12T12:43:01.310821Z` snapshot, the deployment had written zero new historical provenance rows; the total remained 63,048, the latest remained from 2026-08-11, and the leader's first exact candidate remained `LegacyUnknown`. No persisted CLOB market-info errors occurred. PostgreSQL cannot distinguish a runtime option override, continuous foreground-queue deferral, or a worker exception because those facts exist only in the VPS service log; that log is the required next evidence. No production, service, configuration, trading, or product-code state was changed.
+
+## 2026-08-12T13:24:58.3563128Z
+Request:
+В папке D:\1 лежит папка logs, там всё есть
+
+Result:
+Inspected `D:\1\logs` read-only and proved the deployed historical worker started with `ApplyEnabled=true` but never reached ranking, completion, or failure. Market-data queue metrics showed `PendingUpdates` growing from 113,876 at `15:30:19+03:00` to 1,189,245 at `15:57:49+03:00`; the implementation unconditionally deferred the backfill whenever that legitimate continuous-feed backlog was nonzero. Implemented bounded fairness: pending Paper-entry batches still always win, while a persistent market-data backlog receives one full cycle before one bounded 50-candidate backfill turn, then the worker yields again. Added liveness/Paper-priority/rearm tests and updated documentation. Focused tests passed 23/23 and the solution built with zero errors. No production, service, configuration, trading, database, fee, or Net state was changed; deployment remains a separate user action.

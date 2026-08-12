@@ -1,3 +1,16 @@
+## Active Update 2026-08-12 Historical Backfill Queue-Starvation Fix
+Goal: Make the Gross-PnL-ordered historical Net PnL and Net ROI backfill progress without taking priority over current Paper-entry persistence.
+Status: Completed
+Done:
+- Read the service logs directly from the user-identified `D:\1\logs` path without changing them. The deployed worker started at `2026-08-12T15:27:19.646+03:00` with `ApplyEnabled=true`, but there were no later `ranking frozen`, `cycle completed`, or `cycle failed` records.
+- Proved the actual runtime blocker from independent implementation and log evidence: `PaperFakFeeBackfillWorker` rejected every cycle whenever `MarketDataSideEffectQueue.PendingUpdates > 0`; that exact pending count grew from `113,876` at `15:30:19+03:00` to `1,189,245` at `15:57:49+03:00`. The queue count has no accounting leak, but it legitimately need never reach zero under a continuous non-coalescible feed, so the former gate could starve the backfill forever.
+- Replaced the absolute market-data veto with bounded fairness only inside `PaperFakFeeBackfillWorker`: pending Paper-entry batches remain an unconditional gate; a nonempty market-data queue receives one complete 15-second cycle first, then one backfill batch of at most 50 candidates may run, and the worker yields again. Queue internals, batch size, candidate scope, Gross ordering, fee/Net formulas, atomic apply, configuration, and Live trading remain unchanged.
+- Added deterministic worker tests for the persistent market backlog sequence `defer/process/defer`, for never bypassing pending Paper entries, and for rearming the market-data yield after an idle queue turn. Updated README and configuration reference with the bounded schedule and its approximately 30-second cadence under permanent market backlog.
+- Focused historical backfill tests passed `23/23`. `PolyCopyTrader.sln` Debug built with `0` errors and the existing `121` nullable warnings. Two independent read-only reviews found no blocking/P1/P2 issue. The first isolated solution build incorrectly used `--no-restore` with a fresh artifacts path and failed only for missing `project.assets.json`; the corrected build with restore passed.
+Next: Deploy/restart the service on this commit. After the 300-second startup delay, verify `taking one bounded cycle`, `ranking frozen`, `cycle completed`, and new `historical-current-paper-model-v1:` rows in a separate read-only runtime check.
+Notes: No production row/schema, service, configuration, strategy, order, trading, fee, or Net mutation occurred. All log inspection was read-only. Disposable build/test artifacts under `D:\CodexTemp\runs\manual-c9f346a71a1545929e75bbd1e00b30c6` were removed through protected cleanup.
+Blockers: None for the local fix; runtime activation requires the user's normal deployment/restart.
+
 ## Active Update 2026-08-12 Gross-PnL Backfill Redeployment Verification
 Goal: Verify that the redeployed Gross-PnL-ordered historical Net PnL and Net ROI backfill is running on production.
 Status: Completed

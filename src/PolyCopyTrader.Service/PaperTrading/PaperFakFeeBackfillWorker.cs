@@ -10,6 +10,8 @@ public sealed class PaperFakFeeBackfillWorker(
     IPaperEntryPersistenceQueue paperEntryPersistenceQueue,
     IMarketDataSideEffectQueue marketDataSideEffectQueue) : BackgroundService
 {
+    private bool deferNextCycleForMarketData = true;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!options.Enabled)
@@ -99,7 +101,7 @@ public sealed class PaperFakFeeBackfillWorker(
     {
         var pendingPaperEntryBatches = paperEntryPersistenceQueue.PendingBatches;
         var marketDataQueueMetrics = marketDataSideEffectQueue.GetMetrics();
-        if (pendingPaperEntryBatches > 0 || marketDataQueueMetrics.PendingUpdates > 0)
+        if (pendingPaperEntryBatches > 0)
         {
             logger.LogDebug(
                 "Historical Paper FAK fee backfill cycle deferred for foreground queues. " +
@@ -108,6 +110,26 @@ public sealed class PaperFakFeeBackfillWorker(
                 marketDataQueueMetrics.PendingUpdates);
             return PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending;
         }
+
+        if (marketDataQueueMetrics.PendingUpdates > 0 && deferNextCycleForMarketData)
+        {
+            deferNextCycleForMarketData = false;
+            logger.LogDebug(
+                "Historical Paper FAK fee backfill cycle deferred once for the market-data side-effect queue. " +
+                "PendingMarketDataUpdates={PendingMarketDataUpdates}",
+                marketDataQueueMetrics.PendingUpdates);
+            return PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending;
+        }
+
+        if (marketDataQueueMetrics.PendingUpdates > 0)
+        {
+            logger.LogInformation(
+                "Historical Paper FAK fee backfill is taking one bounded cycle after yielding to a persistent " +
+                "market-data side-effect backlog. PendingMarketDataUpdates={PendingMarketDataUpdates}",
+                marketDataQueueMetrics.PendingUpdates);
+        }
+
+        deferNextCycleForMarketData = true;
 
         var result = await processor.RunCycleAsync(cancellationToken).ConfigureAwait(false);
         return result.ReachedEnd

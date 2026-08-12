@@ -30,6 +30,79 @@ public sealed class PaperFakFeeBackfillWorkerTests
     }
 
     [Fact]
+    public async Task RunCycle_AllowsOneBoundedBackfillTurnAfterYieldingToPersistentMarketData()
+    {
+        var processor = new RecordingProcessor();
+        var worker = CreateWorker(
+            processor,
+            new StubPaperEntryPersistenceQueue(0),
+            new StubMarketDataSideEffectQueue(1));
+
+        var first = await worker.RunCycleAsync();
+        var second = await worker.RunCycleAsync();
+        var third = await worker.RunCycleAsync();
+
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, first);
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.Processed, second);
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, third);
+        Assert.Equal(1, processor.Calls);
+    }
+
+    [Fact]
+    public async Task RunCycle_NeverBypassesPendingPaperEntriesAfterMarketDataYield()
+    {
+        var processor = new RecordingProcessor();
+        var paperQueue = new StubPaperEntryPersistenceQueue(0);
+        var worker = CreateWorker(
+            processor,
+            paperQueue,
+            new StubMarketDataSideEffectQueue(1));
+
+        Assert.Equal(
+            PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending,
+            await worker.RunCycleAsync());
+        paperQueue.PendingBatches = 1;
+
+        Assert.Equal(
+            PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending,
+            await worker.RunCycleAsync());
+        Assert.Equal(
+            PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending,
+            await worker.RunCycleAsync());
+        Assert.Equal(0, processor.Calls);
+
+        paperQueue.PendingBatches = 0;
+        Assert.Equal(
+            PaperFakFeeBackfillWorkerCycleDisposition.Processed,
+            await worker.RunCycleAsync());
+        Assert.Equal(1, processor.Calls);
+    }
+
+    [Fact]
+    public async Task RunCycle_QueueIdleTurnRearmsMarketDataYield()
+    {
+        var processor = new RecordingProcessor();
+        var marketQueue = new StubMarketDataSideEffectQueue(1);
+        var worker = CreateWorker(
+            processor,
+            new StubPaperEntryPersistenceQueue(0),
+            marketQueue);
+
+        Assert.Equal(
+            PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending,
+            await worker.RunCycleAsync());
+        marketQueue.PendingUpdates = 0;
+        Assert.Equal(
+            PaperFakFeeBackfillWorkerCycleDisposition.Processed,
+            await worker.RunCycleAsync());
+        marketQueue.PendingUpdates = 1;
+        Assert.Equal(
+            PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending,
+            await worker.RunCycleAsync());
+        Assert.Equal(1, processor.Calls);
+    }
+
+    [Fact]
     public async Task RunCycle_UsesIdleDispositionAtSweepEnd()
     {
         var processor = new RecordingProcessor
@@ -129,7 +202,7 @@ public sealed class PaperFakFeeBackfillWorkerTests
 
     private sealed class StubPaperEntryPersistenceQueue(int pendingBatches) : IPaperEntryPersistenceQueue
     {
-        public int PendingBatches { get; } = pendingBatches;
+        public int PendingBatches { get; set; } = pendingBatches;
 
         public ValueTask EnqueueAsync(
             PaperEntryPersistenceBatch batch,
@@ -141,6 +214,8 @@ public sealed class PaperFakFeeBackfillWorkerTests
 
     private sealed class StubMarketDataSideEffectQueue(int pendingUpdates) : IMarketDataSideEffectQueue
     {
+        public int PendingUpdates { get; set; } = pendingUpdates;
+
         public MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
             string component,
             MarketDataUpdate update,
@@ -166,7 +241,7 @@ public sealed class PaperFakFeeBackfillWorkerTests
         public MarketDataSideEffectQueueMetrics GetMetrics()
         {
             return new MarketDataSideEffectQueueMetrics(
-                PendingUpdates: pendingUpdates,
+                PendingUpdates,
                 PendingDiagnostics: 0,
                 TrackedAssets: 0,
                 EnqueuedUpdates: 0,
