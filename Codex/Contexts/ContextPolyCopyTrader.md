@@ -1,3 +1,16 @@
+## Active Update 2026-08-13 Historical Paper FAK Candidate-Page Optimization
+Goal: Remove the repeated rank-2 historical Paper FAK candidate-read failure without changing Gross ordering, eligibility, cursor semantics, financial calculations, or production schema.
+Status: Completed
+Done:
+- Diagnosed the exact rank-2 production query under bounded `REPEATABLE READ / READ ONLY / UTC` sessions. At the initial snapshot the strategy had 7,825 exact allowlisted BUY orders and 1,976 remaining pre-cutoff `LegacyUnknown` fills, while the deployed query started from the global historical-fill index and estimated scanning about 794,078 pre-cutoff fills before filtering by strategy.
+- Rewrote only `GetHistoricalPaperFakFeeBackfillCandidatesAsync`: it materializes the current strategy's exact allowlisted BUY order IDs, probes fills through the existing `(paper_order_id, filled_at_utc)` index, sorts and limits the narrow candidate keys, and loads the full order/fill rows only for the N+1 page.
+- Preserved the exact cutoff, two-source allowlist, BUY and `LegacyUnknown` filters, tuple cursor/order `(filled_at_utc, paper_order_id, fill_id)`, N+1 `ReachedEnd` behavior, 50-row worker batch, 10-second command timeout, Gross ranking, apply transaction, and Gross/Net PnL/Net ROI formulas. No index, schema, configuration, service, trading, or production data was changed.
+- Verified the exact worktree SQL against production read-only plans. The first page used strategy-local order-keyed fill probes and completed in 382.829ms; a representative later-cursor page completed in 427.227ms. Neither used the global partial fill scan. The old later-cursor query took 4.735s. The later-page result contained the same ordered 51 keys with zero symmetric or ordering mismatch.
+- Added source-contract coverage and an environment-gated PostgreSQL integration regression for both tuple tie-break levels, multi-page cursor traversal, N+1 termination, cutoff equality, wrong-source, and wrong-accounting-status exclusions. Updated README and configuration reference.
+Next: Deploy the pushed service build, restart it, then verify in `paper_fak_fee_backfill_events` that Gross rank 2 produces `CycleCompleted` and advances instead of repeating the candidate-read failure.
+Notes: `dotnet build PolyCopyTrader.sln -c Debug` completed with 0 errors and 121 existing nullable warnings. Focused historical backfill tests passed 32, skipped 3 PostgreSQL integration tests because `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` is absent, and failed 0. The exact inner cause of the deployed top-level Npgsql read exception remains unavailable, but the slow global-scan query path and the replacement plan were independently observed.
+Blockers: None.
+
 ## Active Update 2026-08-13 Paper FAK Database Journal Deployment Verification
 Goal: Verify the deployed Paper FAK backfill database journal and determine whether the Gross-ranked worker is progressing after restart.
 Status: Completed

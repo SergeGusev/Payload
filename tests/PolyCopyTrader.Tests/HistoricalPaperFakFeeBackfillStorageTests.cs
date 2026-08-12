@@ -225,6 +225,58 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
     }
 
     [Fact]
+    public void CandidateQuery_MaterializesStrategyScopeBeforeChronologicalPage()
+    {
+        var source = ReadRepositorySource();
+        var start = source.IndexOf(
+            "GetHistoricalPaperFakFeeBackfillCandidatesAsync",
+            StringComparison.Ordinal);
+        var end = source.IndexOf(
+            "ApplyHistoricalPaperFakFeeBackfillBatchAsync",
+            start,
+            StringComparison.Ordinal);
+        var candidateMethod = source[start..end];
+        var strategyOrders = SliceSql(
+            candidateMethod,
+            "WITH strategy_orders AS MATERIALIZED (",
+            "candidate_keys AS MATERIALIZED (");
+        var candidateKeys = SliceSql(
+            candidateMethod,
+            "candidate_keys AS MATERIALIZED (",
+            "FROM candidate_keys candidate");
+
+        Assert.Contains("FROM public.paper_orders paper_order", strategyOrders, StringComparison.Ordinal);
+        Assert.Contains("paper_order.strategy_id = @StrategyId", strategyOrders, StringComparison.Ordinal);
+        Assert.Contains("paper_order.side", strategyOrders, StringComparison.Ordinal);
+        Assert.Contains("paper_order.execution_source IN", strategyOrders, StringComparison.Ordinal);
+        Assert.Contains("FROM strategy_orders strategy_order", candidateKeys, StringComparison.Ordinal);
+        Assert.Contains(
+            "INNER JOIN public.paper_fills fill ON fill.paper_order_id = strategy_order.id",
+            candidateKeys,
+            StringComparison.Ordinal);
+        Assert.Contains("fill.fee_accounting_status", candidateKeys, StringComparison.Ordinal);
+        Assert.Contains("fill.filled_at_utc < @FilledBeforeUtc", candidateKeys, StringComparison.Ordinal);
+        Assert.Contains("NOT @HasCursor", candidateKeys, StringComparison.Ordinal);
+        Assert.Contains(
+            "ORDER BY fill.filled_at_utc, fill.paper_order_id, fill.id",
+            candidateKeys,
+            StringComparison.Ordinal);
+        Assert.Contains("LIMIT @FetchLimit", candidateKeys, StringComparison.Ordinal);
+        Assert.Contains(
+            "INNER JOIN public.paper_fills fill ON fill.id = candidate.fill_id",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "INNER JOIN public.paper_orders paper_order ON paper_order.id = candidate.paper_order_id",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ORDER BY candidate.filled_at_utc, candidate.paper_order_id, candidate.fill_id",
+            candidateMethod,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StrategyRankQuery_UsesDashboardGrossWithRawFallbackAndAvoidsGlobalFillScan()
     {
         var source = ReadRepositorySource();
@@ -265,6 +317,7 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
             StringComparison.Ordinal);
         Assert.DoesNotContain("fill.fee_accounting_status", rankMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("fill.filled_at_utc < @FilledBeforeUtc", rankMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy_orders AS MATERIALIZED", rankMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("performance.total_pnl_usd", rankMethod, StringComparison.Ordinal);
     }
 

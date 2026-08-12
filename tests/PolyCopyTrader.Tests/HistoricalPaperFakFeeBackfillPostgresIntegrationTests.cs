@@ -136,6 +136,159 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task CandidatePaging_PreservesFullTupleOrderAndCursorProgression()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var scenario = BackfillScenario.Create();
+        Guid OrderedId(uint prefix) =>
+            Guid.Parse($"{prefix:x8}-0000-4000-8000-{scenario.Suffix[..12]}");
+
+        var sharedFilledAtUtc = scenario.BaseUtc.AddMinutes(10);
+        var earlierOrder = CreateOrder(
+            scenario,
+            OrderedId(0x90000000),
+            $"keyset-earlier-{scenario.Suffix}",
+            $"keyset-earlier-condition-{scenario.Suffix}",
+            sharedFilledAtUtc.AddSeconds(-1),
+            "btc_updown5m_fak_taker_paper");
+        var firstSharedOrder = CreateOrder(
+            scenario,
+            OrderedId(0x10000000),
+            $"keyset-first-shared-{scenario.Suffix}",
+            $"keyset-first-shared-condition-{scenario.Suffix}",
+            sharedFilledAtUtc,
+            "btc_updown5m_fak_taker_paper");
+        var excludedSourceOrder = CreateOrder(
+            scenario,
+            OrderedId(0x18000000),
+            $"keyset-excluded-source-{scenario.Suffix}",
+            $"keyset-excluded-source-condition-{scenario.Suffix}",
+            sharedFilledAtUtc,
+            "paper_live_shadow_actual_fill");
+        var secondSharedOrder = CreateOrder(
+            scenario,
+            OrderedId(0x20000000),
+            $"keyset-second-shared-{scenario.Suffix}",
+            $"keyset-second-shared-condition-{scenario.Suffix}",
+            sharedFilledAtUtc,
+            "btc_updown5m_child_mirror_fak_paper");
+        var laterOrder = CreateOrder(
+            scenario,
+            OrderedId(0x05000000),
+            $"keyset-later-{scenario.Suffix}",
+            $"keyset-later-condition-{scenario.Suffix}",
+            sharedFilledAtUtc.AddSeconds(1),
+            "btc_updown5m_fak_taker_paper");
+        var cutoffEqualityOrder = CreateOrder(
+            scenario,
+            OrderedId(0x30000000),
+            $"keyset-cutoff-{scenario.Suffix}",
+            $"keyset-cutoff-condition-{scenario.Suffix}",
+            scenario.CutoffUtc,
+            "btc_updown5m_fak_taker_paper");
+
+        var earlierFill = CreateLegacyFill(OrderedId(0x90000000), earlierOrder);
+        var firstSharedFill = CreateLegacyFill(OrderedId(0x10000000), firstSharedOrder);
+        var excludedStatusFill = CreateLegacyFill(OrderedId(0x18000000), firstSharedOrder) with
+        {
+            FeeAccountingStatus = FeeAccountingStatus.Calculated.ToString()
+        };
+        var secondSharedFill = CreateLegacyFill(OrderedId(0x20000000), firstSharedOrder);
+        var otherOrderSharedFill = CreateLegacyFill(OrderedId(0x01000000), secondSharedOrder);
+        var laterFill = CreateLegacyFill(OrderedId(0x01000001), laterOrder);
+        var excludedSourceFill = CreateLegacyFill(OrderedId(0x01000002), excludedSourceOrder);
+        var cutoffEqualityFill = CreateLegacyFill(OrderedId(0x01000003), cutoffEqualityOrder);
+        var expected = new (Guid OrderId, Guid FillId, DateTimeOffset FilledAtUtc)[]
+        {
+            (earlierOrder.Id, earlierFill.Id, earlierFill.FilledAtUtc),
+            (firstSharedOrder.Id, firstSharedFill.Id, firstSharedFill.FilledAtUtc),
+            (firstSharedOrder.Id, secondSharedFill.Id, secondSharedFill.FilledAtUtc),
+            (secondSharedOrder.Id, otherOrderSharedFill.Id, otherOrderSharedFill.FilledAtUtc),
+            (laterOrder.Id, laterFill.Id, laterFill.FilledAtUtc)
+        };
+
+        try
+        {
+            await SeedStrategyAsync(factory, scenario);
+            foreach (var order in new[]
+                     {
+                         earlierOrder,
+                         firstSharedOrder,
+                         excludedSourceOrder,
+                         secondSharedOrder,
+                         laterOrder,
+                         cutoffEqualityOrder
+                     })
+            {
+                await repository.AddPaperOrderAsync(order);
+            }
+
+            foreach (var fill in new[]
+                     {
+                         earlierFill,
+                         firstSharedFill,
+                         excludedStatusFill,
+                         secondSharedFill,
+                         otherOrderSharedFill,
+                         laterFill,
+                         excludedSourceFill,
+                         cutoffEqualityFill
+                     })
+            {
+                await repository.AddPaperFillAsync(fill);
+            }
+
+            HistoricalPaperFakFeeBackfillCursor? cursor = null;
+            var actual = new List<(Guid OrderId, Guid FillId, DateTimeOffset FilledAtUtc)>();
+            for (var index = 0; index < expected.Length; index++)
+            {
+                var page = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                    scenario.CutoffUtc,
+                    scenario.StrategyId,
+                    1,
+                    cursor);
+                var candidate = Assert.Single(page.Candidates);
+                var expectedTuple = expected[index];
+
+                Assert.Equal(expectedTuple.OrderId, candidate.Order.Id);
+                Assert.Equal(expectedTuple.FillId, candidate.Fill.Id);
+                Assert.Equal(expectedTuple.FilledAtUtc, candidate.Fill.FilledAtUtc);
+                Assert.Equal(index == expected.Length - 1, page.ReachedEnd);
+                var nextCursor = Assert.IsType<HistoricalPaperFakFeeBackfillCursor>(
+                    page.ContinuationCursor);
+                Assert.Equal(scenario.StrategyId, nextCursor.StrategyId);
+                Assert.Equal(candidate.Fill.FilledAtUtc, nextCursor.FilledAtUtc);
+                Assert.Equal(candidate.Fill.PaperOrderId, nextCursor.PaperOrderId);
+                Assert.Equal(candidate.Fill.Id, nextCursor.FillId);
+
+                actual.Add((candidate.Order.Id, candidate.Fill.Id, candidate.Fill.FilledAtUtc));
+                cursor = nextCursor;
+            }
+
+            Assert.Equal(expected, actual);
+            Assert.Equal(expected.Length, actual.Distinct().Count());
+            Assert.DoesNotContain(actual, item => item.FillId == excludedStatusFill.Id);
+            Assert.DoesNotContain(actual, item => item.FillId == excludedSourceFill.Id);
+            Assert.DoesNotContain(actual, item => item.FillId == cutoffEqualityFill.Id);
+
+            var exhausted = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                scenario.CutoffUtc,
+                scenario.StrategyId,
+                1,
+                cursor);
+            Assert.True(exhausted.ReachedEnd);
+            Assert.Empty(exhausted.Candidates);
+            Assert.Null(exhausted.ContinuationCursor);
+        }
+        finally
+        {
+            await CleanupScenarioAsync(factory, scenario);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task Apply_AcceptsExactWebSocketAndRunOnlyShapes_AndRejectsUnsafeLegacyShapes()
     {
         var factory = await CreateFactoryAsync();

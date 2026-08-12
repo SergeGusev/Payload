@@ -89,9 +89,12 @@ one stable ranking, highest first. Equal Gross values use strategy ID as the
 deterministic tie-break. A source strategy without a materialized Dashboard
 snapshot falls back to the same retained run/fill/settlement Gross formula.
 Exact `LegacyUnknown`, cutoff, BUY, and two-source eligibility remains in the
-strategy-bound candidate page; it is intentionally not evaluated through a
-global fill/order join during rank loading. The worker keyset-pages one strategy
-to its current end before starting the next. Ranking affects scheduling only; it
+strategy-bound candidate page. The page first materializes that strategy's exact
+allowlisted BUY order IDs, probes their fills through the existing per-order
+index, then sorts and limits only the strategy-local candidate keys before
+loading the full rows. It does not scan the global chronological `LegacyUnknown`
+fill index to discover each strategy. The worker keyset-pages one strategy to its
+current end before starting the next. Ranking affects scheduling only; it
 does not change Gross PnL, Net PnL or Net ROI formulas, candidate filters, or the
 historical cutoff. Transient fee lookups and conditional-apply conflicts remain
 eligible for a later ranked sweep, while lower-ranked strategies continue in the

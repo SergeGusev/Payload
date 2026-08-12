@@ -117,7 +117,41 @@ ORDER BY gross_realized_pnl_usd DESC, strategy.id;
 
         var pageSize = Math.Min(limit, HistoricalPaperFakFeeBackfillMaxPageSize);
         await using var connection = await OpenConnectionAsync(cancellationToken);
+        // Keep the chronological page narrow and strategy-local. Wide order/fill
+        // payloads are loaded only after the N+1 candidate keys are selected.
         await using var command = CreateCommand(connection, $$"""
+WITH strategy_orders AS MATERIALIZED (
+    SELECT paper_order.id
+    FROM public.paper_orders paper_order
+    WHERE paper_order.strategy_id = @StrategyId
+      AND paper_order.side = '{{TradeSide.Buy}}'
+      AND paper_order.execution_source IN (
+          '{{HistoricalPaperFakDirectSource}}',
+          '{{HistoricalPaperFakChildSource}}')
+),
+candidate_keys AS MATERIALIZED (
+    SELECT
+        fill.id AS fill_id,
+        fill.paper_order_id,
+        fill.filled_at_utc
+    FROM strategy_orders strategy_order
+    INNER JOIN public.paper_fills fill ON fill.paper_order_id = strategy_order.id
+    WHERE fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
+      AND fill.filled_at_utc < @FilledBeforeUtc
+      AND (
+          NOT @HasCursor
+          OR fill.filled_at_utc > @AfterFilledAtUtc
+          OR (
+              fill.filled_at_utc = @AfterFilledAtUtc
+              AND fill.paper_order_id > @AfterPaperOrderId)
+          OR (
+              fill.filled_at_utc = @AfterFilledAtUtc
+              AND fill.paper_order_id = @AfterPaperOrderId
+              AND fill.id > @AfterFillId)
+      )
+    ORDER BY fill.filled_at_utc, fill.paper_order_id, fill.id
+    LIMIT @FetchLimit
+)
 SELECT
     paper_order.id,
     paper_order.signal_id,
@@ -154,28 +188,10 @@ SELECT
     fill.fee_taker_only,
     fill.fee_calculated_at_utc,
     fill.net_realized_pnl_usd
-FROM public.paper_fills fill
-INNER JOIN public.paper_orders paper_order ON paper_order.id = fill.paper_order_id
-WHERE fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
-  AND fill.filled_at_utc < @FilledBeforeUtc
-  AND paper_order.strategy_id = @StrategyId
-  AND paper_order.side = '{{TradeSide.Buy}}'
-  AND paper_order.execution_source IN (
-      '{{HistoricalPaperFakDirectSource}}',
-      '{{HistoricalPaperFakChildSource}}')
-  AND (
-      NOT @HasCursor
-      OR fill.filled_at_utc > @AfterFilledAtUtc
-      OR (
-          fill.filled_at_utc = @AfterFilledAtUtc
-          AND fill.paper_order_id > @AfterPaperOrderId)
-      OR (
-          fill.filled_at_utc = @AfterFilledAtUtc
-          AND fill.paper_order_id = @AfterPaperOrderId
-          AND fill.id > @AfterFillId)
-  )
-ORDER BY fill.filled_at_utc, fill.paper_order_id, fill.id
-LIMIT @FetchLimit;
+FROM candidate_keys candidate
+INNER JOIN public.paper_fills fill ON fill.id = candidate.fill_id
+INNER JOIN public.paper_orders paper_order ON paper_order.id = candidate.paper_order_id
+ORDER BY candidate.filled_at_utc, candidate.paper_order_id, candidate.fill_id;
 """);
         command.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
         command.Parameters.Add("FilledBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(filledBeforeUtc);
