@@ -154,3 +154,10 @@ Request:
 
 Result:
 Clarified that the execution timing and the resulting position point in different senses. A resting `Maker BUY Up @ 0.50` may fill when a seller accepts the bid at exactly `0.50` or compatible liquidity matches it; neither a print strictly below `0.50` nor BTC crossing below its reference line is required. The entry is often contrarian to the immediate Up-token move and therefore has adverse-selection risk, but the filled position remains long Up: five shares cost `$2.50`, produce `+$2.50` gross PnL if Up resolves, and `-$2.50` if Down resolves. No production or trading state changed.
+
+## 2026-08-12T20:34:24.7382130Z
+Request:
+Посмотри содержимое стакана рынка, который начнётся через сутки, но уже начал принимать ставки. Какие там ставки?
+
+Result:
+Performed a strictly read-only official Gamma/CLOB inspection of BTC/ETH/SOL five-minute markets in the `23h..25h` lead band. Gamma exposed 30 already-orderable markets across ten slots; the farthest slot started `2026-08-13T20:20:00Z`. Two checks about 50 seconds apart confirmed the same nearest levels for all six token books. BTC Up/Down each showed best bid/ask `0.49 x 56.02 / 0.51 x 56.02`; ETH Up `0.50 x 5 / 0.51 x 122.04`, Down `0.49 x 122.04 / 0.50 x 5`; SOL Up `0.50 x 5 / 0.51 x 25`, Down `0.49 x 25 / 0.50 x 5`. Tick was `0.01` and minimum size five shares. No production, trading, database, service, configuration, strategy, or source state changed.

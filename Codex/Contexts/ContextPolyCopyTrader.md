@@ -1,3 +1,16 @@
+## Active Update 2026-08-12 Day-Ahead Crypto Order-Book Snapshot
+Goal: Inspect real CLOB liquidity for the farthest already-orderable BTC/ETH/SOL five-minute slot beginning approximately one day later.
+Status: Completed
+Done:
+- Generated the exact BTC/ETH/SOL five-minute slugs in the `23h..25h` lead band at `2026-08-12T20:32:01Z`; Gamma returned `30` active/order-book-enabled/accepting markets across ten consecutive slots.
+- Selected the farthest exposed slot, `2026-08-13T20:20:00Z..20:25:00Z` (`23:20..23:25` Sofia), and fetched both Up and Down CLOB books for all three assets in `2026-08-12T20:32:30Z..20:32:34Z`.
+- Independently re-read all six books plus midpoint/spread endpoints in `2026-08-12T20:33:24Z..20:33:29Z`; the nearest four price levels and top sizes remained unchanged.
+- Verified top-of-book: BTC Up and Down each `0.49 x 56.02` bid / `0.51 x 56.02` ask; ETH Up `0.50 x 5` / `0.51 x 122.04`, ETH Down `0.49 x 122.04` / `0.50 x 5`; SOL Up `0.50 x 5` / `0.51 x 25`, SOL Down `0.49 x 25` / `0.50 x 5`.
+- Verified `0.01` tick and minimum order size `5` shares for every inspected token. Public CLOB levels are aggregated and do not reveal maker identity or the number of constituent orders; complementary Up/Down liquidity must not be double-counted as necessarily independent orders.
+Next: None.
+Notes: Strictly read-only official Gamma and CLOB API inspection. No database, service, strategy, Paper/Live order, configuration, or source-code state changed. Live depth remains time-sensitive beyond the stated snapshots.
+Blockers: None.
+
 ## Active Update 2026-08-12 Maker BUY Fill Direction Versus Outcome Direction
 Goal: Clarify whether a resting `Maker BUY Up @ 0.50` is a bet against the market or a bet on Up.
 Status: Completed
