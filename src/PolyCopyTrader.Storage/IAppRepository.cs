@@ -505,14 +505,8 @@ public interface IAppRepository
     {
         return Task.FromResult(
             new HistoricalPaperFakFeeBackfillBatchResult(
-                updates.Count,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                updates.Count));
+                Requested: updates.Count,
+                StructuralConflicts: updates.Count));
     }
 
     Task<IReadOnlyList<PaperOrder>> GetPaperOrdersForStrategyAssetAsync(

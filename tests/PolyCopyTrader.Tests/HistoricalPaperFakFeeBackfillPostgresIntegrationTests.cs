@@ -83,7 +83,13 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
             var applied = await repository.ApplyHistoricalPaperFakFeeBackfillBatchAsync([targetUpdate]);
 
             Assert.Equal(
-                new HistoricalPaperFakFeeBackfillBatchResult(1, 1, 1, 1, 1, 1, 0, 0),
+                new HistoricalPaperFakFeeBackfillBatchResult(
+                    Requested: 1,
+                    FullChainEligible: 1,
+                    FillsUpdated: 1,
+                    RunsUpdated: 1,
+                    PositionsUpdated: 1,
+                    SettlementsUpdated: 1),
                 applied);
             Assert.Equal(
                 targetGrossBefore,
@@ -96,7 +102,10 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
             var retry = await repository.ApplyHistoricalPaperFakFeeBackfillBatchAsync([targetUpdate]);
 
             Assert.Equal(
-                new HistoricalPaperFakFeeBackfillBatchResult(1, 1, 0, 0, 0, 0, 1, 0),
+                new HistoricalPaperFakFeeBackfillBatchResult(
+                    Requested: 1,
+                    FullChainEligible: 1,
+                    FullChainAlreadyApplied: 1),
                 retry);
             Assert.Equal(
                 targetGrossBefore,
@@ -107,7 +116,9 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
                 [CreateUpdate(conflict, scenario.FeeCalculatedAtUtc)]);
 
             Assert.Equal(
-                new HistoricalPaperFakFeeBackfillBatchResult(1, 0, 0, 0, 0, 0, 0, 1),
+                new HistoricalPaperFakFeeBackfillBatchResult(
+                    Requested: 1,
+                    StructuralConflicts: 1),
                 conflicted);
             Assert.Equal(
                 conflictGrossBefore,
@@ -116,6 +127,193 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
                 conflictAccountingBefore,
                 await ReadAccountingSnapshotAsync(factory, scenario.ConflictOrderId));
             Assert.Equal(projectionBefore, await ReadProjectionSnapshotAsync(factory, scenario));
+        }
+        finally
+        {
+            await CleanupScenarioAsync(factory, scenario);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Apply_AcceptsExactWebSocketAndRunOnlyShapes_AndRejectsUnsafeLegacyShapes()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var scenario = BackfillScenario.Create();
+        var fullWebSocketOrder = CreateOrder(
+            scenario,
+            Guid.NewGuid(),
+            $"websocket-full-{scenario.Suffix}",
+            $"websocket-full-condition-{scenario.Suffix}",
+            scenario.BaseUtc,
+            "btc_updown5m_fak_taker_paper");
+        var runOnlyOrder = CreateOrder(
+            scenario,
+            Guid.NewGuid(),
+            $"run-only-{scenario.Suffix}",
+            $"run-only-condition-{scenario.Suffix}",
+            scenario.BaseUtc.AddSeconds(1),
+            "btc_updown5m_child_mirror_fak_paper");
+        var webSocketAfterRunOrder = CreateOrder(
+            scenario,
+            Guid.NewGuid(),
+            $"websocket-after-{scenario.Suffix}",
+            $"websocket-after-condition-{scenario.Suffix}",
+            scenario.BaseUtc.AddSeconds(2),
+            "btc_updown5m_fak_taker_paper");
+        var unknownSettlementSourceOrder = CreateOrder(
+            scenario,
+            Guid.NewGuid(),
+            $"unknown-source-{scenario.Suffix}",
+            $"unknown-source-condition-{scenario.Suffix}",
+            scenario.BaseUtc.AddSeconds(3),
+            "btc_updown5m_fak_taker_paper");
+        var partialChainOrder = CreateOrder(
+            scenario,
+            Guid.NewGuid(),
+            $"partial-chain-{scenario.Suffix}",
+            $"partial-chain-condition-{scenario.Suffix}",
+            scenario.BaseUtc.AddSeconds(4),
+            "btc_updown5m_fak_taker_paper");
+        var orders = new[]
+        {
+            fullWebSocketOrder,
+            runOnlyOrder,
+            webSocketAfterRunOrder,
+            unknownSettlementSourceOrder,
+            partialChainOrder
+        };
+
+        try
+        {
+            await SeedStrategyAsync(factory, scenario);
+            foreach (var order in orders)
+            {
+                await repository.AddPaperOrderAsync(order);
+                await repository.AddPaperFillAsync(CreateLegacyFill(Guid.NewGuid(), order));
+                Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(
+                    CreateSettledRun(Guid.NewGuid(), order)));
+            }
+
+            foreach (var order in new[]
+                     {
+                         fullWebSocketOrder,
+                         webSocketAfterRunOrder,
+                         unknownSettlementSourceOrder,
+                         partialChainOrder
+                     })
+            {
+                await repository.UpsertPaperPositionAsync(CreateZeroPosition(order));
+            }
+
+            Assert.True(await repository.TryAddPaperPositionSettlementAsync(
+                CreateSettlement(Guid.NewGuid(), fullWebSocketOrder, costBasisUsd: 1m) with
+                {
+                    SettlementSource = "MarketWebSocket",
+                    SettledAtUtc = fullWebSocketOrder.FilledAtUtc!.Value.AddMinutes(4),
+                    CreatedAtUtc = fullWebSocketOrder.FilledAtUtc!.Value.AddMinutes(4).AddSeconds(1)
+                }));
+            Assert.True(await repository.TryAddPaperPositionSettlementAsync(
+                CreateSettlement(Guid.NewGuid(), webSocketAfterRunOrder, costBasisUsd: 1m) with
+                {
+                    SettlementSource = "MarketWebSocket",
+                    SettledAtUtc = webSocketAfterRunOrder.FilledAtUtc!.Value.AddMinutes(6),
+                    CreatedAtUtc = webSocketAfterRunOrder.FilledAtUtc!.Value.AddMinutes(6).AddSeconds(1)
+                }));
+            Assert.True(await repository.TryAddPaperPositionSettlementAsync(
+                CreateSettlement(Guid.NewGuid(), unknownSettlementSourceOrder, costBasisUsd: 1m) with
+                {
+                    SettlementSource = "market_websocket"
+                }));
+
+            var page = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                scenario.CutoffUtc,
+                scenario.StrategyId,
+                20);
+            Assert.True(page.ReachedEnd);
+            Assert.Equal(
+                orders.Select(order => order.Id).OrderBy(id => id),
+                page.Candidates.Select(candidate => candidate.Order.Id).OrderBy(id => id));
+
+            var candidates = page.Candidates.ToDictionary(candidate => candidate.Order.Id);
+            var updates = orders
+                .Select(order => CreateUpdate(
+                    candidates[order.Id],
+                    scenario.FeeCalculatedAtUtc))
+                .ToArray();
+            Assert.Null(await ReadDashboardReconciliationAsync(factory, scenario.StrategyId));
+            var fullGrossBefore = await ReadGrossSnapshotAsync(factory, fullWebSocketOrder.Id);
+            var runOnlyGrossBefore = await ReadFillRunGrossSnapshotAsync(factory, runOnlyOrder.Id);
+            var unsafeOrders = new[]
+            {
+                webSocketAfterRunOrder,
+                unknownSettlementSourceOrder,
+                partialChainOrder
+            };
+            var unsafeAccountingBefore = new Dictionary<Guid, FillRunAccountingSnapshot>();
+            foreach (var order in unsafeOrders)
+            {
+                unsafeAccountingBefore.Add(
+                    order.Id,
+                    await ReadFillRunAccountingSnapshotAsync(factory, order.Id));
+            }
+
+            var applied = await repository.ApplyHistoricalPaperFakFeeBackfillBatchAsync(updates);
+
+            Assert.Equal(
+                new HistoricalPaperFakFeeBackfillBatchResult(
+                    Requested: 5,
+                    StructuralConflicts: 3,
+                    FullChainEligible: 1,
+                    RunOnlyLegacyEligible: 1,
+                    FillsUpdated: 2,
+                    RunsUpdated: 2,
+                    PositionsUpdated: 1,
+                    SettlementsUpdated: 1),
+                applied);
+            Assert.Equal(
+                fullGrossBefore,
+                await ReadGrossSnapshotAsync(factory, fullWebSocketOrder.Id));
+            Assert.Equal(
+                runOnlyGrossBefore,
+                await ReadFillRunGrossSnapshotAsync(factory, runOnlyOrder.Id));
+            AssertCalculatedAccounting(
+                await ReadAccountingSnapshotAsync(factory, fullWebSocketOrder.Id),
+                scenario.FeeCalculatedAtUtc);
+            AssertCalculatedFillRunAccounting(
+                await ReadFillRunAccountingSnapshotAsync(factory, runOnlyOrder.Id),
+                scenario.FeeCalculatedAtUtc);
+            Assert.Equal(
+                new DependentCounts(0, 0),
+                await ReadDependentCountsAsync(factory, scenario.Wallet, runOnlyOrder.AssetId));
+            Assert.Equal(
+                new DashboardReconciliationSnapshot(50, 0, null),
+                await ReadDashboardReconciliationAsync(factory, scenario.StrategyId));
+            Assert.Equal(
+                runOnlyGrossBefore,
+                await ReadFillRunGrossSnapshotAsync(factory, runOnlyOrder.Id));
+            foreach (var order in unsafeOrders)
+            {
+                Assert.Equal(
+                    unsafeAccountingBefore[order.Id],
+                    await ReadFillRunAccountingSnapshotAsync(factory, order.Id));
+            }
+
+            var retry = await repository.ApplyHistoricalPaperFakFeeBackfillBatchAsync(updates);
+
+            Assert.Equal(
+                new HistoricalPaperFakFeeBackfillBatchResult(
+                    Requested: 5,
+                    StructuralConflicts: 3,
+                    FullChainEligible: 1,
+                    RunOnlyLegacyEligible: 1,
+                    FullChainAlreadyApplied: 1,
+                    RunOnlyLegacyAlreadyApplied: 1),
+                retry);
+            Assert.Equal(
+                new DashboardReconciliationSnapshot(50, 0, null),
+                await ReadDashboardReconciliationAsync(factory, scenario.StrategyId));
         }
         finally
         {
@@ -195,6 +393,33 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
         Assert.Equal(0.965m, actual.SettlementNetPnlUsd);
     }
 
+    private static void AssertCalculatedFillRunAccounting(
+        FillRunAccountingSnapshot actual,
+        DateTimeOffset calculatedAtUtc)
+    {
+        var expectedSource = HistoricalPrefix +
+            PolymarketFeeCalculationConstants.FeeCurveCalculationSource;
+        Assert.Equal(0.035m, actual.FillFeeUsd);
+        Assert.Equal(FeeAccountingStatus.Calculated.ToString(), actual.FillStatus);
+        Assert.Equal(FeeLiquidityRole.Taker.ToString(), actual.FillRole);
+        Assert.Equal(expectedSource, actual.FillSource);
+        Assert.Equal(0.07m, actual.FillRate);
+        Assert.Equal(1, actual.FillExponent);
+        Assert.True(actual.FillTakerOnly);
+        Assert.Equal(calculatedAtUtc, actual.FillCalculatedAtUtc);
+        Assert.Null(actual.FillNetPnlUsd);
+
+        Assert.Equal(0.035m, actual.RunFeeUsd);
+        Assert.Equal(FeeAccountingStatus.Calculated.ToString(), actual.RunStatus);
+        Assert.Equal(FeeLiquidityRole.Taker.ToString(), actual.RunRole);
+        Assert.Equal(expectedSource, actual.RunSource);
+        Assert.Equal(0.07m, actual.RunRate);
+        Assert.Equal(1, actual.RunExponent);
+        Assert.True(actual.RunTakerOnly);
+        Assert.Equal(calculatedAtUtc, actual.RunCalculatedAtUtc);
+        Assert.Equal(0.965m, actual.RunNetPnlUsd);
+    }
+
     private static async Task<PostgresConnectionFactory> CreateFactoryAsync()
     {
         var connectionString = Environment.GetEnvironmentVariable(
@@ -216,23 +441,7 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
         PostgresAppRepository repository,
         BackfillScenario scenario)
     {
-        await using (var connection = factory.CreateConnection())
-        {
-            await connection.OpenAsync();
-            await using var command = new NpgsqlCommand(
-                """
-INSERT INTO public.strategies (
-    id, code, name, description, enabled, live_stakes, created_at_utc, updated_at_utc)
-VALUES (
-    @Id, @Code, @Code, 'historical fee backfill integration test', true, false,
-    @CreatedAtUtc, @CreatedAtUtc);
-""",
-                connection);
-            command.Parameters.AddWithValue("Id", scenario.StrategyId);
-            command.Parameters.AddWithValue("Code", scenario.StrategyCode);
-            command.Parameters.AddWithValue("CreatedAtUtc", scenario.BaseUtc.UtcDateTime);
-            Assert.Equal(1, await command.ExecuteNonQueryAsync());
-        }
+        await SeedStrategyAsync(factory, scenario);
 
         var targetOrder = CreateOrder(
             scenario,
@@ -324,6 +533,27 @@ VALUES (
             CreateSettlement(scenario.TargetSettlementId, targetOrder, costBasisUsd: 1m)));
         Assert.True(await repository.TryAddPaperPositionSettlementAsync(
             CreateSettlement(scenario.ConflictSettlementId, conflictOrder, costBasisUsd: 1.01m)));
+    }
+
+    private static async Task SeedStrategyAsync(
+        PostgresConnectionFactory factory,
+        BackfillScenario scenario)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO public.strategies (
+    id, code, name, description, enabled, live_stakes, created_at_utc, updated_at_utc)
+VALUES (
+    @Id, @Code, @Code, 'historical fee backfill integration test', true, false,
+    @CreatedAtUtc, @CreatedAtUtc);
+""",
+            connection);
+        command.Parameters.AddWithValue("Id", scenario.StrategyId);
+        command.Parameters.AddWithValue("Code", scenario.StrategyCode);
+        command.Parameters.AddWithValue("CreatedAtUtc", scenario.BaseUtc.UtcDateTime);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
 
     private static PaperOrder CreateOrder(
@@ -545,6 +775,132 @@ WHERE paper_order.id = @OrderId;
             NullableDecimal(reader, 25));
     }
 
+    private static async Task<FillRunAccountingSnapshot> ReadFillRunAccountingSnapshotAsync(
+        PostgresConnectionFactory factory,
+        Guid orderId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    fill.fee_usd, fill.fee_accounting_status, fill.fee_liquidity_role,
+    fill.fee_calculation_source, fill.fee_rate, fill.fee_exponent,
+    fill.fee_taker_only, fill.fee_calculated_at_utc, fill.net_realized_pnl_usd,
+    run.fee_usd, run.fee_accounting_status, run.fee_liquidity_role,
+    run.fee_calculation_source, run.fee_rate, run.fee_exponent,
+    run.fee_taker_only, run.fee_calculated_at_utc, run.net_realized_pnl_usd
+FROM public.paper_orders paper_order
+INNER JOIN public.paper_fills fill ON fill.paper_order_id = paper_order.id
+INNER JOIN public.strategy_market_paper_runs run ON run.paper_order_id = paper_order.id
+WHERE paper_order.id = @OrderId;
+""",
+            connection);
+        command.Parameters.AddWithValue("OrderId", orderId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new FillRunAccountingSnapshot(
+            reader.GetDecimal(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            NullableDecimal(reader, 4),
+            NullableInt32(reader, 5),
+            NullableBoolean(reader, 6),
+            NullableDateTimeOffset(reader, 7),
+            NullableDecimal(reader, 8),
+            reader.GetDecimal(9),
+            reader.GetString(10),
+            reader.GetString(11),
+            reader.GetString(12),
+            NullableDecimal(reader, 13),
+            NullableInt32(reader, 14),
+            NullableBoolean(reader, 15),
+            NullableDateTimeOffset(reader, 16),
+            NullableDecimal(reader, 17));
+    }
+
+    private static async Task<string> ReadFillRunGrossSnapshotAsync(
+        PostgresConnectionFactory factory,
+        Guid orderId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT jsonb_build_object(
+    'fill', jsonb_build_object(
+        'price', fill.price, 'size', fill.size_shares, 'filled', fill.filled_at_utc,
+        'evidence', fill.evidence, 'realized', fill.realized_pnl_usd),
+    'run', jsonb_build_object(
+        'status', run.status, 'stake', run.stake_usd, 'entry', run.entry_price,
+        'size', run.size_shares, 'settlement_price', run.settlement_price,
+        'settlement_value', run.settlement_value_usd, 'realized', run.realized_pnl_usd,
+        'settled', run.settled_at_utc, 'updated', run.updated_at_utc))::text
+FROM public.paper_orders paper_order
+INNER JOIN public.paper_fills fill ON fill.paper_order_id = paper_order.id
+INNER JOIN public.strategy_market_paper_runs run ON run.paper_order_id = paper_order.id
+WHERE paper_order.id = @OrderId;
+""",
+            connection);
+        command.Parameters.AddWithValue("OrderId", orderId);
+        return (string)(await command.ExecuteScalarAsync()
+            ?? throw new InvalidOperationException("The backfill fill/run Gross chain was not found."));
+    }
+
+    private static async Task<DependentCounts> ReadDependentCountsAsync(
+        PostgresConnectionFactory factory,
+        string wallet,
+        string assetId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    (SELECT count(*)::integer
+     FROM public.paper_positions
+     WHERE copied_trader_wallet = @Wallet AND asset_id = @AssetId),
+    (SELECT count(*)::integer
+     FROM public.paper_position_settlements
+     WHERE copied_trader_wallet = @Wallet AND asset_id = @AssetId);
+""",
+            connection);
+        command.Parameters.AddWithValue("Wallet", wallet);
+        command.Parameters.AddWithValue("AssetId", assetId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new DependentCounts(reader.GetInt32(0), reader.GetInt32(1));
+    }
+
+    private static async Task<DashboardReconciliationSnapshot?> ReadDashboardReconciliationAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT priority, attempt_count, last_error
+FROM public.dashboard_projection_reconciliation_queue
+WHERE strategy_id = @StrategyId;
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+        {
+            return null;
+        }
+
+        var result = new DashboardReconciliationSnapshot(
+            reader.GetInt32(0),
+            reader.GetInt32(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2));
+        Assert.False(await reader.ReadAsync());
+        return result;
+    }
+
     private static async Task<string> ReadProjectionSnapshotAsync(
         PostgresConnectionFactory factory,
         BackfillScenario scenario)
@@ -661,6 +1017,33 @@ WHERE copied_trader_wallet = @Wallet;
         string SettlementStatus,
         string SettlementSource,
         decimal? SettlementNetPnlUsd);
+
+    private sealed record FillRunAccountingSnapshot(
+        decimal FillFeeUsd,
+        string FillStatus,
+        string FillRole,
+        string FillSource,
+        decimal? FillRate,
+        int? FillExponent,
+        bool? FillTakerOnly,
+        DateTimeOffset? FillCalculatedAtUtc,
+        decimal? FillNetPnlUsd,
+        decimal RunFeeUsd,
+        string RunStatus,
+        string RunRole,
+        string RunSource,
+        decimal? RunRate,
+        int? RunExponent,
+        bool? RunTakerOnly,
+        DateTimeOffset? RunCalculatedAtUtc,
+        decimal? RunNetPnlUsd);
+
+    private sealed record DependentCounts(int Positions, int Settlements);
+
+    private sealed record DashboardReconciliationSnapshot(
+        int Priority,
+        int AttemptCount,
+        string? LastError);
 
     private sealed record BackfillScenario(
         Guid StrategyId,

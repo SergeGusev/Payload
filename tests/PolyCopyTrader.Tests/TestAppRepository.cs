@@ -100,7 +100,7 @@ internal sealed class TestAppRepository : IAppRepository
     public List<IReadOnlyList<HistoricalPaperFakFeeBackfillUpdate>> HistoricalPaperFakFeeBackfillApplyCalls { get; } = [];
 
     public HistoricalPaperFakFeeBackfillBatchResult HistoricalPaperFakFeeBackfillApplyResult { get; set; } =
-        new(0, 0, 0, 0, 0, 0, 0, 0);
+        new();
 
     public int GetPaperPositionsCalls { get; private set; }
 
@@ -1442,10 +1442,20 @@ internal sealed class TestAppRepository : IAppRepository
         lock (sync)
         {
             HistoricalPaperFakFeeBackfillApplyCalls.Add(updates.ToArray());
-            return Task.FromResult(HistoricalPaperFakFeeBackfillApplyResult with
+            var result = HistoricalPaperFakFeeBackfillApplyResult with
             {
                 Requested = updates.Count
-            });
+            };
+            if (updates.Count > 0 &&
+                result.StructuralConflicts == 0 &&
+                result.AccountingConflicts == 0 &&
+                result.Eligible == 0 &&
+                result.Deferred == 0)
+            {
+                result = result with { StructuralConflicts = updates.Count };
+            }
+
+            return Task.FromResult(result);
         }
     }
 

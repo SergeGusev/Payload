@@ -100,7 +100,9 @@ public sealed class PaperFakFeeBackfillProcessor(
                 cancellationToken).ConfigureAwait(false);
         }
 
-        var reachedSweepEnd = AdvanceCursor(page);
+        var wholeBatchDeferred = applyResult?.WholeBatchDeferred == true;
+        var reachedStrategyEnd = !wholeBatchDeferred && page.ReachedEnd;
+        var reachedSweepEnd = !wholeBatchDeferred && AdvanceCursor(page);
 
         logger.LogInformation(
             "Historical Paper FAK fee backfill cycle completed. ApplyEnabled={ApplyEnabled} " +
@@ -108,9 +110,13 @@ public sealed class PaperFakFeeBackfillProcessor(
             "StrategyId={StrategyId} StrategyCode={StrategyCode} GrossRealizedPnlUsd={GrossRealizedPnlUsd} " +
             "Candidates={Candidates} EvaluatedForApply={EvaluatedForApply} " +
             "TransientLookupUnavailable={TransientLookupUnavailable} Requested={Requested} Eligible={Eligible} " +
+            "FullChainEligible={FullChainEligible} RunOnlyLegacyEligible={RunOnlyLegacyEligible} " +
             "FillsUpdated={FillsUpdated} RunsUpdated={RunsUpdated} PositionsUpdated={PositionsUpdated} " +
-            "SettlementsUpdated={SettlementsUpdated} AlreadyApplied={AlreadyApplied} " +
-            "ConflictsOrDeferred={ConflictsOrDeferred} ReachedStrategyEnd={ReachedStrategyEnd} " +
+            "SettlementsUpdated={SettlementsUpdated} FullChainAlreadyApplied={FullChainAlreadyApplied} " +
+            "RunOnlyLegacyAlreadyApplied={RunOnlyLegacyAlreadyApplied} AlreadyApplied={AlreadyApplied} " +
+            "StructuralConflicts={StructuralConflicts} AccountingConflicts={AccountingConflicts} " +
+            "DeferredByLockTimeout={DeferredByLockTimeout} " +
+            "DeferredByQueryCancel={DeferredByQueryCancel} ReachedStrategyEnd={ReachedStrategyEnd} " +
             "ReachedSweepEnd={ReachedSweepEnd}",
             options.ApplyEnabled,
             options.HistoricalCutoffUtc,
@@ -124,13 +130,20 @@ public sealed class PaperFakFeeBackfillProcessor(
             transientLookupUnavailable,
             applyResult?.Requested ?? 0,
             applyResult?.Eligible ?? 0,
+            applyResult?.FullChainEligible ?? 0,
+            applyResult?.RunOnlyLegacyEligible ?? 0,
             applyResult?.FillsUpdated ?? 0,
             applyResult?.RunsUpdated ?? 0,
             applyResult?.PositionsUpdated ?? 0,
             applyResult?.SettlementsUpdated ?? 0,
+            applyResult?.FullChainAlreadyApplied ?? 0,
+            applyResult?.RunOnlyLegacyAlreadyApplied ?? 0,
             applyResult?.AlreadyApplied ?? 0,
-            applyResult?.ConflictsOrDeferred ?? 0,
-            page.ReachedEnd,
+            applyResult?.StructuralConflicts ?? 0,
+            applyResult?.AccountingConflicts ?? 0,
+            applyResult?.DeferredByLockTimeout ?? 0,
+            applyResult?.DeferredByQueryCancel ?? 0,
+            reachedStrategyEnd,
             reachedSweepEnd);
 
         return new PaperFakFeeBackfillCycleResult(

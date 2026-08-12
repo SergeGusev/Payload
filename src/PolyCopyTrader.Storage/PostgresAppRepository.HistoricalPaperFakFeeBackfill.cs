@@ -254,40 +254,62 @@ LIMIT @FetchLimit;
                 reader.GetInt32(4),
                 reader.GetInt32(5),
                 reader.GetInt32(6),
-                reader.GetInt32(7));
+                reader.GetInt32(7),
+                reader.GetInt32(8),
+                reader.GetInt32(9),
+                reader.GetInt32(10),
+                reader.GetInt32(11),
+                reader.GetInt32(12));
             await reader.DisposeAsync();
-            var chainsRequiringUpdate = result.Eligible - result.AlreadyApplied;
-            if (result.FillsUpdated != chainsRequiringUpdate ||
-                result.RunsUpdated != chainsRequiringUpdate ||
-                result.PositionsUpdated != chainsRequiringUpdate ||
-                result.SettlementsUpdated != chainsRequiringUpdate)
+            var fullChainsRequiringUpdate =
+                result.FullChainEligible - result.FullChainAlreadyApplied;
+            var runOnlyChainsRequiringUpdate =
+                result.RunOnlyLegacyEligible - result.RunOnlyLegacyAlreadyApplied;
+            var allChainsRequiringUpdate =
+                fullChainsRequiringUpdate + runOnlyChainsRequiringUpdate;
+            if (result.Deferred != 0 ||
+                result.Requested != updates.Count ||
+                result.Requested !=
+                    result.StructuralConflicts +
+                    result.AccountingConflicts +
+                    result.FullChainEligible +
+                    result.RunOnlyLegacyEligible ||
+                fullChainsRequiringUpdate < 0 ||
+                runOnlyChainsRequiringUpdate < 0 ||
+                result.FillsUpdated != allChainsRequiringUpdate ||
+                result.RunsUpdated != allChainsRequiringUpdate ||
+                result.PositionsUpdated != fullChainsRequiringUpdate ||
+                result.SettlementsUpdated != fullChainsRequiringUpdate)
             {
                 await transaction.RollbackAsync(CancellationToken.None);
                 throw new InvalidOperationException(
-                    "Historical Paper FAK fee backfill did not update every eligible dependent row atomically.");
+                    "Historical Paper FAK fee backfill did not preserve its shape-specific atomic update invariants.");
             }
 
             await transaction.CommitAsync(cancellationToken);
             return result;
         }
         catch (PostgresException exception) when (
-            exception.SqlState is PostgresErrorCodes.LockNotAvailable or PostgresErrorCodes.QueryCanceled)
+            exception.SqlState == PostgresErrorCodes.LockNotAvailable)
         {
             await transaction.RollbackAsync(CancellationToken.None);
             return new HistoricalPaperFakFeeBackfillBatchResult(
-                updates.Count,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                updates.Count);
+                Requested: updates.Count,
+                DeferredByLockTimeout: updates.Count);
+        }
+        catch (PostgresException exception) when (
+            exception.SqlState == PostgresErrorCodes.QueryCanceled &&
+            !cancellationToken.IsCancellationRequested)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            return new HistoricalPaperFakFeeBackfillBatchResult(
+                Requested: updates.Count,
+                DeferredByQueryCancel: updates.Count);
         }
     }
 
     private static readonly HistoricalPaperFakFeeBackfillBatchResult EmptyHistoricalPaperFakFeeBackfillResult =
-        new(0, 0, 0, 0, 0, 0, 0, 0);
+        new();
 
     internal const string HistoricalPaperFakFeeBackfillApplySql = """
 WITH requested AS MATERIALIZED (
@@ -331,12 +353,10 @@ WITH requested AS MATERIALIZED (
         desired_fee_calculated_at timestamptz,
         desired_net numeric)
 ),
-structural_chain AS MATERIALIZED (
+run_structural_chain AS MATERIALIZED (
     SELECT
         requested.*,
         run.id AS run_id,
-        position.id AS position_id,
-        settlement.id AS settlement_id,
         fill.fee_usd AS actual_fill_fee,
         fill.fee_accounting_status AS actual_fill_status,
         fill.fee_liquidity_role AS actual_fill_role,
@@ -347,6 +367,9 @@ structural_chain AS MATERIALIZED (
         fill.fee_calculated_at_utc AS actual_fill_calculated_at,
         fill.net_realized_pnl_usd AS actual_fill_net,
         run.realized_pnl_usd AS run_realized,
+        run.settlement_price AS run_settlement_price,
+        run.settlement_value_usd AS run_settlement_value,
+        run.settled_at_utc AS run_settled_at,
         run.fee_usd AS actual_run_fee,
         run.fee_accounting_status AS actual_run_status,
         run.fee_liquidity_role AS actual_run_role,
@@ -355,26 +378,7 @@ structural_chain AS MATERIALIZED (
         run.fee_exponent AS actual_run_exponent,
         run.fee_taker_only AS actual_run_taker_only,
         run.fee_calculated_at_utc AS actual_run_calculated_at,
-        run.net_realized_pnl_usd AS actual_run_net,
-        position.fee_usd AS actual_position_fee,
-        position.fee_accounting_status AS actual_position_status,
-        position.fee_liquidity_role AS actual_position_role,
-        position.fee_calculation_source AS actual_position_source,
-        position.fee_rate AS actual_position_rate,
-        position.fee_exponent AS actual_position_exponent,
-        position.fee_taker_only AS actual_position_taker_only,
-        position.fee_calculated_at_utc AS actual_position_calculated_at,
-        position.net_unrealized_pnl_usd AS actual_position_net,
-        settlement.realized_pnl_usd AS settlement_realized,
-        settlement.fee_usd AS actual_settlement_fee,
-        settlement.fee_accounting_status AS actual_settlement_status,
-        settlement.fee_liquidity_role AS actual_settlement_role,
-        settlement.fee_calculation_source AS actual_settlement_source,
-        settlement.fee_rate AS actual_settlement_rate,
-        settlement.fee_exponent AS actual_settlement_exponent,
-        settlement.fee_taker_only AS actual_settlement_taker_only,
-        settlement.fee_calculated_at_utc AS actual_settlement_calculated_at,
-        settlement.net_realized_pnl_usd AS actual_settlement_net
+        run.net_realized_pnl_usd AS actual_run_net
     FROM requested
     INNER JOIN public.paper_orders paper_order
         ON paper_order.id = requested.paper_order_id
@@ -414,29 +418,9 @@ structural_chain AS MATERIALIZED (
        AND run.size_shares = fill.size_shares
        AND run.stake_usd = round(fill.price * fill.size_shares, 8)
        AND run.realized_pnl_usd IS NOT NULL
+       AND run.settlement_price IS NOT NULL
+       AND run.settlement_value_usd IS NOT NULL
        AND run.settled_at_utc IS NOT NULL
-    INNER JOIN public.paper_positions position
-        ON position.copied_trader_wallet = paper_order.copied_trader_wallet
-       AND position.asset_id = paper_order.asset_id
-       AND position.condition_id = paper_order.condition_id
-       AND position.outcome = paper_order.outcome
-       AND position.size_shares = 0
-       AND position.average_price = 0
-       AND position.estimated_value_usd = 0
-       AND position.unrealized_pnl_usd = 0
-    INNER JOIN public.paper_position_settlements settlement
-        ON settlement.copied_trader_wallet = paper_order.copied_trader_wallet
-       AND settlement.asset_id = paper_order.asset_id
-       AND settlement.condition_id = paper_order.condition_id
-       AND settlement.outcome = paper_order.outcome
-       AND settlement.settled_size_shares = fill.size_shares
-       AND settlement.average_price = fill.price
-       AND settlement.cost_basis_usd = round(fill.price * fill.size_shares, 8)
-       AND settlement.settlement_value_usd = run.settlement_value_usd
-       AND settlement.realized_pnl_usd = run.realized_pnl_usd
-       AND settlement.settled_at_utc = run.settled_at_utc
-       AND settlement.settlement_source = 'BtcUpDown5mGammaClosedMarket'
-       AND run.settlement_price = CASE WHEN settlement.won THEN 1 ELSE 0 END
     WHERE paper_order.price = fill.price
       AND paper_order.size_shares = fill.size_shares
       AND (
@@ -468,21 +452,132 @@ structural_chain AS MATERIALIZED (
           SELECT count(*)
           FROM public.strategy_market_paper_runs sibling_run
           WHERE sibling_run.paper_order_id = paper_order.id) = 1
-      AND (
-          SELECT count(*)
-          FROM public.paper_positions sibling_position
-          WHERE sibling_position.copied_trader_wallet = paper_order.copied_trader_wallet
-            AND sibling_position.asset_id = paper_order.asset_id) = 1
-      AND (
-          SELECT count(*)
-          FROM public.paper_position_settlements sibling_settlement
-          WHERE sibling_settlement.copied_trader_wallet = paper_order.copied_trader_wallet
-            AND sibling_settlement.asset_id = paper_order.asset_id) = 1
     ORDER BY
         paper_order.copied_trader_wallet COLLATE "C",
         paper_order.asset_id COLLATE "C",
         paper_order.id
-    FOR UPDATE OF paper_order, fill, run, position, settlement
+    FOR UPDATE OF paper_order, fill, run
+),
+full_chain_structural AS MATERIALIZED (
+    SELECT
+        run_chain.*,
+        'FullChain'::text AS chain_shape,
+        position.id AS position_id,
+        settlement.id AS settlement_id,
+        position.fee_usd AS actual_position_fee,
+        position.fee_accounting_status AS actual_position_status,
+        position.fee_liquidity_role AS actual_position_role,
+        position.fee_calculation_source AS actual_position_source,
+        position.fee_rate AS actual_position_rate,
+        position.fee_exponent AS actual_position_exponent,
+        position.fee_taker_only AS actual_position_taker_only,
+        position.fee_calculated_at_utc AS actual_position_calculated_at,
+        position.net_unrealized_pnl_usd AS actual_position_net,
+        settlement.realized_pnl_usd AS settlement_realized,
+        settlement.fee_usd AS actual_settlement_fee,
+        settlement.fee_accounting_status AS actual_settlement_status,
+        settlement.fee_liquidity_role AS actual_settlement_role,
+        settlement.fee_calculation_source AS actual_settlement_source,
+        settlement.fee_rate AS actual_settlement_rate,
+        settlement.fee_exponent AS actual_settlement_exponent,
+        settlement.fee_taker_only AS actual_settlement_taker_only,
+        settlement.fee_calculated_at_utc AS actual_settlement_calculated_at,
+        settlement.net_realized_pnl_usd AS actual_settlement_net
+    FROM run_structural_chain run_chain
+    INNER JOIN public.paper_positions position
+        ON position.copied_trader_wallet = run_chain.expected_wallet
+       AND position.asset_id = run_chain.expected_asset_id
+       AND position.condition_id = run_chain.expected_condition_id
+       AND position.outcome = run_chain.expected_outcome
+       AND position.size_shares = 0
+       AND position.average_price = 0
+       AND position.estimated_value_usd = 0
+       AND position.unrealized_pnl_usd = 0
+    INNER JOIN public.paper_position_settlements settlement
+        ON settlement.copied_trader_wallet = run_chain.expected_wallet
+       AND settlement.asset_id = run_chain.expected_asset_id
+       AND settlement.condition_id = run_chain.expected_condition_id
+       AND settlement.outcome = run_chain.expected_outcome
+       AND settlement.settled_size_shares = run_chain.expected_fill_size
+       AND settlement.average_price = run_chain.expected_fill_price
+       AND settlement.cost_basis_usd = round(
+           run_chain.expected_fill_price * run_chain.expected_fill_size,
+           8)
+       AND settlement.settlement_value_usd = run_chain.run_settlement_value
+       AND settlement.realized_pnl_usd = run_chain.run_realized
+       AND run_chain.run_settlement_price = CASE WHEN settlement.won THEN 1 ELSE 0 END
+       AND (
+           (
+               settlement.settlement_source = 'BtcUpDown5mGammaClosedMarket'
+               AND settlement.settled_at_utc = run_chain.run_settled_at)
+           OR (
+               settlement.settlement_source = 'MarketWebSocket'
+               AND settlement.settled_at_utc <= run_chain.run_settled_at)
+       )
+    WHERE (
+          SELECT count(*)
+          FROM public.paper_positions sibling_position
+          WHERE sibling_position.copied_trader_wallet = run_chain.expected_wallet
+            AND sibling_position.asset_id = run_chain.expected_asset_id) = 1
+      AND (
+          SELECT count(*)
+          FROM public.paper_position_settlements sibling_settlement
+          WHERE sibling_settlement.copied_trader_wallet = run_chain.expected_wallet
+            AND sibling_settlement.asset_id = run_chain.expected_asset_id) = 1
+    ORDER BY
+        run_chain.expected_wallet COLLATE "C",
+        run_chain.expected_asset_id COLLATE "C",
+        run_chain.paper_order_id
+    FOR UPDATE OF position, settlement
+),
+run_only_legacy_structural AS MATERIALIZED (
+    SELECT
+        run_chain.*,
+        'RunOnlyLegacy'::text AS chain_shape,
+        NULL::uuid AS position_id,
+        NULL::uuid AS settlement_id,
+        NULL::numeric AS actual_position_fee,
+        NULL::text AS actual_position_status,
+        NULL::text AS actual_position_role,
+        NULL::text AS actual_position_source,
+        NULL::numeric AS actual_position_rate,
+        NULL::integer AS actual_position_exponent,
+        NULL::boolean AS actual_position_taker_only,
+        NULL::timestamptz AS actual_position_calculated_at,
+        NULL::numeric AS actual_position_net,
+        NULL::numeric AS settlement_realized,
+        NULL::numeric AS actual_settlement_fee,
+        NULL::text AS actual_settlement_status,
+        NULL::text AS actual_settlement_role,
+        NULL::text AS actual_settlement_source,
+        NULL::numeric AS actual_settlement_rate,
+        NULL::integer AS actual_settlement_exponent,
+        NULL::boolean AS actual_settlement_taker_only,
+        NULL::timestamptz AS actual_settlement_calculated_at,
+        NULL::numeric AS actual_settlement_net
+    FROM run_structural_chain run_chain
+    WHERE run_chain.run_settlement_price IN (0, 1)
+      AND run_chain.run_settlement_value =
+          run_chain.expected_fill_size * run_chain.run_settlement_price
+      AND run_chain.run_realized =
+          run_chain.run_settlement_value - round(
+              run_chain.expected_fill_price * run_chain.expected_fill_size,
+              8)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.paper_positions position
+          WHERE position.copied_trader_wallet = run_chain.expected_wallet
+            AND position.asset_id = run_chain.expected_asset_id)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.paper_position_settlements settlement
+          WHERE settlement.copied_trader_wallet = run_chain.expected_wallet
+            AND settlement.asset_id = run_chain.expected_asset_id)
+),
+structural_chain AS MATERIALIZED (
+    SELECT * FROM full_chain_structural
+    UNION ALL
+    SELECT * FROM run_only_legacy_structural
 ),
 classified AS MATERIALIZED (
     SELECT
@@ -515,36 +610,42 @@ classified AS MATERIALIZED (
             AND actual_run_taker_only IS NULL
             AND actual_run_calculated_at IS NULL
             AND actual_run_net IS NULL
-            AND actual_settlement_fee = 0
-            AND actual_settlement_status = 'LegacyUnknown'
-            AND actual_settlement_role = 'Unknown'
-            AND actual_settlement_source = ''
-            AND actual_settlement_rate IS NULL
-            AND actual_settlement_exponent IS NULL
-            AND actual_settlement_taker_only IS NULL
-            AND actual_settlement_calculated_at IS NULL
-            AND actual_settlement_net IS NULL
             AND (
-                (
-                    actual_position_fee = 0
-                    AND actual_position_status = 'LegacyUnknown'
-                    AND actual_position_role = 'Unknown'
-                    AND actual_position_source = ''
-                    AND actual_position_rate IS NULL
-                    AND actual_position_exponent IS NULL
-                    AND actual_position_taker_only IS NULL
-                    AND actual_position_calculated_at IS NULL
-                    AND actual_position_net IS NULL)
+                chain_shape = 'RunOnlyLegacy'
                 OR (
-                    actual_position_fee = 0
-                    AND actual_position_status = 'Calculated'
-                    AND actual_position_role = 'Unknown'
-                    AND actual_position_source = ''
-                    AND actual_position_rate IS NULL
-                    AND actual_position_exponent IS NULL
-                    AND actual_position_taker_only IS NULL
-                    AND actual_position_calculated_at IS NULL
-                    AND actual_position_net = 0)
+                    chain_shape = 'FullChain'
+                    AND actual_settlement_fee = 0
+                    AND actual_settlement_status = 'LegacyUnknown'
+                    AND actual_settlement_role = 'Unknown'
+                    AND actual_settlement_source = ''
+                    AND actual_settlement_rate IS NULL
+                    AND actual_settlement_exponent IS NULL
+                    AND actual_settlement_taker_only IS NULL
+                    AND actual_settlement_calculated_at IS NULL
+                    AND actual_settlement_net IS NULL
+                    AND (
+                        (
+                            actual_position_fee = 0
+                            AND actual_position_status = 'LegacyUnknown'
+                            AND actual_position_role = 'Unknown'
+                            AND actual_position_source = ''
+                            AND actual_position_rate IS NULL
+                            AND actual_position_exponent IS NULL
+                            AND actual_position_taker_only IS NULL
+                            AND actual_position_calculated_at IS NULL
+                            AND actual_position_net IS NULL)
+                        OR (
+                            actual_position_fee = 0
+                            AND actual_position_status = 'Calculated'
+                            AND actual_position_role = 'Unknown'
+                            AND actual_position_source = ''
+                            AND actual_position_rate IS NULL
+                            AND actual_position_exponent IS NULL
+                            AND actual_position_taker_only IS NULL
+                            AND actual_position_calculated_at IS NULL
+                            AND actual_position_net = 0)
+                    )
+                )
             )
         ) AS requires_update,
         (
@@ -570,28 +671,34 @@ classified AS MATERIALIZED (
                     THEN run_realized - desired_fee
                     ELSE NULL
                 END)
-            AND actual_position_fee = 0
-            AND actual_position_status = 'Calculated'
-            AND actual_position_role = 'Unknown'
-            AND actual_position_source = ''
-            AND actual_position_rate IS NULL
-            AND actual_position_exponent IS NULL
-            AND actual_position_taker_only IS NULL
-            AND actual_position_calculated_at IS NULL
-            AND actual_position_net = 0
-            AND actual_settlement_fee = desired_fee
-            AND actual_settlement_status = desired_fee_status
-            AND actual_settlement_role = desired_fee_role
-            AND actual_settlement_source = desired_fee_source
-            AND actual_settlement_rate IS NOT DISTINCT FROM desired_fee_rate
-            AND actual_settlement_exponent IS NOT DISTINCT FROM desired_fee_exponent
-            AND actual_settlement_taker_only IS NOT DISTINCT FROM desired_fee_taker_only
-            AND actual_settlement_calculated_at IS NOT DISTINCT FROM desired_fee_calculated_at
-            AND actual_settlement_net IS NOT DISTINCT FROM (
-                CASE WHEN desired_fee_status = 'Calculated'
-                    THEN settlement_realized - desired_fee
-                    ELSE NULL
-                END)
+            AND (
+                chain_shape = 'RunOnlyLegacy'
+                OR (
+                    chain_shape = 'FullChain'
+                    AND actual_position_fee = 0
+                    AND actual_position_status = 'Calculated'
+                    AND actual_position_role = 'Unknown'
+                    AND actual_position_source = ''
+                    AND actual_position_rate IS NULL
+                    AND actual_position_exponent IS NULL
+                    AND actual_position_taker_only IS NULL
+                    AND actual_position_calculated_at IS NULL
+                    AND actual_position_net = 0
+                    AND actual_settlement_fee = desired_fee
+                    AND actual_settlement_status = desired_fee_status
+                    AND actual_settlement_role = desired_fee_role
+                    AND actual_settlement_source = desired_fee_source
+                    AND actual_settlement_rate IS NOT DISTINCT FROM desired_fee_rate
+                    AND actual_settlement_exponent IS NOT DISTINCT FROM desired_fee_exponent
+                    AND actual_settlement_taker_only IS NOT DISTINCT FROM desired_fee_taker_only
+                    AND actual_settlement_calculated_at IS NOT DISTINCT FROM desired_fee_calculated_at
+                    AND actual_settlement_net IS NOT DISTINCT FROM (
+                        CASE WHEN desired_fee_status = 'Calculated'
+                            THEN settlement_realized - desired_fee
+                            ELSE NULL
+                        END)
+                )
+            )
         ) AS already_applied
     FROM structural_chain
 ),
@@ -651,7 +758,8 @@ position_updates AS (
         net_unrealized_pnl_usd = 0
     FROM eligible
     INNER JOIN fill_updates ON fill_updates.id = eligible.fill_id
-    WHERE target.id = eligible.position_id
+    WHERE eligible.chain_shape = 'FullChain'
+      AND target.id = eligible.position_id
     RETURNING target.id
 ),
 settlement_updates AS (
@@ -671,18 +779,36 @@ settlement_updates AS (
         END
     FROM eligible
     INNER JOIN fill_updates ON fill_updates.id = eligible.fill_id
-    WHERE target.id = eligible.settlement_id
+    WHERE eligible.chain_shape = 'FullChain'
+      AND target.id = eligible.settlement_id
     RETURNING target.id
 )
 SELECT
     (SELECT count(*)::integer FROM requested) AS requested,
-    (SELECT count(*)::integer FROM eligible) AS eligible,
+    ((SELECT count(*) FROM requested) -
+        (SELECT count(*) FROM structural_chain))::integer AS structural_conflicts,
+    ((SELECT count(*) FROM structural_chain) -
+        (SELECT count(*) FROM eligible))::integer AS accounting_conflicts,
+    (SELECT count(*)::integer
+        FROM eligible
+        WHERE chain_shape = 'FullChain') AS full_chain_eligible,
+    (SELECT count(*)::integer
+        FROM eligible
+        WHERE chain_shape = 'RunOnlyLegacy') AS run_only_legacy_eligible,
     (SELECT count(*)::integer FROM fill_updates) AS fills_updated,
     (SELECT count(*)::integer FROM run_updates) AS runs_updated,
     (SELECT count(*)::integer FROM position_updates) AS positions_updated,
     (SELECT count(*)::integer FROM settlement_updates) AS settlements_updated,
-    (SELECT count(*)::integer FROM eligible WHERE already_applied) AS already_applied,
-    ((SELECT count(*) FROM requested) - (SELECT count(*) FROM eligible))::integer AS conflicts_or_deferred;
+    (SELECT count(*)::integer
+        FROM eligible
+        WHERE chain_shape = 'FullChain'
+          AND already_applied) AS full_chain_already_applied,
+    (SELECT count(*)::integer
+        FROM eligible
+        WHERE chain_shape = 'RunOnlyLegacy'
+          AND already_applied) AS run_only_legacy_already_applied,
+    0::integer AS deferred_by_lock_timeout,
+    0::integer AS deferred_by_query_cancel;
 """;
 
     private static async Task ConfigureHistoricalPaperFakFeeBackfillTransactionAsync(

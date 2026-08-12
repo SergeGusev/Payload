@@ -146,14 +146,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var repository = new TestAppRepository
         {
             HistoricalPaperFakFeeBackfillApplyResult = new(
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1)
+                StructuralConflicts: 1)
         };
         repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
             new HistoricalPaperFakFeeBackfillPage([transient, conflicting], null, true));
@@ -181,13 +174,116 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
         Assert.True(firstSweepEnd.ReachedEnd);
         Assert.Equal(1, firstSweepEnd.TransientLookupUnavailable);
-        Assert.Equal(1, firstSweepEnd.ApplyResult?.ConflictsOrDeferred);
+        Assert.Equal(1, firstSweepEnd.ApplyResult?.StructuralConflicts);
+        Assert.Equal(0, firstSweepEnd.ApplyResult?.Deferred);
         Assert.True(secondSweepEnd.ReachedEnd);
         Assert.Equal(0, secondSweepEnd.TransientLookupUnavailable);
         Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillApplyCalls.Count);
         Assert.All(
             repository.HistoricalPaperFakFeeBackfillCalls,
             call => Assert.Null(call.AfterCursor));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunCycle_WholeBatchDeferralRetriesExactPageWithoutAdvancingCursor(
+        bool queryCancelled)
+    {
+        var candidate = CreateCandidate("condition-deferred");
+        var cursor = new HistoricalPaperFakFeeBackfillCursor(
+            candidate.Order.StrategyId,
+            candidate.Fill.FilledAtUtc,
+            candidate.Order.Id,
+            candidate.Fill.Id);
+        var repository = new TestAppRepository
+        {
+            HistoricalPaperFakFeeBackfillApplyResult = queryCancelled
+                ? new(DeferredByQueryCancel: 1)
+                : new(DeferredByLockTimeout: 1)
+        };
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([candidate], cursor, false));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([candidate], cursor, false));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([], null, true));
+        var feeService = new RecordingFeeAccountingService((_, fill, _) =>
+            Task.FromResult(fill with
+            {
+                FeeUsd = 0.01m,
+                FeeAccountingStatus = FeeAccountingStatus.Calculated.ToString(),
+                FeeCalculationSource = PolymarketFeeCalculationConstants.FeeCurveCalculationSource
+            }));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        var deferredCycle = await processor.RunCycleAsync();
+        repository.HistoricalPaperFakFeeBackfillApplyResult = new(
+            RunOnlyLegacyEligible: 1,
+            FillsUpdated: 1,
+            RunsUpdated: 1);
+        var retryCycle = await processor.RunCycleAsync();
+        var nextPageCycle = await processor.RunCycleAsync();
+
+        Assert.False(deferredCycle.ReachedEnd);
+        Assert.True(deferredCycle.ApplyResult?.WholeBatchDeferred);
+        Assert.Equal(1, deferredCycle.ApplyResult?.Deferred);
+        Assert.False(retryCycle.ReachedEnd);
+        Assert.False(retryCycle.ApplyResult?.WholeBatchDeferred);
+        Assert.True(nextPageCycle.ReachedEnd);
+        Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillApplyCalls.Count);
+        Assert.Equal(3, repository.HistoricalPaperFakFeeBackfillCalls.Count);
+        Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[0].AfterCursor);
+        Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[1].AfterCursor);
+        Assert.Equal(cursor, repository.HistoricalPaperFakFeeBackfillCalls[2].AfterCursor);
+        Assert.Equal(
+            [candidate.Fill.Id, candidate.Fill.Id],
+            feeService.Calls.Take(2).Select(call => call.Fill.Id).ToArray());
+    }
+
+    [Theory]
+    [InlineData(1, 0)]
+    [InlineData(0, 1)]
+    public async Task RunCycle_CompletedItemConflictAdvancesCursor(
+        int structuralConflicts,
+        int accountingConflicts)
+    {
+        var candidate = CreateCandidate("condition-conflict");
+        var cursor = new HistoricalPaperFakFeeBackfillCursor(
+            candidate.Order.StrategyId,
+            candidate.Fill.FilledAtUtc,
+            candidate.Order.Id,
+            candidate.Fill.Id);
+        var repository = new TestAppRepository
+        {
+            HistoricalPaperFakFeeBackfillApplyResult = new(
+                StructuralConflicts: structuralConflicts,
+                AccountingConflicts: accountingConflicts)
+        };
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([candidate], cursor, false));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([], null, true));
+        var feeService = new RecordingFeeAccountingService((_, fill, _) =>
+            Task.FromResult(fill with
+            {
+                FeeUsd = 0.01m,
+                FeeAccountingStatus = FeeAccountingStatus.Calculated.ToString(),
+                FeeCalculationSource = PolymarketFeeCalculationConstants.FeeCurveCalculationSource
+            }));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        var conflictCycle = await processor.RunCycleAsync();
+        var nextPageCycle = await processor.RunCycleAsync();
+
+        Assert.False(conflictCycle.ReachedEnd);
+        Assert.Equal(1, conflictCycle.ApplyResult?.ItemConflicts);
+        Assert.Equal(0, conflictCycle.ApplyResult?.Deferred);
+        Assert.False(conflictCycle.ApplyResult?.WholeBatchDeferred);
+        Assert.True(nextPageCycle.ReachedEnd);
+        Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillCalls.Count);
+        Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[0].AfterCursor);
+        Assert.Equal(cursor, repository.HistoricalPaperFakFeeBackfillCalls[1].AfterCursor);
     }
 
     [Fact]

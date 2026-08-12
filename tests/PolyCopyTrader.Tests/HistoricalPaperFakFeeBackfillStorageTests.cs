@@ -100,19 +100,96 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
     }
 
     [Fact]
-    public void ApplySql_UsesFillChainAndEnforcesAllFourDependentUpdates()
+    public void ApplySql_UsesExactFullAndRunOnlyShapesWithoutSyntheticAccounting()
     {
         var sql = PostgresAppRepository.HistoricalPaperFakFeeBackfillApplySql;
+        var fullChain = SliceSql(
+            sql,
+            "full_chain_structural AS MATERIALIZED (",
+            "run_only_legacy_structural AS MATERIALIZED (");
+        var runOnlyLegacy = SliceSql(
+            sql,
+            "run_only_legacy_structural AS MATERIALIZED (",
+            "structural_chain AS MATERIALIZED (");
+        var positionUpdates = SliceSql(
+            sql,
+            "position_updates AS (",
+            "settlement_updates AS (");
+        var settlementUpdates = sql[sql.IndexOf(
+            "settlement_updates AS (",
+            StringComparison.Ordinal)..];
 
         Assert.DoesNotContain("paper_order.notional_usd = run.stake_usd", sql, StringComparison.Ordinal);
         Assert.Contains("run.stake_usd = round(fill.price * fill.size_shares, 8)", sql, StringComparison.Ordinal);
-        Assert.Contains("settlement.cost_basis_usd = round(fill.price * fill.size_shares, 8)", sql, StringComparison.Ordinal);
+        Assert.Contains("settlement.cost_basis_usd = round(", fullChain, StringComparison.Ordinal);
+        Assert.Contains(
+            "run_chain.expected_fill_price * run_chain.expected_fill_size",
+            fullChain,
+            StringComparison.Ordinal);
         Assert.Contains("FROM requested sibling_request", sql, StringComparison.Ordinal);
         Assert.Contains("FROM public.paper_orders sibling_order", sql, StringComparison.Ordinal);
         Assert.Contains("actual_fill_fee = 0", sql, StringComparison.Ordinal);
         Assert.Contains("FROM fill_updates", sql, StringComparison.Ordinal);
         Assert.Contains("INNER JOIN fill_updates", sql, StringComparison.Ordinal);
+        Assert.Contains("'FullChain'::text AS chain_shape", fullChain, StringComparison.Ordinal);
+        Assert.Matches(
+            @"settlement\.settlement_source = 'BtcUpDown5mGammaClosedMarket'\s+AND settlement\.settled_at_utc = run_chain\.run_settled_at",
+            fullChain);
+        Assert.Matches(
+            @"settlement\.settlement_source = 'MarketWebSocket'\s+AND settlement\.settled_at_utc <= run_chain\.run_settled_at",
+            fullChain);
+        Assert.Contains("'RunOnlyLegacy'::text AS chain_shape", runOnlyLegacy, StringComparison.Ordinal);
+        Assert.Contains("NULL::uuid AS position_id", runOnlyLegacy, StringComparison.Ordinal);
+        Assert.Contains("NULL::uuid AS settlement_id", runOnlyLegacy, StringComparison.Ordinal);
+        Assert.Contains("run_chain.run_settlement_price IN (0, 1)", runOnlyLegacy, StringComparison.Ordinal);
+        Assert.Matches(
+            @"NOT EXISTS\s*\(\s*SELECT 1\s+FROM public\.paper_positions",
+            runOnlyLegacy);
+        Assert.Matches(
+            @"NOT EXISTS\s*\(\s*SELECT 1\s+FROM public\.paper_position_settlements",
+            runOnlyLegacy);
+        Assert.Contains("WHERE eligible.chain_shape = 'FullChain'", positionUpdates, StringComparison.Ordinal);
+        Assert.Contains("WHERE eligible.chain_shape = 'FullChain'", settlementUpdates, StringComparison.Ordinal);
+        Assert.Contains("AS structural_conflicts", sql, StringComparison.Ordinal);
+        Assert.Contains("AS accounting_conflicts", sql, StringComparison.Ordinal);
+        Assert.Contains("AS deferred_by_lock_timeout", sql, StringComparison.Ordinal);
+        Assert.Contains("AS deferred_by_query_cancel", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("INSERT INTO public.paper_positions", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("INSERT INTO public.paper_position_settlements", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotMatch(@"(?i)\bINSERT\s+INTO\b", sql);
+        Assert.DoesNotMatch(@"(?m)^\s*realized_pnl_usd\s*=", sql);
+        Assert.DoesNotContain("gross_realized_pnl_usd", sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("updated_at_utc =", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BatchResult_SeparatesItemConflictsFromWholeBatchDeferrals()
+    {
+        var completed = new HistoricalPaperFakFeeBackfillBatchResult(
+            Requested: 5,
+            StructuralConflicts: 2,
+            AccountingConflicts: 3);
+        var deferred = new HistoricalPaperFakFeeBackfillBatchResult(
+            Requested: 5,
+            DeferredByLockTimeout: 2,
+            DeferredByQueryCancel: 3);
+
+        Assert.Equal(5, completed.ItemConflicts);
+        Assert.Equal(0, completed.Deferred);
+        Assert.False(completed.WholeBatchDeferred);
+        Assert.Equal(0, deferred.ItemConflicts);
+        Assert.Equal(5, deferred.Deferred);
+        Assert.True(deferred.WholeBatchDeferred);
+    }
+
+    [Fact]
+    public void ApplyRepository_MapsLockAndQueryDeferralsToSeparateDiagnostics()
+    {
+        var source = ReadRepositorySource();
+
+        Assert.Contains("DeferredByLockTimeout: updates.Count", source, StringComparison.Ordinal);
+        Assert.Contains("DeferredByQueryCancel: updates.Count", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConflictsOrDeferred", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -276,5 +353,18 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
             "src",
             "PolyCopyTrader.Storage",
             "PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs"));
+    }
+
+    private static string SliceSql(string sql, string startMarker, string endMarker)
+    {
+        var start = sql.IndexOf(startMarker, StringComparison.Ordinal);
+        var end = sql.IndexOf(endMarker, start + startMarker.Length, StringComparison.Ordinal);
+        if (start < 0 || end < 0)
+        {
+            throw new InvalidOperationException(
+                $"Historical Paper FAK fee backfill SQL markers were not found: {startMarker}, {endMarker}.");
+        }
+
+        return sql[start..end];
     }
 }

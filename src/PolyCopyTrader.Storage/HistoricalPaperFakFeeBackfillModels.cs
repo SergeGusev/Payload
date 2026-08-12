@@ -27,11 +27,27 @@ public sealed record HistoricalPaperFakFeeBackfillUpdate(
     PaperFill EvaluatedFill);
 
 public sealed record HistoricalPaperFakFeeBackfillBatchResult(
-    int Requested,
-    int Eligible,
-    int FillsUpdated,
-    int RunsUpdated,
-    int PositionsUpdated,
-    int SettlementsUpdated,
-    int AlreadyApplied,
-    int ConflictsOrDeferred);
+    int Requested = 0,
+    int StructuralConflicts = 0,
+    int AccountingConflicts = 0,
+    int FullChainEligible = 0,
+    int RunOnlyLegacyEligible = 0,
+    int FillsUpdated = 0,
+    int RunsUpdated = 0,
+    int PositionsUpdated = 0,
+    int SettlementsUpdated = 0,
+    int FullChainAlreadyApplied = 0,
+    int RunOnlyLegacyAlreadyApplied = 0,
+    int DeferredByLockTimeout = 0,
+    int DeferredByQueryCancel = 0)
+{
+    public int Eligible => FullChainEligible + RunOnlyLegacyEligible;
+
+    public int AlreadyApplied => FullChainAlreadyApplied + RunOnlyLegacyAlreadyApplied;
+
+    public int ItemConflicts => StructuralConflicts + AccountingConflicts;
+
+    public int Deferred => DeferredByLockTimeout + DeferredByQueryCancel;
+
+    public bool WholeBatchDeferred => Deferred > 0;
+}

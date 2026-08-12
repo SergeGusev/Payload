@@ -309,13 +309,29 @@ cutoff. It uses the same current fee calculator as new fills, forces the proven
 `historical-current-paper-model-v1`. This is a calculation under the current
 Paper model, not a venue-reported historical fee.
 
-Backfill writes are small, atomic, conditional, and idempotent. They may update
-only fee/provenance and nullable net fields on an unchanged fill and its exact
-settled run, zero-size position, and settlement chain. Gross accounting and its
-timestamps remain unchanged. The worker yields to foreground persistence queues,
-does not persist transient market-info failures as zero fees, and reports
-dependency or concurrency mismatches as deferred conflicts. Reaching the end of
-a keyset sweep is not proof that every legacy row was successfully accounted.
+Backfill writes are small, atomic, conditional, and idempotent. Exactly two
+dependency shapes are accepted:
+
+- `FullChain` requires the unchanged exact fill/run/zero-size-position/settlement
+  chain. The settlement source/time is either exact
+  `BtcUpDown5mGammaClosedMarket` at the run settlement time or exact
+  `MarketWebSocket` at or before the run settlement time. All identity,
+  economic, uniqueness, and accounting guards remain mandatory; only fee,
+  provenance, and nullable net fields on fill, run, position, and settlement are
+  updated.
+- `RunOnlyLegacy` requires exactly one unchanged, settled, economically
+  self-consistent run and zero position and settlement rows. Only fill and run
+  fee/provenance/net fields are updated; missing rows are never synthesized.
+
+Gross accounting and timestamps remain unchanged. Item-level structural or
+accounting conflicts advance the cursor after completed SQL and leave those rows
+untouched for a later ranked sweep. A whole-batch advisory-lock timeout or query
+cancellation does not advance the cursor, so the same page is retried. The worker
+yields to foreground persistence queues and does not persist transient
+market-info failures as zero fees. Gross ordering, Gross/Net PnL and Net ROI
+formulas, the fixed cutoff, source allowlist, and candidate filters remain
+unchanged. Reaching the end of a keyset sweep is not proof that every legacy row
+was successfully accounted.
 
 Historical GTD, Maker, ambiguous, already-accounted, and every
 `paper_live_shadow_actual_fill` row are outside this worker. Current shadow

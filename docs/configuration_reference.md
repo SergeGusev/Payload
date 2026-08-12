@@ -73,6 +73,16 @@ cadence is approximately one batch every 30 seconds. Historical gross PnL
 remains unchanged; fee and nullable net PnL are stored separately with
 `historical-current-paper-model-v1` provenance.
 
+The conditional apply accepts exactly two dependency shapes. `FullChain`
+requires the unchanged exact fill/run/zero-size-position/settlement chain. Its
+settlement source/time must be either exact `BtcUpDown5mGammaClosedMarket` at
+the run settlement time or exact `MarketWebSocket` at or before the run
+settlement time; all identity, economic, uniqueness, and accounting guards
+remain required. This shape updates fill, run, position, and settlement.
+`RunOnlyLegacy` requires exactly one unchanged, settled, economically
+self-consistent run and no position or settlement rows. It updates only fill
+and run and never creates the absent rows.
+
 At each sweep start, the worker reads the materialized Dashboard lifetime Gross
 realized PnL for strategies that have historical FAK-source orders and freezes
 one stable ranking, highest first. Equal Gross values use strategy ID as the
@@ -86,6 +96,13 @@ does not change Gross PnL, Net PnL or Net ROI formulas, candidate filters, or th
 historical cutoff. Transient fee lookups and conditional-apply conflicts remain
 eligible for a later ranked sweep, while lower-ranked strategies continue in the
 current one.
+
+After completed SQL, item-level structural or accounting conflicts advance the
+page cursor and remain untouched for reconsideration in a later ranked sweep.
+A whole-batch advisory-lock timeout or query cancellation does not advance the
+cursor; the same page is retried. Gross ordering, Gross/Net PnL and Net ROI
+formulas, the historical cutoff, source allowlist, and candidate filters are
+unchanged.
 
 ## Polymarket
 
