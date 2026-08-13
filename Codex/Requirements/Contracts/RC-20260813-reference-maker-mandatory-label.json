@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260813-reference-maker-mandatory-label",
+  "title": "Restore the mandatory optimistic Paper label in Reference Average Maker-GTD decisions",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Разрешаю"
+    }
+  ],
+  "scope": {
+    "goal": "Restore the already-mandated optimistic TouchNoDepth Paper warning label in every newly persisted raw decision for the exact ETH Reference Average Maker-GTD family, without changing any signal or execution behavior.",
+    "inScope": [
+      "Define one canonical exact label value: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.",
+      "Persist that exact label in both the root raw decision and the nested maker_gtd evidence for newly created orders of the exact 28 ETH neutral Reference Average Maker-GTD PaperOnly strategies.",
+      "Extend the focused Maker-GTD regression to verify both persisted label locations while retaining the existing v5 incomplete-window signal assertions and maker_gtd_paper_v2 execution assertions."
+    ],
+    "outOfScope": [
+      "Changing Reference Average signal calculations, windows, thresholds, directions, selected outcomes, entry timing, stake sizing, order-book gates, risk gates, or diagnostics other than the mandatory label fields.",
+      "Changing Maker-GTD pricing, placement attempts, PostOnly/GTD semantics, expiration, fill inference, lifecycle, PaperOnly or Live flags, strategy IDs, strategy membership, or historical records.",
+      "Adding the optimistic label to any alias, clone, descendant, other Maker family, or non-exception strategy.",
+      "Deploying, restarting services, changing production configuration, or modifying production data."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Only future raw decisions created by the exact 28 ETH neutral Reference Average Maker-GTD PaperOnly strategy variants; no historical rewrite.",
+    "firstVerification": "Compare the current Maker-GTD raw-decision builder and focused test with the closed exception contract and the last known implementation that persisted the mandatory label."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Every newly created raw decision for the exact ETH Reference Average Maker-GTD closed exception must carry the exact mandatory optimistic Paper label at the decision root and inside its maker_gtd evidence.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Разрешаю",
+      "acceptanceCriteria": [
+        "The exact label is defined once and equals optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.",
+        "A newly placed exact-family Maker-GTD Paper order contains paper_model_label with that exact value at the root of RawDecisionJson.",
+        "The same order contains maker_gtd.paper_model_label with that exact value.",
+        "Both label fields are written only after MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant) returns true; no altered predicate, alias, clone, descendant, or other strategy family inherits them."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/ReferenceAverageMakerGtdPremarketStrategyTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~ProcessAsync_ReferenceAverageMakerGtdAcceptsIncompleteSignalWithoutChangingExecutionContract\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "The focused test passes and proves both exact mandatory label fields are persisted for the exact Maker-GTD order.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "The exact-family contract tests pass for all 28 unique group-8223 IDs/codes and reject variants with altered closed-exception predicates.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Restoring the mandatory label must not change Maker-GTD signal, pricing, placement, fill, lifecycle, PaperOnly, or Live-disabled behavior.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Разрешаю",
+      "acceptanceCriteria": [
+        "The existing maker_gtd_paper_v2 contract version, maximum-resting price, Pending order status, Resting run status, PaperOnly flag, and Live-disabled behavior remain unchanged in focused tests.",
+        "The production diff is limited to the canonical label constant and two diagnostic JSON fields; no execution or signal branch is modified.",
+        "The complete Reference Average focused test subset passes after the label restoration."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "All Reference Average processor tests pass, including the unchanged Maker-GTD execution-contract tests.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "Solution build completes with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the final diff against the exact closed-exception predicates and execution contract.",
+          "expected": "Only the canonical label and its two raw-decision fields are added; no signal or execution behavior changes.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "git diff --check",
+          "expected": "No whitespace errors.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260813-reference-maker-mandatory-label sha256:bfc4fdec2cf79feeba96b9884584a331160935805e7220463a78528d7f8bfd30",
+    "semanticDigest": "sha256:bfc4fdec2cf79feeba96b9884584a331160935805e7220463a78528d7f8bfd30"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reference-maker-label-reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
