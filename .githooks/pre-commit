@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+root="$(git rev-parse --show-toplevel)"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File \
+  "$root/scripts/requirements/Validate-RequirementContract.ps1" -Mode Staged

@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260813-project-requirement-gates",
+  "title": "Project-wide requirement fidelity checkpoints",
+  "author": "agent:/root",
+  "status": "completed",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Что нужно сделать, чтобы ты НИКОГДА не подменял мои требования на свои технические предпочтения?"
+    },
+    {
+      "source": "user",
+      "text": "Что нужно сделать для того, чтобы эти контрольные точки появились?"
+    },
+    {
+      "source": "user",
+      "text": "Внедряй контрольные точки. И так, чтобы они работали по всему проекту и в новых окнах, а не только в этом чате."
+    }
+  ],
+  "scope": {
+    "goal": "Implement durable, fail-closed checkpoints that expose and block unapproved substitutions of user requirements across the PolyCopyTrader repository and future Codex sessions.",
+    "inScope": [
+      "Root and Codex-subtree instructions loaded by future tasks",
+      "Verbatim machine-readable requirement contracts with assumption and deviation approval",
+      "PowerShell validation, regression tests, Codex hooks, Git hooks, and a trusted-base pull-request CI check",
+      "Traceability from each literal requirement to changed paths and passing evidence",
+      "Independent comparison of the original user prompts against the actual diff"
+    ],
+    "outOfScope": [
+      "Any production service, database, strategy, order, configuration, or deployment change",
+      "Correction or deployment of the separate Reference Average strategy implementation",
+      "GitHub branch-protection administration outside repository files",
+      "Changing the shared clone hooksPath while unrelated dirty worktrees remain active"
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Whole repository; future non-read-only tasks; no production time window",
+    "firstVerification": "Inspect root/subtree AGENTS, mandatory Workflow, existing QA, hooks, CI, and shared worktree state before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Repository changes must not replace a user's requirement with an agent's technical preference; assumptions and deviations must be exposed and approved before material edits.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "НИКОГДА не подменял мои требования на свои технические предпочтения",
+      "acceptanceCriteria": [
+        "A contract stores relevant user prompts verbatim and links each REQ item to an exact source quote.",
+        "Any assumption or deviation requires explicit user approval bound to the semantic digest.",
+        "Material edits require an approved parent-revision contract; changed governed files map to REQ items and passing verification.",
+        "A reviewer other than the author compares the verbatim request, contract, diff, and evidence before completion.",
+        "Negative tests demonstrate rejection of missing, stale, unapproved, unmapped, and self-reviewed contracts."
+      ],
+      "implementationPaths": [
+        ".gitattributes",
+        ".gitignore",
+        ".githooks/**",
+        ".github/workflows/**",
+        "AGENTS.md",
+        "Codex/AGENTS.md",
+        "Codex/ContextHistoryProtocol.md",
+        "Codex/Requirements/**",
+        "Codex/Rules/**",
+        "README.md",
+        "scripts/qa-check.ps1",
+        "scripts/requirements/**"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": ".\\scripts\\requirements\\Test-RequirementContractGate.ps1 -TempRoot <marked D:\\CodexTemp session test path>",
+          "expected": "All positive and negative validator lifecycle, approval, coverage, digest, and review cases pass.",
+          "result": "passed",
+          "evidence": "Windows PowerShell 5.1 validator regression harness passed 27/27, including approval lifecycle, staged/index isolation, commit-by-commit range validation, exact context exemptions, immutable completion, bootstrap controls, isolation of successful Git stderr warnings from parsed stdout, and successful in-process native exit-code reset."
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "git diff --check",
+          "expected": "No whitespace errors.",
+          "result": "passed",
+          "evidence": "git diff --check completed with no whitespace errors after the final implementation edits."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "The checkpoints must govern the whole PolyCopyTrader project, not a single strategy or file family.",
+      "sourceRequestIndexes": [2],
+      "sourceQuote": "по всему проекту",
+      "acceptanceCriteria": [
+        "All tracked paths except context/history journals and contract records themselves are governed.",
+        "Root instructions, QA, staged Git hooks, pre-push range validation, and pull-request CI all invoke the same policy.",
+        "Subtree instructions cannot weaken or bypass the root gate."
+      ],
+      "implementationPaths": [
+        ".gitattributes",
+        ".gitignore",
+        ".githooks/**",
+        ".github/workflows/**",
+        "AGENTS.md",
+        "Codex/AGENTS.md",
+        "Codex/ContextHistoryProtocol.md",
+        "Codex/Requirements/**",
+        "Codex/Rules/**",
+        "README.md",
+        "scripts/qa-check.ps1",
+        "scripts/requirements/**"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": ".\\scripts\\requirements\\Test-RequirementContractGate.ps1 -TempRoot <marked D:\\CodexTemp session test path>",
+          "expected": "Whole-repository path coverage and exemption tests pass.",
+          "result": "passed",
+          "evidence": "The 25/25 validator run proved arbitrary governed paths require coverage; only the active context, daily history descendants, and direct contract records are exempt."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "The checkpoints must persist into new Codex windows and not depend on this chat's memory.",
+      "sourceRequestIndexes": [2],
+      "sourceQuote": "в новых окнах, а не только в этом чате",
+      "acceptanceCriteria": [
+        "Root AGENTS automatically directs every new Codex session to the requirement gate.",
+        "Trusted project hooks inject the gate at session, prompt, and subagent starts and block ordinary mutation before exact approval.",
+        "Stop validation prevents normal completion with governed changes lacking completed evidence and independent review.",
+        "Documentation states the one-time Codex trust step and honestly identifies hook, local-Git, and branch-protection limitations."
+      ],
+      "implementationPaths": [
+        ".codex/**",
+        ".gitignore",
+        "AGENTS.md",
+        "Codex/AGENTS.md",
+        "Codex/Requirements/**",
+        "Codex/Rules/RequirementGate.md",
+        "Codex/Rules/Workflow.md",
+        "README.md",
+        "scripts/requirements/**"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": ".\\scripts\\requirements\\Test-CodexRequirementHooks.ps1 -TempRoot <marked D:\\CodexTemp session test path>",
+          "expected": "Hook tests prove draft-only mutation, exact approval unlock, invalid digest denial, subagent context injection, and stop behavior.",
+          "result": "passed",
+          "evidence": "Windows PowerShell 5.1 Codex hook harness passed 52/52, including new-session/subagent injection, exact approval capture, HEAD-bound activation, completed-contract non-reuse, shell/MCP bypass denial (including nested PowerShell expressions, ripgrep external-command/config paths, and Git cat-file filters), mapped edits, and Stop validation."
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Parse .codex/hooks.json and inspect official Codex AGENTS/config/hooks documentation.",
+          "expected": "Hook JSON is valid and event shapes/limitations match official documentation.",
+          "result": "passed",
+          "evidence": "hooks.json and all hook PowerShell files parsed successfully; project trust, exact hook-hash trust, new-session instruction reload, and guardrail limitations were checked against official OpenAI Codex documentation."
+        },
+        {
+          "id": "VER-006",
+          "kind": "test",
+          "command": ".\\scripts\\requirements\\Test-RequirementGitHooks.ps1 -TempRoot <marked D:\\CodexTemp session test path>",
+          "expected": "Git hook tests prove every pushed ref is validated, force pushes and missing bases fail closed, and installation refuses conflicting hooksPath configuration.",
+          "result": "passed",
+          "evidence": "Windows PowerShell 5.1 Git hook harness passed 31/31, covering multiple pushed refs, deletion, new-ref base, force/non-ancestor denial, malformed/empty stdin, installer idempotence, conflicting hooksPath refusal, and forced LF checkout semantics for both shell hooks."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "bootstrap-approved",
+    "approvedBy": "user",
+    "evidenceText": "Внедряй контрольные точки. И так, чтобы они работали по всему проекту и в новых окнах, а не только в этом чате.",
+    "semanticDigest": "sha256:ecd57cb6fafc638997ea89de43fb49259894d6ab388d367ceec03cb1c948c776"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/gate-final-review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
+    "findings": []
+  }
+}

@@ -53,6 +53,30 @@ Run the repeatable pre-live QA gate before any authenticated/live-trading work:
 
 Use `.\scripts\qa-check.ps1 -SkipRuntimeSmoke` when another service instance is already bound to the local IPC port.
 
+## Requirement Fidelity Gate
+
+Repository changes use a mandatory, fail-closed requirement contract. Before
+material edits, the agent records the user's words verbatim, literal `REQ-*`
+items, scope, assumptions, deviations, mapped files, and planned verification;
+the user approves it with exact `APPROVE <contract-id> <semantic-digest>` text.
+Before completion, a different reviewer compares the request and contract with
+the diff and passing evidence.
+
+The full contract is in
+[`Codex/Rules/RequirementGate.md`](Codex/Rules/RequirementGate.md). Local Git
+hooks can be enabled with:
+
+```powershell
+.\scripts\requirements\Install-RequirementGitHooks.ps1
+```
+
+Project Codex hooks apply to new tasks after the project and exact hook hash are
+trusted in Codex; an existing task must be restarted to rebuild its instruction
+chain. Central enforcement additionally requires the
+`requirement-contract` GitHub check to be required by default-branch protection.
+Preserve the approval and implementation commits when merging; a squash merge
+removes the mechanically checked approval-before-edit checkpoint.
+
 ## Operations Docs
 
 Operational documents live under `docs/`:

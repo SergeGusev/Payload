@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://polycopytrader.local/schemas/requirement-contract-v1.json",
+  "title": "PolyCopyTrader Requirement Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "contractId",
+    "title",
+    "author",
+    "status",
+    "originalRequests",
+    "scope",
+    "requirements",
+    "assumptions",
+    "deviations",
+    "approval",
+    "independentReview"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "contractId": { "type": "string", "pattern": "^RC-[0-9]{8}-[a-z0-9-]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "author": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["draft", "approved", "completed"] },
+    "originalRequests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "text"],
+        "properties": {
+          "source": { "const": "user" },
+          "text": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal", "inScope", "outOfScope", "mode", "periodOrFilter", "firstVerification"],
+      "properties": {
+        "goal": { "type": "string", "minLength": 1 },
+        "inScope": { "$ref": "#/$defs/nonEmptyStrings" },
+        "outOfScope": { "$ref": "#/$defs/nonEmptyStrings" },
+        "mode": { "enum": ["read-only", "local-edit", "mutation"] },
+        "periodOrFilter": { "type": "string", "minLength": 1 },
+        "firstVerification": { "type": "string", "minLength": 1 }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/requirement" }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/exception" }
+    },
+    "deviations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/exception" }
+    },
+    "approval": { "$ref": "#/$defs/approval" },
+    "independentReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewer", "comparedOriginalRequests", "verdict", "findings"],
+      "properties": {
+        "reviewer": { "type": "string", "minLength": 1 },
+        "comparedOriginalRequests": { "type": "boolean" },
+        "verdict": { "enum": ["pending", "pass", "fail"] },
+        "findings": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyStrings": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "approvedBy", "evidenceText", "semanticDigest"],
+      "properties": {
+        "status": { "enum": ["pending", "approved", "bootstrap-approved"] },
+        "approvedBy": { "const": "user" },
+        "evidenceText": { "type": "string", "minLength": 1 },
+        "semanticDigest": {
+          "type": "string",
+          "pattern": "^(pending|sha256:[0-9a-f]{64})$"
+        }
+      }
+    },
+    "exception": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "impact", "approval"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(ASM|DEV)-[0-9]{3}$" },
+        "text": { "type": "string", "minLength": 1 },
+        "impact": { "type": "string", "minLength": 1 },
+        "approval": { "$ref": "#/$defs/approval" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "command", "expected", "result", "evidence"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^VER-[0-9]{3}$" },
+        "kind": { "enum": ["test", "build", "inspection", "runtime"] },
+        "command": { "type": "string", "minLength": 1 },
+        "expected": { "type": "string", "minLength": 1 },
+        "result": { "enum": ["pending", "passed", "failed"] },
+        "evidence": { "type": "string" }
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "sourceRequestIndexes", "sourceQuote", "acceptanceCriteria", "implementationPaths", "verification"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^REQ-[0-9]{3}$" },
+        "text": { "type": "string", "minLength": 1 },
+        "sourceRequestIndexes": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 0 } },
+        "sourceQuote": { "type": "string", "minLength": 1 },
+        "acceptanceCriteria": { "$ref": "#/$defs/nonEmptyStrings" },
+        "implementationPaths": { "$ref": "#/$defs/nonEmptyStrings" },
+        "verification": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/verification" } }
+      }
+    }
+  }
+}

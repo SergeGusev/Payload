@@ -1,0 +1,69 @@
+name: requirement-contract
+
+# This workflow starts protecting pull requests only after this file first lands
+# on the default branch. It cannot centrally validate its own bootstrap merge.
+# Validation is commit-by-commit: do not squash an approval-only contract commit
+# together with its implementation. A squashed same-commit lifecycle is rejected.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: requirement-contract
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require a non-squash merge policy
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # Range validation proves that approval existed in a parent revision.
+          # GitHub squash merging would erase that boundary after this check, so
+          # fail closed until repository administrators disable squash merging.
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "User-Agent" = "PolyCopyTrader-requirement-gate"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $settings = Invoke-RestMethod `
+            -Headers $headers `
+            -Uri "https://api.github.com/repos/$env:REPOSITORY"
+          if ([bool]$settings.allow_squash_merge) {
+            throw "Disable 'Allow squash merging': it destroys the required approval parent revision."
+          }
+
+      - name: Check out trusted base history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch untrusted candidate without checking it out
+        shell: pwsh
+        run: |
+          git fetch --no-tags origin `
+            "+refs/pull/${{ github.event.pull_request.number }}/head:refs/remotes/origin/requirement-gate-candidate"
+          $resolved = (git rev-parse refs/remotes/origin/requirement-gate-candidate).Trim()
+          if ($resolved -cne "${{ github.event.pull_request.head.sha }}") {
+            throw "Fetched candidate $resolved does not match the pull-request head SHA."
+          }
+
+      - name: Validate the exact commit range
+        shell: pwsh
+        run: |
+          # The validator comes from the trusted base checkout. Candidate files
+          # are read only as Git objects and no candidate script is executed.
+          # Range mode enforces the approval parent-revision boundary and rejects
+          # a locally squashed contract-plus-implementation commit.
+          .\scripts\requirements\Validate-RequirementContract.ps1 `
+            -Mode Range `
+            -BaseRef "${{ github.event.pull_request.base.sha }}" `
+            -HeadRef "${{ github.event.pull_request.head.sha }}"

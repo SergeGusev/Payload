@@ -182,11 +182,18 @@ For every prompt other than `start`, Codex must not assume chat continuity. It m
 
 Required steps:
 
-1. Run project-required repository sync, if the project uses Git:
+1. Inspect project repository status and upstream divergence without changing
+   repository state:
 
 ```powershell
-git pull --ff-only
+git status --porcelain=v1
+git branch --show-current
+git rev-list --left-right --count 'HEAD...@{upstream}'
 ```
+
+Do not fetch, pull, merge, rebase, switch branches, or otherwise synchronize the
+repository until the current requirement contract has been approved. If there is
+no configured upstream, record that fact and continue the read-only inspection.
 
 2. Re-read:
 
@@ -423,9 +430,12 @@ For any prompt other than `start`, Codex operates in Task Execution Mode.
 
 ## 2.1 Working tree handling
 
-- Unexpected pre-existing changes in Git working tree MUST NOT stop execution.
-- Codex MUST continue in current working tree and include all current changes in the next commit by default.
-- Excluding files from commit is allowed only when user explicitly requests exclusions.
+- Unexpected pre-existing changes in Git working tree MUST NOT be reverted,
+  overwritten, staged, or committed as part of another task.
+- Codex MUST isolate its work when necessary and commit only files mapped by the
+  current approved requirement contract.
+- If safe isolation is impossible, Codex MUST stop before edits and report the
+  exact overlap to the user.
 
 ---
 
@@ -481,7 +491,9 @@ No task logic is allowed in this phase.
 
 For any prompt other than `start`, Codex MUST:
 
-- run `git pull --ff-only` if the project uses Git;
+- inspect `git status`, the current branch, and configured upstream divergence
+  without fetching, pulling, merging, rebasing, or switching branches before the
+  current requirement contract is approved;
 - re-read `Codex/Rules/Workflow.md`;
 - re-read `AGENTS.md`;
 - re-read project coding/task rules;

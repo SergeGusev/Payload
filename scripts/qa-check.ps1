@@ -9,6 +9,15 @@ Set-Location $root
 Write-Host "== PolyCopyTrader QA check =="
 Write-Host "Root: $root"
 
+Write-Host "== requirement contract =="
+$validator = Join-Path $root "scripts\requirements\Validate-RequirementContract.ps1"
+& powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+    -File $validator -Mode WorkingTree -AllowPendingEvidence
+$validatorExitCode = $LASTEXITCODE
+if ($validatorExitCode -ne 0) {
+    throw "Requirement contract validation failed with exit code $validatorExitCode."
+}
+
 Write-Host "== dotnet build =="
 dotnet build PolyCopyTrader.sln
 
