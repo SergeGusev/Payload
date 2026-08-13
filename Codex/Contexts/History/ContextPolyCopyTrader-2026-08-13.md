@@ -11,3 +11,10 @@ Request:
 
 Result:
 Confirmed through three independent production read-only audits that the historical Paper FAK fee/Net recalculation is actively progressing. Between `05:49:46.661Z` and `05:50:54.783Z`, three more cycles completed and 150 more fills/runs/positions/settlements were updated; journal and raw-table totals matched exactly at 44,949 fills and 44,949 runs. Gross ranks 1-15 were complete and rank 16/2233 (`sol_up_down_5m_21_child_progress`) was active with 1,629 exact candidates remaining. Service build `83942e09` was Running/Live with advancing heartbeat, no service error, and zero CycleFailed/query-cancel deferrals. At the preceding 44,799-row financial snapshot, all accounted runs had non-null Net, exact `Net = Gross - Fee`, and fee total `26597.56130000`; later count growth was independently confirmed. Lock-timeout batches were retried and followed by successful pages. No production or source state was changed.
+
+## 2026-08-13T05:54:38.2671742Z
+Request:
+Почему по стратегии ETH Up or Down 5m 2 bps Reference Average Premarket уже второй день нет ставок?
+
+Result:
+Diagnosed exact production strategy `b7c50005-0000-4000-8179-000000000102` read-only. The last Paper order was `2026-08-11T14:44:50.723550Z`. Every one of the 70 due cycles on August 13 through `05:49:30Z` was finalized with `reference_average_bps_denominator_24h_start_price_missing`, not a 2 bps threshold rejection. Raw ETH ticks reconstructed only 54 of the required 60 24-minute buckets because the prior 11-hour feed outage remains inside the rolling 24-hour window. Runtime, fresh ETH ticks, and the post-restart scheduler are healthy; neighboring neutral 1 bps and 3 bps strategies show the same gate. With uninterrupted ticks, the first potentially eligible evaluation is `2026-08-13T08:04:30Z` / `11:04:30 Europe/Sofia`; threshold, book, execution, and risk gates can still correctly skip it. Restarting would not help. No production or source state was changed.
