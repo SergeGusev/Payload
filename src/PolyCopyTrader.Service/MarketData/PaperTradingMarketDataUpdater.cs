@@ -17,8 +17,7 @@ public sealed class PaperTradingMarketDataUpdater(
     IAppRepository repository,
     IPolymarketFeeAccountingService? feeAccountingService = null,
     MarketDataWebSocketOptions? marketDataWebSocketOptions = null,
-    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
-    IMarketDataCache? marketDataCache = null) : IPaperTradingMarketDataUpdater
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IPaperTradingMarketDataUpdater
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const int MakerPositionCasMaximumAttempts = 3;
@@ -26,7 +25,6 @@ public sealed class PaperTradingMarketDataUpdater(
         Math.Max(1, (marketDataWebSocketOptions ?? new MarketDataWebSocketOptions()).StaleAfterSeconds));
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
         makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
-    private readonly IMarketDataCache? marketDataCache = marketDataCache;
     private readonly SemaphoreSlim sync = new(1, 1);
 
     public async Task ApplyUpdateAsync(
@@ -34,23 +32,6 @@ public sealed class PaperTradingMarketDataUpdater(
         DateTimeOffset? receivedAtUtc = null,
         IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
         CancellationToken cancellationToken = default)
-    {
-        await ApplyUpdateAsync(
-            update,
-            receivedAtUtc,
-            eligiblePaperOrderIds,
-            confirmedAssetSubscription: string.IsNullOrWhiteSpace(update.AssetId)
-                ? null
-                : marketDataCache?.GetConfirmedAssetSubscription(update.AssetId),
-            cancellationToken);
-    }
-
-    public async Task ApplyUpdateAsync(
-        MarketDataUpdate update,
-        DateTimeOffset? receivedAtUtc,
-        IReadOnlySet<Guid>? eligiblePaperOrderIds,
-        ConfirmedAssetSubscriptionSnapshot? confirmedAssetSubscription,
-        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(update.AssetId))
         {
@@ -125,7 +106,6 @@ public sealed class PaperTradingMarketDataUpdater(
                         order,
                         update,
                         receivedAtUtc,
-                        confirmedAssetSubscription,
                         positions,
                         cancellationToken);
                     pendingMakerOrderIds.Remove(order.Id);
@@ -269,12 +249,6 @@ public sealed class PaperTradingMarketDataUpdater(
         }
         catch (Exception ex)
         {
-            if (confirmedAssetSubscription is not null)
-            {
-                marketDataCache?.TryInvalidateAssetSubscription(
-                    confirmedAssetSubscription);
-            }
-
             RecordMakerGtdMarketDataFailure(
                 pendingMakerOrderIds ?? eligiblePaperOrderIds,
                 update,
@@ -323,7 +297,6 @@ public sealed class PaperTradingMarketDataUpdater(
         PaperOrder order,
         MarketDataUpdate update,
         DateTimeOffset? receivedAtUtc,
-        ConfirmedAssetSubscriptionSnapshot? confirmedAssetSubscription,
         List<PaperPosition> positions,
         CancellationToken cancellationToken)
     {
@@ -340,40 +313,8 @@ public sealed class PaperTradingMarketDataUpdater(
             return;
         }
 
-        var eventReceivedAtUtc = receivedAtUtc ?? update.ReceivedAtUtc;
-        var pairedOrder = string.Equals(
-                order.ExecutionSource,
-                MakerGtdPaperExecutionSources.PairedFirstAccepting,
-                StringComparison.Ordinal);
-        MakerGtdPaperContinuityEvaluation? pairedContinuity = null;
-        if (pairedOrder)
-        {
-            if (marketDataCache is null ||
-                eventReceivedAtUtc is not { } pairedEventReceivedAtUtc ||
-                update.SourceTimestampUtc is not { } pairedSourceTimestampUtc ||
-                string.IsNullOrWhiteSpace(update.EventFingerprint) ||
-                confirmedAssetSubscription is null)
-            {
-                return;
-            }
-
-            pairedContinuity = MakerGtdPaperContinuityEvaluator.Evaluate(
-                order,
-                marketDataCache.Status,
-                marketDataCache.SubscribedAssetIds,
-                marketDataCache.GetConfirmedAssetSubscription(order.AssetId),
-                new MakerGtdPaperObservationSegmentEvent(
-                    confirmedAssetSubscription,
-                    pairedEventReceivedAtUtc,
-                    pairedSourceTimestampUtc,
-                    update.EventFingerprint));
-            if (!pairedContinuity.Continuous)
-            {
-                return;
-            }
-        }
-
         var processedAtUtc = DateTimeOffset.UtcNow;
+        var eventReceivedAtUtc = receivedAtUtc ?? update.ReceivedAtUtc;
         if (!update.HasAuthoritativeSourceTimestamp ||
             update.SourceTimestampUtc is not { } sourceTimestampUtc ||
             eventReceivedAtUtc is not { } receiptTimestampUtc ||
@@ -389,11 +330,6 @@ public sealed class PaperTradingMarketDataUpdater(
         var sourceAge = receiptTimestampUtc - sourceTimestampUtc;
         if (sourceAge < TimeSpan.Zero)
         {
-            if (pairedOrder)
-            {
-                return;
-            }
-
             sourceAge = TimeSpan.Zero;
         }
 
@@ -435,7 +371,6 @@ public sealed class PaperTradingMarketDataUpdater(
             .ToArray();
         if (matchingRuns.Length != 1)
         {
-            InvalidatePairedObservationSegment(pairedOrder, confirmedAssetSubscription);
             RecordMakerGtdMarketDataFailure(
                 order.Id,
                 update,
@@ -467,35 +402,7 @@ public sealed class PaperTradingMarketDataUpdater(
                 received_at_utc = receiptTimestampUtc,
                 processed_at_utc = processedAtUtc,
                 source_event_id = update.SourceEventId,
-                event_fingerprint = update.EventFingerprint,
-                paired_gap_recovery = pairedOrder
-                    ? new
-                    {
-                        lifecycle_policy_version =
-                            PairedMakerGtdPaperExecutionContract.GapRecoveryLifecyclePolicyVersion,
-                        audit_qualifier =
-                            PairedMakerGtdPaperExecutionContract.GapRecoveryAuditQualifier,
-                        no_backfill = true,
-                        continuity_detail = pairedContinuity?.Detail,
-                        accepted_session_id = orderEvidence.AcceptedMarketDataStatus
-                            .AssetSubscriptionSessionId,
-                        accepted_component = orderEvidence.AcceptedMarketDataStatus
-                            .AssetSubscriptionComponent,
-                        accepted_generation = orderEvidence.AcceptedMarketDataStatus
-                            .AssetSubscriptionGeneration,
-                        trigger_session_id = confirmedAssetSubscription?.SessionId,
-                        trigger_component = confirmedAssetSubscription?.Component,
-                        trigger_generation = confirmedAssetSubscription?.Generation,
-                        recovery_fence_received_at_utc = confirmedAssetSubscription?.ConfirmedAtUtc,
-                        recovery_fence_source_timestamp_utc = confirmedAssetSubscription?
-                            .ConfirmationSourceTimestampUtc,
-                        recovery_fence_event_fingerprint = confirmedAssetSubscription?
-                            .ConfirmationEventFingerprint,
-                        trigger_received_at_utc = receiptTimestampUtc,
-                        trigger_source_timestamp_utc = sourceTimestampUtc,
-                        trigger_event_fingerprint = update.EventFingerprint
-                    }
-                    : null
+                event_fingerprint = update.EventFingerprint
             }),
             FeeLiquidityRole: FeeLiquidityRole.Maker.ToString());
         if (feeAccountingService is not null)
@@ -556,7 +463,7 @@ public sealed class PaperTradingMarketDataUpdater(
                 positionUpdatedAtUtc);
             mutation = await repository.TryApplyMakerGtdPaperFullFillAsync(
                 new MakerGtdPaperFullFillRequest(
-                    order.ExecutionSource,
+                    MakerGtdPaperExecutionContract.ExecutionSource,
                     filledOrder,
                     fill,
                     expectedPosition,
@@ -579,7 +486,6 @@ public sealed class PaperTradingMarketDataUpdater(
 
         if (mutation.Outcome == MakerGtdPaperMutationOutcome.NotEligible)
         {
-            InvalidatePairedObservationSegment(pairedOrder, confirmedAssetSubscription);
             RecordMakerGtdMarketDataFailure(
                 order.Id,
                 update,
@@ -605,16 +511,6 @@ public sealed class PaperTradingMarketDataUpdater(
             exposureCache.ApplyPaperPosition(persistedPosition);
             RemovePosition(positions, persistedPosition);
             positions.Add(persistedPosition);
-        }
-    }
-
-    private void InvalidatePairedObservationSegment(
-        bool pairedOrder,
-        ConfirmedAssetSubscriptionSnapshot? confirmedAssetSubscription)
-    {
-        if (pairedOrder && confirmedAssetSubscription is not null)
-        {
-            marketDataCache?.TryInvalidateAssetSubscription(confirmedAssetSubscription);
         }
     }
 

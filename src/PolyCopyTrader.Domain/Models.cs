@@ -1261,11 +1261,6 @@ public static class StrategyIds
 {
     public const decimal LowerEnterMaximumOrderPrice = 0.50m;
     public const decimal ReferenceAverageMakerGtdMaximumOrderPrice = 0.99m;
-    public const decimal PairedMakerGtdUpMaximumOrderPrice = 0.50m;
-    public const decimal PairedMakerGtdDownMaximumOrderPrice = 0.49m;
-    public const int PairedMakerGtdNominalEntryDelaySeconds = -86_400;
-    public const string OptimisticTouchNoDepthPaperLabel =
-        "optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills";
     public const string FollowLeaderIdValue = "f0110a0d-1ead-4c00-8b01-000000000001";
     public const string FollowLeaderCode = "follow_leader";
     public const string FollowLeaderName = "Follow leader";
@@ -1322,14 +1317,11 @@ public static class StrategyIds
         CreateLowerEnterPremarketVariants(BtcUpDown5mVariants);
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> CryptoUpDown5mVariants =
         CreateCryptoUpDown5mVariants();
-    public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> PairedMakerGtdFirstAcceptingVariants =
-        CreatePairedMakerGtdFirstAcceptingVariants();
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> UpDown5mStrategyVariants =
         [
             .. BtcUpDown5mVariants,
             .. BtcLowerEnterPremarketVariants,
-            .. CryptoUpDown5mVariants,
-            .. PairedMakerGtdFirstAcceptingVariants
+            .. CryptoUpDown5mVariants
         ];
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> DateDependentStrategyVariants =
         CreateDateDependentStrategyVariants();
@@ -1856,69 +1848,6 @@ public static class StrategyIds
         }
 
         return ExcludeRetiredProgressVariants(variants);
-    }
-
-    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreatePairedMakerGtdFirstAcceptingVariants()
-    {
-        const int idGroup = 8224;
-        (string Asset, int UpSuffix, int DownSuffix)[] pairs =
-        [
-            ("BTC", 101, 102),
-            ("ETH", 201, 202),
-            ("SOL", 301, 302)
-        ];
-        var variants = new List<BtcUpDown5mStrategyVariant>(pairs.Length * 2);
-
-        foreach (var pair in pairs)
-        {
-            var upId = Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{pair.UpSuffix:000000000000}");
-            var downId = Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{pair.DownSuffix:000000000000}");
-            variants.Add(CreatePairedMakerGtdFirstAcceptingVariant(
-                pair.Asset,
-                BtcUpDownFixedOutcome.Up,
-                upId,
-                downId,
-                PairedMakerGtdUpMaximumOrderPrice));
-            variants.Add(CreatePairedMakerGtdFirstAcceptingVariant(
-                pair.Asset,
-                BtcUpDownFixedOutcome.Down,
-                downId,
-                upId,
-                PairedMakerGtdDownMaximumOrderPrice));
-        }
-
-        return variants;
-    }
-
-    private static BtcUpDown5mStrategyVariant CreatePairedMakerGtdFirstAcceptingVariant(
-        string assetSymbol,
-        BtcUpDownFixedOutcome outcome,
-        Guid id,
-        Guid pairedStrategyId,
-        decimal maximumOrderPrice)
-    {
-        var normalizedAsset = assetSymbol.ToUpperInvariant();
-        var assetCode = normalizedAsset.ToLowerInvariant();
-        var outcomeName = outcome.ToString();
-        var outcomeCode = outcomeName.ToLowerInvariant();
-        var pairedOutcomeName = outcome == BtcUpDownFixedOutcome.Up ? "Down" : "Up";
-        var capText = maximumOrderPrice.ToString("0.00", CultureInfo.InvariantCulture);
-
-        return new BtcUpDown5mStrategyVariant(
-            id,
-            $"{assetCode}_up_down_5m_{outcomeCode}_paired_maker_gtd_first_accepting",
-            $"{normalizedAsset} Up or Down 5m {outcomeName} Paired Maker GTD First Accepting",
-            $"Paper-only {outcomeName} leg of the {normalizedAsset} 5m equal-share paired Maker GTD strategy. At the first observed market snapshot with acceptingOrders=true, nominally one day before market start, submit one PostOnly GTD BUY using the maximum-resting formula floor_to_tick(min(bestAsk - tick, cap)), capped at {capText}. It is paired with the {pairedOutcomeName} leg, and both independently accepted legs use the same requested share quantity; submission is not atomic and there is no rollback. New v4 placements preserve the bounded ordered direct HTTP request/client-receipt/response/evaluation S0/S1 freshness proof; the authoritative venue snapshot timestamp remains audit evidence and may be old on an unchanged quiet book. Exact v1/v2/v3 persisted orders retain their recorded lifetime. A newly accepted resting order has its effective Paper expiry at market end and its frozen CLOB GTD expiration exactly 60 seconds later. Under paired_touch_no_depth_gap_recovery_v1, restart, reconnect, reassignment, or delivery failure creates a new exact-asset fence: the confirming frame cannot fill, only a later authoritative event in that unchanged segment may fill, and gap/cache/REST/pre-fence events are never backfilled. The optimistic TouchNoDepth Paper model fills the complete leg at its frozen limit on eligible exact-token last_trade_price or current best ask at or below that limit; queue position, depth, and observed size are ignored. By explicit user approval, this exact six-leg family contributes to ordinary Paper orders, PnL, win rate, and performance. Every result must be labeled {OptimisticTouchNoDepthPaperLabel}. Maker rebates are not modeled and are not included in Paper PnL. Live submission is disabled.",
-            BtcUpDown5mStrategyDirection.Dynamic,
-            PairedMakerGtdNominalEntryDelaySeconds,
-            BtcUpDown5mStrategyBehavior.PairedFixedOutcomeMakerGtdFirstAccepting,
-            FixedOutcome: outcome,
-            Category: $"{normalizedAsset} Up/Down 5m Paired Maker GTD First Accepting",
-            ReferenceAssetSymbol: normalizedAsset,
-            PaperOnly: true,
-            MakerMaximumOrderPrice: maximumOrderPrice,
-            EntryTiming: BtcUpDown5mStrategyEntryTiming.FirstAcceptingOrders,
-            PairedStrategyId: pairedStrategyId);
     }
 
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateLowerEnterPremarketVariants(
@@ -3632,24 +3561,6 @@ public enum BtcUpDownPreOpenLifetimeMode
     FullPeriod
 }
 
-public static class MakerGtdPaperExecutionSources
-{
-    public const string ReferenceAverage = "eth_reference_average_maker_gtd_paper";
-    public const string PairedFirstAccepting = "crypto_paired_maker_gtd_first_accepting_paper";
-
-    public static bool IsSupported(string? executionSource)
-    {
-        return string.Equals(executionSource, ReferenceAverage, StringComparison.Ordinal) ||
-            string.Equals(executionSource, PairedFirstAccepting, StringComparison.Ordinal);
-    }
-}
-
-public enum BtcUpDown5mStrategyEntryTiming
-{
-    MarketStartOffset,
-    FirstAcceptingOrders
-}
-
 public enum BtcUpDownFixedOutcome
 {
     Up,
@@ -3721,8 +3632,7 @@ public enum BtcUpDown5mStrategyBehavior
     LowEnterReferenceAverageBpsThresholdFakPremarket,
     ThreeHourReferenceAverageBpsThresholdFakPremarket,
     ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket,
-    ReferenceAverageBpsThresholdMakerGtdPremarket,
-    PairedFixedOutcomeMakerGtdFirstAccepting
+    ReferenceAverageBpsThresholdMakerGtdPremarket
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
@@ -3750,9 +3660,7 @@ public sealed record BtcUpDown5mStrategyVariant(
     bool PaperOnly = false,
     decimal? FakMaximumOrderPrice = null,
     Guid? LowerEnterSourceStrategyId = null,
-    decimal? MakerMaximumOrderPrice = null,
-    BtcUpDown5mStrategyEntryTiming EntryTiming = BtcUpDown5mStrategyEntryTiming.MarketStartOffset,
-    Guid? PairedStrategyId = null)
+    decimal? MakerMaximumOrderPrice = null)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }
@@ -4411,8 +4319,7 @@ public sealed record MarketDataStatusSnapshot(
     int ReconnectCount,
     bool Stale,
     string? LastError,
-    DateTimeOffset UpdatedAtUtc,
-    long ContinuityGeneration = 0);
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record PinnedMarketAsset(
     string AssetId,

@@ -40,19 +40,6 @@ public interface IMarketDataSideEffectQueue
         DateTimeOffset receivedAtUtc,
         IReadOnlySet<Guid>? eligiblePaperOrderIds);
 
-    MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
-        string component,
-        MarketDataUpdate update,
-        ActiveMarketAssetSnapshot? activeMarketSnapshot,
-        DateTimeOffset receivedAtUtc,
-        IReadOnlySet<Guid>? eligiblePaperOrderIds,
-        ConfirmedAssetSubscriptionSnapshot? confirmedAssetSubscription) => EnqueueUpdate(
-            component,
-            update,
-            activeMarketSnapshot,
-            receivedAtUtc,
-            eligiblePaperOrderIds);
-
     MarketDataSideEffectEnqueueOutcome EnqueueFrameDiagnostic(
         MarketWebSocketFrameDiagnostic diagnostic,
         bool important);
@@ -77,8 +64,7 @@ public sealed class MarketDataSideEffectQueue(
     MarketDataWebSocketOptions options,
     IMarketDataSideEffectHandler handler,
     IAppRepository repository,
-    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
-    IMarketDataCache? marketDataCache = null) : IHostedService, IMarketDataSideEffectQueue
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IHostedService, IMarketDataSideEffectQueue
 {
     private const string ComponentName = "MarketDataSideEffectQueue";
     private static readonly IReadOnlySet<Guid> EmptyPaperOrderIds = new HashSet<Guid>();
@@ -207,23 +193,6 @@ public sealed class MarketDataSideEffectQueue(
         DateTimeOffset receivedAtUtc,
         IReadOnlySet<Guid>? eligiblePaperOrderIds)
     {
-        return EnqueueUpdate(
-            component,
-            update,
-            activeMarketSnapshot,
-            receivedAtUtc,
-            eligiblePaperOrderIds,
-            confirmedAssetSubscription: null);
-    }
-
-    public MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
-        string component,
-        MarketDataUpdate update,
-        ActiveMarketAssetSnapshot? activeMarketSnapshot,
-        DateTimeOffset receivedAtUtc,
-        IReadOnlySet<Guid>? eligiblePaperOrderIds,
-        ConfirmedAssetSubscriptionSnapshot? confirmedAssetSubscription)
-    {
         var replaceable = IsReplaceable(update, eligiblePaperOrderIds);
         var workItem = new MarketDataSideEffectWorkItem(
             component,
@@ -232,8 +201,7 @@ public sealed class MarketDataSideEffectQueue(
             receivedAtUtc,
             DateTimeOffset.UtcNow,
             eligiblePaperOrderIds is { Count: 0 } ? EmptyPaperOrderIds : eligiblePaperOrderIds,
-            replaceable,
-            confirmedAssetSubscription);
+            replaceable);
         var assetKey = GetAssetKey(component, update);
         var shouldSignal = false;
         MarketDataSideEffectEnqueueOutcome outcome;
@@ -580,11 +548,6 @@ public sealed class MarketDataSideEffectQueue(
         catch (Exception ex)
         {
             Interlocked.Increment(ref failedUpdates);
-            if (workItem.ConfirmedAssetSubscription is { } failedSubscription)
-            {
-                marketDataCache?.TryInvalidateAssetSubscription(failedSubscription);
-            }
-
             RecordMakerGtdMarketDataFailure(workItem);
             var phase = ex is MarketDataSideEffectPhaseException phaseException
                 ? phaseException.Phase

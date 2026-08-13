@@ -1328,66 +1328,6 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
-WITH legs(asset_symbol, outcome_name, outcome_code, id_suffix, paired_outcome_name, maximum_order_price) AS (
-    VALUES
-        ('BTC', 'Up',   'up',   101, 'Down', '0.50'),
-        ('BTC', 'Down', 'down', 102, 'Up',   '0.49'),
-        ('ETH', 'Up',   'up',   201, 'Down', '0.50'),
-        ('ETH', 'Down', 'down', 202, 'Up',   '0.49'),
-        ('SOL', 'Up',   'up',   301, 'Down', '0.50'),
-        ('SOL', 'Down', 'down', 302, 'Up',   '0.49')
-)
-SELECT
-    ('b7c50005-0000-4000-8224-' || lpad(id_suffix::text, 12, '0'))::uuid,
-    lower(asset_symbol) || '_up_down_5m_' || outcome_code || '_paired_maker_gtd_first_accepting',
-    asset_symbol || ' Up or Down 5m ' || outcome_name || ' Paired Maker GTD First Accepting',
-    'Paper-only ' || outcome_name || ' leg of the ' || asset_symbol || ' 5m equal-share paired Maker GTD strategy. At the first observed market snapshot with acceptingOrders=true, nominally one day before market start, submit one PostOnly GTD BUY using the maximum-resting formula floor_to_tick(min(bestAsk - tick, cap)), capped at ' || maximum_order_price || '. It is paired with the ' || paired_outcome_name || ' leg, and both independently accepted legs use the same requested share quantity; submission is not atomic and there is no rollback. New v4 placements preserve the bounded ordered direct HTTP request/client-receipt/response/evaluation S0/S1 freshness proof; the authoritative venue snapshot timestamp remains audit evidence and may be old on an unchanged quiet book. Exact v1/v2/v3 persisted orders retain their recorded lifetime. A newly accepted resting order has its effective Paper expiry at market end and its frozen CLOB GTD expiration exactly 60 seconds later. Under paired_touch_no_depth_gap_recovery_v1, restart, reconnect, reassignment, or delivery failure creates a new exact-asset fence: the confirming frame cannot fill, only a later authoritative event in that unchanged segment may fill, and gap/cache/REST/pre-fence events are never backfilled. The optimistic TouchNoDepth Paper model fills the complete leg at its frozen limit on eligible exact-token last_trade_price or current best ask at or below that limit; queue position, depth, and observed size are ignored. By explicit user approval, this exact six-leg family contributes to ordinary Paper orders, PnL, win rate, and performance. Every result must be labeled optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. Maker rebates are not modeled and are not included in Paper PnL. Live submission is disabled.',
-    true,
-    false,
-    1.00,
-    1.00,
-    100.00,
-    false,
-    NULL,
-    false,
-    NULL,
-    NULL,
-    NULL,
-    1.00,
-    1.00,
-    0,
-    0,
-    now(),
-    now()
-FROM legs
-ON CONFLICT (id) DO UPDATE SET
-    code = excluded.code,
-    name = excluded.name,
-    description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
-
-INSERT INTO strategies (
-    id,
-    code,
-    name,
-    description,
-    enabled,
-    live_stakes,
-    paper_stake_amount,
-    live_stake_amount,
-    live_available_balance,
-    paused,
-    paused_until_utc,
-    auto_live_paused,
-    auto_live_paused_at_utc,
-    auto_live_pause_window_start_utc,
-    live_enabled_at_utc,
-    paper_lost_coeff,
-    live_lost_coeff,
-    paper_lost_counter,
-    live_lost_counter,
-    created_at_utc,
-    updated_at_utc)
 WITH assets(asset_symbol, id_group) AS (
     VALUES
         ('BTC', '8213'),
@@ -8030,6 +7970,1894 @@ BEGIN
             ';deleted_strategies=' || deleted_strategies::text
         );
     END IF;
+END $$;
+
+DO $$
+DECLARE
+    migration_key_value text := '20260813_remove_paired_maker_gtd_first_accepting_strategies';
+    allowlist_count integer := 0;
+    target_strategy_count integer := 0;
+    collected_paper_orders integer := 0;
+    collected_paper_fills integer := 0;
+    collected_live_orders integer := 0;
+    collected_strategy_runs integer := 0;
+    collected_signals integer := 0;
+    collected_positions integer := 0;
+    collected_settlements integer := 0;
+    active_live_orders integer := 0;
+    deleted_paper_orders integer := 0;
+    deleted_paper_fills integer := 0;
+    deleted_live_orders integer := 0;
+    deleted_strategy_runs integer := 0;
+    deleted_signals integer := 0;
+    deleted_positions integer := 0;
+    deleted_settlements integer := 0;
+    deleted_api_errors integer := 0;
+    deleted_projection_rows integer := 0;
+    deleted_performance_rows integer := 0;
+    deleted_related_rows integer := 0;
+    deleted_strategies integer := 0;
+    affected_rows integer := 0;
+    legacy_residual boolean := false;
+BEGIN
+    -- Always revalidate even when the marker exists: an older binary can
+    -- reseed this retired family after the first cleanup.
+        PERFORM set_config('lock_timeout', '2s', true);
+        PERFORM set_config('statement_timeout', '5min', true);
+
+        LOCK TABLE
+            schema_data_migrations,
+            strategies,
+            paper_orders,
+            paper_fills,
+            live_orders,
+            strategy_market_paper_runs,
+            signals,
+            signal_rejections,
+            paper_positions,
+            paper_position_settlements,
+            paper_live_shadow_decisions,
+            paper_live_shadow_discrepancies,
+            polymarket_onchain_paper_signal_results,
+            dry_run_orders,
+            date_dependent_strategy_hourly_paper_pnl,
+            crypto_up_down_5m_diff_shift_progress_states,
+            api_errors,
+            paper_copied_leader_activity_events,
+            paper_copied_leader_positions,
+            paper_copied_trader_performance,
+            dashboard_strategy_performance_snapshots,
+            dashboard_strategy_recent_performance_snapshots
+        IN SHARE ROW EXCLUSIVE MODE NOWAIT;
+
+        IF to_regclass('public.strategy_child_parent_assignments') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.strategy_child_parent_assignments IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.strategy_live_retention_guards') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.strategy_live_retention_guards IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.strategy_paper_skip_rollups') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.strategy_paper_skip_rollups IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.strategy_market_paper_skip_tombstones') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.strategy_market_paper_skip_tombstones IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.paper_fak_fee_backfill_events') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.paper_fak_fee_backfill_events IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+
+        IF to_regclass('public.dashboard_projection_events') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.dashboard_projection_events IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.dashboard_projection_reconciliation_queue') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.dashboard_projection_reconciliation_queue IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.dashboard_projection_control') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.dashboard_projection_control IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.dashboard_strategy_lifetime_projection_states') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.dashboard_strategy_lifetime_projection_states IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.dashboard_strategy_recent_projection_states') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.dashboard_strategy_recent_projection_states IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.dashboard_strategy_recent_projection_facts') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.dashboard_strategy_recent_projection_facts IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.dashboard_strategy_position_projection_facts') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.dashboard_strategy_position_projection_facts IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+
+        IF to_regclass('public.paper_copied_trader_performance_refresh_queue') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.paper_copied_trader_performance_refresh_queue IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.paper_copied_trader_performance_refresh_inflight') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.paper_copied_trader_performance_refresh_inflight IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.paper_copied_trader_performance_projection_control') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.paper_copied_trader_performance_projection_control IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+
+        IF to_regclass('public.maintenance_live_paper_restore_20260704') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.maintenance_live_paper_restore_20260704 IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+        IF to_regclass('public.maintenance_paper_shadow_live_sync_20260705') IS NOT NULL THEN
+            EXECUTE 'LOCK TABLE public.maintenance_paper_shadow_live_sync_20260705 IN SHARE ROW EXCLUSIVE MODE NOWAIT';
+        END IF;
+
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_allowlist;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_targets;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_wallets;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_paper_orders;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_paper_fills;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_live_orders;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_runs;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_signals;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_positions;
+        DROP TABLE IF EXISTS tmp_paired_maker_gtd_settlements;
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_allowlist (
+            id uuid PRIMARY KEY,
+            code text UNIQUE NOT NULL,
+            paired_id uuid NOT NULL
+        ) ON COMMIT DROP;
+
+        INSERT INTO tmp_paired_maker_gtd_allowlist (id, code, paired_id)
+        VALUES
+            ('b7c50005-0000-4000-8224-000000000101'::uuid, 'btc_up_down_5m_up_paired_maker_gtd_first_accepting',   'b7c50005-0000-4000-8224-000000000102'::uuid),
+            ('b7c50005-0000-4000-8224-000000000102'::uuid, 'btc_up_down_5m_down_paired_maker_gtd_first_accepting', 'b7c50005-0000-4000-8224-000000000101'::uuid),
+            ('b7c50005-0000-4000-8224-000000000201'::uuid, 'eth_up_down_5m_up_paired_maker_gtd_first_accepting',   'b7c50005-0000-4000-8224-000000000202'::uuid),
+            ('b7c50005-0000-4000-8224-000000000202'::uuid, 'eth_up_down_5m_down_paired_maker_gtd_first_accepting', 'b7c50005-0000-4000-8224-000000000201'::uuid),
+            ('b7c50005-0000-4000-8224-000000000301'::uuid, 'sol_up_down_5m_up_paired_maker_gtd_first_accepting',   'b7c50005-0000-4000-8224-000000000302'::uuid),
+            ('b7c50005-0000-4000-8224-000000000302'::uuid, 'sol_up_down_5m_down_paired_maker_gtd_first_accepting', 'b7c50005-0000-4000-8224-000000000301'::uuid);
+
+        SELECT count(*)::integer
+        INTO allowlist_count
+        FROM tmp_paired_maker_gtd_allowlist;
+
+        IF allowlist_count <> 6 THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because the allowlist contains % rows instead of 6.',
+                allowlist_count;
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM strategies strategy
+            JOIN tmp_paired_maker_gtd_allowlist target
+                ON strategy.id = target.id OR strategy.code = target.code
+            WHERE strategy.id <> target.id OR strategy.code <> target.code
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because a strategy id/code collision was found.';
+        END IF;
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_targets ON COMMIT DROP AS
+        SELECT strategy.id, strategy.code
+        FROM strategies strategy
+        JOIN tmp_paired_maker_gtd_allowlist target
+            ON strategy.id = target.id AND strategy.code = target.code;
+
+        SELECT count(*)::integer
+        INTO target_strategy_count
+        FROM tmp_paired_maker_gtd_targets;
+
+        IF target_strategy_count NOT IN (0, 6) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because % exact strategies were found; only 0 or 6 is valid.',
+                target_strategy_count;
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM strategies strategy
+            JOIN tmp_paired_maker_gtd_targets target
+                ON strategy.id = target.id AND strategy.code = target.code
+            WHERE strategy.enabled
+               OR NOT strategy.paused
+               OR strategy.live_stakes
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because all six strategies must already have enabled=false, paused=true, live_stakes=false.';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM strategies strategy
+            WHERE (
+                    lower(strategy.code) LIKE '%paired%maker%gtd%first%accepting%'
+                    OR lower(strategy.name) LIKE '%paired%maker%gtd%first%accepting%'
+                    OR lower(strategy.description) LIKE '%paired%maker%gtd%first%accepting%'
+                )
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM tmp_paired_maker_gtd_allowlist target
+                    WHERE target.id = strategy.id AND target.code = strategy.code
+                )
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because a near-name strategy alias exists outside the exact allowlist.';
+        END IF;
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_wallets ON COMMIT DROP AS
+        SELECT 'strategy:' || target.code AS wallet
+        FROM tmp_paired_maker_gtd_allowlist target;
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_paper_orders ON COMMIT DROP AS
+        SELECT paper_order.id, paper_order.signal_id, paper_order.correlation_id
+        FROM paper_orders paper_order
+        WHERE paper_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            )
+           OR paper_order.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_paired_maker_gtd_wallets target
+            );
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_paper_fills ON COMMIT DROP AS
+        SELECT fill.id
+        FROM paper_fills fill
+        WHERE fill.paper_order_id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_paper_orders target
+        );
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_live_orders ON COMMIT DROP AS
+        SELECT live_order.id, live_order.signal_id, live_order.paper_order_id, live_order.correlation_id
+        FROM live_orders live_order
+        WHERE live_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            )
+           OR live_order.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_paper_orders target
+            );
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_runs ON COMMIT DROP AS
+        SELECT run.id, run.paper_order_id, run.signal_id
+        FROM strategy_market_paper_runs run
+        WHERE run.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            )
+           OR run.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_paper_orders target
+            );
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_signals ON COMMIT DROP AS
+        SELECT DISTINCT signal.id
+        FROM signals signal
+        WHERE signal.trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_paired_maker_gtd_wallets target
+            )
+           OR signal.id IN (
+                SELECT target.signal_id
+                FROM tmp_paired_maker_gtd_paper_orders target
+                WHERE target.signal_id IS NOT NULL
+            )
+           OR signal.id IN (
+                SELECT target.signal_id
+                FROM tmp_paired_maker_gtd_live_orders target
+                WHERE target.signal_id IS NOT NULL
+            )
+           OR signal.id IN (
+                SELECT target.signal_id
+                FROM tmp_paired_maker_gtd_runs target
+                WHERE target.signal_id IS NOT NULL
+            );
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_positions ON COMMIT DROP AS
+        SELECT position.id
+        FROM paper_positions position
+        WHERE position.copied_trader_wallet IN (
+            SELECT target.wallet
+            FROM tmp_paired_maker_gtd_wallets target
+        );
+
+        CREATE TEMP TABLE tmp_paired_maker_gtd_settlements ON COMMIT DROP AS
+        SELECT settlement.id
+        FROM paper_position_settlements settlement
+        WHERE settlement.copied_trader_wallet IN (
+            SELECT target.wallet
+            FROM tmp_paired_maker_gtd_wallets target
+        );
+
+        IF EXISTS (
+            SELECT 1
+            FROM paper_orders paper_order
+            WHERE paper_order.created_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+              AND paper_order.execution_source = 'crypto_paired_maker_gtd_first_accepting_paper'
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM tmp_paired_maker_gtd_allowlist target
+                    WHERE target.id = paper_order.strategy_id
+                      AND 'strategy:' || target.code = paper_order.copied_trader_wallet
+                )
+        ) OR EXISTS (
+            SELECT 1
+            FROM live_orders live_order
+            WHERE live_order.created_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+              AND live_order.execution_source = 'crypto_paired_maker_gtd_first_accepting_paper'
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM tmp_paired_maker_gtd_allowlist target
+                    WHERE target.id = live_order.strategy_id
+                )
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because the exact execution source is attached to a non-allowlisted strategy or wallet.';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM paper_orders paper_order
+            WHERE paper_order.created_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+              AND (
+                    lower(paper_order.execution_source) LIKE '%paired%maker%gtd%'
+                    OR lower(COALESCE(
+                        paper_order.raw_decision_json #>> '{maker_gtd,execution_source}',
+                        '')) LIKE '%paired%maker%gtd%'
+                    OR lower(COALESCE(
+                        paper_order.raw_decision_json #>> '{maker_gtd,contract_version}',
+                        '')) LIKE 'paired_maker_gtd_paper_%'
+                )
+              AND (
+                    paper_order.execution_source IS DISTINCT FROM
+                        'crypto_paired_maker_gtd_first_accepting_paper'
+                    OR paper_order.raw_decision_json #>> '{maker_gtd,execution_source}' IS DISTINCT FROM
+                        'crypto_paired_maker_gtd_first_accepting_paper'
+                    OR COALESCE(
+                        paper_order.raw_decision_json #>> '{maker_gtd,contract_version}',
+                        '') NOT IN (
+                        'paired_maker_gtd_paper_v1',
+                        'paired_maker_gtd_paper_v2',
+                        'paired_maker_gtd_paper_v3',
+                        'paired_maker_gtd_paper_v4'
+                    )
+                )
+        ) OR EXISTS (
+            SELECT 1
+            FROM strategy_market_paper_runs run
+            WHERE run.updated_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+              AND (
+                    lower(COALESCE(
+                        run.skip_diagnostics_json::jsonb #>> '{maker_gtd,execution_source}',
+                        '')) LIKE '%paired%maker%gtd%'
+                    OR lower(COALESCE(
+                        run.skip_diagnostics_json::jsonb #>> '{maker_gtd,contract_version}',
+                        '')) LIKE 'paired_maker_gtd_paper_%'
+                )
+              AND (
+                    run.skip_diagnostics_json::jsonb #>> '{maker_gtd,execution_source}' IS DISTINCT FROM
+                        'crypto_paired_maker_gtd_first_accepting_paper'
+                    OR COALESCE(
+                        run.skip_diagnostics_json::jsonb #>> '{maker_gtd,contract_version}',
+                        '') NOT IN (
+                        'paired_maker_gtd_paper_v1',
+                        'paired_maker_gtd_paper_v2',
+                        'paired_maker_gtd_paper_v3',
+                        'paired_maker_gtd_paper_v4'
+                    )
+                )
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because a near-source or contract-version alias was found.';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM paper_orders paper_order
+            WHERE paper_order.created_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+              AND (
+                    paper_order.raw_decision_json #>> '{maker_gtd,execution_source}' =
+                        'crypto_paired_maker_gtd_first_accepting_paper'
+                    OR paper_order.raw_decision_json #>> '{maker_gtd,contract_version}' IN (
+                        'paired_maker_gtd_paper_v1',
+                        'paired_maker_gtd_paper_v2',
+                        'paired_maker_gtd_paper_v3',
+                        'paired_maker_gtd_paper_v4'
+                    )
+                )
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM tmp_paired_maker_gtd_allowlist target
+                    WHERE target.id = paper_order.strategy_id
+                      AND 'strategy:' || target.code = paper_order.copied_trader_wallet
+                )
+        ) OR EXISTS (
+            SELECT 1
+            FROM strategy_market_paper_runs run
+            WHERE run.updated_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+              AND (
+                    run.skip_diagnostics_json::jsonb #>> '{maker_gtd,execution_source}' =
+                        'crypto_paired_maker_gtd_first_accepting_paper'
+                    OR run.skip_diagnostics_json::jsonb #>> '{maker_gtd,contract_version}' IN (
+                        'paired_maker_gtd_paper_v1',
+                        'paired_maker_gtd_paper_v2',
+                        'paired_maker_gtd_paper_v3',
+                        'paired_maker_gtd_paper_v4'
+                    )
+                )
+              AND run.strategy_id NOT IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_allowlist target
+                )
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because a persisted paired contract alias exists outside the exact allowlist.';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM tmp_paired_maker_gtd_paper_orders collected
+            JOIN paper_orders paper_order ON paper_order.id = collected.id
+            LEFT JOIN tmp_paired_maker_gtd_allowlist target
+                ON target.id = paper_order.strategy_id
+               AND 'strategy:' || target.code = paper_order.copied_trader_wallet
+            WHERE target.id IS NULL
+               OR paper_order.execution_source IS DISTINCT FROM
+                    'crypto_paired_maker_gtd_first_accepting_paper'
+               OR paper_order.raw_decision_json IS NULL
+               OR paper_order.raw_decision_json #> '{maker_gtd,paper_only}'
+                    IS DISTINCT FROM 'true'::jsonb
+               OR paper_order.raw_decision_json #>> '{maker_gtd,execution_source}' IS DISTINCT FROM
+                    'crypto_paired_maker_gtd_first_accepting_paper'
+               OR COALESCE(
+                    paper_order.raw_decision_json #>> '{maker_gtd,contract_version}',
+                    '') NOT IN (
+                    'paired_maker_gtd_paper_v1',
+                    'paired_maker_gtd_paper_v2',
+                    'paired_maker_gtd_paper_v3',
+                    'paired_maker_gtd_paper_v4'
+                )
+               OR paper_order.raw_decision_json #>> '{pair,strategy_id}' IS DISTINCT FROM target.id::text
+               OR paper_order.raw_decision_json #>> '{pair,paired_strategy_id}' IS DISTINCT FROM
+                    target.paired_id::text
+               OR paper_order.raw_decision_json #> '{pair,atomic}'
+                    IS DISTINCT FROM 'false'::jsonb
+               OR paper_order.raw_decision_json #> '{pair,rollback}'
+                    IS DISTINCT FROM 'false'::jsonb
+               OR jsonb_typeof(
+                    paper_order.raw_decision_json #> '{pair,pair_strategy_ids}') IS DISTINCT FROM 'array'
+               OR jsonb_array_length(
+                    paper_order.raw_decision_json #> '{pair,pair_strategy_ids}') <> 2
+               OR NOT (
+                    paper_order.raw_decision_json #> '{pair,pair_strategy_ids}' @>
+                        jsonb_build_array(target.id::text, target.paired_id::text)
+                    AND paper_order.raw_decision_json #> '{pair,pair_strategy_ids}' <@
+                        jsonb_build_array(target.id::text, target.paired_id::text)
+                )
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because at least one collected Paper order violates the exact source, wallet, Paper-only, v1-v4, pair, atomic, or rollback contract.';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM tmp_paired_maker_gtd_live_orders collected
+            JOIN live_orders live_order ON live_order.id = collected.id
+            WHERE live_order.execution_source IS DISTINCT FROM
+                    'crypto_paired_maker_gtd_first_accepting_paper'
+               OR live_order.strategy_id NOT IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                )
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because at least one collected Live order violates the exact source or strategy allowlist.';
+        END IF;
+
+        SELECT count(*)::integer INTO collected_paper_orders FROM tmp_paired_maker_gtd_paper_orders;
+        SELECT count(*)::integer INTO collected_paper_fills FROM tmp_paired_maker_gtd_paper_fills;
+        SELECT count(*)::integer INTO collected_live_orders FROM tmp_paired_maker_gtd_live_orders;
+        SELECT count(*)::integer INTO collected_strategy_runs FROM tmp_paired_maker_gtd_runs;
+        SELECT count(*)::integer INTO collected_signals FROM tmp_paired_maker_gtd_signals;
+        SELECT count(*)::integer INTO collected_positions FROM tmp_paired_maker_gtd_positions;
+        SELECT count(*)::integer INTO collected_settlements FROM tmp_paired_maker_gtd_settlements;
+
+        IF to_regclass('public.maintenance_paper_shadow_live_sync_20260705') IS NOT NULL THEN
+            EXECUTE $legacy$
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM public.maintenance_paper_shadow_live_sync_20260705 legacy
+                    CROSS JOIN LATERAL jsonb_each_text(to_jsonb(legacy)) field
+                    WHERE field.value IN (
+                        SELECT target.id::text FROM tmp_paired_maker_gtd_allowlist target
+                        UNION SELECT target.code FROM tmp_paired_maker_gtd_allowlist target
+                        UNION SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                        UNION SELECT target.id::text FROM tmp_paired_maker_gtd_paper_orders target
+                        UNION SELECT target.id::text FROM tmp_paired_maker_gtd_paper_fills target
+                        UNION SELECT target.id::text FROM tmp_paired_maker_gtd_live_orders target
+                        UNION SELECT target.id::text FROM tmp_paired_maker_gtd_runs target
+                        UNION SELECT target.id::text FROM tmp_paired_maker_gtd_signals target
+                        UNION SELECT target.id::text FROM tmp_paired_maker_gtd_positions target
+                        UNION SELECT target.id::text FROM tmp_paired_maker_gtd_settlements target
+                    )
+                       OR lower(field.value) LIKE '%paired%maker%gtd%'
+                       OR field.value = 'crypto_paired_maker_gtd_first_accepting_paper'
+                )
+            $legacy$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Refusing Paired Maker GTD First Accepting cleanup because maintenance_paper_shadow_live_sync_20260705 retains an exact structural or static marker.';
+            END IF;
+        END IF;
+
+        IF target_strategy_count = 0 THEN
+            IF collected_paper_orders <> 0
+               OR collected_paper_fills <> 0
+               OR collected_live_orders <> 0
+               OR collected_strategy_runs <> 0
+               OR collected_signals <> 0
+               OR collected_positions <> 0
+               OR collected_settlements <> 0
+               OR EXISTS (
+                    SELECT 1
+                    FROM paper_live_shadow_decisions decision
+                    WHERE decision.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                       OR decision.paper_order_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                        )
+                       OR decision.live_order_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_live_orders target
+                        )
+                       OR decision.signal_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                        )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM paper_live_shadow_discrepancies discrepancy
+                    WHERE discrepancy.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM dry_run_orders dry_run_order
+                    WHERE dry_run_order.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM polymarket_onchain_paper_signal_results result
+                    WHERE result.copied_trader_wallet IN (
+                            SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                        )
+                       OR result.paper_order_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                        )
+                       OR result.signal_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                        )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM date_dependent_strategy_hourly_paper_pnl hourly_pnl
+                    WHERE hourly_pnl.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM crypto_up_down_5m_diff_shift_progress_states state
+                    WHERE state.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM api_errors api_error
+                    WHERE api_error.component IN (
+                        'PairedMakerGtdDayAheadDiscoveryWorker',
+                        'PairedMakerGtdFirstAcceptingProcessor'
+                    )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM paper_copied_leader_positions copied_position
+                    WHERE copied_position.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM paper_copied_leader_activity_events activity
+                    WHERE activity.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM paper_copied_trader_performance performance
+                    WHERE performance.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM dashboard_strategy_performance_snapshots snapshot
+                    WHERE snapshot.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                       OR snapshot.code IN (
+                            SELECT target.code FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                )
+               OR EXISTS (
+                    SELECT 1 FROM dashboard_strategy_recent_performance_snapshots snapshot
+                    WHERE snapshot.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                       OR snapshot.code IN (
+                            SELECT target.code FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                ) THEN
+                RAISE EXCEPTION
+                    'Refusing zero-target Paired Maker GTD First Accepting migration because exact history or a direct dependency remains.';
+            END IF;
+
+            IF to_regclass('public.strategy_child_parent_assignments') IS NOT NULL THEN
+                EXECUTE $check$ SELECT EXISTS (
+                    SELECT 1 FROM public.strategy_child_parent_assignments assignment
+                    WHERE assignment.child_strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+                       OR assignment.parent_strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+                ) $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION 'Refusing zero-target Paired Maker GTD First Accepting migration because an exact child/parent assignment remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.strategy_live_retention_guards') IS NOT NULL THEN
+                EXECUTE $check$ SELECT EXISTS (
+                    SELECT 1 FROM public.strategy_live_retention_guards guard
+                    WHERE guard.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+                ) $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION 'Refusing zero-target Paired Maker GTD First Accepting migration because an exact Live retention guard remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.strategy_paper_skip_rollups') IS NOT NULL THEN
+                EXECUTE $check$ SELECT EXISTS (
+                    SELECT 1 FROM public.strategy_paper_skip_rollups rollup
+                    WHERE rollup.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+                ) $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION 'Refusing zero-target Paired Maker GTD First Accepting migration because an exact skip rollup remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.strategy_market_paper_skip_tombstones') IS NOT NULL THEN
+                EXECUTE $check$ SELECT EXISTS (
+                    SELECT 1 FROM public.strategy_market_paper_skip_tombstones tombstone
+                    WHERE tombstone.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+                ) $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION 'Refusing zero-target Paired Maker GTD First Accepting migration because an exact skip tombstone remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.paper_fak_fee_backfill_events') IS NOT NULL THEN
+                EXECUTE $check$ SELECT EXISTS (
+                    SELECT 1 FROM public.paper_fak_fee_backfill_events event
+                    WHERE event.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+                       OR event.strategy_code IN (
+                            SELECT target.code FROM tmp_paired_maker_gtd_allowlist target)
+                ) $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION 'Refusing zero-target Paired Maker GTD First Accepting migration because an exact fee-backfill event remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.dashboard_projection_events') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.dashboard_projection_events event
+                        WHERE event.strategy_id IN (
+                                SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                            )
+                           OR event.source_id IN (
+                                SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                            )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because exact dashboard projection events remain.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.dashboard_projection_reconciliation_queue') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.dashboard_projection_reconciliation_queue queue
+                        WHERE queue.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because exact dashboard reconciliation work remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.dashboard_projection_control') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.dashboard_projection_control control
+                        WHERE control.reconciliation_cursor_strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because the dashboard cursor retains an exact target.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.dashboard_strategy_lifetime_projection_states') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.dashboard_strategy_lifetime_projection_states state
+                        WHERE state.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because exact lifetime projection state remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.dashboard_strategy_recent_projection_states') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.dashboard_strategy_recent_projection_states state
+                        WHERE state.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because exact recent projection state remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.dashboard_strategy_recent_projection_facts') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.dashboard_strategy_recent_projection_facts fact
+                        WHERE fact.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because exact recent projection fact remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.dashboard_strategy_position_projection_facts') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.dashboard_strategy_position_projection_facts fact
+                        WHERE fact.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because exact position projection fact remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.paper_copied_trader_performance_refresh_queue') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.paper_copied_trader_performance_refresh_queue queue
+                        WHERE queue.copied_trader_wallet IN (
+                            SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because exact performance refresh work remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.paper_copied_trader_performance_refresh_inflight') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.paper_copied_trader_performance_refresh_inflight inflight
+                        WHERE inflight.copied_trader_wallet IN (
+                            SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because exact performance inflight work remains.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.paper_copied_trader_performance_projection_control') IS NOT NULL THEN
+                EXECUTE $check$
+                    SELECT EXISTS (
+                        SELECT 1 FROM public.paper_copied_trader_performance_projection_control control
+                        WHERE control.reconciliation_cursor_wallet IN (
+                            SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                        )
+                    )
+                $check$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because the performance cursor retains an exact target.';
+                END IF;
+            END IF;
+
+            IF to_regclass('public.maintenance_live_paper_restore_20260704') IS NOT NULL THEN
+                EXECUTE $legacy$
+                    SELECT EXISTS (
+                        SELECT 1
+                        FROM public.maintenance_live_paper_restore_20260704 legacy
+                        WHERE lower(COALESCE(legacy.source_note, '')) LIKE '%paired%maker%gtd%'
+                           OR legacy.source_note =
+                                'crypto_paired_maker_gtd_first_accepting_paper'
+                    )
+                $legacy$ INTO legacy_residual;
+                IF legacy_residual THEN
+                    RAISE EXCEPTION
+                        'Refusing zero-target Paired Maker GTD First Accepting migration because maintenance_live_paper_restore_20260704 retains a paired-family marker.';
+                END IF;
+            END IF;
+
+            INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+            VALUES (
+                migration_key_value,
+                clock_timestamp(),
+                'allowlist=6;target_strategies=0;verified_no_residuals=true'
+            )
+            ON CONFLICT (migration_key) DO NOTHING;
+            RETURN;
+        END IF;
+
+        SELECT count(*)::integer
+        INTO active_live_orders
+        FROM live_orders live_order
+        WHERE live_order.id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_live_orders target
+            )
+          AND live_order.settled_at_utc IS NULL
+          AND (
+                lower(live_order.status) IN (
+                    'created', 'queued', 'validated', 'submitted', 'open', 'live',
+                    'unmatched', 'partiallymatched', 'pending', 'cancelrequested'
+                )
+                OR lower(live_order.cancel_status) IN ('requested', 'pending')
+                OR (
+                    live_order.remaining_size > 0
+                    AND lower(live_order.status) NOT IN (
+                        'matched', 'filled', 'settled', 'expired', 'failed', 'ignored',
+                        'rejected', 'preflightrejected', 'cancelled', 'cancelfailed'
+                    )
+                )
+            );
+
+        IF active_live_orders > 0 THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because % active Live orders still exist.',
+                active_live_orders;
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM paper_orders paper_order
+            WHERE paper_order.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_signals target
+                )
+              AND paper_order.id NOT IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_paper_orders target
+                )
+        ) OR EXISTS (
+            SELECT 1
+            FROM live_orders live_order
+            WHERE live_order.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_signals target
+                )
+              AND live_order.id NOT IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_live_orders target
+                )
+        ) OR EXISTS (
+            SELECT 1
+            FROM strategy_market_paper_runs run
+            WHERE run.signal_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_signals target
+                )
+              AND run.id NOT IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_runs target
+                )
+        ) THEN
+            RAISE EXCEPTION
+                'Refusing Paired Maker GTD First Accepting cleanup because a collected signal is shared with non-target history.';
+        END IF;
+
+        DELETE FROM paper_live_shadow_discrepancies discrepancy
+        WHERE discrepancy.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            )
+           OR discrepancy.correlation_id IN (
+                SELECT target.correlation_id
+                FROM tmp_paired_maker_gtd_paper_orders target
+                WHERE target.correlation_id IS NOT NULL
+            )
+           OR discrepancy.correlation_id IN (
+                SELECT target.correlation_id
+                FROM tmp_paired_maker_gtd_live_orders target
+                WHERE target.correlation_id IS NOT NULL
+            );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        DELETE FROM paper_live_shadow_decisions decision
+        WHERE decision.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            )
+           OR decision.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_paper_orders target
+            )
+           OR decision.live_order_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_live_orders target
+            )
+           OR decision.signal_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_signals target
+            )
+           OR decision.correlation_id IN (
+                SELECT target.correlation_id
+                FROM tmp_paired_maker_gtd_paper_orders target
+                WHERE target.correlation_id IS NOT NULL
+            )
+           OR decision.correlation_id IN (
+                SELECT target.correlation_id
+                FROM tmp_paired_maker_gtd_live_orders target
+                WHERE target.correlation_id IS NOT NULL
+            );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        DELETE FROM polymarket_onchain_paper_signal_results result
+        WHERE result.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_paired_maker_gtd_wallets target
+            )
+           OR result.paper_order_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_paper_orders target
+            )
+           OR result.signal_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_signals target
+            );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        DELETE FROM dry_run_orders dry_run_order
+        WHERE dry_run_order.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            )
+           OR dry_run_order.signal_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_signals target
+            );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        DELETE FROM date_dependent_strategy_hourly_paper_pnl hourly_pnl
+        WHERE hourly_pnl.strategy_id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_allowlist target
+        );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        DELETE FROM crypto_up_down_5m_diff_shift_progress_states state
+        WHERE state.strategy_id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_allowlist target
+        );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        IF to_regclass('public.strategy_child_parent_assignments') IS NOT NULL THEN
+            EXECUTE $delete$
+                DELETE FROM public.strategy_child_parent_assignments assignment
+                WHERE assignment.child_strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR assignment.parent_strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+            $delete$;
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_related_rows := deleted_related_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.strategy_live_retention_guards') IS NOT NULL THEN
+            EXECUTE $delete$
+                DELETE FROM public.strategy_live_retention_guards guard
+                WHERE guard.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                )
+            $delete$;
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_related_rows := deleted_related_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.strategy_market_paper_skip_tombstones') IS NOT NULL THEN
+            EXECUTE $delete$
+                DELETE FROM public.strategy_market_paper_skip_tombstones tombstone
+                WHERE tombstone.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                )
+            $delete$;
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_related_rows := deleted_related_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.strategy_paper_skip_rollups') IS NOT NULL THEN
+            EXECUTE $delete$
+                DELETE FROM public.strategy_paper_skip_rollups rollup
+                WHERE rollup.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                )
+            $delete$;
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_related_rows := deleted_related_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.paper_fak_fee_backfill_events') IS NOT NULL THEN
+            EXECUTE $delete$
+                DELETE FROM public.paper_fak_fee_backfill_events event
+                WHERE event.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR event.strategy_code IN (
+                        SELECT target.code FROM tmp_paired_maker_gtd_allowlist target
+                    )
+            $delete$;
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_related_rows := deleted_related_rows + affected_rows;
+        END IF;
+
+        DELETE FROM api_errors api_error
+        WHERE api_error.component IN (
+            'PairedMakerGtdDayAheadDiscoveryWorker',
+            'PairedMakerGtdFirstAcceptingProcessor'
+        );
+        GET DIAGNOSTICS deleted_api_errors = ROW_COUNT;
+
+        DELETE FROM paper_copied_leader_activity_events activity
+        WHERE activity.copied_trader_wallet IN (
+            SELECT target.wallet
+            FROM tmp_paired_maker_gtd_wallets target
+        );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        DELETE FROM paper_copied_leader_positions copied_position
+        WHERE copied_position.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_paired_maker_gtd_wallets target
+            )
+           OR copied_position.entry_paper_order_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_paper_orders target
+            )
+           OR copied_position.entry_signal_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_signals target
+            );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        DELETE FROM live_orders live_order
+        WHERE live_order.id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_live_orders target
+        );
+        GET DIAGNOSTICS deleted_live_orders = ROW_COUNT;
+
+        DELETE FROM strategy_market_paper_runs run
+        WHERE run.id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_runs target
+        );
+        GET DIAGNOSTICS deleted_strategy_runs = ROW_COUNT;
+
+        DELETE FROM paper_fills fill
+        WHERE fill.id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_paper_fills target
+        );
+        GET DIAGNOSTICS deleted_paper_fills = ROW_COUNT;
+
+        DELETE FROM paper_orders paper_order
+        WHERE paper_order.id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_paper_orders target
+        );
+        GET DIAGNOSTICS deleted_paper_orders = ROW_COUNT;
+
+        DELETE FROM signal_rejections rejection
+        WHERE rejection.signal_id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_signals target
+        );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_related_rows := deleted_related_rows + affected_rows;
+
+        DELETE FROM signals signal
+        WHERE signal.id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_signals target
+        );
+        GET DIAGNOSTICS deleted_signals = ROW_COUNT;
+
+        DELETE FROM paper_positions position
+        WHERE position.id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_positions target
+        );
+        GET DIAGNOSTICS deleted_positions = ROW_COUNT;
+
+        DELETE FROM paper_position_settlements settlement
+        WHERE settlement.id IN (
+            SELECT target.id
+            FROM tmp_paired_maker_gtd_settlements target
+        );
+        GET DIAGNOSTICS deleted_settlements = ROW_COUNT;
+
+        IF deleted_paper_orders <> collected_paper_orders
+           OR deleted_paper_fills <> collected_paper_fills
+           OR deleted_live_orders <> collected_live_orders
+           OR deleted_strategy_runs <> collected_strategy_runs
+           OR deleted_signals <> collected_signals
+           OR deleted_positions <> collected_positions
+           OR deleted_settlements <> collected_settlements THEN
+            RAISE EXCEPTION
+                'Paired Maker GTD First Accepting cleanup core delete mismatch: orders %/%, fills %/%, live %/%, runs %/%, signals %/%, positions %/%, settlements %/%.',
+                deleted_paper_orders, collected_paper_orders,
+                deleted_paper_fills, collected_paper_fills,
+                deleted_live_orders, collected_live_orders,
+                deleted_strategy_runs, collected_strategy_runs,
+                deleted_signals, collected_signals,
+                deleted_positions, collected_positions,
+                deleted_settlements, collected_settlements;
+        END IF;
+
+        DELETE FROM paper_copied_trader_performance performance
+        WHERE performance.copied_trader_wallet IN (
+            SELECT target.wallet
+            FROM tmp_paired_maker_gtd_wallets target
+        );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_performance_rows := deleted_performance_rows + affected_rows;
+
+        DELETE FROM dashboard_strategy_performance_snapshots snapshot
+        WHERE snapshot.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            )
+           OR snapshot.code IN (
+                SELECT target.code
+                FROM tmp_paired_maker_gtd_allowlist target
+            );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_projection_rows := deleted_projection_rows + affected_rows;
+
+        DELETE FROM dashboard_strategy_recent_performance_snapshots snapshot
+        WHERE snapshot.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            )
+           OR snapshot.code IN (
+                SELECT target.code
+                FROM tmp_paired_maker_gtd_allowlist target
+            );
+        GET DIAGNOSTICS affected_rows = ROW_COUNT;
+        deleted_projection_rows := deleted_projection_rows + affected_rows;
+
+        IF to_regclass('public.dashboard_strategy_lifetime_projection_states') IS NOT NULL THEN
+            DELETE FROM dashboard_strategy_lifetime_projection_states state
+            WHERE state.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            );
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_projection_rows := deleted_projection_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.dashboard_strategy_position_projection_facts') IS NOT NULL THEN
+            DELETE FROM dashboard_strategy_position_projection_facts fact
+            WHERE fact.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            );
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_projection_rows := deleted_projection_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.dashboard_strategy_recent_projection_facts') IS NOT NULL THEN
+            DELETE FROM dashboard_strategy_recent_projection_facts fact
+            WHERE fact.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            );
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_projection_rows := deleted_projection_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.dashboard_strategy_recent_projection_states') IS NOT NULL THEN
+            DELETE FROM dashboard_strategy_recent_projection_states state
+            WHERE state.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            );
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_projection_rows := deleted_projection_rows + affected_rows;
+        END IF;
+
+        DELETE FROM strategies strategy
+        WHERE (strategy.id, strategy.code) IN (
+            SELECT target.id, target.code
+            FROM tmp_paired_maker_gtd_targets target
+        );
+        GET DIAGNOSTICS deleted_strategies = ROW_COUNT;
+
+        IF deleted_strategies <> target_strategy_count THEN
+            RAISE EXCEPTION
+                'Paired Maker GTD First Accepting cleanup deleted % strategies after collecting % exact targets.',
+                deleted_strategies,
+                target_strategy_count;
+        END IF;
+
+        -- Source-table deletes and the final strategy delete can enqueue fresh
+        -- projection work through triggers installed by an earlier deployment.
+        -- Clear those exact-target rows only after all source deletes are done.
+        IF to_regclass('public.dashboard_projection_events') IS NOT NULL THEN
+            DELETE FROM dashboard_projection_events event
+            WHERE event.strategy_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_allowlist target
+                )
+               OR event.source_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_allowlist target
+                )
+               OR event.source_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_paper_orders target
+                )
+               OR event.source_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_paper_fills target
+                )
+               OR event.source_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_live_orders target
+                )
+               OR event.source_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_runs target
+                )
+               OR event.source_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_positions target
+                )
+               OR event.source_id IN (
+                    SELECT target.id
+                    FROM tmp_paired_maker_gtd_settlements target
+                );
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_projection_rows := deleted_projection_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.dashboard_projection_reconciliation_queue') IS NOT NULL THEN
+            DELETE FROM dashboard_projection_reconciliation_queue queue
+            WHERE queue.strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            );
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_projection_rows := deleted_projection_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.dashboard_projection_control') IS NOT NULL THEN
+            UPDATE dashboard_projection_control control
+            SET reconciliation_cursor_strategy_id = NULL
+            WHERE control.reconciliation_cursor_strategy_id IN (
+                SELECT target.id
+                FROM tmp_paired_maker_gtd_allowlist target
+            );
+        END IF;
+
+        IF to_regclass('public.paper_copied_trader_performance_refresh_inflight') IS NOT NULL THEN
+            DELETE FROM paper_copied_trader_performance_refresh_inflight inflight
+            WHERE inflight.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_paired_maker_gtd_wallets target
+            );
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_performance_rows := deleted_performance_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.paper_copied_trader_performance_refresh_queue') IS NOT NULL THEN
+            DELETE FROM paper_copied_trader_performance_refresh_queue queue
+            WHERE queue.copied_trader_wallet IN (
+                SELECT target.wallet
+                FROM tmp_paired_maker_gtd_wallets target
+            );
+            GET DIAGNOSTICS affected_rows = ROW_COUNT;
+            deleted_performance_rows := deleted_performance_rows + affected_rows;
+        END IF;
+
+        IF to_regclass('public.paper_copied_trader_performance_projection_control') IS NOT NULL THEN
+            UPDATE paper_copied_trader_performance_projection_control control
+            SET reconciliation_cursor_wallet = NULL
+            WHERE control.reconciliation_cursor_wallet IN (
+                SELECT target.wallet
+                FROM tmp_paired_maker_gtd_wallets target
+            );
+        END IF;
+
+        IF EXISTS (
+                SELECT 1 FROM strategies strategy
+                WHERE strategy.id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR strategy.code IN (
+                        SELECT target.code FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR lower(strategy.code) LIKE '%paired%maker%gtd%first%accepting%'
+                   OR lower(strategy.name) LIKE '%paired%maker%gtd%first%accepting%'
+                   OR lower(strategy.description) LIKE '%paired%maker%gtd%first%accepting%'
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_orders paper_order
+                WHERE paper_order.id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                    )
+                   OR paper_order.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR paper_order.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                   OR (
+                        paper_order.created_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+                        AND (
+                            paper_order.execution_source =
+                                'crypto_paired_maker_gtd_first_accepting_paper'
+                            OR paper_order.raw_decision_json #>> '{maker_gtd,execution_source}' =
+                                'crypto_paired_maker_gtd_first_accepting_paper'
+                            OR paper_order.raw_decision_json #>> '{maker_gtd,contract_version}' IN (
+                                'paired_maker_gtd_paper_v1',
+                                'paired_maker_gtd_paper_v2',
+                                'paired_maker_gtd_paper_v3',
+                                'paired_maker_gtd_paper_v4'
+                            )
+                        )
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_fills fill
+                WHERE fill.id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_fills target
+                    )
+                   OR fill.paper_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM live_orders live_order
+                WHERE live_order.id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_live_orders target
+                    )
+                   OR live_order.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR live_order.paper_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                    )
+                   OR live_order.signal_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                    )
+                   OR (
+                        live_order.created_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+                        AND live_order.execution_source =
+                            'crypto_paired_maker_gtd_first_accepting_paper'
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM strategy_market_paper_runs run
+                WHERE run.id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_runs target
+                    )
+                   OR run.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR run.paper_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                    )
+                   OR run.signal_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                    )
+                   OR (
+                        run.updated_at_utc >= '2026-08-09T20:50:00Z'::timestamptz
+                        AND (
+                            run.skip_diagnostics_json::jsonb #>> '{maker_gtd,execution_source}' =
+                                'crypto_paired_maker_gtd_first_accepting_paper'
+                            OR run.skip_diagnostics_json::jsonb #>> '{maker_gtd,contract_version}' IN (
+                                'paired_maker_gtd_paper_v1',
+                                'paired_maker_gtd_paper_v2',
+                                'paired_maker_gtd_paper_v3',
+                                'paired_maker_gtd_paper_v4'
+                            )
+                        )
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM signals signal
+                WHERE signal.id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                    )
+                   OR signal.trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_positions position
+                WHERE position.id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_positions target
+                    )
+                   OR position.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_position_settlements settlement
+                WHERE settlement.id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_settlements target
+                    )
+                   OR settlement.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_live_shadow_decisions decision
+                WHERE decision.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR decision.paper_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                    )
+                   OR decision.live_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_live_orders target
+                    )
+                   OR decision.signal_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_live_shadow_discrepancies discrepancy
+                WHERE discrepancy.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                )
+            )
+           OR EXISTS (
+                SELECT 1 FROM dry_run_orders dry_run_order
+                WHERE dry_run_order.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR dry_run_order.signal_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM polymarket_onchain_paper_signal_results result
+                WHERE result.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                   OR result.paper_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                    )
+                   OR result.signal_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM date_dependent_strategy_hourly_paper_pnl hourly_pnl
+                WHERE hourly_pnl.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                )
+            )
+           OR EXISTS (
+                SELECT 1 FROM crypto_up_down_5m_diff_shift_progress_states state
+                WHERE state.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                )
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_copied_leader_activity_events activity
+                WHERE activity.copied_trader_wallet IN (
+                    SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                )
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_copied_leader_positions copied_position
+                WHERE copied_position.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                   OR copied_position.entry_paper_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                    )
+                   OR copied_position.entry_signal_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_signals target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM api_errors api_error
+                WHERE api_error.component IN (
+                    'PairedMakerGtdDayAheadDiscoveryWorker',
+                    'PairedMakerGtdFirstAcceptingProcessor'
+                )
+            )
+           OR EXISTS (
+                SELECT 1 FROM paper_copied_trader_performance performance
+                WHERE performance.copied_trader_wallet IN (
+                    SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                )
+            )
+           OR EXISTS (
+                SELECT 1 FROM dashboard_strategy_performance_snapshots snapshot
+                WHERE snapshot.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR snapshot.code IN (
+                        SELECT target.code FROM tmp_paired_maker_gtd_allowlist target
+                    )
+            )
+           OR EXISTS (
+                SELECT 1 FROM dashboard_strategy_recent_performance_snapshots snapshot
+                WHERE snapshot.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                   OR snapshot.code IN (
+                        SELECT target.code FROM tmp_paired_maker_gtd_allowlist target
+                    )
+            ) THEN
+            RAISE EXCEPTION
+                'Paired Maker GTD First Accepting cleanup postcondition failed because exact source history or a direct dependency remains.';
+        END IF;
+
+        IF to_regclass('public.strategy_child_parent_assignments') IS NOT NULL THEN
+            EXECUTE $check$ SELECT EXISTS (
+                SELECT 1 FROM public.strategy_child_parent_assignments assignment
+                WHERE assignment.child_strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+                   OR assignment.parent_strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+            ) $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION 'Paired Maker GTD First Accepting cleanup postcondition failed because an exact child/parent assignment remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.strategy_live_retention_guards') IS NOT NULL THEN
+            EXECUTE $check$ SELECT EXISTS (
+                SELECT 1 FROM public.strategy_live_retention_guards guard
+                WHERE guard.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+            ) $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION 'Paired Maker GTD First Accepting cleanup postcondition failed because an exact Live retention guard remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.strategy_paper_skip_rollups') IS NOT NULL THEN
+            EXECUTE $check$ SELECT EXISTS (
+                SELECT 1 FROM public.strategy_paper_skip_rollups rollup
+                WHERE rollup.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+            ) $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION 'Paired Maker GTD First Accepting cleanup postcondition failed because an exact skip rollup remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.strategy_market_paper_skip_tombstones') IS NOT NULL THEN
+            EXECUTE $check$ SELECT EXISTS (
+                SELECT 1 FROM public.strategy_market_paper_skip_tombstones tombstone
+                WHERE tombstone.strategy_id IN (
+                    SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+            ) $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION 'Paired Maker GTD First Accepting cleanup postcondition failed because an exact skip tombstone remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.paper_fak_fee_backfill_events') IS NOT NULL THEN
+            EXECUTE $check$ SELECT EXISTS (
+                SELECT 1 FROM public.paper_fak_fee_backfill_events event
+                WHERE event.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target)
+                   OR event.strategy_code IN (
+                        SELECT target.code FROM tmp_paired_maker_gtd_allowlist target)
+            ) $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION 'Paired Maker GTD First Accepting cleanup postcondition failed because an exact fee-backfill event remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.dashboard_projection_events') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.dashboard_projection_events event
+                    WHERE event.strategy_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                        )
+                       OR event.source_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                            UNION SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                            UNION SELECT target.id FROM tmp_paired_maker_gtd_paper_fills target
+                            UNION SELECT target.id FROM tmp_paired_maker_gtd_live_orders target
+                            UNION SELECT target.id FROM tmp_paired_maker_gtd_runs target
+                            UNION SELECT target.id FROM tmp_paired_maker_gtd_positions target
+                            UNION SELECT target.id FROM tmp_paired_maker_gtd_settlements target
+                        )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because exact dashboard projection events remain.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.dashboard_projection_reconciliation_queue') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.dashboard_projection_reconciliation_queue queue
+                    WHERE queue.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because exact dashboard reconciliation work remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.dashboard_projection_control') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.dashboard_projection_control control
+                    WHERE control.reconciliation_cursor_strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because the dashboard cursor retains an exact target.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.dashboard_strategy_lifetime_projection_states') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.dashboard_strategy_lifetime_projection_states state
+                    WHERE state.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because exact lifetime projection state remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.dashboard_strategy_recent_projection_states') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.dashboard_strategy_recent_projection_states state
+                    WHERE state.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because exact recent projection state remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.dashboard_strategy_recent_projection_facts') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.dashboard_strategy_recent_projection_facts fact
+                    WHERE fact.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because exact recent projection fact remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.dashboard_strategy_position_projection_facts') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.dashboard_strategy_position_projection_facts fact
+                    WHERE fact.strategy_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_allowlist target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because exact position projection fact remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.paper_copied_trader_performance_refresh_queue') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.paper_copied_trader_performance_refresh_queue queue
+                    WHERE queue.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because exact performance refresh work remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.paper_copied_trader_performance_refresh_inflight') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.paper_copied_trader_performance_refresh_inflight inflight
+                    WHERE inflight.copied_trader_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because exact performance inflight work remains.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.paper_copied_trader_performance_projection_control') IS NOT NULL THEN
+            EXECUTE $check$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.paper_copied_trader_performance_projection_control control
+                    WHERE control.reconciliation_cursor_wallet IN (
+                        SELECT target.wallet FROM tmp_paired_maker_gtd_wallets target
+                    )
+                )
+            $check$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed because the performance cursor retains an exact target.';
+            END IF;
+        END IF;
+
+        IF to_regclass('public.maintenance_live_paper_restore_20260704') IS NOT NULL THEN
+            EXECUTE $legacy$
+                DELETE FROM public.maintenance_live_paper_restore_20260704 legacy
+                WHERE legacy.live_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_live_orders target
+                    )
+                   OR legacy.paper_order_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                    )
+                   OR legacy.paper_fill_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_paper_fills target
+                    )
+                   OR legacy.paper_settlement_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_settlements target
+                    )
+                   OR legacy.strategy_run_id IN (
+                        SELECT target.id FROM tmp_paired_maker_gtd_runs target
+                    )
+            $legacy$;
+        END IF;
+
+        IF to_regclass('public.maintenance_live_paper_restore_20260704') IS NOT NULL THEN
+            EXECUTE $legacy$
+                SELECT EXISTS (
+                    SELECT 1 FROM public.maintenance_live_paper_restore_20260704 legacy
+                    WHERE legacy.live_order_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_live_orders target
+                        )
+                       OR legacy.paper_order_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_paper_orders target
+                        )
+                       OR legacy.paper_fill_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_paper_fills target
+                        )
+                       OR legacy.paper_settlement_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_settlements target
+                        )
+                       OR legacy.strategy_run_id IN (
+                            SELECT target.id FROM tmp_paired_maker_gtd_runs target
+                        )
+                )
+            $legacy$ INTO legacy_residual;
+            IF legacy_residual THEN
+                RAISE EXCEPTION
+                    'Paired Maker GTD First Accepting cleanup postcondition failed for maintenance_live_paper_restore_20260704.';
+            END IF;
+        END IF;
+
+        INSERT INTO schema_data_migrations (migration_key, applied_at_utc, details)
+        VALUES (
+            migration_key_value,
+            clock_timestamp(),
+            'allowlist=6' ||
+            ';target_strategies=' || target_strategy_count::text ||
+            ';collected_paper_orders=' || collected_paper_orders::text ||
+            ';collected_paper_fills=' || collected_paper_fills::text ||
+            ';collected_live_orders=' || collected_live_orders::text ||
+            ';collected_strategy_runs=' || collected_strategy_runs::text ||
+            ';collected_signals=' || collected_signals::text ||
+            ';collected_positions=' || collected_positions::text ||
+            ';collected_settlements=' || collected_settlements::text ||
+            ';active_live_orders=' || active_live_orders::text ||
+            ';deleted_paper_orders=' || deleted_paper_orders::text ||
+            ';deleted_paper_fills=' || deleted_paper_fills::text ||
+            ';deleted_live_orders=' || deleted_live_orders::text ||
+            ';deleted_strategy_runs=' || deleted_strategy_runs::text ||
+            ';deleted_signals=' || deleted_signals::text ||
+            ';deleted_positions=' || deleted_positions::text ||
+            ';deleted_settlements=' || deleted_settlements::text ||
+            ';deleted_api_errors=' || deleted_api_errors::text ||
+            ';deleted_projection_rows=' || deleted_projection_rows::text ||
+            ';deleted_performance_rows=' || deleted_performance_rows::text ||
+            ';deleted_related_rows=' || deleted_related_rows::text ||
+            ';deleted_strategies=' || deleted_strategies::text
+        )
+        ON CONFLICT (migration_key) DO UPDATE SET
+            applied_at_utc = EXCLUDED.applied_at_utc,
+            details = EXCLUDED.details;
 END $$;
 
 DO $$

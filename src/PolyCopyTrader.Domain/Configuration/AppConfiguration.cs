@@ -44,8 +44,6 @@ public sealed class AppConfiguration
 
     public GammaMarketIngestionOptions GammaMarketIngestion { get; init; } = new();
 
-    public PairedMakerGtdDayAheadDiscoveryOptions PairedMakerGtdDayAheadDiscovery { get; init; } = new();
-
     public BtcUpDown5mStrategyOptions BtcUpDown5mStrategy { get; init; } = new();
 
     public CoinbaseExchangeOptions CoinbaseExchange { get; init; } = new();
@@ -691,19 +689,6 @@ public enum GammaMarketPersistenceScope
 {
     AllActiveMarkets,
     CryptoUpDown5mOnly
-}
-
-public sealed class PairedMakerGtdDayAheadDiscoveryOptions
-{
-    public bool Enabled { get; init; } = true;
-
-    public int PollIntervalSeconds { get; init; } = 5;
-
-    public int MinimumLeadHours { get; init; } = 23;
-
-    public int MaximumLeadHours { get; init; } = 25;
-
-    public int GammaBatchSize { get; init; } = 50;
 }
 
 public sealed class BtcUpDown5mStrategyOptions

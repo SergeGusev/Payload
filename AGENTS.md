@@ -50,7 +50,7 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
 
 ## Paper/live execution parity
 
-- Except for the closed user-approved ordinary-Paper exceptions enumerated below,
+- Except for the closed user-approved ordinary-Paper exception enumerated below,
   a Paper strategy may model only an order and execution sequence that the
   current Live Polymarket API can perform with the same pre-submit constraints and
   order semantics. See `docs/architecture/PAPER_LIVE_PARITY.md`.
@@ -89,49 +89,6 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
   submission remains disabled. No
   alias, clone, descendant, future strategy, or changed execution semantic inherits
   this exception; all other unsupported behavior remains `ResearchOnly`.
-- Second closed exception approved explicitly by the user on 2026-08-09, with the
-  v4 expiration revision approved explicitly on 2026-08-10: ordinary
-  Paper accounting is also allowed only for the exact six five-minute paired
-  Maker-GTD legs in catalog group `8224`: assets `BTC`, `ETH`, and `SOL`; fixed
-  outcomes `Up` and `Down`; behavior `PairedFixedOutcomeMakerGtdFirstAccepting`;
-  ID suffixes `101/102`, `201/202`, and `301/302`; mutually linked pair IDs;
-  `EntryTiming=FirstAcceptingOrders`; nominal `EntryDelaySeconds=-86400`;
-  execution source `crypto_paired_maker_gtd_first_accepting_paper`; `PaperOnly=true`;
-  Up cap `0.50`; Down cap `0.49`; and formula
-  `floor_to_tick(min(bestAsk-tick, cap))`. New placements use contract
-  `paired_maker_gtd_paper_v4`; its S0/S1 placement contract retains the bounded,
-  ordered local request/client-receipt/response/evaluation bracket, while the
-  authoritative venue snapshot timestamp remains mandatory audit evidence but may
-  be old on an unchanged quiet book. Exact-family `paired_maker_gtd_paper_v1`,
-  `paired_maker_gtd_paper_v2`, and `paired_maker_gtd_paper_v3` orders already
-  persisted under the former effective-expiry-at-market-end-minus-60-seconds and
-  wire-expiration-at-market-end contract remain grandfathered for lifecycle
-  completion. Each pair freezes one common normalized
-  share quantity before either leg is attempted. Each leg then has independent
-  fresh S0/S1 PostOnly acceptance and persistence, without atomicity, rollback,
-  cancellation, or resizing of an accepted leg when its peer fails. New v4 PostOnly
-  GTD legs remain eligible for Paper execution through market end; their stated/wire
-  expiration is market end plus 60 seconds because of the venue GTD security
-  threshold. All other approved predicates and lifecycle semantics remain unchanged.
-  This exact family may use the optimistic
-  full-fill `TouchNoDepth` inference. Under lifecycle policy
-  `paired_touch_no_depth_gap_recovery_v1`, service restart, owning-shard reconnect,
-  asset reassignment, or delivery failure pauses fill inference and creates a new
-  exact-asset observation fence. The first authoritative frame confirms that fence
-  and cannot fill; only a later authoritative event from the same unchanged
-  session/component/generation, with receipt and venue timestamp strictly after the
-  fence and a different fingerprint, may fill. Events missed during the gap, cached
-  state, REST snapshots, and pre-fence queued events are never backfilled. A segment
-  confirmed before expiry may finish as expired-unfilled; absent or post-expiry
-  confirmation remains evidence-unavailable. Queue position,
-  depth, event size, and aggressor remain unmodeled and fills may be overstated.
-  Results enter ordinary Paper orders, positions, PnL, win rate, and performance and
-  must carry `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
-  Paired terminal evidence must additionally carry
-  `observation gaps are not backfilled; only future authoritative events after confirmed recovery are eligible`.
-  Maker rebates are not modeled or included in Paper PnL. Live submission remains
-  disabled. No alias, clone, changed ID/source/timing/cap/pair link, or other semantic
-  inherits this exception.
 - Never simulate atomicity, rollback, post-fill rejection, or aggregate fill-price
   guarantees unless the Live venue explicitly provides that guarantee for the
   same order type.

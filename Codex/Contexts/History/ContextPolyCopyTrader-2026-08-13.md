@@ -18,3 +18,12 @@ Request:
 
 Result:
 Diagnosed exact production strategy `b7c50005-0000-4000-8179-000000000102` read-only. The last Paper order was `2026-08-11T14:44:50.723550Z`. Every one of the 70 due cycles on August 13 through `05:49:30Z` was finalized with `reference_average_bps_denominator_24h_start_price_missing`, not a 2 bps threshold rejection. Raw ETH ticks reconstructed only 54 of the required 60 24-minute buckets because the prior 11-hour feed outage remains inside the rolling 24-hour window. Runtime, fresh ETH ticks, and the post-restart scheduler are healthy; neighboring neutral 1 bps and 3 bps strategies show the same gate. With uninterrupted ticks, the first potentially eligible evaluation is `2026-08-13T08:04:30Z` / `11:04:30 Europe/Sofia`; threshold, book, execution, and risk gates can still correctly skip it. Restarting would not help. No production or source state was changed.
+
+## 2026-08-13T08:24:21.5344083Z
+Request:
+Удали все Paired Maker GTD First Accepting для всех валют, включая историю и логику, которая была с ними связана
+
+Продолжай
+
+Result:
+Removed the exact six BTC/ETH/SOL group-8224 variants and their code, seed, configuration, workers, paired-only lifecycle plumbing, tests, current documentation exception, and two directly related research artifacts. Added and locally rollback-smoked a guarded exact cleanup migration. Production preview identified the exact attributable rows, and only the six strategy settings were transactionally quiesced (`enabled=false`, `paused=true`, `live_stakes=false`). Production history was not yet purged because the deployed old binary can reseed the family after restart; durable completion is blocked pending explicit approval to deploy/restart the new build and then verify zero residuals. The clean commit built with zero errors. Its full suite retained exactly the clean-HEAD failure set (125 failed cases / 114 distinct failed names, with no commit-only failure); the 134-test count reduction is entirely the removed paired tests.

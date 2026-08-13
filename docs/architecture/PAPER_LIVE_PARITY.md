@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Except for the closed user-approved ordinary-Paper exceptions defined in this
+Except for the closed user-approved ordinary-Paper exception defined in this
 document, Paper results are valid only when they model behavior that the
 current Live Polymarket integration can perform. This contract is mandatory for
 every strategy, order type, simulator, execution-policy change, replay, and
@@ -12,8 +12,8 @@ The governing rule is:
 
 > Default rule: no proven Live equivalent means no Paper trade.
 
-The default has two closed exceptions, defined under **Closed user-approved
-ordinary-Paper exceptions** below. They are classification decisions, not evidence
+The default has one closed exception, defined under **Closed user-approved
+ordinary-Paper exception** below. It is a classification decision, not evidence
 of Live-equivalent fills, and cannot be inferred for any other strategy.
 
 ## Verified Polymarket FAK equivalent
@@ -73,7 +73,7 @@ expected Live execution. Missing/stale timestamp evidence cannot fill an order,
 and a reconnect, restart, or other observable continuity loss prevents an
 unfilled expiry from being represented as proven continuous observation.
 
-### Closed user-approved ordinary-Paper exceptions
+### Closed user-approved ordinary-Paper exception
 
 On 2026-08-09 the user explicitly approved one closed exception that permits this
 optimistic model to contribute to ordinary Paper accounting. The exception applies
@@ -107,61 +107,6 @@ evidence, audit, or testing requirements. No alias, clone, descendant, future
 strategy, different execution source, predicate mismatch, or changed execution
 semantic inherits the exception; every other unsupported execution model remains
 `ResearchOnly`.
-
-On 2026-08-09 the user explicitly approved a second closed exception for the exact
-six five-minute paired Maker-GTD legs in catalog group `8224`. It applies only when
-all of these predicates hold. On 2026-08-10 the user explicitly approved the v4
-expiration revision described below; all other approved predicates and lifecycle
-semantics remain unchanged:
-
-- asset is exactly `BTC`, `ETH`, or `SOL`, with one fixed `Up` and one fixed `Down`
-  leg per asset;
-- behavior is `PairedFixedOutcomeMakerGtdFirstAccepting`, interval is five minutes,
-  and timing is `FirstAcceptingOrders` with nominal metadata delay `-86400` seconds;
-- catalog ID suffixes are exactly `101/102`, `201/202`, and `301/302`, and each pair
-  has symmetric `PairedStrategyId` links;
-- persisted source is `crypto_paired_maker_gtd_first_accepting_paper`, new PostOnly
-  GTD placements use contract `paired_maker_gtd_paper_v4`, and `PaperOnly=true`;
-- S0 price is `floor_to_tick(min(S0.bestAsk-S0.tickSize, cap))`, with Up cap `0.50`
-  and Down cap `0.49`, so accepted pair limits cannot exceed `0.99` in total;
-- each v2/v3/v4 direct HTTP S0/S1 read persists and validates one ordered local bracket:
-  request start, client receipt, response completion, and evaluation. Both receipt
-  age and request duration must remain within the configured maximum. The venue
-  snapshot timestamp and hash remain audit evidence and the timestamp must be
-  authoritative and no later than local receipt, but an old unchanged snapshot
-  does not by itself make a freshly fetched quiet book stale. Exact-family v1,
-  v2, and v3 orders already persisted under their former placement and expiry
-  contracts remain grandfathered for fill/expiry and historical accounting;
-- one common CLOB-normalized share quantity is frozen from both valid S0 sizing
-  results before either leg is attempted. Each leg then has independent S0/S1
-  PostOnly attempts and independent persistence. The venue provides no pair
-  atomicity: rejection or non-fill of one leg never rolls back, cancels, or resizes
-  an accepted peer;
-- new v4 accepted PostOnly GTD legs stop Paper execution at market end and use
-  market end plus 60 seconds as their stated/wire expiration because of the venue
-  GTD security threshold. Grandfathered v1/v2/v3 legs retain effective Paper expiry
-  at market end minus 60 seconds and stated/wire expiration at market end;
-- lifecycle policy `paired_touch_no_depth_gap_recovery_v1` applies to exact-family
-  outstanding v1/v2/v3 orders and new v4 orders. Restart, owning-shard reconnect,
-  asset reassignment, or a delivery failure invalidates the prior segment and pauses
-  inference. The first later authoritative exact-asset frame freezes a new immutable
-  session/component/generation fence and cannot fill. Only a subsequent event whose
-  receipt and venue timestamp are strictly after that fence, whose fingerprint is
-  different, and whose ingress segment still equals the current segment may fill.
-  No REST/cache/pre-fence event or missing gap event is backfilled. A confirmed
-  pre-expiry recovery segment may expire unfilled; no recovery, or recovery only
-  after expiry, remains evidence unavailable.
-
-For this exact family, ordinary Paper orders, positions, fills, PnL, win rate, and
-performance inclusion is intentional. Queue position, book depth, event size, and
-aggressor remain ignored, so inferred full fills may still be overstated. Every
-result carries `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
-Paired fill and expiry evidence also carries
-`observation gaps are not backfilled; only future authoritative events after confirmed recovery are eligible`.
-Maker rebates are not modeled, inferred, or included in Paper PnL; eligibility and
-amount require an authoritative venue payout ledger. Live submission remains
-disabled. No alias, clone, different source, changed cap/timing/pair link, or other
-predicate mismatch inherits this exception.
 
 Authoritative references, verified 2026-08-10:
 
@@ -201,14 +146,14 @@ other later information are forbidden inputs.
 ## Execution and outcome rules
 
 Paper must model the documented behavior of the matching Live order type. The exact
-closed exceptions above may depart only from the explicitly qualified rules
+closed exception above may depart only from the explicitly qualified rules
 below; every other execution and outcome rule still applies:
 
 - enforce the same price boundary, time-in-force, and cancellation behavior;
 - enforce the same liquidity boundary and partial-fill behavior, except for the
-  exact closed `TouchNoDepth` exceptions above;
+  exact closed `TouchNoDepth` exception above;
 - never fill liquidity that the admissible market evidence does not contain, except
-  for the exact closed `TouchNoDepth` inferences above;
+  for the exact closed `TouchNoDepth` inference above;
 - never model atomicity, rollback, or conditional acceptance that the venue does
   not provide;
 - never treat an aggregate result such as final VWAP as a pre-submit constraint
@@ -233,7 +178,7 @@ the order; explicit reconciliation is required.
 
 `PaperOnly` means that the intent is not sent externally. It does not relax any
 rule in this contract except the ordinary-Paper classification explicitly granted
-to the exact closed exceptions above; those exceptions still cannot submit Live.
+to the exact closed exception above; that exception still cannot submit Live.
 
 ## Fee accounting and performance reporting
 
@@ -360,7 +305,7 @@ The current model has three material limits:
 
 ## Research-only algorithms
 
-Except for the exact closed user-approved ordinary-Paper exceptions above, an
+Except for the exact closed user-approved ordinary-Paper exception above, an
 algorithm that depends on unavailable Live behavior or hindsight must be classified
 `ResearchOnly`. Its records and metrics must be physically or logically separated
 from Paper trades, Paper PnL, Paper win rate, and any statement about expected Live
@@ -382,7 +327,7 @@ Before completing a new or changed Paper execution feature:
    cancellation.
 4. Add a regression test showing that post-fill data cannot alter acceptance of
    the originating order.
-5. Run the relevant test suite. Outside the exact closed exceptions, missing
+5. Run the relevant test suite. Outside the exact closed exception, missing
    evidence, an unsupported guarantee, or a failing parity test blocks completion
    and Paper performance claims. For the exception, a predicate mismatch, missing
    mandatory label, enabled Live path, or failing exception contract test blocks

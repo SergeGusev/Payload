@@ -527,7 +527,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     public void StrategyIds_ExcludeCryptoBinanceBpsVariants()
     {
         Assert.Equal(1799, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(3227, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(3221, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(324, StrategyIds.BtcLowerEnterPremarketVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,

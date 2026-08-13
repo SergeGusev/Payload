@@ -33,72 +33,6 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         Assert.Equal(0, queue.UpdateCalls);
     }
 
-    [Fact]
-    public async Task ProcessTextMessageAsync_FirstOwningShardFrameConfirmsAndReconnectInvalidatesBeforeAggregatePublish()
-    {
-        var queue = new ControlledSideEffectQueue(MarketDataSideEffectEnqueueOutcome.Enqueued);
-        var options = new MarketDataWebSocketOptions();
-        var cache = new MarketDataCache(options);
-        cache.AssignAssetSubscriptions(Component, ["asset-1"]);
-        var service = CreateService(queue, marketDataCache: cache);
-        var now = DateTimeOffset.UtcNow;
-        var connected = new MarketDataStatusSnapshot(
-            Component,
-            MarketDataConnectionState.Connected,
-            "wss://example.test",
-            1,
-            now,
-            now,
-            null,
-            0,
-            false,
-            null,
-            now);
-        service.OnShardStatus(connected);
-        Assert.False(cache.GetConfirmedAssetSubscription("asset-1").ConfirmedLive);
-
-        await service.ProcessTextMessageAsync(
-            Component,
-            ValidMarketUpdateJson,
-            now,
-            CancellationToken.None);
-        var accepted = cache.GetConfirmedAssetSubscription("asset-1");
-        Assert.True(accepted.ConfirmedLive);
-        Assert.Equal(0, accepted.Generation);
-        Assert.Equal(now, accepted.ConfirmedAtUtc);
-        Assert.NotNull(accepted.ConfirmationSourceTimestampUtc);
-        Assert.False(string.IsNullOrWhiteSpace(accepted.ConfirmationEventFingerprint));
-        Assert.NotNull(queue.LastConfirmedAssetSubscription);
-        Assert.Equal(accepted, queue.LastConfirmedAssetSubscription);
-
-        service.OnShardStatus(connected with
-        {
-            ConnectionState = MarketDataConnectionState.Reconnecting,
-            LastDisconnectedUtc = now.AddSeconds(1),
-            ReconnectCount = 1,
-            UpdatedAtUtc = now.AddSeconds(1)
-        });
-        var disconnected = cache.GetConfirmedAssetSubscription("asset-1");
-        Assert.False(disconnected.ConfirmedLive);
-        Assert.Equal(1, disconnected.Generation);
-
-        service.OnShardStatus(connected with
-        {
-            LastConnectedUtc = now.AddSeconds(2),
-            LastDisconnectedUtc = now.AddSeconds(1),
-            ReconnectCount = 1,
-            UpdatedAtUtc = now.AddSeconds(2)
-        });
-        await service.ProcessTextMessageAsync(
-            Component,
-            ValidMarketUpdateJson,
-            now.AddSeconds(2),
-            CancellationToken.None);
-        var reconnected = cache.GetConfirmedAssetSubscription("asset-1");
-        Assert.True(reconnected.ConfirmedLive);
-        Assert.Equal(1, reconnected.Generation);
-    }
-
     [Theory]
     [InlineData("PONG")]
     [InlineData("{\"status\":\"ok\"}")]
@@ -166,43 +100,6 @@ public sealed class MarketDataWebSocketFrameProcessingTests
     [Theory]
     [InlineData(MarketDataSideEffectEnqueueOutcome.Dropped)]
     [InlineData(MarketDataSideEffectEnqueueOutcome.Rejected)]
-    public async Task ProcessTextMessageAsync_UnacceptedConfirmedFrameInvalidatesExactSegment(
-        MarketDataSideEffectEnqueueOutcome outcome)
-    {
-        var queue = new ControlledSideEffectQueue(outcome);
-        var cache = new MarketDataCache(
-            new MarketDataWebSocketOptions(),
-            "market-data-test-session");
-        cache.AssignAssetSubscriptions(Component, ["asset-1"]);
-        var service = CreateService(queue, marketDataCache: cache);
-        var now = DateTimeOffset.UtcNow;
-        service.OnShardStatus(new MarketDataStatusSnapshot(
-            Component,
-            MarketDataConnectionState.Connected,
-            "wss://example.test",
-            1,
-            now,
-            now,
-            null,
-            0,
-            false,
-            null,
-            now));
-
-        Assert.False(await service.ProcessTextMessageAsync(
-            Component,
-            ValidMarketUpdateJson,
-            now,
-            CancellationToken.None));
-
-        var invalidated = cache.GetConfirmedAssetSubscription("asset-1");
-        Assert.False(invalidated.ConfirmedLive);
-        Assert.Equal(1, invalidated.Generation);
-    }
-
-    [Theory]
-    [InlineData(MarketDataSideEffectEnqueueOutcome.Dropped)]
-    [InlineData(MarketDataSideEffectEnqueueOutcome.Rejected)]
     public async Task ProcessTextMessageAsync_UnacceptedUpdatePoisonsOnlyMatchingAssetAndWindow(
         MarketDataSideEffectEnqueueOutcome outcome)
     {
@@ -258,26 +155,7 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         repository.PaperOrders.Add(order);
         var exposureCache = new ExposureSnapshotCache(repository, handoff);
         await exposureCache.GetSnapshotAsync();
-        var cache = new MarketDataCache(new MarketDataWebSocketOptions());
-        cache.AssignAssetSubscriptions(Component, ["asset-1"]);
-        var service = CreateService(
-            queue,
-            handoff,
-            exposureCache,
-            repository,
-            cache);
-        service.OnShardStatus(new MarketDataStatusSnapshot(
-            Component,
-            MarketDataConnectionState.Connected,
-            "wss://example.test",
-            1,
-            receivedAtUtc.AddMinutes(-1),
-            receivedAtUtc.AddMinutes(-1),
-            null,
-            0,
-            false,
-            null,
-            receivedAtUtc));
+        var service = CreateService(queue, handoff, exposureCache, repository);
         await using var receiptAdmission = await handoff.EnterMarketDataReceiptAsync();
 
         Assert.False(await service.ProcessTextMessageAsync(
@@ -299,28 +177,16 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         Assert.Equal(
             MakerGtdPaperExecutionContract.MarketDataDispatchFailureCode,
             Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
-        var invalidated = cache.GetConfirmedAssetSubscription("asset-1");
-        Assert.False(invalidated.ConfirmedLive);
-        Assert.Equal(1, invalidated.Generation);
     }
 
     [Fact]
     public async Task ProcessTextMessageAsync_ParseFailureInsideReceiptPoisonsAllMatchingLifetimes()
     {
         var handoff = new MakerGtdPaperPlacementHandoff();
-        var cache = new MarketDataCache(new MarketDataWebSocketOptions());
-        cache.AssignAssetSubscriptions(Component, ["asset-1"]);
-        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
-        Assert.True(cache.ConfirmAssetSubscription(
-            Component,
-            "asset-1",
-            receivedAtUtc.AddSeconds(-2),
-            receivedAtUtc.AddSeconds(-3),
-            "pre-parse-failure-frame"));
         var service = CreateService(
             new ControlledSideEffectQueue(MarketDataSideEffectEnqueueOutcome.Enqueued),
-            handoff,
-            marketDataCache: cache);
+            handoff);
+        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
         await using var receiptAdmission = await handoff.EnterMarketDataReceiptAsync();
 
         Assert.False(await service.ProcessTextMessageAsync(
@@ -339,52 +205,6 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         Assert.Equal(
             MakerGtdPaperExecutionContract.MarketDataParseFailureCode,
             Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
-        var invalidated = cache.GetConfirmedAssetSubscription("asset-1");
-        Assert.False(invalidated.ConfirmedLive);
-        Assert.Equal(1, invalidated.Generation);
-    }
-
-    [Fact]
-    public async Task ProcessTextMessageAsync_FutureVenueTimestampInvalidatesConfirmedSegment()
-    {
-        var queue = new ControlledSideEffectQueue(MarketDataSideEffectEnqueueOutcome.Enqueued);
-        var options = new MarketDataWebSocketOptions();
-        var cache = new MarketDataCache(options);
-        cache.AssignAssetSubscriptions(Component, ["asset-1"]);
-        var receivedAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
-        Assert.True(cache.ConfirmAssetSubscription(
-            Component,
-            "asset-1",
-            receivedAtUtc.AddSeconds(-2),
-            receivedAtUtc.AddSeconds(-3),
-            "pre-future-frame"));
-        var service = CreateService(queue, marketDataCache: cache);
-        service.OnShardStatus(new MarketDataStatusSnapshot(
-            Component,
-            MarketDataConnectionState.Connected,
-            "wss://example.test",
-            1,
-            receivedAtUtc.AddMinutes(-1),
-            receivedAtUtc.AddMinutes(-1),
-            null,
-            0,
-            false,
-            null,
-            receivedAtUtc));
-        var futureTimestamp = receivedAtUtc.AddSeconds(1).ToUnixTimeMilliseconds();
-        var message =
-            $"{{\"event_type\":\"last_trade_price\",\"asset_id\":\"asset-1\",\"market\":\"condition-1\",\"price\":\"0.51\",\"size\":\"2\",\"side\":\"BUY\",\"timestamp\":\"{futureTimestamp}\"}}";
-
-        Assert.True(await service.ProcessTextMessageAsync(
-            Component,
-            message,
-            receivedAtUtc,
-            CancellationToken.None));
-
-        var invalidated = cache.GetConfirmedAssetSubscription("asset-1");
-        Assert.False(invalidated.ConfirmedLive);
-        Assert.Equal(1, invalidated.Generation);
-        Assert.Null(queue.LastConfirmedAssetSubscription);
     }
 
     [Theory]
@@ -504,8 +324,7 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         IMarketDataSideEffectQueue sideEffectQueue,
         IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
         IExposureSnapshotCache? exposureSnapshotCache = null,
-        IAppRepository? repository = null,
-        IMarketDataCache? marketDataCache = null)
+        IAppRepository? repository = null)
     {
         var options = new MarketDataWebSocketOptions();
         repository ??= new NoOpAppRepository();
@@ -518,7 +337,7 @@ public sealed class MarketDataWebSocketFrameProcessingTests
             new EmptyRelevantMarketAssetProvider(),
             new ActiveMarketAssetSubscriptionRegistry(),
             new NoOpBtcOrderBookLagDiagnosticService(),
-            marketDataCache ?? new MarketDataCache(options),
+            new MarketDataCache(options),
             exposureSnapshotCache ?? new ExposureSnapshotCache(repository, makerGtdPaperPlacementHandoff),
             sideEffectQueue,
             repository,
@@ -587,8 +406,6 @@ public sealed class MarketDataWebSocketFrameProcessingTests
 
         public IReadOnlySet<Guid>? LastEligiblePaperOrderIds { get; private set; }
 
-        public ConfirmedAssetSubscriptionSnapshot? LastConfirmedAssetSubscription { get; private set; }
-
         public MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
             string component,
             MarketDataUpdate update,
@@ -606,23 +423,6 @@ public sealed class MarketDataWebSocketFrameProcessingTests
             }
 
             return updateOutcome;
-        }
-
-        public MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
-            string component,
-            MarketDataUpdate update,
-            ActiveMarketAssetSnapshot? activeMarketSnapshot,
-            DateTimeOffset receivedAtUtc,
-            IReadOnlySet<Guid>? eligiblePaperOrderIds,
-            ConfirmedAssetSubscriptionSnapshot? confirmedAssetSubscription)
-        {
-            LastConfirmedAssetSubscription = confirmedAssetSubscription;
-            return EnqueueUpdate(
-                component,
-                update,
-                activeMarketSnapshot,
-                receivedAtUtc,
-                eligiblePaperOrderIds);
         }
 
         public MarketDataSideEffectEnqueueOutcome EnqueueFrameDiagnostic(

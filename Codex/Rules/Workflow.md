@@ -96,28 +96,6 @@ the closed user-approved exception defined below:
   submission is
   disabled, and no alias, clone, descendant, future strategy, or changed execution
   semantic inherits the exception;
-- allow the second exact closed ordinary-Paper exception only for the six
-  group-`8224` BTC/ETH/SOL five-minute paired Maker-GTD legs: fixed Up/Down
-  outcomes, mutually linked pair IDs, first-observed `acceptingOrders=true`
-  timing, source `crypto_paired_maker_gtd_first_accepting_paper`, Up cap `0.50`,
-  Down cap `0.49`, one frozen equal-share quantity per pair, independent S0/S1
-  acceptance, no atomic rollback, effective Paper expiry at market end, and
-  stated/wire GTD expiration at market end plus 60 seconds because of the venue
-  security threshold. Their new PostOnly GTD placements use
-  `paired_maker_gtd_paper_v4`: every direct HTTP S0/S1 read
-  must carry a bounded ordered local request/client-receipt/response/evaluation
-  bracket. The authoritative venue snapshot timestamp remains mandatory audit
-  evidence but may be old for a freshly fetched unchanged quiet book. Exact-family
-  v1/v2/v3 orders remain grandfathered under their former effective Paper expiry at
-  market end minus 60 seconds and stated/wire expiration at market end for lifecycle
-  completion. All other approved predicates and lifecycle semantics remain unchanged. Under
-  `paired_touch_no_depth_gap_recovery_v1`, a restart, reconnect, reassignment, or
-  delivery failure creates a new exact-asset fence: the confirming frame cannot
-  fill, only a later authoritative event in that unchanged segment can fill, and
-  missing/cache/REST/pre-fence events are never backfilled. Terminal evidence must
-  persist the acceptance, fence, trigger, policy version, and `no_backfill=true`.
-  They use the same mandatory label; maker rebates are excluded from Paper PnL;
-  Live is disabled, and no predicate mismatch inherits this exception;
 - add or update parity tests and verify that intent, market evidence, fills, and
   outcomes are persisted or otherwise auditable.
 

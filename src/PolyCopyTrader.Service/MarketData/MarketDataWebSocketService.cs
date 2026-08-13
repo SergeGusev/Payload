@@ -133,11 +133,6 @@ public sealed class MarketDataWebSocketService(
             operationalDesiredAssetIds,
             snapshots);
         var plans = BuildSubscriptionPlans(criticalCryptoUpDown5mAssetIds, operationalPlans);
-        foreach (var plan in plans)
-        {
-            marketDataCache.AssignAssetSubscriptions(plan.Component, plan.AssetIds);
-        }
-
         var plannedAssetIds = plans.SelectMany(plan => plan.AssetIds).ToArray();
         marketDataCache.ReplaceSubscribedAssets(plannedAssetIds);
 
@@ -274,7 +269,6 @@ public sealed class MarketDataWebSocketService(
         }
         catch (JsonException ex)
         {
-            marketDataCache.InvalidateAssetSubscriptions(component);
             makerGtdHandoff.RecordMarketDataFailure(
                 assetId: null,
                 conditionId: null,
@@ -315,7 +309,6 @@ public sealed class MarketDataWebSocketService(
             cancellationToken.ThrowIfCancellationRequested();
             IAsyncDisposable? marketDataAdmission = null;
             IReadOnlySet<Guid>? eligiblePaperOrderIds = null;
-            ConfirmedAssetSubscriptionSnapshot? confirmedAssetSubscription = null;
             try
             {
                 if (!string.IsNullOrWhiteSpace(update.AssetId))
@@ -323,10 +316,6 @@ public sealed class MarketDataWebSocketService(
                     marketDataAdmission = await makerGtdHandoff.EnterMarketDataAdmissionAsync(
                         update.AssetId,
                         cancellationToken);
-                    confirmedAssetSubscription = TryConfirmLiveAssetSubscription(
-                        component,
-                        update,
-                        receivedAtUtc);
                 }
 
                 ActiveMarketAssetSnapshot? activeMarketSnapshot = null;
@@ -361,8 +350,7 @@ public sealed class MarketDataWebSocketService(
                     update,
                     activeMarketSnapshot,
                     receivedAtUtc,
-                    eligiblePaperOrderIds,
-                    confirmedAssetSubscription);
+                    eligiblePaperOrderIds);
                 switch (outcome)
                 {
                     case MarketDataSideEffectEnqueueOutcome.Enqueued:
@@ -373,12 +361,6 @@ public sealed class MarketDataWebSocketService(
                         break;
                     default:
                         failedUpdates++;
-                        if (confirmedAssetSubscription is not null)
-                        {
-                            marketDataCache.TryInvalidateAssetSubscription(
-                                confirmedAssetSubscription);
-                        }
-
                         RecordMakerGtdMarketDataFailure(
                             update,
                             receivedAtUtc,
@@ -400,12 +382,6 @@ public sealed class MarketDataWebSocketService(
             catch (Exception ex)
             {
                 failedUpdates++;
-                if (confirmedAssetSubscription is not null)
-                {
-                    marketDataCache.TryInvalidateAssetSubscription(
-                        confirmedAssetSubscription);
-                }
-
                 RecordMakerGtdMarketDataFailure(
                     update,
                     receivedAtUtc,
@@ -551,16 +527,10 @@ public sealed class MarketDataWebSocketService(
         return plans;
     }
 
-    internal void OnShardStatus(MarketDataStatusSnapshot status)
+    private void OnShardStatus(MarketDataStatusSnapshot status)
     {
         lock (statusGate)
         {
-            if (shardStatuses.TryGetValue(status.Component, out var previous) &&
-                IsShardContinuityBreak(previous, status))
-            {
-                marketDataCache.InvalidateAssetSubscriptions(status.Component);
-            }
-
             shardStatuses[status.Component] = status;
         }
     }
@@ -570,69 +540,7 @@ public sealed class MarketDataWebSocketService(
         lock (statusGate)
         {
             shardStatuses.Remove(component);
-            marketDataCache.RemoveAssetSubscriptionComponent(component);
         }
-    }
-
-    private ConfirmedAssetSubscriptionSnapshot? TryConfirmLiveAssetSubscription(
-        string component,
-        MarketDataUpdate update,
-        DateTimeOffset receivedAtUtc)
-    {
-        if (string.IsNullOrWhiteSpace(update.AssetId) ||
-            !update.HasAuthoritativeSourceTimestamp ||
-            update.SourceTimestampUtc is not { } sourceTimestampUtc ||
-            string.IsNullOrWhiteSpace(update.EventFingerprint))
-        {
-            return null;
-        }
-
-        if (sourceTimestampUtc > receivedAtUtc)
-        {
-            var existingSubscription = marketDataCache.GetConfirmedAssetSubscription(
-                update.AssetId);
-            if (existingSubscription.ConfirmedLive &&
-                string.Equals(existingSubscription.Component, component, StringComparison.Ordinal))
-            {
-                marketDataCache.TryInvalidateAssetSubscription(existingSubscription);
-            }
-
-            return null;
-        }
-
-        lock (statusGate)
-        {
-            if (!shardStatuses.TryGetValue(component, out var status) ||
-                !IsHealthyShardStatus(status) ||
-                !marketDataCache.ConfirmAssetSubscription(
-                    component,
-                    update.AssetId,
-                    receivedAtUtc,
-                    sourceTimestampUtc,
-                    update.EventFingerprint))
-            {
-                return null;
-            }
-
-            return marketDataCache.GetConfirmedAssetSubscription(update.AssetId);
-        }
-    }
-
-    private static bool IsShardContinuityBreak(
-        MarketDataStatusSnapshot previous,
-        MarketDataStatusSnapshot current)
-    {
-        var disconnectedTimestampChanged =
-            current.LastDisconnectedUtc is { } currentDisconnectedAtUtc &&
-            currentDisconnectedAtUtc != previous.LastDisconnectedUtc;
-        return IsHealthyShardStatus(previous) && !IsHealthyShardStatus(current) ||
-            current.ReconnectCount != previous.ReconnectCount ||
-            disconnectedTimestampChanged;
-    }
-
-    private static bool IsHealthyShardStatus(MarketDataStatusSnapshot status)
-    {
-        return status.ConnectionState == MarketDataConnectionState.Connected && !status.Stale;
     }
 
     private async Task PublishShardRemovedStatusAsync(string component, CancellationToken cancellationToken)

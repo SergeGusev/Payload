@@ -957,9 +957,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         if (options.EnabledVariantCodes is null || options.EnabledVariantCodes.Count == 0)
         {
-            return StrategyIds.UpDown5mStrategyVariants
-                .Where(variant => variant.EntryTiming == BtcUpDown5mStrategyEntryTiming.MarketStartOffset)
-                .ToArray();
+            return StrategyIds.UpDown5mStrategyVariants;
         }
 
         var enabledCodes = options.EnabledVariantCodes
@@ -967,7 +965,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             .Select(code => code.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return StrategyIds.UpDown5mStrategyVariants
-            .Where(variant => variant.EntryTiming == BtcUpDown5mStrategyEntryTiming.MarketStartOffset)
             .Where(variant => enabledCodes.Contains(variant.Code))
             .ToArray();
     }

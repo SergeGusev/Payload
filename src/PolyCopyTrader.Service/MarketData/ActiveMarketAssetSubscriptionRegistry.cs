@@ -6,13 +6,10 @@ public sealed class ActiveMarketAssetSubscriptionRegistry : IActiveMarketAssetSu
 {
     private readonly Lock gate = new();
     private readonly Dictionary<string, ActiveMarketAssetSnapshot> snapshots = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DateTimeOffset> protectedUntilUtc = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim changeSignal = new(0);
     private int pendingSignal;
 
-    public ActiveMarketAssetRegistryUpdateResult AddOrUpdateMarkets(
-        IReadOnlyCollection<PolymarketGammaMarket> markets,
-        bool protectFromFullScanRetention = false)
+    public ActiveMarketAssetRegistryUpdateResult AddOrUpdateMarkets(IReadOnlyCollection<PolymarketGammaMarket> markets)
     {
         var added = 0;
         var updated = 0;
@@ -29,11 +26,6 @@ public sealed class ActiveMarketAssetSubscriptionRegistry : IActiveMarketAssetSu
 
                 foreach (var snapshot in BuildSnapshots(market))
                 {
-                    if (protectFromFullScanRetention && market.EndDateUtc is { } endDateUtc)
-                    {
-                        protectedUntilUtc[snapshot.AssetId] = endDateUtc;
-                    }
-
                     if (!snapshots.TryGetValue(snapshot.AssetId, out var existing))
                     {
                         snapshots[snapshot.AssetId] = snapshot;
@@ -72,24 +64,14 @@ public sealed class ActiveMarketAssetSubscriptionRegistry : IActiveMarketAssetSu
 
         lock (gate)
         {
-            var nowUtc = DateTimeOffset.UtcNow;
-            foreach (var assetId in protectedUntilUtc
-                         .Where(pair => pair.Value <= nowUtc)
-                         .Select(pair => pair.Key)
-                         .ToArray())
-            {
-                protectedUntilUtc.Remove(assetId);
-            }
-
             foreach (var assetId in snapshots.Keys.ToArray())
             {
-                if (retained.Contains(assetId) || protectedUntilUtc.ContainsKey(assetId))
+                if (retained.Contains(assetId))
                 {
                     continue;
                 }
 
                 snapshots.Remove(assetId);
-                protectedUntilUtc.Remove(assetId);
                 removed++;
             }
 
@@ -125,7 +107,6 @@ public sealed class ActiveMarketAssetSubscriptionRegistry : IActiveMarketAssetSu
             if (update.MarketResolved)
             {
                 snapshots.Remove(assetId);
-                protectedUntilUtc.Remove(assetId);
                 SignalChange();
                 return true;
             }

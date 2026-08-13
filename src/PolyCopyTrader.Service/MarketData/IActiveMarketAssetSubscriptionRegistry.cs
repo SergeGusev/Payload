@@ -13,9 +13,7 @@ public sealed record ActiveMarketAssetRegistryUpdateResult(
 
 public interface IActiveMarketAssetSubscriptionRegistry
 {
-    ActiveMarketAssetRegistryUpdateResult AddOrUpdateMarkets(
-        IReadOnlyCollection<PolymarketGammaMarket> markets,
-        bool protectFromFullScanRetention = false);
+    ActiveMarketAssetRegistryUpdateResult AddOrUpdateMarkets(IReadOnlyCollection<PolymarketGammaMarket> markets);
 
     ActiveMarketAssetRegistryUpdateResult RetainAssets(IReadOnlyCollection<string> activeAssetIds);
 

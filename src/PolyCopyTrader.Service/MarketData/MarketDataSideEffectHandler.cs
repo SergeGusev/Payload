@@ -11,8 +11,7 @@ public sealed record MarketDataSideEffectWorkItem(
     DateTimeOffset ReceivedAtUtc,
     DateTimeOffset EnqueuedAtUtc,
     IReadOnlySet<Guid>? EligiblePaperOrderIds,
-    bool Replaceable,
-    ConfirmedAssetSubscriptionSnapshot? ConfirmedAssetSubscription = null);
+    bool Replaceable);
 
 public interface IMarketDataSideEffectHandler
 {
@@ -75,7 +74,6 @@ public sealed class MarketDataSideEffectHandler(
                 workItem.Update,
                 workItem.ReceivedAtUtc,
                 workItem.EligiblePaperOrderIds,
-                workItem.ConfirmedAssetSubscription,
                 cancellationToken));
     }
 

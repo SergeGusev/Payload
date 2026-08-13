@@ -39,7 +39,6 @@ public static class AppOptionsValidator
         ValidateAnalytics(configuration.Analytics, errors);
         ValidateTraderDiscovery(configuration.TraderDiscovery, errors);
         ValidateGammaMarketIngestion(configuration.GammaMarketIngestion, errors);
-        ValidatePairedMakerGtdDayAheadDiscovery(configuration.PairedMakerGtdDayAheadDiscovery, errors);
         ValidateBtcUpDown5mStrategy(configuration.BtcUpDown5mStrategy, errors);
         ValidateCoinbaseExchange(configuration.CoinbaseExchange, errors);
         ValidateBinanceBtcUsdReference(configuration.BinanceBtcUsdReference, errors);
@@ -150,10 +149,6 @@ public static class AppOptionsValidator
             $"Gamma market ingestion poll interval seconds: {configuration.GammaMarketIngestion.PollIntervalSeconds}",
             $"Gamma market ingestion page limit: {configuration.GammaMarketIngestion.PageLimit}",
             $"Gamma market persistence scope: {configuration.GammaMarketIngestion.PersistenceScope}",
-            $"Paired Maker-GTD day-ahead discovery enabled: {configuration.PairedMakerGtdDayAheadDiscovery.Enabled}",
-            $"Paired Maker-GTD day-ahead poll interval seconds: {configuration.PairedMakerGtdDayAheadDiscovery.PollIntervalSeconds}",
-            $"Paired Maker-GTD day-ahead lead band hours: {configuration.PairedMakerGtdDayAheadDiscovery.MinimumLeadHours}..{configuration.PairedMakerGtdDayAheadDiscovery.MaximumLeadHours}",
-            $"Paired Maker-GTD day-ahead Gamma batch size: {configuration.PairedMakerGtdDayAheadDiscovery.GammaBatchSize}",
             $"BTC Up or Down 5m strategy enabled: {configuration.BtcUpDown5mStrategy.Enabled}",
             $"BTC Up or Down 5m strategy poll interval seconds: {configuration.BtcUpDown5mStrategy.PollIntervalSeconds}",
             $"BTC Up or Down 5m Diff fast poll interval ms: {configuration.BtcUpDown5mStrategy.DiffCounterFastPollIntervalMilliseconds}",
@@ -1300,31 +1295,6 @@ public static class AppOptionsValidator
         if (options.PageLimit <= 0 || options.PageLimit > 500)
         {
             errors.Add("GammaMarketIngestion.PageLimit must be between 1 and 500.");
-        }
-    }
-
-    private static void ValidatePairedMakerGtdDayAheadDiscovery(
-        PairedMakerGtdDayAheadDiscoveryOptions options,
-        List<string> errors)
-    {
-        if (options.PollIntervalSeconds <= 0 || options.PollIntervalSeconds > 86_400)
-        {
-            errors.Add("PairedMakerGtdDayAheadDiscovery.PollIntervalSeconds must be between 1 and 86400.");
-        }
-
-        if (options.MinimumLeadHours < 0 || options.MinimumLeadHours > 168)
-        {
-            errors.Add("PairedMakerGtdDayAheadDiscovery.MinimumLeadHours must be between 0 and 168.");
-        }
-
-        if (options.MaximumLeadHours <= options.MinimumLeadHours || options.MaximumLeadHours > 168)
-        {
-            errors.Add("PairedMakerGtdDayAheadDiscovery.MaximumLeadHours must be greater than MinimumLeadHours and no more than 168.");
-        }
-
-        if (options.GammaBatchSize <= 0 || options.GammaBatchSize > 50)
-        {
-            errors.Add("PairedMakerGtdDayAheadDiscovery.GammaBatchSize must be between 1 and 50.");
         }
     }
 
