@@ -108,6 +108,17 @@ strategy, different execution source, predicate mismatch, or changed execution
 semantic inherits the exception; every other unsupported execution model remains
 `ResearchOnly`.
 
+Reference Average decision contract v5 changes only the shared pre-execution
+signal. Every usable configured average participates in Max/Min selection whether
+its window is complete or incomplete, and gaps or incomplete coverage alone do not
+block the signal. The explicitly named 3h families remain 3h-only but accept a
+usable incomplete 3h average. The exact ETH Maker-GTD family inherits this signal
+change only: `maker_gtd_paper_v2` pricing, immutable post-only GTD intent,
+acceptance, expiry, `TouchNoDepth` fill/lifecycle rules, `PaperOnly=true`, disabled
+Live submission, exact exception predicates, and the mandatory
+`optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills` label are
+unchanged.
+
 Authoritative references, verified 2026-08-10:
 
 - [Place Orders](https://docs.polymarket.com/trading/place-orders)

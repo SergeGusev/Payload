@@ -3,7 +3,7 @@
   "contractId": "RC-20260813-reference-average-available-windows",
   "title": "Use every available Reference Average window without completeness blocking",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -79,16 +79,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Focused Reference Average processor tests pass, including an incomplete extreme window winning Max/Min and full-data economic decisions remaining unchanged.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX reference-average-final.trx: 30/30 passed; includes incomplete extrema, all-incomplete windows, 3h-only, Optimized, composed, impact, and Maker-GTD cases."
         },
         {
           "id": "VER-008",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~CryptoReferencePriceAverageCacheTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Cache tests prove sparse ticks and internal gaps produce available incomplete averages for every configured nested window, while an empty cache remains empty.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX cache-final.trx: 5/5 passed; sparse internal gaps and nested-window availability are covered."
         }
       ]
     },
@@ -125,16 +125,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Focused tests prove gaps/incomplete coverage do not block ordinary, single-window 3h, Optimized, and composed Reference Average decisions, while zero usable data still rejects.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX reference-average-final.trx: 30/30 passed, including zero-data rejection and available incomplete-window evaluation."
         },
         {
           "id": "VER-009",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~CryptoReferencePriceAverageCacheTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Cache tests prove actual empty buckets do not erase populated-bucket averages and prove shorter-window availability implies configured 24h availability.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX cache-final.trx: 5/5 passed; actual sparse buckets preserve usable averages and shorter-window ticks also populate 24h."
         }
       ]
     },
@@ -169,16 +169,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Shared-path impact, ordinary/composed/single-window/Optimized/Maker behavior, and unchanged Maker execution-contract tests pass.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX reference-average-final.trx: 30/30 passed; catalog test proves 764 direct + 168 Confirmed = 932 static, BTC/ETH/SOL 312/406/214, plus 247 conditional Child = 1179."
         },
         {
           "id": "VER-004",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "Solution build completes with zero errors.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated dotnet build completed with 0 errors; existing nullable warnings remain."
         }
       ]
     },
@@ -212,24 +212,24 @@
           "kind": "inspection",
           "command": "Inspect the final diff and search the shared Reference Average bps selector for IsFullWindow/full-window-only predicates and stale v4/full-window descriptions.",
           "expected": "No completeness-only selector remains; unrelated signal and execution behavior is unchanged; current documentation consistently describes the available-data policy.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent final diff review confirmed no IsFullWindow selector remains in the shared Reference Average path; remaining predicates belong to independent Diff/extrema algorithms or diagnostics."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "git diff --check",
           "expected": "No whitespace errors.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final git diff --check completed with no whitespace errors."
         },
         {
           "id": "VER-007",
           "kind": "inspection",
           "command": ".\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree",
           "expected": "Requirement contract validation passes after evidence and independent review are complete.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final WorkingTree and Staged validator results are recorded after contract completion and staging."
         }
       ]
     },
@@ -263,8 +263,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Focused tests prove 3h-only identity is preserved, incomplete 3h data is accepted, and other windows cannot become its boundary.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX reference-average-final.trx: 30/30 passed, including strict 3h-only selection from incomplete 3h data."
         }
       ]
     }
@@ -278,9 +278,9 @@
     "semanticDigest": "sha256:9e511d9935f8e788e1efe5a6aafc941f78acfe8bfabcf8e90a5f921a0a5ef0e5"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reference-average-available-windows-reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/final_reference_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

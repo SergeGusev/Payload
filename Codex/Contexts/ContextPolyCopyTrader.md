@@ -1,3 +1,17 @@
+## Active Update 2026-08-13 Reference Average Available-Window v5
+Goal: Make every strategy on the shared Reference Average bps path calculate from all usable data present in its configured windows, without completeness or internal gaps blocking the decision.
+Status: Completed in branch; deployment is not part of this task.
+Done:
+- Replaced the shared Reference Average full-window selector with an available-data selector: every configured multi-window average with at least one valid sample and a positive price participates even when incomplete; an incomplete extreme may become Max/Min.
+- Preserved explicit 3h strategies as strictly 3h-only while allowing an incomplete usable 3h record; Optimized required-window matching and Confirmed/LowerEnter/Maker/Child shared-path inheritance remain intact.
+- Versioned diagnostics as v5, updated catalog/schema/docs, and proved the exact impact catalog: 764 direct + 168 Confirmed = 932 static strategies (BTC 312, ETH 406, SOL 214), plus 247 conditional Child rows = 1179 potential scope.
+- Preserved the explicit 24h oldest-real-bucket bps denominator and proved the cache invariant that every valid tick enters every configured nested window; gaps remain non-blocking while a completely unusable cache or integrity violation remains fail-closed.
+- Restored the pre-existing mandatory Maker-GTD warning label in root and nested `maker_gtd` raw-decision evidence only after the exact closed-exception predicate passes; pricing, GTD, fill, lifecycle, PaperOnly, and Live-disabled behavior did not change.
+- Requirement contracts were approved in parent commits `873638d7` and `ae5a552e`. Independent reviewer `agent:/root/final_reference_review` compared the verbatim requests, both contracts, complete diff, and evidence and returned PASS with no findings.
+Next: Deploy the branch build only when explicitly requested, then verify production v5 raw decisions and incomplete-window behavior read-only.
+Notes: Final isolated verification: build 0 errors; Reference Average 30/30; cache 5/5; Storage 104/104; exact Maker label 1/1; exact Maker closed-exception contract 4/4; `git diff --check` and both semantic digests passed. The first parallel Storage rerun lacked `POLYCOPYTRADER_REPOSITORY_ROOT` and produced source-location failures only; the corrected final run passed 104/104. No production service, database, strategy row, order, configuration, deployment, or restart was changed.
+Blockers: None.
+
 ## Active Update 2026-08-13 Project-Wide Requirement Fidelity Checkpoints
 Goal: Implement durable checkpoints that prevent Codex from silently replacing user requirements with technical preferences across the whole repository and future Codex sessions.
 Status: Completed in branch; activation prerequisites remain.

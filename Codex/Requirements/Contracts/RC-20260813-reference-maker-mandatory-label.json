@@ -3,7 +3,7 @@
   "contractId": "RC-20260813-reference-maker-mandatory-label",
   "title": "Restore the mandatory optimistic Paper label in Reference Average Maker-GTD decisions",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -53,16 +53,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~ProcessAsync_ReferenceAverageMakerGtdAcceptsIncompleteSignalWithoutChangingExecutionContract\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "The focused test passes and proves both exact mandatory label fields are persisted for the exact Maker-GTD order.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX label-final.trx: 1/1 passed; exact root and nested maker_gtd paper_model_label values are asserted."
         },
         {
           "id": "VER-006",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "The exact-family contract tests pass for all 28 unique group-8223 IDs/codes and reject variants with altered closed-exception predicates.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX maker-contract-final.trx: 4/4 passed; exact 28 group-8223 variants and altered-predicate rejection are covered."
         }
       ]
     },
@@ -89,32 +89,32 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "All Reference Average processor tests pass, including the unchanged Maker-GTD execution-contract tests.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated TRX reference-average-final.trx: 30/30 passed, including unchanged Maker-GTD execution-contract tests."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "Solution build completes with zero errors.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated dotnet build completed with 0 errors; existing nullable warnings remain."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Inspect the final diff against the exact closed-exception predicates and execution contract.",
           "expected": "Only the canonical label and its two raw-decision fields are added; no signal or execution behavior changes.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent final diff review confirmed only the canonical constant and two JSON fields after IsApprovedCurrentStrategyVariant were added; no signal or execution behavior changed."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "git diff --check",
           "expected": "No whitespace errors.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final git diff --check completed with no whitespace errors."
         }
       ]
     }
@@ -128,9 +128,9 @@
     "semanticDigest": "sha256:bfc4fdec2cf79feeba96b9884584a331160935805e7220463a78528d7f8bfd30"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reference-maker-label-reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/final_reference_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

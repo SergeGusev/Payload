@@ -41,3 +41,27 @@ Request:
 
 Result:
 Implemented a project-wide requirement-fidelity gate in isolated branch `codex/project-requirement-gates`. It persists verbatim prompts and REQ/source mappings, binds exact user approval to a semantic digest and parent revision, governs all non-journal repository paths, requires mapped passing evidence and an independent semantic review, and makes completed contracts immutable. Added future-session Codex lifecycle/pre-tool/stop hooks, staged/range Git hooks with an installer, and trusted-base pull-request CI with a non-squash guard. Negative/positive suites passed: validator 27/27, Codex hooks 52/52, Git hooks 31/31; parsing, whitespace, upstream-divergence, and forced-LF shell-hook checkout checks passed. Independent review returned PASS with no findings. No production/trading/Reference Average behavior changed. Default-branch activation still requires merge without squash, one-time Codex project/hook trust in a new session, local Git-hook installation after concurrent worktrees are quiescent, and required protected-branch CI with direct pushes and squash disabled.
+## 2026-08-13T13:21:30.7193526Z
+Request:
+Переделываем так:
+
+1. Используем все окна (24h, 12h и т.д.)
+2. При этом неполные данные по этим окнам не являются стоппером. Были дыры - ок, не проблема, работаем с тем, что есть.
+
+Re: Стратегии, специально названные 3h, должны:
+остаться 3h-only, но считать по любому имеющемуся объёму данных внутри 3h;
+
+Должны остаться  3h-only
+
+Re: Если в самом окне 24h нет вообще ни одной точки, но данные в более коротких окнах есть, какой знаменатель использовать для bps?
+
+А как такое может быть? Ведь более короткие окна включены в 24h, разве нет?
+
+APPROVE RC-20260813-reference-average-available-windows sha256:9e511d9935f8e788e1efe5a6aafc941f78acfe8bfabcf8e90a5f921a0a5ef0e5
+
+Разрешаю
+
+APPROVE RC-20260813-reference-maker-mandatory-label sha256:bfc4fdec2cf79feeba96b9884584a331160935805e7220463a78528d7f8bfd30
+
+Result:
+Implemented Reference Average available-window v5 for the complete shared decision path: all usable complete or incomplete configured windows participate, internal gaps do not block evaluation, and explicit 3h variants remain 3h-only while accepting incomplete 3h data. Confirmed exact static scope 932 plus 247 conditional Child rows. Preserved formula, direction, threshold, execution, risk, timing, and explicit available 24h oldest-bucket denominator. Restored the mandatory exact Maker-GTD optimistic Paper label at root and nested decision evidence only after the closed-exception predicate. Final isolated checks passed: build 0 errors, Reference Average 30/30, cache 5/5, Storage 104/104, Maker label 1/1, Maker contract 4/4, whitespace and requirement validation; independent review passed with no findings. No production or database state changed.

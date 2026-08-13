@@ -63,6 +63,96 @@ public sealed class CryptoReferencePriceAverageCacheTests
         Assert.Equal(now.AddSeconds(10), average.LastBucketStartUtc);
     }
 
+    [Fact]
+    public void Reset_SparseTicksWithInternalGapsRemainAvailableInEveryConfiguredWindow()
+    {
+        var now = new DateTimeOffset(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);
+        var cache = new CryptoReferencePriceAverageCache(new CryptoReferencePriceHistoryOptions
+        {
+            AssetSymbols = ["ETH"],
+            WriteIntervalSeconds = 10,
+            TargetSamplesPerWindow = 60,
+            WindowMinutes = [1440, 720, 360, 180, 90, 45, 20, 10]
+        });
+        CryptoReferencePriceTick[] ticks =
+        [
+            Tick("ETH", now.AddMinutes(-9).AddSeconds(-40), 100m),
+            Tick("ETH", now.AddMinutes(-5), 200m),
+            Tick("ETH", now.AddSeconds(-10), 300m)
+        ];
+
+        cache.Reset(ticks, now);
+
+        var averages = cache.GetAssetAverages("ETH");
+        Assert.Equal(["24h", "12h", "6h", "3h", "90m", "45m", "20m", "10m"], averages.Select(item => item.WindowLabel));
+        Assert.All(averages, average =>
+        {
+            Assert.True(average.SampleCount > 0);
+            Assert.False(average.IsFullWindow);
+            Assert.True(average.AveragePriceUsd > 0m);
+            Assert.NotNull(average.FirstBucketAveragePriceUsd);
+            Assert.NotNull(average.FirstBucketStartUtc);
+            Assert.NotNull(average.LastBucketStartUtc);
+        });
+        var tenMinute = averages.Single(average => average.WindowLabel == "10m");
+        Assert.Equal(3, tenMinute.SampleCount);
+        Assert.Equal(60, tenMinute.ExpectedSampleCount);
+        Assert.Equal(200m, tenMinute.AveragePriceUsd);
+    }
+
+    [Fact]
+    public void Add_OneShortWindowTickAlsoCreatesAvailableTwentyFourHourDenominator()
+    {
+        var now = new DateTimeOffset(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);
+        var cache = new CryptoReferencePriceAverageCache(new CryptoReferencePriceHistoryOptions
+        {
+            AssetSymbols = ["SOL"],
+            WriteIntervalSeconds = 10,
+            TargetSamplesPerWindow = 60,
+            WindowMinutes = [1440, 180, 10]
+        });
+        var tick = Tick("SOL", now.AddMinutes(-5), 150m);
+
+        cache.Add(tick, now);
+
+        var tenMinute = Assert.IsType<CryptoReferencePriceAverage>(cache.GetAverage("SOL", "10m"));
+        var twentyFourHour = Assert.IsType<CryptoReferencePriceAverage>(cache.GetAverage("SOL", "24h"));
+        Assert.Equal(1, tenMinute.SampleCount);
+        Assert.Equal(1, twentyFourHour.SampleCount);
+        Assert.Equal(150m, tenMinute.AveragePriceUsd);
+        Assert.Equal(150m, twentyFourHour.AveragePriceUsd);
+        Assert.Equal(150m, twentyFourHour.FirstBucketAveragePriceUsd);
+        Assert.False(tenMinute.IsFullWindow);
+        Assert.False(twentyFourHour.IsFullWindow);
+    }
+
+    [Fact]
+    public void Reset_WithoutTicksLeavesEveryConfiguredWindowUnusable()
+    {
+        var now = new DateTimeOffset(2026, 8, 13, 12, 0, 0, TimeSpan.Zero);
+        var cache = new CryptoReferencePriceAverageCache(new CryptoReferencePriceHistoryOptions
+        {
+            AssetSymbols = ["BTC"],
+            WriteIntervalSeconds = 10,
+            TargetSamplesPerWindow = 60,
+            WindowMinutes = [1440, 180, 10]
+        });
+
+        cache.Reset([], now);
+
+        var averages = cache.GetAssetAverages("BTC");
+        Assert.Equal(3, averages.Count);
+        Assert.All(averages, average =>
+        {
+            Assert.Equal(0, average.SampleCount);
+            Assert.False(average.IsFullWindow);
+            Assert.Null(average.AveragePriceUsd);
+            Assert.Null(average.FirstBucketAveragePriceUsd);
+            Assert.Null(average.FirstBucketStartUtc);
+            Assert.Null(average.LastBucketStartUtc);
+        });
+    }
+
     private static CryptoReferencePriceTick Tick(
         string assetSymbol,
         DateTimeOffset sampledAtUtc,

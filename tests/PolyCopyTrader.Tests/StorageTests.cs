@@ -391,9 +391,11 @@ public sealed class StorageTests
         Assert.DoesNotContain("'eth_up_down_5m_down_filtered_average_bps_' || code_suffix || '_fak_premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("'ETH Up or Down 5m Down ' || threshold_name || ' bps Filtered Average Premarket'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain("If the selected reference window is 6h or 12h, skip.", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("largest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("smallest full in-memory reference average across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows", PostgresSchema.SchemaSql, StringComparison.Ordinal);
-        Assert.Contains("envelope formed by the smallest and largest full in-memory reference averages across 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m windows", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("largest usable in-memory reference average across every configured 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m window", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("smallest usable in-memory reference average across every configured 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m window", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("envelope formed by the smallest and largest usable in-memory reference averages across every configured 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m window", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("whether complete or incomplete; gaps and incomplete coverage alone do not block calculation", PostgresSchema.SchemaSql, StringComparison.Ordinal);
+        Assert.Contains("oldest available real bucket in the 24h window; that 24h window may be incomplete, but no other denominator is substituted", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("If the current price moves Up by at least", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("If the current price moves Down by at least", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("if it is below the minimum boundary by at least", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -708,9 +710,10 @@ public sealed class StorageTests
             "'ETH Up or Down 5m ' || name_trigger_prefix || threshold_value::text || ' bps Optimized Average Premarket'",
             statement,
             StringComparison.Ordinal);
-        Assert.Contains("Use the largest full reference average as the maximum boundary", statement, StringComparison.Ordinal);
-        Assert.Contains("Use the smallest full reference average as the minimum boundary", statement, StringComparison.Ordinal);
-        Assert.Contains("Use the envelope formed by the smallest and largest full reference averages", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the largest usable reference average as the maximum boundary", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the smallest usable reference average as the minimum boundary", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the envelope formed by the smallest and largest usable reference averages", statement, StringComparison.Ordinal);
+        Assert.Contains("whether complete or incomplete; gaps and incomplete coverage alone do not block calculation", statement, StringComparison.Ordinal);
         Assert.Contains("direction-relevant maximum boundary came from the 3h window", statement, StringComparison.Ordinal);
         Assert.Contains("direction-relevant minimum boundary came from the 3h window", statement, StringComparison.Ordinal);
         Assert.Contains("envelope boundary that triggered the signal came from the 3h window", statement, StringComparison.Ordinal);
@@ -752,9 +755,10 @@ public sealed class StorageTests
             statement,
             StringComparison.Ordinal);
         Assert.Contains("latest Binance BTC/USDT reference price", statement, StringComparison.Ordinal);
-        Assert.Contains("Use the largest full reference average as the maximum boundary", statement, StringComparison.Ordinal);
-        Assert.Contains("Use the smallest full reference average as the minimum boundary", statement, StringComparison.Ordinal);
-        Assert.Contains("Use the envelope formed by the smallest and largest full reference averages", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the largest usable reference average as the maximum boundary", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the smallest usable reference average as the minimum boundary", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the envelope formed by the smallest and largest usable reference averages", statement, StringComparison.Ordinal);
+        Assert.Contains("whether complete or incomplete; gaps and incomplete coverage alone do not block calculation", statement, StringComparison.Ordinal);
         Assert.Contains("direction-relevant maximum boundary came from the 3h window", statement, StringComparison.Ordinal);
         Assert.Contains("direction-relevant minimum boundary came from the 3h window", statement, StringComparison.Ordinal);
         Assert.Contains("envelope boundary that triggered the signal came from the 3h window", statement, StringComparison.Ordinal);
@@ -796,9 +800,10 @@ public sealed class StorageTests
             statement,
             StringComparison.Ordinal);
         Assert.Contains("latest Binance SOL/USDT reference price", statement, StringComparison.Ordinal);
-        Assert.Contains("Use the largest full reference average as the maximum boundary", statement, StringComparison.Ordinal);
-        Assert.Contains("Use the smallest full reference average as the minimum boundary", statement, StringComparison.Ordinal);
-        Assert.Contains("Use the envelope formed by the smallest and largest full reference averages", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the largest usable reference average as the maximum boundary", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the smallest usable reference average as the minimum boundary", statement, StringComparison.Ordinal);
+        Assert.Contains("Use the envelope formed by the smallest and largest usable reference averages", statement, StringComparison.Ordinal);
+        Assert.Contains("whether complete or incomplete; gaps and incomplete coverage alone do not block calculation", statement, StringComparison.Ordinal);
         Assert.Contains("direction-relevant maximum boundary came from the 3h window", statement, StringComparison.Ordinal);
         Assert.Contains("direction-relevant minimum boundary came from the 3h window", statement, StringComparison.Ordinal);
         Assert.Contains("envelope boundary that triggered the signal came from the 3h window", statement, StringComparison.Ordinal);
@@ -838,7 +843,8 @@ public sealed class StorageTests
             "asset_symbol || ' Up or Down 5m ' || threshold_value::text || ' bps LowEnter Average Premarket'",
             statement,
             StringComparison.Ordinal);
-        Assert.Contains("envelope formed by the smallest and largest full in-memory reference averages", statement, StringComparison.Ordinal);
+        Assert.Contains("envelope formed by the smallest and largest usable in-memory reference averages", statement, StringComparison.Ordinal);
+        Assert.Contains("whether complete or incomplete; gaps and incomplete coverage alone do not block calculation", statement, StringComparison.Ordinal);
         Assert.Contains("above the maximum boundary by at least", statement, StringComparison.Ordinal);
         Assert.Contains("below the minimum boundary by at least", statement, StringComparison.Ordinal);
         Assert.Contains("maximum order price of 0.50", statement, StringComparison.Ordinal);
@@ -877,7 +883,8 @@ public sealed class StorageTests
             "'ETH Up or Down 5m ' || threshold_value::text || ' bps ' || name_marker || ' Premarket'",
             statement,
             StringComparison.Ordinal);
-        Assert.Contains("full in-memory 3h reference average only", statement, StringComparison.Ordinal);
+        Assert.Contains("usable in-memory 3h reference average only; other configured windows do not participate", statement, StringComparison.Ordinal);
+        Assert.Contains("whether complete or incomplete; gaps and incomplete coverage alone do not block calculation", statement, StringComparison.Ordinal);
         Assert.Contains("maximum order price of 0.50", statement, StringComparison.Ordinal);
         Assert.Contains("immediately executable asks at or below that price", statement, StringComparison.Ordinal);
         Assert.Contains("remainder", statement, StringComparison.Ordinal);
