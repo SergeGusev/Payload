@@ -98,6 +98,14 @@ the persisted contract version and formula distinguish them from v2. Runtime v2
 placement is fail-closed unless the exact asset, behavior, ID, threshold, code,
 timing, Paper-only flag, and `0.99` cap predicates pass.
 
+On 2026-08-13 the user explicitly approved this exact family inheriting the shared
+Reference Average v4 signal rule. Max/Min boundaries still use only full windows,
+while the first populated real bucket of the explicit `24h` record may be used as
+the bps denominator when that record is incomplete; no other window may be
+substituted. This changes signal availability only. The `maker_gtd_paper_v2`
+intent, pricing, PostOnly acceptance, TouchNoDepth fill, and lifecycle semantics
+remain unchanged.
+
 For these exact 28 strategies, ordinary Paper orders, positions, fills, PnL, win
 rate, and performance inclusion is intentional. Every result must carry the label
 `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. The

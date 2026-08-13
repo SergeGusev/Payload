@@ -89,7 +89,11 @@ the closed user-approved exception defined below:
   `floor_to_tick(min(S0.bestAsk - S0.tickSize, 0.99))`. Exact-family records already
   persisted under `maker_gtd_paper_v1` remain grandfathered with their original
   one-tick-improvement formula; persisted version/formula fields separate the two
-  regimes. Its ordinary
+  regimes. On 2026-08-13 the user explicitly approved this exact family inheriting
+  the shared Reference Average v4 signal rule: Max/Min boundaries remain full-only,
+  while an incomplete explicit `24h` record may supply its first populated real
+  bucket as the bps denominator; no other window may be substituted. The
+  `maker_gtd_paper_v2` execution contract is unchanged. Its ordinary
   Paper orders, PnL, win rate, and performance are intentional, but every result
   must say
   `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. Live

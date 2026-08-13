@@ -81,6 +81,12 @@ Leader trades are signal candidates, not commands. The bot may act only when cat
   original `floor_to_tick(min(S0.bestBid + S0.tickSize, S0.bestAsk - S0.tickSize,
   0.99))` pricing so their lifecycle and historical accounting are not orphaned;
   the persisted contract version and formula distinguish the two regimes.
+  On 2026-08-13 the user explicitly approved this exact family inheriting the
+  shared Reference Average v4 signal rule: Max/Min boundaries still require full
+  windows, while the first populated real bucket of the explicit `24h` record may
+  be used as the bps denominator when that record is incomplete; no other window
+  may be substituted. This changes only signal availability and leaves
+  `maker_gtd_paper_v2` placement, acceptance, fill, and lifecycle semantics intact.
   These exact 28 PaperOnly strategies intentionally contribute orders, positions, PnL, win rate,
   and performance to ordinary Paper metrics even though their optimistic
   `TouchNoDepth` full-fill inference is not Live-equivalent and may overstate

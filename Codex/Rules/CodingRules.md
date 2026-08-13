@@ -39,7 +39,11 @@ contains the full safety and project rules.
   `floor_to_tick(min(S0.bestAsk - S0.tickSize, 0.99))`. Exact-family records already
   persisted under `maker_gtd_paper_v1` remain grandfathered with their original
   one-tick-improvement formula; persisted version/formula fields separate the two
-  regimes. This family
+  regimes. On 2026-08-13 the user explicitly approved this exact family inheriting
+  the shared Reference Average v4 signal rule: Max/Min boundaries remain full-only,
+  while an incomplete explicit `24h` record may supply its first populated real
+  bucket as the bps denominator; no other window may be substituted. The
+  `maker_gtd_paper_v2` execution contract is unchanged. This family
   intentionally enters ordinary Paper metrics under the mandatory label
   `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`; Live
   submission is disabled. No alias, clone, descendant, future strategy, or changed

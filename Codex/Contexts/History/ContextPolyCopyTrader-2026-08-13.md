@@ -18,3 +18,10 @@ Request:
 
 Result:
 Diagnosed exact production strategy `b7c50005-0000-4000-8179-000000000102` read-only. The last Paper order was `2026-08-11T14:44:50.723550Z`. Every one of the 70 due cycles on August 13 through `05:49:30Z` was finalized with `reference_average_bps_denominator_24h_start_price_missing`, not a 2 bps threshold rejection. Raw ETH ticks reconstructed only 54 of the required 60 24-minute buckets because the prior 11-hour feed outage remains inside the rolling 24-hour window. Runtime, fresh ETH ticks, and the post-restart scheduler are healthy; neighboring neutral 1 bps and 3 bps strategies show the same gate. With uninterrupted ticks, the first potentially eligible evaluation is `2026-08-13T08:04:30Z` / `11:04:30 Europe/Sofia`; threshold, book, execution, and risk gates can still correctly skip it. Restarting would not help. No production or source state was changed.
+
+## 2026-08-13T07:31:41.2513558Z
+Request:
+Да, исправь все стратегии с этой логикой
+
+Result:
+Implemented Reference Average signal contract v4 for the complete verified shared scope of 932 production catalog strategies (`312 BTC + 406 ETH + 214 SOL`) without changing production. Max/Min and exact-window boundaries remain full-only, while the first real bucket of a populated explicit 24h record may now serve as the bps denominator even when the 24h record is incomplete; no other-window fallback is allowed. Ordinary, Optimized, LowEnter, 3h, generic LowerEnter, exact ETH Maker-GTD, and nested Confirmed paths are covered. Maker-GTD execution remains `maker_gtd_paper_v2` and Paper-only; only shared signal eligibility and mandatory label evidence changed. Updated runtime diagnostics to v4, catalog/schema descriptions, parity/rule documentation, and focused regressions. The focused final suite passed 24/24 and the solution built with zero errors. The full run's 125 failures exactly matched the 125 failing names on clean base `bf859770`, with no feature-only failures; 35 environment-gated tests were not executed in both runs. Independent review found no blocker and `git diff --check` passed. Work was isolated from unrelated concurrent main-worktree changes.
