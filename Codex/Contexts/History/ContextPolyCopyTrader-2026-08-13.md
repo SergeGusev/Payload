@@ -27,3 +27,10 @@ Request:
 
 Result:
 Removed the exact six BTC/ETH/SOL group-8224 variants and their code, seed, configuration, workers, paired-only lifecycle plumbing, tests, current documentation exception, and two directly related research artifacts. Added and locally rollback-smoked a guarded exact cleanup migration. Production preview identified the exact attributable rows, and only the six strategy settings were transactionally quiesced (`enabled=false`, `paused=true`, `live_stakes=false`). Production history was not yet purged because the deployed old binary can reseed the family after restart; durable completion is blocked pending explicit approval to deploy/restart the new build and then verify zero residuals. The clean commit built with zero errors. Its full suite retained exactly the clean-HEAD failure set (125 failed cases / 114 distinct failed names, with no commit-only failure); the 134-test count reduction is entirely the removed paired tests.
+
+## 2026-08-13T09:02:55.5636671Z
+Request:
+Перезапустил. Проверяй и продолжай
+
+Result:
+Verified production after the user's restart through two independent bounded read-only UTC snapshots against exact server `192.168.0.101:5432/polycopytrader`. The service is Running/Live and reports heartbeat version marker `info=1.0.0+f5acfc99e6689dab912124a115b7273a7cceabf0`, with a fresh heartbeat and empty error. Cleanup marker `20260813_remove_paired_maker_gtd_first_accepting_strategies` was applied at `2026-08-13T08:58:26.821002Z` and records deletion of exactly 6 strategies, 4,326 orders, 509 fills, 5,004 runs, 4,326 signals, 509 positions, 503 settlements, 54 dedicated API errors, 18,494 projection rows, and 18 performance rows, with zero active/live rows. Current exact strategies and all attributable orders/fills/runs/signals/positions/settlements/API errors/Live/shadow rows, near aliases, and source aliases are zero. One broad independent aggregate timed out read-only and rolled back; shorter indexed control queries then independently confirmed the core zero state. Codex performed no deployment, restart, or production mutation in this continuation.
