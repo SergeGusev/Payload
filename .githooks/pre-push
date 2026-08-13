@@ -1,0 +1,111 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  echo "Requirement gate: $*" >&2
+  exit 2
+}
+
+root="$(git rev-parse --show-toplevel)" || fail "cannot resolve the repository root."
+remote_name="${1:-}"
+validator="$root/scripts/requirements/Validate-RequirementContract.ps1"
+
+[ -n "$remote_name" ] || fail "Git did not provide a remote name."
+[ -f "$validator" ] || fail "validator is missing: $validator"
+
+case "$(git rev-parse --show-object-format 2>/dev/null || true)" in
+  sha1)
+    zero_oid="0000000000000000000000000000000000000000"
+    ;;
+  sha256)
+    zero_oid="0000000000000000000000000000000000000000000000000000000000000000"
+    ;;
+  *)
+    fail "unsupported or unknown Git object format."
+    ;;
+esac
+
+assert_oid_shape() {
+  value="$1"
+  label="$2"
+  if [ "${#value}" -ne "${#zero_oid}" ]; then
+    fail "$label is not a full-length object id."
+  fi
+  case "$value" in
+    *[!0-9a-fA-F]*) fail "$label is not a hexadecimal object id." ;;
+  esac
+}
+
+resolve_commit() {
+  object_id="$1"
+  label="$2"
+  resolved="$(git rev-parse --verify "${object_id}^{commit}" 2>/dev/null || true)"
+  [ -n "$resolved" ] || fail "$label '$object_id' is not available locally as a commit; fetch before pushing."
+  printf '%s\n' "$resolved"
+}
+
+resolve_new_ref_base() {
+  symbolic_ref="$(git symbolic-ref -q "refs/remotes/$remote_name/HEAD" 2>/dev/null || true)"
+  if [ -n "$symbolic_ref" ]; then
+    symbolic_commit="$(git rev-parse --verify "${symbolic_ref}^{commit}" 2>/dev/null || true)"
+    if [ -n "$symbolic_commit" ]; then
+      printf '%s\n' "$symbolic_commit"
+      return
+    fi
+  fi
+
+  master_commit="$(git rev-parse --verify "refs/remotes/$remote_name/master^{commit}" 2>/dev/null || true)"
+  if [ -n "$master_commit" ]; then
+    printf '%s\n' "$master_commit"
+    return
+  fi
+
+  fail "cannot resolve a trusted base for a new ref on '$remote_name'; fetch its default branch first."
+}
+
+record_count=0
+validated_count=0
+carriage_return="$(printf '\r')"
+
+while IFS=' ' read -r local_ref local_oid remote_ref remote_oid extra; do
+  record_count=$((record_count + 1))
+  # PowerShell-based test and wrapper processes may terminate stdin records with
+  # CRLF. Git's fields themselves cannot contain carriage returns.
+  remote_oid="${remote_oid%"$carriage_return"}"
+  extra="${extra%"$carriage_return"}"
+
+  if [ -z "${local_ref:-}" ] || [ -z "${local_oid:-}" ] ||
+     [ -z "${remote_ref:-}" ] || [ -z "${remote_oid:-}" ] ||
+     [ -n "${extra:-}" ]; then
+    fail "malformed pre-push input record $record_count."
+  fi
+
+  assert_oid_shape "$local_oid" "local object id for '$local_ref'"
+  assert_oid_shape "$remote_oid" "remote object id for '$remote_ref'"
+
+  if [ "$local_oid" = "$zero_oid" ]; then
+    echo "Requirement gate: skipping deleted ref '$remote_ref'."
+    continue
+  fi
+
+  head_commit="$(resolve_commit "$local_oid" "local object id for '$local_ref'")"
+  if [ "$remote_oid" = "$zero_oid" ]; then
+    base_commit="$(resolve_new_ref_base)"
+    base_description="the fetched default branch of '$remote_name'"
+  else
+    base_commit="$(resolve_commit "$remote_oid" "remote object id for '$remote_ref'")"
+    base_description="the current remote ref '$remote_ref'"
+  fi
+
+  if ! git merge-base --is-ancestor "$base_commit" "$head_commit"; then
+    fail "ref '$remote_ref' is non-fast-forward relative to $base_description; force/non-ancestor pushes are blocked."
+  fi
+
+  echo "Requirement gate: validating '$remote_ref' range $base_commit..$head_commit"
+  powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File \
+    "$validator" -Mode Range -BaseRef "$base_commit" -HeadRef "$head_commit"
+  validated_count=$((validated_count + 1))
+done
+
+[ "$record_count" -gt 0 ] || fail "Git supplied no pre-push ref records."
+echo "Requirement gate: pre-push validation passed for $validated_count non-delete ref(s)."

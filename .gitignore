@@ -49,6 +49,11 @@ appsettings.Production.local.json
 
 ## Local Codex workspace
 .codex/
+!.codex/
+.codex/*
+!.codex/hooks.json
+!.codex/hooks/
+!.codex/hooks/**
 
 ## NuGet
 *.nupkg
