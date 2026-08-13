@@ -92,3 +92,10 @@ Request:
 
 Result:
 Explained from the current schema that the archive is not a retained Paper/Live bet: it is a compact per-run tombstone used to prevent duplicate recreation after raw deletion, preserve exact skip reason/time for projection and reconciliation, and restore the raw run while reversing its rollup if a late durable Paper/Live/shadow dependency appears. Rollups alone retain aggregate counts but cannot identify or reconstruct an exact run; deleting without a marker loses those guarantees. Also identified the stronger possible optimization: keep a rich restore-capable tombstone only for a proven late-dependency horizon and then reduce it to a slim permanent dedupe key while retaining rollups. That horizon and field set remain unproven and were not silently added to the pending contract. No product, contract, database, service, configuration, deployment, trading, build, or test state changed.
+
+## 2026-08-13T15:16:21.1148612Z
+Request:
+ок, действуй
+
+Result:
+Completed the approved-scope read-only design and runtime preview for stronger skipped-run archive compaction. A finite rich-payload TTL was disproved by unbounded late-dependency restore paths and missing durable restore telemetry. Exact endpoint inspection measured about 5.28 million v1 tombstones occupying 5.31 GB, mostly indexes. Designed a dedicated narrow v2 with local immutable market/metadata/reason dimensions, exact restore, complete Paper/Live blocker preservation, mixed v1/v2 semantics, and a Live-enable race correction. The first compatibility release is hard-disabled for product v2 writes and cannot save space until a separate activation/fence release. A deterministic five-layout, 262,144-row prototype must prove the selected layout is strictly smallest and at least 35% below v1, including every owned heap/index/dimension. Three independent reviews passed the validated contract `RC-20260813-compact-skip-archive-v2`, digest `sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d`. No product source, database, service, deployment, configuration, API, trading, Docker, or test-database state changed; product edits await exact approval.
