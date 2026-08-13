@@ -1,0 +1,347 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260813-calculated-net-ratio-fallback",
+  "title": "Finalize unresolved Paper run Net with a same-strategy fee-to-stake ratio",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Давай введём новое правило:\n\n1. Если какая-то ставка не может быть перерасчитана в Net из-за разных ошибок типа fee_calculation_source='mixed' и любой другой.\n2. То мы вычисляем по остальным ставкам этой стратегии коэффициент Gross/Net и просто делим Gross для этих ставок на полученный коэффициент. Получаем Net.\n\nЭто будет достаточно близко к правде"
+    },
+    {
+      "source": "user",
+      "text": "Давай не будем усложнять. Помечай сразу как Calculated, чтобы к этому не возвращаться. \n\nПо поводу коэффициентов и корректировки рассчёта - согласен"
+    }
+  ],
+  "scope": {
+    "goal": "Finalize an unresolved Settled Paper strategy run once by deriving a same-strategy fee-to-stake ratio from exact runs, writing a formula-consistent fee and Net, and marking the run Calculated so ordinary strategy Net PnL and Net ROI can become available.",
+    "inScope": [
+      "Existing and future canonical strategy_market_paper_runs in Paper accounting for every strategy, when status is Settled, strategy identity is present, stake_usd is positive, realized_pnl_usd is present, and the run still fails the current complete fee/Net accounting predicate after the exact calculation path has had priority.",
+      "An exact repair that preserves an already authoritative nonnegative Fee and derives only missing Net as Gross - Fee before any ratio fallback, followed when necessary by a lifetime same-strategy donor coefficient R = SUM(exact fee_usd) / SUM(exact positive stake_usd), using only complete Calculated or VenueReported Settled runs that satisfy Net = Gross - Fee and were not produced by this fallback.",
+      "Per-target fallback values estimated_fee_usd = ROUND(stake_usd * R, 8, midpoint away from zero) and estimated Net = realized_pnl_usd - estimated_fee_usd.",
+      "Terminal run-only persistence as fee_accounting_status=Calculated with a stable internal fallback fee_calculation_source, existing reconciliation dispatch, Gross-ranked strategy scheduling, bounded batches, retryable transaction deferrals, and idempotent compare-and-set behavior.",
+      "Focused source, processor, storage, PostgreSQL integration, projection, and documentation verification of the fallback contract."
+    ],
+    "outOfScope": [
+      "Live accounting, open or non-Settled runs, signal selection, entry timing, prices, stake sizing, order placement, execution semantics, portfolio/risk logic, or enabling Live orders.",
+      "Changing Gross PnL, stake, settlement result, timestamps, strategy identity, order/fill economics, exact Polymarket fee formulas, or any already complete exact run.",
+      "Adding an Estimated status, Estimated UI/CSV label, separate estimated coverage, coefficient caps/floors, outlier removal, winner/loser coefficients, or an average of per-run ratios.",
+      "Updating or synthesizing paper fills, orders, positions, or settlements when the canonical run is fallback-finalized.",
+      "Production data mutation, deployment, service restart, configuration mutation, or trading action as part of this local implementation task."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "All historical and future Settled Paper strategy runs with positive stake and non-null Gross, across all strategy IDs. No historical cutoff or execution-source allowlist applies to the fallback phase. Live and non-Settled records are excluded.",
+    "firstVerification": "Trace the current run-backed Dashboard completeness predicate, exact historical recalculation phase, fee-only reconciliation trigger, donor data, unresolved production examples, and the mathematical behavior of the literal Gross/Net rule before selecting an implementation path."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "After exact fee calculation has priority, route every otherwise unresolved eligible Settled Paper run to the same-strategy ratio fallback without disturbing a run that is already exactly complete.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Если какая-то ставка не может быть перерасчитана в Net из-за разных ошибок типа fee_calculation_source='mixed' и любой другой.",
+      "acceptanceCriteria": [
+        "The fallback unit is the canonical strategy_market_paper_runs row with status Settled, positive stake_usd, non-null realized_pnl_usd, and an exact strategy_id.",
+        "A run is already complete and remains byte-for-byte untouched when status is Calculated or VenueReported, fee_usd is nonnegative, Gross and Net are present, and Net exactly equals Gross minus Fee; fee_calculation_source=mixed alone does not make such a run a target.",
+        "Before ratio estimation, an otherwise identity-valid Settled run with status Calculated or VenueReported, nonnegative fee_usd, non-null Gross, and missing or inconsistent Net is repaired exactly by preserving Fee, status, source, and fee metadata and setting Net = Gross - Fee; it is not a ratio target.",
+        "An eligible run that still fails the complete predicate after both the existing exact fee path and the authoritative-Fee Net repair is a fallback target regardless of its incomplete fee status or source; any stored incomplete fee/Net values may be replaced by the approved ratio result.",
+        "A database lock timeout, statement cancellation, transport error, programming error, or service cancellation is retried as an operational failure and never converted into a financial estimate.",
+        "For each Gross-ranked strategy visit, the bounded exact historical phase and authoritative-Fee Net repair run before the ratio fallback phase, and the fallback phase runs before that strategy rank is completed.",
+        "Selection and UPDATE execute with compare-and-set protection: the mutation rechecks the unchanged strategy/run/economic tuple and that the row still needs the applicable exact repair or ratio fallback. A concurrent exact completion causes zero fallback updates and is never overwritten."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/HistoricalPaperNetFallbackModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperNetFallback.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperNetFallbackPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused PaperFakFeeBackfillProcessorTests and HistoricalPaperFakFeeBackfillStorageTests under the marked D:\\CodexTemp run.",
+          "expected": "Exact-complete runs remain untouched, an authoritative Fee receives an exact Net repair without fee replacement, valid mixed-source exact runs are not ratio targets, unresolved financial rows reach fallback only after exact stages, a concurrent exact completion wins, and operational failures retry without estimating.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "For each bounded fallback batch, calculate one lifetime coefficient from exact Settled donor runs of the same strategy as R = SUM(Fee) / SUM(Stake), excluding every prior ratio-fallback result.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "мы вычисляем по остальным ставкам этой стратегии коэффициент Gross/Net",
+      "acceptanceCriteria": [
+        "Donors have the exact same strategy_id as the target batch, status Settled, positive stake_usd, nonnegative fee_usd, non-null Gross and Net, status Calculated or VenueReported, and exact Net = Gross - Fee.",
+        "A donor produced by this ratio fallback is excluded using the exact case-sensitive source strategy-settled-fee-stake-ratio-v1 even though its persisted status is Calculated; estimates can never recursively influence later coefficients.",
+        "R is the ratio of aggregate sums SUM(fee_usd) / SUM(stake_usd), not an average of individual ratios and not Gross/Net; positive and negative Gross donors share the same fee-to-stake coefficient.",
+        "The exact donor snapshot is recomputed for each bounded transaction. There is no minimum donor count beyond at least one valid donor, and there is no cap, floor, sign split, time window, or outlier filter.",
+        "If no valid donor exists or aggregate donor stake is not positive, the transaction updates no target and leaves it unresolved for a later strategy visit."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/HistoricalPaperNetFallbackModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperNetFallback.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperNetFallbackPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused storage contract and PostgreSQL integration cases for donor selection, coefficient calculation, fallback-source exclusion, and no-donor behavior under the marked D:\\CodexTemp run.",
+          "expected": "The SQL and runtime results use only exact same-strategy donors, compute the aggregate fee-to-stake ratio, exclude prior fallback rows, and perform no update without positive donor stake.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Persist each approved fallback result as ordinary Calculated accounting with a nonnegative estimated Fee and exact Net = Gross - Fee.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Помечай сразу как Calculated",
+      "acceptanceCriteria": [
+        "For donor rows (stake 100, fee 2) and (stake 50, fee 1), R is 0.02; a target with stake 20 and Gross 10 receives fee 0.40 and Net 9.60, while a target with stake 20 and Gross -10 receives fee 0.40 and Net -10.40.",
+        "The estimated fee is stake_usd multiplied by R and rounded to numeric(28,8) with midpoint away from zero; Net is the unchanged realized_pnl_usd minus that rounded fee, also stored at numeric(28,8) precision.",
+        "A zero coefficient from exact zero-fee donors is valid and produces Fee 0 and Net equal to Gross. A target with nonpositive stake or missing Gross is not eligible and remains unchanged.",
+        "The run is written with fee_accounting_status=Calculated, fee_calculated_at_utc, estimated fee_usd, net_realized_pnl_usd, and the exact case-sensitive fee_calculation_source strategy-settled-fee-stake-ratio-v1.",
+        "The ratio result sets fee_liquidity_role to Unknown, clears fee_rate, fee_taker_only, and fee_exponent to NULL, and replaces the prior fee_calculation_source; no original failure source is copied elsewhere.",
+        "Gross, stake, run status Settled, settlement economics, strategy/market identity, settled_at_utc, and all non-fee fields are unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/HistoricalPaperNetFallbackModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperNetFallback.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperNetFallbackPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run deterministic positive-Gross, negative-Gross, zero-fee, rounding, invalid-target, and Gross-immutability PostgreSQL integration cases under the marked D:\\CodexTemp run.",
+          "expected": "Every eligible target becomes Calculated with exact Fee/Net values and unchanged Gross/stake/settlement facts; invalid targets remain unchanged.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Treat a successfully fallback-calculated run as terminal and ordinary: never revisit or replace it, do not expose an Estimated status or label, and let existing Dashboard reconciliation count it as covered Net.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "чтобы к этому не возвращаться",
+      "acceptanceCriteria": [
+        "A successfully written ratio-fallback row is identified by exact case-sensitive source strategy-settled-fee-stake-ratio-v1, is idempotent, and is never recomputed by this workflow when donors later change; later exact fee availability does not replace it.",
+        "The old exact historical candidate path excludes a legacy fill whose linked Settled run already has valid fallback-finalized Calculated accounting, preventing recurring accounting conflicts after restart or a new sweep.",
+        "No new FeeAccountingStatus, Estimated status, WPF/CSV marker, separate estimated coverage, or visible warning is added. The exact internal source strategy-settled-fee-stake-ratio-v1 is retained only for donor exclusion, idempotency, and database audit.",
+        "The run-only fee update uses the existing fee-only reconciliation queue. After reconciliation, existing Dashboard rules include it in accounted fee and Net coverage and use the unchanged Net ROI formula SUM(Net) * 100 / (SUM(settled stake) + SUM(accounted fee)).",
+        "Related fill, order, position, and settlement accounting rows are not updated or synthesized and may retain their prior statuses or blank Net values."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperNetFallback.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperNetFallbackPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run focused idempotency, restart, exact-candidate exclusion, reconciliation-queue, and run-backed Dashboard projection tests under the marked D:\\CodexTemp run.",
+          "expected": "Fallback rows remain terminal Calculated values, never donate or re-enter either phase, queue one strategy reconciliation, and unlock ordinary run-backed Net/Net ROI when all required runs are covered.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Preserve Gross-ranked strategy processing and bounded transactional liveness while broadening fallback eligibility to all unresolved Settled Paper runs.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "и любой другой",
+      "acceptanceCriteria": [
+        "The frozen strategy list remains ordered by lifetime Gross realized PnL descending with the existing deterministic strategy-id tie break, and includes strategies that have an eligible unresolved Settled Paper run even when no historical two-source FAK candidate exists.",
+        "Exact historical pages retain their existing source allowlist, cutoff, financial formulas, cursor order, and atomic apply contract; only the separate fallback phase has lifetime/all-source run eligibility.",
+        "Fallback work is bounded by the existing batch size, foreground fairness, apply/preview gate, transaction timeout policy, and retry behavior. A whole-batch lock/query deferral keeps the same fallback phase/page for retry rather than finalizing or skipping it.",
+        "No product path changes Live submission, Paper execution semantics, Gross calculation, strategy signals, risk, or order placement.",
+        "Documentation states that the fallback is approximate despite being persisted as Calculated, uses fee-to-stake rather than Gross/Net, is terminal, mutates runs only, and leaves a source marker but no UI estimate label."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperNetFallback.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperNetFallbackPostgresIntegrationTests.cs",
+        "README.md",
+        "docs/configuration_reference.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-13.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp run artifacts path>",
+          "expected": "The solution builds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-006",
+          "kind": "test",
+          "command": "Run focused fallback, historical fee backfill, Dashboard projection/reconciliation, and storage tests under the marked D:\\CodexTemp run; run env-gated PostgreSQL cases only against an explicitly selected disposable test database.",
+          "expected": "All selected non-environment-gated tests pass with zero failures; PostgreSQL cases pass when an explicitly approved disposable database is available or remain truthfully unexecuted rather than being claimed.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-007",
+          "kind": "inspection",
+          "command": "Run git diff --check, requirement WorkingTree/Staged validation, and an independent review comparing both verbatim requests, this approved contract, the complete diff, and all verification evidence.",
+          "expected": "All mechanical checks pass and the independent reviewer records pass with no open findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "The user term ставка means one canonical Settled strategy_market_paper_runs row; the rule applies to all existing and future Paper strategies, while Live and non-Settled records are excluded.",
+      "impact": "The change can fill strategy-level Net/ROI broadly, not only the five current SOL examples or the fixed-cutoff historical FAK cohort, but it does not change Live accounting or open positions.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "Operational infrastructure and software failures are retry conditions, not reasons to invent a financial result; the fallback applies only when the persisted run itself remains financially incomplete after the exact path has had priority.",
+      "impact": "A lock, timeout, cancellation, database outage, transport failure, or code defect cannot silently convert a run to Calculated, even though the user's phrase any other error is broad.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    },
+    {
+      "id": "ASM-003",
+      "text": "The donor ratio is recomputed in every bounded fallback transaction from then-current exact lifetime donors, while previously fallback-calculated rows are excluded; it is not durably frozen for the whole strategy sweep.",
+      "impact": "Different batches of one strategy can receive slightly different terminal ratios if new exact runs arrive between transactions, and already finalized rows are not adjusted.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    },
+    {
+      "id": "ASM-004",
+      "text": "Immediately means within the same bounded fallback transaction after a run is selected, following the exact phase for that Gross-ranked strategy; it does not guarantee a wall-clock deadline after settlement or failure.",
+      "impact": "An existing or future unresolved run waits until its strategy is reached by the ranked worker, but once successfully selected it is written Calculated atomically and is not revisited.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    },
+    {
+      "id": "ASM-005",
+      "text": "If a strategy has no valid exact donor, aggregate donor stake is not positive, or a target stake is not positive, the rule cannot calculate a ratio result and performs no mutation.",
+      "impact": "Such a run remains incomplete and can be reconsidered on a later ranked visit, which is the sole exception to terminal no-return behavior because no fallback result exists.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The literal Gross/Net coefficient and Gross divided by that coefficient are replaced by the user-agreed fee-to-stake coefficient R = SUM(Fee) / SUM(Stake), estimated Fee = Stake * R, and Net = Gross - estimated Fee.",
+      "impact": "The numerical result differs from the first prompt, but preserves nonnegative fees, prevents loss-to-profit sign reversal caused by aggregate Gross/Net cancellation, and satisfies the existing Dashboard accounting identity and Net ROI denominator.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "An approximate ratio result is intentionally persisted as ordinary fee_accounting_status=Calculated, receives no Estimated status or visible label, and is never replaced by later exact evidence.",
+      "impact": "Dashboard and users cannot distinguish the estimate from exact accounting through status or UI; only the internal fee_calculation_source preserves audit provenance, and exact fee coverage will count the approximation as complete.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    },
+    {
+      "id": "DEV-003",
+      "text": "The fallback finalizes only the canonical strategy run and does not update or synthesize related fill, order, position, or settlement accounting rows.",
+      "impact": "Strategy Net PnL/Net ROI becomes complete through its authoritative run-backed path, while detailed dependent-row exports may continue showing their earlier status or blank Net values.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    },
+    {
+      "id": "DEV-004",
+      "text": "After preserving any authoritative nonnegative Calculated or VenueReported Fee through the exact Net repair, the approved ratio result replaces any remaining incomplete fee/status/source/Net tuple, including a PartiallyCalculated or otherwise inconsistent tuple, rather than preserving a known partial fee as a lower bound; it sets fee_liquidity_role=Unknown, clears fee_rate/fee_taker_only/fee_exponent to NULL, and discards the original failure source.",
+      "impact": "The terminal approximate value can be lower or higher than a previously stored partial fee component and the original failure provenance is no longer stored on the run, but the new exact source marker identifies the applied formula and the row will not be revisited.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+        "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5",
+    "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/calculated_net_ratio_fallback_final_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
