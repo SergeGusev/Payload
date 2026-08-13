@@ -231,7 +231,9 @@ Fee coverage is never inferred from the numeric default of `FeeUsd`:
   schedule, liquidity role, price, shares, or other evidence was missing or
   invalid.
 - `Calculated`: a deterministic result from the stored fill and public per-market
-  schedule, including a calculated zero-fee result.
+  schedule, including a calculated zero-fee result. The explicitly approved
+  terminal run-level ratio fallback below also uses this status even though its
+  Fee is approximate; its distinct source preserves the calculation method.
 - `VenueReported`: an authoritative fee supplied by the venue, not by the local
   model.
 - `PartiallyCalculated`: an aggregate contains at least one accounted child and
@@ -279,23 +281,55 @@ dependency shapes are accepted:
   self-consistent run and zero position and settlement rows. Only fill and run
   fee/provenance/net fields are updated; missing rows are never synthesized.
 
-Gross accounting and timestamps remain unchanged. Item-level structural or
-accounting conflicts advance the cursor after completed SQL and leave those rows
-untouched for a later ranked sweep. A whole-batch advisory-lock timeout or query
-cancellation does not advance the cursor, so the same page is retried. The worker
-yields to foreground persistence queues and does not persist transient
-market-info failures as zero fees. Gross ordering, Gross/Net PnL and Net ROI
-formulas, the fixed cutoff, source allowlist, and candidate filters remain
-unchanged. Reaching the end of a keyset sweep is not proof that every legacy row
-was successfully accounted.
+After that exact allowlisted phase, the same Gross-ranked worker has a separate
+canonical-run phase for every strategy. It covers all historical and future
+`Settled` Paper runs with positive stake and non-null Gross, without the exact
+phase's cutoff or execution-source allowlist. An authoritative nonnegative Fee
+already marked `Calculated` or `VenueReported` is repaired first by deriving
+only `Net = Gross - Fee`; Fee, status, source, and fee metadata remain exact and
+unchanged. A run still incomplete after the exact paths may then use a bounded
+same-strategy lifetime ratio. Each transaction recomputes
+`R = SUM(exact Fee) / SUM(exact positive Stake)` from complete `Calculated` or
+`VenueReported` donor runs satisfying `Net = Gross - Fee`; prior ratio results
+are excluded. Without a valid donor or positive aggregate donor stake, no run is
+changed.
 
-Historical GTD, Maker, ambiguous, already-accounted, and every
-`paper_live_shadow_actual_fill` row are outside this worker. Current shadow
-semantics calculate the fee on the aggregate linked Live execution and copy that
-accounting into one canonical Paper fill. Independently recalculating a legacy
-shadow Paper row could disagree with Live cost basis, settlement, balance effects,
-or canonical multi-fill replacement, so those rows require a separate
-Live-accounting reconciliation rather than a Paper-only estimate.
+For an eligible fallback target, the approximate Fee is
+`ROUND(Stake * R, 8)` and Net is exactly `Gross - Fee`. Only the canonical
+strategy run is updated. It is stored as ordinary `Calculated` with the exact
+case-sensitive source `strategy-settled-fee-stake-ratio-v1`, receives no visible
+`Estimated` status or label, and is terminal: the worker never revisits it when
+donors change or exact evidence becomes available. Related fill, order,
+position, and settlement rows are deliberately not synthesized or updated and
+may therefore retain earlier accounting or blank Net in detailed exports. The
+run-only divergence is an accounting/reporting choice and does not change the
+execution intent, Paper fills, Live submission, Live accounting, or risk gates.
+
+Gross accounting and timestamps remain unchanged. Item-level exact-phase
+structural or accounting conflicts advance its cursor after completed SQL;
+eligible canonical runs can subsequently enter the separate run-level phase.
+A whole-batch advisory-lock timeout or query cancellation does not advance the
+applicable cursor, so the same work is retried. Transport failures, programming
+errors, and service cancellation are operational deferrals and never create a
+financial estimate. Compare-and-set protection leaves a concurrently completed
+exact run untouched. The worker yields to foreground persistence queues and
+does not persist transient market-info failures as zero fees. Gross ordering
+and the Dashboard Gross/Net PnL and Net ROI aggregate formulas remain unchanged;
+the fixed cutoff, source allowlist, candidate filters, and exact financial
+formula remain unchanged for the exact phase. Reaching the end of a keyset sweep
+is not proof that every unresolved row was successfully accounted.
+
+Historical GTD, Maker, ambiguous, already-accounted, and
+`paper_live_shadow_actual_fill` rows remain outside the exact fill-recalculation
+phase. Complete Paper runs from those families may be exact donors for the
+separate canonical-run phase, and financially incomplete `PaperOnly` runs may be
+fallback targets. Runs classified `LiveOrShadow` remain outside that phase.
+Current shadow semantics calculate the fee on the aggregate linked Live execution
+and copy that accounting into one canonical Paper fill. Independently
+recalculating a legacy shadow Paper row could disagree with Live cost basis,
+settlement, balance effects, or canonical multi-fill replacement, so those rows
+require a separate Live-accounting reconciliation rather than a Paper-only
+estimate.
 
 The current model has three material limits:
 

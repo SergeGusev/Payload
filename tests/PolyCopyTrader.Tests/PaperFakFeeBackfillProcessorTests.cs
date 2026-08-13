@@ -76,7 +76,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.Equal(4, result.Candidates);
         Assert.Equal(3, result.EvaluatedForApply);
         Assert.Equal(1, result.TransientLookupUnavailable);
-        Assert.True(result.ReachedEnd);
+        Assert.False(result.ReachedEnd);
         Assert.Equal(3, result.ApplyResult?.Requested);
 
         var updates = Assert.Single(repository.HistoricalPaperFakFeeBackfillApplyCalls);
@@ -120,8 +120,8 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.Equal(1, cycleEvent.TransientLookupUnavailable);
         Assert.Equal(3, cycleEvent.Requested);
         Assert.Equal(3, cycleEvent.StructuralConflicts);
-        Assert.True(cycleEvent.ReachedStrategyEnd);
-        Assert.True(cycleEvent.ReachedSweepEnd);
+        Assert.False(cycleEvent.ReachedStrategyEnd);
+        Assert.False(cycleEvent.ReachedSweepEnd);
         Assert.True(cycleEvent.DurationMilliseconds >= 0);
     }
 
@@ -208,12 +208,17 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var processor = CreateProcessor(repository, feeService, applyEnabled: true);
 
         var transientCycle = await processor.RunCycleAsync();
+        var exactEndCycle = await processor.RunCycleAsync();
+        var repairCycle = await processor.RunCycleAsync();
         var sweepEndCycle = await processor.RunCycleAsync();
         var retryCycle = await processor.RunCycleAsync();
 
         Assert.Equal(1, transientCycle.TransientLookupUnavailable);
         Assert.Null(transientCycle.ApplyResult);
+        Assert.False(exactEndCycle.ReachedEnd);
+        Assert.NotNull(repairCycle.AuthoritativeNetRepairResult);
         Assert.True(sweepEndCycle.ReachedEnd);
+        Assert.NotNull(sweepEndCycle.NetFallbackResult);
         Assert.Equal(1, retryCycle.EvaluatedForApply);
         Assert.Single(repository.HistoricalPaperFakFeeBackfillApplyCalls);
         Assert.All(
@@ -255,15 +260,19 @@ public sealed class PaperFakFeeBackfillProcessorTests
                     }));
         var processor = CreateProcessor(repository, feeService, applyEnabled: true);
 
+        var firstExactEnd = await processor.RunCycleAsync();
+        var repairCycle = await processor.RunCycleAsync();
         var firstSweepEnd = await processor.RunCycleAsync();
-        var secondSweepEnd = await processor.RunCycleAsync();
+        var secondExactEnd = await processor.RunCycleAsync();
 
         Assert.True(firstSweepEnd.ReachedEnd);
-        Assert.Equal(1, firstSweepEnd.TransientLookupUnavailable);
-        Assert.Equal(1, firstSweepEnd.ApplyResult?.StructuralConflicts);
-        Assert.Equal(0, firstSweepEnd.ApplyResult?.Deferred);
-        Assert.True(secondSweepEnd.ReachedEnd);
-        Assert.Equal(0, secondSweepEnd.TransientLookupUnavailable);
+        Assert.Equal(1, firstExactEnd.TransientLookupUnavailable);
+        Assert.Equal(1, firstExactEnd.ApplyResult?.StructuralConflicts);
+        Assert.Equal(0, firstExactEnd.ApplyResult?.Deferred);
+        Assert.NotNull(repairCycle.AuthoritativeNetRepairResult);
+        Assert.NotNull(firstSweepEnd.NetFallbackResult);
+        Assert.False(secondExactEnd.ReachedEnd);
+        Assert.Equal(0, secondExactEnd.TransientLookupUnavailable);
         Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillApplyCalls.Count);
         Assert.All(
             repository.HistoricalPaperFakFeeBackfillCalls,
@@ -310,13 +319,17 @@ public sealed class PaperFakFeeBackfillProcessorTests
             RunsUpdated: 1);
         var retryCycle = await processor.RunCycleAsync();
         var nextPageCycle = await processor.RunCycleAsync();
+        var repairCycle = await processor.RunCycleAsync();
+        var sweepEndCycle = await processor.RunCycleAsync();
 
         Assert.False(deferredCycle.ReachedEnd);
         Assert.True(deferredCycle.ApplyResult?.WholeBatchDeferred);
         Assert.Equal(1, deferredCycle.ApplyResult?.Deferred);
         Assert.False(retryCycle.ReachedEnd);
         Assert.False(retryCycle.ApplyResult?.WholeBatchDeferred);
-        Assert.True(nextPageCycle.ReachedEnd);
+        Assert.False(nextPageCycle.ReachedEnd);
+        Assert.NotNull(repairCycle.AuthoritativeNetRepairResult);
+        Assert.True(sweepEndCycle.ReachedEnd);
         Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillApplyCalls.Count);
         Assert.Equal(3, repository.HistoricalPaperFakFeeBackfillCalls.Count);
         Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[0].AfterCursor);
@@ -361,12 +374,16 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
         var conflictCycle = await processor.RunCycleAsync();
         var nextPageCycle = await processor.RunCycleAsync();
+        var repairCycle = await processor.RunCycleAsync();
+        var sweepEndCycle = await processor.RunCycleAsync();
 
         Assert.False(conflictCycle.ReachedEnd);
         Assert.Equal(1, conflictCycle.ApplyResult?.ItemConflicts);
         Assert.Equal(0, conflictCycle.ApplyResult?.Deferred);
         Assert.False(conflictCycle.ApplyResult?.WholeBatchDeferred);
-        Assert.True(nextPageCycle.ReachedEnd);
+        Assert.False(nextPageCycle.ReachedEnd);
+        Assert.NotNull(repairCycle.AuthoritativeNetRepairResult);
+        Assert.True(sweepEndCycle.ReachedEnd);
         Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillCalls.Count);
         Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[0].AfterCursor);
         Assert.Equal(cursor, repository.HistoricalPaperFakFeeBackfillCalls[1].AfterCursor);
@@ -431,11 +448,19 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
         var winnerFirstPageCycle = await processor.RunCycleAsync();
         var winnerLastPageCycle = await processor.RunCycleAsync();
-        var loserCycle = await processor.RunCycleAsync();
+        var winnerRepairCycle = await processor.RunCycleAsync();
+        var winnerFallbackCycle = await processor.RunCycleAsync();
+        var loserExactCycle = await processor.RunCycleAsync();
+        var loserRepairCycle = await processor.RunCycleAsync();
+        var loserFallbackCycle = await processor.RunCycleAsync();
 
         Assert.False(winnerFirstPageCycle.ReachedEnd);
         Assert.False(winnerLastPageCycle.ReachedEnd);
-        Assert.True(loserCycle.ReachedEnd);
+        Assert.NotNull(winnerRepairCycle.AuthoritativeNetRepairResult);
+        Assert.NotNull(winnerFallbackCycle.NetFallbackResult);
+        Assert.False(loserExactCycle.ReachedEnd);
+        Assert.NotNull(loserRepairCycle.AuthoritativeNetRepairResult);
+        Assert.True(loserFallbackCycle.ReachedEnd);
         Assert.Equal(
             [winnerStrategyId, winnerStrategyId, loserStrategyId],
             feeService.Calls.Select(call => call.Order.StrategyId).ToArray());
@@ -447,6 +472,16 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[0].AfterCursor);
         Assert.Equal(winnerCursor, repository.HistoricalPaperFakFeeBackfillCalls[1].AfterCursor);
         Assert.Null(repository.HistoricalPaperFakFeeBackfillCalls[2].AfterCursor);
+        Assert.Equal(
+            [winnerStrategyId, loserStrategyId],
+            repository.HistoricalPaperAuthoritativeNetRepairCalls
+                .Select(call => call.StrategyId)
+                .ToArray());
+        Assert.Equal(
+            [winnerStrategyId, loserStrategyId],
+            repository.HistoricalPaperNetFallbackCalls
+                .Select(call => call.StrategyId)
+                .ToArray());
         Assert.Single(repository.HistoricalPaperFakFeeBackfillStrategyRankCalls);
     }
 
@@ -486,18 +521,365 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var processor = CreateProcessor(repository, feeService, applyEnabled: true);
 
         var winnerTransientCycle = await processor.RunCycleAsync();
-        var loserCycle = await processor.RunCycleAsync();
+        var winnerRepairCycle = await processor.RunCycleAsync();
+        var winnerFallbackCycle = await processor.RunCycleAsync();
+        var loserExactCycle = await processor.RunCycleAsync();
+        var loserRepairCycle = await processor.RunCycleAsync();
+        var loserFallbackCycle = await processor.RunCycleAsync();
         var winnerRetryCycle = await processor.RunCycleAsync();
 
         Assert.Equal(1, winnerTransientCycle.TransientLookupUnavailable);
         Assert.False(winnerTransientCycle.ReachedEnd);
-        Assert.True(loserCycle.ReachedEnd);
+        Assert.NotNull(winnerRepairCycle.AuthoritativeNetRepairResult);
+        Assert.NotNull(winnerFallbackCycle.NetFallbackResult);
+        Assert.False(loserExactCycle.ReachedEnd);
+        Assert.NotNull(loserRepairCycle.AuthoritativeNetRepairResult);
+        Assert.True(loserFallbackCycle.ReachedEnd);
         Assert.False(winnerRetryCycle.ReachedEnd);
         Assert.Equal(
             [winnerStrategyId, loserStrategyId, winnerStrategyId],
             feeService.Calls.Select(call => call.Order.StrategyId).ToArray());
+        Assert.Equal(
+            [winner.Order.Id],
+            repository.HistoricalPaperNetFallbackCalls[0].ExcludedPaperOrderIds);
+        Assert.Empty(repository.HistoricalPaperNetFallbackCalls[1].ExcludedPaperOrderIds);
         Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillStrategyRankCalls.Count);
         Assert.Equal(2, repository.HistoricalPaperFakFeeBackfillApplyCalls.Count);
+    }
+
+    [Fact]
+    public async Task RunCycle_ProcessesOneBoundedPagePerPhaseBeforeCompletingStrategy()
+    {
+        var strategyId = Guid.Parse("60000000-0000-0000-0000-000000000001");
+        var repairCursor = new HistoricalPaperNetRunCursor(
+            strategyId,
+            Guid.Parse("60000000-0000-0000-0000-000000000002"));
+        var fallbackCursor = new HistoricalPaperNetRunCursor(
+            strategyId,
+            Guid.Parse("60000000-0000-0000-0000-000000000003"));
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.Add(
+            new(strategyId, "strategy", 1m));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([], null, true));
+        repository.HistoricalPaperAuthoritativeNetRepairResults.Enqueue(
+            new(Candidates: 50, ReachedEnd: false, ContinuationCursor: repairCursor));
+        repository.HistoricalPaperAuthoritativeNetRepairResults.Enqueue(
+            new(Candidates: 1, RunsUpdated: 1));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            new(
+                Candidates: 50,
+                ExactDonorCount: 2,
+                ExactDonorFeeUsd: 3m,
+                ExactDonorStakeUsd: 150m,
+                FeeToStakeRatio: 0.02m,
+                RunsUpdated: 50,
+                DonorAvailable: true,
+                ReachedEnd: false,
+                ContinuationCursor: fallbackCursor));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            new(
+                Candidates: 1,
+                ExactDonorCount: 2,
+                ExactDonorFeeUsd: 3m,
+                ExactDonorStakeUsd: 150m,
+                FeeToStakeRatio: 0.02m,
+                RunsUpdated: 1,
+                DonorAvailable: true));
+        var feeService = new RecordingFeeAccountingService((_, _, _) =>
+            throw new InvalidOperationException("The exact page is empty."));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        var exactCycle = await processor.RunCycleAsync();
+        var firstRepairCycle = await processor.RunCycleAsync();
+        var lastRepairCycle = await processor.RunCycleAsync();
+        var firstFallbackCycle = await processor.RunCycleAsync();
+        var lastFallbackCycle = await processor.RunCycleAsync();
+
+        Assert.False(exactCycle.ReachedEnd);
+        Assert.False(firstRepairCycle.ReachedEnd);
+        Assert.False(lastRepairCycle.ReachedEnd);
+        Assert.False(firstFallbackCycle.ReachedEnd);
+        Assert.True(lastFallbackCycle.ReachedEnd);
+        Assert.Equal(50, firstRepairCycle.AuthoritativeNetRepairResult?.Candidates);
+        Assert.Equal(1, lastRepairCycle.AuthoritativeNetRepairResult?.RunsUpdated);
+        Assert.Equal(50, firstFallbackCycle.NetFallbackResult?.RunsUpdated);
+        Assert.Equal(1, lastFallbackCycle.NetFallbackResult?.RunsUpdated);
+        Assert.Equal(
+            new HistoricalPaperNetRunCursor?[] { null, repairCursor },
+            repository.HistoricalPaperAuthoritativeNetRepairCalls
+                .Select(call => call.AfterCursor)
+                .ToArray());
+        Assert.Equal(
+            new HistoricalPaperNetRunCursor?[] { null, fallbackCursor },
+            repository.HistoricalPaperNetFallbackCalls
+                .Select(call => call.AfterCursor)
+                .ToArray());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunCycle_FallbackDeferralRetriesSamePageWithoutAdvancingCursor(
+        bool queryCancelled)
+    {
+        var strategyId = Guid.Parse("61000000-0000-0000-0000-000000000001");
+        var cursor = new HistoricalPaperNetRunCursor(
+            strategyId,
+            Guid.Parse("61000000-0000-0000-0000-000000000002"));
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.Add(
+            new(strategyId, "strategy", 1m));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([], null, true));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            queryCancelled
+                ? new(
+                    Candidates: 1,
+                    ReachedEnd: false,
+                    ContinuationCursor: cursor,
+                    DeferredByQueryCancel: 1)
+                : new(
+                    Candidates: 1,
+                    ReachedEnd: false,
+                    ContinuationCursor: cursor,
+                    DeferredByLockTimeout: 1));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            new(
+                Candidates: 1,
+                DonorAvailable: true,
+                ReachedEnd: false,
+                ContinuationCursor: cursor));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            new(Candidates: 0, DonorAvailable: true));
+        var feeService = new RecordingFeeAccountingService((_, _, _) =>
+            throw new InvalidOperationException("The exact page is empty."));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        await processor.RunCycleAsync();
+        await processor.RunCycleAsync();
+        var deferredCycle = await processor.RunCycleAsync();
+        var retryCycle = await processor.RunCycleAsync();
+        var sweepEndCycle = await processor.RunCycleAsync();
+
+        Assert.True(deferredCycle.NetFallbackResult?.WholeBatchDeferred);
+        Assert.False(deferredCycle.ReachedEnd);
+        Assert.False(retryCycle.NetFallbackResult?.WholeBatchDeferred);
+        Assert.False(retryCycle.ReachedEnd);
+        Assert.True(sweepEndCycle.ReachedEnd);
+        Assert.Equal(
+            new HistoricalPaperNetRunCursor?[] { null, null, cursor },
+            repository.HistoricalPaperNetFallbackCalls
+                .Select(call => call.AfterCursor)
+                .ToArray());
+    }
+
+    [Fact]
+    public async Task RunCycle_NoDonorFallbackCompletesStrategyVisitWithoutUpdate()
+    {
+        var strategyId = Guid.Parse("62000000-0000-0000-0000-000000000001");
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.Add(
+            new(strategyId, "strategy", 1m));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([], null, true));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            new(Candidates: 5, DonorAvailable: false));
+        var feeService = new RecordingFeeAccountingService((_, _, _) =>
+            throw new InvalidOperationException("The exact page is empty."));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        await processor.RunCycleAsync();
+        await processor.RunCycleAsync();
+        var fallbackCycle = await processor.RunCycleAsync();
+
+        Assert.True(fallbackCycle.ReachedEnd);
+        Assert.False(fallbackCycle.NetFallbackResult?.DonorAvailable);
+        Assert.Equal(0, fallbackCycle.NetFallbackResult?.RunsUpdated);
+        Assert.Single(repository.HistoricalPaperNetFallbackCalls);
+    }
+
+    [Fact]
+    public async Task RunCycle_ExcludesTransientExactOrdersFromFallbackForCurrentStrategyVisit()
+    {
+        var strategyId = Guid.Parse("62500000-0000-0000-0000-000000000001");
+        var transientFirst = CreateCandidate("condition-transient-first", strategyId);
+        var transientSecond = CreateCandidate("condition-transient-second", strategyId);
+        var otherUnresolved = CreateCandidate("condition-other-unresolved", strategyId);
+        var exactCursor = new HistoricalPaperFakFeeBackfillCursor(
+            strategyId,
+            transientFirst.Fill.FilledAtUtc,
+            transientFirst.Order.Id,
+            transientFirst.Fill.Id);
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.Add(
+            new(strategyId, "strategy", 1m));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([transientFirst], exactCursor, false));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([otherUnresolved, transientSecond], null, true));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            new(Candidates: 1, RunsUpdated: 1, DonorAvailable: true));
+        var feeService = new RecordingFeeAccountingService((order, fill, _) =>
+            Task.FromResult(
+                order.Id == otherUnresolved.Order.Id
+                    ? fill with
+                    {
+                        FeeAccountingStatus = FeeAccountingStatus.CalculationUnavailable.ToString(),
+                        FeeCalculationSource = PolymarketFeeCalculationConstants.FeeCurveCalculationSource
+                    }
+                    : fill with
+                    {
+                        FeeAccountingStatus = FeeAccountingStatus.CalculationUnavailable.ToString(),
+                        FeeCalculationSource =
+                            PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource
+                    }));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        var firstExactCycle = await processor.RunCycleAsync();
+        var lastExactCycle = await processor.RunCycleAsync();
+        await processor.RunCycleAsync();
+        var fallbackCycle = await processor.RunCycleAsync();
+
+        Assert.Equal(1, firstExactCycle.TransientLookupUnavailable);
+        Assert.Equal(1, lastExactCycle.TransientLookupUnavailable);
+        Assert.True(fallbackCycle.ReachedEnd);
+        Assert.Equal(1, fallbackCycle.NetFallbackResult?.RunsUpdated);
+        Assert.Equal(
+            new[] { transientFirst.Order.Id, transientSecond.Order.Id }.Order().ToArray(),
+            Assert.Single(repository.HistoricalPaperNetFallbackCalls)
+                .ExcludedPaperOrderIds
+                .Order()
+                .ToArray());
+        Assert.Contains(
+            Assert.Single(repository.HistoricalPaperFakFeeBackfillApplyCalls),
+            update => update.Expected.Order.Id == otherUnresolved.Order.Id);
+    }
+
+    [Fact]
+    public async Task RunCycle_MissingConditionIsFinancialGapAndRemainsFallbackEligible()
+    {
+        var strategyId = Guid.Parse("62700000-0000-0000-0000-000000000001");
+        var missingCondition = CreateCandidate(string.Empty, strategyId);
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.Add(
+            new(strategyId, "strategy", 1m));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([missingCondition], null, true));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            new(Candidates: 1, RunsUpdated: 1, DonorAvailable: true));
+        var feeService = new RecordingFeeAccountingService((_, fill, _) =>
+            Task.FromResult(fill with
+            {
+                FeeAccountingStatus = FeeAccountingStatus.CalculationUnavailable.ToString(),
+                FeeCalculationSource =
+                    PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource
+            }));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        var exactCycle = await processor.RunCycleAsync();
+        await processor.RunCycleAsync();
+        var fallbackCycle = await processor.RunCycleAsync();
+
+        Assert.Equal(1, exactCycle.TransientLookupUnavailable);
+        Assert.True(fallbackCycle.ReachedEnd);
+        Assert.Equal(1, fallbackCycle.NetFallbackResult?.RunsUpdated);
+        Assert.Empty(Assert.Single(repository.HistoricalPaperNetFallbackCalls).ExcludedPaperOrderIds);
+        Assert.Empty(repository.HistoricalPaperFakFeeBackfillApplyCalls);
+    }
+
+    [Fact]
+    public async Task RunCycle_PreviewAdvancesThroughNetPhasesWithoutEnablingApply()
+    {
+        var strategyId = Guid.Parse("63000000-0000-0000-0000-000000000001");
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.Add(
+            new(strategyId, "strategy", 1m));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([], null, true));
+        repository.HistoricalPaperAuthoritativeNetRepairResults.Enqueue(
+            new(Candidates: 1));
+        repository.HistoricalPaperNetFallbackResults.Enqueue(
+            new(Candidates: 1, DonorAvailable: true));
+        var feeService = new RecordingFeeAccountingService((_, _, _) =>
+            throw new InvalidOperationException("The exact page is empty."));
+        var processor = CreateProcessor(repository, feeService, applyEnabled: false);
+
+        var exactCycle = await processor.RunCycleAsync();
+        var repairCycle = await processor.RunCycleAsync();
+        var fallbackCycle = await processor.RunCycleAsync();
+
+        Assert.False(exactCycle.ReachedEnd);
+        Assert.False(repairCycle.ReachedEnd);
+        Assert.True(fallbackCycle.ReachedEnd);
+        Assert.False(Assert.Single(repository.HistoricalPaperAuthoritativeNetRepairCalls).ApplyEnabled);
+        Assert.False(Assert.Single(repository.HistoricalPaperNetFallbackCalls).ApplyEnabled);
+        Assert.Empty(repository.HistoricalPaperFakFeeBackfillApplyCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunCycle_OperationalFeeEvaluationFailureDoesNotEstimateAndRetriesExactPage(
+        bool cancellationFailure)
+    {
+        var strategyId = Guid.Parse("63500000-0000-0000-0000-000000000001");
+        var candidate = CreateCandidate("condition-operational-failure", strategyId);
+        var repository = new TestAppRepository();
+        repository.HistoricalPaperFakFeeBackfillStrategyRanks.Add(
+            new(strategyId, "strategy", 1m));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([candidate], null, true));
+        repository.HistoricalPaperFakFeeBackfillPages.Enqueue(
+            new HistoricalPaperFakFeeBackfillPage([candidate], null, true));
+        var feeService = new RecordingFeeAccountingService((_, fill, call) =>
+        {
+            if (call == 1)
+            {
+                if (cancellationFailure)
+                {
+                    throw new OperationCanceledException("Injected operational cancellation.");
+                }
+
+                throw new InvalidOperationException("Injected operational fee failure.");
+            }
+
+            return Task.FromResult(fill with
+            {
+                FeeUsd = 0.1m,
+                FeeAccountingStatus = FeeAccountingStatus.Calculated.ToString(),
+                FeeCalculationSource = PolymarketFeeCalculationConstants.FeeCurveCalculationSource,
+                NetRealizedPnlUsd = fill.RealizedPnlUsd - 0.1m
+            });
+        });
+        var processor = CreateProcessor(repository, feeService, applyEnabled: true);
+
+        if (cancellationFailure)
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => processor.RunCycleAsync());
+        }
+        else
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => processor.RunCycleAsync());
+        }
+
+        Assert.Empty(repository.HistoricalPaperFakFeeBackfillApplyCalls);
+        Assert.Empty(repository.HistoricalPaperAuthoritativeNetRepairCalls);
+        Assert.Empty(repository.HistoricalPaperNetFallbackCalls);
+
+        var retry = await processor.RunCycleAsync();
+
+        Assert.Equal(1, retry.EvaluatedForApply);
+        Assert.Equal(2, feeService.Calls.Count);
+        Assert.All(feeService.Calls, call => Assert.Equal(candidate.Order.Id, call.Order.Id));
+        Assert.Equal(
+            new HistoricalPaperFakFeeBackfillCursor?[] { null, null },
+            repository.HistoricalPaperFakFeeBackfillCalls
+                .Select(call => call.AfterCursor)
+                .ToArray());
+        Assert.Single(repository.HistoricalPaperFakFeeBackfillApplyCalls);
+        Assert.Empty(repository.HistoricalPaperAuthoritativeNetRepairCalls);
+        Assert.Empty(repository.HistoricalPaperNetFallbackCalls);
     }
 
     private static PaperFakFeeBackfillProcessor CreateProcessor(

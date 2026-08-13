@@ -225,6 +225,50 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
     }
 
     [Fact]
+    public void CandidateQuery_ExcludesValidTerminalFallbackRun()
+    {
+        var source = ReadRepositorySource();
+        var start = source.IndexOf(
+            "GetHistoricalPaperFakFeeBackfillCandidatesAsync",
+            StringComparison.Ordinal);
+        var end = source.IndexOf(
+            "ApplyHistoricalPaperFakFeeBackfillBatchAsync",
+            start,
+            StringComparison.Ordinal);
+        var candidateMethod = source[start..end];
+
+        Assert.Contains("AND NOT EXISTS (", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "FROM public.strategy_market_paper_runs fallback_run",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "fallback_run.paper_order_id = fill.paper_order_id",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "fallback_run.fee_accounting_status = '{{FeeAccountingStatus.Calculated}}'",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "fallback_run.retention_scope = '{{StrategyRunRetentionScopes.PaperOnly}}'",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'{{HistoricalPaperNetFallbackConstants.CalculationSource}}'",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "fallback_run.net_realized_pnl_usd =",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "fallback_run.realized_pnl_usd - fallback_run.fee_usd",
+            candidateMethod,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CandidateQuery_MaterializesStrategyScopeBeforeChronologicalPage()
     {
         var source = ReadRepositorySource();
@@ -277,7 +321,7 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
     }
 
     [Fact]
-    public void StrategyRankQuery_UsesDashboardGrossWithRawFallbackAndAvoidsGlobalFillScan()
+    public void StrategyRankQuery_UsesGrossOrderAndIncludesExactOrUnresolvedRunWork()
     {
         var source = ReadRepositorySource();
         var start = source.IndexOf(
@@ -299,13 +343,48 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
             rankMethod,
             StringComparison.Ordinal);
         Assert.Contains("THEN performance.realized_pnl_usd", rankMethod, StringComparison.Ordinal);
-        Assert.Contains("CROSS JOIN LATERAL", rankMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("CROSS JOIN LATERAL", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("WHERE EXISTS (", rankMethod, StringComparison.Ordinal);
         Assert.Contains("FROM public.paper_orders source_order", rankMethod, StringComparison.Ordinal);
         Assert.Contains("source_order.side", rankMethod, StringComparison.Ordinal);
         Assert.Contains("source_order.execution_source IN", rankMethod, StringComparison.Ordinal);
         Assert.Contains("HistoricalPaperFakDirectSource", rankMethod, StringComparison.Ordinal);
         Assert.Contains("HistoricalPaperFakChildSource", rankMethod, StringComparison.Ordinal);
-        Assert.Contains("LIMIT 1", rankMethod, StringComparison.Ordinal);
+        Assert.Contains("OR EXISTS (", rankMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "FROM public.strategy_market_paper_runs unresolved_run",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "unresolved_run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "unresolved_run.retention_scope = '{{StrategyRunRetentionScopes.PaperOnly}}'",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains("unresolved_run.stake_usd > 0", rankMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "unresolved_run.realized_pnl_usd IS NOT NULL",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "unresolved_run.fee_calculation_source IS DISTINCT FROM",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'{{HistoricalPaperNetFallbackConstants.CalculationSource}}'",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains("AND NOT (", rankMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "unresolved_run.fee_accounting_status IN ('Calculated', 'VenueReported')",
+            rankMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "unresolved_run.net_realized_pnl_usd =",
+            rankMethod,
+            StringComparison.Ordinal);
         Assert.Contains("public.strategy_market_paper_runs", rankMethod, StringComparison.Ordinal);
         Assert.Contains("public.strategy_paper_skip_rollups", rankMethod, StringComparison.Ordinal);
         Assert.Contains("SUM(COALESCE(run.realized_pnl_usd, 0))", rankMethod, StringComparison.Ordinal);
@@ -319,6 +398,248 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
         Assert.DoesNotContain("fill.filled_at_utc < @FilledBeforeUtc", rankMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("strategy_orders AS MATERIALIZED", rankMethod, StringComparison.Ordinal);
         Assert.DoesNotContain("performance.total_pnl_usd", rankMethod, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AuthoritativeNetRepairSql_PreservesFeeTupleAndRepairsOnlyNetWithCas()
+    {
+        var sql = PostgresAppRepository.HistoricalPaperAuthoritativeNetRepairSql;
+        var update = SliceSql(
+            sql,
+            "run_updates AS (",
+            "(SELECT count(*)::integer FROM candidates) AS candidates");
+
+        Assert.Contains("run.status = 'Settled'", sql, StringComparison.Ordinal);
+        Assert.Contains("run.retention_scope = 'PaperOnly'", sql, StringComparison.Ordinal);
+        Assert.Contains("run.stake_usd > 0", sql, StringComparison.Ordinal);
+        Assert.Contains("run.realized_pnl_usd IS NOT NULL", sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "run.fee_accounting_status IN ('Calculated', 'VenueReported')",
+            sql,
+            StringComparison.Ordinal);
+        Assert.Contains("run.fee_usd >= 0", sql, StringComparison.Ordinal);
+        Assert.Contains("run.net_realized_pnl_usd IS NULL", sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "run.net_realized_pnl_usd <> run.realized_pnl_usd - run.fee_usd",
+            sql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"'{HistoricalPaperNetFallbackConstants.CalculationSource}'",
+            sql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SET net_realized_pnl_usd = target.realized_pnl_usd - target.fee_usd",
+            update,
+            StringComparison.Ordinal);
+        Assert.Contains("WHERE @ApplyEnabled", update, StringComparison.Ordinal);
+        Assert.Contains("run.xmin AS row_version", sql, StringComparison.Ordinal);
+        Assert.Contains("target.xmin = candidate.row_version", update, StringComparison.Ordinal);
+        Assert.Contains(
+            "target.retention_scope = candidate.retention_scope",
+            update,
+            StringComparison.Ordinal);
+        Assert.Contains("target.retention_scope = 'PaperOnly'", update, StringComparison.Ordinal);
+        Assert.Contains("target.fee_usd = candidate.fee_usd", update, StringComparison.Ordinal);
+        Assert.Contains(
+            "target.fee_calculation_source = candidate.fee_calculation_source",
+            update,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "target.net_realized_pnl_usd IS NOT DISTINCT FROM candidate.net_realized_pnl_usd",
+            update,
+            StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"(?m)^\s*fee_usd\s*=", update);
+        Assert.DoesNotMatch(@"(?m)^\s*fee_accounting_status\s*=", update);
+        Assert.DoesNotMatch(@"(?m)^\s*fee_calculation_source\s*=", update);
+        Assert.DoesNotContain("updated_at_utc", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NetRepairAndFallbackSql_LeaveCompleteMixedSourceRunUntouched()
+    {
+        var repair = PostgresAppRepository.HistoricalPaperAuthoritativeNetRepairSql;
+        var fallback = PostgresAppRepository.HistoricalPaperNetFallbackSql;
+
+        Assert.Contains(
+            "run.net_realized_pnl_usd <> run.realized_pnl_usd - run.fee_usd",
+            repair,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "run.fee_accounting_status IN ('Calculated', 'VenueReported')",
+            fallback,
+            StringComparison.Ordinal);
+        Assert.Contains("AND run.fee_usd >= 0", fallback, StringComparison.Ordinal);
+        Assert.Contains(
+            "run.net_realized_pnl_usd = run.realized_pnl_usd - run.fee_usd",
+            fallback,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("fee_calculation_source = 'mixed'", repair, StringComparison.Ordinal);
+        Assert.DoesNotContain("fee_calculation_source = 'mixed'", fallback, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RatioFallbackSql_UsesExactAggregateDonorsAndTerminalRunOnlyFormula()
+    {
+        var sql = PostgresAppRepository.HistoricalPaperNetFallbackSql;
+        var donors = SliceSql(
+            sql,
+            "exact_donors AS MATERIALIZED (",
+            "donor_ratio AS MATERIALIZED (");
+        var candidates = SliceSql(
+            sql,
+            "candidate_page AS MATERIALIZED (",
+            "candidates AS MATERIALIZED (");
+        var update = SliceSql(
+            sql,
+            "run_updates AS (",
+            "(SELECT count(*)::integer FROM candidates) AS candidates");
+
+        Assert.Contains("run.strategy_id = @StrategyId", donors, StringComparison.Ordinal);
+        Assert.Contains("run.status = 'Settled'", donors, StringComparison.Ordinal);
+        Assert.Contains("run.retention_scope = 'PaperOnly'", donors, StringComparison.Ordinal);
+        Assert.Contains("run.stake_usd > 0", donors, StringComparison.Ordinal);
+        Assert.Contains("run.realized_pnl_usd IS NOT NULL", donors, StringComparison.Ordinal);
+        Assert.Contains("run.fee_usd >= 0", donors, StringComparison.Ordinal);
+        Assert.Contains("run.net_realized_pnl_usd IS NOT NULL", donors, StringComparison.Ordinal);
+        Assert.Contains(
+            "run.fee_accounting_status IN ('Calculated', 'VenueReported')",
+            donors,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "run.net_realized_pnl_usd = run.realized_pnl_usd - run.fee_usd",
+            donors,
+            StringComparison.Ordinal);
+        Assert.Contains("count(*)::integer AS donor_count", donors, StringComparison.Ordinal);
+        Assert.Contains("sum(run.fee_usd)", donors, StringComparison.Ordinal);
+        Assert.Contains("sum(run.stake_usd)", donors, StringComparison.Ordinal);
+        Assert.DoesNotContain("avg(", donors, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "donor_fee_usd / donor_stake_usd",
+            sql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"'{HistoricalPaperNetFallbackConstants.CalculationSource}'",
+            donors,
+            StringComparison.Ordinal);
+
+        Assert.Contains("run.strategy_id = @StrategyId", candidates, StringComparison.Ordinal);
+        Assert.Contains("run.status = 'Settled'", candidates, StringComparison.Ordinal);
+        Assert.Contains("run.retention_scope = 'PaperOnly'", candidates, StringComparison.Ordinal);
+        Assert.Contains("run.stake_usd > 0", candidates, StringComparison.Ordinal);
+        Assert.Contains("run.realized_pnl_usd IS NOT NULL", candidates, StringComparison.Ordinal);
+        Assert.Contains("AND NOT (", candidates, StringComparison.Ordinal);
+        Assert.Contains("run.paper_order_id IS NULL", candidates, StringComparison.Ordinal);
+        Assert.Contains(
+            "run.paper_order_id <> ALL(@ExcludedPaperOrderIds)",
+            candidates,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_orders", candidates, StringComparison.Ordinal);
+        Assert.DoesNotContain("execution_source", candidates, StringComparison.Ordinal);
+        Assert.DoesNotContain("FilledBeforeUtc", candidates, StringComparison.Ordinal);
+        Assert.Contains(
+            "AND (NOT @HasCursor OR run.id > @AfterRunId)",
+            candidates,
+            StringComparison.Ordinal);
+        Assert.Contains("ORDER BY run.id", candidates, StringComparison.Ordinal);
+        Assert.Contains("LIMIT @FetchLimit", candidates, StringComparison.Ordinal);
+        Assert.Contains(
+            "SELECT *\n    FROM candidate_page\n    ORDER BY id\n    LIMIT @Limit",
+            sql.Replace("\r\n", "\n", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SELECT candidate.id FROM candidates candidate ORDER BY candidate.id DESC LIMIT 1",
+            sql,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "round(candidate.stake_usd * donor.fee_to_stake_ratio, 8)",
+            sql,
+            StringComparison.Ordinal);
+        Assert.Contains("WHERE donor.donor_available", sql, StringComparison.Ordinal);
+        Assert.Contains("fee_usd = estimated.estimated_fee_usd", update, StringComparison.Ordinal);
+        Assert.Contains("fee_accounting_status = 'Calculated'", update, StringComparison.Ordinal);
+        Assert.Contains("fee_liquidity_role = 'Unknown'", update, StringComparison.Ordinal);
+        Assert.Contains(
+            $"fee_calculation_source = '{HistoricalPaperNetFallbackConstants.CalculationSource}'",
+            update,
+            StringComparison.Ordinal);
+        Assert.Contains("fee_rate = NULL", update, StringComparison.Ordinal);
+        Assert.Contains("fee_exponent = NULL", update, StringComparison.Ordinal);
+        Assert.Contains("fee_taker_only = NULL", update, StringComparison.Ordinal);
+        Assert.Contains("fee_calculated_at_utc = statement_timestamp()", update, StringComparison.Ordinal);
+        Assert.Contains(
+            "net_realized_pnl_usd = target.realized_pnl_usd - estimated.estimated_fee_usd",
+            update,
+            StringComparison.Ordinal);
+        Assert.Contains("WHERE @ApplyEnabled", update, StringComparison.Ordinal);
+        Assert.Contains("run.xmin AS row_version", candidates, StringComparison.Ordinal);
+        Assert.Contains("target.xmin = estimated.row_version", update, StringComparison.Ordinal);
+        Assert.Contains(
+            "target.retention_scope = estimated.retention_scope",
+            update,
+            StringComparison.Ordinal);
+        Assert.Contains("target.retention_scope = 'PaperOnly'", update, StringComparison.Ordinal);
+        Assert.Contains(
+            "target.paper_order_id <> ALL(@ExcludedPaperOrderIds)",
+            update,
+            StringComparison.Ordinal);
+        Assert.Contains("target.fee_usd = estimated.fee_usd", update, StringComparison.Ordinal);
+        Assert.Contains(
+            "target.net_realized_pnl_usd IS NOT DISTINCT FROM estimated.net_realized_pnl_usd",
+            update,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("updated_at_utc", sql, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"(?m)^\s*realized_pnl_usd\s*=", update);
+        Assert.DoesNotMatch(@"(?i)\bUPDATE\s+public\.paper_(orders|fills|positions|position_settlements)\b", sql);
+    }
+
+    [Fact]
+    public void NetFallbackRepository_BindsTypedTransientOrderExclusionsAndValidatesResults()
+    {
+        var source = ReadNetFallbackRepositorySource();
+
+        Assert.Contains(
+            "IReadOnlyCollection<Guid> excludedPaperOrderIds",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains("ArgumentNullException.ThrowIfNull(excludedPaperOrderIds)", source, StringComparison.Ordinal);
+        Assert.Contains("NpgsqlDbType.Array | NpgsqlDbType.Uuid", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "IsValidHistoricalPaperAuthoritativeNetRepairResult(",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains("IsValidHistoricalPaperNetFallbackResult(", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "result.RunsUpdated + result.CompareAndSetConflicts == result.Candidates",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "result.ExactDonorCount == 0",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains("result.FeeToStakeRatio.Value >= 0", source, StringComparison.Ordinal);
+        Assert.Contains("await transaction.RollbackAsync(CancellationToken.None)", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NetFallbackBatchResults_SeparateCasConflictsAndWholeBatchDeferrals()
+    {
+        var repairConflict = new HistoricalPaperAuthoritativeNetRepairBatchResult(
+            Candidates: 2,
+            RunsUpdated: 1,
+            CompareAndSetConflicts: 1);
+        var fallbackDeferred = new HistoricalPaperNetFallbackBatchResult(
+            Candidates: 2,
+            DeferredByQueryCancel: 1,
+            ReachedEnd: false);
+
+        Assert.Equal(1, repairConflict.CompareAndSetConflicts);
+        Assert.Equal(0, repairConflict.Deferred);
+        Assert.False(repairConflict.WholeBatchDeferred);
+        Assert.Equal(0, fallbackDeferred.CompareAndSetConflicts);
+        Assert.Equal(1, fallbackDeferred.Deferred);
+        Assert.True(fallbackDeferred.WholeBatchDeferred);
+        Assert.False(fallbackDeferred.ReachedEnd);
     }
 
     [Fact]
@@ -406,6 +727,18 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
             "src",
             "PolyCopyTrader.Storage",
             "PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs"));
+    }
+
+    private static string ReadNetFallbackRepositorySource([CallerFilePath] string testFilePath = "")
+    {
+        var testsDirectory = Path.GetDirectoryName(testFilePath)
+            ?? throw new InvalidOperationException("The test source directory was not resolved.");
+        var repositoryRoot = Path.GetFullPath(Path.Combine(testsDirectory, "..", ".."));
+        return File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.HistoricalPaperNetFallback.cs"));
     }
 
     private static string SliceSql(string sql, string startMarker, string endMarker)

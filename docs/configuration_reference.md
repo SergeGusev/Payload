@@ -84,28 +84,55 @@ self-consistent run and no position or settlement rows. It updates only fill
 and run and never creates the absent rows.
 
 At each sweep start, the worker reads the materialized Dashboard lifetime Gross
-realized PnL for strategies that have historical FAK-source orders and freezes
-one stable ranking, highest first. Equal Gross values use strategy ID as the
-deterministic tie-break. A source strategy without a materialized Dashboard
-snapshot falls back to the same retained run/fill/settlement Gross formula.
-Exact `LegacyUnknown`, cutoff, BUY, and two-source eligibility remains in the
-strategy-bound candidate page. The page first materializes that strategy's exact
-allowlisted BUY order IDs, probes their fills through the existing per-order
-index, then sorts and limits only the strategy-local candidate keys before
-loading the full rows. It does not scan the global chronological `LegacyUnknown`
-fill index to discover each strategy. The worker keyset-pages one strategy to its
-current end before starting the next. Ranking affects scheduling only; it
-does not change Gross PnL, Net PnL or Net ROI formulas, candidate filters, or the
-historical cutoff. Transient fee lookups and conditional-apply conflicts remain
-eligible for a later ranked sweep, while lower-ranked strategies continue in the
-current one.
+realized PnL and freezes one stable ranking, highest first. The ranking includes
+strategies with historical FAK-source orders and strategies with an eligible
+unresolved Settled Paper run, even when they have no historical FAK candidate.
+Equal Gross values use strategy ID as the deterministic tie-break. A source
+strategy without a materialized Dashboard snapshot falls back to the same
+retained run/fill/settlement Gross formula. Exact `LegacyUnknown`, cutoff, BUY,
+and two-source eligibility remains in the strategy-bound exact candidate page.
+The page first materializes that strategy's exact allowlisted BUY order IDs,
+probes their fills through the existing per-order index, then sorts and limits
+only the strategy-local candidate keys before loading the full rows. It does not
+scan the global chronological `LegacyUnknown` fill index to discover each
+strategy. The worker finishes the bounded exact phase for one strategy before
+running that strategy's run-level repair/fallback phase and moving to the next.
+Ranking affects scheduling only: Gross PnL and the Dashboard aggregate Net PnL
+and Net ROI formulas remain unchanged. The exact phase also retains its cutoff,
+source allowlist, candidate filters, and financial formula.
+
+The run-level phase covers historical and future `Settled` Paper runs with
+positive `stake_usd` and non-null Gross for every strategy; it has no historical
+cutoff or execution-source allowlist and never changes Live accounting. It first
+repairs an authoritative `Calculated` or `VenueReported` nonnegative Fee by
+setting only a missing or inconsistent Net to `Gross - Fee`, preserving the Fee,
+status, source, and fee metadata. Only a run still incomplete after the exact
+paths can use the approximate fallback. For each bounded transaction, the worker
+recomputes the same-strategy lifetime coefficient
+`R = SUM(exact fee_usd) / SUM(exact positive stake_usd)` from complete
+`Calculated` or `VenueReported` donor runs satisfying `Net = Gross - Fee`.
+Ratio-finalized rows never donate. If no valid donor or no positive aggregate
+donor stake exists, the target remains unchanged for a later ranked visit.
+
+The fallback stores `Fee = ROUND(stake_usd * R, 8)` and
+`Net = Gross - Fee` on the canonical run only. It writes ordinary
+`fee_accounting_status=Calculated` with the exact case-sensitive source
+`strategy-settled-fee-stake-ratio-v1`; no `Estimated` status, UI label, or
+separate coverage is added. A successfully finalized run is terminal: later
+donor changes or exact fee availability do not recalculate or replace it.
+Related fills, orders, positions, and settlements are not updated, so their
+detailed accounting may retain an earlier status or blank Net even after the
+run-backed strategy Net and Net ROI become complete. Lock/query deferrals,
+transport or programming errors, and service cancellation never create a
+financial estimate; compare-and-set leaves a concurrently completed exact run
+untouched and retryable operational failures retain their work for retry.
 
 After completed SQL, item-level structural or accounting conflicts advance the
 page cursor and remain untouched for reconsideration in a later ranked sweep.
 A whole-batch advisory-lock timeout or query cancellation does not advance the
-cursor; the same page is retried. Gross ordering, Gross/Net PnL and Net ROI
-formulas, the historical cutoff, source allowlist, and candidate filters are
-unchanged.
+cursor; the same page is retried. Gross ordering and the Dashboard Gross/Net PnL
+and Net ROI aggregate formulas are unchanged; the historical cutoff, source
+allowlist, and candidate filters remain unchanged for the exact phase.
 
 The dedicated PostgreSQL table `paper_fak_fee_backfill_events` stores only this
 worker's structured lifecycle, strategy-ranking, cycle, and failure events.

@@ -32,6 +32,9 @@ public sealed class PaperFakFeeBackfillProcessor(
     private Guid? sweepId;
     private int strategyRankIndex;
     private HistoricalPaperFakFeeBackfillCursor? continuationCursor;
+    private HistoricalPaperNetRunCursor? netContinuationCursor;
+    private PaperFakFeeBackfillPhase phase = PaperFakFeeBackfillPhase.ExactHistorical;
+    private readonly HashSet<Guid> transientPaperOrderIds = [];
 
     public Task<PaperFakFeeBackfillCycleResult> RunCycleAsync(
         CancellationToken cancellationToken = default)
@@ -109,6 +112,29 @@ public sealed class PaperFakFeeBackfillProcessor(
                 GrossRealizedPnlUsd = activeRank.GrossRealizedPnlUsd
             },
             cancellationToken).ConfigureAwait(false);
+
+        if (phase == PaperFakFeeBackfillPhase.AuthoritativeNetRepair)
+        {
+            return await RunAuthoritativeNetRepairCycleAsync(
+                cycleId,
+                cycleStartedTimestamp,
+                activeRank,
+                activeRankPosition,
+                strategyCount,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (phase == PaperFakFeeBackfillPhase.NetFallback)
+        {
+            return await RunNetFallbackCycleAsync(
+                cycleId,
+                cycleStartedTimestamp,
+                activeRank,
+                activeRankPosition,
+                strategyCount,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var page = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
             options.HistoricalCutoffUtc,
             activeRank.StrategyId,
@@ -145,6 +171,17 @@ public sealed class PaperFakFeeBackfillProcessor(
                 if (IsTransientLookupUnavailable(evaluatedFill))
                 {
                     transientLookupUnavailable++;
+                    // A non-empty condition reaches this source only after the
+                    // production CLOB lookup threw and was converted to an
+                    // unavailable result. Keep that operational failure out of
+                    // the financial fallback for this strategy visit. A missing
+                    // condition ID performs no lookup, so it is a persisted data
+                    // gap and remains eligible for the approved ratio fallback.
+                    if (!string.IsNullOrWhiteSpace(candidate.Order.ConditionId))
+                    {
+                        transientPaperOrderIds.Add(candidate.Order.Id);
+                    }
+
                     continue;
                 }
 
@@ -169,8 +206,14 @@ public sealed class PaperFakFeeBackfillProcessor(
 
         var wholeBatchDeferred = applyResult?.WholeBatchDeferred == true;
         var completedSweepId = sweepId;
-        var reachedStrategyEnd = !wholeBatchDeferred && page.ReachedEnd;
-        var reachedSweepEnd = !wholeBatchDeferred && AdvanceCursor(page);
+        var reachedExactPhaseEnd = !wholeBatchDeferred && page.ReachedEnd;
+        if (!wholeBatchDeferred)
+        {
+            AdvanceExactPhase(page);
+        }
+
+        const bool reachedStrategyEnd = false;
+        const bool reachedSweepEnd = false;
 
         logger.LogInformation(
             "Historical Paper FAK fee backfill cycle completed. ApplyEnabled={ApplyEnabled} " +
@@ -184,7 +227,8 @@ public sealed class PaperFakFeeBackfillProcessor(
             "RunOnlyLegacyAlreadyApplied={RunOnlyLegacyAlreadyApplied} AlreadyApplied={AlreadyApplied} " +
             "StructuralConflicts={StructuralConflicts} AccountingConflicts={AccountingConflicts} " +
             "DeferredByLockTimeout={DeferredByLockTimeout} " +
-            "DeferredByQueryCancel={DeferredByQueryCancel} ReachedStrategyEnd={ReachedStrategyEnd} " +
+            "DeferredByQueryCancel={DeferredByQueryCancel} ReachedExactPhaseEnd={ReachedExactPhaseEnd} " +
+            "ReachedStrategyEnd={ReachedStrategyEnd} " +
             "ReachedSweepEnd={ReachedSweepEnd}",
             options.ApplyEnabled,
             options.HistoricalCutoffUtc,
@@ -211,6 +255,7 @@ public sealed class PaperFakFeeBackfillProcessor(
             applyResult?.AccountingConflicts ?? 0,
             applyResult?.DeferredByLockTimeout ?? 0,
             applyResult?.DeferredByQueryCancel ?? 0,
+            reachedExactPhaseEnd,
             reachedStrategyEnd,
             reachedSweepEnd);
 
@@ -277,6 +322,9 @@ public sealed class PaperFakFeeBackfillProcessor(
         strategyRanks = loadedRanks.ToArray();
         strategyRankIndex = 0;
         continuationCursor = null;
+        netContinuationCursor = null;
+        phase = PaperFakFeeBackfillPhase.ExactHistorical;
+        transientPaperOrderIds.Clear();
 
         logger.LogInformation(
             "Historical Paper FAK fee backfill Gross-PnL strategy ranking frozen for this sweep. " +
@@ -359,15 +407,25 @@ public sealed class PaperFakFeeBackfillProcessor(
         }
     }
 
-    private bool AdvanceCursor(HistoricalPaperFakFeeBackfillPage page)
+    private void AdvanceExactPhase(HistoricalPaperFakFeeBackfillPage page)
     {
         if (!page.ReachedEnd)
         {
             continuationCursor = page.ContinuationCursor;
-            return false;
+            return;
         }
 
         continuationCursor = null;
+        netContinuationCursor = null;
+        phase = PaperFakFeeBackfillPhase.AuthoritativeNetRepair;
+    }
+
+    private bool CompleteStrategy()
+    {
+        continuationCursor = null;
+        netContinuationCursor = null;
+        phase = PaperFakFeeBackfillPhase.ExactHistorical;
+        transientPaperOrderIds.Clear();
         strategyRankIndex++;
         if (strategyRankIndex < strategyRanks!.Count)
         {
@@ -384,6 +442,257 @@ public sealed class PaperFakFeeBackfillProcessor(
         sweepId = null;
         strategyRankIndex = 0;
         continuationCursor = null;
+        netContinuationCursor = null;
+        phase = PaperFakFeeBackfillPhase.ExactHistorical;
+        transientPaperOrderIds.Clear();
+    }
+
+    private async Task<PaperFakFeeBackfillCycleResult> RunAuthoritativeNetRepairCycleAsync(
+        Guid cycleId,
+        long cycleStartedTimestamp,
+        HistoricalPaperFakFeeBackfillStrategyRank activeRank,
+        int activeRankPosition,
+        int strategyCount,
+        CancellationToken cancellationToken)
+    {
+        var result = await repository.ApplyHistoricalPaperAuthoritativeNetRepairBatchAsync(
+            activeRank.StrategyId,
+            options.BatchSize,
+            options.ApplyEnabled,
+            netContinuationCursor,
+            cancellationToken).ConfigureAwait(false);
+        ValidateNetPage(activeRank, result.Candidates, result.ReachedEnd, result.ContinuationCursor,
+            result.WholeBatchDeferred);
+
+        if (!result.WholeBatchDeferred)
+        {
+            if (result.ReachedEnd)
+            {
+                netContinuationCursor = null;
+                phase = PaperFakFeeBackfillPhase.NetFallback;
+            }
+            else
+            {
+                netContinuationCursor = result.ContinuationCursor;
+            }
+        }
+
+        logger.LogInformation(
+            "Historical Paper authoritative-Fee Net repair cycle completed. " +
+            "ApplyEnabled={ApplyEnabled} StrategyRank={StrategyRank}/{StrategyCount} " +
+            "StrategyId={StrategyId} StrategyCode={StrategyCode} GrossRealizedPnlUsd={GrossRealizedPnlUsd} " +
+            "Candidates={Candidates} RunsUpdated={RunsUpdated} CompareAndSetConflicts={CompareAndSetConflicts} " +
+            "DeferredByLockTimeout={DeferredByLockTimeout} DeferredByQueryCancel={DeferredByQueryCancel} " +
+            "ReachedPhaseEnd={ReachedPhaseEnd}",
+            options.ApplyEnabled,
+            activeRankPosition,
+            strategyCount,
+            activeRank.StrategyId,
+            activeRank.StrategyCode,
+            activeRank.GrossRealizedPnlUsd,
+            result.Candidates,
+            result.RunsUpdated,
+            result.CompareAndSetConflicts,
+            result.DeferredByLockTimeout,
+            result.DeferredByQueryCancel,
+            !result.WholeBatchDeferred && result.ReachedEnd);
+
+        await RecordNetPhaseCompletedEventAsync(
+            cycleId,
+            cycleStartedTimestamp,
+            activeRank,
+            activeRankPosition,
+            strategyCount,
+            "Historical Paper authoritative-Fee Net repair cycle completed.",
+            result.Candidates,
+            result.RunsUpdated,
+            result.CompareAndSetConflicts,
+            result.DeferredByLockTimeout,
+            result.DeferredByQueryCancel,
+            reachedStrategyEnd: false,
+            reachedSweepEnd: false,
+            completedSweepId: sweepId,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        return new PaperFakFeeBackfillCycleResult(
+            result.Candidates,
+            result.Candidates,
+            0,
+            false,
+            options.ApplyEnabled,
+            null)
+        {
+            AuthoritativeNetRepairResult = result
+        };
+    }
+
+    private async Task<PaperFakFeeBackfillCycleResult> RunNetFallbackCycleAsync(
+        Guid cycleId,
+        long cycleStartedTimestamp,
+        HistoricalPaperFakFeeBackfillStrategyRank activeRank,
+        int activeRankPosition,
+        int strategyCount,
+        CancellationToken cancellationToken)
+    {
+        var result = await repository.ApplyHistoricalPaperNetFallbackBatchAsync(
+            activeRank.StrategyId,
+            options.BatchSize,
+            options.ApplyEnabled,
+            transientPaperOrderIds,
+            netContinuationCursor,
+            cancellationToken).ConfigureAwait(false);
+        ValidateNetPage(activeRank, result.Candidates, result.ReachedEnd, result.ContinuationCursor,
+            result.WholeBatchDeferred);
+
+        var reachedStrategyEnd = !result.WholeBatchDeferred && result.ReachedEnd;
+        var reachedSweepEnd = false;
+        var completedSweepId = sweepId;
+        if (!result.WholeBatchDeferred)
+        {
+            if (result.ReachedEnd)
+            {
+                reachedSweepEnd = CompleteStrategy();
+            }
+            else
+            {
+                netContinuationCursor = result.ContinuationCursor;
+            }
+        }
+
+        logger.LogInformation(
+            "Historical Paper same-strategy fee-ratio Net fallback cycle completed. " +
+            "ApplyEnabled={ApplyEnabled} StrategyRank={StrategyRank}/{StrategyCount} " +
+            "StrategyId={StrategyId} StrategyCode={StrategyCode} GrossRealizedPnlUsd={GrossRealizedPnlUsd} " +
+            "Candidates={Candidates} DonorAvailable={DonorAvailable} ExactDonorCount={ExactDonorCount} " +
+            "FeeToStakeRatio={FeeToStakeRatio} RunsUpdated={RunsUpdated} " +
+            "CompareAndSetConflicts={CompareAndSetConflicts} DeferredByLockTimeout={DeferredByLockTimeout} " +
+            "DeferredByQueryCancel={DeferredByQueryCancel} ReachedStrategyEnd={ReachedStrategyEnd} " +
+            "ReachedSweepEnd={ReachedSweepEnd}",
+            options.ApplyEnabled,
+            activeRankPosition,
+            strategyCount,
+            activeRank.StrategyId,
+            activeRank.StrategyCode,
+            activeRank.GrossRealizedPnlUsd,
+            result.Candidates,
+            result.DonorAvailable,
+            result.ExactDonorCount,
+            result.FeeToStakeRatio,
+            result.RunsUpdated,
+            result.CompareAndSetConflicts,
+            result.DeferredByLockTimeout,
+            result.DeferredByQueryCancel,
+            reachedStrategyEnd,
+            reachedSweepEnd);
+
+        await RecordNetPhaseCompletedEventAsync(
+            cycleId,
+            cycleStartedTimestamp,
+            activeRank,
+            activeRankPosition,
+            strategyCount,
+            "Historical Paper same-strategy fee-ratio Net fallback cycle completed.",
+            result.Candidates,
+            result.RunsUpdated,
+            result.CompareAndSetConflicts,
+            result.DeferredByLockTimeout,
+            result.DeferredByQueryCancel,
+            reachedStrategyEnd,
+            reachedSweepEnd,
+            completedSweepId,
+            cancellationToken).ConfigureAwait(false);
+
+        return new PaperFakFeeBackfillCycleResult(
+            result.Candidates,
+            result.Candidates,
+            0,
+            reachedSweepEnd,
+            options.ApplyEnabled,
+            null)
+        {
+            NetFallbackResult = result
+        };
+    }
+
+    private void ValidateNetPage(
+        HistoricalPaperFakFeeBackfillStrategyRank activeRank,
+        int candidates,
+        bool reachedEnd,
+        HistoricalPaperNetRunCursor? nextCursor,
+        bool wholeBatchDeferred)
+    {
+        if (candidates < 0 || candidates > options.BatchSize)
+        {
+            throw new InvalidOperationException(
+                "Historical Paper Net backfill repository returned an invalid candidate count.");
+        }
+
+        if (nextCursor is not null && nextCursor.StrategyId != activeRank.StrategyId)
+        {
+            throw new InvalidOperationException(
+                "Historical Paper Net backfill page returned a cursor for another strategy.");
+        }
+
+        if (wholeBatchDeferred)
+        {
+            return;
+        }
+
+        if (!reachedEnd && nextCursor is null)
+        {
+            throw new InvalidOperationException(
+                "Historical Paper Net backfill page did not provide a continuation cursor before phase end.");
+        }
+
+        if (!reachedEnd && nextCursor == netContinuationCursor)
+        {
+            throw new InvalidOperationException(
+                "Historical Paper Net backfill continuation cursor did not advance.");
+        }
+    }
+
+    private Task RecordNetPhaseCompletedEventAsync(
+        Guid cycleId,
+        long cycleStartedTimestamp,
+        HistoricalPaperFakFeeBackfillStrategyRank activeRank,
+        int activeRankPosition,
+        int strategyCount,
+        string message,
+        int candidates,
+        int runsUpdated,
+        int compareAndSetConflicts,
+        int deferredByLockTimeout,
+        int deferredByQueryCancel,
+        bool reachedStrategyEnd,
+        bool reachedSweepEnd,
+        Guid? completedSweepId,
+        CancellationToken cancellationToken)
+    {
+        return TryRecordEventAsync(
+            CreateProcessorEvent(
+                PaperFakFeeBackfillEventTypes.CycleCompleted,
+                PaperFakFeeBackfillEventLevels.Information,
+                message) with
+            {
+                SweepId = completedSweepId,
+                CycleId = cycleId,
+                StrategyId = activeRank.StrategyId,
+                StrategyCode = activeRank.StrategyCode,
+                StrategyRank = activeRankPosition,
+                StrategyCount = strategyCount,
+                GrossRealizedPnlUsd = activeRank.GrossRealizedPnlUsd,
+                Candidates = candidates,
+                EvaluatedForApply = candidates,
+                Requested = candidates,
+                RunsUpdated = runsUpdated,
+                AccountingConflicts = compareAndSetConflicts,
+                DeferredByLockTimeout = deferredByLockTimeout,
+                DeferredByQueryCancel = deferredByQueryCancel,
+                ReachedStrategyEnd = reachedStrategyEnd,
+                ReachedSweepEnd = reachedSweepEnd,
+                DurationMilliseconds = GetElapsedMilliseconds(cycleStartedTimestamp)
+            },
+            cancellationToken);
     }
 
     private static bool IsTransientLookupUnavailable(PaperFill fill)
@@ -457,4 +766,16 @@ public sealed record PaperFakFeeBackfillCycleResult(
     int TransientLookupUnavailable,
     bool ReachedEnd,
     bool ApplyEnabled,
-    HistoricalPaperFakFeeBackfillBatchResult? ApplyResult);
+    HistoricalPaperFakFeeBackfillBatchResult? ApplyResult)
+{
+    public HistoricalPaperAuthoritativeNetRepairBatchResult? AuthoritativeNetRepairResult { get; init; }
+
+    public HistoricalPaperNetFallbackBatchResult? NetFallbackResult { get; init; }
+}
+
+internal enum PaperFakFeeBackfillPhase
+{
+    ExactHistorical,
+    AuthoritativeNetRepair,
+    NetFallback
+}

@@ -20,11 +20,11 @@ public sealed partial class PostgresAppRepository
             DateTimeOffset filledBeforeUtc,
             CancellationToken cancellationToken = default)
     {
-        // Rank from the materialized lifetime Gross shown by the Dashboard. Exact
-        // LegacyUnknown/cutoff eligibility stays in the strategy-bound page query;
-        // joining it here forces a multi-million-row fill/order scan before every
-        // sweep. The raw accounting formula remains a fail-safe for a source
-        // strategy whose Dashboard snapshot has not been materialized yet.
+        // Rank from the materialized lifetime Gross shown by the Dashboard. Keep
+        // source-based exact work and all-source unresolved Settled run work in one
+        // frozen strategy order without joining the multi-million-row fill payload.
+        // The raw accounting formula remains a fail-safe for a strategy whose
+        // Dashboard snapshot has not been materialized yet.
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = CreateCommand(connection, $$"""
 SELECT
@@ -68,7 +68,7 @@ SELECT
 FROM public.strategies strategy
 LEFT JOIN public.dashboard_strategy_performance_snapshots performance
     ON performance.strategy_id = strategy.id
-CROSS JOIN LATERAL (
+WHERE EXISTS (
     SELECT 1
     FROM public.paper_orders source_order
     WHERE source_order.strategy_id = strategy.id
@@ -76,8 +76,24 @@ CROSS JOIN LATERAL (
       AND source_order.execution_source IN (
            '{{HistoricalPaperFakDirectSource}}',
            '{{HistoricalPaperFakChildSource}}')
-    LIMIT 1
-) historical_source
+)
+OR EXISTS (
+    SELECT 1
+    FROM public.strategy_market_paper_runs unresolved_run
+    WHERE unresolved_run.strategy_id = strategy.id
+      AND unresolved_run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'
+      AND unresolved_run.retention_scope = '{{StrategyRunRetentionScopes.PaperOnly}}'
+      AND unresolved_run.stake_usd > 0
+      AND unresolved_run.realized_pnl_usd IS NOT NULL
+      AND unresolved_run.fee_calculation_source IS DISTINCT FROM
+          '{{HistoricalPaperNetFallbackConstants.CalculationSource}}'
+      AND NOT (
+          unresolved_run.fee_accounting_status IN ('Calculated', 'VenueReported')
+          AND unresolved_run.fee_usd >= 0
+          AND unresolved_run.net_realized_pnl_usd IS NOT NULL
+          AND unresolved_run.net_realized_pnl_usd =
+              unresolved_run.realized_pnl_usd - unresolved_run.fee_usd)
+)
 ORDER BY gross_realized_pnl_usd DESC, strategy.id;
 """);
         command.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
@@ -138,6 +154,22 @@ candidate_keys AS MATERIALIZED (
     INNER JOIN public.paper_fills fill ON fill.paper_order_id = strategy_order.id
     WHERE fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
       AND fill.filled_at_utc < @FilledBeforeUtc
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.strategy_market_paper_runs fallback_run
+          WHERE fallback_run.paper_order_id = fill.paper_order_id
+            AND fallback_run.strategy_id = @StrategyId
+            AND fallback_run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'
+            AND fallback_run.retention_scope = '{{StrategyRunRetentionScopes.PaperOnly}}'
+            AND fallback_run.stake_usd > 0
+            AND fallback_run.realized_pnl_usd IS NOT NULL
+            AND fallback_run.fee_usd >= 0
+            AND fallback_run.fee_accounting_status = '{{FeeAccountingStatus.Calculated}}'
+            AND fallback_run.fee_calculation_source =
+                '{{HistoricalPaperNetFallbackConstants.CalculationSource}}'
+            AND fallback_run.net_realized_pnl_usd IS NOT NULL
+            AND fallback_run.net_realized_pnl_usd =
+                fallback_run.realized_pnl_usd - fallback_run.fee_usd)
       AND (
           NOT @HasCursor
           OR fill.filled_at_utc > @AfterFilledAtUtc

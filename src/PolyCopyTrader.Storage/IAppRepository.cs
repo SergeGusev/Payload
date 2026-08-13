@@ -509,6 +509,28 @@ public interface IAppRepository
                 StructuralConflicts: updates.Count));
     }
 
+    Task<HistoricalPaperAuthoritativeNetRepairBatchResult>
+        ApplyHistoricalPaperAuthoritativeNetRepairBatchAsync(
+            Guid strategyId,
+            int limit,
+            bool applyEnabled,
+            HistoricalPaperNetRunCursor? afterCursor = null,
+            CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new HistoricalPaperAuthoritativeNetRepairBatchResult());
+    }
+
+    Task<HistoricalPaperNetFallbackBatchResult> ApplyHistoricalPaperNetFallbackBatchAsync(
+        Guid strategyId,
+        int limit,
+        bool applyEnabled,
+        IReadOnlyCollection<Guid> excludedPaperOrderIds,
+        HistoricalPaperNetRunCursor? afterCursor = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new HistoricalPaperNetFallbackBatchResult());
+    }
+
     Task AddPaperFakFeeBackfillEventAsync(
         PaperFakFeeBackfillEvent entry,
         CancellationToken cancellationToken = default)

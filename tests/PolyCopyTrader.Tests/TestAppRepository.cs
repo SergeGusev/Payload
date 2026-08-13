@@ -102,6 +102,26 @@ internal sealed class TestAppRepository : IAppRepository
     public HistoricalPaperFakFeeBackfillBatchResult HistoricalPaperFakFeeBackfillApplyResult { get; set; } =
         new();
 
+    public Queue<HistoricalPaperAuthoritativeNetRepairBatchResult>
+        HistoricalPaperAuthoritativeNetRepairResults { get; } = [];
+
+    public List<(
+        Guid StrategyId,
+        int Limit,
+        bool ApplyEnabled,
+        HistoricalPaperNetRunCursor? AfterCursor)>
+        HistoricalPaperAuthoritativeNetRepairCalls { get; } = [];
+
+    public Queue<HistoricalPaperNetFallbackBatchResult> HistoricalPaperNetFallbackResults { get; } = [];
+
+    public List<(
+        Guid StrategyId,
+        int Limit,
+        bool ApplyEnabled,
+        IReadOnlyList<Guid> ExcludedPaperOrderIds,
+        HistoricalPaperNetRunCursor? AfterCursor)>
+        HistoricalPaperNetFallbackCalls { get; } = [];
+
     public List<PaperFakFeeBackfillEvent> PaperFakFeeBackfillEvents { get; } = [];
 
     public List<(DateTimeOffset OccurredBeforeUtc, int BatchSize)>
@@ -1463,6 +1483,45 @@ internal sealed class TestAppRepository : IAppRepository
             }
 
             return Task.FromResult(result);
+        }
+    }
+
+    public Task<HistoricalPaperAuthoritativeNetRepairBatchResult>
+        ApplyHistoricalPaperAuthoritativeNetRepairBatchAsync(
+            Guid strategyId,
+            int limit,
+            bool applyEnabled,
+            HistoricalPaperNetRunCursor? afterCursor = null,
+            CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            HistoricalPaperAuthoritativeNetRepairCalls.Add(
+                (strategyId, limit, applyEnabled, afterCursor));
+            return Task.FromResult(HistoricalPaperAuthoritativeNetRepairResults.Count > 0
+                ? HistoricalPaperAuthoritativeNetRepairResults.Dequeue()
+                : new HistoricalPaperAuthoritativeNetRepairBatchResult());
+        }
+    }
+
+    public Task<HistoricalPaperNetFallbackBatchResult> ApplyHistoricalPaperNetFallbackBatchAsync(
+        Guid strategyId,
+        int limit,
+        bool applyEnabled,
+        IReadOnlyCollection<Guid> excludedPaperOrderIds,
+        HistoricalPaperNetRunCursor? afterCursor = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(excludedPaperOrderIds);
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (sync)
+        {
+            HistoricalPaperNetFallbackCalls.Add(
+                (strategyId, limit, applyEnabled, excludedPaperOrderIds.ToArray(), afterCursor));
+            return Task.FromResult(HistoricalPaperNetFallbackResults.Count > 0
+                ? HistoricalPaperNetFallbackResults.Dequeue()
+                : new HistoricalPaperNetFallbackBatchResult());
         }
     }
 

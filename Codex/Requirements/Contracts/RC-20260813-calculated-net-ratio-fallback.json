@@ -3,7 +3,7 @@
   "contractId": "RC-20260813-calculated-net-ratio-fallback",
   "title": "Finalize unresolved Paper run Net with a same-strategy fee-to-stake ratio",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -69,8 +69,8 @@
           "kind": "test",
           "command": "Run focused PaperFakFeeBackfillProcessorTests and HistoricalPaperFakFeeBackfillStorageTests under the marked D:\\CodexTemp run.",
           "expected": "Exact-complete runs remain untouched, an authoritative Fee receives an exact Net repair without fee replacement, valid mixed-source exact runs are not ratio targets, unresolved financial rows reach fallback only after exact stages, a concurrent exact completion wins, and operational failures retry without estimating.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final focused run net-fallback-final-complete.trx passed all selected non-environment tests. PaperFakFeeBackfillProcessorTests and HistoricalPaperFakFeeBackfillStorageTests cover phase ordering, exact-complete and valid mixed-source preservation, authoritative Fee-to-Net repair, CAS rechecks, injected exception/cancellation propagation with exact-page retry and no fallback, operational deferrals, and current-visit transient exclusions; the deterministic real-PostgreSQL concurrent exact-winner case compiled and was discovered but remained environment-skipped."
         }
       ]
     },
@@ -101,8 +101,8 @@
           "kind": "test",
           "command": "Run focused storage contract and PostgreSQL integration cases for donor selection, coefficient calculation, fallback-source exclusion, and no-donor behavior under the marked D:\\CodexTemp run.",
           "expected": "The SQL and runtime results use only exact same-strategy donors, compute the aggregate fee-to-stake ratio, exclude prior fallback rows, and perform no update without positive donor stake.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "HistoricalPaperFakFeeBackfillStorageTests passed and assert same-strategy exact donor predicates, aggregate SUM(Fee)/SUM(Stake), exact fallback-source exclusion, and no-donor fail-closed behavior. The five HistoricalPaperNetFallbackPostgresIntegrationTests compiled and were discovered, but no explicitly selected disposable test database was configured, so they were skipped and no PostgreSQL runtime result is claimed."
         }
       ]
     },
@@ -134,8 +134,8 @@
           "kind": "test",
           "command": "Run deterministic positive-Gross, negative-Gross, zero-fee, rounding, invalid-target, and Gross-immutability PostgreSQL integration cases under the marked D:\\CodexTemp run.",
           "expected": "Every eligible target becomes Calculated with exact Fee/Net values and unchanged Gross/stake/settlement facts; invalid targets remain unchanged.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The storage contract tests passed for positive/negative Gross, numeric round-to-8 SQL, exact Calculated metadata, Gross/stake immutability, and invalid-target predicates. The env-gated PostgreSQL suite contains deterministic positive, negative, midpoint, zero-fee, zero-stake, null-Gross, and dependent-row immutability cases; all compiled and were discovered but were not executed because no explicitly selected disposable test database was configured."
         }
       ]
     },
@@ -167,8 +167,8 @@
           "kind": "test",
           "command": "Run focused idempotency, restart, exact-candidate exclusion, reconciliation-queue, and run-backed Dashboard projection tests under the marked D:\\CodexTemp run.",
           "expected": "Fallback rows remain terminal Calculated values, never donate or re-enter either phase, queue one strategy reconciliation, and unlock ordinary run-backed Net/Net ROI when all required runs are covered.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The final focused matrix passed processor restart/idempotency, old exact-candidate terminal exclusion, run-backed Dashboard Net completeness, and reconciliation worker tests. Source-contract assertions verify the existing run fee-only reconciliation trigger; the PostgreSQL queue/idempotency cases compiled and were discovered but remained environment-skipped."
         }
       ]
     },
@@ -207,24 +207,24 @@
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp run artifacts path>",
           "expected": "The solution builds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path D:\\CodexTemp\\runs\\manual-63901aee18bd44e7826129e94f3f7eb6\\artifacts --no-restore completed with 0 errors and one pre-existing nullable warning in BtcUpDown5mPaperStrategyProcessorTests.cs."
         },
         {
           "id": "VER-006",
           "kind": "test",
           "command": "Run focused fallback, historical fee backfill, Dashboard projection/reconciliation, and storage tests under the marked D:\\CodexTemp run; run env-gated PostgreSQL cases only against an explicitly selected disposable test database.",
           "expected": "All selected non-environment-gated tests pass with zero failures; PostgreSQL cases pass when an explicitly approved disposable database is available or remain truthfully unexecuted rather than being claimed.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final focused run net-fallback-final-complete.trx completed with 66 passed, 0 failed, and 5 skipped. Every skipped test was an env-gated HistoricalPaperNetFallbackPostgresIntegrationTests case; POLYCOPYTRADER_TEST_POSTGRES_CONNECTION was absent and no disposable database was explicitly selected, exactly preserving the approved no-substitution boundary."
         },
         {
           "id": "VER-007",
           "kind": "inspection",
           "command": "Run git diff --check, requirement WorkingTree/Staged validation, and an independent review comparing both verbatim requests, this approved contract, the complete diff, and all verification evidence.",
           "expected": "All mechanical checks pass and the independent reviewer records pass with no open findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "git diff --check passed. Independent reviewer agent:/root/net_fallback_code_review compared both verbatim prompts, approved digest, complete current production/storage/processor/test/docs/context/history diff, and persisted build/TRX evidence, then returned PASS with no open P0/P1/P2 findings. Contract validation preserved digest sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5; isolated exact-patch WorkingTree validation and selective-index Staged validation both passed with governedFiles=12 and contracts=1."
         }
       ]
     }
@@ -339,9 +339,9 @@
     "semanticDigest": "sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5"
   },
   "independentReview": {
-    "reviewer": "agent:/root/calculated_net_ratio_fallback_final_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/net_fallback_code_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

@@ -1,3 +1,17 @@
+## Active Update 2026-08-14 Calculated Net Ratio Fallback
+Goal: Finalize unresolved Settled Paper run Net values after exact accounting has priority, using the approved same-strategy fee-to-stake ratio and ordinary `Calculated` status.
+Status: Completed in branch; deployment is not part of this task
+Done:
+- Implemented the approved three-phase Gross-ranked strategy visit: retained exact historical Paper FAK accounting, authoritative nonnegative Fee-to-Net repair, then a bounded canonical-run ratio fallback before advancing to the next strategy.
+- The fallback recomputes `R = SUM(exact Fee) / SUM(exact positive Stake)` from exact same-strategy `PaperOnly` donors, excludes prior fallback results, stores `Fee = ROUND(Stake * R, 8)` and `Net = Gross - Fee`, and writes exact source `strategy-settled-fee-stake-ratio-v1` with ordinary `Calculated` status.
+- Preserved complete exact runs and Gross/stake/settlement facts; added compare-and-set protection, transaction deferral retry, current-visit exclusion of operational exact-lookup failures, terminal idempotency, and the no-donor/no-positive-stake no-op boundary.
+- Kept fallback persistence run-only as approved. Fill, order, position, and settlement accounting rows are not synthesized or rewritten; Live/shadow accounting, execution, signals, risk, and order placement are unchanged.
+- Added focused processor/storage contracts and five environment-gated PostgreSQL cases covering exact repair, donor selection, positive/negative/zero-fee/rounding behavior, invalid targets, dependent-row immutability, no donor, reconciliation, idempotency, and a concurrent exact-accounting winner.
+- Updated README, configuration reference, and Paper/live parity documentation with the exact approximate-but-`Calculated`, terminal, run-only contract.
+Next: Deploy only when explicitly requested, then verify the deployed build and database journal read-only as the Gross-ranked worker reaches the canonical-run phases.
+Notes: Requirement contract `RC-20260813-calculated-net-ratio-fallback` was approved at semantic digest `sha256:833994ee210b3fb1a63fd1d66fce0f406d452610f678455d90f0b4fcac9a4be5` in parent commit `1cf9ae4d` before product edits. Final Debug solution build passed with `0` errors and one pre-existing nullable test warning. The focused matrix passed `66`, failed `0`, and skipped `5`; all five skips are the new PostgreSQL integration cases because `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` was absent and no disposable database was explicitly selected. Those cases compiled and were discovered, but PostgreSQL runtime behavior is not claimed. `git diff --check` passed. No production database, service, deployment, configuration, strategy, order, trading, Fee, or Net value was changed by this local implementation.
+Blockers: None for local implementation. Real PostgreSQL execution of the five environment-gated cases remains a verification limitation until an explicitly selected disposable test database is provided.
+
 ## Active Update 2026-08-13 Compact Skipped-Run Archive v2 Contract
 Goal: Design the strongest evidence-backed reduction in future skipped-run tombstone growth without losing complete Paper or Live betting history.
 Status: Blocked pending exact user approval
