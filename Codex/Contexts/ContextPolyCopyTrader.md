@@ -1,3 +1,18 @@
+## Active Update 2026-08-13 Database Growth Optimization Status
+Goal: Summarize the current verified state of the database-growth optimization while preserving complete Paper and Live betting history.
+Status: Completed read-only
+Done:
+- Verified clean `HEAD c6b3c674` matches its tracking branch. The latest deployed source build recorded by the fresh runtime verification is `d7e18a65`; its `src` tree matches current HEAD, and immediate skipped-run implementation commit `999d3092` is in its ancestry.
+- Verified the current checked-in retention configuration remains bulk `Enabled=false / ApplyEnabled=false` and direct `DirectPaperSkipCompactionEnabled=true / DirectPaperSkipCompactionApplyEnabled=true`. Exact process-effective direct flags for the current `d7e18a65` process were not freshly observed.
+- Confirmed the implemented boundary has not changed since `999d3092`: terminal-at-creation eligible PaperOnly skips can go directly to the restore-capable tombstone, rollup, canonical Dashboard event, and reconciliation queue before any raw insert; equivalent queue requests avoid physical rewrites.
+- Reconfirmed the last exact runtime profile over `368.614223s`: raw runs changed by `+4,796` inserts, `+3,434` updates, and `+2,746` deletes while tombstones increased by exactly `2,746`, so the strict observed lower bound for archive-before-insert was zero. All `2,746` were existing durable `Observed` rows finalized about `9.5-10m` later. Their v1 completeness, raw-overlap, rollup, facts, and dependency gates passed; naturally protected Paper/diagnostic rows remained raw.
+- Confirmed the dominant path remains unoptimized for write amplification: existing `Observed -> Skipped` and deferred terminal batches still perform a wide raw update before tombstone/archive and raw delete. The durable initial `Observed` insert and later delete therefore remain for the main workload.
+- Confirmed the larger planned steps are not implemented: a narrow durable pending-run scheduler, full Dashboard reconciliation no-op, merged RunActivity/RunSkipped fact, rich-to-slim tombstone lifecycle, and historical skipped-run bulk cleanup. The bulk engine remains disabled.
+- The latest recorded deployed-service check at `2026-08-13T14:06:04.002326Z` found `d7e18a65` healthy and active, but it did not include a new raw/tombstone/WAL growth profile. Therefore current database size, sustained growth rate, current immediate-path share, and actual savings on this build remain unknown.
+Next: For the next code step, draft and obtain approval of a requirement contract for archiving an existing terminal `Observed` payload before its wide raw update while retaining the initial durable scheduler row. Treat replacement of the initial raw insert/delete with a narrow durable scheduling table as a separate larger requirement.
+Notes: This status used current source/configuration, Git ancestry/tree identity, persisted exact runtime evidence, and an independent read-only source review. No database, service, configuration, trading/API state, product source, or tests changed. Repository context/history updates are requirement-gate exemptions. Persisted records conflict on whether endpoint `192.168.0.101:5432/polycopytrader` is called production or test, so this update does not infer an environment label.
+Blockers: None for the status report. A fresh bounded read-only profile is required to state the current physical database growth/WAL rate or quantify savings on `d7e18a65`.
+
 ## Active Update 2026-08-13 Production Verification of Reference Average v5
 Goal: Verify the deployed available-window v5 build, production runtime health, betting flow, incomplete-window behavior, 3h-only behavior, and exact Maker-GTD boundaries read-only.
 Status: Completed
