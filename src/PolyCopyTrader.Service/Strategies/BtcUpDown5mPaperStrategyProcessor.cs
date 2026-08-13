@@ -13726,19 +13726,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     reason));
         }
 
-        var allAverages = cryptoReferencePriceAverageProvider
+        var availableAverages = cryptoReferencePriceAverageProvider
             .GetAssetAverages(referenceAssetSymbol)
-            .Where(average => average.IsFullWindow && average.AveragePriceUsd is > 0m)
+            .Where(average =>
+                average.SampleCount > 0 &&
+                average.AveragePriceUsd is > 0m)
             .ToArray();
-        var bpsDenominatorAverage = GetReferenceAverageBpsDenominatorAverage(allAverages);
+        var bpsDenominatorAverage = GetReferenceAverageBpsDenominatorAverage(availableAverages);
+        var fullAverages = availableAverages
+            .Where(average => average.IsFullWindow)
+            .ToArray();
         var averages = IsSingleWindowReferenceAverageBpsFakPremarketEntry(variant)
-            ? allAverages
+            ? fullAverages
                 .Where(average => string.Equals(
                     average.WindowLabel,
                     variant.RequiredReferenceAverageWindow,
                     StringComparison.OrdinalIgnoreCase))
                 .ToArray()
-            : allAverages
+            : fullAverages
                 .OrderByDescending(average => average.AveragePriceUsd.GetValueOrDefault())
                 .ThenByDescending(average => average.WindowSeconds)
                 .ToArray();
@@ -13844,7 +13849,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         if (bpsDenominatorAverage?.FirstBucketAveragePriceUsd is not > 0m)
         {
-            const string reason = "reference_average_bps_denominator_24h_start_price_missing";
+            const string reason = "reference_average_bps_denominator_24h_available_start_price_missing";
             return BtcOpeningLimitDecision.Reject(
                 reason,
                 BuildReferenceAverageBpsRawDecisionJson(
@@ -15940,9 +15945,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         return averages
             .Where(average =>
-                average.IsFullWindow &&
+                average.SampleCount > 0 &&
                 average.AveragePriceUsd is > 0m &&
                 average.FirstBucketAveragePriceUsd is > 0m &&
+                average.FirstBucketStartUtc is not null &&
+                average.LastBucketStartUtc is not null &&
                 (average.WindowSeconds == 86_400 ||
                     string.Equals(average.WindowLabel, "24h", StringComparison.OrdinalIgnoreCase)))
             .OrderByDescending(average => average.WindowSeconds)
@@ -18666,10 +18673,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             strategy_code = variant.Code,
             reference_asset_symbol = referenceAssetSymbol,
             reference_binance_symbol = selectedAverage?.BinanceSymbol ?? referenceAssetSymbol + "USDT",
-            decision_source = "reference_price_average_envelope_bps_premarket_v3",
+            decision_source = "reference_price_average_envelope_bps_premarket_v4",
             reference_average_source = "crypto_reference_price_average_cache",
-            reference_average_algorithm_version = 3,
-            reference_average_contract = "max_min_envelope_24h_start_denominator",
+            reference_average_algorithm_version = 4,
+            reference_average_contract = "max_min_full_window_envelope_available_24h_start_denominator",
             quote_received_at_utc = nowUtc,
             condition_id = market.ConditionId,
             market_id = market.MarketId,
@@ -18704,9 +18711,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             reference_average_minimum_window = minimumAverage?.WindowLabel,
             reference_average_minimum_window_seconds = minimumAverage?.WindowSeconds,
             reference_average_minimum_price_usd = minimumAveragePriceUsd,
-            reference_average_bps_denominator_source = "24h_first_bucket_average_price",
+            reference_average_boundary_requires_full_window = true,
+            reference_average_bps_denominator_allows_partial_window = true,
+            reference_average_bps_denominator_source = "available_24h_first_bucket_average_price",
             reference_average_bps_denominator_window = denominatorAverage?.WindowLabel,
             reference_average_bps_denominator_window_seconds = denominatorAverage?.WindowSeconds,
+            reference_average_bps_denominator_sample_count = denominatorAverage?.SampleCount,
+            reference_average_bps_denominator_expected_sample_count = denominatorAverage?.ExpectedSampleCount,
+            reference_average_bps_denominator_is_full_window = denominatorAverage?.IsFullWindow,
             reference_average_bps_denominator_price_usd = denominatorPriceUsd,
             reference_average_bps_denominator_first_bucket_utc = denominatorAverage?.FirstBucketStartUtc,
             reference_average_bps_denominator_last_bucket_utc = denominatorAverage?.LastBucketStartUtc,
