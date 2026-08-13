@@ -1,0 +1,423 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260813-compact-skip-archive-v2",
+  "title": "Prepare a dormant dedicated compact skipped-run archive v2",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Мне важно, чтобы вся Paper история сохранилась. Кроме скипнутых"
+    },
+    {
+      "source": "user",
+      "text": "На всякий случай - Live история тоже должна вся сохраняться"
+    },
+    {
+      "source": "user",
+      "text": "Давай здесь продолжим. Конечная цель - как можно сильнее оптимизировать работу с базой, не теряя истории."
+    },
+    {
+      "source": "user",
+      "text": "А зачем нам это архивирование?"
+    },
+    {
+      "source": "user",
+      "text": "ок, действуй"
+    }
+  ],
+  "scope": {
+    "goal": "Prepare and fully test a hard-disabled dedicated version-2 skipped-run archive that materially reduces future per-run heap and index footprint and is the smallest of the explicitly compared exact-history layouts, while preserving complete Paper and Live betting history, exact local late-dependency restoration, deduplication, rollups, and Dashboard semantics.",
+    "inScope": [
+      "A compact market-identity dimension keyed by exact market_id, plus immutable versioned market-metadata rows so different exact metadata tuples for the same market_id remain representable without overwriting history.",
+      "An immutable byte-exact skip-reason dimension.",
+      "A dedicated narrow v2 tombstone table that stores only identity references and run-specific values required for exact restoration, dedupe, recent Dashboard facts, and rollup reversal.",
+      "Dormant v2 implementations for terminal-at-insert direct archive, existing-raw direct compaction, and age-based bulk transfer, all hard-disabled in the compatibility release.",
+      "Version-union dependency matching, raw reinsert prevention, cross-v1/v2 collision checks, exact restore, mixed rollup reversal, Dashboard rebuild, recent-performance reads, retention preview, constraints, and indexes.",
+      "Preservation of every existing intrinsic, Paper, Live, shadow, fee, diagnostic, dependency, and projection blocker applicable to each current archive writer.",
+      "Coordination of strategy Live-state changes with retention so a concurrent Live enable cannot strand a logically Live run only in v1 or v2 skipped archive form.",
+      "A compatibility release with schema/readers/restoration/dormant writers and focused disposable-PostgreSQL tests; product runtime continues writing only v1.",
+      "A deterministic storage and query-plan prototype comparing equal logical cohorts for the current v1 layout and four exact-history v2 candidate layouts, including every candidate-owned heap, TOAST relation, dimension, constraint index, and lookup index."
+    ],
+    "outOfScope": [
+      "Updating, deleting, backfilling, moving, reindexing, or otherwise rewriting existing v1 tombstone rows.",
+      "Activating v2 writers, populating v2 or its dimensions outside disposable tests, designing or enabling the durable old-binary capability fence required for later activation, production DML/DDL, deployment, restart, or configuration mutation.",
+      "Choosing an age TTL or deleting any restore payload; current source has no finite late-dependency horizon and no durable restore ledger.",
+      "Using Gamma, CLOB, or any external API during synchronous restore.",
+      "Eliminating the initial durable Observed insert, the current existing-Observed wide update, its later raw delete, the historical raw skipped backlog, RunActivity/RunSkipped fact duplication, or general Dashboard reconciliation churn.",
+      "Changing signals, strategy decisions, thresholds, Paper or Live orders, fills, positions, settlements, execution semantics, risk, PnL, fees, trading configuration, or Live order placement."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Compatibility preparation only. Existing v1 stored logical values are not rewritten and existing v1 semantics remain unchanged except for the explicit REQ-005 Live-history race correction; product runtime emits no v2 rows. Future eligible rows may use v2 only after a separate approved activation release installs and proves a durable old-binary capability fence. PostgreSQL mutation is limited to one purpose-created container named pct-codex-skip-v2-<12 lowercase hex> from the locally available official postgres:18-alpine image, bound to loopback on an OS-assigned port, with PGDATA bind-mounted at <marked D:\\CodexTemp run>\\db\\postgres and one database named pct_codex_skip_v2_<UTC timestamp>_<8 lowercase hex>; the working endpoint 192.168.0.101:5432/polycopytrader, all pre-existing containers/volumes/databases, and every shared or non-loopback database are forbidden.",
+    "firstVerification": "Read the exact current schema, all three archive writers, all blockers, all restore/dependency triggers, rollup and Dashboard readers, configuration flow, and deployed read-only size/cardinality evidence before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "V2 must normalize only byte-exact repeated values into immutable local dimensions and must represent multiple exact metadata versions for one market without choosing a canonical winner or calling an external API.",
+      "sourceRequestIndexes": [0, 1, 2, 4],
+      "sourceQuote": "как можно сильнее оптимизировать работу с базой, не теряя истории",
+      "acceptanceCriteria": [
+        "A market-identity row uniquely maps a compact numeric key to the exact market_id.",
+        "One market identity may have multiple immutable metadata-version rows; each stores exact condition_id, market_slug, market_title, category, market_start_utc, and market_end_utc, and equal tuples are reused under the common retention lock.",
+        "A metadata change creates a new exact version and never overwrites an older tuple or forces an otherwise eligible run raw merely because its market_id was seen before.",
+        "The skip-reason dimension maps a compact numeric key to byte-exact reason text; rows cannot be updated or deleted.",
+        "Dimension resolution and tombstone insertion are one transaction. An unresolved collision, capacity limit, or internal mismatch produces no partial dimension/tombstone/rollup/event state and falls back to the exact v1 representation where safe, otherwise the transaction fails closed.",
+        "No restore or archive operation reads an external API."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.Retention.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run disposable PostgreSQL dimension tests for equal tuple reuse, two different exact metadata tuples for one market, every nullable-field boundary, concurrent resolution, immutable rows, byte-exact reasons, and forced resolution failure.",
+          "expected": "Every exact value remains representable and immutable; equal values deduplicate; different values coexist; failures leave zero partial persistence and preserve the run through v1 fallback or full rollback.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "The dedicated v2 tombstone must omit repeated and deterministically derivable values while retaining or exactly reconstructing every raw-run value needed if a late Paper, Live, or shadow dependency appears.",
+      "sourceRequestIndexes": [0, 1, 2, 4],
+      "sourceQuote": "вся Paper история сохранилась",
+      "acceptanceCriteria": [
+        "The v2 row stores strategy_id, market identity, exact metadata version, archived_run_id, detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome, stake_usd, skip-reason identity, and run_updated_at_utc.",
+        "Its primary dedupe identity is one strategy/market-identity pair and archived_run_id remains globally unique across v1 and v2 under the common retention gate and cross-table checks.",
+        "Rollup bucket is derived exactly as the UTC day of run_updated_at_utc and is not stored in v2.",
+        "A run uses v2 only when run_created_at_utc equals detected_at_utc exactly; restore reconstructs created_at_utc from detected_at_utc. A non-equal run uses the existing exact v1 representation.",
+        "V2 does not store archived_at_utc; this approved loss is limited to the skipped-row archive-operation timestamp and does not change raw-run reconstruction, Paper/Live history, skip decision time/reason, rollups, or Dashboard results.",
+        "Equivalent v1 and v2 fixtures restore to byte/logical-value-equivalent raw rows and emit equal logical projection contributions."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.Retention.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run disposable PostgreSQL v1/v2 exact-payload, derived-created-time, non-equal-created v1 fallback, derived UTC bucket, archive-time omission, idempotent retry, conflicting retry, cross-table collision, rollup, event, and raw-delete atomicity tests.",
+          "expected": "V2 is narrower while exact restorable run values and logical history match v1; unrepresentable or conflicting cases never lose or silently replace a run.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "V2 changes representation only: each archive writer must retain its complete current eligibility and fail-closed blocker contract so no Paper or Live bet history can enter either compact archive.",
+      "sourceRequestIndexes": [0, 1, 2, 4],
+      "sourceQuote": "Live история тоже должна вся сохраняться",
+      "acceptanceCriteria": [
+        "Every writer still requires terminal Skipped, non-empty reason, null signal/order/entry/settlement/economic fields, null persisted diagnostics, and all nine neutral fee fields. Existing-raw direct and age-based writers additionally require persisted retention_scope='PaperOnly'; terminal-at-insert has no persisted scope yet and preserves its exact source-equivalent strategy non-Live, live timestamp/guard, and dependency eligibility rules.",
+        "Current Live scope, live_enabled_at_utc boundary, permanent Live guard, Paper order, DryRun order, Live order, Live-shadow market/condition, Paper position, settlement, copied-leader position/activity, and on-chain dependencies continue to block archival exactly as applicable today.",
+        "Age-based retention additionally preserves its current market-end/48-hour rules and projection-event, recent-fact, and reconciliation-queue blockers.",
+        "Direct paths preserve their existing canonical projection event and queue behavior and do not acquire bulk-only eligibility semantics.",
+        "For every ineligible or blocked case, the complete exact run remains raw or follows the existing v1 fallback; no v2 tombstone, new rollup contribution, raw delete, or Paper/Live row mutation occurs.",
+        "The three dormant v2 writers are tested independently against their applicable blocker matrices."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.Retention.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run table-driven disposable PostgreSQL blocker tests for all intrinsic fields, all nine fee fields, current/historical Live guards, every Paper/Live/shadow/dependency class, and bulk-only projection blockers across each applicable v2 writer.",
+          "expected": "Every protected run remains exact and raw or v1; no protected run enters v2 and no dependent Paper/Live history changes.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "All dedupe, dependency, restore, rollup, and Dashboard contracts must operate correctly over the union of unchanged v1 rows and dedicated v2 rows.",
+      "sourceRequestIndexes": [0, 1, 2, 4],
+      "sourceQuote": "не теряя истории",
+      "acceptanceCriteria": [
+        "No implementation or startup statement updates, deletes, backfills, moves, or rewrites any existing v1 row; all pre-existing v1 logical column values and semantics remain unchanged except when the explicitly required REQ-005 Live-history correction restores a qualifying archived v1 run during a concurrent or later Live enable transaction.",
+        "Raw reinsert prevention and archive writers check strategy/market and archived_run_id conflicts across v1 and v2 while holding the common retention gate.",
+        "All current late-dependency trigger sources restore matching v1 or v2 rows: Paper, DryRun, Live order, shadow decision, position, settlement, copied position/activity, on-chain result, and strategy-code remapping.",
+        "V2 restore obtains exact market_id/metadata/reason locally, recreates the raw Skipped row, promotes Live/shadow scope when required, removes only the per-run v2 row, reverses one rollup contribution, and queues reconciliation atomically.",
+        "Rollup reversal recomputes remaining count/min/max across both v1 and v2 rows in the exact strategy/day/reason group.",
+        "Recent Dashboard rebuild and recent-performance readers union v1 and v2 and produce identical 1h/6h/24h facts for equivalent inputs.",
+        "Missing/inconsistent dimension references, unsupported archive state, or cross-table collisions fail closed before the dependency write commits."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Build.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run disposable PostgreSQL v1-only, v2-only, and mixed-group tests for every dependency trigger, exact restoration, cross-table dedupe, Live/shadow promotion, rollup reversal, reconciliation, malformed references, and 1h/6h/24h Dashboard parity.",
+          "expected": "All valid logical outcomes are version-independent and all invalid states block atomically without history loss.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Strategy Live-state mutation and both archive versions must share one serialization contract so concurrent Live enablement cannot lose or misclassify a Live run.",
+      "sourceRequestIndexes": [1, 2, 4],
+      "sourceQuote": "Live история тоже должна вся сохраняться",
+      "acceptanceCriteria": [
+        "A schema-level pre-update guard takes the shared strategy-run retention lock before live_stakes or live_enabled_at_utc changes.",
+        "If Live enablement wins serialization first, subsequent archive eligibility sees the committed Live state/guard and retains the run raw.",
+        "If archive wins first and run_updated_at_utc is at or after the newly committed live_enabled_at_utc, the same Live-state transaction restores v1 or v2 exactly, reverses its rollup, promotes it to LiveOrShadow, and queues reconciliation.",
+        "A skip whose run_updated_at_utc is strictly before live_enabled_at_utc remains an archived pre-Live Paper skip.",
+        "Both commit orders and both archive versions are covered by deterministic concurrency tests."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "Run deterministic disposable PostgreSQL concurrency tests for Live enable versus v1 archive and versus v2 archive in both serialization orders, plus the strict pre-Live boundary.",
+          "expected": "Every logically Live run exists raw as LiveOrShadow with no residual rollup; every strictly pre-Live skip remains archived; no deadlock or partial state occurs.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "text": "Dedicated v2 storage and indexes must avoid adding future rows to wide v1 heap/index structures, be the smallest of the explicitly evaluated exact-history layouts on one deterministic cohort, and provide bounded indexed access for every v2 lookup path.",
+      "sourceRequestIndexes": [2, 4],
+      "sourceQuote": "как можно сильнее оптимизировать работу с базой",
+      "acceptanceCriteria": [
+        "The existing v1 table and its indexes receive no v2 row or v2-specific column/index expansion.",
+        "V2 uses compact numeric market/metadata/reason references, a strategy/market primary key, global archived_run_id uniqueness within v2, and narrow indexes for dependency, rollup-day/reason, strategy-recent, and global-recent access.",
+        "Every cross-table uniqueness path is serialized by the existing retention lock and verified by database triggers/invariants rather than relying only on application call order.",
+        "The deterministic prototype contains exactly 262,144 logical tombstones over 256 strategies, 1,024 market identities, 1,032 immutable metadata versions including two exact versions for eight markets, 37 byte-exact reasons, and 30 UTC update days. Condition, slug, title, category, and reason text use deterministic UTF-8 byte-length distributions centered on the measured current pg_stats widths 67/25/48/7/43; nullable market times, category, selected asset, and selected outcome cycle through both null and non-null states. Every candidate receives identical logical values and required lookup semantics.",
+        "The prototype compares five exact-history layouts: current v1; a same-table versioned layout; dedicated v2 with per-row market metadata and reason text; dedicated v2 with normalized immutable market identity/metadata but per-row reason text; and the proposed dedicated v2 with normalized immutable market identity/metadata and reason. Candidate eligibility is representation-neutral: it must preserve byte-exact raw restoration without API access, logical dedupe, the complete blocker matrix, mixed-version rollup and Dashboard semantics, Live-race serialization, and all six lookup shapes; REQ-001's selected normalization mechanism is not an eligibility prerequisite for alternative candidates.",
+        "For each layout, measure an empty baseline, insert the identical cohort, VACUUM (ANALYZE), then record pg_relation_size, pg_indexes_size, TOAST size, and pg_total_relation_size for every owned tombstone, dimension, constraint index, and lookup index. Compare both populated total and populated-minus-empty bytes. The proposed v2 passes only if both totals are strictly the smallest eligible candidate and its populated total is at least 35 percent smaller than current v1; otherwise the contract stops without claiming completion or enabling v2.",
+        "Run EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) plus an independently computed exact-result comparison for six implemented query shapes: condition dependency, exact strategy/market, exact archived_run_id, exact strategy/UTC-day/reason rollup reversal, one-strategy 24-hour Dashboard recent, and global 24-hour recent performance. Exact-key lookups return at most one row; condition access examines at most matched rows plus two v2 rows; rollup access at most matched rows plus four; strategy recent at most 40; global recent at most 9,000. The driving access to v2 must be Index Scan, Index Only Scan, or Bitmap Index Scan using the declared lookup index, with no sequential scan of v2; a sequential scan of a dimension is allowed only when that dimension has at most 1,032 rows.",
+        "The completion report records the exact fixture generator/version, PostgreSQL version, SQL, row and distinct counts, empty/populated relation bytes, all plan JSON files and result hashes, and distinguishes prototype savings from unknown deployed savings."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Build.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-006",
+          "kind": "test",
+          "command": "On the exact allowlisted disposable database, generate the specified 262,144-row cohort for all five layouts; capture empty and post-VACUUM (ANALYZE) heap/index/TOAST/total bytes including all dimensions and indexes; then run the six specified EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) queries and independent exact-result comparisons, writing only scripts/results/logs under the marked D:\\CodexTemp run.",
+          "expected": "The proposed v2 is strictly smallest among every eligible exact-history candidate and at least 35 percent smaller than v1 by populated total bytes; all six result sets match independently, exact-key cardinality is at most one, every v2 driving scan uses the declared index family, and every explicit examined-row bound passes. Otherwise verification fails and no completion or activation claim is made.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-007",
+      "text": "This release must be compatibility-only: it must understand and test v2 but make product v2 emission impossible even through configuration or environment overrides.",
+      "sourceRequestIndexes": [1, 2, 4],
+      "sourceQuote": "не теряя истории",
+      "acceptanceCriteria": [
+        "Schema initialization is restart/idempotency safe, creates empty v2/dimension structures, and performs no v1 backfill or v2 population.",
+        "Readers/restoration understand v1 and v2; all three v2 writer implementations are directly testable but product dispatch is guarded by a compiled compatibility capability that is false.",
+        "A typed configuration option defaults false, checked-in configuration is false, and validation rejects true unconditionally in this compatibility build, including an environment-variable override.",
+        "Product service execution continues to emit v1 only, and focused tests prove no configuration path can cause a v2 product write.",
+        "Later activation requires a new approved contract, a new build that changes the compiled capability/validator, and a durable database capability/version fence that blocks any v1-only service before schema or data writes; merely observing one current process is explicitly insufficient.",
+        "README documents the two-release boundary and the fact that this compatibility release alone produces no storage savings."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.Retention.cs",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-007",
+          "kind": "test",
+          "command": "Run schema initialization twice over preserved v1 fixtures, configuration/default/environment-override tests, product dispatch tests, and direct dormant-writer test hooks in a disposable PostgreSQL database.",
+          "expected": "V1 rows are logically unchanged; schema is idempotent; product dispatch cannot emit v2; test-only enabled writer paths produce correct v2 fixtures.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-008",
+      "text": "The bounded local implementation must pass build, focused tests, requirement validation, whitespace checks, temporary-artifact cleanup, and independent semantic review before completion.",
+      "sourceRequestIndexes": [2, 4],
+      "sourceQuote": "ок, действуй",
+      "acceptanceCriteria": [
+        "No database outside disposable tests, service, deployment, configuration state, strategy, order, API, or trading state is changed.",
+        "Before any PostgreSQL mutation, require a running Docker daemon and an already local official postgres:18-alpine image; do not pull or download an image. Preview and require zero existing container/name collision for generated ^pct-codex-skip-v2-[0-9a-f]{12}$, zero existing generated database path, and a marked-run-owned empty <run>\\db\\postgres directory. Reject every pre-existing container, named Docker volume, user-supplied database connection, non-loopback binding, 192.168.0.101, and database polycopytrader.",
+        "Create exactly one purpose-created container with --name pct-codex-skip-v2-<12 lowercase hex>, --rm, no restart policy, the official postgres:18-alpine image, loopback 127.0.0.1 bound to an OS-assigned host port, PGDATA bind-mounted to the resolved marked-run-owned <run>\\db\\postgres directory, and exactly one generated database matching ^pct_codex_skip_v2_[0-9]{14}_[0-9a-f]{8}$. After health readiness, resolve the actual host port, verify IPAddress.IsLoopback, PostgreSQL major version 18, exact database name, container ID/name/image/digest, and empty application schema before setting the test connection; record identity without credentials.",
+        "Mutate only that generated database. All build/test scripts, results, plans, logs, and disposable database files stay under the same marked D:\\CodexTemp run. After tests, verify the generated database identity and zero unexpected databases/sessions, stop the exact container ID, verify container absence and no named volume, then run protected marked-run cleanup and verify the run directory is absent.",
+        "The solution builds with zero errors and focused retention, configuration, projection, and disposable PostgreSQL tests pass with zero failures.",
+        "WorkingTree and Staged requirement validation, git diff --check, and an independent comparison of verbatim requests, approved contract, complete diff, and evidence pass with no open finding."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.Retention.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Build.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs",
+        "README.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-13.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-008",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --artifacts-path <marked D:\\CodexTemp run artifacts path>",
+          "expected": "Build completes with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-009",
+          "kind": "test",
+          "command": "Run focused configuration, StrategyRunRetention, Dashboard, and processor-dispatch tests under the marked D:\\CodexTemp run.",
+          "expected": "All focused non-PostgreSQL tests pass with zero failures.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-010",
+          "kind": "test",
+          "command": "Using only an already local official postgres:18-alpine image, preview zero collisions, create the exact purpose-created --rm pct-codex-skip-v2-<12 lowercase hex> container with PGDATA at <marked D:\\CodexTemp run>\\db\\postgres and 127.0.0.1 on an OS-assigned port, verify container/image/server/database identity and empty schema, set POLYCOPYTRADER_TEST_POSTGRES_CONNECTION only to generated pct_codex_skip_v2_<UTC timestamp>_<8 lowercase hex>, run StrategyRunRetentionPostgresIntegrationTests and focused DashboardIncrementalProjectionIntegrationTests, verify identity and zero unexpected databases/sessions, stop the exact container, verify container/volume absence, and complete protected marked-run cleanup.",
+          "expected": "Identity and allowlist gates pass without exposing credentials or pulling an image; every selected PostgreSQL test passes with zero failures; only the purpose-created loopback container/database and marked-run files are mutated; exact container absence, absence of named volumes, and protected marked-run cleanup are verified.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-011",
+          "kind": "inspection",
+          "command": "Run requirement WorkingTree and Staged validation, git diff --check, and independent semantic review of original requests, approved contract, complete diff, and verification evidence.",
+          "expected": "Every gate passes and the independent reviewer reports pass with no open finding.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Existing v1 tombstones are not rewritten or reclaimed; compact storage applies only to future rows after a separately approved activation.",
+      "impact": "The current approximately 5.31 GB v1 tombstone relation remains allocated, so this contract alone does not reduce current database size.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2 sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d",
+        "semanticDigest": "sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "The compatibility release hard-disables product v2 writes and requires a later approved activation release with a durable old-binary capability fence.",
+      "impact": "The first deployment changes no archive growth rate; storage savings start only after a second implementation, approval, deployment, and verification step.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2 sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d",
+        "semanticDigest": "sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d"
+      }
+    },
+    {
+      "id": "DEV-003",
+      "text": "Dedicated v2 rows omit archived_at_utc because the current source never reads it and the user explicitly excludes Skipped rows from the history-preservation requirement.",
+      "impact": "The exact database operation time when a v2 skipped row was archived cannot be queried later; the run's detection, due, update, identity, reason, stake, restoration, rollup, Dashboard, Paper, and Live semantics remain exact.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2 sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d",
+        "semanticDigest": "sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d"
+      }
+    },
+    {
+      "id": "DEV-004",
+      "text": "A run whose created_at_utc differs from detected_at_utc, or whose dimensions cannot be safely resolved, remains in the exact existing v1 representation rather than widening v2.",
+      "impact": "Such rows receive less storage reduction but retain complete exact history and current behavior.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2 sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d",
+        "semanticDigest": "sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d"
+      }
+    },
+    {
+      "id": "DEV-005",
+      "text": "This contract does not remove the dominant existing Observed insert, wide terminal update, or raw delete lifecycle.",
+      "impact": "Major raw-table write amplification remains and must be optimized under a separate later contract; this task targets future tombstone heap/index width only.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2 sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d",
+        "semanticDigest": "sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2 sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d",
+    "semanticDigest": "sha256:dc3e64419f265457facc27aa67833f4a850e638e4970615e52e0344022f3b81d"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/compact_skip_archive_v2_final_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
