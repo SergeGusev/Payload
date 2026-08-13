@@ -1,0 +1,75 @@
+{
+  "description": "PolyCopyTrader project-wide requirement fidelity checkpoints.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$(git rev-parse --show-toplevel)/.codex/hooks/Invoke-RequirementLifecycle.ps1\"",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$root = (& git rev-parse --show-toplevel).Trim(); & (Join-Path $root '.codex\\hooks\\Invoke-RequirementLifecycle.ps1')\"",
+            "timeout": 15,
+            "statusMessage": "Loading requirement fidelity gate",
+            "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$(git rev-parse --show-toplevel)/.codex/hooks/Invoke-RequirementLifecycle.ps1\"",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$root = (& git rev-parse --show-toplevel).Trim(); & (Join-Path $root '.codex\\hooks\\Invoke-RequirementLifecycle.ps1')\"",
+            "timeout": 15,
+            "statusMessage": "Locking literal task scope",
+            "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$(git rev-parse --show-toplevel)/.codex/hooks/Invoke-RequirementLifecycle.ps1\"",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$root = (& git rev-parse --show-toplevel).Trim(); & (Join-Path $root '.codex\\hooks\\Invoke-RequirementLifecycle.ps1')\"",
+            "timeout": 15,
+            "statusMessage": "Passing requirement contract to subagent",
+            "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$(git rev-parse --show-toplevel)/.codex/hooks/Invoke-RequirementPreToolUse.ps1\"",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$root = (& git rev-parse --show-toplevel).Trim(); & (Join-Path $root '.codex\\hooks\\Invoke-RequirementPreToolUse.ps1')\"",
+            "timeout": 15,
+            "statusMessage": "Checking requirement authorization"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pwsh -NoProfile -File \"$(git rev-parse --show-toplevel)/.codex/hooks/Invoke-RequirementStop.ps1\"",
+            "commandWindows": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"$root = (& git rev-parse --show-toplevel).Trim(); & (Join-Path $root '.codex\\hooks\\Invoke-RequirementStop.ps1')\"",
+            "timeout": 60,
+            "statusMessage": "Validating requirement fidelity"
+          }
+        ]
+      }
+    ]
+  }
+}

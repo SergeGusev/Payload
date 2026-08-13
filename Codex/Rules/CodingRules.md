@@ -3,6 +3,14 @@
 These rules summarize the project-local engineering constraints. `AGENTS.md`
 contains the full safety and project rules.
 
+- Before editing any tracked file, follow
+  `Codex/Rules/RequirementGate.md`: verbatim request, explicit scope and
+  acceptance criteria, no hidden assumptions/deviations, user approval bound to
+  the semantic digest, `REQ-*` path/test traceability, and independent semantic
+  review before completion.
+- Never replace requested behavior with a “safer”, “more conservative”,
+  “minimal”, conventional, or technically preferred behavior without presenting
+  that deviation and receiving explicit user approval first.
 - Use C#/.NET native code only unless the user explicitly changes that rule.
 - Use WPF for the dashboard and Worker Service / Windows Service for the 24/7
   engine.

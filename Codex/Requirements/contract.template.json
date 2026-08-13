@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-YYYYMMDD-short-description",
+  "title": "Short task title",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Copy the complete relevant user prompt verbatim"
+    }
+  ],
+  "scope": {
+    "goal": "Literal requested outcome",
+    "inScope": [
+      "Exact entities and behavior to change"
+    ],
+    "outOfScope": [
+      "Explicit exclusions"
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "not-applicable",
+    "firstVerification": "First evidence-gathering step before implementation"
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "One literal, observable requirement",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Exact non-empty substring of originalRequests[0].text",
+      "acceptanceCriteria": [
+        "Observable pass condition"
+      ],
+      "implementationPaths": [
+        "path/to/changed-file"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Exact command",
+          "expected": "Expected outcome",
+          "result": "pending",
+          "evidence": "Filled after execution"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "pending",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-YYYYMMDD-short-description sha256:<64 lowercase hex digits>",
+    "semanticDigest": "pending"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}

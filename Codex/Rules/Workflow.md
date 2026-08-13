@@ -39,11 +39,13 @@ before relying on prior chat context.
 
 Required steps:
 
-- run `git pull --ff-only` when a tracking remote exists; if no upstream is
-  configured, record that fact and continue locally;
 - read this file;
 - read `AGENTS.md`;
 - read `Codex/Rules/CodingRules.md`;
+- read `Codex/Rules/RequirementGate.md`;
+- inspect the configured tracking branch and local divergence read-only; do not
+  fetch, pull, merge, rebase, or otherwise mutate Git state before requirement
+  approval. If no upstream is configured, record that fact and continue locally;
 - determine `ActiveContextFile` from `AGENTS.md`;
 - create the active context file if it is missing;
 - read the active context file;
@@ -56,6 +58,21 @@ Do not ask the user to reconstruct context when it can be recovered from files.
 ## 3. Task Execution
 
 Codex should keep important progress in files, not only in chat.
+
+For every task that may change repository files, the requirement-fidelity gate
+in `Codex/Rules/RequirementGate.md` runs before material edits:
+
+- draft the machine-readable contract from the user's verbatim prompts;
+- present the contract and semantic digest to the user;
+- obtain a later explicit approval of that exact digest;
+- map every changed path and verification item to a literal `REQ-*`;
+- invalidate approval and stop if requirements, scope, assumptions, or
+  deviations change;
+- obtain independent semantic review of the original prompts, contract, diff,
+  and evidence before completion.
+
+Only context/history updates and drafting a new contract are allowed before
+approval. Read-only work that leaves the repository unchanged is exempt.
 
 For substantial or multi-step work:
 
@@ -111,6 +128,10 @@ After every completed non-`start` task:
 - update the active context file with a newest-first active update;
 - append one entry to the daily history file;
 - run project-required verification commands appropriate to the change;
+- complete the approved requirement contract, including passing evidence and an
+  independent semantic review;
+- run `scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree`
+  and then its staged mode before committing;
 - run staged or unstaged diff checks where practical;
 - commit and push when repository files changed and a Git remote/upstream is
   available;
@@ -166,4 +187,5 @@ history often contains Cyrillic user prompts.
 ## 8. Recovery Rule
 
 After any context reset, re-enter task initialization: read workflow, `AGENTS.md`,
-coding rules, active context, relevant docs, and Git status before continuing.
+coding rules, the requirement-fidelity gate, active context, relevant docs, and
+Git status before continuing.

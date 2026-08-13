@@ -21,6 +21,18 @@ This repository contains **PolyCopyTrader**, a Windows/.NET C# application for m
 
 ## Operational scope lock and execution gates
 
+- Before any repository mutation, read and follow
+  `Codex/Rules/RequirementGate.md`. Create a machine-readable requirement
+  contract from the user's verbatim words, present its semantic digest, and
+  obtain the user's later approval before material edits. Every assumption or
+  deviation requires its own explicit user approval; technical preference,
+  conservatism, safety language, convention, and prior chat summaries are not
+  authorization to change requested behavior.
+- Treat the requirement contract as fail-closed. If implementation discovers a
+  choice that could change behavior, scope, data, risk, cost, or acceptance
+  criteria, stop, revise the contract, and obtain approval for the new digest.
+  Before completion, require an independent reviewer to compare the verbatim
+  request and approved contract against the actual diff and verification.
 - Before any non-trivial task, explicitly lock scope before material work. State the goal, exact in-scope entities, out-of-scope entities, period/window/filter, mode (`read-only`, local edit, or mutation), expected scale if known, and the first verification step.
 - Do not start material work when a missing choice could change meaning, risk, cost, data touched, or runtime behavior. Ask the smallest focused question instead.
 - Never substitute one meaning of a term for another. In particular, a strategy lookback window, calculation window, or chart window is not an analysis period unless the user explicitly says so.
