@@ -1,3 +1,16 @@
+## Active Update 2026-08-13 Historical Paper FAK Recalculation Progress
+Goal: Verify from fresh production evidence whether the Gross-ranked historical Paper FAK fee/Net recalculation is still running.
+Status: Completed
+Done:
+- Audited exact production PostgreSQL `192.168.0.101:5432/polycopytrader` through independent bounded `REPEATABLE READ / READ ONLY / UTC` snapshots. Service build `83942e097738288228ed58a11827158b9b56fcdf` remained `Running/Live`, heartbeat advanced, and `last_error` was empty.
+- Proved live growth between `2026-08-13T05:49:46.661319Z` and `05:50:54.783494Z`: three additional cycles completed and 150 additional fills/runs/positions/settlements were updated. The journal sequence advanced `3469 -> 3477`; `CycleFailed` remained zero.
+- Verified Gross ranks 1 through 15 reached strategy end. Rank 16 of 2,233 is active: strategy `b7c50005-0000-4000-8190-000000000021` / `sol_up_down_5m_21_child_progress`, frozen Gross `1002.73600261`.
+- Reconciled exact totals at the final snapshot: journal and direct raw tables both report 44,949 post-start Calculated fills and 44,949 runs with `historical-current-paper-model-v1:%` provenance. At the independent `05:49:17.087231Z` financial snapshot, the then-current 44,799 fills/runs carried equal fee totals of `26597.56130000`; every run had non-null Net and `SUM(Gross - Fee - Net) = 0.00000000`.
+- Rank 16 had 1,629 exact remaining pre-cutoff `LegacyUnknown` candidates. Lock-timeout deferrals are being retried: a deferred 50-row attempt was followed by three successful 50-row cycles. Total query-cancel deferrals remained zero.
+Next: No action required. Let the worker continue; use the database journal for later status checks.
+Notes: This was a strictly read-only runtime verification. No production data, schema, service, configuration, trading, or source code was changed, so no build/tests were required.
+Blockers: None.
+
 ## Active Update 2026-08-13 Current Server And Betting Health Audit
 Goal: Check current server, market-data, Paper/Live betting, lifecycle queues, exact Maker-GTD families, and Dashboard health.
 Status: Completed
@@ -14,6 +27,20 @@ Done:
 Next: No immediate restart or trading intervention. Continue monitoring recurrence of copied-performance stream errors/WS churn and the reconciliation backlog; separately diagnose the persistent 230 August 5 Entered rows if repair is desired.
 Notes: Several schema-assumption probes and one broad historical status query failed or hit the 15-second bound and rolled back; they were replaced by exact schema/bounded indexed queries. An agent's initial all-in-one diagnostic also exceeded its client bound before being split. All sessions were read-only and no server data was affected. No build or tests were required because product code did not change.
 Blockers: Exchange-side open-order state was not authenticated in this scope; all Live conclusions are server-DB conclusions.
+
+## Active Update 2026-08-13 Historical Paper FAK Candidate Optimization Deployment Verification
+Goal: Verify that deployed build `83942e09` uses the optimized strategy-local candidate page and progresses past the former rank-2 read failure.
+Status: Completed
+Done:
+- Audited exact production PostgreSQL `192.168.0.101:5432/polycopytrader` only through bounded `REPEATABLE READ / READ ONLY / UTC` sessions. The service is `Running/Live`, started at `2026-08-12T21:27:19.676705Z`, heartbeat advanced, `last_error` remained empty, and both heartbeat and journal identify exact build `83942e097738288228ed58a11827158b9b56fcdf` / MVID `22a7ea3a5bf4`.
+- Verified worker instance `875b423f-0442-4a87-a958-2c195f98bc37`, fixed cutoff `2026-08-07T22:44:55.219515Z`, Apply enabled, batch size 50, and the expected five-minute startup delay. The new frozen sweep contains 2,233 strategies.
+- The strategy that failed as Gross rank 2 before deployment (`b7c50005-0000-4000-8168-000000000003`, `sol_up_down_5m_3_diff_shift_progress_premarket`) is Gross rank 1 in this new sweep at `5758.98910677`. Through snapshot `2026-08-12T21:41:58.407316Z`, it produced 18 `CycleCompleted` and zero `CycleFailed`; the prior repeated candidate-read exception did not recur.
+- Sixteen pages atomically updated 800 fills/runs/positions/settlements. Two completed attempts reported 100 total lock-timeout deferrals, with zero structural conflicts, accounting conflicts, or query-cancel deferrals; whole-batch lock deferrals retain their cursor for retry.
+- Independently verified exactly 800 post-start `paper_fills` and 800 runs for the same strategy, all `Calculated` with `historical-current-paper-model-v1:%` provenance. Both table totals match journal update counters exactly and each carries total fee `434.68829000`.
+- Reconciled remaining exact candidates as `1,976 - 800 = 1,176` under the same BUY/two-source/cutoff/`LegacyUnknown` filter. The active strategy has not reached its end, so rank 2 and later have correctly not been visited yet; no other strategy has post-start historical provenance.
+Next: No corrective action. Let this rank finish; a later read-only journal check can confirm `ReachedStrategyEnd=true` and advancement to the next frozen Gross rank.
+Notes: No production row, schema, service, configuration, strategy, order, trading, or repository source was changed. This was runtime verification only; no build/test command was needed. Database journal events and direct raw financial rows independently confirm progress.
+Blockers: None.
 
 ## Active Update 2026-08-13 Historical Paper FAK Candidate-Page Optimization
 Goal: Remove the repeated rank-2 historical Paper FAK candidate-read failure without changing Gross ordering, eligibility, cursor semantics, financial calculations, or production schema.

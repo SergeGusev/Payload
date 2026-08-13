@@ -175,3 +175,10 @@ Request:
 
 Result:
 Optimized only the historical Paper FAK strategy-bound candidate page. A bounded production read-only audit proved that the deployed rank-2 query started from the global chronological `LegacyUnknown` fill index, while the replacement materializes the strategy's allowlisted BUY order IDs, probes the existing per-order fill index, limits narrow tuple keys, and only then loads full rows. Exact worktree plans completed in 382.829ms for the first page and 427.227ms for a later cursor, versus 4.735s for the old later-cursor query; the compared later page returned the same ordered 51 keys with zero mismatch. Gross ordering, cutoff, source/status filters, tuple cursor, N+1 behavior, timeout, apply logic, and Gross/Net PnL/Net ROI formulas remain unchanged, with no schema/index/configuration/production mutation. The solution built with zero errors; focused tests passed 32 and skipped three env-gated PostgreSQL tests because the disposable test connection is absent. Added deterministic PostgreSQL integration coverage for tuple tie-breaks and cursor traversal, updated docs/context, and left deployment to the user.
+
+## 2026-08-12T21:43:15.8211604Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified exact production build `83942e097738288228ed58a11827158b9b56fcdf` through advancing heartbeat, matching database-journal identity, cycle events, and direct financial rows in bounded read-only UTC snapshots. The formerly failing SOL strategy is rank 1 in the new frozen sweep. By `2026-08-12T21:41:58.407316Z`, 18 cycles completed and zero failed; 800 fills/runs/positions/settlements were updated, while two lock-timeout attempts deferred 100 rows without structural/accounting/query-cancel conflicts. Independent raw-table counts matched journal updates exactly: 800 Calculated fills and 800 runs for the same strategy, with total fee `434.68829000` on each level. Exact remaining candidates reconciled from 1,976 to 1,176. The current strategy had not ended, so later Gross ranks had not yet been visited. No production or source state was changed by the audit.
