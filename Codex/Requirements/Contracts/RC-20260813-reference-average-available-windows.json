@@ -1,0 +1,286 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260813-reference-average-available-windows",
+  "title": "Use every available Reference Average window without completeness blocking",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, доработай. Пусть считает по тому, что есть."
+    },
+    {
+      "source": "user",
+      "text": "И, конечно, не только она одна, но все стратегии данного типа"
+    },
+    {
+      "source": "user",
+      "text": "Да, исправь все стратегии с этой логикой"
+    },
+    {
+      "source": "user",
+      "text": "Переделываем так:\n\n1. Используем все окна (24h, 12h и т.д.)\n2. При этом неполные данные по этим окнам не являются стоппером. Были дыры - ок, не проблема, работаем с тем, что есть."
+    },
+    {
+      "source": "user",
+      "text": "Re: Стратегии, специально названные 3h, должны:\nостаться 3h-only, но считать по любому имеющемуся объёму данных внутри 3h;\n\nДолжны остаться  3h-only\n\nRe: Если в самом окне 24h нет вообще ни одной точки, но данные в более коротких окнах есть, какой знаменатель использовать для bps?\n\nА как такое может быть? Ведь более короткие окна включены в 24h, разве нет?"
+    }
+  ],
+  "scope": {
+    "goal": "Make every strategy on the shared Reference Average bps decision path use its configured windows from all valid data actually present, without excluding a window or stopping solely because its history contains gaps or is incomplete.",
+    "inScope": [
+      "For multi-window Reference Average variants, include every configured window: 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m, whenever that window has at least one valid sample and a positive calculated average.",
+      "For explicit single-window 3h variants, preserve the user-confirmed 3h-only selection but allow the available 3h average to participate even when its history is incomplete.",
+      "For Optimized variants, preserve the existing required-window match rule while allowing an incomplete required window to be selected and matched.",
+      "Apply the completeness-policy change through the shared Reference Average bps path to every current ordinary, Optimized, LowEnter, 3h, 3h LowEnter, ETH Maker-GTD, LowerEnter clone, BpsConfirmed, and DiffConfirmed variant, and to downstream Child behavior when it uses one of those parents. Keep the shared Filtered behavior dispatch under the same policy even though the current static catalog contains zero Filtered rows.",
+      "Keep the explicit 24h oldest-available-real-bucket bps denominator, allowing it to be incomplete. Preserve and test the cache invariant that every valid tick is inserted into every configured window, so usable data in any shorter window necessarily also provides usable data and a first bucket in the configured 24h window.",
+      "Version the changed decision contract as v5 and update diagnostics, catalog/schema descriptions, documentation, and focused processor/cache tests to describe and prove the available-data policy.",
+      "Verify that the ETH Maker-GTD family inherits only the shared signal change while its PaperOnly flag, mandatory optimistic label, pricing, GTD, fill, lifecycle, and Live-disabled execution contract remain unchanged."
+    ],
+    "outOfScope": [
+      "Changing bps formulas, thresholds, directions, selected outcomes, entry timing, stake sizing, order-book gates, risk gates, FAK execution, Maker-GTD execution, Paper/live flags, or strategy identifiers.",
+      "Creating new strategies, deleting strategies, recalculating historical decisions or PnL, modifying production data, changing database schema structure, deploying, restarting services, or enabling Live trading.",
+      "Treating a completely empty cache, a non-positive calculated price, or a missing current reference price as calculable data.",
+      "Inventing a different bps denominator when the configured 24h record is absent despite shorter-window data. Current cache construction makes that state an internal configuration/integrity violation rather than an ordinary data gap, so it remains fail-closed and must be diagnosed explicitly.",
+      "Changing non-Reference-Average extrema, previous-result, Diff-average, or other independent decision algorithms that do not invoke the shared Reference Average bps decision path."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Current static strategy catalog and shared Reference Average bps call paths; no historical-period rewrite and no production mutation.",
+    "firstVerification": "Inspect the current master implementation, shared dispatch paths, strategy impact catalog, diagnostics, descriptions, and focused tests to prove exactly where IsFullWindow currently blocks or excludes data before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Every configured Reference Average window with usable data must participate in its strategy's boundary or required-window calculation even when IsFullWindow is false.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Используем все окна (24h, 12h и т.д.)",
+      "acceptanceCriteria": [
+        "A multi-window decision supplies all usable 24h, 12h, 6h, 3h, 90m, 45m, 20m, and 10m averages to Max/Min selection without an IsFullWindow filter.",
+        "An incomplete window whose available-data average is the highest or lowest is allowed to become Amax or Amin and to drive the selected boundary.",
+        "Longer-window tie-breaking remains unchanged and applies across both complete and incomplete usable windows.",
+        "Versioned raw diagnostics list all usable windows and identify whether each selected boundary was complete or incomplete."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/ExternalPrices/CryptoReferencePriceAverageCache.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/CryptoReferencePriceAverageCacheTests.cs",
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Focused Reference Average processor tests pass, including an incomplete extreme window winning Max/Min and full-data economic decisions remaining unchanged.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-008",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~CryptoReferencePriceAverageCacheTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Cache tests prove sparse ticks and internal gaps produce available incomplete averages for every configured nested window, while an empty cache remains empty.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Missing buckets and incomplete coverage must not by themselves stop Reference Average signal evaluation; the strategy must calculate from the valid data that exists.",
+      "sourceRequestIndexes": [
+        0,
+        3
+      ],
+      "sourceQuote": "При этом неполные данные по этим окнам не являются стоппером. Были дыры - ок, не проблема, работаем с тем, что есть.",
+      "acceptanceCriteria": [
+        "No decision is skipped solely because a usable boundary window has IsFullWindow=false or fewer samples than ExpectedSampleCount.",
+        "If all configured windows have usable averages, gaps in any or all of them do not produce reference_average_full_window_missing or an equivalent completeness-only rejection.",
+        "A single-window 3h strategy evaluates from a usable incomplete 3h average; an Optimized strategy may select and match its required incomplete window.",
+        "Sparse ticks separated by one or more completely empty time buckets still produce usable incomplete averages from the populated buckets and do not stop the decision.",
+        "The cache inserts every valid tick into all configured nested windows; therefore usable shorter-window data guarantees a usable 24h record and first bucket under the current configuration.",
+        "The decision still fails closed when there is no usable average data at all, no usable current reference price, or the cache violates the configured nested-window invariant."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/ExternalPrices/CryptoReferencePriceAverageCache.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/CryptoReferencePriceAverageCacheTests.cs",
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Focused tests prove gaps/incomplete coverage do not block ordinary, single-window 3h, Optimized, and composed Reference Average decisions, while zero usable data still rejects.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-009",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~CryptoReferencePriceAverageCacheTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Cache tests prove actual empty buckets do not erase populated-bucket averages and prove shorter-window availability implies configured 24h availability.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "The available-data policy must apply to all strategies using the shared Reference Average bps logic, not only ETH neutral 2 bps or one named family.",
+      "sourceRequestIndexes": [
+        1,
+        2
+      ],
+      "sourceQuote": "Да, исправь все стратегии с этой логикой",
+      "acceptanceCriteria": [
+        "A catalog/call-path test enumerates every current static direct and Confirmed strategy that invokes the shared Reference Average bps decision and proves none retains the old completeness policy.",
+        "The expected current static impact is 932 strategies: 764 direct shared-path rows plus 168 Confirmed composites, split BTC 312, ETH 406, and SOL 214. The current Filtered catalog count is zero but its shared dispatch remains covered.",
+        "The conditional downstream impact is the current 247 Child-family rows, for an inclusive potential catalog scope of 1179; ordinary directional and neutral, Optimized, LowEnter, 3h, 3h LowEnter, ETH Maker-GTD, LowerEnter clones, BpsConfirmed, and DiffConfirmed are covered.",
+        "Downstream Child variants require no separate signal implementation and inherit the changed parent decision when such a parent is selected.",
+        "The ETH Maker-GTD focused test proves its shared signal accepts incomplete windows while maker_gtd_paper_v2 execution semantics, mandatory label, PaperOnly restriction, and Live-disabled behavior are unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "docs/configuration_reference.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Shared-path impact, ordinary/composed/single-window/Optimized/Maker behavior, and unchanged Maker execution-contract tests pass.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "Solution build completes with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "The implementation, diagnostics, descriptions, and documentation must state the literal available-data rule and must not preserve or reintroduce a hidden full-window requirement.",
+      "sourceRequestIndexes": [
+        0,
+        3
+      ],
+      "sourceQuote": "Пусть считает по тому, что есть.",
+      "acceptanceCriteria": [
+        "Current strategy descriptions and operational documentation say that usable incomplete windows participate and that gaps/completeness alone do not block calculation.",
+        "A new versioned decision contract distinguishes this policy from v4 and records boundary completeness evidence without asserting boundary_requires_full_window=true.",
+        "Focused source inspection finds no IsFullWindow predicate in the shared Reference Average price-boundary or required-window selector.",
+        "The final diff contains no change to bps threshold arithmetic, direction/outcome rules, entry timing, stake sizing, FAK execution, Maker-GTD execution, risk gates, strategy flags, or IDs."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "docs/configuration_reference.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Inspect the final diff and search the shared Reference Average bps selector for IsFullWindow/full-window-only predicates and stale v4/full-window descriptions.",
+          "expected": "No completeness-only selector remains; unrelated signal and execution behavior is unchanged; current documentation consistently describes the available-data policy.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "git diff --check",
+          "expected": "No whitespace errors.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-007",
+          "kind": "inspection",
+          "command": ".\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree",
+          "expected": "Requirement contract validation passes after evidence and independent review are complete.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Strategies explicitly defined as 3h-only must remain 3h-only while calculating from whatever valid data is present inside their 3h window.",
+      "sourceRequestIndexes": [
+        4
+      ],
+      "sourceQuote": "Должны остаться  3h-only",
+      "acceptanceCriteria": [
+        "ThreeHourReferenceAverageBpsThresholdFakPremarket and ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket continue to select only the 3h record.",
+        "A usable incomplete 3h record is eligible and can enter; completeness and missing internal buckets do not reject it.",
+        "Other configured windows do not affect the selected boundary of a 3h-only strategy.",
+        "Its bps denominator remains the first available real bucket of the configured 24h record, whose availability follows from the shared nested-window cache invariant whenever 3h data exists."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/ExternalPrices/CryptoReferencePriceAverageCache.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/CryptoReferencePriceAverageCacheTests.cs",
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-010",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~ReferenceAverage\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Focused tests prove 3h-only identity is preserved, incomplete 3h data is accepted, and other windows cannot become its boundary.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260813-reference-average-available-windows sha256:9e511d9935f8e788e1efe5a6aafc941f78acfe8bfabcf8e90a5f921a0a5ef0e5",
+    "semanticDigest": "sha256:9e511d9935f8e788e1efe5a6aafc941f78acfe8bfabcf8e90a5f921a0a5ef0e5"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reference-average-available-windows-reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
