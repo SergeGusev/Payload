@@ -1,3 +1,15 @@
+## Active Update 2026-08-13 Skipped-Run Archive Purpose Clarification
+Goal: Explain why the current design archives eligible Skipped runs instead of simply deleting them or never retaining an individual record.
+Status: Completed read-only
+Done:
+- Verified from the current schema and restoration functions that a tombstone is not a Paper/Live bet record. It is a compact per-run identity and restoration marker for a no-bet terminal skip, while `strategy_paper_skip_rollups` retains aggregate skip count/reason/time history.
+- Confirmed three current responsibilities: block duplicate recreation of the same `(strategy_id, market_id)` after raw deletion/retry; preserve exact skip reason and timestamps for Dashboard/reconciliation; and reconstruct the raw run plus reverse its rollup if a late Paper/Live/shadow or other durable dependency appears.
+- Clarified that deleting the raw row without any permanent identity would remove those guarantees. Keeping only rollups would not identify which exact run was already processed and could not reconstruct it after a late dependency.
+- Distinguished the current rich permanent tombstone from a possible stronger optimization: retain the restore-capable rich row only for a proven late-dependency horizon, then reduce it to a slim permanent dedupe identity while retaining rollups. The safe horizon and exact slim fields have not been proven, so that design is not silently substituted into the pending contract.
+Next: User decides whether to continue with the current safe pre-update archive contract or change direction to a separately designed tiered rich-to-slim marker lifecycle.
+Notes: No product source, contract semantics, database, service, configuration, deployment, trading, build, or test state changed. Draft contract `RC-20260813-observed-skip-preupdate-archive` remains unapproved and no product edits are permitted under it.
+Blockers: The next implementation direction depends on whether the user wants current permanent restore-capable tombstones or a separately scoped tiered marker design.
+
 ## Active Update 2026-08-13 Existing Observed Skip Pre-Update Archive Contract
 Goal: Define the next database-write optimization exactly before changing product code: archive eligible existing Observed-to-Skipped rows before their wide raw update while preserving complete Paper and Live history.
 Status: Blocked pending exact user approval
