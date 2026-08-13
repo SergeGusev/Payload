@@ -1,3 +1,16 @@
+## Active Update 2026-08-13 Existing Observed Skip Pre-Update Archive Contract
+Goal: Define the next database-write optimization exactly before changing product code: archive eligible existing Observed-to-Skipped rows before their wide raw update while preserving complete Paper and Live history.
+Status: Blocked pending exact user approval
+Done:
+- Recovered the current storage and processor dispatch paths read-only. The dominant flow persists a durable raw `Observed`, later finalizes it through either direct finalize or deferred entry batch, performs `UpdateStrategyMarketPaperRunsBatchAsync`, and only then writes tombstone/rollup, suppresses raw Delete projection, queues reconciliation, and deletes the raw row.
+- Confirmed the bounded implementation can stay in the current storage transaction: pre-archive exact existing Observed candidates, emit the canonical logical `StrategyRun / Update` event manually, exclude archived IDs from the wide update/second compact scan, and retain the current fallback for absent, mismatched, blocked, diagnostic, fee-bearing, protected, and retry inputs.
+- Independent test audit identified required physical-update detection, exact tombstone/rollup/event/fact parity, retry/concurrent-finalize idempotency, existing-Observed Paper/Live/shadow/diagnostic/fee blockers, mixed deferred-batch atomicity, lock order, failure rollback, and disabled-gate regressions.
+- Identified and included an existing Live-history race: a strategy Live-state transaction can overlap retention before its AFTER promotion trigger. The contract requires strategy Live-state mutation to coordinate with the retention gate and restore/reclassify a just-archived run when its terminal timestamp is at or after the committed Live-enabled timestamp; strictly pre-Live Paper skips remain archived.
+- Drafted and mechanically validated `RC-20260813-observed-skip-preupdate-archive`. Semantic digest is `sha256:287585962d219036087ba57d76366ff90829c823b2585a4c3e5536567c83c542`; assumptions and deviations are empty.
+Next: User must send exactly `APPROVE RC-20260813-observed-skip-preupdate-archive sha256:287585962d219036087ba57d76366ff90829c823b2585a4c3e5536567c83c542`. Then record and commit the approval before any product edit, implement, run focused/disposable-PostgreSQL verification, obtain independent semantic review, and finalize.
+Notes: Scope excludes a narrow scheduling table, removal of the initial Observed insert, historical cleanup/backfill, fact merging, tombstone tiering, general Dashboard no-op work, production mutation, deployment, restart, configuration, or trading actions. No product file, database, service, configuration, trading state, build, or test changed during contract preparation. The contract and context/history files are the only permitted pre-approval writes.
+Blockers: Exact contract approval is mandatory before material edits.
+
 ## Active Update 2026-08-13 Database Growth Optimization Status
 Goal: Summarize the current verified state of the database-growth optimization while preserving complete Paper and Live betting history.
 Status: Completed read-only
