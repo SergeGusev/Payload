@@ -106,8 +106,8 @@
           "kind": "runtime",
           "command": "Run bounded UTC REPEATABLE READ READ ONLY target-membership checks on 192.168.0.101:5432/polycopytrader and 127.0.0.1:5432/polycopytrader before each mutation stage.",
           "expected": "The exact fixed membership and UUID/code identities match the approved allowlist; unexpected rows or collisions abort mutation.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Stage 1 preflight used UTC REPEATABLE READ READ ONLY snapshots with 15-second statement timeouts. Product snapshot 2026-08-13T21:12:23.032512Z found exactly 220/220 UUID+code targets, zero missing rows or ID/code collisions, all 220 named Progress, all enabled and non-Live, and the same exact 220 negative for lifetime Paper Gross realized and Gross MtM with zero formula mismatches and zero negative Gross Live rows. Local snapshot 2026-08-13T21:07:50.251242Z found exactly 132 present and 88 absent, zero collisions, and all 132 enabled/non-Live/unpaused. The deployed product trigger set and build d7e18a654b4c093412daf74a2ccc2e5efda31255 were independently reconciled before mutation; the older local schema was independently confirmed to have no application triggers, rules, RLS, or update cascades on the approved fields."
         }
       ]
     },
@@ -137,8 +137,8 @@
           "kind": "runtime",
           "command": "Execute Stage 1 as exact allowlisted database transactions and immediately re-read target and non-target control states in UTC read-only transactions.",
           "expected": "Only 220 product and 132 local target rows are disabled/live-off/paused; services stay healthy and non-target controls do not change.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Local SERIALIZABLE transaction 293984460 committed exactly 132 target updates at statement timestamp 2026-08-13T21:23:40.778004Z; post-commit database-clock witness 2026-08-13T21:23:40.824312Z; target identity MD5 8391fb01c0eca814926607b0a9cae575; all 1925 non-target strategy rows were identical inside the transaction. Independent local post-check at 2026-08-13T21:26:21.198056Z confirmed 132 disabled/live-off/permanently-paused targets, 88 expected absences, zero collisions, and zero Paper/Live/run creations after the witness; no local PolyCopyTrader process or Windows service existed before or after Stage 1. Product SERIALIZABLE transaction 736494323 committed exactly 220 target updates at statement timestamp 2026-08-13T21:25:10.299534Z; post-commit database-clock witness 2026-08-13T21:25:10.499570Z; target identity MD5 e6a209a29632260a08379d869af0cad8; all 2391 non-target strategy rows were identical inside the transaction. Independent product post-check at 2026-08-13T21:27:19.328807Z confirmed all 220 disabled/live-off/permanently-paused, zero missing/collisions, zero target retention guards and zero Dashboard events for transaction 736494323. A bounded indexed snapshot at 2026-08-13T21:32:21.465457Z found zero target Paper orders, Live orders, or strategy runs created after the product witness. The product service remained Running/Live on build d7e18a654b4c093412daf74a2ccc2e5efda31255 with fresh heartbeat and no last_error. No backup or service stop occurred. The conservative current quiet-period boundary is 2026-08-13T21:25:10.499570Z."
         },
         {
           "id": "VER-004",
