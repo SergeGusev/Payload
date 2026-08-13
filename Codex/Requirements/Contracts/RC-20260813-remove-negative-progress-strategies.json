@@ -1,0 +1,320 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260813-remove-negative-progress-strategies",
+  "title": "Stop and remove product-negative Progress strategies from local and product systems",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Давай предварительно удалим все Progress стратегии с отрицательным Gross Pnl. Включая их логику и историю но локальном и продуктовом серверах"
+    },
+    {
+      "source": "user",
+      "text": "1 - Да, удаляем всё. Но, наверное, надо сначала остановить эти стратегии, чтобы новых не создавали ордеров.\n\n2. Удаляем без резервной копии"
+    },
+    {
+      "source": "user",
+      "text": "Сервис останавливать не будем. Сейчас просто остановим стратегии, подождём сутки, а потом всё удалим."
+    },
+    {
+      "source": "user",
+      "text": "Я имею в виду - остановим те стратегии, которые будем удалять, а не все стратегии вообще"
+    },
+    {
+      "source": "user",
+      "text": "Рестарт - да. Остановка - нет"
+    }
+  ],
+  "scope": {
+    "goal": "Disable only the fixed product-negative Progress allowlist on both databases while the service and every non-target strategy continue running, wait for a complete 24-hour target creation-free period, then use only a normal brief deployment restart to activate the new build and irreversibly remove those exact variants, their dispatch/catalog membership, and all exactly attributable structured local and product history without a backup.",
+    "inScope": [
+      "Progress uses the application's exact case-insensitive visible-name predicate: strategy name contains `Progress`.",
+      "Gross uses lifetime Paper Gross realized and lifetime Paper Gross MtM. On the product snapshot both predicates selected the same exact 220 UUIDs; Gross Live selected zero. The target is frozen to those 220 UUID/code pairs and is not recalculated during disable or deletion.",
+      "Product identity at selection: 192.168.0.101:5432/polycopytrader, PostgreSQL 18.3, service build d7e18a654b4c093412daf74a2ccc2e5efda31255, raw verification cutoff 2026-08-13T20:14:11Z. Exactly 220 targets were present, with zero snapshot/raw Gross mismatches across 795095 settled Paper rows.",
+      "Local identity at preview: 127.0.0.1:5432/polycopytrader, PostgreSQL 17.5, snapshot 2026-08-13T20:44:49.726133Z. Exactly 132 of the fixed 220 targets were present and 88 were absent; absent rows remain absent and no local-only negative strategy is substituted.",
+      "Exact family 8154: UUID b7c50005-0000-4000-8154-{n as 12 decimal digits}, n=1..19, code btc_up_down_5m_diff_{n}_up_progress.",
+      "Exact family 8155: UUID b7c50005-0000-4000-8155-{n as 12 decimal digits}, n in {1,10,11,12,13,14}, code btc_up_down_5m_diff_{n}_down_progress.",
+      "Exact family 8156: UUID b7c50005-0000-4000-8156-{n as 12 decimal digits}, n in {3..12,17..28}, code eth_up_down_5m_diff_{n}_up_progress.",
+      "Exact family 8157: UUID b7c50005-0000-4000-8157-{n as 12 decimal digits}, n=1..15, code eth_up_down_5m_diff_{n}_down_progress.",
+      "Exact family 8158: UUID b7c50005-0000-4000-8158-{n as 12 decimal digits}, n in {3..25,30..39}, code sol_up_down_5m_diff_{n}_up_progress.",
+      "Exact family 8159: UUID b7c50005-0000-4000-8159-{n as 12 decimal digits}, n=1..10, code sol_up_down_5m_diff_{n}_down_progress.",
+      "Exact singleton family 8162: UUID b7c50005-0000-4000-8162-000000000001, code eth_up_down_5m_diff_up_shift_progress.",
+      "Exact singleton family 8164: UUID b7c50005-0000-4000-8164-000000000001, code sol_up_down_5m_diff_up_shift_progress.",
+      "Exact premarket Shift families: 8166 BTC n={3}; 8167 ETH n={1,2,3,5}; 8168 SOL n={1,4}; UUID b7c50005-0000-4000-{family}-{n as 12 decimal digits}; code {asset}_up_down_5m_{n}_diff_shift_progress_premarket.",
+      "Exact premarket Limit families: 8170 ETH n=1..5 and 8171 SOL n={4,5}; UUID b7c50005-0000-4000-{family}-{n as 12 decimal digits}; code {asset}_up_down_5m_{n}_diff_limit_progress_premarket.",
+      "Exact premarket Real Limit families: 8172 BTC n=1..5, 8173 ETH n={3,4,5}, and 8174 SOL n={1,2,5}; UUID b7c50005-0000-4000-{family}-{n as 12 decimal digits}; code {asset}_up_down_5m_{n}_diff_real_limit_progress_premarket.",
+      "Exact Child Progress families: 8188 BTC n=1..24, 8189 ETH n in {7,12,15,16,17,18,20,22,23}, and 8190 SOL n in {1..14,16,18}; UUID b7c50005-0000-4000-{family}-{n as 12 decimal digits}; code {asset}_up_down_5m_{n}_child_progress.",
+      "Exact Child Progress ROI families: 8197 BTC n in {1,2,3,10..21,23,24}, 8198 ETH n in {2,4,6,10}, and 8199 SOL n in {1,2,3,7,8,10,11,12,15,16,17,18,20,22,24}; UUID b7c50005-0000-4000-{family}-{n as 12 decimal digits}; code {asset}_up_down_5m_{n}_child_progress_roi.",
+      "Exact LowerEnter family: UUID b7c50005-0001-4000-8172-{n as 12 decimal digits}, n=1..3, code btc_up_down_5m_{n}_diff_real_limit_progress_lower_enter_premarket.",
+      "The family expansion must produce exactly 220 distinct UUID/code pairs before either database is changed.",
+      "Stage 1 changes only exact targets that exist: product expected 220 and local expected 132. Set enabled=false, live_stakes=false, paused=true with no expiry, clear auto-pause anchors and live_enabled_at_utc, and record each database commit timestamp. No other strategy row changes.",
+      "The service remains running and all non-target strategies remain available throughout Stage 1 and the 24-hour observation period. The quiet-period clock begins at the later successful database commit; if already in-flight work creates a new target Paper/Live order or strategy run afterward, the clock restarts at the latest such creation. Updates or settlement of target rows that already existed at Stage 1 do not restart the clock because those rows are intentionally deleted in Stage 2.",
+      "Stage 2 begins only after a complete 24-hour target creation-free period and a fresh read-only preview confirms the fixed identities, target states, no target Live orders, and no target Paper/Live order or strategy run created during that period. Any mismatch or newly created target order/run stops deletion and restarts or blocks the observation period.",
+      "Delete the fixed targets even though the product preview contained 506 Observed/Entered runs and 257 open Paper positions; all target operational state and structured history are intentionally removed regardless of settlement state.",
+      "Remove exact target variants from runtime catalog and every SQL seed path so an existing or future startup cannot recreate or dispatch them. Retain shared Progress algorithms required by non-target variants.",
+      "Use one fail-closed atomic transaction per database with a fixed allowlist, exact ownership collection, guards, ordered deletion, collected-versus-deleted checks, and zero-residual postconditions. The service itself is not deliberately stopped for deletion.",
+      "A normal brief service restart is allowed only to deploy and activate the new binary after the 24-hour gate. During that restart the schema initializer runs the approved fail-closed cleanup before workers start, and the service must then start automatically; the service is not left stopped as a quiescence method or maintenance state.",
+      "Delete exactly attributable structured rows from strategies; Paper orders, fills, runs, positions and settlements; Live/dry-run/shadow rows; signals and rejections when not shared; onchain Paper results; Progress state; Child assignments; retention guards, rollups, v1/v2 target tombstones; fee events; copied-leader/performance rows; Dashboard snapshots, projection state/facts/events/queues/cursors; and exact legacy maintenance rows when present.",
+      "After code deployment and deletion, verify exact target UUID/code/wallet absence, zero structured residuals, no reseed after at least two worker cycles, and unchanged non-target strategy identities/counts on both databases."
+    ],
+    "outOfScope": [
+      "Deliberately stopping or leaving the Windows service stopped as a quiescence or maintenance method, stopping all strategies, pausing or modifying any non-target strategy, or cancelling unrelated Paper/Live activity. This does not exclude the user-approved normal brief restart required to activate the new deployment.",
+      "Selecting separate local negatives, adding local-only candidates, recalculating the allowlist after Stage 1, or deleting a strategy merely because its description/category contains Progress.",
+      "Deleting shared Progress processor methods still used by retained variants, or changing the behavior of retained strategies.",
+      "Deleting shared/global v2 dimension rows or shared market/API/onchain data that is not owned by an exact target.",
+      "Creating any backup, dump, archive, restore point, or recovery copy.",
+      "VACUUM FULL, pg_repack, database-file shrink, index rationalization, compact-v2 activation, or any separate storage-reclaim operation.",
+      "Deploying an old binary that still seeds the removed variants after Stage 2."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "Fixed 220 product-negative Progress UUID/code pairs selected and independently reconciled through 2026-08-13T20:14:11Z; Stage 2 is gated by a complete 24-hour period with no new target Paper/Live order or strategy-run creation, beginning at the later Stage 1 commit or restarting at the latest such creation.",
+    "firstVerification": "In read-only UTC snapshots, independently identify the product and local database endpoints, expand and validate the exact 220-pair allowlist, verify product/local target membership and runtime states, reconcile the product Gross snapshot against base history, and count active Paper/Live state before any mutation."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Use one immutable 220-pair product-derived Progress allowlist on both local and product systems.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "все Progress стратегии с отрицательным Gross Pnl",
+      "acceptanceCriteria": [
+        "The compact family specification expands to exactly 220 unique UUID/code pairs and matches the product snapshot set for both Gross realized < 0 and Gross MtM < 0.",
+        "Product membership is exactly 220 and local membership is exactly the already observed 132; 88 exact targets may be absent locally, but no local-only row is added.",
+        "Every mutation joins both UUID and code and fails closed on any ID/code collision, unexpected target count, near-alias, or changed fixed allowlist.",
+        "The selection is not recomputed from a later PnL value during Stage 1 or Stage 2."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run the focused retired-Progress catalog tests against the exact expanded allowlist.",
+          "expected": "Exactly 220 unique UUID/code pairs are absent from the runtime catalog and seed definitions, while every non-target catalog variant remains.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "runtime",
+          "command": "Run bounded UTC REPEATABLE READ READ ONLY target-membership checks on 192.168.0.101:5432/polycopytrader and 127.0.0.1:5432/polycopytrader before each mutation stage.",
+          "expected": "The exact fixed membership and UUID/code identities match the approved allowlist; unexpected rows or collisions abort mutation.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Stop only the target strategies, keep the service and all other strategies running, and wait at least 24 hours before deletion.",
+      "sourceRequestIndexes": [
+        1,
+        2,
+        3
+      ],
+      "sourceQuote": "Сейчас просто остановим стратегии, подождём сутки, а потом всё удалим.",
+      "acceptanceCriteria": [
+        "One transaction per database sets enabled=false, live_stakes=false, paused=true, paused_until_utc=NULL, auto_live_paused=false, auto_live_paused_at_utc=NULL, auto_live_pause_window_start_utc=NULL, and live_enabled_at_utc=NULL only for exact existing targets.",
+        "The Stage 1 transaction returns and records exact updated UUID/code pairs and a database commit timestamp; expected updated counts are 220 product and 132 local.",
+        "All non-target strategy control fields are byte-for-byte unchanged, and the PolyCopyTrader service remains running.",
+        "Stage 2 cannot run until at least 24 hours have elapsed from the later successful Stage 1 commit or, if already in-flight work creates a new target Paper/Live order or strategy run after disable, from the latest such creation.",
+        "Immediately before Stage 2, two bounded read-only observations compare exact target Paper/Live order and strategy-run identities and their created_at_utc values and confirm no target row was created during the complete 24-hour period; updates or settlement of pre-existing rows are allowed, while any new identity or state reversal aborts deletion and restarts or blocks the period."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "runtime",
+          "command": "Execute Stage 1 as exact allowlisted database transactions and immediately re-read target and non-target control states in UTC read-only transactions.",
+          "expected": "Only 220 product and 132 local target rows are disabled/live-off/paused; services stay healthy and non-target controls do not change.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "runtime",
+          "command": "At or after T+24h, compare exact target Paper/Live order and strategy-run identity ledgers and query their created_at_utc values against the later Stage 1 commit or latest post-disable target creation.",
+          "expected": "No target strategy is re-enabled and no new target Paper/Live order or strategy-run identity is created during the full 24-hour period; updates or settlement of rows that existed before Stage 1 do not fail the gate.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Delete every exactly attributable structured record for the targets, including unfinished runs and open Paper positions.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Да, удаляем всё.",
+      "acceptanceCriteria": [
+        "Stage 2 intentionally includes the 506 product Observed/Entered runs and 257 product open Paper positions seen at preview, plus every other target row found at the fresh pre-delete snapshot.",
+        "A single atomic fail-closed transaction per database collects exact target-owned IDs, rejects active Live orders and shared ownership conflicts, deletes in FK-safe order, and verifies collected versus deleted counts.",
+        "Every current structured target dependency named in scope is either deleted or proven absent; v2 target tombstones are deleted without deleting shared v2 dimension rows.",
+        "Postconditions find zero target UUID, code, strategy wallet, order, run, position, settlement, tombstone, rollup, assignment, snapshot, projection, queue, and exactly attributable audit rows.",
+        "Non-target strategy identities/counts and sampled non-target history remain unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "Run focused PostgreSQL cleanup tests with target Paper/Live/shadow/state/projection/v1-v2 fixtures and fail-closed conflict cases.",
+          "expected": "All target structured rows are atomically removed, shared/non-target rows survive, and any guard failure rolls back the whole database transaction.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "runtime",
+          "command": "After Stage 2, run exact zero-residual and non-target-count queries on local and product databases immediately and after at least two worker cycles.",
+          "expected": "Zero target structured residuals or reseeded strategy rows; non-target counts and service health remain valid.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Remove the selected strategies' runnable logic without breaking shared Progress behavior used by retained strategies.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Включая их логику",
+      "acceptanceCriteria": [
+        "The exact 220 variants are excluded from StrategyIds runtime registry, static SQL seeds, dynamic LowerEnter generation, and every startup reseed path.",
+        "No retained strategy references a removed target through LowerEnterSourceStrategyId, BaseSignalStrategyId, ConfirmationSignalStrategyId, or a persisted Child assignment.",
+        "Shared behavior enum values and processor implementations remain only where at least one retained variant still consumes them; exact targets cannot dispatch because their catalog identities no longer exist.",
+        "Focused catalog and processor tests prove retained positive Progress siblings still resolve and execute their unchanged shared behavior."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-007",
+          "kind": "test",
+          "command": "Run focused Progress catalog, seed, clone-reference, Child-assignment, and processor regression tests.",
+          "expected": "All 220 targets are absent and cannot dispatch or reseed; every retained Progress variant and shared behavior remains valid.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-008",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln with outputs under the active marked D:\\CodexTemp run.",
+          "expected": "The solution builds with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Perform the deletion without a backup or a deliberate service-wide stop, while allowing the normal brief restart required to deploy and activate the new build.",
+      "sourceRequestIndexes": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sourceQuote": "Рестарт - да. Остановка - нет",
+      "acceptanceCriteria": [
+        "No database dump, backup, archive, restore point, or copied target history is created.",
+        "The user is informed that each committed database deletion is irreversible and that local/product commits cannot be atomic with each other.",
+        "No deliberate service stop or global strategy pause is used as a quiescence method. After the 24-hour gate, one normal brief restart may activate the new binary; its initializer completes the fail-closed cleanup before workers start and the service then starts automatically.",
+        "If a database transaction fails, that database rolls back fully. If one database commits and the other fails, report the split state and do not claim cross-database rollback or completion."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-009",
+          "kind": "inspection",
+          "command": "Inspect executed commands, deployment timestamps, service state, transaction results, and artifact inventory for backup or service-stop operations.",
+          "expected": "No backup artifact and no deliberate stopped interval exist; only the normal deployment restart occurs, the service returns healthy automatically, and each database transaction has an explicit commit or rollback result.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-010",
+          "kind": "inspection",
+          "command": "Run git diff --check and .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree, then staged validation before commit.",
+          "expected": "No whitespace errors and requirement validation passes with completed evidence and independent review.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "The product-derived fixed 220 UUID/code set is authoritative for source removal and for both databases; local-only negative Progress strategies are not additional targets.",
+      "impact": "Product will remove 220 strategies and local will remove the 132 members currently present. Four local Gross-realized-only and fifteen local Gross-MtM-only UUIDs outside the product set remain because the source catalog is global and the local database is stale.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-remove-negative-progress-strategies sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e",
+        "semanticDigest": "sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Shared Progress processor methods are retained when a non-target strategy still uses them; target-specific logic removal means removing exact catalog, seed, clone, reference, and dispatch identities.",
+      "impact": "The selected 220 strategies cannot run or be recreated, but generic Progress implementation code remains for retained profitable variants instead of being globally deleted.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-remove-negative-progress-strategies sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e",
+        "semanticDigest": "sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "Shared or unstructured global text logs and API/risk/live event rows without a verified exact target key are not deleted.",
+      "impact": "All exactly attributable structured target history is deleted, but an unattributable text message may remain when deleting it would also remove evidence belonging to retained strategies.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-remove-negative-progress-strategies sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e",
+        "semanticDigest": "sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260813-remove-negative-progress-strategies sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e",
+    "semanticDigest": "sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/progress_contract_reviewer",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
+    "findings": []
+  }
+}
