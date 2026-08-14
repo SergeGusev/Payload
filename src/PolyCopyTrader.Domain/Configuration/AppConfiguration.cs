@@ -249,6 +249,8 @@ public sealed class StrategyRunRetentionOptions
 
     public bool DirectPaperSkipCompactionApplyEnabled { get; init; }
 
+    public bool CompactSkipArchiveV2Enabled { get; init; }
+
     public int RawRetentionHours { get; init; } = 48;
 
     public int CleanupIntervalMinutes { get; init; } = 10;
@@ -256,6 +258,11 @@ public sealed class StrategyRunRetentionOptions
     public int CleanupBatchSize { get; init; } = 500;
 
     public int CleanupMaxBatchesPerCycle { get; init; } = 1;
+}
+
+public static class StrategyRunRetentionCapabilities
+{
+    public const bool CompactSkipArchiveV2ProductWritesSupported = false;
 }
 
 public sealed class PolymarketAuthOptions

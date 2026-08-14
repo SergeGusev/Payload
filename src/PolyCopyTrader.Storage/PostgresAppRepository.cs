@@ -751,7 +751,7 @@ ON CONFLICT (wallet, condition_id) DO UPDATE SET
 	public async Task<bool> TryAddStrategyMarketPaperRunAsync(StrategyMarketPaperRun run, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO strategy_market_paper_runs (\n    id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc,\n    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\n)\nSELECT\n    @Id, @StrategyId, @MarketId, @ConditionId, @MarketSlug, @MarketTitle, @Category,\n    @MarketStartUtc, @MarketEndUtc, @DetectedAtUtc, @EntryDueAtUtc, @Status,\n    @SelectedAssetId, @SelectedOutcome, @EntryPrice, @StakeUsd, @SizeShares,\n    @SignalId, @PaperOrderId, @EnteredAtUtc, @SettlementPrice, @SettlementValueUsd,\n    @RealizedPnlUsd, @SettledAtUtc, @SkipReason, CAST(@SkipDiagnosticsJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc,\n    @FeeUsd, @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate,\n    @FeeExponent, @FeeTakerOnly, @FeeCalculatedAtUtc, @NetRealizedPnlUsd\nWHERE NOT EXISTS (\n    SELECT 1\n    FROM strategy_market_paper_skip_tombstones tombstone\n    WHERE tombstone.strategy_id = @StrategyId\n      AND tombstone.market_id = @MarketId\n)\nON CONFLICT (strategy_id, market_id) DO NOTHING;");
+		await using NpgsqlCommand command = CreateCommand(connection, "INSERT INTO strategy_market_paper_runs (\n    id, strategy_id, market_id, condition_id, market_slug, market_title, category,\n    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,\n    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,\n    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,\n    realized_pnl_usd, settled_at_utc, skip_reason, skip_diagnostics_json, created_at_utc, updated_at_utc,\n    fee_usd, fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate,\n    fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd\n)\nSELECT\n    @Id, @StrategyId, @MarketId, @ConditionId, @MarketSlug, @MarketTitle, @Category,\n    @MarketStartUtc, @MarketEndUtc, @DetectedAtUtc, @EntryDueAtUtc, @Status,\n    @SelectedAssetId, @SelectedOutcome, @EntryPrice, @StakeUsd, @SizeShares,\n    @SignalId, @PaperOrderId, @EnteredAtUtc, @SettlementPrice, @SettlementValueUsd,\n    @RealizedPnlUsd, @SettledAtUtc, @SkipReason, CAST(@SkipDiagnosticsJson AS jsonb), @CreatedAtUtc, @UpdatedAtUtc,\n    @FeeUsd, @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate,\n    @FeeExponent, @FeeTakerOnly, @FeeCalculatedAtUtc, @NetRealizedPnlUsd\nWHERE NOT EXISTS (SELECT 1 FROM strategy_market_paper_skip_tombstones WHERE archived_run_id = @Id)\n  AND NOT EXISTS (SELECT 1 FROM strategy_market_paper_skip_tombstones WHERE strategy_id = @StrategyId AND market_id = @MarketId)\n  AND NOT EXISTS (SELECT 1 FROM strategy_market_paper_skip_tombstones_v2 WHERE archived_run_id = @Id)\n  AND NOT EXISTS (\n      SELECT 1\n      FROM strategy_skip_archive_market_identities market_identity\n      INNER JOIN strategy_market_paper_skip_tombstones_v2 tombstone\n          ON tombstone.strategy_id = @StrategyId\n         AND tombstone.market_identity_id = market_identity.market_identity_id\n      WHERE market_identity.market_id = @MarketId COLLATE \"C\")\nON CONFLICT (strategy_id, market_id) DO NOTHING;");
 		AddStrategyMarketPaperRunParameters(command, run);
 		return await command.ExecuteNonQueryAsync(cancellationToken) > 0;
 	}
@@ -843,11 +843,22 @@ SELECT
     fee_exponent, fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd
 FROM run_rows
 WHERE NOT EXISTS (
-    SELECT 1
-    FROM strategy_market_paper_skip_tombstones tombstone
+    SELECT 1 FROM strategy_market_paper_skip_tombstones tombstone
+    WHERE tombstone.archived_run_id = run_rows.id)
+AND NOT EXISTS (
+    SELECT 1 FROM strategy_market_paper_skip_tombstones tombstone
     WHERE tombstone.strategy_id = run_rows.strategy_id
-      AND tombstone.market_id = run_rows.market_id
-)
+      AND tombstone.market_id = run_rows.market_id)
+AND NOT EXISTS (
+    SELECT 1 FROM strategy_market_paper_skip_tombstones_v2 tombstone
+    WHERE tombstone.archived_run_id = run_rows.id)
+AND NOT EXISTS (
+    SELECT 1
+    FROM strategy_skip_archive_market_identities market_identity
+    INNER JOIN strategy_market_paper_skip_tombstones_v2 tombstone
+        ON tombstone.strategy_id = run_rows.strategy_id
+       AND tombstone.market_identity_id = market_identity.market_identity_id
+    WHERE market_identity.market_id = run_rows.market_id COLLATE "C")
 ON CONFLICT (strategy_id, market_id) DO NOTHING
 RETURNING id;
 """);
@@ -1931,11 +1942,22 @@ WHERE NOT EXISTS (
     WHERE updated_rows.id = run_rows.id
 )
 AND NOT EXISTS (
-    SELECT 1
-    FROM strategy_market_paper_skip_tombstones tombstone
+    SELECT 1 FROM strategy_market_paper_skip_tombstones tombstone
+    WHERE tombstone.archived_run_id = run_rows.id)
+AND NOT EXISTS (
+    SELECT 1 FROM strategy_market_paper_skip_tombstones tombstone
     WHERE tombstone.strategy_id = run_rows.strategy_id
-      AND tombstone.market_id = run_rows.market_id
-)
+      AND tombstone.market_id = run_rows.market_id)
+AND NOT EXISTS (
+    SELECT 1 FROM strategy_market_paper_skip_tombstones_v2 tombstone
+    WHERE tombstone.archived_run_id = run_rows.id)
+AND NOT EXISTS (
+    SELECT 1
+    FROM strategy_skip_archive_market_identities market_identity
+    INNER JOIN strategy_market_paper_skip_tombstones_v2 tombstone
+        ON tombstone.strategy_id = run_rows.strategy_id
+       AND tombstone.market_identity_id = market_identity.market_identity_id
+    WHERE market_identity.market_id = run_rows.market_id COLLATE "C")
 ON CONFLICT (strategy_id, market_id) DO UPDATE SET
     condition_id = excluded.condition_id,
     market_slug = excluded.market_slug,
@@ -4599,13 +4621,12 @@ archived_skip_window_rows AS (
         window_row.window_label,
         window_row.window_start_utc,
         window_row.window_end_utc
-    FROM strategy_market_paper_skip_tombstones tombstone
+    FROM strategy_market_paper_skip_archive_rows tombstone
     INNER JOIN selected_strategies strategy ON strategy.id = tombstone.strategy_id
     INNER JOIN windows window_row
         ON tombstone.run_updated_at_utc >= window_row.window_start_utc
        AND tombstone.run_updated_at_utc <= window_row.window_end_utc
-    WHERE tombstone.archive_format_version = 1
-      AND tombstone.run_updated_at_utc >= CAST(@NowUtc AS timestamptz) - interval '24 hours'
+    WHERE tombstone.run_updated_at_utc >= CAST(@NowUtc AS timestamptz) - interval '24 hours'
       AND tombstone.run_updated_at_utc <= CAST(@NowUtc AS timestamptz)
 ),
 run_window_rows AS (

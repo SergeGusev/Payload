@@ -315,6 +315,7 @@ public sealed class StrategyRunRetentionTests
         Assert.False(retention.GetProperty("ApplyEnabled").GetBoolean());
         Assert.True(retention.GetProperty("DirectPaperSkipCompactionEnabled").GetBoolean());
         Assert.True(retention.GetProperty("DirectPaperSkipCompactionApplyEnabled").GetBoolean());
+        Assert.False(retention.GetProperty("CompactSkipArchiveV2Enabled").GetBoolean());
         Assert.True(retention.GetProperty("RawRetentionHours").GetInt32() >= 48);
     }
 
@@ -358,7 +359,9 @@ public sealed class StrategyRunRetentionTests
         };
         foreach (var predicate in neutralPredicates)
         {
-            Assert.Equal(2, CountOccurrences(directSource, predicate));
+            Assert.True(
+                CountOccurrences(directSource, predicate) >= 4,
+                $"Both v1 and dormant v2 direct writers must enforce '{predicate}'.");
             Assert.Equal(1, CountOccurrences(retentionSource, predicate));
         }
     }
@@ -392,7 +395,7 @@ public sealed class StrategyRunRetentionTests
             source,
             StringComparison.Ordinal);
         Assert.Equal(
-            2,
+            4,
             CountOccurrences(
                 source,
                 "WHERE existing_queue.priority < EXCLUDED.priority"));
@@ -459,6 +462,148 @@ public sealed class StrategyRunRetentionTests
     }
 
     [Fact]
+    public void Schema_InstallsDedicatedImmutableV2ArchiveAndUnifiedLogicalView()
+    {
+        var schema = PostgresSchema.SchemaSql;
+        var normalizedSchema = schema.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(schema);
+
+        Assert.Contains(
+            "CREATE TABLE IF NOT EXISTS strategy_skip_archive_market_identities",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CREATE TABLE IF NOT EXISTS strategy_skip_archive_market_metadata_versions",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "UNIQUE NULLS NOT DISTINCT",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CREATE TABLE IF NOT EXISTS strategy_skip_archive_reasons",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CREATE TABLE IF NOT EXISTS strategy_market_paper_skip_tombstones_v2",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "PRIMARY KEY (strategy_id, market_identity_id)",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "UNIQUE (archived_run_id)",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "FOREIGN KEY (metadata_version_id, market_identity_id)",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "BEFORE UPDATE OR DELETE ON public.strategy_skip_archive_market_identities",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "BEFORE UPDATE OR DELETE ON public.strategy_skip_archive_market_metadata_versions",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "BEFORE UPDATE OR DELETE ON public.strategy_skip_archive_reasons",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CREATE OR REPLACE VIEW public.strategy_market_paper_skip_archive_rows AS",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains("1::smallint AS archive_storage_version", schema, StringComparison.Ordinal);
+        Assert.Contains("2::smallint", schema, StringComparison.Ordinal);
+        Assert.Contains(
+            "reason.skip_reason,\n    tombstone.detected_at_utc,\n    tombstone.run_updated_at_utc",
+            normalizedSchema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "NULL::timestamptz",
+            schema,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "date_trunc('day', tombstone.run_updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'",
+            schema,
+            StringComparison.Ordinal);
+
+        var v2IndexNames = new[]
+        {
+            "ix_skip_archive_metadata_condition",
+            "ix_skip_tombstones_v2_metadata_strategy",
+            "ix_skip_tombstones_v2_rollup_group",
+            "ix_skip_tombstones_v2_strategy_recent",
+            "ix_skip_tombstones_v2_global_recent"
+        };
+        foreach (var indexName in v2IndexNames)
+        {
+            Assert.Single(
+                statements,
+                statement => statement.StartsWith(
+                    $"CREATE INDEX IF NOT EXISTS {indexName}",
+                    StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void ProjectionSchema_RestoresBothArchiveVersionsAndSerializesLiveEnablement()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "DashboardProjectionSchema.cs");
+
+        Assert.Contains(
+            "restore_archived_strategy_runs_for_dependency_core",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "FROM public.strategy_skip_archive_market_metadata_versions metadata",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "metadata.condition_id = target_condition_id COLLATE \"C\"",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "market_identity.market_id = target_market_id COLLATE \"C\"",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "IF candidate_archive.archive_storage_version = 1 THEN",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DELETE FROM public.strategy_market_paper_skip_tombstones_v2 tombstone",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "FROM public.strategy_market_paper_skip_tombstones_v2 tombstone",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "BEFORE UPDATE OF live_stakes, live_enabled_at_utc ON public.strategies",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "EXECUTE FUNCTION public.coordinate_strategy_run_mutation_with_retention();",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "tombstone.run_updated_at_utc >= target_updated_at_or_after",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SET retention_scope = 'LiveOrShadow'",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Schema_InstallsLiveGuardAtomicallyAndKeepsRetentionScopeMonotonic()
     {
         var statements = PostgresSchemaInitializer.SplitSchemaSqlStatements(PostgresSchema.SchemaSql);
@@ -481,6 +626,41 @@ public sealed class StrategyRunRetentionTests
         Assert.True(guardTableIndex < guardTriggerIndex);
         Assert.True(guardTriggerIndex < guardBackfillIndex);
         Assert.True(guardBackfillIndex < commitIndex);
+
+        var liveGateDropIndexes = statements
+            .Select((statement, index) => (statement, index))
+            .Where(item => item.statement.StartsWith(
+                "DROP TRIGGER IF EXISTS trg_00_coordinate_strategy_live_state_with_retention",
+                StringComparison.Ordinal))
+            .Select(item => item.index)
+            .ToArray();
+        Assert.Equal(2, liveGateDropIndexes.Length);
+        foreach (var liveGateDropIndex in liveGateDropIndexes)
+        {
+            var replacementBeginIndex = Enumerable.Range(0, liveGateDropIndex)
+                .Last(index => statements[index] == "BEGIN;");
+            var replacementLockIndex = Enumerable.Range(
+                    replacementBeginIndex + 1,
+                    liveGateDropIndex - replacementBeginIndex - 1)
+                .First(index => statements[index].Contains(
+                    "LOCK TABLE public.strategies IN SHARE ROW EXCLUSIVE MODE",
+                    StringComparison.Ordinal));
+            Assert.True(replacementBeginIndex < replacementLockIndex);
+            Assert.True(replacementLockIndex < liveGateDropIndex);
+
+            var replacementCommitIndex = Enumerable.Range(
+                    liveGateDropIndex + 1,
+                    statements.Count - liveGateDropIndex - 1)
+                .First(index => statements[index] == "COMMIT;");
+            var promotionTriggerIndex = Enumerable.Range(
+                    liveGateDropIndex + 1,
+                    replacementCommitIndex - liveGateDropIndex - 1)
+                .First(index => statements[index].Contains(
+                    "CREATE TRIGGER trg_promote_active_strategy_runs_to_live_scope",
+                    StringComparison.Ordinal));
+            Assert.True(promotionTriggerIndex < replacementCommitIndex);
+        }
+
         Assert.Contains("IF NEW.live_stakes OR was_live THEN", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains("OR NEW.retention_scope = 'LiveOrShadow'", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.Contains(
@@ -612,7 +792,7 @@ public sealed class StrategyRunRetentionTests
     }
 
     [Fact]
-    public void DashboardBuild_UsesFreshV1TombstonesOnlyForRecentPaperSkipFacts()
+    public void DashboardBuild_UsesUnifiedArchiveRowsOnlyForRecentPaperSkipFacts()
     {
         var source = ReadRepositorySource(
             "src",
@@ -629,11 +809,7 @@ public sealed class StrategyRunRetentionTests
         Assert.True(recentEnd > recentStart);
         var recentSource = source[recentStart..recentEnd];
         Assert.Contains(
-            "FROM strategy_market_paper_skip_tombstones tombstone",
-            recentSource,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "tombstone.archive_format_version = 1",
+            "FROM strategy_market_paper_skip_archive_rows tombstone",
             recentSource,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -661,7 +837,7 @@ public sealed class StrategyRunRetentionTests
     }
 
     [Fact]
-    public void DirectRecentPerformance_IncludesFreshV1PaperSkipTombstonesWithoutLiveCounts()
+    public void DirectRecentPerformance_IncludesFreshUnifiedPaperSkipArchiveWithoutLiveCounts()
     {
         var source = ReadRepositorySource(
             "src",
@@ -680,11 +856,7 @@ public sealed class StrategyRunRetentionTests
         var method = source[methodStart..methodEnd];
         Assert.Contains("archived_skip_window_rows AS", method, StringComparison.Ordinal);
         Assert.Contains(
-            "FROM strategy_market_paper_skip_tombstones tombstone",
-            method,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "tombstone.archive_format_version = 1",
+            "FROM strategy_market_paper_skip_archive_rows tombstone",
             method,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -734,8 +906,11 @@ public sealed class StrategyRunRetentionTests
         Assert.Contains("ux_strategy_market_paper_skip_tombstones_run", schema, StringComparison.Ordinal);
         Assert.Contains("ix_strategy_market_paper_skip_tombstones_incomplete", schema, StringComparison.Ordinal);
         Assert.True(
-            CountOccurrences(repositorySource, "FROM strategy_market_paper_skip_tombstones tombstone") >= 3,
-            "All three current strategy-run INSERT paths must check tombstones explicitly.");
+            CountOccurrences(repositorySource, "strategy_market_paper_skip_tombstones_v2") >= 6,
+            "All three current strategy-run INSERT paths must check v2 by run ID and strategy/market.");
+        Assert.True(
+            CountOccurrences(repositorySource, "FROM strategy_skip_archive_market_identities market_identity") >= 3,
+            "All three current strategy-run INSERT paths must resolve the indexed v2 market identity.");
     }
 
     private static int FindStatement(

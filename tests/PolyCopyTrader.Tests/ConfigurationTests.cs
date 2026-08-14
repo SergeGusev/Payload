@@ -1,10 +1,49 @@
+using Microsoft.Extensions.Configuration;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
+using PolyCopyTrader.Service.Configuration;
 
 namespace PolyCopyTrader.Tests;
 
 public sealed class ConfigurationTests
 {
+    [Fact]
+    public void CompactSkipArchiveV2_DefaultsToDisabledInCompatibilityBuild()
+    {
+        var options = new StrategyRunRetentionOptions();
+
+        Assert.False(options.CompactSkipArchiveV2Enabled);
+        Assert.False(StrategyRunRetentionCapabilities.CompactSkipArchiveV2ProductWritesSupported);
+    }
+
+    [Fact]
+    public void CompactSkipArchiveV2_EnvironmentOverrideIsRejectedInCompatibilityBuild()
+    {
+        var environmentPrefix = $"POLYCOPYTRADER_TEST_SKIP_V2_{Guid.NewGuid():N}_";
+        var variableName = environmentPrefix +
+            "StrategyRunRetention__CompactSkipArchiveV2Enabled";
+
+        try
+        {
+            Environment.SetEnvironmentVariable(variableName, "true");
+            var configurationRoot = new ConfigurationBuilder()
+                .AddEnvironmentVariables(environmentPrefix)
+                .Build();
+            var configuration = AppConfigurationLoader.Load(configurationRoot);
+
+            Assert.True(configuration.StrategyRunRetention.CompactSkipArchiveV2Enabled);
+            Assert.Contains(
+                AppOptionsValidator.Validate(configuration),
+                error => error.Contains(
+                    "CompactSkipArchiveV2Enabled cannot be true in this compatibility release",
+                    StringComparison.Ordinal));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variableName, null);
+        }
+    }
+
     [Fact]
     public void DefaultConfiguration_IsValid()
     {
@@ -1206,6 +1245,8 @@ public sealed class ConfigurationTests
         Assert.Contains("Gamma market persistence scope:", summary);
         Assert.Contains("Strategy run direct Paper skip compaction enabled: False", summary);
         Assert.Contains("Strategy run direct Paper skip compaction apply enabled: False", summary);
+        Assert.Contains("Strategy run compact skip archive v2 enabled: False", summary);
+        Assert.Contains("Strategy run compact skip archive v2 product writes supported: False", summary);
         Assert.Contains("Paper FAK fee backfill enabled: False", summary);
         Assert.Contains("Paper FAK fee backfill apply enabled: False", summary);
         Assert.Contains("Paper FAK fee backfill historical cutoff UTC: 2026-08-07T22:44:55.2195150+00:00", summary);

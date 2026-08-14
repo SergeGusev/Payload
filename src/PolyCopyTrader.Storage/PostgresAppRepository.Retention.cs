@@ -1,6 +1,7 @@
 using System.Data;
 using Npgsql;
 using NpgsqlTypes;
+using PolyCopyTrader.Domain.Configuration;
 
 namespace PolyCopyTrader.Storage;
 
@@ -148,6 +149,16 @@ blocker_hits AS (
 
     SELECT DISTINCT candidate.id
     FROM candidate_batch candidate
+    INNER JOIN public.strategy_skip_archive_market_identities market_identity
+        ON market_identity.market_id = candidate.market_id COLLATE "C"
+    INNER JOIN public.strategy_market_paper_skip_tombstones_v2 dependency
+        ON dependency.strategy_id = candidate.strategy_id
+       AND dependency.market_identity_id = market_identity.market_identity_id
+
+    UNION ALL
+
+    SELECT DISTINCT candidate.id
+    FROM candidate_batch candidate
     INNER JOIN public.dashboard_projection_events dependency
         ON dependency.source_kind = 'StrategyRun'
        AND dependency.source_id = candidate.id
@@ -175,6 +186,210 @@ blocked_candidate_ids AS MATERIALIZED (
     SELECT DISTINCT blocker_hit.id
     FROM blocker_hits blocker_hit
 )
+""";
+
+    private const string TransferPaperOnlySkippedRunsToCompactArchiveV2Sql = $$"""
+WITH candidate_batch AS MATERIALIZED (
+    SELECT
+        run.id,
+        run.strategy_id,
+        run.market_id,
+        run.condition_id,
+        run.market_slug,
+        run.market_title,
+        run.category,
+        run.market_start_utc,
+        run.market_end_utc,
+        run.detected_at_utc,
+        run.entry_due_at_utc,
+        run.selected_asset_id,
+        run.selected_outcome,
+        run.stake_usd,
+        run.skip_reason,
+        run.created_at_utc,
+        run.updated_at_utc,
+        date_trunc('day', run.updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+            AS rollup_bucket_start_utc
+    FROM public.strategy_market_paper_runs run
+    WHERE run.id = ANY(@RunIds)
+      AND {{IntrinsicPaperOnlySkippedRunFilter}}
+    ORDER BY run.updated_at_utc, run.id
+    FOR UPDATE OF run
+),
+{{StrategyRunRetentionBlockerCtes}},
+candidates AS MATERIALIZED (
+    SELECT candidate.*
+    FROM candidate_batch candidate
+    LEFT JOIN blocked_candidate_ids blocked ON blocked.id = candidate.id
+    WHERE blocked.id IS NULL
+    ORDER BY candidate.updated_at_utc, candidate.id
+),
+{{CompactSkipArchiveV2DimensionCtes}},
+v2_tombstones AS (
+    INSERT INTO public.strategy_market_paper_skip_tombstones_v2 (
+        strategy_id,
+        market_identity_id,
+        metadata_version_id,
+        archived_run_id,
+        detected_at_utc,
+        entry_due_at_utc,
+        selected_asset_id,
+        selected_outcome,
+        stake_usd,
+        skip_reason_id,
+        run_updated_at_utc)
+    SELECT
+        candidate.strategy_id,
+        candidate.market_identity_id,
+        candidate.metadata_version_id,
+        candidate.id,
+        candidate.detected_at_utc,
+        candidate.entry_due_at_utc,
+        candidate.selected_asset_id,
+        candidate.selected_outcome,
+        candidate.stake_usd,
+        candidate.skip_reason_id,
+        candidate.updated_at_utc
+    FROM resolved_v2_candidates candidate
+    ON CONFLICT DO NOTHING
+    RETURNING strategy_id, market_identity_id, archived_run_id
+),
+v1_tombstones AS (
+    INSERT INTO public.strategy_market_paper_skip_tombstones (
+        strategy_id,
+        market_id,
+        archived_run_id,
+        archived_at_utc,
+        archive_format_version,
+        condition_id,
+        market_slug,
+        market_title,
+        category,
+        market_start_utc,
+        market_end_utc,
+        detected_at_utc,
+        entry_due_at_utc,
+        selected_asset_id,
+        selected_outcome,
+        stake_usd,
+        skip_reason,
+        run_created_at_utc,
+        run_updated_at_utc,
+        rollup_bucket_start_utc)
+    SELECT
+        candidate.strategy_id,
+        candidate.market_id,
+        candidate.id,
+        clock_timestamp(),
+        1,
+        candidate.condition_id,
+        candidate.market_slug,
+        candidate.market_title,
+        candidate.category,
+        candidate.market_start_utc,
+        candidate.market_end_utc,
+        candidate.detected_at_utc,
+        candidate.entry_due_at_utc,
+        candidate.selected_asset_id,
+        candidate.selected_outcome,
+        candidate.stake_usd,
+        candidate.skip_reason,
+        candidate.created_at_utc,
+        candidate.updated_at_utc,
+        candidate.rollup_bucket_start_utc
+    FROM candidates candidate
+    WHERE candidate.created_at_utc IS DISTINCT FROM candidate.detected_at_utc
+    ON CONFLICT (strategy_id, market_id) DO NOTHING
+    RETURNING strategy_id, archived_run_id
+),
+archived_candidates AS MATERIALIZED (
+    SELECT candidate.*
+    FROM v2_tombstones tombstone
+    INNER JOIN resolved_v2_candidates candidate
+        ON candidate.id = tombstone.archived_run_id
+       AND candidate.strategy_id = tombstone.strategy_id
+       AND candidate.market_identity_id = tombstone.market_identity_id
+
+    UNION ALL
+
+    SELECT candidate.*
+    FROM v1_tombstones tombstone
+    INNER JOIN candidates candidate
+        ON candidate.id = tombstone.archived_run_id
+       AND candidate.strategy_id = tombstone.strategy_id
+),
+rollups AS (
+    INSERT INTO public.strategy_paper_skip_rollups AS existing_rollup (
+        strategy_id,
+        bucket_start_utc,
+        skip_reason,
+        run_count,
+        first_updated_at_utc,
+        last_updated_at_utc,
+        created_at_utc,
+        updated_at_utc)
+    SELECT
+        candidate.strategy_id,
+        candidate.rollup_bucket_start_utc,
+        candidate.skip_reason,
+        count(*)::integer,
+        min(candidate.updated_at_utc),
+        max(candidate.updated_at_utc),
+        clock_timestamp(),
+        clock_timestamp()
+    FROM archived_candidates candidate
+    GROUP BY candidate.strategy_id, candidate.rollup_bucket_start_utc, candidate.skip_reason
+    ON CONFLICT (strategy_id, bucket_start_utc, skip_reason) DO UPDATE SET
+        run_count = existing_rollup.run_count + EXCLUDED.run_count,
+        first_updated_at_utc = LEAST(
+            existing_rollup.first_updated_at_utc,
+            EXCLUDED.first_updated_at_utc),
+        last_updated_at_utc = GREATEST(
+            existing_rollup.last_updated_at_utc,
+            EXCLUDED.last_updated_at_utc),
+        updated_at_utc = clock_timestamp()
+    RETURNING 1
+),
+deleted AS (
+    DELETE FROM public.strategy_market_paper_runs run
+    USING archived_candidates candidate
+    WHERE run.id = candidate.id
+    RETURNING run.id
+),
+queued AS (
+    INSERT INTO public.dashboard_projection_reconciliation_queue AS existing_queue (
+        strategy_id, priority, reason, requested_at_utc, attempt_count, next_attempt_at_utc, last_error)
+    SELECT
+        distinct_candidate.strategy_id,
+        50,
+        'paper_skip_retention_transfer',
+        clock_timestamp(),
+        0,
+        clock_timestamp(),
+        NULL
+    FROM (
+        SELECT DISTINCT candidate.strategy_id
+        FROM archived_candidates candidate
+    ) distinct_candidate
+    ON CONFLICT (strategy_id) DO UPDATE SET
+        priority = GREATEST(existing_queue.priority, EXCLUDED.priority),
+        reason = EXCLUDED.reason,
+        requested_at_utc = LEAST(
+            existing_queue.requested_at_utc,
+            EXCLUDED.requested_at_utc),
+        next_attempt_at_utc = LEAST(
+            existing_queue.next_attempt_at_utc,
+            EXCLUDED.next_attempt_at_utc),
+        last_error = NULL
+    RETURNING 1
+)
+SELECT
+    (SELECT count(*)::integer FROM candidates),
+    (SELECT count(*)::integer FROM deleted),
+    (SELECT count(*)::integer FROM rollups),
+    ((SELECT count(*)::integer FROM v1_tombstones) +
+        (SELECT count(*)::integer FROM v2_tombstones)),
+    (SELECT count(*)::integer FROM queued);
 """;
 
     public async Task<StrategyRunRetentionPreview> PreviewPaperOnlySkippedRunRetentionAsync(
@@ -340,10 +555,54 @@ CROSS JOIN sample;
             reader.GetFieldValue<Guid[]>(4));
     }
 
-    public async Task<StrategyRunRetentionBatchResult> TransferPaperOnlySkippedRunsToRollupsAsync(
+    public Task<StrategyRunRetentionBatchResult> TransferPaperOnlySkippedRunsToRollupsAsync(
         IReadOnlyCollection<Guid> expectedRunIds,
         DateTimeOffset updatedBeforeUtc,
         CancellationToken cancellationToken = default)
+    {
+        if (StrategyRunRetentionCapabilities.CompactSkipArchiveV2ProductWritesSupported)
+        {
+            throw new InvalidOperationException(
+                "Compact skipped-run archive v2 product writes are not supported by this compatibility build.");
+        }
+
+        return TransferPaperOnlySkippedRunsToRollupsCoreAsync(
+            expectedRunIds,
+            updatedBeforeUtc,
+            useCompactSkipArchiveV2: false,
+            cancellationToken: cancellationToken);
+    }
+
+    internal async Task<StrategyRunRetentionBatchResult>
+        TransferPaperOnlySkippedRunsToCompactArchiveV2ForTestsAsync(
+            IReadOnlyCollection<Guid> expectedRunIds,
+            DateTimeOffset updatedBeforeUtc,
+            CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await TransferPaperOnlySkippedRunsToRollupsCoreAsync(
+                expectedRunIds,
+                updatedBeforeUtc,
+                useCompactSkipArchiveV2: true,
+                cancellationToken: cancellationToken);
+        }
+        catch (PostgresException exception)
+            when (IsCompactSkipArchiveV2DimensionCapacityException(exception))
+        {
+            return await TransferPaperOnlySkippedRunsToRollupsCoreAsync(
+                expectedRunIds,
+                updatedBeforeUtc,
+                useCompactSkipArchiveV2: false,
+                cancellationToken: cancellationToken);
+        }
+    }
+
+    private async Task<StrategyRunRetentionBatchResult> TransferPaperOnlySkippedRunsToRollupsCoreAsync(
+        IReadOnlyCollection<Guid> expectedRunIds,
+        DateTimeOffset updatedBeforeUtc,
+        bool useCompactSkipArchiveV2,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(expectedRunIds);
 
@@ -391,7 +650,9 @@ CROSS JOIN sample;
 
             await using var command = CreateCommand(
                 connection,
-                $$"""
+                useCompactSkipArchiveV2
+                    ? TransferPaperOnlySkippedRunsToCompactArchiveV2Sql
+                    : $$"""
 WITH candidate_batch AS MATERIALIZED (
     SELECT
         run.id,

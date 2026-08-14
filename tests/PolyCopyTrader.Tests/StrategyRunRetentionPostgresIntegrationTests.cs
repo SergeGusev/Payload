@@ -1,5 +1,12 @@
 using System.Data;
+using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Globalization;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using Npgsql;
 using NpgsqlTypes;
 using PolyCopyTrader.Domain;
@@ -12,17 +19,1509 @@ internal sealed class PostgresIntegrationFactAttribute : FactAttribute
 {
     public PostgresIntegrationFactAttribute()
     {
-        if (string.IsNullOrWhiteSpace(
-                Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION")))
+        var validationError = DisposablePostgresIntegrationGuard
+            .GetConfiguredConnectionValidationError();
+        if (validationError is not null)
         {
-            Skip = "POLYCOPYTRADER_TEST_POSTGRES_CONNECTION is not configured.";
+            Skip = validationError;
         }
+    }
+}
+
+internal sealed class PostgresStoragePrototypeFactAttribute : FactAttribute
+{
+    public PostgresStoragePrototypeFactAttribute()
+    {
+        Skip = DisposablePostgresIntegrationGuard.GetConfiguredConnectionValidationError()
+            ?? DisposablePostgresIntegrationGuard.GetConfiguredEvidenceDirectoryValidationError();
+    }
+}
+
+internal static partial class DisposablePostgresIntegrationGuard
+{
+    private const string ConnectionEnvironmentVariable =
+        "POLYCOPYTRADER_TEST_POSTGRES_CONNECTION";
+    internal const string EvidenceDirectoryEnvironmentVariable =
+        "POLYCOPYTRADER_TEST_SKIP_V2_EVIDENCE_DIRECTORY";
+
+    [GeneratedRegex(
+        "^pct_codex_skip_v2_[0-9]{14}_[0-9a-f]{8}$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex AllowedDatabaseNameRegex();
+
+    internal static string? GetConfiguredConnectionValidationError()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(
+            ConnectionEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return $"{ConnectionEnvironmentVariable} is not configured.";
+        }
+
+        NpgsqlConnectionStringBuilder builder;
+        try
+        {
+            builder = new NpgsqlConnectionStringBuilder(connectionString);
+        }
+        catch (ArgumentException exception)
+        {
+            return $"{ConnectionEnvironmentVariable} is invalid: {exception.Message}";
+        }
+
+        if (!IsConfiguredLoopbackHost(builder.Host ?? string.Empty))
+        {
+            return $"{ConnectionEnvironmentVariable} must target one loopback host.";
+        }
+
+        if (!AllowedDatabaseNameRegex().IsMatch(builder.Database ?? string.Empty))
+        {
+            return $"{ConnectionEnvironmentVariable} database is not an allowlisted disposable database.";
+        }
+
+        return null;
+    }
+
+    internal static string? GetConfiguredEvidenceDirectoryValidationError()
+    {
+        var configuredPath = Environment.GetEnvironmentVariable(
+            EvidenceDirectoryEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return $"{EvidenceDirectoryEnvironmentVariable} is not configured.";
+        }
+
+        string evidencePath;
+        try
+        {
+            evidencePath = Path.GetFullPath(configuredPath).TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return $"{EvidenceDirectoryEnvironmentVariable} is invalid: {exception.Message}";
+        }
+
+        var runsRoot = Path.GetFullPath(@"D:\CodexTemp\runs").TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+        if (!evidencePath.StartsWith(
+                runsRoot + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{EvidenceDirectoryEnvironmentVariable} must be inside D:\\CodexTemp\\runs.";
+        }
+
+        var relativePath = Path.GetRelativePath(runsRoot, evidencePath);
+        var segments = relativePath.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length < 2)
+        {
+            return $"{EvidenceDirectoryEnvironmentVariable} must be a child of one marked run.";
+        }
+
+        if (!segments[1].Equals("results", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{EvidenceDirectoryEnvironmentVariable} must be inside the marked run's results directory.";
+        }
+
+        var runPath = Path.Combine(runsRoot, segments[0]);
+        var markerPath = Path.Combine(runPath, ".codex-ephemeral.json");
+        if (!File.Exists(markerPath))
+        {
+            return $"Codex ownership marker is missing: {markerPath}";
+        }
+
+        try
+        {
+            var runDirectory = new DirectoryInfo(runPath);
+            if (!runDirectory.Exists)
+            {
+                return $"Codex run directory does not exist: {runPath}";
+            }
+
+            if ((runDirectory.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                return $"Codex run directory must not be a reparse point: {runPath}";
+            }
+
+            var markerFile = new FileInfo(markerPath);
+            if ((markerFile.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                return $"Codex ownership marker must not be a reparse point: {markerPath}";
+            }
+
+            using var marker = JsonDocument.Parse(File.ReadAllText(markerPath));
+            var root = marker.RootElement;
+            if (root.GetProperty("schemaVersion").GetInt32() != 1
+                || !string.Equals(
+                    root.GetProperty("owner").GetString(),
+                    "OpenAI Codex",
+                    StringComparison.Ordinal)
+                || !string.Equals(
+                    root.GetProperty("kind").GetString(),
+                    "ephemeral-session",
+                    StringComparison.Ordinal)
+                || !string.Equals(
+                    Path.GetFullPath(root.GetProperty("runPath").GetString() ?? string.Empty)
+                        .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                    runPath,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return $"Codex ownership marker does not identify the selected run: {markerPath}";
+            }
+        }
+        catch (Exception exception) when (
+            exception is IOException
+                or UnauthorizedAccessException
+                or JsonException
+                or KeyNotFoundException
+                or InvalidOperationException
+                or ArgumentException)
+        {
+            return $"Codex ownership marker is invalid: {markerPath}. {exception.Message}";
+        }
+
+        if (!Directory.Exists(evidencePath))
+        {
+            return $"Evidence directory does not exist: {evidencePath}";
+        }
+
+        var current = new DirectoryInfo(evidencePath);
+        while (current is not null
+               && !current.FullName.Equals(runPath, StringComparison.OrdinalIgnoreCase))
+        {
+            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                return $"Evidence path must not traverse a reparse point: {current.FullName}";
+            }
+
+            current = current.Parent;
+        }
+
+        return current is null
+            ? $"Evidence directory is not beneath its marked run: {evidencePath}"
+            : null;
+    }
+
+    internal static string GetConfiguredEvidenceDirectory()
+    {
+        var validationError = GetConfiguredEvidenceDirectoryValidationError();
+        if (validationError is not null)
+        {
+            throw new InvalidOperationException(validationError);
+        }
+
+        return Path.GetFullPath(Environment.GetEnvironmentVariable(
+            EvidenceDirectoryEnvironmentVariable)!);
+    }
+
+    internal static async Task<PostgresConnectionFactory> CreateInitializedFactoryAsync()
+    {
+        var validationError = GetConfiguredConnectionValidationError();
+        if (validationError is not null)
+        {
+            throw new InvalidOperationException(validationError);
+        }
+
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable)!;
+        var factory = new PostgresConnectionFactory(
+            new StorageOptions { ConnectionString = connectionString });
+        await using (var connection = factory.CreateConnection())
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(
+                """
+SELECT
+    current_database(),
+    current_setting('server_version_num')::integer,
+    inet_server_addr();
+""",
+                connection);
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+
+            var databaseName = reader.GetString(0);
+            var serverVersionNumber = reader.GetInt32(1);
+            var serverAddress = reader.GetFieldValue<IPAddress>(2);
+            Assert.Matches(AllowedDatabaseNameRegex(), databaseName);
+            Assert.Equal(18, serverVersionNumber / 10_000);
+            Assert.NotEqual(IPAddress.Any, serverAddress);
+            Assert.NotEqual(IPAddress.IPv6Any, serverAddress);
+            Assert.NotEqual(IPAddress.Parse("192.168.0.101"), serverAddress);
+            Assert.False(await reader.ReadAsync());
+        }
+
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        return factory;
+    }
+
+    private static bool IsConfiguredLoopbackHost(string host)
+    {
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
     }
 }
 
 [Collection(PaperCopiedTraderPerformancePostgresIntegrationCollection.Name)]
 public sealed class StrategyRunRetentionPostgresIntegrationTests
 {
+    [PostgresStoragePrototypeFact]
+    [Trait("Category", "PostgresStoragePrototype")]
+    public async Task CompactSkipArchiveV2_StoragePrototype_IsSmallestAndUsesBoundedIndexes()
+    {
+        const string generatorVersion = "compact-skip-archive-v2-prototype-v2";
+        var factory = await CreateFactoryAsync();
+        var evidenceDirectory = DisposablePostgresIntegrationGuard
+            .GetConfiguredEvidenceDirectory();
+        var schemaName = $"skip_v2_prototype_{Guid.NewGuid():N}";
+        var quotedSchemaName = new NpgsqlCommandBuilder().QuoteIdentifier(schemaName);
+        var layouts = CreatePrototypeLayouts();
+
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        var schemaCreated = false;
+        try
+        {
+            var databaseEvidence = await ReadPrototypeDatabaseEvidenceAsync(connection);
+            Assert.Equal(18, databaseEvidence.ServerVersionNumber / 10_000);
+            Assert.Equal("UTF8", databaseEvidence.ServerEncoding);
+
+            await ExecutePrototypeSqlAsync(
+                connection,
+                $"CREATE SCHEMA {quotedSchemaName}; SET search_path TO {quotedSchemaName}, pg_catalog;");
+            schemaCreated = true;
+
+            WritePrototypeEvidenceFile(
+                evidenceDirectory,
+                "fixture-generator-v2.sql",
+                PrototypeFixtureSql);
+            WritePrototypeEvidenceFile(
+                evidenceDirectory,
+                "candidate-layouts-v2.sql",
+                PrototypeCandidateLayoutsSql);
+            WritePrototypeEvidenceFile(
+                evidenceDirectory,
+                "candidate-population-v2.sql",
+                PrototypePopulationSql);
+
+            await ExecutePrototypeSqlAsync(connection, PrototypeCandidateLayoutsSql);
+            await VacuumPrototypeTablesAsync(connection, layouts);
+            var emptyMeasurements = await MeasurePrototypeLayoutsAsync(
+                connection,
+                schemaName,
+                layouts);
+            WritePrototypeJsonEvidenceFile(
+                evidenceDirectory,
+                "empty-layout-sizes.json",
+                emptyMeasurements);
+
+            await ExecutePrototypeSqlAsync(connection, PrototypeFixtureSql);
+            await ExecutePrototypeSqlAsync(connection, PrototypePopulationSql);
+            await VacuumPrototypeTablesAsync(connection, layouts);
+
+            var fixtureCounts = await ReadPrototypeFixtureCountsAsync(connection);
+            Assert.Equal(262_144, fixtureCounts.Rows);
+            Assert.Equal(256, fixtureCounts.Strategies);
+            Assert.Equal(1_024, fixtureCounts.MarketIdentities);
+            Assert.Equal(1_032, fixtureCounts.MetadataVersions);
+            Assert.Equal(1_032, fixtureCounts.MetadataDimensionRows);
+            Assert.Equal(8, fixtureCounts.DualVersionMarkets);
+            Assert.Equal(1_016, fixtureCounts.SingleVersionMarkets);
+            Assert.Equal(37, fixtureCounts.Reasons);
+            Assert.Equal(30, fixtureCounts.UtcDays);
+            Assert.True(fixtureCounts.NullableStatesAllCovered);
+            Assert.InRange(fixtureCounts.AverageConditionBytes, 66.0, 68.0);
+            Assert.InRange(fixtureCounts.AverageSlugBytes, 24.0, 26.0);
+            Assert.InRange(fixtureCounts.AverageTitleBytes, 47.0, 49.0);
+            Assert.InRange(fixtureCounts.AverageCategoryBytes, 6.0, 8.0);
+            Assert.InRange(fixtureCounts.AverageReasonBytes, 42.0, 44.0);
+
+            var restorationEvidence = await ReadPrototypeCanonicalRestorationEvidenceAsync(
+                connection,
+                layouts);
+            var fixtureRestoration = Assert.Single(
+                restorationEvidence,
+                evidence => evidence.Layout == "fixture");
+            Assert.Equal(262_144, fixtureRestoration.Rows);
+            foreach (var layout in layouts)
+            {
+                var layoutRestoration = Assert.Single(
+                    restorationEvidence,
+                    evidence => evidence.Layout == layout.Name);
+                Assert.Equal(fixtureRestoration.Rows, layoutRestoration.Rows);
+                Assert.Equal(fixtureRestoration.Sha256, layoutRestoration.Sha256);
+            }
+
+            WritePrototypeJsonEvidenceFile(
+                evidenceDirectory,
+                "canonical-restoration-hashes.json",
+                restorationEvidence);
+
+            var populatedMeasurements = await MeasurePrototypeLayoutsAsync(
+                connection,
+                schemaName,
+                layouts);
+            AssertPrototypeLayoutRowCounts(populatedMeasurements);
+            WritePrototypeJsonEvidenceFile(
+                evidenceDirectory,
+                "populated-layout-sizes.json",
+                populatedMeasurements);
+
+            var comparisons = ComparePrototypeLayoutSizes(
+                emptyMeasurements,
+                populatedMeasurements);
+            var proposed = Assert.Single(
+                comparisons,
+                comparison => comparison.Layout == "proposed_normalized_v2");
+            var currentV1 = Assert.Single(
+                comparisons,
+                comparison => comparison.Layout == "current_v1");
+            foreach (var alternative in comparisons.Where(
+                         comparison => comparison.Layout != proposed.Layout))
+            {
+                Assert.True(
+                    proposed.PopulatedTotalBytes < alternative.PopulatedTotalBytes,
+                    $"Proposed populated bytes {proposed.PopulatedTotalBytes} must be below " +
+                    $"{alternative.Layout} bytes {alternative.PopulatedTotalBytes}.");
+                Assert.True(
+                    proposed.DeltaTotalBytes < alternative.DeltaTotalBytes,
+                    $"Proposed delta bytes {proposed.DeltaTotalBytes} must be below " +
+                    $"{alternative.Layout} delta bytes {alternative.DeltaTotalBytes}.");
+            }
+
+            Assert.True(
+                proposed.PopulatedTotalBytes * 100L
+                    <= currentV1.PopulatedTotalBytes * 65L,
+                $"Proposed populated bytes {proposed.PopulatedTotalBytes} are not at least " +
+                $"35% below v1 bytes {currentV1.PopulatedTotalBytes}.");
+
+            var querySpecs = await CreatePrototypeQuerySpecsAsync(connection);
+            Assert.Equal(6, querySpecs.Count);
+            var queryEvidence = new List<PrototypeQueryEvidence>(querySpecs.Count);
+            foreach (var spec in querySpecs)
+            {
+                WritePrototypeEvidenceFile(
+                    evidenceDirectory,
+                    $"query-{spec.Name}.sql",
+                    FormatPrototypeQueryEvidenceSql(spec));
+
+                var expectedResult = await ReadPrototypeQueryResultAsync(
+                    connection,
+                    spec.ExpectedSql,
+                    spec.Parameters);
+                var actualResult = await ReadPrototypeQueryResultAsync(
+                    connection,
+                    spec.ActualSql,
+                    spec.Parameters);
+                Assert.Equal(expectedResult.Cardinality, actualResult.Cardinality);
+                Assert.Equal(expectedResult.Sha256, actualResult.Sha256);
+                Assert.InRange(actualResult.Cardinality, 0, spec.ResultCardinalityLimit);
+
+                var plan = await ReadPrototypePlanAsync(
+                    connection,
+                    spec.ActualSql,
+                    spec.Parameters);
+                var planEvidence = InspectPrototypePlan(plan, spec);
+                Assert.False(
+                    planEvidence.HasProposedTombstoneSequentialScan,
+                    $"{spec.Name} used a sequential scan of proposed_tombstones.");
+                Assert.Equal(spec.RequiredIndexName, planEvidence.DrivingIndexName);
+                Assert.InRange(
+                    planEvidence.DrivingExaminedRows,
+                    0,
+                    spec.ExaminedRowsLimit(expectedResult.Cardinality));
+                Assert.All(
+                    planEvidence.SequentialDimensionRelations,
+                    relation => Assert.InRange(relation.RelationRows, 0, 1_032));
+
+                var planFileName = $"plan-{spec.Name}.json";
+                WritePrototypeJsonEvidenceFile(
+                    evidenceDirectory,
+                    planFileName,
+                    plan.RootElement);
+                queryEvidence.Add(new PrototypeQueryEvidence(
+                    spec.Name,
+                    expectedResult.Cardinality,
+                    expectedResult.Sha256,
+                    actualResult.Sha256,
+                    planEvidence.DrivingIndexName,
+                    planEvidence.DrivingNodeType,
+                    planEvidence.DrivingExaminedRows,
+                    planFileName));
+            }
+
+            var report = new PrototypeCompletionReport(
+                generatorVersion,
+                databaseEvidence.Version,
+                databaseEvidence.DatabaseName,
+                fixtureCounts,
+                restorationEvidence,
+                comparisons,
+                queryEvidence,
+                PrototypeFixtureSql,
+                PrototypeCandidateLayoutsSql,
+                PrototypePopulationSql,
+                "Prototype-only measurements from an isolated PostgreSQL 18 database; " +
+                "deployed savings remain unknown until separately approved activation and measurement.");
+            WritePrototypeJsonEvidenceFile(
+                evidenceDirectory,
+                "storage-prototype-summary.json",
+                report);
+            Console.WriteLine(
+                $"Compact skipped-run v2 storage prototype evidence: {evidenceDirectory}");
+        }
+        finally
+        {
+            if (schemaCreated)
+            {
+                await ExecutePrototypeSqlAsync(
+                    connection,
+                    $"RESET search_path; DROP SCHEMA {quotedSchemaName} CASCADE;");
+            }
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task V2Dimensions_ResolveExactValuesConcurrentlyAndRemainImmutable()
+    {
+        var factory = await CreateFactoryAsync();
+        var detectedAtUtc = DateTimeOffset.UtcNow.AddDays(-3);
+        var exactRun = CreateSkippedRun(Guid.NewGuid(), detectedAtUtc.AddMinutes(10)) with
+        {
+            MarketId = $"v2-dimension-market-{Guid.NewGuid():N}",
+            ConditionId = $"v2-dimension-condition-{Guid.NewGuid():N}",
+            MarketSlug = $"v2-dimension-slug-{Guid.NewGuid():N}",
+            MarketTitle = "V2 dimension exact metadata",
+            Category = "Тест",
+            MarketStartUtc = detectedAtUtc,
+            MarketEndUtc = detectedAtUtc.AddMinutes(5),
+            DetectedAtUtc = detectedAtUtc,
+            CreatedAtUtc = detectedAtUtc,
+            SkipReason = "ByteExactReason"
+        };
+
+        var concurrent = await Task.WhenAll(
+            Enumerable.Range(0, 4)
+                .Select(_ => ResolveV2DimensionsAsync(factory, exactRun)));
+        Assert.Single(concurrent.Select(value => value.MarketIdentityId).Distinct());
+        Assert.Single(concurrent.Select(value => value.MetadataVersionId).Distinct());
+        Assert.Single(concurrent.Select(value => value.SkipReasonId).Distinct());
+
+        var nullableVersion = exactRun with
+        {
+            MarketTitle = "V2 dimension nullable metadata version",
+            Category = null,
+            MarketStartUtc = null,
+            MarketEndUtc = null
+        };
+        var secondVersion = await ResolveV2DimensionsAsync(factory, nullableVersion);
+        Assert.Equal(concurrent[0].MarketIdentityId, secondVersion.MarketIdentityId);
+        Assert.NotEqual(concurrent[0].MetadataVersionId, secondVersion.MetadataVersionId);
+        Assert.Equal(concurrent[0].SkipReasonId, secondVersion.SkipReasonId);
+
+        var independentNullableVersions = new[]
+        {
+            exactRun with { Category = null },
+            exactRun with { MarketStartUtc = null },
+            exactRun with { MarketEndUtc = null }
+        };
+        var independentNullableIds = new List<int>();
+        foreach (var variant in independentNullableVersions)
+        {
+            var first = await ResolveV2DimensionsAsync(factory, variant);
+            var retry = await ResolveV2DimensionsAsync(factory, variant);
+            Assert.Equal(first, retry);
+            independentNullableIds.Add(first.MetadataVersionId);
+        }
+        Assert.Equal(3, independentNullableIds.Distinct().Count());
+        Assert.DoesNotContain(concurrent[0].MetadataVersionId, independentNullableIds);
+        Assert.DoesNotContain(secondVersion.MetadataVersionId, independentNullableIds);
+
+        var byteDistinctReason = await ResolveV2DimensionsAsync(
+            factory,
+            exactRun with { SkipReason = exactRun.SkipReason + " " });
+        Assert.NotEqual(concurrent[0].SkipReasonId, byteDistinctReason.SkipReasonId);
+
+        var counts = await ReadV2DimensionCountsAsync(factory, exactRun.MarketId);
+        Assert.Equal((1L, 5L), (counts.MarketIdentities, counts.MetadataVersions));
+
+        await AssertV2DimensionMutationRejectedAsync(
+            factory,
+            "UPDATE strategy_skip_archive_market_identities " +
+            "SET market_id = market_id || '-changed' WHERE market_identity_id = @Id;",
+            concurrent[0].MarketIdentityId);
+        await AssertV2DimensionMutationRejectedAsync(
+            factory,
+            "DELETE FROM strategy_skip_archive_market_metadata_versions " +
+            "WHERE metadata_version_id = @Id;",
+            concurrent[0].MetadataVersionId);
+        await AssertV2DimensionMutationRejectedAsync(
+            factory,
+            "UPDATE strategy_skip_archive_reasons " +
+            "SET skip_reason = skip_reason || '-changed' WHERE skip_reason_id = @Id;",
+            concurrent[0].SkipReasonId);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task V2DormantDirectWriter_ConcurrentEqualTuplesReuseRealDimensions()
+    {
+        var factory = await CreateFactoryAsync();
+        var firstStrategyId = Guid.NewGuid();
+        var secondStrategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-3);
+        var shared = CreateSkippedRun(firstStrategyId, oldUtc) with
+        {
+            MarketId = $"v2-real-dimension-{Guid.NewGuid():N}",
+            ConditionId = $"v2-real-condition-{Guid.NewGuid():N}",
+            MarketSlug = $"v2-real-slug-{Guid.NewGuid():N}",
+            MarketTitle = "V2 dormant writer concurrent dimension reuse",
+            Category = null,
+            MarketStartUtc = null,
+            MarketEndUtc = null,
+            SelectedAssetId = null,
+            SelectedOutcome = null,
+            SkipReason = $"v2-real-reason-{Guid.NewGuid():N}"
+        };
+        var second = shared with
+        {
+            Id = Guid.NewGuid(),
+            StrategyId = secondStrategyId
+        };
+
+        await InsertStrategyAsync(
+            factory,
+            firstStrategyId,
+            $"v2_dimension_first_{Guid.NewGuid():N}",
+            liveStakes: false);
+        await InsertStrategyAsync(
+            factory,
+            secondStrategyId,
+            $"v2_dimension_second_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            var writes = await Task.WhenAll(
+                new PostgresAppRepository(factory)
+                    .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync([shared]),
+                new PostgresAppRepository(factory)
+                    .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync([second]));
+            Assert.Equal([shared.Id], writes[0].ToArray());
+            Assert.Equal([second.Id], writes[1].ToArray());
+
+            var dimensions = await ReadV2DimensionReferenceCountsAsync(
+                factory,
+                shared.MarketId,
+                shared.SkipReason!);
+            Assert.Equal(new V2DimensionReferenceCounts(1, 1, 1, 2), dimensions);
+            Assert.Equal(2, (await ReadArchiveStorageVersionsAsync(factory, firstStrategyId))[shared.Id]);
+            Assert.Equal(2, (await ReadArchiveStorageVersionsAsync(factory, secondStrategyId))[second.Id]);
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, firstStrategyId);
+            await DeleteTestStrategyAsync(factory, secondStrategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task V2DirectWriter_UsesV2WhenExactlyRepresentableAndV1FallbackOtherwise()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"v2_direct_{Guid.NewGuid():N}";
+        var nowUtc = DateTimeOffset.UtcNow.AddDays(-3);
+        var v2Run = CreateSkippedRun(strategyId, nowUtc);
+        var v1FallbackRun = CreateSkippedRun(strategyId, nowUtc.AddMinutes(1)) with
+        {
+            CreatedAtUtc = nowUtc.AddMinutes(-30)
+        };
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            var inserted = await repository
+                .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                    [v2Run, v1FallbackRun]);
+            Assert.Equal(
+                new[] { v2Run.Id, v1FallbackRun.Id }.OrderBy(id => id),
+                inserted.OrderBy(id => id));
+
+            var storageVersions = await ReadArchiveStorageVersionsAsync(factory, strategyId);
+            Assert.Equal(2, storageVersions[v2Run.Id]);
+            Assert.Equal(1, storageVersions[v1FallbackRun.Id]);
+            Assert.Equal(
+                new RetentionCounts(0, 2, 2, 2, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+
+            var retry = await repository
+                .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                    [v2Run, v1FallbackRun]);
+            Assert.Empty(retry);
+            Assert.Equal(
+                new RetentionCounts(0, 2, 2, 2, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+
+            var archivedPayload = await ReadRestorableArchivePayloadAsync(factory, v2Run.Id);
+            await repository.AddPaperOrderAsync(CreatePaperOrder(
+                strategyId,
+                v2Run.ConditionId,
+                nowUtc.AddHours(1)));
+
+            Assert.Equal(
+                archivedPayload,
+                await ReadRestorableRawPayloadAsync(factory, v2Run.Id));
+            Assert.Equal(
+                StrategyRunRetentionScopes.PaperOnly,
+                await ReadRetentionScopeAsync(factory, v2Run.Id));
+            var restoredCounts = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal((1L, 1L, 1L, 1L),
+                (restoredCounts.RawRuns,
+                    restoredCounts.RollupRuns,
+                    restoredCounts.Tombstones,
+                    restoredCounts.ReconciliationQueueRows));
+            Assert.Equal([v1FallbackRun.Id], await ReadArchivedRunIdsAsync(factory, strategyId));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LiveEnable_RestoresV1AndV2AtBoundaryAndKeepsStrictlyEarlierV2Archived()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"v2_live_boundary_{Guid.NewGuid():N}";
+        var dayUtc = new DateTimeOffset(
+            DateTime.UtcNow.Date.AddDays(-3).AddHours(12),
+            TimeSpan.Zero);
+        var preLiveV2 = CreateSkippedRun(strategyId, dayUtc);
+        var boundaryV2 = CreateSkippedRun(strategyId, dayUtc.AddMinutes(1));
+        var postBoundaryV1 = CreateSkippedRun(strategyId, dayUtc.AddMinutes(2)) with
+        {
+            CreatedAtUtc = dayUtc.AddHours(-1)
+        };
+        var allRuns = new[] { preLiveV2, boundaryV2, postBoundaryV1 };
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            Assert.Equal(
+                allRuns.Select(run => run.Id).OrderBy(id => id),
+                (await repository
+                    .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(allRuns))
+                    .OrderBy(id => id));
+            var before = await ReadArchiveStorageVersionsAsync(factory, strategyId);
+            Assert.Equal(2, before[preLiveV2.Id]);
+            Assert.Equal(2, before[boundaryV2.Id]);
+            Assert.Equal(1, before[postBoundaryV1.Id]);
+
+            Assert.True(await repository.SetStrategyLiveStakesAsync(
+                strategyId,
+                liveStakes: true,
+                updatedAtUtc: boundaryV2.UpdatedAtUtc));
+
+            Assert.Equal(
+                new[] { boundaryV2.Id, postBoundaryV1.Id }.OrderBy(id => id),
+                (await ReadRunIdsAsync(factory, allRuns.Select(run => run.Id).ToArray()))
+                .OrderBy(id => id));
+            Assert.Equal(
+                StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, boundaryV2.Id));
+            Assert.Equal(
+                StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, postBoundaryV1.Id));
+            var remaining = await ReadArchiveStorageVersionsAsync(factory, strategyId);
+            var remainingArchive = Assert.Single(remaining);
+            Assert.Equal(preLiveV2.Id, remainingArchive.Key);
+            Assert.Equal(2, remainingArchive.Value);
+            var liveCounts = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal((2L, 1L, 1L, 1L),
+                (liveCounts.RawRuns,
+                    liveCounts.RollupRuns,
+                    liveCounts.Tombstones,
+                    liveCounts.ReconciliationQueueRows));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LiveEnable_WinningSerializationBlocksV2ArchiveAndRetainsLiveRunRaw()
+    {
+        var factory = await CreateFactoryAsync();
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"v2_live_first_{Guid.NewGuid():N}";
+        var boundaryUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var run = CreateSkippedRun(strategyId, boundaryUtc.AddSeconds(1));
+        var writerApplicationName = $"v2_live_first_writer_{Guid.NewGuid():N}";
+        var writerFactory = WithApplicationName(factory, writerApplicationName);
+        using var raceCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        Task<IReadOnlySet<Guid>>? writerTask = null;
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            await using var liveConnection = factory.CreateConnection();
+            await liveConnection.OpenAsync();
+            await using var liveTransaction = await liveConnection.BeginTransactionAsync();
+            await using (var liveCommand = new NpgsqlCommand(
+                             """
+UPDATE public.strategies
+SET live_stakes = true,
+    live_enabled_at_utc = @BoundaryUtc,
+    updated_at_utc = @BoundaryUtc
+WHERE id = @StrategyId;
+""",
+                             liveConnection,
+                             liveTransaction))
+            {
+                liveCommand.Parameters.AddWithValue("BoundaryUtc", boundaryUtc.UtcDateTime);
+                liveCommand.Parameters.AddWithValue("StrategyId", strategyId);
+                Assert.Equal(1, await liveCommand.ExecuteNonQueryAsync());
+            }
+
+            writerTask = new PostgresAppRepository(writerFactory)
+                .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                    [run],
+                    raceCancellation.Token);
+            var writerPid = await WaitForBlockedApplicationAsync(
+                factory,
+                writerApplicationName,
+                "advisory");
+            await AssertBlockedByAsync(factory, writerPid, liveConnection.ProcessID);
+
+            await liveTransaction.CommitAsync();
+            Assert.Equal(
+                [run.Id],
+                (await writerTask.WaitAsync(TimeSpan.FromSeconds(15))).ToArray());
+
+            Assert.Empty(await ReadArchiveStorageVersionsAsync(factory, strategyId));
+            Assert.Equal(
+                StrategyMarketPaperRunStatuses.Skipped,
+                await ReadRunStatusAsync(factory, run.Id));
+            Assert.Equal(
+                StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, run.Id));
+        }
+        finally
+        {
+            await DrainRaceTaskAsync(writerTask);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LiveEnableAndArchive_SerializeBothCommitOrdersForV1AndV2()
+    {
+        foreach (var archiveVersion in new short[] { 1, 2 })
+        {
+            await AssertLiveArchiveSerializationAsync(
+                archiveVersion,
+                liveEnableWins: true);
+            await AssertLiveArchiveSerializationAsync(
+                archiveVersion,
+                liveEnableWins: false);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task V2ExistingRawAndAgeWriters_ArchiveEligibleRowsThroughTheirDormantSeams()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"v2_existing_{Guid.NewGuid():N}";
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var observed = CreateSkippedRun(strategyId, oldUtc) with
+        {
+            Status = StrategyMarketPaperRunStatuses.Observed,
+            SkipReason = null
+        };
+        var finalized = observed with
+        {
+            Status = StrategyMarketPaperRunStatuses.Skipped,
+            SkipReason = "v2_existing_raw_skip",
+            DetectedAtUtc = oldUtc.AddMinutes(-10),
+            CreatedAtUtc = oldUtc.AddMinutes(-10),
+            UpdatedAtUtc = oldUtc.AddMinutes(1)
+        };
+        var ageRun = CreateSkippedRun(strategyId, oldUtc.AddMinutes(2)) with
+        {
+            SkipReason = "v2_age_transfer_skip"
+        };
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(observed));
+            await repository.FinalizeStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                [finalized]);
+            Assert.Null(await ReadRunStatusAsync(factory, finalized.Id));
+            Assert.Equal(
+                2,
+                (await ReadArchiveStorageVersionsAsync(factory, strategyId))[finalized.Id]);
+
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(ageRun));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            var ageResult = await repository
+                .TransferPaperOnlySkippedRunsToCompactArchiveV2ForTestsAsync(
+                    [ageRun.Id],
+                    DateTimeOffset.UtcNow.AddHours(-48));
+            Assert.Equal(1, ageResult.SelectedRows);
+            Assert.Equal(1, ageResult.DeletedRows);
+            Assert.Equal(1, ageResult.TombstonesChanged);
+            Assert.Null(await ReadRunStatusAsync(factory, ageRun.Id));
+
+            var versions = await ReadArchiveStorageVersionsAsync(factory, strategyId);
+            Assert.Equal(2, versions[finalized.Id]);
+            Assert.Equal(2, versions[ageRun.Id]);
+            var counts = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal((0L, 2L, 2L),
+                (counts.RawRuns, counts.RollupRuns, counts.Tombstones));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task V2Writers_IndependentlyPreserveIntrinsicFeeLivePersistedScopeDependencyAndAgeOnlyBlockers()
+    {
+        var factory = await CreateFactoryAsync();
+
+        foreach (var writer in Enum.GetValues<V2WriterKind>())
+        {
+            await AssertV2WriterBlockerMatrixAsync(factory, writer);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task V2CapacityFallbackAndDeleteFailureAreWholeTransactionSafe()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var capacityStrategyId = Guid.NewGuid();
+        var rollbackStrategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var capacityRun = CreateSkippedRun(capacityStrategyId, oldUtc) with
+        {
+            MarketId = $"v2-capacity-market-{Guid.NewGuid():N}",
+            ConditionId = $"v2-capacity-condition-{Guid.NewGuid():N}",
+            MarketSlug = $"v2-capacity-slug-{Guid.NewGuid():N}",
+            SkipReason = $"v2-capacity-reason-{Guid.NewGuid():N}"
+        };
+        var rollbackRun = CreateSkippedRun(rollbackStrategyId, oldUtc.AddMinutes(1)) with
+        {
+            MarketId = $"v2-rollback-market-{Guid.NewGuid():N}",
+            ConditionId = $"v2-rollback-condition-{Guid.NewGuid():N}",
+            MarketSlug = $"v2-rollback-slug-{Guid.NewGuid():N}",
+            SkipReason = $"v2-rollback-reason-{Guid.NewGuid():N}"
+        };
+        var triggerSuffix = Guid.NewGuid().ToString("N");
+        var triggerName = $"trg_v2_delete_failure_{triggerSuffix}";
+        var functionName = $"v2_delete_failure_{triggerSuffix}";
+
+        await InsertStrategyAsync(
+            factory,
+            capacityStrategyId,
+            $"v2_capacity_{Guid.NewGuid():N}",
+            liveStakes: false);
+        await InsertStrategyAsync(
+            factory,
+            rollbackStrategyId,
+            $"v2_rollback_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            await SetIdentitySequenceAtLimitAsync(
+                factory,
+                "strategy_skip_archive_reasons",
+                "skip_reason_id");
+            try
+            {
+                Assert.Equal(
+                    [capacityRun.Id],
+                    (await repository
+                        .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                            [capacityRun]))
+                    .ToArray());
+            }
+            finally
+            {
+                await ResetIdentitySequenceToTableMaximumAsync(
+                    factory,
+                    "strategy_skip_archive_market_identities",
+                    "market_identity_id");
+                await ResetIdentitySequenceToTableMaximumAsync(
+                    factory,
+                    "strategy_skip_archive_market_metadata_versions",
+                    "metadata_version_id");
+                await ResetIdentitySequenceToTableMaximumAsync(
+                    factory,
+                    "strategy_skip_archive_reasons",
+                    "skip_reason_id");
+            }
+
+            Assert.Equal(1, (await ReadArchiveStorageVersionsAsync(
+                factory,
+                capacityStrategyId))[capacityRun.Id]);
+            Assert.Equal(
+                new V2DimensionReferenceCounts(0, 0, 0, 0),
+                await ReadV2DimensionReferenceCountsAsync(
+                    factory,
+                    capacityRun.MarketId,
+                    capacityRun.SkipReason!));
+            Assert.Equal(
+                new RetentionCounts(0, 1, 1, 1, 1),
+                await ReadRetentionCountsAsync(factory, capacityStrategyId));
+
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(rollbackRun));
+            await DeleteProjectionBlockersAsync(factory, rollbackStrategyId);
+            await CreateDeleteFailureTriggerAsync(
+                factory,
+                triggerName,
+                functionName,
+                rollbackRun.Id);
+            try
+            {
+                var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+                    repository.TransferPaperOnlySkippedRunsToCompactArchiveV2ForTestsAsync(
+                        [rollbackRun.Id],
+                        DateTimeOffset.UtcNow.AddHours(-48)));
+                Assert.Equal("P0001", exception.SqlState);
+            }
+            finally
+            {
+                await DropDeleteFailureTriggerAsync(factory, triggerName, functionName);
+            }
+
+            Assert.Equal(
+                await ReadRestorableRawPayloadAsync(factory, rollbackRun.Id),
+                await ReadRunPayloadWithoutScopeAsync(factory, rollbackRun.Id));
+            Assert.Empty(await ReadArchiveStorageVersionsAsync(factory, rollbackStrategyId));
+            var rollbackCounts = await ReadRetentionCountsAsync(factory, rollbackStrategyId);
+            Assert.Equal(
+                new RetentionCounts(1, 0, 0, 0, 0),
+                rollbackCounts);
+            Assert.Equal(
+                new V2DimensionReferenceCounts(0, 0, 0, 0),
+                await ReadV2DimensionReferenceCountsAsync(
+                    factory,
+                    rollbackRun.MarketId,
+                    rollbackRun.SkipReason!));
+        }
+        finally
+        {
+            await DropDeleteFailureTriggerAsync(factory, triggerName, functionName);
+            await DeleteTestStrategyAsync(factory, capacityStrategyId);
+            await DeleteTestStrategyAsync(factory, rollbackStrategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Bootstrap_MixedV1V2ArchivesFeedEqualLifetimeAndRecentContributions()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var snapshots = new PostgresDashboardSnapshotRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"v2_dashboard_{Guid.NewGuid():N}";
+        var capturedNowUtc = DateTimeOffset.UtcNow;
+        var alignedNowUtc = capturedNowUtc.AddTicks(
+            -(capturedNowUtc.Ticks % TimeSpan.TicksPerSecond));
+        var updatedAtUtc = alignedNowUtc.AddMinutes(-30);
+        var v1RunId = Guid.NewGuid();
+        var v2Run = CreateSkippedRun(strategyId, updatedAtUtc) with
+        {
+            SkipReason = "mixed_v2_skip"
+        };
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            await InsertArchivedPaperSkipAsync(
+                factory,
+                strategyId,
+                v1RunId,
+                updatedAtUtc,
+                "mixed_v1_skip");
+            Assert.Equal(
+                [v2Run.Id],
+                (await repository
+                    .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync([v2Run]))
+                .ToArray());
+
+            await projection.BootstrapAsync();
+
+            var lifetime = (await snapshots.GetStrategyPerformanceSnapshotAsync())
+                .Single(row => row.StrategyId == strategyId);
+            Assert.Equal(2, lifetime.SkippedRunsCount);
+            Assert.Equal(2, lifetime.PaperConditionSkippedRunsCount);
+            Assert.Equal(updatedAtUtc, lifetime.LastRunUtc);
+
+            var recentRows = (await snapshots.GetStrategyRecentPerformanceSnapshotAsync())
+                .Where(row => row.StrategyId == strategyId)
+                .ToDictionary(row => row.WindowHours);
+            var directRecentRows = (await repository.GetStrategyRecentPerformanceAsync())
+                .Where(row => row.StrategyId == strategyId)
+                .ToDictionary(row => row.WindowHours);
+            foreach (var windowHours in new[] { 1, 6, 24 })
+            {
+                Assert.Equal(2, recentRows[windowHours].SkippedRunsCount);
+                Assert.Equal(2, recentRows[windowHours].PaperConditionSkippedRunsCount);
+                Assert.Equal(updatedAtUtc, recentRows[windowHours].LastRunUtc);
+                Assert.Equal(2, directRecentRows[windowHours].SkippedRunsCount);
+                Assert.Equal(2, directRecentRows[windowHours].PaperConditionSkippedRunsCount);
+                Assert.Equal(updatedAtUtc, directRecentRows[windowHours].LastRunUtc);
+            }
+
+            Assert.Equal(2, await ReadRecentStrategyRunFactCountAsync(factory, v1RunId));
+            Assert.Equal(2, await ReadRecentStrategyRunFactCountAsync(factory, v2Run.Id));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task CompatibilityInitializationTwicePreservesV1AndAllPublicWritersStayV1()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var terminalRun = CreateSkippedRun(strategyId, oldUtc);
+        var observed = CreateSkippedRun(strategyId, oldUtc.AddMinutes(1)) with
+        {
+            Status = StrategyMarketPaperRunStatuses.Observed,
+            SkipReason = null
+        };
+        var finalized = observed with
+        {
+            Status = StrategyMarketPaperRunStatuses.Skipped,
+            SkipReason = "compatibility-finalized-v1",
+            UpdatedAtUtc = oldUtc.AddMinutes(2)
+        };
+        var agedRun = CreateSkippedRun(strategyId, oldUtc.AddMinutes(3));
+
+        await InsertStrategyAsync(
+            factory,
+            strategyId,
+            $"compatibility_v1_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            Assert.Equal(
+                [terminalRun.Id],
+                (await repository.TryAddStrategyMarketPaperRunsAsync(
+                    [terminalRun],
+                    directPaperSkipCompactionEnabled: true)).ToArray());
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(observed));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            await repository.FinalizeStrategyMarketPaperRunsAsync(
+                [finalized],
+                directPaperSkipCompactionEnabled: true);
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(agedRun));
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            Assert.Equal(1, (await repository.TransferPaperOnlySkippedRunsToRollupsAsync(
+                [agedRun.Id],
+                DateTimeOffset.UtcNow.AddHours(-48))).DeletedRows);
+
+            var expectedVersions = new[] { terminalRun.Id, finalized.Id, agedRun.Id }
+                .ToDictionary(id => id, _ => (short)1);
+            Assert.Equal(expectedVersions, await ReadArchiveStorageVersionsAsync(factory, strategyId));
+            Assert.Equal(0, await ReadV2TombstoneCountAsync(factory, strategyId));
+            var physicalV1RowsBefore = await ReadPhysicalV1ArchiveRowsAsync(factory, strategyId);
+            Assert.Equal(expectedVersions.Count, physicalV1RowsBefore.Count);
+            var dimensionsBefore = await ReadV2DimensionTableSnapshotAsync(factory);
+
+            var initializer = new PostgresSchemaInitializer(factory);
+            await initializer.InitializeAsync();
+            await initializer.InitializeAsync();
+
+            Assert.Equal(expectedVersions, await ReadArchiveStorageVersionsAsync(factory, strategyId));
+            Assert.Equal(
+                physicalV1RowsBefore,
+                await ReadPhysicalV1ArchiveRowsAsync(factory, strategyId));
+            Assert.Equal(
+                dimensionsBefore,
+                await ReadV2DimensionTableSnapshotAsync(factory));
+            Assert.Equal(0, await ReadV2TombstoneCountAsync(factory, strategyId));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task V1V2CollisionsAndEveryRawWriterFailClosedWithoutReplacingArchive()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var v2StrategyId = Guid.NewGuid();
+        var v1StrategyId = Guid.NewGuid();
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-3);
+        var v2Run = CreateSkippedRun(v2StrategyId, oldUtc);
+        var v1Run = CreateSkippedRun(v1StrategyId, oldUtc.AddMinutes(1));
+
+        await InsertStrategyAsync(
+            factory,
+            v2StrategyId,
+            $"v2_collision_{Guid.NewGuid():N}",
+            liveStakes: false);
+        await InsertStrategyAsync(
+            factory,
+            v1StrategyId,
+            $"v1_collision_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            Assert.Equal(
+                [v2Run.Id],
+                (await repository
+                    .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync([v2Run]))
+                .ToArray());
+            Assert.Equal(
+                [v1Run.Id],
+                (await repository.TryAddStrategyMarketPaperRunsAsync(
+                    [v1Run],
+                    directPaperSkipCompactionEnabled: true)).ToArray());
+
+            var v2SameId = v2Run with
+            {
+                MarketId = $"v2-collision-other-{Guid.NewGuid():N}",
+                ConditionId = $"v2-collision-other-{Guid.NewGuid():N}",
+                MarketSlug = $"v2-collision-other-{Guid.NewGuid():N}"
+            };
+            var v2SameMarket = v2Run with { Id = Guid.NewGuid() };
+            Assert.False(await repository.TryAddStrategyMarketPaperRunAsync(v2SameId));
+            Assert.False(await repository.TryAddStrategyMarketPaperRunAsync(v2SameMarket));
+            Assert.Empty(await repository.TryAddStrategyMarketPaperRunsAsync(
+                [v2SameId, v2SameMarket]));
+            await repository.UpdateStrategyMarketPaperRunsAsync([v2SameId, v2SameMarket]);
+            Assert.Empty(await repository.TryAddStrategyMarketPaperRunsAsync(
+                [v2SameId, v2SameMarket],
+                directPaperSkipCompactionEnabled: true));
+
+            var v1SameId = v1Run with
+            {
+                MarketId = $"v1-collision-other-{Guid.NewGuid():N}",
+                ConditionId = $"v1-collision-other-{Guid.NewGuid():N}",
+                MarketSlug = $"v1-collision-other-{Guid.NewGuid():N}"
+            };
+            var v1SameMarket = v1Run with { Id = Guid.NewGuid() };
+            Assert.Empty(await repository
+                .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                    [v1SameId, v1SameMarket]));
+
+            var attemptedRawIds = new[]
+            {
+                v2SameId.Id,
+                v2SameMarket.Id,
+                v1SameId.Id,
+                v1SameMarket.Id
+            };
+            Assert.Empty(await ReadRunIdsAsync(factory, attemptedRawIds));
+            Assert.Equal(2, (await ReadArchiveStorageVersionsAsync(factory, v2StrategyId))[v2Run.Id]);
+            Assert.Equal(1, (await ReadArchiveStorageVersionsAsync(factory, v1StrategyId))[v1Run.Id]);
+
+            var malformed = await Assert.ThrowsAsync<PostgresException>(() =>
+                InsertMalformedV2TombstoneAsync(factory, v2StrategyId));
+            Assert.Equal("23503", malformed.SqlState);
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, v2StrategyId);
+            await DeleteTestStrategyAsync(factory, v1StrategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task V2EveryLateDependencyRestoresExactRunAndMixedRollupRecomputesCountMinMax()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var oldCode = $"v2_restore_old_{Guid.NewGuid():N}";
+        var newCode = $"v2_restore_new_{Guid.NewGuid():N}";
+        var prefix = $"v2-all-restore-{Guid.NewGuid():N}";
+        var oldUtc = new DateTimeOffset(
+            DateTime.UtcNow.Date.AddDays(-4).AddHours(12),
+            TimeSpan.Zero);
+        var reason = $"v2-shared-rollup-reason-{Guid.NewGuid():N}";
+
+        StrategyMarketPaperRun Fixture(string name, int minute) => WithRetentionKey(
+            CreateSkippedRun(strategyId, oldUtc.AddMinutes(minute)) with
+            {
+                SkipReason = reason
+            },
+            $"{prefix}-{name}");
+
+        var firstV1 = Fixture("first-v1", 0) with
+        {
+            CreatedAtUtc = oldUtc.AddMinutes(-30)
+        };
+        var paper = Fixture("paper", -10);
+        var dryRun = Fixture("dry-run", 2);
+        var live = Fixture("live", 3);
+        var shadowMarket = Fixture("shadow-market", 4);
+        var shadowCondition = Fixture("shadow-condition", 5);
+        var position = Fixture("position", 6);
+        var settlement = Fixture("settlement", 7);
+        var copiedPosition = Fixture("copied-position", 8);
+        var copiedActivity = Fixture("copied-activity", 9);
+        var onchain = Fixture("onchain", 10);
+        var codeRemap = Fixture("code-remap", 30);
+        var lastV1 = Fixture("last-v1", 20) with
+        {
+            CreatedAtUtc = oldUtc.AddMinutes(-29)
+        };
+        var v2Runs = new[]
+        {
+            paper,
+            dryRun,
+            live,
+            shadowMarket,
+            shadowCondition,
+            position,
+            settlement,
+            copiedPosition,
+            copiedActivity,
+            onchain,
+            codeRemap
+        };
+
+        await InsertStrategyAsync(factory, strategyId, oldCode, liveStakes: false);
+        try
+        {
+            await repository.UpsertPaperPositionAsync(new PaperPosition(
+                $"asset-{Guid.NewGuid():N}",
+                codeRemap.ConditionId,
+                "Yes",
+                2m,
+                0.50m,
+                1m,
+                0m,
+                oldUtc,
+                $"strategy:{newCode}"));
+
+            Assert.Equal(
+                new[] { firstV1.Id, lastV1.Id }.OrderBy(id => id),
+                (await repository.TryAddStrategyMarketPaperRunsAsync(
+                    [firstV1, lastV1],
+                    directPaperSkipCompactionEnabled: true)).OrderBy(id => id));
+            Assert.Equal(
+                v2Runs.Select(run => run.Id).OrderBy(id => id),
+                (await repository
+                    .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(v2Runs))
+                .OrderBy(id => id));
+
+            var archivedPayloads = new Dictionary<Guid, string>();
+            foreach (var run in v2Runs)
+            {
+                archivedPayloads.Add(
+                    run.Id,
+                    await ReadRestorableArchivePayloadAsync(factory, run.Id));
+            }
+            Assert.Equal(
+                new RollupGroup(13, paper.UpdatedAtUtc, codeRemap.UpdatedAtUtc),
+                await ReadRollupGroupAsync(factory, strategyId, oldUtc, reason));
+
+            var restoredV2RunIds = new HashSet<Guid>();
+            async Task AssertOnlyTargetRestoredAsync(StrategyMarketPaperRun target)
+            {
+                Assert.True(restoredV2RunIds.Add(target.Id));
+                Assert.Equal(
+                    archivedPayloads[target.Id],
+                    await ReadRestorableRawPayloadAsync(factory, target.Id));
+                Assert.Equal(
+                    restoredV2RunIds.OrderBy(id => id),
+                    (await ReadRunIdsAsync(factory, v2Runs.Select(run => run.Id).ToArray()))
+                    .OrderBy(id => id));
+
+                var remainingVersions = await ReadArchiveStorageVersionsAsync(factory, strategyId);
+                Assert.Equal(1, remainingVersions[firstV1.Id]);
+                Assert.Equal(1, remainingVersions[lastV1.Id]);
+                foreach (var run in v2Runs)
+                {
+                    if (restoredV2RunIds.Contains(run.Id))
+                    {
+                        Assert.DoesNotContain(run.Id, remainingVersions.Keys);
+                    }
+                    else
+                    {
+                        Assert.Equal(2, remainingVersions[run.Id]);
+                    }
+                }
+
+                var remainingArchivedRuns = new[] { firstV1, lastV1 }
+                    .Concat(v2Runs.Where(run => !restoredV2RunIds.Contains(run.Id)))
+                    .ToArray();
+                Assert.Equal(
+                    new RollupGroup(
+                        remainingArchivedRuns.Length,
+                        remainingArchivedRuns.Min(run => run.UpdatedAtUtc),
+                        remainingArchivedRuns.Max(run => run.UpdatedAtUtc)),
+                    await ReadRollupGroupAsync(factory, strategyId, oldUtc, reason));
+            }
+
+            await repository.AddPaperOrderAsync(CreatePaperOrder(
+                strategyId,
+                paper.ConditionId,
+                oldUtc.AddHours(1)));
+            await AssertOnlyTargetRestoredAsync(paper);
+            Assert.Equal(
+                new RollupGroup(12, firstV1.UpdatedAtUtc, codeRemap.UpdatedAtUtc),
+                await ReadRollupGroupAsync(factory, strategyId, oldUtc, reason));
+
+            await InsertDirectExternalDependencyAsync(
+                factory,
+                strategyId,
+                oldUtc.AddHours(1),
+                dryRun,
+                DirectExternalDependencyKind.DryRunOrder);
+            await AssertOnlyTargetRestoredAsync(dryRun);
+
+            await repository.AddLiveOrderAsync(CreateLiveOrder(
+                strategyId,
+                live.ConditionId,
+                oldUtc.AddHours(1)));
+            await AssertOnlyTargetRestoredAsync(live);
+
+            await repository.AddPaperLiveShadowDecisionAsync(CreateShadowDecision(
+                strategyId,
+                shadowMarket.MarketId,
+                $"{prefix}-shadow-market-unrelated-condition",
+                oldUtc.AddHours(1)));
+            await AssertOnlyTargetRestoredAsync(shadowMarket);
+
+            await repository.AddPaperLiveShadowDecisionAsync(CreateShadowDecision(
+                strategyId,
+                $"{prefix}-shadow-condition-unrelated-market",
+                shadowCondition.ConditionId,
+                oldUtc.AddHours(1)));
+            await AssertOnlyTargetRestoredAsync(shadowCondition);
+
+            await repository.UpsertPaperPositionAsync(new PaperPosition(
+                $"asset-{Guid.NewGuid():N}",
+                position.ConditionId,
+                "Yes",
+                2m,
+                0.50m,
+                1m,
+                0m,
+                oldUtc.AddHours(1),
+                $"strategy:{oldCode}"));
+            await AssertOnlyTargetRestoredAsync(position);
+
+            Assert.True(await repository.TryAddPaperPositionSettlementAsync(
+                CreateSettlement(
+                    $"strategy:{oldCode}",
+                    settlement.ConditionId,
+                    oldUtc.AddHours(1))));
+            await AssertOnlyTargetRestoredAsync(settlement);
+
+            await InsertDirectExternalDependencyAsync(
+                factory,
+                strategyId,
+                oldUtc.AddHours(1),
+                copiedPosition,
+                DirectExternalDependencyKind.CopiedLeaderPosition);
+            await AssertOnlyTargetRestoredAsync(copiedPosition);
+
+            await InsertDirectExternalDependencyAsync(
+                factory,
+                strategyId,
+                oldUtc.AddHours(1),
+                copiedActivity,
+                DirectExternalDependencyKind.CopiedLeaderActivity);
+            await AssertOnlyTargetRestoredAsync(copiedActivity);
+
+            await InsertDirectExternalDependencyAsync(
+                factory,
+                strategyId,
+                oldUtc.AddHours(1),
+                onchain,
+                DirectExternalDependencyKind.OnchainPaperSignalResult);
+            await AssertOnlyTargetRestoredAsync(onchain);
+
+            await UpdateStrategyCodeAsync(
+                factory,
+                strategyId,
+                newCode,
+                CancellationToken.None);
+            await AssertOnlyTargetRestoredAsync(codeRemap);
+            Assert.Equal(
+                new RollupGroup(2, firstV1.UpdatedAtUtc, lastV1.UpdatedAtUtc),
+                await ReadRollupGroupAsync(factory, strategyId, oldUtc, reason));
+
+            Assert.Equal(StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, live.Id));
+            Assert.Equal(StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, shadowMarket.Id));
+            Assert.Equal(StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, shadowCondition.Id));
+            foreach (var run in v2Runs.Except([live, shadowMarket, shadowCondition]))
+            {
+                Assert.Equal(StrategyRunRetentionScopes.PaperOnly,
+                    await ReadRetentionScopeAsync(factory, run.Id));
+            }
+
+            var remainingVersions = await ReadArchiveStorageVersionsAsync(factory, strategyId);
+            Assert.Equal(2, remainingVersions.Count);
+            Assert.Equal(1, remainingVersions[firstV1.Id]);
+            Assert.Equal(1, remainingVersions[lastV1.Id]);
+            Assert.Equal(
+                new RollupGroup(2, firstV1.UpdatedAtUtc, lastV1.UpdatedAtUtc),
+                await ReadRollupGroupAsync(factory, strategyId, oldUtc, reason));
+            var restoredCounts = await ReadRetentionCountsAsync(factory, strategyId);
+            Assert.Equal((11L, 2L, 2L, 1L),
+                (restoredCounts.RawRuns,
+                    restoredCounts.RollupRuns,
+                    restoredCounts.Tombstones,
+                    restoredCounts.ReconciliationQueueRows));
+        }
+        finally
+        {
+            await DeleteConditionDependenciesAsync(factory, prefix);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
     public async Task DirectCompaction_BulkInsertReturnsLogicalIdsAndRetryIsIdempotent()
@@ -2356,18 +3855,468 @@ WHERE strategy_id = @StrategyId;
         }
     }
 
-    private static async Task<PostgresConnectionFactory> CreateFactoryAsync()
+    private static async Task<V2DimensionIds> ResolveV2DimensionsAsync(
+        PostgresConnectionFactory factory,
+        StrategyMarketPaperRun run)
     {
-        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
-        if (string.IsNullOrWhiteSpace(connectionString))
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await using (var insertIdentity = new NpgsqlCommand(
+                         "INSERT INTO strategy_skip_archive_market_identities (market_id) " +
+                         "VALUES (@MarketId) ON CONFLICT (market_id) DO NOTHING;",
+                         connection,
+                         transaction))
         {
-            throw new InvalidOperationException(
-                "POLYCOPYTRADER_TEST_POSTGRES_CONNECTION disappeared after test discovery.");
+            insertIdentity.Parameters.AddWithValue("MarketId", run.MarketId);
+            await insertIdentity.ExecuteNonQueryAsync();
         }
 
-        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
-        await new PostgresSchemaInitializer(factory).InitializeAsync();
-        return factory;
+        int marketIdentityId;
+        await using (var readIdentity = new NpgsqlCommand(
+                         "SELECT market_identity_id " +
+                         "FROM strategy_skip_archive_market_identities WHERE market_id = @MarketId;",
+                         connection,
+                         transaction))
+        {
+            readIdentity.Parameters.AddWithValue("MarketId", run.MarketId);
+            marketIdentityId = Convert.ToInt32(await readIdentity.ExecuteScalarAsync());
+        }
+
+        await using (var insertMetadata = new NpgsqlCommand(
+                         """
+INSERT INTO strategy_skip_archive_market_metadata_versions (
+    market_identity_id, condition_id, market_slug, market_title,
+    category, market_start_utc, market_end_utc)
+VALUES (
+    @MarketIdentityId, @ConditionId, @MarketSlug, @MarketTitle,
+    @Category, @MarketStartUtc, @MarketEndUtc)
+ON CONFLICT DO NOTHING;
+""",
+                         connection,
+                         transaction))
+        {
+            AddV2MetadataParameters(insertMetadata, marketIdentityId, run);
+            await insertMetadata.ExecuteNonQueryAsync();
+        }
+
+        int metadataVersionId;
+        await using (var readMetadata = new NpgsqlCommand(
+                         """
+SELECT metadata_version_id
+FROM strategy_skip_archive_market_metadata_versions
+WHERE market_identity_id = @MarketIdentityId
+  AND condition_id = @ConditionId
+  AND market_slug = @MarketSlug
+  AND market_title = @MarketTitle
+  AND category IS NOT DISTINCT FROM @Category
+  AND market_start_utc IS NOT DISTINCT FROM @MarketStartUtc
+  AND market_end_utc IS NOT DISTINCT FROM @MarketEndUtc;
+""",
+                         connection,
+                         transaction))
+        {
+            AddV2MetadataParameters(readMetadata, marketIdentityId, run);
+            metadataVersionId = Convert.ToInt32(await readMetadata.ExecuteScalarAsync());
+        }
+
+        await using (var insertReason = new NpgsqlCommand(
+                         "INSERT INTO strategy_skip_archive_reasons (skip_reason) " +
+                         "VALUES (@SkipReason) ON CONFLICT (skip_reason) DO NOTHING;",
+                         connection,
+                         transaction))
+        {
+            insertReason.Parameters.AddWithValue("SkipReason", run.SkipReason!);
+            await insertReason.ExecuteNonQueryAsync();
+        }
+
+        short skipReasonId;
+        await using (var readReason = new NpgsqlCommand(
+                         "SELECT skip_reason_id FROM strategy_skip_archive_reasons " +
+                         "WHERE skip_reason = @SkipReason;",
+                         connection,
+                         transaction))
+        {
+            readReason.Parameters.AddWithValue("SkipReason", run.SkipReason!);
+            skipReasonId = Convert.ToInt16(await readReason.ExecuteScalarAsync());
+        }
+
+        await transaction.CommitAsync();
+        return new V2DimensionIds(marketIdentityId, metadataVersionId, skipReasonId);
+    }
+
+    private static void AddV2MetadataParameters(
+        NpgsqlCommand command,
+        int marketIdentityId,
+        StrategyMarketPaperRun run)
+    {
+        command.Parameters.AddWithValue("MarketIdentityId", marketIdentityId);
+        command.Parameters.AddWithValue("ConditionId", run.ConditionId);
+        command.Parameters.AddWithValue("MarketSlug", run.MarketSlug);
+        command.Parameters.AddWithValue("MarketTitle", run.MarketTitle);
+        command.Parameters.Add("Category", NpgsqlDbType.Text).Value =
+            (object?)run.Category ?? DBNull.Value;
+        command.Parameters.Add("MarketStartUtc", NpgsqlDbType.TimestampTz).Value =
+            run.MarketStartUtc is null
+                ? DBNull.Value
+                : run.MarketStartUtc.Value.UtcDateTime;
+        command.Parameters.Add("MarketEndUtc", NpgsqlDbType.TimestampTz).Value =
+            run.MarketEndUtc is null
+                ? DBNull.Value
+                : run.MarketEndUtc.Value.UtcDateTime;
+    }
+
+    private static async Task<V2DimensionCounts> ReadV2DimensionCountsAsync(
+        PostgresConnectionFactory factory,
+        string marketId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    count(DISTINCT market_identity.market_identity_id),
+    count(metadata.metadata_version_id)
+FROM strategy_skip_archive_market_identities market_identity
+LEFT JOIN strategy_skip_archive_market_metadata_versions metadata
+    ON metadata.market_identity_id = market_identity.market_identity_id
+WHERE market_identity.market_id = @MarketId;
+""",
+            connection);
+        command.Parameters.AddWithValue("MarketId", marketId);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new V2DimensionCounts(reader.GetInt64(0), reader.GetInt64(1));
+    }
+
+    private static async Task<V2DimensionReferenceCounts> ReadV2DimensionReferenceCountsAsync(
+        PostgresConnectionFactory factory,
+        string marketId,
+        string skipReason)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    (SELECT count(*)
+     FROM public.strategy_skip_archive_market_identities
+     WHERE market_id = @MarketId COLLATE "C"),
+    (SELECT count(*)
+     FROM public.strategy_skip_archive_market_metadata_versions metadata
+     INNER JOIN public.strategy_skip_archive_market_identities market_identity
+         ON market_identity.market_identity_id = metadata.market_identity_id
+     WHERE market_identity.market_id = @MarketId COLLATE "C"),
+    (SELECT count(*)
+     FROM public.strategy_skip_archive_reasons
+     WHERE skip_reason = @SkipReason COLLATE "C"),
+    (SELECT count(*)
+     FROM public.strategy_market_paper_skip_tombstones_v2 tombstone
+     INNER JOIN public.strategy_skip_archive_market_identities market_identity
+         ON market_identity.market_identity_id = tombstone.market_identity_id
+     WHERE market_identity.market_id = @MarketId COLLATE "C");
+""",
+            connection);
+        command.Parameters.AddWithValue("MarketId", marketId);
+        command.Parameters.AddWithValue("SkipReason", skipReason);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new V2DimensionReferenceCounts(
+            reader.GetInt64(0),
+            reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.GetInt64(3));
+    }
+
+    private static async Task<long> ReadV2TombstoneCountAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*) FROM public.strategy_market_paper_skip_tombstones_v2 " +
+            "WHERE strategy_id = @StrategyId;",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        return (long)(await command.ExecuteScalarAsync() ?? 0L);
+    }
+
+    private static async Task SetIdentitySequenceAtLimitAsync(
+        PostgresConnectionFactory factory,
+        string tableName,
+        string columnName)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT setval(pg_get_serial_sequence(@TableName, @ColumnName), 32767, true);",
+            connection);
+        command.Parameters.AddWithValue("TableName", $"public.{tableName}");
+        command.Parameters.AddWithValue("ColumnName", columnName);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task ResetIdentitySequenceToTableMaximumAsync(
+        PostgresConnectionFactory factory,
+        string tableName,
+        string columnName)
+    {
+        var quotedTable = new NpgsqlCommandBuilder().QuoteIdentifier(tableName);
+        var quotedColumn = new NpgsqlCommandBuilder().QuoteIdentifier(columnName);
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"""
+SELECT setval(
+    pg_get_serial_sequence(@TableName, @ColumnName),
+    GREATEST(COALESCE((SELECT max({quotedColumn}) FROM public.{quotedTable}), 0) + 1, 1),
+    false);
+""",
+            connection);
+        command.Parameters.AddWithValue("TableName", $"public.{tableName}");
+        command.Parameters.AddWithValue("ColumnName", columnName);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task CreateDeleteFailureTriggerAsync(
+        PostgresConnectionFactory factory,
+        string triggerName,
+        string functionName,
+        Guid runId)
+    {
+        var builder = new NpgsqlCommandBuilder();
+        var quotedTrigger = builder.QuoteIdentifier(triggerName);
+        var quotedFunction = builder.QuoteIdentifier(functionName);
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"""
+CREATE FUNCTION public.{quotedFunction}()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF OLD.id = '{runId:D}'::uuid THEN
+        RAISE EXCEPTION 'forced v2 raw delete failure';
+    END IF;
+    RETURN OLD;
+END;
+$$;
+CREATE TRIGGER {quotedTrigger}
+BEFORE DELETE ON public.strategy_market_paper_runs
+FOR EACH ROW
+EXECUTE FUNCTION public.{quotedFunction}();
+""",
+            connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task DropDeleteFailureTriggerAsync(
+        PostgresConnectionFactory factory,
+        string triggerName,
+        string functionName)
+    {
+        var builder = new NpgsqlCommandBuilder();
+        var quotedTrigger = builder.QuoteIdentifier(triggerName);
+        var quotedFunction = builder.QuoteIdentifier(functionName);
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            $"""
+DROP TRIGGER IF EXISTS {quotedTrigger} ON public.strategy_market_paper_runs;
+DROP FUNCTION IF EXISTS public.{quotedFunction}();
+""",
+            connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task InsertMalformedV2TombstoneAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO public.strategy_market_paper_skip_tombstones_v2 (
+    strategy_id, market_identity_id, metadata_version_id, archived_run_id,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome,
+    stake_usd, skip_reason_id, run_updated_at_utc)
+VALUES (
+    @StrategyId, 2147483647, 2147483647, @RunId,
+    clock_timestamp(), clock_timestamp(), NULL, NULL,
+    1, 32767, clock_timestamp());
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("RunId", Guid.NewGuid());
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task AssertV2DimensionMutationRejectedAsync(
+        PostgresConnectionFactory factory,
+        string sql,
+        object id)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("Id", id);
+        var exception = await Assert.ThrowsAsync<PostgresException>(
+            () => command.ExecuteNonQueryAsync());
+        Assert.Equal("55000", exception.SqlState);
+    }
+
+    private static async Task<Dictionary<Guid, short>> ReadArchiveStorageVersionsAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT archived_run_id, archive_storage_version
+FROM strategy_market_paper_skip_archive_rows
+WHERE strategy_id = @StrategyId
+ORDER BY archived_run_id;
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        var results = new Dictionary<Guid, short>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(reader.GetGuid(0), reader.GetInt16(1));
+        }
+
+        return results;
+    }
+
+    private static Task<string> ReadRestorableArchivePayloadAsync(
+        PostgresConnectionFactory factory,
+        Guid runId)
+    {
+        return ReadRestorablePayloadAsync(
+            factory,
+            """
+SELECT to_jsonb(payload)::text
+FROM (
+    SELECT
+        archived_run_id AS id,
+        strategy_id,
+        market_id,
+        condition_id,
+        market_slug,
+        market_title,
+        category,
+        market_start_utc,
+        market_end_utc,
+        detected_at_utc,
+        entry_due_at_utc,
+        'Skipped'::text AS status,
+        selected_asset_id,
+        selected_outcome,
+        NULL::numeric AS entry_price,
+        stake_usd,
+        NULL::numeric AS size_shares,
+        NULL::uuid AS signal_id,
+        NULL::uuid AS paper_order_id,
+        NULL::timestamptz AS entered_at_utc,
+        NULL::numeric AS settlement_price,
+        NULL::numeric AS settlement_value_usd,
+        NULL::numeric AS realized_pnl_usd,
+        NULL::timestamptz AS settled_at_utc,
+        skip_reason,
+        NULL::jsonb AS skip_diagnostics_json,
+        run_created_at_utc AS created_at_utc,
+        run_updated_at_utc AS updated_at_utc,
+        0::numeric AS fee_usd,
+        'LegacyUnknown'::text AS fee_accounting_status,
+        'Unknown'::text AS fee_liquidity_role,
+        ''::text AS fee_calculation_source,
+        NULL::numeric AS fee_rate,
+        NULL::integer AS fee_exponent,
+        NULL::boolean AS fee_taker_only,
+        NULL::timestamptz AS fee_calculated_at_utc,
+        NULL::numeric AS net_realized_pnl_usd
+    FROM strategy_market_paper_skip_archive_rows
+    WHERE archived_run_id = @RunId
+) payload;
+""",
+            runId);
+    }
+
+    private static Task<string> ReadRestorableRawPayloadAsync(
+        PostgresConnectionFactory factory,
+        Guid runId)
+    {
+        return ReadRestorablePayloadAsync(
+            factory,
+            """
+SELECT to_jsonb(payload)::text
+FROM (
+    SELECT
+        id,
+        strategy_id,
+        market_id,
+        condition_id,
+        market_slug,
+        market_title,
+        category,
+        market_start_utc,
+        market_end_utc,
+        detected_at_utc,
+        entry_due_at_utc,
+        status,
+        selected_asset_id,
+        selected_outcome,
+        entry_price,
+        stake_usd,
+        size_shares,
+        signal_id,
+        paper_order_id,
+        entered_at_utc,
+        settlement_price,
+        settlement_value_usd,
+        realized_pnl_usd,
+        settled_at_utc,
+        skip_reason,
+        skip_diagnostics_json,
+        created_at_utc,
+        updated_at_utc,
+        fee_usd,
+        fee_accounting_status,
+        fee_liquidity_role,
+        fee_calculation_source,
+        fee_rate,
+        fee_exponent,
+        fee_taker_only,
+        fee_calculated_at_utc,
+        net_realized_pnl_usd
+    FROM strategy_market_paper_runs
+    WHERE id = @RunId
+) payload;
+""",
+            runId);
+    }
+
+    private static async Task<string> ReadRestorablePayloadAsync(
+        PostgresConnectionFactory factory,
+        string sql,
+        Guid runId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("RunId", runId);
+        return Assert.IsType<string>(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<PostgresConnectionFactory> CreateFactoryAsync()
+    {
+        return await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
     }
 
     private static async Task InsertArchivedPaperSkipAsync(
@@ -2484,6 +4433,443 @@ WHERE source_kind = @SourceKind
             MarketSlug = key,
             MarketTitle = key
         };
+    }
+
+    private static async Task AssertV2WriterBlockerMatrixAsync(
+        PostgresConnectionFactory factory,
+        V2WriterKind writer)
+    {
+        var repository = new PostgresAppRepository(factory);
+        var paperStrategyId = Guid.NewGuid();
+        var liveStrategyId = Guid.NewGuid();
+        var guardedStrategyId = Guid.NewGuid();
+        var boundaryStrategyId = Guid.NewGuid();
+        var queueStrategyId = Guid.NewGuid();
+        var paperCode = $"v2_blockers_{writer}_{Guid.NewGuid():N}";
+        var prefix = $"v2-blockers-{writer}-{Guid.NewGuid():N}";
+        var oldUtc = DateTimeOffset.UtcNow.AddDays(-4);
+        var index = 0;
+
+        StrategyMarketPaperRun Fixture(Guid strategyId, string name)
+        {
+            return WithRetentionKey(
+                CreateSkippedRun(strategyId, oldUtc.AddMinutes(index++)),
+                $"{prefix}-{name}");
+        }
+
+        var signalRun = Fixture(paperStrategyId, "signal");
+        var signalId = Guid.NewGuid();
+        signalRun = signalRun with { SignalId = signalId };
+        var paperOrderRun = Fixture(paperStrategyId, "paper-order-field");
+        var fieldOrder = CreatePaperOrder(
+            paperStrategyId,
+            paperOrderRun.ConditionId,
+            oldUtc);
+        paperOrderRun = paperOrderRun with { PaperOrderId = fieldOrder.Id };
+
+        var intrinsicRuns = new[]
+        {
+            Fixture(paperStrategyId, "status") with
+            {
+                Status = StrategyMarketPaperRunStatuses.Observed
+            },
+            Fixture(paperStrategyId, "empty-reason") with { SkipReason = " " },
+            signalRun,
+            paperOrderRun,
+            Fixture(paperStrategyId, "entered-at") with { EnteredAtUtc = oldUtc },
+            Fixture(paperStrategyId, "entry-price") with { EntryPrice = 0.50m },
+            Fixture(paperStrategyId, "size") with { SizeShares = 2m },
+            Fixture(paperStrategyId, "settlement-price") with { SettlementPrice = 1m },
+            Fixture(paperStrategyId, "settlement-value") with { SettlementValueUsd = 2m },
+            Fixture(paperStrategyId, "realized-pnl") with { RealizedPnlUsd = 1m },
+            Fixture(paperStrategyId, "settled-at") with { SettledAtUtc = oldUtc },
+            Fixture(paperStrategyId, "diagnostics") with
+            {
+                SkipReason = "maker_gtd_post_only_attempts_exhausted",
+                SkipDiagnosticsJson =
+                    "{\"execution_source\":\"eth_reference_average_maker_gtd_paper\",\"skip_reason\":\"maker_gtd_post_only_attempts_exhausted\",\"maker_gtd\":{\"execution_source\":\"eth_reference_average_maker_gtd_paper\",\"terminal_outcome\":\"skipped\",\"terminal_reason\":\"maker_gtd_post_only_attempts_exhausted\"}}"
+            }
+        };
+        var feeRuns = new[]
+        {
+            Fixture(paperStrategyId, "fee-usd") with { FeeUsd = 0.01m },
+            Fixture(paperStrategyId, "fee-status") with { FeeAccountingStatus = "Calculated" },
+            Fixture(paperStrategyId, "fee-role") with { FeeLiquidityRole = "Taker" },
+            Fixture(paperStrategyId, "fee-source") with { FeeCalculationSource = "fixture" },
+            Fixture(paperStrategyId, "fee-rate") with { FeeRate = 0.01m },
+            Fixture(paperStrategyId, "fee-exponent") with { FeeExponent = 2 },
+            Fixture(paperStrategyId, "fee-taker-only") with { FeeTakerOnly = false },
+            Fixture(paperStrategyId, "fee-calculated-at") with { FeeCalculatedAtUtc = oldUtc },
+            Fixture(paperStrategyId, "net-pnl") with { NetRealizedPnlUsd = -0.01m }
+        };
+        var liveRun = Fixture(liveStrategyId, "current-live");
+        var guardedRun = Fixture(guardedStrategyId, "permanent-live-guard");
+        var boundaryRun = Fixture(boundaryStrategyId, "live-boundary");
+        var persistedScopeRun = Fixture(paperStrategyId, "persisted-live-or-shadow-scope");
+        var persistedScopeRuns = writer == V2WriterKind.TerminalAtInsert
+            ? []
+            : new[] { persistedScopeRun };
+
+        var externalPaper = Fixture(paperStrategyId, "dependency-paper");
+        var externalDry = Fixture(paperStrategyId, "dependency-dry");
+        var externalLive = Fixture(paperStrategyId, "dependency-live");
+        var externalShadowMarket = Fixture(paperStrategyId, "dependency-shadow-market");
+        var externalShadowCondition = Fixture(paperStrategyId, "dependency-shadow-condition");
+        var externalPosition = Fixture(paperStrategyId, "dependency-position");
+        var externalSettlement = Fixture(paperStrategyId, "dependency-settlement");
+        var externalCopiedPosition = Fixture(paperStrategyId, "dependency-copied-position");
+        var externalCopiedActivity = Fixture(paperStrategyId, "dependency-copied-activity");
+        var externalOnchain = Fixture(paperStrategyId, "dependency-onchain");
+        var dependencyRuns = new[]
+        {
+            externalPaper,
+            externalDry,
+            externalLive,
+            externalShadowMarket,
+            externalShadowCondition,
+            externalPosition,
+            externalSettlement,
+            externalCopiedPosition,
+            externalCopiedActivity,
+            externalOnchain
+        };
+
+        var ageMissingEnd = Fixture(paperStrategyId, "age-missing-end") with
+        {
+            MarketEndUtc = null
+        };
+        var ageFreshRun = Fixture(paperStrategyId, "age-fresh-run") with
+        {
+            UpdatedAtUtc = DateTimeOffset.UtcNow.AddHours(-1)
+        };
+        var ageFreshEnd = Fixture(paperStrategyId, "age-fresh-end") with
+        {
+            MarketEndUtc = DateTimeOffset.UtcNow.AddHours(-1)
+        };
+        var ageProjectionEvent = Fixture(paperStrategyId, "age-projection-event");
+        var ageRecentFact = Fixture(paperStrategyId, "age-recent-fact");
+        var ageReconciliation = Fixture(queueStrategyId, "age-reconciliation");
+        var ageOnlyRuns = writer == V2WriterKind.AgeBased
+            ? new[]
+            {
+                ageMissingEnd,
+                ageFreshRun,
+                ageFreshEnd,
+                ageProjectionEvent,
+                ageRecentFact,
+                ageReconciliation
+            }
+            : [];
+        var allRuns = intrinsicRuns
+            .Concat(feeRuns)
+            .Concat([liveRun, guardedRun, boundaryRun])
+            .Concat(persistedScopeRuns)
+            .Concat(dependencyRuns)
+            .Concat(ageOnlyRuns)
+            .ToArray();
+        var strategyIds = new[]
+        {
+            paperStrategyId,
+            liveStrategyId,
+            guardedStrategyId,
+            boundaryStrategyId,
+            queueStrategyId
+        };
+
+        await InsertStrategyAsync(factory, paperStrategyId, paperCode, liveStakes: false);
+        await InsertStrategyAsync(
+            factory,
+            liveStrategyId,
+            $"v2_blockers_live_{Guid.NewGuid():N}",
+            liveStakes: true);
+        await InsertStrategyAsync(
+            factory,
+            guardedStrategyId,
+            $"v2_blockers_guard_{Guid.NewGuid():N}",
+            liveStakes: false);
+        await InsertStrategyAsync(
+            factory,
+            boundaryStrategyId,
+            $"v2_blockers_boundary_{Guid.NewGuid():N}",
+            liveStakes: false);
+        await InsertStrategyAsync(
+            factory,
+            queueStrategyId,
+            $"v2_blockers_queue_{Guid.NewGuid():N}",
+            liveStakes: false);
+        try
+        {
+            await InsertSignalAsync(factory, signalId, signalRun.ConditionId, oldUtc);
+            await repository.AddPaperOrderAsync(fieldOrder);
+            await repository.AddPaperOrderAsync(CreatePaperOrder(
+                paperStrategyId,
+                externalPaper.ConditionId,
+                oldUtc));
+            await InsertDirectExternalDependenciesAsync(
+                factory,
+                paperStrategyId,
+                oldUtc,
+                externalDry,
+                externalCopiedPosition,
+                externalCopiedActivity,
+                externalOnchain);
+            await repository.AddLiveOrderAsync(CreateLiveOrder(
+                paperStrategyId,
+                externalLive.ConditionId,
+                oldUtc));
+            await repository.AddPaperLiveShadowDecisionAsync(CreateShadowDecision(
+                paperStrategyId,
+                externalShadowMarket.MarketId,
+                $"{prefix}-unrelated-condition",
+                oldUtc));
+            await repository.AddPaperLiveShadowDecisionAsync(CreateShadowDecision(
+                paperStrategyId,
+                $"{prefix}-unrelated-market",
+                externalShadowCondition.ConditionId,
+                oldUtc));
+            await repository.UpsertPaperPositionAsync(new PaperPosition(
+                $"asset-{Guid.NewGuid():N}",
+                externalPosition.ConditionId,
+                "Yes",
+                2m,
+                0.50m,
+                1m,
+                0m,
+                oldUtc,
+                $"strategy:{paperCode}"));
+            Assert.True(await repository.TryAddPaperPositionSettlementAsync(
+                CreateSettlement(
+                    $"strategy:{paperCode}",
+                    externalSettlement.ConditionId,
+                    oldUtc)));
+            await InsertLiveRetentionGuardAsync(factory, guardedStrategyId, oldUtc);
+            await SetStrategyLiveBoundaryWithoutCurrentLiveAsync(
+                factory,
+                boundaryStrategyId,
+                boundaryRun.UpdatedAtUtc.AddSeconds(-1));
+
+            if (writer != V2WriterKind.TerminalAtInsert)
+            {
+                var initialRuns = writer == V2WriterKind.ExistingRawFinalize
+                    ? allRuns.Select(run => run with
+                    {
+                        Status = StrategyMarketPaperRunStatuses.Observed,
+                        SkipReason = null
+                    }).ToArray()
+                    : allRuns;
+                Assert.Equal(
+                    allRuns.Length,
+                    (await repository.TryAddStrategyMarketPaperRunsAsync(initialRuns)).Count);
+                foreach (var strategyId in strategyIds)
+                {
+                    await DeleteProjectionBlockersAsync(factory, strategyId);
+                }
+
+                if (persistedScopeRuns.Length > 0)
+                {
+                    await SetRunRetentionScopeAsync(
+                        factory,
+                        persistedScopeRun.Id,
+                        StrategyRunRetentionScopes.LiveOrShadow);
+                    Assert.Equal(
+                        StrategyRunRetentionScopes.LiveOrShadow,
+                        await ReadRetentionScopeAsync(factory, persistedScopeRun.Id));
+                    await DeleteProjectionBlockersAsync(factory, paperStrategyId);
+                }
+
+                if (writer == V2WriterKind.AgeBased)
+                {
+                    await InsertAgeOnlyProjectionBlockersAsync(
+                        factory,
+                        paperStrategyId,
+                        queueStrategyId,
+                        oldUtc,
+                        ageProjectionEvent.Id,
+                        ageRecentFact.Id);
+                }
+            }
+
+            foreach (var run in allRuns)
+            {
+                switch (writer)
+                {
+                    case V2WriterKind.TerminalAtInsert:
+                        Assert.Equal(
+                            [run.Id],
+                            (await repository
+                                .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                                    [run]))
+                            .ToArray());
+                        break;
+                    case V2WriterKind.ExistingRawFinalize:
+                        await repository
+                            .FinalizeStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                                [run]);
+                        break;
+                    case V2WriterKind.AgeBased:
+                        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                            repository.TransferPaperOnlySkippedRunsToCompactArchiveV2ForTestsAsync(
+                                [run.Id],
+                                DateTimeOffset.UtcNow.AddHours(-48)));
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(writer), writer, null);
+                }
+
+                Assert.Equal([run.Id], await ReadRunIdsAsync(factory, [run.Id]));
+                Assert.DoesNotContain(
+                    run.Id,
+                    (await ReadArchiveStorageVersionsAsync(factory, run.StrategyId)).Keys);
+            }
+
+            Assert.Equal(
+                allRuns.Select(run => run.Id).OrderBy(id => id),
+                (await ReadRunIdsAsync(factory, allRuns.Select(run => run.Id).ToArray()))
+                .OrderBy(id => id));
+            foreach (var strategyId in strategyIds)
+            {
+                Assert.Empty(await ReadArchiveStorageVersionsAsync(factory, strategyId));
+                var counts = await ReadRetentionCountsAsync(factory, strategyId);
+                Assert.Equal(0, counts.RollupRuns);
+                Assert.Equal(0, counts.Tombstones);
+            }
+        }
+        finally
+        {
+            foreach (var strategyId in strategyIds)
+            {
+                await DeleteTestStrategyAsync(factory, strategyId);
+            }
+            await DeleteConditionDependenciesAsync(factory, prefix);
+            await DeleteSignalAsync(factory, signalId);
+        }
+    }
+
+    private static async Task InsertSignalAsync(
+        PostgresConnectionFactory factory,
+        Guid signalId,
+        string conditionId,
+        DateTimeOffset createdAtUtc)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO public.signals (
+    id, leader_trade_id, trader_wallet, condition_id, asset_id, outcome,
+    leader_price, best_bid, best_ask, spread_abs, spread_pct, lag_seconds,
+    score, accepted, decision, proposed_paper_price,
+    proposed_size_shares, proposed_notional_usd, created_at_utc, raw_context_json)
+VALUES (
+    @Id, NULL, @Wallet, @ConditionId, @AssetId, 'Yes',
+    0.50, NULL, NULL, NULL, NULL, NULL,
+    0, false, 'retention_fixture', NULL,
+    NULL, NULL, @CreatedAtUtc, NULL);
+""",
+            connection);
+        command.Parameters.AddWithValue("Id", signalId);
+        command.Parameters.AddWithValue("Wallet", $"0x{Guid.NewGuid():N}");
+        command.Parameters.AddWithValue("ConditionId", conditionId);
+        command.Parameters.AddWithValue("AssetId", $"asset-{Guid.NewGuid():N}");
+        command.Parameters.AddWithValue("CreatedAtUtc", createdAtUtc.UtcDateTime);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task DeleteSignalAsync(
+        PostgresConnectionFactory factory,
+        Guid signalId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "DELETE FROM public.signals WHERE id = @Id;",
+            connection);
+        command.Parameters.AddWithValue("Id", signalId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task InsertLiveRetentionGuardAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        DateTimeOffset observedAtUtc)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO public.strategy_live_retention_guards (
+    strategy_id, first_live_observed_at_utc, last_live_observed_at_utc)
+VALUES (@StrategyId, @ObservedAtUtc, @ObservedAtUtc);
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("ObservedAtUtc", observedAtUtc.UtcDateTime);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task SetStrategyLiveBoundaryWithoutCurrentLiveAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        DateTimeOffset boundaryUtc)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+UPDATE public.strategies
+SET live_stakes = false,
+    live_enabled_at_utc = @BoundaryUtc,
+    updated_at_utc = @BoundaryUtc
+WHERE id = @StrategyId;
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("BoundaryUtc", boundaryUtc.UtcDateTime);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task InsertAgeOnlyProjectionBlockersAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        Guid queueStrategyId,
+        DateTimeOffset occurredAtUtc,
+        Guid projectionEventRunId,
+        Guid recentFactRunId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO public.dashboard_projection_events (
+    source_kind, source_id, strategy_id, operation,
+    old_payload, new_payload, transaction_id)
+VALUES (
+    'StrategyRun', @ProjectionEventRunId, @StrategyId, 'Update',
+    NULL, NULL, pg_current_xact_id());
+
+INSERT INTO public.dashboard_strategy_recent_projection_facts (
+    source_kind, source_id, fact_kind, strategy_id,
+    occurred_at_utc, contribution_json,
+    applied_1h, applied_6h, applied_24h, updated_at_utc)
+VALUES (
+    'StrategyRun', @RecentFactRunId, 'RetentionFixture', @StrategyId,
+    @OccurredAtUtc, '{}'::jsonb,
+    false, false, false, @OccurredAtUtc);
+
+INSERT INTO public.dashboard_projection_reconciliation_queue (
+    strategy_id, priority, reason, requested_at_utc,
+    attempt_count, next_attempt_at_utc, last_error)
+VALUES (
+    @QueueStrategyId, 0, 'retention_fixture', @OccurredAtUtc,
+    0, @OccurredAtUtc, NULL);
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("QueueStrategyId", queueStrategyId);
+        command.Parameters.AddWithValue("OccurredAtUtc", occurredAtUtc.UtcDateTime);
+        command.Parameters.AddWithValue("ProjectionEventRunId", projectionEventRunId);
+        command.Parameters.AddWithValue("RecentFactRunId", recentFactRunId);
+        Assert.Equal(3, await command.ExecuteNonQueryAsync());
     }
 
     private static LiveOrder CreateLiveOrder(
@@ -2649,6 +5035,110 @@ WHERE run.id = ANY(@RunIds);
         }
 
         return results;
+    }
+
+    private static async Task InsertDirectExternalDependencyAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        DateTimeOffset oldUtc,
+        StrategyMarketPaperRun run,
+        DirectExternalDependencyKind dependencyKind)
+    {
+        var commandText = dependencyKind switch
+        {
+            DirectExternalDependencyKind.DryRunOrder =>
+                """
+                INSERT INTO public.dry_run_orders (
+                    id, signal_id, strategy_id, status, side, asset_id, condition_id,
+                    outcome, price, size_shares, notional_usd, order_type,
+                    payload_json, validation_summary, created_at_utc)
+                VALUES (
+                    @Id, @SignalId, @StrategyId, 'Validated', 'Buy', @AssetId, @ConditionId,
+                    'Yes', 0.50, 2, 1, 'FAK',
+                    '{}'::jsonb, 'retention fixture', @OldUtc);
+                """,
+            DirectExternalDependencyKind.CopiedLeaderPosition =>
+                """
+                INSERT INTO public.paper_copied_leader_positions (
+                    id, entry_signal_id, entry_paper_order_id,
+                    copied_trader_wallet, asset_id, condition_id, outcome,
+                    entry_timestamp_utc, leader_entry_price,
+                    leader_initial_size_shares, status,
+                    next_activity_sync_at_utc, created_at_utc, updated_at_utc)
+                VALUES (
+                    @Id, @SignalId, @OrderId,
+                    @Wallet, @AssetId, @ConditionId, 'Yes',
+                    @OldUtc, 0.50,
+                    2, 'Active',
+                    @OldUtc, @OldUtc, @OldUtc);
+                """,
+            DirectExternalDependencyKind.CopiedLeaderActivity =>
+                """
+                INSERT INTO public.paper_copied_leader_activity_events (
+                    id, dedup_key, copied_trader_wallet, asset_id, condition_id,
+                    side, price, size_shares, usdc_size,
+                    activity_timestamp_utc, raw_json, observed_at_utc)
+                VALUES (
+                    @Id, @DedupKey, @Wallet, @AssetId, @ConditionId,
+                    'Buy', 0.50, 2, 1,
+                    @OldUtc, '{}'::jsonb, @OldUtc);
+                """,
+            DirectExternalDependencyKind.OnchainPaperSignalResult =>
+                """
+                INSERT INTO public.polymarket_onchain_paper_signal_results (
+                    id, capture_id, transaction_hash, log_index, participant_role,
+                    copied_trader_wallet, counterparty_wallet, side, token_id,
+                    condition_id, market_slug, outcome,
+                    status, decision_code, reason_details, processed_at_utc)
+                VALUES (
+                    @Id, @CaptureId, @TransactionHash, 0, 'maker',
+                    @Wallet, @Counterparty, 'Buy', @AssetId,
+                    @ConditionId, @MarketSlug, 'Yes',
+                    'Skipped', 'retention_fixture', 'retention fixture', @OldUtc);
+                """,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(dependencyKind),
+                dependencyKind,
+                null)
+        };
+
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(commandText, connection);
+        command.Parameters.AddWithValue("Id", Guid.NewGuid());
+        command.Parameters.AddWithValue("AssetId", $"asset-{Guid.NewGuid():N}");
+        command.Parameters.AddWithValue("ConditionId", run.ConditionId);
+        command.Parameters.AddWithValue("OldUtc", oldUtc.UtcDateTime);
+        switch (dependencyKind)
+        {
+            case DirectExternalDependencyKind.DryRunOrder:
+                command.Parameters.AddWithValue("SignalId", Guid.NewGuid());
+                command.Parameters.AddWithValue("StrategyId", strategyId);
+                break;
+            case DirectExternalDependencyKind.CopiedLeaderPosition:
+                command.Parameters.AddWithValue("SignalId", Guid.NewGuid());
+                command.Parameters.AddWithValue("OrderId", Guid.NewGuid());
+                command.Parameters.AddWithValue("Wallet", $"0x{Guid.NewGuid():N}");
+                break;
+            case DirectExternalDependencyKind.CopiedLeaderActivity:
+                command.Parameters.AddWithValue("DedupKey", $"retention-{Guid.NewGuid():N}");
+                command.Parameters.AddWithValue("Wallet", $"0x{Guid.NewGuid():N}");
+                break;
+            case DirectExternalDependencyKind.OnchainPaperSignalResult:
+                command.Parameters.AddWithValue("CaptureId", Guid.NewGuid());
+                command.Parameters.AddWithValue("TransactionHash", $"0x{Guid.NewGuid():N}");
+                command.Parameters.AddWithValue("Wallet", $"0x{Guid.NewGuid():N}");
+                command.Parameters.AddWithValue("Counterparty", $"0x{Guid.NewGuid():N}");
+                command.Parameters.AddWithValue("MarketSlug", run.MarketSlug);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(dependencyKind),
+                    dependencyKind,
+                    null);
+        }
+
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
 
     private static async Task InsertDirectExternalDependenciesAsync(
@@ -2837,6 +5327,70 @@ CREATE TABLE {quotedSchemaName}.paper_orders (
         return results.ToArray();
     }
 
+    private static async Task<Dictionary<Guid, string>> ReadPhysicalV1ArchiveRowsAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT archive_row.archived_run_id,
+       to_jsonb(archive_row)::text
+FROM public.strategy_market_paper_skip_tombstones archive_row
+WHERE archive_row.strategy_id = @StrategyId
+ORDER BY archive_row.archived_run_id;
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        var rows = new Dictionary<Guid, string>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(reader.GetGuid(0), reader.GetString(1));
+        }
+
+        return rows;
+    }
+
+    private static async Task<V2DimensionTableSnapshot> ReadV2DimensionTableSnapshotAsync(
+        PostgresConnectionFactory factory)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    (SELECT count(*) FROM public.strategy_skip_archive_market_identities),
+    (SELECT COALESCE(
+        jsonb_agg(to_jsonb(identity_row) ORDER BY identity_row.market_identity_id),
+        '[]'::jsonb)::text
+     FROM public.strategy_skip_archive_market_identities identity_row),
+    (SELECT count(*) FROM public.strategy_skip_archive_market_metadata_versions),
+    (SELECT COALESCE(
+        jsonb_agg(to_jsonb(metadata_row) ORDER BY metadata_row.metadata_version_id),
+        '[]'::jsonb)::text
+     FROM public.strategy_skip_archive_market_metadata_versions metadata_row),
+    (SELECT count(*) FROM public.strategy_skip_archive_reasons),
+    (SELECT COALESCE(
+        jsonb_agg(to_jsonb(reason_row) ORDER BY reason_row.skip_reason_id),
+        '[]'::jsonb)::text
+     FROM public.strategy_skip_archive_reasons reason_row);
+""",
+            connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        var snapshot = new V2DimensionTableSnapshot(
+            reader.GetInt64(0),
+            reader.GetString(1),
+            reader.GetInt64(2),
+            reader.GetString(3),
+            reader.GetInt64(4),
+            reader.GetString(5));
+        Assert.False(await reader.ReadAsync());
+        return snapshot;
+    }
+
     private static async Task<string> ReadRunPayloadWithoutScopeAsync(
         PostgresConnectionFactory factory,
         Guid runId)
@@ -2864,6 +5418,178 @@ CREATE TABLE {quotedSchemaName}.paper_orders (
         {
             ConnectionString = builder.ConnectionString
         });
+    }
+
+    private static async Task AssertLiveArchiveSerializationAsync(
+        short archiveVersion,
+        bool liveEnableWins)
+    {
+        var factory = await CreateFactoryAsync();
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"v{archiveVersion}_live_archive_{Guid.NewGuid():N}";
+        var dayUtc = new DateTimeOffset(
+            DateTime.UtcNow.Date.AddDays(-3).AddHours(12),
+            TimeSpan.Zero);
+        var boundaryUtc = dayUtc.AddMinutes(10);
+        var candidate = CreateSkippedRun(strategyId, boundaryUtc.AddSeconds(1)) with
+        {
+            SkipReason = "live_archive_serialization"
+        };
+        var archiveApplicationName = $"v{archiveVersion}_archive_{Guid.NewGuid():N}";
+        var liveApplicationName = $"v{archiveVersion}_live_{Guid.NewGuid():N}";
+        var archiveFactory = WithApplicationName(factory, archiveApplicationName);
+        var liveFactory = WithApplicationName(factory, liveApplicationName);
+        using var raceCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        Task<IReadOnlySet<Guid>>? archiveTask = null;
+        Task<bool>? liveTask = null;
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            if (liveEnableWins)
+            {
+                await using var liveConnection = liveFactory.CreateConnection();
+                await liveConnection.OpenAsync();
+                await using var liveTransaction = await liveConnection.BeginTransactionAsync();
+                await using (var liveCommand = new NpgsqlCommand(
+                                 """
+UPDATE public.strategies
+SET live_stakes = true,
+    live_enabled_at_utc = @BoundaryUtc,
+    updated_at_utc = @BoundaryUtc
+WHERE id = @StrategyId;
+""",
+                                 liveConnection,
+                                 liveTransaction))
+                {
+                    liveCommand.Parameters.AddWithValue("BoundaryUtc", boundaryUtc.UtcDateTime);
+                    liveCommand.Parameters.AddWithValue("StrategyId", strategyId);
+                    Assert.Equal(1, await liveCommand.ExecuteNonQueryAsync());
+                }
+
+                archiveTask = ArchiveTerminalSkipForVersionAsync(
+                    archiveFactory,
+                    archiveVersion,
+                    candidate,
+                    raceCancellation.Token);
+                var archivePid = await WaitForBlockedApplicationAsync(
+                    factory,
+                    archiveApplicationName,
+                    "advisory");
+                await AssertBlockedByAsync(factory, archivePid, liveConnection.ProcessID);
+
+                await liveTransaction.CommitAsync();
+                Assert.Equal(
+                    [candidate.Id],
+                    (await archiveTask.WaitAsync(TimeSpan.FromSeconds(15))).ToArray());
+            }
+            else
+            {
+                var anchor = CreateSkippedRun(strategyId, boundaryUtc.AddMinutes(-5)) with
+                {
+                    SkipReason = candidate.SkipReason
+                };
+                Assert.Equal(
+                    [anchor.Id],
+                    (await new PostgresAppRepository(factory)
+                        .TryAddStrategyMarketPaperRunsAsync(
+                            [anchor],
+                            directPaperSkipCompactionEnabled: true))
+                    .ToArray());
+
+                await using var blockerConnection = factory.CreateConnection();
+                await blockerConnection.OpenAsync();
+                await using var blockerTransaction = await blockerConnection.BeginTransactionAsync();
+                await LockRollupGroupAsync(
+                    blockerConnection,
+                    blockerTransaction,
+                    strategyId,
+                    anchor.UpdatedAtUtc,
+                    anchor.SkipReason!);
+
+                archiveTask = ArchiveTerminalSkipForVersionAsync(
+                    archiveFactory,
+                    archiveVersion,
+                    candidate,
+                    raceCancellation.Token);
+                var archivePid = await WaitForBlockedApplicationAsync(
+                    factory,
+                    archiveApplicationName,
+                    "transactionid");
+                await AssertBlockedByAsync(factory, archivePid, blockerConnection.ProcessID);
+                Assert.True(await HoldsExclusiveRetentionGateAsync(factory, archivePid));
+
+                liveTask = new PostgresAppRepository(liveFactory).SetStrategyLiveStakesAsync(
+                    strategyId,
+                    liveStakes: true,
+                    updatedAtUtc: boundaryUtc,
+                    cancellationToken: raceCancellation.Token);
+                var livePid = await WaitForBlockedApplicationAsync(
+                    factory,
+                    liveApplicationName,
+                    "advisory");
+                await AssertBlockedByAsync(factory, livePid, archivePid);
+
+                await blockerTransaction.CommitAsync();
+                Assert.Equal(
+                    [candidate.Id],
+                    (await archiveTask.WaitAsync(TimeSpan.FromSeconds(15))).ToArray());
+                Assert.True(await liveTask.WaitAsync(TimeSpan.FromSeconds(15)));
+
+                var remainingArchives = await ReadArchiveStorageVersionsAsync(factory, strategyId);
+                var remaining = Assert.Single(remainingArchives);
+                Assert.Equal(anchor.Id, remaining.Key);
+                Assert.Equal(1, remaining.Value);
+                var rollup = await ReadRollupGroupAsync(
+                    factory,
+                    strategyId,
+                    anchor.UpdatedAtUtc,
+                    anchor.SkipReason!);
+                Assert.Equal(1, rollup.RunCount);
+                Assert.Equal(anchor.UpdatedAtUtc, rollup.FirstUpdatedAtUtc);
+                Assert.Equal(anchor.UpdatedAtUtc, rollup.LastUpdatedAtUtc);
+            }
+
+            Assert.Equal(
+                StrategyMarketPaperRunStatuses.Skipped,
+                await ReadRunStatusAsync(factory, candidate.Id));
+            Assert.Equal(
+                StrategyRunRetentionScopes.LiveOrShadow,
+                await ReadRetentionScopeAsync(factory, candidate.Id));
+            Assert.DoesNotContain(
+                candidate.Id,
+                (await ReadArchiveStorageVersionsAsync(factory, strategyId)).Keys);
+        }
+        finally
+        {
+            raceCancellation.Cancel();
+            await DrainRaceTaskAsync(liveTask);
+            await DrainRaceTaskAsync(archiveTask);
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    private static Task<IReadOnlySet<Guid>> ArchiveTerminalSkipForVersionAsync(
+        PostgresConnectionFactory factory,
+        short archiveVersion,
+        StrategyMarketPaperRun run,
+        CancellationToken cancellationToken)
+    {
+        var repository = new PostgresAppRepository(factory);
+        return archiveVersion switch
+        {
+            1 => repository.TryAddStrategyMarketPaperRunsAsync(
+                [run],
+                directPaperSkipCompactionEnabled: true,
+                cancellationToken: cancellationToken),
+            2 => repository.TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(
+                [run],
+                cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(archiveVersion),
+                archiveVersion,
+                "Only archive versions 1 and 2 are supported by this test.")
+        };
     }
 
     private static async Task AssertStrategyCodePositionRaceAsync(bool codeUpdateFirst)
@@ -3265,7 +5991,7 @@ WHERE strategy_id = @StrategyId
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(
-            "SELECT archived_run_id FROM public.strategy_market_paper_skip_tombstones " +
+            "SELECT archived_run_id FROM public.strategy_market_paper_skip_archive_rows " +
             "WHERE strategy_id = @StrategyId ORDER BY archived_run_id;",
             connection);
         command.Parameters.AddWithValue("StrategyId", strategyId);
@@ -3638,6 +6364,21 @@ WHERE id = @Id;
         await command.ExecuteNonQueryAsync();
     }
 
+    private static async Task SetRunRetentionScopeAsync(
+        PostgresConnectionFactory factory,
+        Guid runId,
+        string retentionScope)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "UPDATE strategy_market_paper_runs SET retention_scope = @RetentionScope WHERE id = @Id;",
+            connection);
+        command.Parameters.AddWithValue("Id", runId);
+        command.Parameters.AddWithValue("RetentionScope", retentionScope);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
     private static async Task<string> ReadRetentionScopeAsync(
         PostgresConnectionFactory factory,
         Guid runId)
@@ -3723,7 +6464,7 @@ WHERE id = @Id;
 SELECT
     (SELECT count(*) FROM strategy_market_paper_runs WHERE strategy_id = @StrategyId),
     (SELECT COALESCE(sum(run_count), 0) FROM strategy_paper_skip_rollups WHERE strategy_id = @StrategyId),
-    (SELECT count(*) FROM strategy_market_paper_skip_tombstones WHERE strategy_id = @StrategyId),
+    (SELECT count(*) FROM strategy_market_paper_skip_archive_rows WHERE strategy_id = @StrategyId),
     (SELECT count(*) FROM dashboard_projection_events WHERE strategy_id = @StrategyId),
     (SELECT count(*) FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @StrategyId);
 """,
@@ -3890,6 +6631,32 @@ WHERE lower(copied_trader_wallet) IN (
             ExecutionSource: "retention_integration_test");
     }
 
+    private static PaperPositionSettlement CreateSettlement(
+        string copiedTraderWallet,
+        string conditionId,
+        DateTimeOffset createdAtUtc)
+    {
+        var assetId = $"asset-{Guid.NewGuid():N}";
+        return new PaperPositionSettlement(
+            Guid.NewGuid(),
+            copiedTraderWallet,
+            assetId,
+            conditionId,
+            "Yes",
+            assetId,
+            "Yes",
+            "IntegrationTest",
+            2m,
+            0.50m,
+            1m,
+            2m,
+            1m,
+            true,
+            "IntegrationTest",
+            createdAtUtc,
+            createdAtUtc);
+    }
+
     private static async Task ExecuteForStrategyAsync(
         PostgresConnectionFactory factory,
         string sql,
@@ -3901,6 +6668,1585 @@ WHERE lower(copied_trader_wallet) IN (
         command.Parameters.AddWithValue("StrategyId", strategyId);
         await command.ExecuteNonQueryAsync();
     }
+
+    private enum V2WriterKind
+    {
+        TerminalAtInsert,
+        ExistingRawFinalize,
+        AgeBased
+    }
+
+    private enum DirectExternalDependencyKind
+    {
+        DryRunOrder,
+        CopiedLeaderPosition,
+        CopiedLeaderActivity,
+        OnchainPaperSignalResult
+    }
+
+    private sealed record V2DimensionReferenceCounts(
+        long MarketIdentities,
+        long MetadataVersions,
+        long Reasons,
+        long Tombstones);
+
+    private const string PrototypeCandidateLayoutsSql =
+        """
+CREATE TABLE v1_tombstones (
+    strategy_id uuid NOT NULL,
+    market_id text NOT NULL,
+    archived_run_id uuid NOT NULL,
+    archived_at_utc timestamptz NOT NULL,
+    archive_format_version smallint NULL,
+    condition_id text NULL,
+    market_slug text NULL,
+    market_title text NULL,
+    category text NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    detected_at_utc timestamptz NULL,
+    entry_due_at_utc timestamptz NULL,
+    selected_asset_id text NULL,
+    selected_outcome text NULL,
+    stake_usd numeric(28,8) NULL,
+    skip_reason text NULL,
+    run_created_at_utc timestamptz NULL,
+    run_updated_at_utc timestamptz NULL,
+    rollup_bucket_start_utc timestamptz NULL,
+    PRIMARY KEY (strategy_id, market_id),
+    UNIQUE (archived_run_id)
+);
+CREATE INDEX v1_condition_strategy_idx
+ON v1_tombstones(condition_id, strategy_id)
+WHERE archive_format_version = 1;
+CREATE INDEX v1_rollup_group_idx
+ON v1_tombstones(strategy_id, rollup_bucket_start_utc, skip_reason, run_updated_at_utc)
+WHERE archive_format_version = 1;
+CREATE INDEX v1_strategy_recent_idx
+ON v1_tombstones(strategy_id, run_updated_at_utc, archived_run_id)
+WHERE archive_format_version = 1;
+CREATE INDEX v1_global_recent_idx
+ON v1_tombstones(run_updated_at_utc, strategy_id, archived_run_id)
+WHERE archive_format_version = 1;
+CREATE INDEX v1_incomplete_idx
+ON v1_tombstones(strategy_id, market_id)
+WHERE archive_format_version IS DISTINCT FROM 1;
+
+CREATE TABLE same_market_identities (
+    market_identity_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    market_id text COLLATE "C" NOT NULL UNIQUE
+);
+CREATE TABLE same_metadata_versions (
+    metadata_version_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    market_identity_id integer NOT NULL REFERENCES same_market_identities,
+    condition_id text COLLATE "C" NOT NULL,
+    market_slug text COLLATE "C" NOT NULL,
+    market_title text COLLATE "C" NOT NULL,
+    category text COLLATE "C" NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    UNIQUE (metadata_version_id, market_identity_id),
+    UNIQUE NULLS NOT DISTINCT (
+        market_identity_id, condition_id, market_slug, market_title,
+        category, market_start_utc, market_end_utc)
+);
+CREATE TABLE same_reasons (
+    skip_reason_id smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    skip_reason text COLLATE "C" NOT NULL UNIQUE
+);
+CREATE TABLE same_tombstones (
+    strategy_id uuid NOT NULL,
+    market_id text NULL,
+    market_identity_id integer NULL REFERENCES same_market_identities,
+    metadata_version_id integer NULL,
+    archived_run_id uuid NOT NULL,
+    archived_at_utc timestamptz NULL,
+    archive_format_version smallint NULL,
+    condition_id text NULL,
+    market_slug text NULL,
+    market_title text NULL,
+    category text NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    detected_at_utc timestamptz NULL,
+    entry_due_at_utc timestamptz NULL,
+    selected_asset_id text NULL,
+    selected_outcome text NULL,
+    stake_usd numeric(28,8) NULL,
+    skip_reason text NULL,
+    skip_reason_id smallint NULL REFERENCES same_reasons,
+    run_created_at_utc timestamptz NULL,
+    run_updated_at_utc timestamptz NULL,
+    rollup_bucket_start_utc timestamptz NULL,
+    UNIQUE (archived_run_id),
+    FOREIGN KEY (metadata_version_id, market_identity_id)
+        REFERENCES same_metadata_versions(metadata_version_id, market_identity_id),
+    CHECK (
+        (archive_format_version IS NULL
+            AND market_id IS NOT NULL
+            AND archived_at_utc IS NOT NULL)
+        OR
+        (archive_format_version = 1
+            AND market_id IS NOT NULL
+            AND archived_at_utc IS NOT NULL
+            AND condition_id IS NOT NULL
+            AND market_slug IS NOT NULL
+            AND market_title IS NOT NULL
+            AND detected_at_utc IS NOT NULL
+            AND entry_due_at_utc IS NOT NULL
+            AND stake_usd IS NOT NULL
+            AND NULLIF(btrim(COALESCE(skip_reason, '')), '') IS NOT NULL
+            AND run_created_at_utc IS NOT NULL
+            AND run_updated_at_utc IS NOT NULL
+            AND rollup_bucket_start_utc IS NOT NULL)
+        OR
+        (archive_format_version = 2 AND market_identity_id IS NOT NULL
+            AND metadata_version_id IS NOT NULL
+            AND detected_at_utc IS NOT NULL
+            AND entry_due_at_utc IS NOT NULL
+            AND stake_usd IS NOT NULL
+            AND skip_reason_id IS NOT NULL
+            AND run_updated_at_utc IS NOT NULL))
+);
+CREATE UNIQUE INDEX same_v1_identity_idx
+ON same_tombstones(strategy_id, market_id)
+WHERE archive_format_version IS DISTINCT FROM 2;
+CREATE UNIQUE INDEX same_v2_identity_idx
+ON same_tombstones(strategy_id, market_identity_id)
+WHERE archive_format_version = 2;
+CREATE INDEX same_v1_condition_idx
+ON same_tombstones(condition_id, strategy_id)
+WHERE archive_format_version = 1;
+CREATE INDEX same_v1_rollup_idx
+ON same_tombstones(strategy_id, rollup_bucket_start_utc, skip_reason, run_updated_at_utc)
+WHERE archive_format_version = 1;
+CREATE INDEX same_v1_strategy_recent_idx
+ON same_tombstones(strategy_id, run_updated_at_utc, archived_run_id)
+WHERE archive_format_version = 1;
+CREATE INDEX same_v1_global_recent_idx
+ON same_tombstones(run_updated_at_utc, strategy_id, archived_run_id)
+WHERE archive_format_version = 1;
+CREATE INDEX same_metadata_condition_idx
+ON same_metadata_versions(condition_id, metadata_version_id, market_identity_id);
+CREATE INDEX same_v2_metadata_strategy_idx
+ON same_tombstones(metadata_version_id, strategy_id, archived_run_id)
+WHERE archive_format_version = 2;
+CREATE INDEX same_v2_rollup_idx
+ON same_tombstones(
+    strategy_id, ((run_updated_at_utc AT TIME ZONE 'UTC')::date),
+    skip_reason_id, run_updated_at_utc, archived_run_id)
+WHERE archive_format_version = 2;
+CREATE INDEX same_v2_strategy_recent_idx
+ON same_tombstones(strategy_id, run_updated_at_utc DESC, archived_run_id)
+INCLUDE (stake_usd, entry_due_at_utc, skip_reason_id)
+WHERE archive_format_version = 2;
+CREATE INDEX same_v2_global_recent_idx
+ON same_tombstones(run_updated_at_utc DESC, strategy_id, archived_run_id)
+INCLUDE (stake_usd, entry_due_at_utc, skip_reason_id)
+WHERE archive_format_version = 2;
+CREATE INDEX same_incomplete_idx
+ON same_tombstones(strategy_id, market_id)
+WHERE archive_format_version IS DISTINCT FROM 1
+  AND archive_format_version IS DISTINCT FROM 2;
+
+CREATE TABLE per_row_tombstones (
+    strategy_id uuid NOT NULL,
+    market_id text COLLATE "C" NOT NULL,
+    archived_run_id uuid NOT NULL,
+    condition_id text COLLATE "C" NOT NULL,
+    market_slug text COLLATE "C" NOT NULL,
+    market_title text COLLATE "C" NOT NULL,
+    category text COLLATE "C" NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    detected_at_utc timestamptz NOT NULL,
+    entry_due_at_utc timestamptz NOT NULL,
+    selected_asset_id text NULL,
+    selected_outcome text NULL,
+    stake_usd numeric(28,8) NOT NULL,
+    skip_reason text COLLATE "C" NOT NULL,
+    run_updated_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (strategy_id, market_id),
+    UNIQUE (archived_run_id)
+);
+CREATE INDEX per_row_condition_idx
+ON per_row_tombstones(condition_id, strategy_id, archived_run_id);
+CREATE INDEX per_row_rollup_idx
+ON per_row_tombstones(
+    strategy_id, ((run_updated_at_utc AT TIME ZONE 'UTC')::date),
+    skip_reason, run_updated_at_utc, archived_run_id);
+CREATE INDEX per_row_strategy_recent_idx
+ON per_row_tombstones(strategy_id, run_updated_at_utc DESC, archived_run_id)
+INCLUDE (stake_usd, entry_due_at_utc, skip_reason);
+CREATE INDEX per_row_global_recent_idx
+ON per_row_tombstones(run_updated_at_utc DESC, strategy_id, archived_run_id)
+INCLUDE (stake_usd, entry_due_at_utc, skip_reason);
+
+CREATE TABLE normalized_market_identities (
+    market_identity_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    market_id text COLLATE "C" NOT NULL UNIQUE
+);
+CREATE TABLE normalized_metadata_versions (
+    metadata_version_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    market_identity_id integer NOT NULL REFERENCES normalized_market_identities,
+    condition_id text COLLATE "C" NOT NULL,
+    market_slug text COLLATE "C" NOT NULL,
+    market_title text COLLATE "C" NOT NULL,
+    category text COLLATE "C" NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    UNIQUE (metadata_version_id, market_identity_id),
+    UNIQUE NULLS NOT DISTINCT (
+        market_identity_id, condition_id, market_slug, market_title,
+        category, market_start_utc, market_end_utc)
+);
+CREATE TABLE normalized_market_tombstones (
+    strategy_id uuid NOT NULL,
+    market_identity_id integer NOT NULL REFERENCES normalized_market_identities,
+    metadata_version_id integer NOT NULL,
+    archived_run_id uuid NOT NULL UNIQUE,
+    detected_at_utc timestamptz NOT NULL,
+    entry_due_at_utc timestamptz NOT NULL,
+    selected_asset_id text NULL,
+    selected_outcome text NULL,
+    stake_usd numeric(28,8) NOT NULL,
+    skip_reason text COLLATE "C" NOT NULL,
+    run_updated_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (strategy_id, market_identity_id),
+    FOREIGN KEY (metadata_version_id, market_identity_id)
+        REFERENCES normalized_metadata_versions(metadata_version_id, market_identity_id)
+);
+CREATE INDEX normalized_metadata_condition_idx
+ON normalized_metadata_versions(condition_id, metadata_version_id, market_identity_id);
+CREATE INDEX normalized_tombstones_metadata_strategy_idx
+ON normalized_market_tombstones(metadata_version_id, strategy_id, archived_run_id);
+CREATE INDEX normalized_tombstones_rollup_idx
+ON normalized_market_tombstones(
+    strategy_id, ((run_updated_at_utc AT TIME ZONE 'UTC')::date),
+    skip_reason, run_updated_at_utc, archived_run_id);
+CREATE INDEX normalized_tombstones_strategy_recent_idx
+ON normalized_market_tombstones(strategy_id, run_updated_at_utc DESC, archived_run_id)
+INCLUDE (stake_usd, entry_due_at_utc, skip_reason);
+CREATE INDEX normalized_tombstones_global_recent_idx
+ON normalized_market_tombstones(run_updated_at_utc DESC, strategy_id, archived_run_id)
+INCLUDE (stake_usd, entry_due_at_utc, skip_reason);
+
+CREATE TABLE proposed_market_identities (
+    market_identity_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    market_id text COLLATE "C" NOT NULL UNIQUE
+);
+CREATE TABLE proposed_metadata_versions (
+    metadata_version_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    market_identity_id integer NOT NULL REFERENCES proposed_market_identities,
+    condition_id text COLLATE "C" NOT NULL,
+    market_slug text COLLATE "C" NOT NULL,
+    market_title text COLLATE "C" NOT NULL,
+    category text COLLATE "C" NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    UNIQUE (metadata_version_id, market_identity_id),
+    UNIQUE NULLS NOT DISTINCT (
+        market_identity_id, condition_id, market_slug, market_title,
+        category, market_start_utc, market_end_utc)
+);
+CREATE TABLE proposed_reasons (
+    skip_reason_id smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    skip_reason text COLLATE "C" NOT NULL UNIQUE
+);
+CREATE TABLE proposed_tombstones (
+    strategy_id uuid NOT NULL,
+    market_identity_id integer NOT NULL REFERENCES proposed_market_identities,
+    metadata_version_id integer NOT NULL,
+    archived_run_id uuid NOT NULL UNIQUE,
+    detected_at_utc timestamptz NOT NULL,
+    entry_due_at_utc timestamptz NOT NULL,
+    selected_asset_id text NULL,
+    selected_outcome text NULL,
+    stake_usd numeric(28,8) NOT NULL,
+    skip_reason_id smallint NOT NULL REFERENCES proposed_reasons,
+    run_updated_at_utc timestamptz NOT NULL,
+    PRIMARY KEY (strategy_id, market_identity_id),
+    FOREIGN KEY (metadata_version_id, market_identity_id)
+        REFERENCES proposed_metadata_versions(metadata_version_id, market_identity_id)
+);
+CREATE INDEX proposed_metadata_condition_idx
+ON proposed_metadata_versions(condition_id, metadata_version_id, market_identity_id);
+CREATE INDEX proposed_tombstones_metadata_strategy_idx
+ON proposed_tombstones(metadata_version_id, strategy_id, archived_run_id);
+CREATE INDEX proposed_tombstones_rollup_idx
+ON proposed_tombstones(
+    strategy_id, ((run_updated_at_utc AT TIME ZONE 'UTC')::date),
+    skip_reason_id, run_updated_at_utc, archived_run_id);
+CREATE INDEX proposed_tombstones_strategy_recent_idx
+ON proposed_tombstones(strategy_id, run_updated_at_utc DESC, archived_run_id)
+INCLUDE (stake_usd, entry_due_at_utc, skip_reason_id);
+CREATE INDEX proposed_tombstones_global_recent_idx
+ON proposed_tombstones(run_updated_at_utc DESC, strategy_id, archived_run_id)
+INCLUDE (stake_usd, entry_due_at_utc, skip_reason_id);
+""";
+
+    private const string PrototypeFixtureSql =
+        """
+CREATE TABLE fixture_market_identities (
+    market_identity_id integer PRIMARY KEY,
+    market_id text COLLATE "C" NOT NULL UNIQUE
+);
+INSERT INTO fixture_market_identities (market_identity_id, market_id)
+SELECT
+    market_ordinal + 1,
+    'm-' || lpad(market_ordinal::text, 4, '0') || repeat('x', 26)
+FROM generate_series(0, 1023) AS market(market_ordinal);
+
+CREATE TABLE fixture_metadata_versions (
+    metadata_version_id integer PRIMARY KEY,
+    market_identity_id integer NOT NULL,
+    condition_id text COLLATE "C" NOT NULL,
+    market_slug text COLLATE "C" NOT NULL,
+    market_title text COLLATE "C" NOT NULL,
+    category text COLLATE "C" NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL
+);
+WITH metadata_keys AS (
+    SELECT market_ordinal + 1 AS metadata_version_id, market_ordinal + 1 AS market_identity_id
+    FROM generate_series(0, 1023) AS market(market_ordinal)
+    UNION ALL
+    SELECT 1025 + market_ordinal, market_ordinal + 1
+    FROM generate_series(0, 7) AS market(market_ordinal)
+), metadata_widths AS (
+    SELECT
+        metadata_version_id,
+        market_identity_id,
+        65 + ((metadata_version_id - 1) % 3) * 2 AS condition_bytes,
+        23 + ((metadata_version_id - 1) % 3) * 2 AS slug_bytes,
+        44 + ((metadata_version_id - 1) % 3) * 4 AS title_bytes,
+        5 + ((metadata_version_id - 1) % 3) * 2 AS category_bytes
+    FROM metadata_keys
+)
+INSERT INTO fixture_metadata_versions (
+    metadata_version_id, market_identity_id, condition_id, market_slug, market_title,
+    category, market_start_utc, market_end_utc)
+SELECT
+    metadata_version_id,
+    market_identity_id,
+    'Ж' || lpad(metadata_version_id::text, 6, '0') || repeat('c', condition_bytes - 8),
+    'Ж' || lpad(metadata_version_id::text, 6, '0') || repeat('s', slug_bytes - 8),
+    '界' || lpad(metadata_version_id::text, 6, '0') || repeat('t', title_bytes - 9),
+    CASE WHEN metadata_version_id % 4 = 0 THEN NULL
+         ELSE 'Ж' || lpad((metadata_version_id % 100)::text, 2, '0')
+              || repeat('g', category_bytes - 4)
+    END,
+    CASE WHEN metadata_version_id % 4 IN (1, 3)
+         THEN timestamptz '2026-06-01 00:00:00+00'
+              + market_identity_id * interval '5 minutes'
+         ELSE NULL
+    END,
+    CASE WHEN metadata_version_id % 4 IN (2, 3)
+         THEN timestamptz '2026-06-01 00:05:00+00'
+              + market_identity_id * interval '5 minutes'
+         ELSE NULL
+    END
+FROM metadata_widths;
+
+CREATE TABLE fixture_reasons (
+    skip_reason_id smallint PRIMARY KEY,
+    skip_reason text COLLATE "C" NOT NULL UNIQUE
+);
+INSERT INTO fixture_reasons (skip_reason_id, skip_reason)
+SELECT
+    reason_ordinal + 1,
+    'Ж' || lpad((reason_ordinal + 1)::text, 2, '0')
+        || repeat('r', (39 + (reason_ordinal % 3) * 4) - 4)
+FROM generate_series(0, 36) AS reason(reason_ordinal);
+
+CREATE TABLE fixture_rows (
+    row_ordinal integer PRIMARY KEY,
+    strategy_ordinal integer NOT NULL,
+    market_ordinal integer NOT NULL,
+    strategy_id uuid NOT NULL,
+    market_identity_id integer NOT NULL,
+    metadata_version_id integer NOT NULL,
+    archived_run_id uuid NOT NULL,
+    market_id text COLLATE "C" NOT NULL,
+    condition_id text COLLATE "C" NOT NULL,
+    market_slug text COLLATE "C" NOT NULL,
+    market_title text COLLATE "C" NOT NULL,
+    category text COLLATE "C" NULL,
+    market_start_utc timestamptz NULL,
+    market_end_utc timestamptz NULL,
+    detected_at_utc timestamptz NOT NULL,
+    entry_due_at_utc timestamptz NOT NULL,
+    selected_asset_id text NULL,
+    selected_outcome text NULL,
+    stake_usd numeric(28,8) NOT NULL,
+    skip_reason_id smallint NOT NULL,
+    skip_reason text COLLATE "C" NOT NULL,
+    run_updated_at_utc timestamptz NOT NULL
+);
+WITH row_keys AS (
+    SELECT
+        strategy_ordinal * 1024 + market_ordinal AS row_ordinal,
+        strategy_ordinal,
+        market_ordinal,
+        CASE
+            WHEN market_ordinal < 8 AND strategy_ordinal % 2 = 1
+                THEN 1025 + market_ordinal
+            ELSE market_ordinal + 1
+        END AS metadata_version_id,
+        ((strategy_ordinal * 1024 + market_ordinal) % 37 + 1)::smallint AS skip_reason_id,
+        timestamptz '2026-07-01 00:00:00+00'
+            + (market_ordinal % 30) * interval '1 day'
+            + ((strategy_ordinal * 307 + market_ordinal) % 86400) * interval '1 second'
+            AS run_updated_at_utc
+    FROM generate_series(0, 255) AS strategy(strategy_ordinal)
+    CROSS JOIN generate_series(0, 1023) AS market(market_ordinal)
+)
+INSERT INTO fixture_rows (
+    row_ordinal, strategy_ordinal, market_ordinal, strategy_id, market_identity_id,
+    metadata_version_id, archived_run_id, market_id, condition_id, market_slug,
+    market_title, category, market_start_utc, market_end_utc, detected_at_utc,
+    entry_due_at_utc, selected_asset_id, selected_outcome, stake_usd,
+    skip_reason_id, skip_reason, run_updated_at_utc)
+SELECT
+    row_keys.row_ordinal,
+    row_keys.strategy_ordinal,
+    row_keys.market_ordinal,
+    ('10000000-0000-4000-8000-'
+        || lpad(to_hex(row_keys.strategy_ordinal + 1), 12, '0'))::uuid,
+    row_keys.market_ordinal + 1,
+    row_keys.metadata_version_id,
+    ('20000000-0000-4000-8000-'
+        || lpad(to_hex(row_keys.row_ordinal + 1), 12, '0'))::uuid,
+    identity.market_id,
+    metadata.condition_id,
+    metadata.market_slug,
+    metadata.market_title,
+    metadata.category,
+    metadata.market_start_utc,
+    metadata.market_end_utc,
+    row_keys.run_updated_at_utc - interval '10 minutes',
+    row_keys.run_updated_at_utc - interval '5 minutes',
+    CASE WHEN row_keys.row_ordinal % 3 = 0 THEN NULL
+         ELSE 'asset-' || lpad((row_keys.market_ordinal % 113)::text, 3, '0')
+    END,
+    CASE WHEN row_keys.row_ordinal % 4 = 0 THEN NULL
+         WHEN row_keys.row_ordinal % 2 = 0 THEN 'Yes'
+         ELSE 'Нет'
+    END,
+    ((100 + row_keys.row_ordinal % 900)::numeric / 100)::numeric(28,8),
+    row_keys.skip_reason_id,
+    reason.skip_reason,
+    row_keys.run_updated_at_utc
+FROM row_keys
+INNER JOIN fixture_market_identities identity
+    ON identity.market_identity_id = row_keys.market_ordinal + 1
+INNER JOIN fixture_metadata_versions metadata
+    ON metadata.metadata_version_id = row_keys.metadata_version_id
+   AND metadata.market_identity_id = identity.market_identity_id
+INNER JOIN fixture_reasons reason
+    ON reason.skip_reason_id = row_keys.skip_reason_id;
+""";
+
+    private const string PrototypePopulationSql =
+        """
+INSERT INTO v1_tombstones (
+    strategy_id, market_id, archived_run_id, archived_at_utc, archive_format_version,
+    condition_id, market_slug, market_title, category, market_start_utc, market_end_utc,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome, stake_usd,
+    skip_reason, run_created_at_utc, run_updated_at_utc, rollup_bucket_start_utc)
+SELECT
+    strategy_id, market_id, archived_run_id, run_updated_at_utc + interval '1 hour', 1,
+    condition_id, market_slug, market_title, category, market_start_utc, market_end_utc,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome, stake_usd,
+    skip_reason, detected_at_utc, run_updated_at_utc,
+    date_trunc('day', run_updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+FROM fixture_rows;
+
+INSERT INTO same_market_identities OVERRIDING SYSTEM VALUE
+SELECT * FROM fixture_market_identities;
+INSERT INTO same_metadata_versions OVERRIDING SYSTEM VALUE
+SELECT * FROM fixture_metadata_versions;
+INSERT INTO same_reasons OVERRIDING SYSTEM VALUE
+SELECT * FROM fixture_reasons;
+SELECT setval(
+    pg_get_serial_sequence('same_market_identities', 'market_identity_id'),
+    (SELECT max(market_identity_id) FROM same_market_identities),
+    true);
+SELECT setval(
+    pg_get_serial_sequence('same_metadata_versions', 'metadata_version_id'),
+    (SELECT max(metadata_version_id) FROM same_metadata_versions),
+    true);
+SELECT setval(
+    pg_get_serial_sequence('same_reasons', 'skip_reason_id'),
+    (SELECT max(skip_reason_id) FROM same_reasons),
+    true);
+INSERT INTO same_tombstones (
+    strategy_id, market_identity_id, metadata_version_id, archived_run_id,
+    archive_format_version, detected_at_utc, entry_due_at_utc, selected_asset_id,
+    selected_outcome, stake_usd, skip_reason_id, run_updated_at_utc)
+SELECT
+    strategy_id, market_identity_id, metadata_version_id, archived_run_id,
+    2, detected_at_utc, entry_due_at_utc, selected_asset_id,
+    selected_outcome, stake_usd, skip_reason_id, run_updated_at_utc
+FROM fixture_rows;
+
+INSERT INTO per_row_tombstones (
+    strategy_id, market_id, archived_run_id, condition_id, market_slug, market_title,
+    category, market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc,
+    selected_asset_id, selected_outcome, stake_usd, skip_reason, run_updated_at_utc)
+SELECT
+    strategy_id, market_id, archived_run_id, condition_id, market_slug, market_title,
+    category, market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc,
+    selected_asset_id, selected_outcome, stake_usd, skip_reason, run_updated_at_utc
+FROM fixture_rows;
+
+INSERT INTO normalized_market_identities OVERRIDING SYSTEM VALUE
+SELECT * FROM fixture_market_identities;
+INSERT INTO normalized_metadata_versions OVERRIDING SYSTEM VALUE
+SELECT * FROM fixture_metadata_versions;
+SELECT setval(
+    pg_get_serial_sequence('normalized_market_identities', 'market_identity_id'),
+    (SELECT max(market_identity_id) FROM normalized_market_identities),
+    true);
+SELECT setval(
+    pg_get_serial_sequence('normalized_metadata_versions', 'metadata_version_id'),
+    (SELECT max(metadata_version_id) FROM normalized_metadata_versions),
+    true);
+INSERT INTO normalized_market_tombstones (
+    strategy_id, market_identity_id, metadata_version_id, archived_run_id,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome,
+    stake_usd, skip_reason, run_updated_at_utc)
+SELECT
+    strategy_id, market_identity_id, metadata_version_id, archived_run_id,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome,
+    stake_usd, skip_reason, run_updated_at_utc
+FROM fixture_rows;
+
+INSERT INTO proposed_market_identities OVERRIDING SYSTEM VALUE
+SELECT * FROM fixture_market_identities;
+INSERT INTO proposed_metadata_versions OVERRIDING SYSTEM VALUE
+SELECT * FROM fixture_metadata_versions;
+INSERT INTO proposed_reasons OVERRIDING SYSTEM VALUE
+SELECT * FROM fixture_reasons;
+SELECT setval(
+    pg_get_serial_sequence('proposed_market_identities', 'market_identity_id'),
+    (SELECT max(market_identity_id) FROM proposed_market_identities),
+    true);
+SELECT setval(
+    pg_get_serial_sequence('proposed_metadata_versions', 'metadata_version_id'),
+    (SELECT max(metadata_version_id) FROM proposed_metadata_versions),
+    true);
+SELECT setval(
+    pg_get_serial_sequence('proposed_reasons', 'skip_reason_id'),
+    (SELECT max(skip_reason_id) FROM proposed_reasons),
+    true);
+INSERT INTO proposed_tombstones (
+    strategy_id, market_identity_id, metadata_version_id, archived_run_id,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome,
+    stake_usd, skip_reason_id, run_updated_at_utc)
+SELECT
+    strategy_id, market_identity_id, metadata_version_id, archived_run_id,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome,
+    stake_usd, skip_reason_id, run_updated_at_utc
+FROM fixture_rows;
+""";
+
+    private static IReadOnlyList<PrototypeLayout> CreatePrototypeLayouts()
+    {
+        return
+        [
+            new(
+                "current_v1",
+                ["v1_tombstones"],
+                []),
+            new(
+                "same_table_versioned",
+                ["same_market_identities", "same_metadata_versions", "same_reasons", "same_tombstones"],
+                [
+                    "same_market_identities_market_identity_id_seq",
+                    "same_metadata_versions_metadata_version_id_seq",
+                    "same_reasons_skip_reason_id_seq"
+                ]),
+            new(
+                "dedicated_per_row_v2",
+                ["per_row_tombstones"],
+                []),
+            new(
+                "normalized_market_v2",
+                ["normalized_market_identities", "normalized_metadata_versions", "normalized_market_tombstones"],
+                [
+                    "normalized_market_identities_market_identity_id_seq",
+                    "normalized_metadata_versions_metadata_version_id_seq"
+                ]),
+            new(
+                "proposed_normalized_v2",
+                ["proposed_market_identities", "proposed_metadata_versions", "proposed_reasons", "proposed_tombstones"],
+                [
+                    "proposed_market_identities_market_identity_id_seq",
+                    "proposed_metadata_versions_metadata_version_id_seq",
+                    "proposed_reasons_skip_reason_id_seq"
+                ])
+        ];
+    }
+
+    private static async Task<PrototypeDatabaseEvidence> ReadPrototypeDatabaseEvidenceAsync(
+        NpgsqlConnection connection)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT version(), current_database(), current_setting('server_version_num')::integer,
+       current_setting('server_encoding');
+""",
+            connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        var result = new PrototypeDatabaseEvidence(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetInt32(2),
+            reader.GetString(3));
+        Assert.False(await reader.ReadAsync());
+        return result;
+    }
+
+    private static async Task ExecutePrototypeSqlAsync(
+        NpgsqlConnection connection,
+        string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection)
+        {
+            CommandTimeout = 0
+        };
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task VacuumPrototypeTablesAsync(
+        NpgsqlConnection connection,
+        IReadOnlyList<PrototypeLayout> layouts)
+    {
+        var tableNames = layouts
+            .SelectMany(layout => layout.Tables)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        foreach (var tableName in tableNames)
+        {
+            await ExecutePrototypeSqlAsync(connection, $"VACUUM (ANALYZE) {tableName};");
+        }
+    }
+
+    private static async Task<IReadOnlyList<PrototypeLayoutMeasurement>> MeasurePrototypeLayoutsAsync(
+        NpgsqlConnection connection,
+        string schemaName,
+        IReadOnlyList<PrototypeLayout> layouts)
+    {
+        var result = new List<PrototypeLayoutMeasurement>(layouts.Count);
+        foreach (var layout in layouts)
+        {
+            var relationMeasurements = new List<PrototypeRelationMeasurement>(
+                layout.Tables.Count + layout.Sequences.Count);
+            foreach (var tableName in layout.Tables)
+            {
+                await using var command = new NpgsqlCommand(
+                    """
+WITH target AS (
+    SELECT c.oid, c.reltoastrelid
+    FROM pg_class c
+    INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = @SchemaName
+      AND c.relname = @TableName
+      AND c.relkind = 'r'
+)
+SELECT
+    @TableName,
+    COALESCE(pg_relation_size(target.oid), 0)::bigint,
+    COALESCE(pg_indexes_size(target.oid), 0)::bigint,
+    CASE WHEN target.reltoastrelid = 0 THEN 0::bigint
+         ELSE pg_total_relation_size(target.reltoastrelid)::bigint
+    END,
+    COALESCE(pg_total_relation_size(target.oid), 0)::bigint,
+    CASE WHEN target.reltoastrelid = 0 THEN NULL
+         ELSE target.reltoastrelid::regclass::text
+    END
+FROM target;
+""",
+                    connection);
+                command.Parameters.AddWithValue("SchemaName", schemaName);
+                command.Parameters.AddWithValue("TableName", tableName);
+                await using var reader = await command.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                var relationName = reader.GetString(0);
+                var heapBytes = reader.GetInt64(1);
+                var indexBytes = reader.GetInt64(2);
+                var toastBytes = reader.GetInt64(3);
+                var totalBytes = reader.GetInt64(4);
+                var toastRelation = reader.IsDBNull(5) ? null : reader.GetString(5);
+                Assert.False(await reader.ReadAsync());
+                await reader.DisposeAsync();
+
+                var rowCount = await ReadPrototypeScalarAsync<long>(
+                    connection,
+                    $"SELECT count(*)::bigint FROM {tableName};");
+                var indexes = await ReadPrototypeIndexMeasurementsAsync(
+                    connection,
+                    schemaName,
+                    tableName);
+                Assert.Equal(indexBytes, indexes.Sum(index => index.Bytes));
+                relationMeasurements.Add(new PrototypeRelationMeasurement(
+                    relationName,
+                    rowCount,
+                    heapBytes,
+                    indexBytes,
+                    toastBytes,
+                    totalBytes,
+                    toastRelation,
+                    indexes));
+            }
+
+            foreach (var sequenceName in layout.Sequences)
+            {
+                await using var command = new NpgsqlCommand(
+                    """
+WITH target AS (
+    SELECT c.oid
+    FROM pg_class c
+    INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = @SchemaName
+      AND c.relname = @SequenceName
+      AND c.relkind = 'S'
+)
+SELECT
+    @SequenceName,
+    COALESCE(pg_relation_size(target.oid), 0)::bigint,
+    COALESCE(pg_total_relation_size(target.oid), 0)::bigint
+FROM target;
+""",
+                    connection);
+                command.Parameters.AddWithValue("SchemaName", schemaName);
+                command.Parameters.AddWithValue("SequenceName", sequenceName);
+                await using var reader = await command.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                var relationName = reader.GetString(0);
+                var heapBytes = reader.GetInt64(1);
+                var totalBytes = reader.GetInt64(2);
+                Assert.False(await reader.ReadAsync());
+                relationMeasurements.Add(new PrototypeRelationMeasurement(
+                    relationName,
+                    1,
+                    heapBytes,
+                    0,
+                    0,
+                    totalBytes,
+                    null,
+                    []));
+            }
+
+            result.Add(new PrototypeLayoutMeasurement(
+                layout.Name,
+                relationMeasurements,
+                relationMeasurements.Sum(relation => relation.HeapBytes),
+                relationMeasurements.Sum(relation => relation.IndexBytes),
+                relationMeasurements.Sum(relation => relation.ToastBytes),
+                relationMeasurements.Sum(relation => relation.TotalBytes)));
+        }
+
+        return result;
+    }
+
+    private static async Task<IReadOnlyList<PrototypeIndexMeasurement>>
+        ReadPrototypeIndexMeasurementsAsync(
+            NpgsqlConnection connection,
+            string schemaName,
+            string tableName)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT index_class.relname, pg_relation_size(index_class.oid)::bigint
+FROM pg_index index_definition
+INNER JOIN pg_class table_class ON table_class.oid = index_definition.indrelid
+INNER JOIN pg_namespace table_namespace ON table_namespace.oid = table_class.relnamespace
+INNER JOIN pg_class index_class ON index_class.oid = index_definition.indexrelid
+WHERE table_namespace.nspname = @SchemaName
+  AND table_class.relname = @TableName
+ORDER BY index_class.relname;
+""",
+            connection);
+        command.Parameters.AddWithValue("SchemaName", schemaName);
+        command.Parameters.AddWithValue("TableName", tableName);
+        var indexes = new List<PrototypeIndexMeasurement>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            indexes.Add(new PrototypeIndexMeasurement(
+                reader.GetString(0),
+                reader.GetInt64(1)));
+        }
+
+        return indexes;
+    }
+
+    private static void AssertPrototypeLayoutRowCounts(
+        IReadOnlyList<PrototypeLayoutMeasurement> measurements)
+    {
+        var byLayout = measurements.ToDictionary(
+            measurement => measurement.Layout,
+            StringComparer.Ordinal);
+        Assert.Equal(262_144, Assert.Single(byLayout["current_v1"].Relations).Rows);
+        Assert.Equal(262_144, byLayout["same_table_versioned"].Relations
+            .Single(relation => relation.Relation == "same_tombstones").Rows);
+        Assert.Equal(262_144, Assert.Single(byLayout["dedicated_per_row_v2"].Relations).Rows);
+        Assert.Equal(262_144, byLayout["normalized_market_v2"].Relations
+            .Single(relation => relation.Relation == "normalized_market_tombstones").Rows);
+        Assert.Equal(262_144, byLayout["proposed_normalized_v2"].Relations
+            .Single(relation => relation.Relation == "proposed_tombstones").Rows);
+        Assert.Equal(1_024, byLayout["proposed_normalized_v2"].Relations
+            .Single(relation => relation.Relation == "proposed_market_identities").Rows);
+        Assert.Equal(1_032, byLayout["proposed_normalized_v2"].Relations
+            .Single(relation => relation.Relation == "proposed_metadata_versions").Rows);
+        Assert.Equal(37, byLayout["proposed_normalized_v2"].Relations
+            .Single(relation => relation.Relation == "proposed_reasons").Rows);
+    }
+
+    private static IReadOnlyList<PrototypeLayoutComparison> ComparePrototypeLayoutSizes(
+        IReadOnlyList<PrototypeLayoutMeasurement> emptyMeasurements,
+        IReadOnlyList<PrototypeLayoutMeasurement> populatedMeasurements)
+    {
+        var emptyByLayout = emptyMeasurements.ToDictionary(
+            measurement => measurement.Layout,
+            StringComparer.Ordinal);
+        return populatedMeasurements
+            .Select(populated =>
+            {
+                var empty = emptyByLayout[populated.Layout];
+                return new PrototypeLayoutComparison(
+                    populated.Layout,
+                    empty.TotalBytes,
+                    populated.TotalBytes,
+                    populated.TotalBytes - empty.TotalBytes,
+                    populated.HeapBytes,
+                    populated.IndexBytes,
+                    populated.ToastBytes,
+                    empty.Relations,
+                    populated.Relations);
+            })
+            .ToArray();
+    }
+
+    private static async Task<PrototypeFixtureCounts> ReadPrototypeFixtureCountsAsync(
+        NpgsqlConnection connection)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    count(*)::bigint,
+    count(DISTINCT strategy_id)::bigint,
+    count(DISTINCT market_identity_id)::bigint,
+    count(DISTINCT metadata_version_id)::bigint,
+    (SELECT count(*)::bigint FROM fixture_metadata_versions),
+    (SELECT count(*)::bigint
+     FROM (
+         SELECT market_identity_id
+         FROM fixture_rows
+         GROUP BY market_identity_id
+         HAVING count(DISTINCT metadata_version_id) = 2
+     ) dual_version_market),
+    (SELECT count(*)::bigint
+     FROM (
+         SELECT market_identity_id
+         FROM fixture_rows
+         GROUP BY market_identity_id
+         HAVING count(DISTINCT metadata_version_id) = 1
+     ) single_version_market),
+    count(DISTINCT skip_reason_id)::bigint,
+    count(DISTINCT (run_updated_at_utc AT TIME ZONE 'UTC')::date)::bigint,
+    (SELECT count(*) > 0 FROM fixture_rows WHERE category IS NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE category IS NOT NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE market_start_utc IS NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE market_start_utc IS NOT NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE market_end_utc IS NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE market_end_utc IS NOT NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE selected_asset_id IS NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE selected_asset_id IS NOT NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE selected_outcome IS NULL)
+        AND (SELECT count(*) > 0 FROM fixture_rows WHERE selected_outcome IS NOT NULL),
+    (SELECT avg(octet_length(condition_id))::double precision FROM fixture_rows),
+    (SELECT avg(octet_length(market_slug))::double precision FROM fixture_rows),
+    (SELECT avg(octet_length(market_title))::double precision FROM fixture_rows),
+    (SELECT avg(octet_length(category))::double precision FROM fixture_rows
+     WHERE category IS NOT NULL),
+    (SELECT avg(octet_length(skip_reason))::double precision FROM fixture_rows)
+FROM fixture_rows;
+""",
+            connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        var result = new PrototypeFixtureCounts(
+            reader.GetInt64(0),
+            reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.GetInt64(3),
+            reader.GetInt64(4),
+            reader.GetInt64(5),
+            reader.GetInt64(6),
+            reader.GetInt64(7),
+            reader.GetInt64(8),
+            reader.GetBoolean(9),
+            reader.GetDouble(10),
+            reader.GetDouble(11),
+            reader.GetDouble(12),
+            reader.GetDouble(13),
+            reader.GetDouble(14));
+        Assert.False(await reader.ReadAsync());
+        return result;
+    }
+
+    private static async Task<IReadOnlyList<PrototypeCanonicalRestorationEvidence>>
+        ReadPrototypeCanonicalRestorationEvidenceAsync(
+            NpgsqlConnection connection,
+            IReadOnlyList<PrototypeLayout> layouts)
+    {
+        IReadOnlyList<(string Layout, string Sql)> canonicalQueries =
+        [
+            (
+                "fixture",
+                """
+SELECT
+    strategy_id, market_id, archived_run_id,
+    condition_id, market_slug, market_title, category, market_start_utc, market_end_utc,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome, stake_usd,
+    skip_reason, detected_at_utc AS run_created_at_utc, run_updated_at_utc,
+    date_trunc('day', run_updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AS rollup_bucket_start_utc
+FROM fixture_rows
+ORDER BY archived_run_id
+"""),
+            (
+                "current_v1",
+                """
+SELECT
+    strategy_id, market_id, archived_run_id,
+    condition_id, market_slug, market_title, category, market_start_utc, market_end_utc,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome, stake_usd,
+    skip_reason, run_created_at_utc, run_updated_at_utc, rollup_bucket_start_utc
+FROM v1_tombstones
+WHERE archive_format_version = 1
+ORDER BY archived_run_id
+"""),
+            (
+                "same_table_versioned",
+                """
+SELECT
+    tombstone.strategy_id, market_identity.market_id, tombstone.archived_run_id,
+    metadata.condition_id, metadata.market_slug, metadata.market_title, metadata.category,
+    metadata.market_start_utc, metadata.market_end_utc,
+    tombstone.detected_at_utc, tombstone.entry_due_at_utc,
+    tombstone.selected_asset_id, tombstone.selected_outcome, tombstone.stake_usd,
+    reason.skip_reason, tombstone.detected_at_utc AS run_created_at_utc,
+    tombstone.run_updated_at_utc,
+    date_trunc('day', tombstone.run_updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AS rollup_bucket_start_utc
+FROM same_tombstones tombstone
+INNER JOIN same_market_identities market_identity
+    ON market_identity.market_identity_id = tombstone.market_identity_id
+INNER JOIN same_metadata_versions metadata
+    ON metadata.metadata_version_id = tombstone.metadata_version_id
+   AND metadata.market_identity_id = tombstone.market_identity_id
+INNER JOIN same_reasons reason ON reason.skip_reason_id = tombstone.skip_reason_id
+WHERE tombstone.archive_format_version = 2
+ORDER BY tombstone.archived_run_id
+"""),
+            (
+                "dedicated_per_row_v2",
+                """
+SELECT
+    strategy_id, market_id, archived_run_id,
+    condition_id, market_slug, market_title, category, market_start_utc, market_end_utc,
+    detected_at_utc, entry_due_at_utc, selected_asset_id, selected_outcome, stake_usd,
+    skip_reason, detected_at_utc AS run_created_at_utc, run_updated_at_utc,
+    date_trunc('day', run_updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AS rollup_bucket_start_utc
+FROM per_row_tombstones
+ORDER BY archived_run_id
+"""),
+            (
+                "normalized_market_v2",
+                """
+SELECT
+    tombstone.strategy_id, market_identity.market_id, tombstone.archived_run_id,
+    metadata.condition_id, metadata.market_slug, metadata.market_title, metadata.category,
+    metadata.market_start_utc, metadata.market_end_utc,
+    tombstone.detected_at_utc, tombstone.entry_due_at_utc,
+    tombstone.selected_asset_id, tombstone.selected_outcome, tombstone.stake_usd,
+    tombstone.skip_reason, tombstone.detected_at_utc AS run_created_at_utc,
+    tombstone.run_updated_at_utc,
+    date_trunc('day', tombstone.run_updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AS rollup_bucket_start_utc
+FROM normalized_market_tombstones tombstone
+INNER JOIN normalized_market_identities market_identity
+    ON market_identity.market_identity_id = tombstone.market_identity_id
+INNER JOIN normalized_metadata_versions metadata
+    ON metadata.metadata_version_id = tombstone.metadata_version_id
+   AND metadata.market_identity_id = tombstone.market_identity_id
+ORDER BY tombstone.archived_run_id
+"""),
+            (
+                "proposed_normalized_v2",
+                """
+SELECT
+    tombstone.strategy_id, market_identity.market_id, tombstone.archived_run_id,
+    metadata.condition_id, metadata.market_slug, metadata.market_title, metadata.category,
+    metadata.market_start_utc, metadata.market_end_utc,
+    tombstone.detected_at_utc, tombstone.entry_due_at_utc,
+    tombstone.selected_asset_id, tombstone.selected_outcome, tombstone.stake_usd,
+    reason.skip_reason, tombstone.detected_at_utc AS run_created_at_utc,
+    tombstone.run_updated_at_utc,
+    date_trunc('day', tombstone.run_updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        AS rollup_bucket_start_utc
+FROM proposed_tombstones tombstone
+INNER JOIN proposed_market_identities market_identity
+    ON market_identity.market_identity_id = tombstone.market_identity_id
+INNER JOIN proposed_metadata_versions metadata
+    ON metadata.metadata_version_id = tombstone.metadata_version_id
+   AND metadata.market_identity_id = tombstone.market_identity_id
+INNER JOIN proposed_reasons reason ON reason.skip_reason_id = tombstone.skip_reason_id
+ORDER BY tombstone.archived_run_id
+""")
+        ];
+
+        Assert.Equal(layouts.Count + 1, canonicalQueries.Count);
+        Assert.All(
+            layouts,
+            layout => Assert.Single(
+                canonicalQueries,
+                query => query.Layout == layout.Name));
+
+        var evidence = new List<PrototypeCanonicalRestorationEvidence>(canonicalQueries.Count);
+        foreach (var query in canonicalQueries)
+        {
+            var result = await ReadPrototypeQueryResultAsync(connection, query.Sql, []);
+            evidence.Add(new PrototypeCanonicalRestorationEvidence(
+                query.Layout,
+                result.Cardinality,
+                result.Sha256));
+        }
+
+        return evidence;
+    }
+
+    private static async Task<IReadOnlyList<PrototypeQuerySpec>> CreatePrototypeQuerySpecsAsync(
+        NpgsqlConnection connection)
+    {
+        var nowUtc = await ReadPrototypeScalarAsync<DateTime>(
+            connection,
+            "SELECT max(run_updated_at_utc) FROM fixture_rows;");
+        var cutoffUtc = nowUtc.AddHours(-24);
+        var strategyId = await ReadPrototypeScalarAsync<Guid>(
+            connection,
+            "SELECT strategy_id FROM fixture_rows WHERE row_ordinal = 262143;");
+        var marketId = await ReadPrototypeScalarAsync<string>(
+            connection,
+            "SELECT market_id FROM fixture_rows WHERE row_ordinal = 262143;");
+        var archivedRunId = await ReadPrototypeScalarAsync<Guid>(
+            connection,
+            "SELECT archived_run_id FROM fixture_rows WHERE row_ordinal = 262143;");
+        var conditionId = await ReadPrototypeScalarAsync<string>(
+            connection,
+            "SELECT condition_id FROM fixture_rows WHERE row_ordinal = 1023;");
+        var rollupStrategyId = await ReadPrototypeScalarAsync<Guid>(
+            connection,
+            "SELECT strategy_id FROM fixture_rows WHERE row_ordinal = 261120;");
+        var rollupDay = await ReadPrototypeScalarAsync<DateOnly>(
+            connection,
+            "SELECT (run_updated_at_utc AT TIME ZONE 'UTC')::date FROM fixture_rows WHERE row_ordinal = 261120;");
+        var rollupReasonId = await ReadPrototypeScalarAsync<short>(
+            connection,
+            "SELECT skip_reason_id FROM fixture_rows WHERE row_ordinal = 261120;");
+
+        return
+        [
+            new(
+                "condition-dependency",
+                """
+SELECT t.archived_run_id
+FROM proposed_metadata_versions m
+INNER JOIN proposed_tombstones t
+    ON t.metadata_version_id = m.metadata_version_id
+   AND t.market_identity_id = m.market_identity_id
+WHERE m.condition_id = @ConditionId
+ORDER BY t.archived_run_id
+""",
+                "SELECT archived_run_id FROM fixture_rows WHERE condition_id = @ConditionId ORDER BY archived_run_id",
+                [new("ConditionId", conditionId)],
+                "proposed_tombstones_metadata_strategy_idx",
+                int.MaxValue,
+                matched => matched + 2),
+            new(
+                "strategy-market",
+                """
+SELECT t.archived_run_id
+FROM proposed_market_identities m
+INNER JOIN proposed_tombstones t ON t.market_identity_id = m.market_identity_id
+WHERE m.market_id = @MarketId AND t.strategy_id = @StrategyId
+ORDER BY t.archived_run_id
+""",
+                "SELECT archived_run_id FROM fixture_rows WHERE market_id = @MarketId AND strategy_id = @StrategyId ORDER BY archived_run_id",
+                [new("MarketId", marketId), new("StrategyId", strategyId)],
+                "proposed_tombstones_pkey",
+                1,
+                matched => matched + 2),
+            new(
+                "archived-run",
+                "SELECT archived_run_id FROM proposed_tombstones WHERE archived_run_id = @ArchivedRunId ORDER BY archived_run_id",
+                "SELECT archived_run_id FROM fixture_rows WHERE archived_run_id = @ArchivedRunId ORDER BY archived_run_id",
+                [new("ArchivedRunId", archivedRunId)],
+                "proposed_tombstones_archived_run_id_key",
+                1,
+                matched => matched + 2),
+            new(
+                "rollup-reversal",
+                """
+SELECT archived_run_id
+FROM proposed_tombstones
+WHERE strategy_id = @StrategyId
+  AND (run_updated_at_utc AT TIME ZONE 'UTC')::date = @UtcDay
+  AND skip_reason_id = @SkipReasonId
+ORDER BY run_updated_at_utc, archived_run_id
+""",
+                """
+SELECT archived_run_id
+FROM fixture_rows
+WHERE strategy_id = @StrategyId
+  AND (run_updated_at_utc AT TIME ZONE 'UTC')::date = @UtcDay
+  AND skip_reason_id = @SkipReasonId
+ORDER BY run_updated_at_utc, archived_run_id
+""",
+                [
+                    new("StrategyId", rollupStrategyId),
+                    new("UtcDay", rollupDay),
+                    new("SkipReasonId", rollupReasonId)
+                ],
+                "proposed_tombstones_rollup_idx",
+                1,
+                matched => matched + 4),
+            new(
+                "strategy-recent-24h",
+                """
+SELECT tombstone.archived_run_id, tombstone.strategy_id, tombstone.stake_usd,
+       tombstone.entry_due_at_utc, reason.skip_reason, tombstone.run_updated_at_utc
+FROM proposed_tombstones tombstone
+INNER JOIN proposed_reasons reason ON reason.skip_reason_id = tombstone.skip_reason_id
+WHERE tombstone.strategy_id = @StrategyId
+  AND tombstone.run_updated_at_utc >= @CutoffUtc
+  AND tombstone.run_updated_at_utc <= @NowUtc
+ORDER BY tombstone.strategy_id, tombstone.run_updated_at_utc, tombstone.archived_run_id
+""",
+                """
+SELECT archived_run_id, strategy_id, stake_usd, entry_due_at_utc,
+       skip_reason, run_updated_at_utc
+FROM fixture_rows
+WHERE strategy_id = @StrategyId
+  AND run_updated_at_utc >= @CutoffUtc
+  AND run_updated_at_utc <= @NowUtc
+ORDER BY strategy_id, run_updated_at_utc, archived_run_id
+""",
+                [
+                    new("StrategyId", strategyId),
+                    new("CutoffUtc", cutoffUtc),
+                    new("NowUtc", nowUtc)
+                ],
+                "proposed_tombstones_strategy_recent_idx",
+                40,
+                _ => 40),
+            new(
+                "global-recent-24h",
+                """
+SELECT tombstone.archived_run_id, tombstone.strategy_id, tombstone.stake_usd,
+       tombstone.entry_due_at_utc, reason.skip_reason, tombstone.run_updated_at_utc
+FROM proposed_tombstones tombstone
+INNER JOIN proposed_reasons reason ON reason.skip_reason_id = tombstone.skip_reason_id
+WHERE tombstone.run_updated_at_utc >= @CutoffUtc
+  AND tombstone.run_updated_at_utc <= @NowUtc
+ORDER BY tombstone.strategy_id, tombstone.run_updated_at_utc, tombstone.archived_run_id
+""",
+                """
+SELECT archived_run_id, strategy_id, stake_usd, entry_due_at_utc,
+       skip_reason, run_updated_at_utc
+FROM fixture_rows
+WHERE run_updated_at_utc >= @CutoffUtc
+  AND run_updated_at_utc <= @NowUtc
+ORDER BY strategy_id, run_updated_at_utc, archived_run_id
+""",
+                [new("CutoffUtc", cutoffUtc), new("NowUtc", nowUtc)],
+                "proposed_tombstones_global_recent_idx",
+                9_000,
+                _ => 9_000)
+        ];
+    }
+
+    private static async Task<T> ReadPrototypeScalarAsync<T>(
+        NpgsqlConnection connection,
+        string sql)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        return Assert.IsType<T>(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<PrototypeQueryResult> ReadPrototypeQueryResultAsync(
+        NpgsqlConnection connection,
+        string sql,
+        IReadOnlyList<PrototypeQueryParameter> parameters)
+    {
+        await using var command = new NpgsqlCommand(sql, connection)
+        {
+            CommandTimeout = 0
+        };
+        AddPrototypeParameters(command, parameters);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var cardinality = 0;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            hash.AppendData([(byte)0xF0]);
+            AppendPrototypeInt32(hash, reader.FieldCount);
+            for (var ordinal = 0; ordinal < reader.FieldCount; ordinal++)
+            {
+                if (reader.IsDBNull(ordinal))
+                {
+                    hash.AppendData([(byte)0]);
+                    continue;
+                }
+
+                hash.AppendData([(byte)1]);
+                AppendPrototypeValue(hash, reader.GetValue(ordinal));
+            }
+
+            hash.AppendData([(byte)0xF1]);
+            cardinality++;
+        }
+
+        return new PrototypeQueryResult(
+            cardinality,
+            Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant());
+    }
+
+    private static void AppendPrototypeValue(IncrementalHash hash, object value)
+    {
+        switch (value)
+        {
+            case Guid guid:
+            {
+                hash.AppendData([(byte)'g']);
+                Span<byte> buffer = stackalloc byte[16];
+                Assert.True(guid.TryWriteBytes(buffer));
+                hash.AppendData(buffer);
+                break;
+            }
+            case string text:
+            {
+                hash.AppendData([(byte)'s']);
+                var bytes = Encoding.UTF8.GetBytes(text);
+                AppendPrototypeInt32(hash, bytes.Length);
+                hash.AppendData(bytes);
+                break;
+            }
+            case DateTime dateTime:
+                hash.AppendData([(byte)'t']);
+                AppendPrototypeInt64(hash, dateTime.ToUniversalTime().Ticks);
+                break;
+            case DateTimeOffset dateTimeOffset:
+                hash.AppendData([(byte)'o']);
+                AppendPrototypeInt64(hash, dateTimeOffset.UtcTicks);
+                break;
+            case decimal decimalValue:
+                hash.AppendData([(byte)'d']);
+                foreach (var part in decimal.GetBits(decimalValue))
+                {
+                    AppendPrototypeInt32(hash, part);
+                }
+
+                break;
+            case short shortValue:
+                hash.AppendData([(byte)'h']);
+                AppendPrototypeInt32(hash, shortValue);
+                break;
+            case int intValue:
+                hash.AppendData([(byte)'i']);
+                AppendPrototypeInt32(hash, intValue);
+                break;
+            case long longValue:
+                hash.AppendData([(byte)'l']);
+                AppendPrototypeInt64(hash, longValue);
+                break;
+            case DateOnly dateOnly:
+                hash.AppendData([(byte)'D']);
+                AppendPrototypeInt32(hash, dateOnly.DayNumber);
+                break;
+            case bool boolValue:
+                hash.AppendData([(byte)'b', boolValue ? (byte)1 : (byte)0]);
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported prototype result type {value.GetType().FullName}.");
+        }
+    }
+
+    private static void AppendPrototypeInt32(IncrementalHash hash, int value)
+    {
+        Span<byte> buffer = stackalloc byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32LittleEndian(buffer, value);
+        hash.AppendData(buffer);
+    }
+
+    private static void AppendPrototypeInt64(IncrementalHash hash, long value)
+    {
+        Span<byte> buffer = stackalloc byte[sizeof(long)];
+        BinaryPrimitives.WriteInt64LittleEndian(buffer, value);
+        hash.AppendData(buffer);
+    }
+
+    private static async Task<JsonDocument> ReadPrototypePlanAsync(
+        NpgsqlConnection connection,
+        string sql,
+        IReadOnlyList<PrototypeQueryParameter> parameters)
+    {
+        await using var command = new NpgsqlCommand(
+            "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + sql,
+            connection)
+        {
+            CommandTimeout = 0
+        };
+        AddPrototypeParameters(command, parameters);
+        var planJson = Assert.IsType<string>(await command.ExecuteScalarAsync());
+        return JsonDocument.Parse(planJson);
+    }
+
+    private static void AddPrototypeParameters(
+        NpgsqlCommand command,
+        IReadOnlyList<PrototypeQueryParameter> parameters)
+    {
+        foreach (var parameter in parameters)
+        {
+            command.Parameters.AddWithValue(parameter.Name, parameter.Value);
+        }
+    }
+
+    private static PrototypePlanEvidence InspectPrototypePlan(
+        JsonDocument plan,
+        PrototypeQuerySpec spec)
+    {
+        var nodes = new List<PrototypePlanNode>();
+        CollectPrototypePlanNodes(plan.RootElement[0].GetProperty("Plan"), nodes);
+        var drivingNode = Assert.Single(nodes, node =>
+            node.IndexName == spec.RequiredIndexName
+            && (node.RelationName == "proposed_tombstones"
+                || (node.NodeType == "Bitmap Index Scan" && node.RelationName is null)));
+        Assert.Contains(
+            drivingNode.NodeType,
+            (IReadOnlyCollection<string>)["Index Scan", "Index Only Scan", "Bitmap Index Scan"]);
+        var hasSequentialScan = nodes.Any(node =>
+            node.RelationName == "proposed_tombstones"
+            && node.NodeType == "Seq Scan");
+        var sequentialDimensions = nodes
+            .Where(node => node.NodeType == "Seq Scan"
+                && node.RelationName is "proposed_market_identities"
+                    or "proposed_metadata_versions"
+                    or "proposed_reasons")
+            .Select(node => new PrototypeSequentialDimension(
+                node.RelationName!,
+                checked((int)Math.Ceiling(node.ActualRows * node.ActualLoops))))
+            .ToArray();
+        return new PrototypePlanEvidence(
+            drivingNode.IndexName!,
+            drivingNode.NodeType,
+            checked((int)Math.Ceiling(
+                (drivingNode.ActualRows + drivingNode.RowsRemovedByFilter
+                    + drivingNode.RowsRemovedByIndexRecheck) * drivingNode.ActualLoops)),
+            hasSequentialScan,
+            sequentialDimensions);
+    }
+
+    private static void CollectPrototypePlanNodes(
+        JsonElement node,
+        ICollection<PrototypePlanNode> nodes)
+    {
+        nodes.Add(new PrototypePlanNode(
+            node.GetProperty("Node Type").GetString()!,
+            node.TryGetProperty("Relation Name", out var relationName)
+                ? relationName.GetString()
+                : null,
+            node.TryGetProperty("Index Name", out var indexName)
+                ? indexName.GetString()
+                : null,
+            node.TryGetProperty("Actual Rows", out var actualRows)
+                ? actualRows.GetDouble()
+                : 0,
+            node.TryGetProperty("Actual Loops", out var actualLoops)
+                ? actualLoops.GetDouble()
+                : 0,
+            node.TryGetProperty("Rows Removed by Filter", out var removedByFilter)
+                ? removedByFilter.GetDouble()
+                : 0,
+            node.TryGetProperty("Rows Removed by Index Recheck", out var removedByRecheck)
+                ? removedByRecheck.GetDouble()
+                : 0));
+        if (node.TryGetProperty("Plans", out var childPlans))
+        {
+            foreach (var child in childPlans.EnumerateArray())
+            {
+                CollectPrototypePlanNodes(child, nodes);
+            }
+        }
+    }
+
+    private static string FormatPrototypeQueryEvidenceSql(PrototypeQuerySpec spec)
+    {
+        var parameterLines = string.Join(
+            Environment.NewLine,
+            spec.Parameters.Select(parameter =>
+                $"-- @{parameter.Name} = {Convert.ToString(parameter.Value, CultureInfo.InvariantCulture)}"));
+        return $"{parameterLines}{Environment.NewLine}{Environment.NewLine}" +
+               $"-- Actual proposed-v2 query{Environment.NewLine}{spec.ActualSql};" +
+               $"{Environment.NewLine}{Environment.NewLine}" +
+               $"-- Independent fixture query{Environment.NewLine}{spec.ExpectedSql};" +
+               Environment.NewLine;
+    }
+
+    private static void WritePrototypeEvidenceFile(
+        string evidenceDirectory,
+        string fileName,
+        string content)
+    {
+        var path = Path.Combine(evidenceDirectory, fileName);
+        File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+    }
+
+    private static void WritePrototypeJsonEvidenceFile<T>(
+        string evidenceDirectory,
+        string fileName,
+        T value)
+    {
+        WritePrototypeEvidenceFile(
+            evidenceDirectory,
+            fileName,
+            JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private sealed record PrototypeLayout(
+        string Name,
+        IReadOnlyList<string> Tables,
+        IReadOnlyList<string> Sequences);
+
+    private sealed record PrototypeDatabaseEvidence(
+        string Version,
+        string DatabaseName,
+        int ServerVersionNumber,
+        string ServerEncoding);
+
+    private sealed record PrototypeRelationMeasurement(
+        string Relation,
+        long Rows,
+        long HeapBytes,
+        long IndexBytes,
+        long ToastBytes,
+        long TotalBytes,
+        string? ToastRelation,
+        IReadOnlyList<PrototypeIndexMeasurement> Indexes);
+
+    private sealed record PrototypeIndexMeasurement(string Index, long Bytes);
+
+    private sealed record PrototypeLayoutMeasurement(
+        string Layout,
+        IReadOnlyList<PrototypeRelationMeasurement> Relations,
+        long HeapBytes,
+        long IndexBytes,
+        long ToastBytes,
+        long TotalBytes);
+
+    private sealed record PrototypeLayoutComparison(
+        string Layout,
+        long EmptyTotalBytes,
+        long PopulatedTotalBytes,
+        long DeltaTotalBytes,
+        long PopulatedHeapBytes,
+        long PopulatedIndexBytes,
+        long PopulatedToastBytes,
+        IReadOnlyList<PrototypeRelationMeasurement> EmptyRelations,
+        IReadOnlyList<PrototypeRelationMeasurement> Relations);
+
+    private sealed record PrototypeFixtureCounts(
+        long Rows,
+        long Strategies,
+        long MarketIdentities,
+        long MetadataVersions,
+        long MetadataDimensionRows,
+        long DualVersionMarkets,
+        long SingleVersionMarkets,
+        long Reasons,
+        long UtcDays,
+        bool NullableStatesAllCovered,
+        double AverageConditionBytes,
+        double AverageSlugBytes,
+        double AverageTitleBytes,
+        double AverageCategoryBytes,
+        double AverageReasonBytes);
+
+    private sealed record PrototypeCanonicalRestorationEvidence(
+        string Layout,
+        int Rows,
+        string Sha256);
+
+    private sealed record PrototypeQueryParameter(string Name, object Value);
+
+    private sealed record PrototypeQuerySpec(
+        string Name,
+        string ActualSql,
+        string ExpectedSql,
+        IReadOnlyList<PrototypeQueryParameter> Parameters,
+        string RequiredIndexName,
+        int ResultCardinalityLimit,
+        Func<int, int> ExaminedRowsLimit);
+
+    private sealed record PrototypeQueryResult(int Cardinality, string Sha256);
+
+    private sealed record PrototypePlanNode(
+        string NodeType,
+        string? RelationName,
+        string? IndexName,
+        double ActualRows,
+        double ActualLoops,
+        double RowsRemovedByFilter,
+        double RowsRemovedByIndexRecheck);
+
+    private sealed record PrototypeSequentialDimension(string Relation, int RelationRows);
+
+    private sealed record PrototypePlanEvidence(
+        string DrivingIndexName,
+        string DrivingNodeType,
+        int DrivingExaminedRows,
+        bool HasProposedTombstoneSequentialScan,
+        IReadOnlyList<PrototypeSequentialDimension> SequentialDimensionRelations);
+
+    private sealed record PrototypeQueryEvidence(
+        string Query,
+        int Cardinality,
+        string ExpectedSha256,
+        string ActualSha256,
+        string DrivingIndex,
+        string DrivingNodeType,
+        int DrivingExaminedRows,
+        string PlanFile);
+
+    private sealed record PrototypeCompletionReport(
+        string FixtureGeneratorVersion,
+        string PostgreSqlVersion,
+        string DatabaseName,
+        PrototypeFixtureCounts FixtureCounts,
+        IReadOnlyList<PrototypeCanonicalRestorationEvidence> CanonicalRestoration,
+        IReadOnlyList<PrototypeLayoutComparison> Layouts,
+        IReadOnlyList<PrototypeQueryEvidence> Queries,
+        string FixtureSql,
+        string CandidateLayoutsSql,
+        string PopulationSql,
+        string SavingsBoundary);
 
     private sealed record RetentionCounts(
         long RawRuns,
@@ -3934,4 +8280,21 @@ WHERE lower(copied_trader_wallet) IN (
         int RunCount,
         DateTimeOffset FirstUpdatedAtUtc,
         DateTimeOffset LastUpdatedAtUtc);
+
+    private sealed record V2DimensionIds(
+        int MarketIdentityId,
+        int MetadataVersionId,
+        short SkipReasonId);
+
+    private sealed record V2DimensionCounts(
+        long MarketIdentities,
+        long MetadataVersions);
+
+    private sealed record V2DimensionTableSnapshot(
+        long MarketIdentityCount,
+        string MarketIdentitiesJson,
+        long MetadataVersionCount,
+        string MetadataVersionsJson,
+        long ReasonCount,
+        string ReasonsJson);
 }

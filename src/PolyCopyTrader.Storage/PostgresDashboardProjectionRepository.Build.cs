@@ -346,9 +346,8 @@ SELECT tombstone.archived_run_id,
        tombstone.entry_due_at_utc,
        tombstone.skip_reason,
        tombstone.run_updated_at_utc
-FROM strategy_market_paper_skip_tombstones tombstone
-WHERE tombstone.archive_format_version = 1
-  AND tombstone.run_updated_at_utc >= @RecentCutoffUtc
+FROM strategy_market_paper_skip_archive_rows tombstone
+WHERE tombstone.run_updated_at_utc >= @RecentCutoffUtc
   AND tombstone.run_updated_at_utc <= @NowUtc
   {{filter}}
 ORDER BY tombstone.strategy_id, tombstone.run_updated_at_utc, tombstone.archived_run_id;

@@ -1,0 +1,242 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260813-compact-skip-archive-v2-simplified",
+  "title": "Simplify the dormant compact skipped-run archive compatibility change",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Мне важно, чтобы вся Paper история сохранилась. Кроме скипнутых"
+    },
+    {
+      "source": "user",
+      "text": "На всякий случай - Live история тоже должна вся сохраняться"
+    },
+    {
+      "source": "user",
+      "text": "Давай здесь продолжим. Конечная цель - как можно сильнее оптимизировать работу с базой, не теряя истории."
+    },
+    {
+      "source": "user",
+      "text": "Что-то мы не туда заехали. Зачем на Docker ?"
+    },
+    {
+      "source": "user",
+      "text": "Да, упрощай"
+    }
+  ],
+  "scope": {
+    "goal": "Reduce the current compact skipped-run archive change to the smallest compatibility-only implementation that preserves complete Paper and Live betting history, removes Docker and the five-layout storage prototype, and can be built and reviewed locally before a normal user-controlled test deployment.",
+    "inScope": [
+      "Keep only the dedicated compact v2 schema, local exact restore/read support, mixed v1/v2 rollup and Dashboard support, and the three dormant internal v2 writer paths needed for a later activation release.",
+      "Keep existing v1 skipped-run rows and their values untouched.",
+      "Keep all current intrinsic, fee, diagnostic, Paper, Live, shadow, dependency, dedupe, and Live-enable serialization protections.",
+      "Keep product v2 writes compiled and configured off; public product paths continue writing v1 only.",
+      "Retain focused source/configuration tests and compact functional PostgreSQL test cases for a later explicitly selected disposable test database, but remove the local Docker harness and storage-comparison prototype.",
+      "Build the solution and run the focused non-PostgreSQL tests locally; perform final read-only deployed-build/schema/health verification only after the user deploys through the existing workflow."
+    ],
+    "outOfScope": [
+      "Docker, containers, local PGDATA, image inspection, the 262144-row fixture, five candidate layouts, physical-size percentage gates, EXPLAIN plan evidence files, or temporary database creation in this task.",
+      "Activating product v2 writes, changing the compiled capability, populating v2 outside a later approved activation, or claiming current storage savings.",
+      "Rewriting, deleting, backfilling, reindexing, or compacting existing v1 rows.",
+      "Dropping or replacing current production indexes, running a new broad index audit, or changing the existing Observed insert/update/delete lifecycle.",
+      "Changing signals, strategies, Paper/Live orders, fills, positions, settlements, PnL, fees, risk, execution semantics, deployment, service state, or any database in the current local-edit phase."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "This contract supersedes the remaining implementation and verification work of RC-20260813-compact-skip-archive-v2. It is a compatibility-only source change: no database, service, Docker, deployment, API, or trading mutation is authorized. Existing v1 rows remain unchanged and product runtime continues emitting v1 only.",
+    "firstVerification": "Separate the current product correctness core and focused history-preservation tests from every Docker, storage-prototype, evidence-file, and five-layout benchmark component before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "The simplified compatibility core must preserve complete Paper and Live betting history and must not rewrite any existing v1 skipped-run row.",
+      "sourceRequestIndexes": [0, 1, 2, 4],
+      "sourceQuote": "Live история тоже должна вся сохраняться",
+      "acceptanceCriteria": [
+        "Existing v1 rows receive no UPDATE, DELETE, backfill, move, or representation rewrite.",
+        "Every current intrinsic, fee, diagnostic, Paper, Live, shadow, position, settlement, copied-activity, on-chain, and Live-boundary blocker remains fail closed.",
+        "A late local dependency can restore an eligible v1 or dormant-test v2 row exactly without an external API, reverse its rollup, and queue reconciliation atomically.",
+        "Raw/archive collisions remain prevented across v1 and v2 by run identity and strategy/market identity."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.Retention.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Build.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused source/configuration retention tests covering v1 immutability, union restore/read SQL, blockers, collisions, rollups, Dashboard windows, and Live serialization.",
+          "expected": "All selected tests pass with zero failures and the test project compiles the retained functional PostgreSQL cases.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep only the compact v2 representation and compatibility paths that are required for exact future skipped-run storage and restoration; remove experimental storage alternatives and evidence machinery.",
+      "sourceRequestIndexes": [2, 3, 4],
+      "sourceQuote": "Да, упрощай",
+      "acceptanceCriteria": [
+        "The retained v2 representation uses immutable local dimensions and a narrow per-run row sufficient for exact local reconstruction, dedupe, rollup, and recent Dashboard semantics.",
+        "The repository contains no PostgresStoragePrototype test attribute, five-layout candidate DDL/population, 262144-row generator, prototype plan parser, prototype size/result records, or prototype evidence writer.",
+        "No Docker-specific test gate, container naming, image requirement, PGDATA requirement, or prototype evidence-directory environment variable remains in the simplified task implementation.",
+        "The large retention integration test file is reduced to focused compatibility and history-preservation tests rather than a storage-benchmark framework."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.Retention.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Inspect the final diff and search the repository for PostgresStoragePrototype, prototype layout/generator helpers, Docker/PGDATA gates, and prototype evidence variables.",
+          "expected": "The experimental benchmark and Docker infrastructure are absent while the compact compatibility core and focused correctness tests remain.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "This simplified release must remain compatibility-only and must not emit v2 rows in product execution.",
+      "sourceRequestIndexes": [0, 1, 2, 4],
+      "sourceQuote": "не теряя истории",
+      "acceptanceCriteria": [
+        "The typed v2 option defaults false and checked-in configuration is false.",
+        "The compiled compatibility capability remains false and validation rejects true, including an environment override.",
+        "All public product archive paths continue selecting v1; v2 writers are internal test seams only.",
+        "README states that this compatibility release alone produces no storage savings and that activation needs a separate approval and build."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.Retention.cs",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run configuration/default/environment-override and public-writer source-contract tests.",
+          "expected": "No configuration or public product dispatch can enable v2 in this build.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Verification must be ordinary and bounded: local build and focused non-database tests now, followed by the existing user-controlled deploy and read-only runtime verification without Docker.",
+      "sourceRequestIndexes": [3, 4],
+      "sourceQuote": "Зачем на Docker",
+      "acceptanceCriteria": [
+        "No Docker daemon, container, image, volume, PGDATA, local test database, service, deployment, or database is changed by the local implementation turn.",
+        "The full solution builds with zero errors and focused configuration, retention, projection, and processor-dispatch tests pass with zero failures.",
+        "git diff --check and requirement WorkingTree/Staged validation pass, followed by an independent full-diff semantic review.",
+        "After a later normal deployment by the user, verification is read only and checks exact deployed build identity, service health, schema initialization, empty v2 tables, unchanged v1 availability, and absence of unexpected product v2 rows; activation remains out of scope."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-13.md",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --artifacts-path <marked D:\\CodexTemp run artifacts path>",
+          "expected": "Build completes with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "Run focused configuration, StrategyRunRetention, Dashboard storage, and direct-skip processor-dispatch tests under the marked D:\\CodexTemp run.",
+          "expected": "All selected tests pass with zero failures and zero skipped tests.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Run git diff --check, requirement WorkingTree and Staged validation, and independent review of the original requests, approved simplified contract, final diff, and evidence.",
+          "expected": "Every local completion gate passes with no open finding.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The Docker-based PostgreSQL 18 run, five-layout 262144-row storage prototype, physical-size threshold, and EXPLAIN evidence required by the superseded contract are removed rather than completed.",
+      "impact": "No measured physical compression percentage or local PostgreSQL runtime proof is claimed by this simplified compatibility task.",
+      "approval": {
+        "status": "pending",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2-simplified sha256:<pending>",
+        "semanticDigest": "pending"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "Focused PostgreSQL functional cases remain compile-checked for later execution on an explicitly selected disposable test database, but this local turn does not create or mutate a database.",
+      "impact": "Schema/runtime behavior remains unactivated and must be verified through the user's normal test/deploy workflow before any later v2 activation.",
+      "approval": {
+        "status": "pending",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2-simplified sha256:<pending>",
+        "semanticDigest": "pending"
+      }
+    },
+    {
+      "id": "DEV-003",
+      "text": "Product v2 writes remain hard disabled in the simplified compatibility release.",
+      "impact": "This release alone does not slow current database growth; it only prepares compatible schema/read/restore code for a separately approved activation.",
+      "approval": {
+        "status": "pending",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2-simplified sha256:<pending>",
+        "semanticDigest": "pending"
+      }
+    }
+  ],
+  "approval": {
+    "status": "pending",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260813-compact-skip-archive-v2-simplified sha256:<pending>",
+    "semanticDigest": "pending"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/compact_skip_archive_v2_simplified_final_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}

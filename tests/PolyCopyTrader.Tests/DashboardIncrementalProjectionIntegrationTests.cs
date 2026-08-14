@@ -1,24 +1,18 @@
 using Npgsql;
 using NpgsqlTypes;
 using PolyCopyTrader.Domain;
-using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Tests;
 
+[Collection(PaperCopiedTraderPerformancePostgresIntegrationCollection.Name)]
 public sealed class DashboardIncrementalProjectionIntegrationTests
 {
-    [Fact]
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task Projection_BootstrapDeltaAndReconciliation_MatchRawAggregates()
     {
-        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
-
-        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
-        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
         var projection = new PostgresDashboardProjectionRepository(factory);
         var snapshots = new PostgresDashboardSnapshotRepository(factory);
         var rawRepository = new PostgresAppRepository(factory);
@@ -234,20 +228,14 @@ public sealed class DashboardIncrementalProjectionIntegrationTests
         var deleteStrategyBatch = await projection.ApplyPendingEventsAsync(100);
         Assert.Equal(1, deleteStrategyBatch.EventsApplied);
         var deletedCounts = await ReadDeletedStrategyProjectionCountsAsync(factory, disposableStrategyId);
-        Assert.Equal((0, 0, 0, 0), deletedCounts);
+        Assert.Equal((0, 0, 0, 0, 0, 0, 0), deletedCounts);
     }
 
-    [Fact]
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task ApplyPendingEvents_MultipleEventsForSameRun_PersistsOnlyFinalFacts()
     {
-        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
-
-        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
-        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
         var projection = new PostgresDashboardProjectionRepository(factory);
         var snapshots = new PostgresDashboardSnapshotRepository(factory);
         var strategyId = Guid.NewGuid();
@@ -311,17 +299,11 @@ public sealed class DashboardIncrementalProjectionIntegrationTests
         Assert.Equal(1, (await projection.ApplyPendingEventsAsync(100)).EventsApplied);
     }
 
-    [Fact]
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task ExpireRecentFacts_SkipsLockedOldestFactAndBackfillsBatch()
     {
-        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
-
-        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
-        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
         var projection = new PostgresDashboardProjectionRepository(factory);
         var strategyId = Guid.NewGuid();
         var lockedOrderId = Guid.NewGuid();
@@ -387,6 +369,309 @@ FOR UPDATE;
             DashboardProjectionSourceKinds.PaperOrder,
             lockedOrderId));
     }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Bootstrap_V1OnlyV2OnlyAndMixedArchivesHaveIdenticalLifetimeAndRecentWindows()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var snapshots = new PostgresDashboardSnapshotRepository(factory);
+        var capturedNowUtc = DateTimeOffset.UtcNow;
+        var alignedNowUtc = capturedNowUtc.AddTicks(
+            -(capturedNowUtc.Ticks % TimeSpan.TicksPerSecond));
+        var updatedAtUtc = new[]
+        {
+            alignedNowUtc.AddMinutes(-30),
+            alignedNowUtc.AddHours(-3),
+            alignedNowUtc.AddHours(-12),
+            alignedNowUtc.AddHours(-25)
+        };
+        const string skipReason = "dashboard_archive_window_skip";
+        var marketFixtureKey = Guid.NewGuid().ToString("N");
+        var cohorts = new[]
+        {
+            (
+                StrategyId: Guid.NewGuid(),
+                ArchiveVersions: new short[] { 1, 1, 1, 1 }),
+            (
+                StrategyId: Guid.NewGuid(),
+                ArchiveVersions: new short[] { 2, 2, 2, 2 }),
+            (
+                StrategyId: Guid.NewGuid(),
+                ArchiveVersions: new short[] { 2, 1, 2, 1 })
+        };
+        var runsByStrategy = new Dictionary<Guid, StrategyMarketPaperRun[]>();
+        var insertedStrategyIds = new List<Guid>();
+
+        try
+        {
+            foreach (var cohort in cohorts)
+            {
+                await InsertStrategyAsync(factory, cohort.StrategyId);
+                insertedStrategyIds.Add(cohort.StrategyId);
+                var runs = updatedAtUtc
+                    .Select((timestamp, index) => CreateArchivedSkipRun(
+                        cohort.StrategyId,
+                        $"{marketFixtureKey}-{index}",
+                        timestamp,
+                        skipReason))
+                    .ToArray();
+                runsByStrategy.Add(cohort.StrategyId, runs);
+
+                var v1Runs = runs
+                    .Where((_, index) => cohort.ArchiveVersions[index] == 1)
+                    .ToArray();
+                if (v1Runs.Length > 0)
+                {
+                    var insertedV1 = await repository.TryAddStrategyMarketPaperRunsAsync(
+                        v1Runs,
+                        directPaperSkipCompactionEnabled: true);
+                    Assert.Equal(
+                        v1Runs.Select(run => run.Id).OrderBy(id => id).ToArray(),
+                        insertedV1.OrderBy(id => id).ToArray());
+                }
+
+                var v2Runs = runs
+                    .Where((_, index) => cohort.ArchiveVersions[index] == 2)
+                    .ToArray();
+                if (v2Runs.Length > 0)
+                {
+                    var insertedV2 = await repository
+                        .TryAddStrategyMarketPaperRunsWithCompactSkipArchiveV2ForTestsAsync(v2Runs);
+                    Assert.Equal(
+                        v2Runs.Select(run => run.Id).OrderBy(id => id).ToArray(),
+                        insertedV2.OrderBy(id => id).ToArray());
+                }
+            }
+
+            await projection.BootstrapAsync();
+
+            var cohortIds = cohorts.Select(cohort => cohort.StrategyId).ToHashSet();
+            var dashboardLifetime = (await snapshots.GetStrategyPerformanceSnapshotAsync())
+                .Where(row => cohortIds.Contains(row.StrategyId))
+                .ToDictionary(row => row.StrategyId);
+            var directLifetime = (await repository.GetStrategyPerformanceAsync())
+                .Where(row => cohortIds.Contains(row.StrategyId))
+                .ToDictionary(row => row.StrategyId);
+            var dashboardRecent = (await snapshots.GetStrategyRecentPerformanceSnapshotAsync())
+                .Where(row => cohortIds.Contains(row.StrategyId))
+                .GroupBy(row => row.StrategyId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.ToDictionary(row => row.WindowHours));
+            var directRecent = (await repository.GetStrategyRecentPerformanceAsync())
+                .Where(row => cohortIds.Contains(row.StrategyId))
+                .GroupBy(row => row.StrategyId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.ToDictionary(row => row.WindowHours));
+            var baselineLifetime = dashboardLifetime[cohorts[0].StrategyId];
+            var baselineRecent = dashboardRecent[cohorts[0].StrategyId];
+            var expectedWindowCounts = new Dictionary<int, int>
+            {
+                [1] = 1,
+                [6] = 2,
+                [24] = 3
+            };
+
+            foreach (var cohort in cohorts)
+            {
+                var lifetime = dashboardLifetime[cohort.StrategyId];
+                var directLifetimeRow = directLifetime[cohort.StrategyId];
+                Assert.Equal(0, lifetime.ObservedRunsCount);
+                Assert.Equal(0, lifetime.EnteredRunsCount);
+                Assert.Equal(4, lifetime.SkippedRunsCount);
+                Assert.Equal(4, lifetime.PaperConditionSkippedRunsCount);
+                Assert.Equal(0, lifetime.PaperNotAcceptedRunsCount);
+                Assert.Equal(updatedAtUtc[0], lifetime.LastRunUtc);
+                AssertStrategyMetricsEqual(baselineLifetime, lifetime);
+                AssertStrategyMetricsEqual(lifetime, directLifetimeRow);
+
+                Assert.Equal(
+                    [1, 6, 24],
+                    dashboardRecent[cohort.StrategyId].Keys.OrderBy(value => value).ToArray());
+                Assert.Equal(
+                    [1, 6, 24],
+                    directRecent[cohort.StrategyId].Keys.OrderBy(value => value).ToArray());
+                foreach (var (windowHours, expectedCount) in expectedWindowCounts)
+                {
+                    var dashboardRow = dashboardRecent[cohort.StrategyId][windowHours];
+                    var directRow = directRecent[cohort.StrategyId][windowHours];
+                    Assert.Equal(expectedCount, dashboardRow.SkippedRunsCount);
+                    Assert.Equal(expectedCount, dashboardRow.PaperConditionSkippedRunsCount);
+                    Assert.Equal(0, dashboardRow.PaperNotAcceptedRunsCount);
+                    Assert.Equal($"{skipReason}:{expectedCount}", dashboardRow.TopSkipReason);
+                    Assert.Equal(updatedAtUtc[0], dashboardRow.LastRunUtc);
+                    AssertRecentMetricsEqual(baselineRecent[windowHours], dashboardRow);
+                    AssertRecentMetricsEqual(dashboardRow, directRow);
+                    Assert.Equal(expectedCount, directRow.PaperConditionSkippedRunsCount);
+                    Assert.Equal(0, directRow.PaperNotAcceptedRunsCount);
+                    Assert.Equal(updatedAtUtc[0], directRow.LastRunUtc);
+                }
+
+                var counts = await ReadArchiveDashboardCountsAsync(factory, cohort.StrategyId);
+                Assert.Equal(0, counts.RawRuns);
+                Assert.Equal(
+                    cohort.ArchiveVersions.LongCount(version => version == 1),
+                    counts.V1Archives);
+                Assert.Equal(
+                    cohort.ArchiveVersions.LongCount(version => version == 2),
+                    counts.V2Archives);
+                Assert.Equal(4, counts.CanonicalArchives);
+                Assert.Equal(4, counts.DistinctArchivedRunIds);
+                Assert.Equal(4, counts.RollupRuns);
+                Assert.Equal(6, counts.RecentFacts);
+                Assert.Equal(3, counts.RunActivityFacts);
+                Assert.Equal(3, counts.RunSkippedFacts);
+
+                var sourceFactCounts = await ReadRecentStrategyRunFactCountsAsync(
+                    factory,
+                    cohort.StrategyId);
+                Assert.Equal(3, sourceFactCounts.Count);
+                foreach (var recentRun in runsByStrategy[cohort.StrategyId].Take(3))
+                {
+                    Assert.Equal(2, sourceFactCounts[recentRun.Id]);
+                }
+
+                Assert.DoesNotContain(
+                    runsByStrategy[cohort.StrategyId][3].Id,
+                    sourceFactCounts.Keys);
+            }
+        }
+        finally
+        {
+            foreach (var strategyId in insertedStrategyIds)
+            {
+                await DeleteStrategyProjectionArtifactsAsync(factory, strategyId);
+                await DeleteStrategyAsync(factory, strategyId);
+                await DeleteStrategyProjectionArtifactsAsync(factory, strategyId);
+                Assert.Equal(
+                    (0, 0, 0, 0, 0, 0, 0),
+                    await ReadDeletedStrategyProjectionCountsAsync(factory, strategyId));
+            }
+        }
+    }
+
+    private static StrategyMarketPaperRun CreateArchivedSkipRun(
+        Guid strategyId,
+        string marketFixtureKey,
+        DateTimeOffset updatedAtUtc,
+        string skipReason)
+    {
+        var detectedAtUtc = updatedAtUtc.AddMinutes(-10);
+        return new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            strategyId,
+            $"dashboard-archive-market-{marketFixtureKey}",
+            $"dashboard-archive-condition-{marketFixtureKey}",
+            $"dashboard-archive-market-{marketFixtureKey}",
+            "Dashboard archive window integration test",
+            "Test",
+            updatedAtUtc.AddMinutes(-5),
+            updatedAtUtc,
+            detectedAtUtc,
+            updatedAtUtc.AddMinutes(-5),
+            StrategyMarketPaperRunStatuses.Skipped,
+            null,
+            null,
+            null,
+            6m,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            skipReason,
+            detectedAtUtc,
+            updatedAtUtc);
+    }
+
+    private static async Task<ArchiveDashboardCounts> ReadArchiveDashboardCountsAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT
+    (SELECT count(*) FROM strategy_market_paper_runs WHERE strategy_id = @StrategyId),
+    (SELECT count(*) FROM strategy_market_paper_skip_tombstones WHERE strategy_id = @StrategyId),
+    (SELECT count(*) FROM strategy_market_paper_skip_tombstones_v2 WHERE strategy_id = @StrategyId),
+    (SELECT count(*) FROM strategy_market_paper_skip_archive_rows WHERE strategy_id = @StrategyId),
+    (SELECT count(DISTINCT archived_run_id) FROM strategy_market_paper_skip_archive_rows
+        WHERE strategy_id = @StrategyId),
+    (SELECT COALESCE(sum(run_count), 0)::bigint FROM strategy_paper_skip_rollups
+        WHERE strategy_id = @StrategyId),
+    (SELECT count(*) FROM dashboard_strategy_recent_projection_facts
+        WHERE strategy_id = @StrategyId AND source_kind = @SourceKind),
+    (SELECT count(*) FROM dashboard_strategy_recent_projection_facts
+        WHERE strategy_id = @StrategyId AND source_kind = @SourceKind AND fact_kind = @RunActivity),
+    (SELECT count(*) FROM dashboard_strategy_recent_projection_facts
+        WHERE strategy_id = @StrategyId AND source_kind = @SourceKind AND fact_kind = @RunSkipped);
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("SourceKind", DashboardProjectionSourceKinds.StrategyRun);
+        command.Parameters.AddWithValue("RunActivity", DashboardProjectionFactKinds.RunActivity);
+        command.Parameters.AddWithValue("RunSkipped", DashboardProjectionFactKinds.RunSkipped);
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new ArchiveDashboardCounts(
+            reader.GetInt64(0),
+            reader.GetInt64(1),
+            reader.GetInt64(2),
+            reader.GetInt64(3),
+            reader.GetInt64(4),
+            reader.GetInt64(5),
+            reader.GetInt64(6),
+            reader.GetInt64(7),
+            reader.GetInt64(8));
+    }
+
+    private static async Task<IReadOnlyDictionary<Guid, int>> ReadRecentStrategyRunFactCountsAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT source_id, count(*)::integer
+FROM dashboard_strategy_recent_projection_facts
+WHERE strategy_id = @StrategyId
+  AND source_kind = @SourceKind
+GROUP BY source_id
+ORDER BY source_id;
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("SourceKind", DashboardProjectionSourceKinds.StrategyRun);
+        var counts = new Dictionary<Guid, int>();
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            counts.Add(reader.GetGuid(0), reader.GetInt32(1));
+        }
+
+        return counts;
+    }
+
+    private sealed record ArchiveDashboardCounts(
+        long RawRuns,
+        long V1Archives,
+        long V2Archives,
+        long CanonicalArchives,
+        long DistinctArchivedRunIds,
+        long RollupRuns,
+        long RecentFacts,
+        long RunActivityFacts,
+        long RunSkippedFacts);
 
     private static async Task<(Guid StrategyId, string StrategyCode)> ReadFirstStrategyAsync(
         PostgresConnectionFactory factory)
@@ -530,7 +815,35 @@ WHERE source_kind = @SourceKind
         await command.ExecuteNonQueryAsync();
     }
 
-    private static async Task<(int Snapshots, int States, int Events, int Queue)> ReadDeletedStrategyProjectionCountsAsync(
+    private static async Task DeleteStrategyProjectionArtifactsAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+DELETE FROM dashboard_projection_events WHERE strategy_id = @Id;
+DELETE FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @Id;
+DELETE FROM dashboard_strategy_recent_projection_facts WHERE strategy_id = @Id;
+DELETE FROM dashboard_strategy_recent_projection_states WHERE strategy_id = @Id;
+DELETE FROM dashboard_strategy_lifetime_projection_states WHERE strategy_id = @Id;
+DELETE FROM dashboard_strategy_recent_performance_snapshots WHERE strategy_id = @Id;
+DELETE FROM dashboard_strategy_performance_snapshots WHERE strategy_id = @Id;
+""",
+            connection);
+        command.Parameters.AddWithValue("Id", strategyId);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<(
+        int LifetimeSnapshots,
+        int RecentSnapshots,
+        int LifetimeStates,
+        int RecentStates,
+        int RecentFacts,
+        int Events,
+        int Queue)> ReadDeletedStrategyProjectionCountsAsync(
         PostgresConnectionFactory factory,
         Guid strategyId)
     {
@@ -540,7 +853,10 @@ WHERE source_kind = @SourceKind
             """
 SELECT
     (SELECT count(*)::integer FROM dashboard_strategy_performance_snapshots WHERE strategy_id = @Id),
+    (SELECT count(*)::integer FROM dashboard_strategy_recent_performance_snapshots WHERE strategy_id = @Id),
     (SELECT count(*)::integer FROM dashboard_strategy_lifetime_projection_states WHERE strategy_id = @Id),
+    (SELECT count(*)::integer FROM dashboard_strategy_recent_projection_states WHERE strategy_id = @Id),
+    (SELECT count(*)::integer FROM dashboard_strategy_recent_projection_facts WHERE strategy_id = @Id),
     (SELECT count(*)::integer FROM dashboard_projection_events WHERE strategy_id = @Id),
     (SELECT count(*)::integer FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @Id);
 """,
@@ -548,7 +864,14 @@ SELECT
         command.Parameters.AddWithValue("Id", strategyId);
         await using var reader = await command.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        return (reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2), reader.GetInt32(3));
+        return (
+            reader.GetInt32(0),
+            reader.GetInt32(1),
+            reader.GetInt32(2),
+            reader.GetInt32(3),
+            reader.GetInt32(4),
+            reader.GetInt32(5),
+            reader.GetInt32(6));
     }
 
     private static async Task UpdatePaperOrderStatusAsync(

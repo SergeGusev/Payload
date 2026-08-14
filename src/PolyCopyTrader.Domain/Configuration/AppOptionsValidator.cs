@@ -79,6 +79,8 @@ public static class AppOptionsValidator
             $"Strategy run retention apply enabled: {configuration.StrategyRunRetention.ApplyEnabled}",
             $"Strategy run direct Paper skip compaction enabled: {configuration.StrategyRunRetention.DirectPaperSkipCompactionEnabled}",
             $"Strategy run direct Paper skip compaction apply enabled: {configuration.StrategyRunRetention.DirectPaperSkipCompactionApplyEnabled}",
+            $"Strategy run compact skip archive v2 enabled: {configuration.StrategyRunRetention.CompactSkipArchiveV2Enabled}",
+            $"Strategy run compact skip archive v2 product writes supported: {StrategyRunRetentionCapabilities.CompactSkipArchiveV2ProductWritesSupported}",
             $"Strategy run raw retention hours: {configuration.StrategyRunRetention.RawRetentionHours}",
             $"Paper FAK fee backfill enabled: {configuration.PaperFakFeeBackfill.Enabled}",
             $"Paper FAK fee backfill apply enabled: {configuration.PaperFakFeeBackfill.ApplyEnabled}",
@@ -1138,6 +1140,13 @@ public static class AppOptionsValidator
         StrategyRunRetentionOptions options,
         List<string> errors)
     {
+        if (options.CompactSkipArchiveV2Enabled)
+        {
+            errors.Add(
+                "StrategyRunRetention.CompactSkipArchiveV2Enabled cannot be true in this " +
+                "compatibility release because compact skip archive v2 product writes are compiled off.");
+        }
+
         if (options.ApplyEnabled && !options.Enabled)
         {
             errors.Add("StrategyRunRetention.ApplyEnabled requires StrategyRunRetention.Enabled.");

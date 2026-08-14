@@ -189,6 +189,201 @@ BEGIN
 END;
 $function$;
 
+-- Archive creation/key mutation must be exclusive even when issued outside the
+-- repository. Product retention already owns the session-level exclusive gate
+-- and marks its transaction, so this path is only the database invariant fence.
+CREATE OR REPLACE FUNCTION public.coordinate_strategy_run_archive_mutation_with_retention()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+    IF current_setting('polycopytrader.skip_run_retention_transfer', true)
+       IS DISTINCT FROM 'on' THEN
+        PERFORM pg_advisory_xact_lock(1346589778, 1);
+    END IF;
+
+    RETURN NULL;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_00_coordinate_skip_archive_v1_with_retention
+ON public.strategy_market_paper_skip_tombstones;
+CREATE TRIGGER trg_00_coordinate_skip_archive_v1_with_retention
+BEFORE INSERT OR UPDATE ON public.strategy_market_paper_skip_tombstones
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.coordinate_strategy_run_archive_mutation_with_retention();
+
+DROP TRIGGER IF EXISTS trg_00_coordinate_skip_archive_v2_with_retention
+ON public.strategy_market_paper_skip_tombstones_v2;
+CREATE TRIGGER trg_00_coordinate_skip_archive_v2_with_retention
+BEFORE INSERT OR UPDATE ON public.strategy_market_paper_skip_tombstones_v2
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.coordinate_strategy_run_archive_mutation_with_retention();
+
+CREATE OR REPLACE FUNCTION public.enforce_strategy_run_raw_archive_exclusion()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    current_strategy_id uuid;
+    current_market_id text;
+    target_market_id text;
+BEGIN
+    IF TG_TABLE_NAME = 'strategy_market_paper_runs' THEN
+        SELECT run.strategy_id, run.market_id
+        INTO current_strategy_id, current_market_id
+        FROM public.strategy_market_paper_runs run
+        WHERE run.id = NEW.id;
+
+        IF NOT FOUND THEN
+            RETURN NULL;
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_skip_tombstones archive_row
+            WHERE archive_row.archived_run_id = NEW.id
+        ) OR EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_skip_tombstones archive_row
+            WHERE archive_row.strategy_id = current_strategy_id
+              AND archive_row.market_id = current_market_id
+        ) OR EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_skip_tombstones_v2 archive_row
+            WHERE archive_row.archived_run_id = NEW.id
+        ) OR EXISTS (
+            SELECT 1
+            FROM public.strategy_skip_archive_market_identities market_identity
+            INNER JOIN public.strategy_market_paper_skip_tombstones_v2 archive_row
+                ON archive_row.strategy_id = current_strategy_id
+               AND archive_row.market_identity_id = market_identity.market_identity_id
+            WHERE market_identity.market_id = current_market_id COLLATE "C"
+        ) THEN
+            RAISE EXCEPTION
+                'Raw strategy run conflicts with a skipped-run archive.'
+                USING ERRCODE = '23505';
+        END IF;
+    ELSIF TG_TABLE_NAME = 'strategy_market_paper_skip_tombstones' THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_skip_tombstones tombstone
+            WHERE tombstone.strategy_id = NEW.strategy_id
+              AND tombstone.market_id = NEW.market_id
+              AND tombstone.archived_run_id = NEW.archived_run_id
+        ) THEN
+            RETURN NULL;
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_runs run
+            WHERE run.id = NEW.archived_run_id
+               OR (run.strategy_id = NEW.strategy_id
+                   AND run.market_id = NEW.market_id)
+        ) THEN
+            RAISE EXCEPTION
+                'V1 skipped-run archive conflicts with a raw strategy run.'
+                USING ERRCODE = '23505';
+        END IF;
+    ELSIF TG_TABLE_NAME = 'strategy_market_paper_skip_tombstones_v2' THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_skip_tombstones_v2 tombstone
+            WHERE tombstone.strategy_id = NEW.strategy_id
+              AND tombstone.market_identity_id = NEW.market_identity_id
+              AND tombstone.archived_run_id = NEW.archived_run_id
+        ) THEN
+            RETURN NULL;
+        END IF;
+
+        SELECT market_identity.market_id
+        INTO STRICT target_market_id
+        FROM public.strategy_skip_archive_market_identities market_identity
+        WHERE market_identity.market_identity_id = NEW.market_identity_id;
+
+        IF EXISTS (
+            SELECT 1
+            FROM public.strategy_market_paper_runs run
+            WHERE run.id = NEW.archived_run_id
+               OR (run.strategy_id = NEW.strategy_id
+                   AND run.market_id = target_market_id)
+        ) THEN
+            RAISE EXCEPTION
+                'V2 skipped-run archive conflicts with a raw strategy run.'
+                USING ERRCODE = '23505';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'Unsupported raw/archive exclusion table: %.', TG_TABLE_NAME;
+    END IF;
+
+    RETURN NULL;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_enforce_strategy_run_raw_archive_exclusion
+ON public.strategy_market_paper_runs;
+DROP TRIGGER IF EXISTS trg_enforce_strategy_run_raw_archive_exclusion_insert
+ON public.strategy_market_paper_runs;
+DROP TRIGGER IF EXISTS trg_enforce_strategy_run_raw_archive_exclusion_update
+ON public.strategy_market_paper_runs;
+CREATE CONSTRAINT TRIGGER trg_enforce_strategy_run_raw_archive_exclusion_insert
+AFTER INSERT ON public.strategy_market_paper_runs
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_strategy_run_raw_archive_exclusion();
+CREATE CONSTRAINT TRIGGER trg_enforce_strategy_run_raw_archive_exclusion_update
+AFTER UPDATE ON public.strategy_market_paper_runs
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+WHEN (
+    OLD.id IS DISTINCT FROM NEW.id
+    OR OLD.strategy_id IS DISTINCT FROM NEW.strategy_id
+    OR OLD.market_id IS DISTINCT FROM NEW.market_id)
+EXECUTE FUNCTION public.enforce_strategy_run_raw_archive_exclusion();
+
+DROP TRIGGER IF EXISTS trg_enforce_skip_archive_v1_raw_exclusion
+ON public.strategy_market_paper_skip_tombstones;
+DROP TRIGGER IF EXISTS trg_enforce_skip_archive_v1_raw_exclusion_insert
+ON public.strategy_market_paper_skip_tombstones;
+DROP TRIGGER IF EXISTS trg_enforce_skip_archive_v1_raw_exclusion_update
+ON public.strategy_market_paper_skip_tombstones;
+CREATE CONSTRAINT TRIGGER trg_enforce_skip_archive_v1_raw_exclusion_insert
+AFTER INSERT ON public.strategy_market_paper_skip_tombstones
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_strategy_run_raw_archive_exclusion();
+CREATE CONSTRAINT TRIGGER trg_enforce_skip_archive_v1_raw_exclusion_update
+AFTER UPDATE ON public.strategy_market_paper_skip_tombstones
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+WHEN (
+    OLD.strategy_id IS DISTINCT FROM NEW.strategy_id
+    OR OLD.market_id IS DISTINCT FROM NEW.market_id
+    OR OLD.archived_run_id IS DISTINCT FROM NEW.archived_run_id)
+EXECUTE FUNCTION public.enforce_strategy_run_raw_archive_exclusion();
+
+DROP TRIGGER IF EXISTS trg_enforce_skip_archive_v2_raw_exclusion
+ON public.strategy_market_paper_skip_tombstones_v2;
+DROP TRIGGER IF EXISTS trg_enforce_skip_archive_v2_raw_exclusion_insert
+ON public.strategy_market_paper_skip_tombstones_v2;
+DROP TRIGGER IF EXISTS trg_enforce_skip_archive_v2_raw_exclusion_update
+ON public.strategy_market_paper_skip_tombstones_v2;
+CREATE CONSTRAINT TRIGGER trg_enforce_skip_archive_v2_raw_exclusion_insert
+AFTER INSERT ON public.strategy_market_paper_skip_tombstones_v2
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_strategy_run_raw_archive_exclusion();
+CREATE CONSTRAINT TRIGGER trg_enforce_skip_archive_v2_raw_exclusion_update
+AFTER UPDATE ON public.strategy_market_paper_skip_tombstones_v2
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW
+WHEN (
+    OLD.strategy_id IS DISTINCT FROM NEW.strategy_id
+    OR OLD.market_identity_id IS DISTINCT FROM NEW.market_identity_id
+    OR OLD.archived_run_id IS DISTINCT FROM NEW.archived_run_id)
+EXECUTE FUNCTION public.enforce_strategy_run_raw_archive_exclusion();
+
 DROP TRIGGER IF EXISTS trg_00_coordinate_strategy_run_mutation_with_retention
 ON public.strategy_market_paper_runs;
 CREATE TRIGGER trg_00_coordinate_strategy_run_mutation_with_retention
@@ -220,16 +415,18 @@ BEGIN
 END;
 $function$;
 
-CREATE OR REPLACE FUNCTION public.restore_archived_strategy_runs_for_dependency(
+CREATE OR REPLACE FUNCTION public.restore_archived_strategy_runs_for_dependency_core(
     target_strategy_id uuid,
     target_condition_id text,
     target_market_id text,
     match_market_or_condition boolean,
-    promote_live_or_shadow boolean)
+    promote_live_or_shadow boolean,
+    target_updated_at_or_after timestamptz)
 RETURNS integer
 LANGUAGE plpgsql
 AS $function$
 DECLARE
+    candidate_archive record;
     archived record;
     rollup_count integer;
     rollup_first_updated_at_utc timestamptz;
@@ -261,7 +458,8 @@ BEGIN
         WHERE tombstone.archive_format_version IS DISTINCT FROM 1
           AND (target_strategy_id IS NULL
                OR tombstone.strategy_id = target_strategy_id)
-          AND (target_condition_id IS NOT NULL
+          AND (target_updated_at_or_after IS NOT NULL
+               OR target_condition_id IS NOT NULL
                OR (target_market_id IS NOT NULL
                    AND tombstone.market_id = target_market_id))
     ) THEN
@@ -270,31 +468,187 @@ BEGIN
             USING ERRCODE = '55000';
     END IF;
 
-    FOR archived IN
-        SELECT tombstone.*
-        FROM public.strategy_market_paper_skip_tombstones tombstone
-        WHERE tombstone.archive_format_version = 1
-          AND (target_strategy_id IS NULL
-               OR tombstone.strategy_id = target_strategy_id)
-          AND (
-              (
-                  match_market_or_condition
-                  AND (
-                      (target_condition_id IS NOT NULL
-                       AND tombstone.condition_id = target_condition_id)
-                      OR (target_market_id IS NOT NULL
-                          AND tombstone.market_id = target_market_id)
-                  )
-              )
-              OR (
-                  NOT match_market_or_condition
-                  AND target_condition_id IS NOT NULL
-                  AND tombstone.condition_id = target_condition_id
-              )
-          )
-        ORDER BY tombstone.strategy_id, tombstone.market_id
-        FOR UPDATE
+    FOR candidate_archive IN
+        SELECT deduplicated_candidate.*
+        FROM (
+            SELECT DISTINCT ON (
+                candidate.archive_storage_version,
+                candidate.archived_run_id)
+                candidate.archive_storage_version,
+                candidate.strategy_id,
+                candidate.market_id,
+                candidate.archived_run_id
+            FROM (
+            -- Live enablement is strategy- and time-bounded. Keep both archive
+            -- representations on their declared strategy/recent index paths.
+            SELECT
+                1::smallint AS archive_storage_version,
+                tombstone.strategy_id,
+                tombstone.market_id,
+                tombstone.archived_run_id
+            FROM public.strategy_market_paper_skip_tombstones tombstone
+            WHERE target_updated_at_or_after IS NOT NULL
+              AND target_strategy_id IS NOT NULL
+              AND tombstone.archive_format_version = 1
+              AND tombstone.strategy_id = target_strategy_id
+              AND tombstone.run_updated_at_utc >= target_updated_at_or_after
+            UNION ALL
+            SELECT
+                2::smallint,
+                tombstone.strategy_id,
+                market_identity.market_id,
+                tombstone.archived_run_id
+            FROM public.strategy_market_paper_skip_tombstones_v2 tombstone
+            INNER JOIN public.strategy_skip_archive_market_identities market_identity
+                ON market_identity.market_identity_id = tombstone.market_identity_id
+            WHERE target_updated_at_or_after IS NOT NULL
+              AND target_strategy_id IS NOT NULL
+              AND tombstone.strategy_id = target_strategy_id
+              AND tombstone.run_updated_at_utc >= target_updated_at_or_after
+            UNION ALL
+            -- Condition dependencies drive through the v1 condition index and
+            -- through metadata(condition)->v2(metadata,strategy), respectively.
+            SELECT
+                1::smallint,
+                tombstone.strategy_id,
+                tombstone.market_id,
+                tombstone.archived_run_id
+            FROM public.strategy_market_paper_skip_tombstones tombstone
+            WHERE target_updated_at_or_after IS NULL
+              AND target_condition_id IS NOT NULL
+              AND tombstone.archive_format_version = 1
+              AND tombstone.condition_id = target_condition_id
+              AND (target_strategy_id IS NULL
+                   OR tombstone.strategy_id = target_strategy_id)
+            UNION ALL
+            SELECT
+                2::smallint,
+                tombstone.strategy_id,
+                market_identity.market_id,
+                tombstone.archived_run_id
+            FROM public.strategy_skip_archive_market_metadata_versions metadata
+            INNER JOIN public.strategy_market_paper_skip_tombstones_v2 tombstone
+                ON tombstone.metadata_version_id = metadata.metadata_version_id
+            INNER JOIN public.strategy_skip_archive_market_identities market_identity
+                ON market_identity.market_identity_id = tombstone.market_identity_id
+            WHERE target_updated_at_or_after IS NULL
+              AND target_condition_id IS NOT NULL
+              AND metadata.condition_id = target_condition_id COLLATE "C"
+              AND (target_strategy_id IS NULL
+                   OR tombstone.strategy_id = target_strategy_id)
+            UNION ALL
+            -- Shadow decisions match condition OR exact market. The condition
+            -- branches above supply the first half; these extra branches use
+            -- exact strategy/market keys and are deduplicated by the outer query.
+            SELECT
+                1::smallint,
+                tombstone.strategy_id,
+                tombstone.market_id,
+                tombstone.archived_run_id
+            FROM public.strategy_market_paper_skip_tombstones tombstone
+            WHERE target_updated_at_or_after IS NULL
+              AND match_market_or_condition
+              AND target_strategy_id IS NOT NULL
+              AND target_market_id IS NOT NULL
+              AND tombstone.archive_format_version = 1
+              AND tombstone.strategy_id = target_strategy_id
+              AND tombstone.market_id = target_market_id
+            UNION ALL
+            SELECT
+                2::smallint,
+                tombstone.strategy_id,
+                market_identity.market_id,
+                tombstone.archived_run_id
+            FROM public.strategy_skip_archive_market_identities market_identity
+            INNER JOIN public.strategy_market_paper_skip_tombstones_v2 tombstone
+                ON tombstone.strategy_id = target_strategy_id
+               AND tombstone.market_identity_id = market_identity.market_identity_id
+            WHERE target_updated_at_or_after IS NULL
+              AND match_market_or_condition
+              AND target_strategy_id IS NOT NULL
+              AND target_market_id IS NOT NULL
+              AND market_identity.market_id = target_market_id COLLATE "C"
+            ) candidate
+            ORDER BY
+                candidate.archive_storage_version,
+                candidate.archived_run_id,
+                candidate.strategy_id,
+                candidate.market_id COLLATE "C"
+        ) deduplicated_candidate
+        ORDER BY
+            deduplicated_candidate.strategy_id,
+            deduplicated_candidate.market_id COLLATE "C",
+            deduplicated_candidate.archive_storage_version
     LOOP
+        IF candidate_archive.archive_storage_version = 1 THEN
+            SELECT
+                1::smallint AS archive_storage_version,
+                tombstone.strategy_id,
+                tombstone.market_id,
+                tombstone.archived_run_id,
+                tombstone.condition_id,
+                tombstone.market_slug,
+                tombstone.market_title,
+                tombstone.category,
+                tombstone.market_start_utc,
+                tombstone.market_end_utc,
+                tombstone.detected_at_utc,
+                tombstone.entry_due_at_utc,
+                tombstone.selected_asset_id,
+                tombstone.selected_outcome,
+                tombstone.stake_usd,
+                tombstone.skip_reason,
+                tombstone.run_created_at_utc,
+                tombstone.run_updated_at_utc,
+                tombstone.rollup_bucket_start_utc,
+                NULL::integer AS market_identity_id
+            INTO archived
+            FROM public.strategy_market_paper_skip_tombstones tombstone
+            WHERE tombstone.archived_run_id = candidate_archive.archived_run_id
+              AND tombstone.archive_format_version = 1
+            FOR UPDATE;
+        ELSE
+            SELECT
+                2::smallint AS archive_storage_version,
+                tombstone.strategy_id,
+                market_identity.market_id,
+                tombstone.archived_run_id,
+                metadata.condition_id,
+                metadata.market_slug,
+                metadata.market_title,
+                metadata.category,
+                metadata.market_start_utc,
+                metadata.market_end_utc,
+                tombstone.detected_at_utc,
+                tombstone.entry_due_at_utc,
+                tombstone.selected_asset_id,
+                tombstone.selected_outcome,
+                tombstone.stake_usd,
+                reason.skip_reason,
+                tombstone.detected_at_utc AS run_created_at_utc,
+                tombstone.run_updated_at_utc,
+                date_trunc('day', tombstone.run_updated_at_utc AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+                    AS rollup_bucket_start_utc,
+                tombstone.market_identity_id
+            INTO archived
+            FROM public.strategy_market_paper_skip_tombstones_v2 tombstone
+            INNER JOIN public.strategy_skip_archive_market_identities market_identity
+                ON market_identity.market_identity_id = tombstone.market_identity_id
+            INNER JOIN public.strategy_skip_archive_market_metadata_versions metadata
+                ON metadata.metadata_version_id = tombstone.metadata_version_id
+               AND metadata.market_identity_id = tombstone.market_identity_id
+            INNER JOIN public.strategy_skip_archive_reasons reason
+                ON reason.skip_reason_id = tombstone.skip_reason_id
+            WHERE tombstone.archived_run_id = candidate_archive.archived_run_id
+            FOR UPDATE OF tombstone;
+        END IF;
+
+        -- Another dependency transaction may have restored the row while this
+        -- transaction waited for its per-representation row lock.
+        IF NOT FOUND THEN
+            CONTINUE;
+        END IF;
+
         IF EXISTS (
             SELECT 1
             FROM public.strategy_market_paper_runs run
@@ -329,18 +683,33 @@ BEGIN
 
         SELECT
             count(*)::integer,
-            min(tombstone.run_updated_at_utc),
-            max(tombstone.run_updated_at_utc)
+            min(remaining.run_updated_at_utc),
+            max(remaining.run_updated_at_utc)
         INTO
             remaining_count,
             remaining_first_updated_at_utc,
             remaining_last_updated_at_utc
-        FROM public.strategy_market_paper_skip_tombstones tombstone
-        WHERE tombstone.archive_format_version = 1
-          AND tombstone.strategy_id = archived.strategy_id
-          AND tombstone.rollup_bucket_start_utc = archived.rollup_bucket_start_utc
-          AND tombstone.skip_reason = archived.skip_reason
-          AND tombstone.archived_run_id <> archived.archived_run_id;
+        FROM (
+            SELECT tombstone.run_updated_at_utc
+            FROM public.strategy_market_paper_skip_tombstones tombstone
+            WHERE tombstone.archive_format_version = 1
+              AND tombstone.strategy_id = archived.strategy_id
+              AND tombstone.rollup_bucket_start_utc = archived.rollup_bucket_start_utc
+              AND tombstone.skip_reason = archived.skip_reason
+              AND tombstone.archived_run_id <> archived.archived_run_id
+            UNION ALL
+            SELECT tombstone.run_updated_at_utc
+            FROM public.strategy_market_paper_skip_tombstones_v2 tombstone
+            INNER JOIN public.strategy_skip_archive_reasons reason
+                ON reason.skip_reason_id = tombstone.skip_reason_id
+            WHERE tombstone.strategy_id = archived.strategy_id
+              AND ((tombstone.run_updated_at_utc AT TIME ZONE 'UTC')::date) =
+                  ((archived.rollup_bucket_start_utc AT TIME ZONE 'UTC')::date)
+              AND tombstone.run_updated_at_utc >= archived.rollup_bucket_start_utc
+              AND tombstone.run_updated_at_utc < archived.rollup_bucket_start_utc + interval '1 day'
+              AND reason.skip_reason = archived.skip_reason
+              AND tombstone.archived_run_id <> archived.archived_run_id
+        ) remaining;
 
         expected_first_updated_at_utc := CASE
             WHEN remaining_count = 0 THEN archived.run_updated_at_utc
@@ -362,9 +731,15 @@ BEGIN
         PERFORM public.suppress_dashboard_strategy_run_projection(
             archived.archived_run_id);
 
-        DELETE FROM public.strategy_market_paper_skip_tombstones tombstone
-        WHERE tombstone.strategy_id = archived.strategy_id
-          AND tombstone.market_id = archived.market_id;
+        IF archived.archive_storage_version = 1 THEN
+            DELETE FROM public.strategy_market_paper_skip_tombstones tombstone
+            WHERE tombstone.strategy_id = archived.strategy_id
+              AND tombstone.market_id = archived.market_id;
+        ELSE
+            DELETE FROM public.strategy_market_paper_skip_tombstones_v2 tombstone
+            WHERE tombstone.strategy_id = archived.strategy_id
+              AND tombstone.market_identity_id = archived.market_identity_id;
+        END IF;
         GET DIAGNOSTICS affected_rows = ROW_COUNT;
         IF affected_rows <> 1 THEN
             RAISE EXCEPTION
@@ -503,6 +878,86 @@ BEGIN
     RETURN restored_count;
 END;
 $function$;
+
+CREATE OR REPLACE FUNCTION public.restore_archived_strategy_runs_for_dependency(
+    target_strategy_id uuid,
+    target_condition_id text,
+    target_market_id text,
+    match_market_or_condition boolean,
+    promote_live_or_shadow boolean)
+RETURNS integer
+LANGUAGE sql
+VOLATILE
+AS $function$
+SELECT public.restore_archived_strategy_runs_for_dependency_core(
+    target_strategy_id,
+    target_condition_id,
+    target_market_id,
+    match_market_or_condition,
+    promote_live_or_shadow,
+    NULL);
+$function$;
+
+BEGIN;
+LOCK TABLE public.strategies IN SHARE ROW EXCLUSIVE MODE;
+
+DROP TRIGGER IF EXISTS trg_00_coordinate_strategy_live_state_with_retention
+ON public.strategies;
+CREATE TRIGGER trg_00_coordinate_strategy_live_state_with_retention
+BEFORE UPDATE OF live_stakes, live_enabled_at_utc ON public.strategies
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.coordinate_strategy_run_mutation_with_retention();
+
+CREATE OR REPLACE FUNCTION public.promote_active_strategy_runs_to_live_scope()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    live_boundary_utc timestamptz;
+BEGIN
+    IF NEW.live_stakes
+       AND (
+           NOT OLD.live_stakes
+           OR OLD.live_enabled_at_utc IS DISTINCT FROM NEW.live_enabled_at_utc
+       ) THEN
+        live_boundary_utc := COALESCE(
+            NEW.live_enabled_at_utc,
+            NEW.updated_at_utc,
+            clock_timestamp());
+
+        PERFORM public.restore_archived_strategy_runs_for_dependency_core(
+            NEW.id,
+            NULL,
+            NULL,
+            false,
+            true,
+            live_boundary_utc);
+
+        UPDATE public.strategy_market_paper_runs run
+        SET retention_scope = 'LiveOrShadow'
+        WHERE run.strategy_id = NEW.id
+          AND run.retention_scope = 'PaperOnly'
+          AND (
+              run.status IN ('Observed', 'Entered')
+              OR run.updated_at_utc >= live_boundary_utc
+          );
+    END IF;
+
+    RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_promote_active_strategy_runs_to_live_scope
+ON public.strategies;
+CREATE TRIGGER trg_promote_active_strategy_runs_to_live_scope
+AFTER UPDATE OF live_stakes, live_enabled_at_utc ON public.strategies
+FOR EACH ROW
+WHEN (
+    OLD.live_stakes IS DISTINCT FROM NEW.live_stakes
+    OR OLD.live_enabled_at_utc IS DISTINCT FROM NEW.live_enabled_at_utc)
+EXECUTE FUNCTION public.promote_active_strategy_runs_to_live_scope();
+
+COMMIT;
 
 CREATE OR REPLACE FUNCTION public.restore_strategy_runs_after_dependency_write()
 RETURNS trigger
@@ -784,6 +1239,13 @@ SELECT array_remove(ARRAY[
         FROM public.strategy_market_paper_skip_tombstones tombstone
         WHERE tombstone.strategy_id = (target_run).strategy_id
           AND tombstone.market_id = (target_run).market_id
+        UNION ALL
+        SELECT 1
+        FROM public.strategy_market_paper_skip_tombstones_v2 tombstone
+        INNER JOIN public.strategy_skip_archive_market_identities market_identity
+            ON market_identity.market_identity_id = tombstone.market_identity_id
+        WHERE tombstone.strategy_id = (target_run).strategy_id
+          AND market_identity.market_id = (target_run).market_id
     ) THEN 'existing_tombstone' END,
     CASE WHEN EXISTS (
         SELECT 1
