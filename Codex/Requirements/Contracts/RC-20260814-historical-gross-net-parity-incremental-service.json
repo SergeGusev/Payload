@@ -12,6 +12,10 @@
     {
       "source": "user",
       "text": "А почему ты сейчас считаешь доноров? Пусть этим сервис занимается в процессе работы"
+    },
+    {
+      "source": "user",
+      "text": "Подтверждаю"
     }
   ],
   "scope": {
@@ -114,7 +118,7 @@
         "Candidate strategy IDs are produced by the approved typed matcher and read in deterministic pages no larger than the configured historical parity BatchSize. Every donor SQL statement has an explicit finite strategy-ID allowlist, the approved exact-donor predicate, a bounded statement timeout, and uses only the existing source-specific access paths as applicable: ix_strategy_market_paper_runs_strategy_settled; ix_strategy_paper_skip_rollups_strategy_last; ix_live_orders_strategy_settlement; ix_paper_orders_strategy_time; ix_paper_orders_id_strategy_side_cover; ix_paper_fills_order_time; ux_paper_positions_wallet_asset; ix_paper_positions_open_wallet; ux_paper_position_settlements_wallet_asset; and ix_paper_position_settlements_wallet_time. It never scans donors for unlisted strategies. No new index DDL is introduced. A timeout, cancellation, sequential full-corpus plan, or incomplete candidate page causes no financial mutation and retries later without using partial aggregates.",
         "Paper targets use exact Paper donors; Live targets use the approved exact Paper plus exact Live pool with economic-lineage deduplication and representation precedence from RC-20260814-historical-gross-net-parity.",
         "DonorHashEncodingV1 is a closed binary encoding. A payload begins with the ASCII domain tag HGNM1 or HGNS1, then an unsigned 32-bit big-endian record count, then fixed-field records. Every scalar starts with one type byte: 00 null; 01 exact UTF-8 string with unsigned 32-bit big-endian byte length and no Unicode normalization; 02 signed invariant base-10 integer with no leading zeros except 0, length-prefixed as UTF-8; 03 decimal as a type-02 unscaled signed integer followed by signed 32-bit big-endian scale; 04 false; 05 true; 06 UUID as 36 lowercase ASCII D-format bytes; 07 case-sensitive declared enum name as a type-01 string; 08 UTC timestamp as type-02 ticks since 0001-01-01T00:00:00Z after UTC conversion and truncation to PostgreSQL microsecond precision; 09 positive infinity. A field's domain type, not its text shape, chooses the type byte. Lists contain unsigned 32-bit big-endian count followed by elements. Byte comparison is unsigned lexicographic; null therefore sorts before non-null. Lowercase SHA-256 hex is used everywhere.",
-        "HistoricalGrossNetDonorMembershipHashV1 hashes an HGNM1 payload. Deduplicated selected representation records are sorted by encoded economicDedupKey, sourceKind, sourceId, allocationId, then by the entire encoded record as final tie-break. Each record has exactly this field order: economicDedupKey string, sourceKind enum, sourceId in its declared UUID-or-string domain type, allocationId nullable string, representationPrecedence integer, contributionKind enum, Gross decimal, basis decimal, Fee decimal, Net decimal, status enum, calculationSource string, evidenceVersion nullable string, liquidityRole enum, feeRate nullable decimal, feeExponent nullable integer, feeTakerOnly nullable boolean, calculatedAt nullable timestamp, componentAllocationHash string. componentAllocationHash is the lowercase SHA-256 of an HGNM1-domain nested list whose records are sorted by encoded allocationId, sourceChargeId, then whole record and contain allocationId string, sourceChargeId string, amount decimal, and evidenceVersion nullable string.",
+        "HistoricalGrossNetDonorMembershipHashV1 hashes an HGNM1 payload. Deduplicated selected representation records are sorted by encoded economicDedupKey, sourceKind, sourceId, allocationId, then by the entire encoded record as final tie-break. Each record has exactly this field order: economicDedupKey string, sourceKind enum, sourceId in its declared UUID-or-string domain type, allocationId nullable string, representationPrecedence integer, contributionKind enum, Gross decimal, basis decimal, Fee decimal, Net decimal, status enum, calculationSource string, evidenceVersion nullable string, liquidityRole enum, feeRate nullable decimal, feeExponent nullable integer, feeTakerOnly nullable boolean, calculatedAt nullable timestamp, componentAllocationHash string. componentAllocationHash is the lowercase SHA-256 of the ComponentEvidenceGraphV1 HGNM1-domain nested payload defined by REQ-006.",
         "HistoricalGrossNetDonorSelectionHashV1 hashes an HGNS1 payload over every candidate aggregate the matcher must inspect to prove the winner or tier exhaustion. Records are sorted in exact HistoricalGrossNetDonorDistanceV1 matcher comparison order with candidate UUID as final tie-break. Each record has exactly this field order: candidateStrategyId UUID, tier integer, distanceComponents list, exactDonorCount integer, aggregateStake decimal, N decimal, D decimal, MembershipHashV1 string. distanceComponents appear in the exact field order declared by HistoricalGrossNetDonorDistanceV1; each component is a two-field record of case-sensitive component-name string and a typed value using DonorHashEncodingV1, including type 09 for positive infinity and type 00 for null. An empty candidate uses zero count/N/D/stake and the MembershipHashV1 of an empty HGNM1 payload.",
         "The decision stores the chosen donor strategy and tier, exact numerator N, exact denominator D, raw/exact/deduplicated counts, aggregate exact donor stake, MembershipHashV1, SelectionHashV1, ratio, target basis, component floor, final Fee/Net, source, and timestamp.",
         "Inside the target SERIALIZABLE mutation transaction the service recomputes the complete relevant tier candidate set, every required candidate aggregate/absence proof, both hashes, the deterministic winner, and the target stable tuple before writing. Revalidating only the previously selected strategy is forbidden. A concurrent donor or competing-strategy change yields either one complete serializable selection or a rollback/retry, never a mixed/stale choice.",
@@ -224,6 +228,39 @@
           "evidence": ""
         }
       ]
+    },
+    {
+      "id": "REQ-006",
+      "text": "ComponentEvidenceGraphV1 keeps each SELL contribution's effective entry-Fee allocation and pool-rounding residual aggregate, while separately recording the original BUY source charges and their coverage edges; it never invents a per-BUY distribution of the aggregate effective allocation or residual.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "Подтверждаю",
+      "acceptanceCriteria": [
+        "The componentAllocationHash nested payload uses the HGNM1 domain, an unsigned 32-bit big-endian record count, and fixed-field records with this exact field order: recordKind enum, allocationId nullable string, sourceChargeId nullable string, amount nullable decimal, evidenceVersion nullable string, poolAllocatedRaw nullable decimal, remainingPool nullable decimal, poolDecrement nullable decimal, poolRoundingResidual nullable decimal. Records are sorted by encoded recordKind, allocationId, sourceChargeId, then the entire encoded record as final tie-break.",
+        "The closed recordKind set and allowed non-null fields are: EffectiveAllocation = allocationId, amount, optional evidenceVersion; SourceCharge = sourceChargeId, amount, optional evidenceVersion; CoverageEdge = allocationId and sourceChargeId; PoolMovement = allocationId, poolAllocatedRaw, remainingPool, poolDecrement, and poolRoundingResidual. Every field not listed for that record kind is encoded as null. Undefined kinds, invalid nullability, duplicate identities, missing edge endpoints, overlap, or an unexplained amount are invariant conflicts.",
+        "For an exact SELL, paper-entry-allocation:{sell_fill_id} has one EffectiveAllocation record whose amount is the aggregate effectiveEntrySlice8 and one PoolMovement record containing the aggregate poolAllocatedRaw, remainingPool8, poolDecrement8, and poolRoundingResidual8. Each contributing paper-fill:{buy_fill_id}:entry has one SourceCharge record with its proved original Fee/evidence and one CoverageEdge to that entry allocation. The proved exit charge paper-fill:{sell_fill_id}:exit has one SourceCharge record, paper-exit-allocation:{sell_fill_id} has one EffectiveAllocation record with the proved exit Fee, and one CoverageEdge joins them. No part of effectiveEntrySlice8 or poolRoundingResidual8 is assigned to an individual BUY source charge.",
+        "The replay/audit validator proves the aggregate persisted pool transition, unique source-charge and allocation identities, complete charge-to-pool-to-allocation coverage, contribution-effective Fee, component floor, and the approved residual equation without requiring or fabricating a per-charge share of the aggregate residual. Inability to prove those aggregate identities and equations defers only that target without admitting it as an exact donor.",
+        "This representation changes only permanent evidence and deterministic hash bytes. Gross, basis, stored Fee, contribution-effective Fee, Net, donor numerator, component floor, cutoff membership, status/source precedence, and every financial formula remain exactly as previously approved."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetDonorMatcherTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/*HistoricalGrossNetParity*"
+      ],
+      "verification": [
+        {
+          "id": "VER-007",
+          "kind": "test",
+          "command": "Run ComponentEvidenceGraphV1 replay, hash, audit, and donor tests under the marked D:\\CodexTemp run.",
+          "expected": "Tests cover one BUY, multiple BUYs, two partial SELLs plus remainder, adversarial eighth-decimal residual, exact SELL donor inclusion, mixed-source proof, missing/duplicate/overlapping edges, permutation-invariant known-answer hashing, and prove that no per-BUY residual distribution affects Fee/Net.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
     }
   ],
   "assumptions": [
@@ -234,8 +271,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
-        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
       }
     },
     {
@@ -245,8 +282,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
-        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
       }
     },
     {
@@ -256,8 +293,19 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
-        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+      }
+    },
+    {
+      "id": "ASM-004",
+      "text": "The user's confirmation means that a multi-BUY SELL keeps effectiveEntrySlice8 and poolRoundingResidual8 as aggregate facts, while the audit separately records the original BUY source charges and charge-to-allocation coverage edges without assigning an arbitrary part of either aggregate amount to an individual BUY.",
+      "impact": "Fee, Net, donor numerator, component floor, and every financial result remain unchanged. The audit proves the aggregate pool transition and which source charges are covered, but intentionally makes no claim about a counterfactual per-BUY ownership of the aggregate rounding residual.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
       }
     }
   ],
@@ -269,8 +317,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
-        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
       }
     },
     {
@@ -280,8 +328,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
-        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
       }
     },
     {
@@ -291,8 +339,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
-        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
       }
     },
     {
@@ -302,16 +350,27 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
-        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+      }
+    },
+    {
+      "id": "DEV-005",
+      "text": "ComponentEvidenceGraphV1 supersedes the previously approved componentAllocationHash nested record (allocationId, sourceChargeId, amount, evidenceVersion) because that singular shape falsely requires one aggregate SELL effective allocation/residual to be apportioned among multiple BUY source charges. The replacement uses typed aggregate-allocation, source-charge, coverage-edge, and pool-movement records defined by REQ-006.",
+      "impact": "Previously derived componentAllocationHash known-answer bytes are intentionally replaced before deployment and must be regenerated in focused tests. No canonical accounting field or financial value changes; only the permanent evidence graph and its deterministic hash representation change.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
-    "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+    "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
+    "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
   },
   "independentReview": {
     "reviewer": "agent:/root/incremental_service_semantic_review",
