@@ -1,0 +1,322 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260814-historical-gross-net-parity-incremental-service",
+  "title": "Incremental service-side donor calculation for historical Gross/Net parity",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Вот это не нужно: Сначала выполняется полностью read-only preview. Он создаёт неизменяемый artifact; фактическое применение потребует отдельного последующего одобрения его SHA.\n\nДелай сразу\n\nОстальное нормально"
+    },
+    {
+      "source": "user",
+      "text": "А почему ты сейчас считаешь доноров? Пусть этим сервис занимается в процессе работы"
+    }
+  ],
+  "scope": {
+    "goal": "Replace the previously approved full donor-universe preflight and immutable database plan with bounded incremental donor calculation performed by the deployed service while it processes each eligible historical target.",
+    "inScope": [
+      "Only the orchestration, persistence, audit, restart, concurrency, and Live-ordering changes required to make the deployed service calculate donor aggregates lazily during background processing.",
+      "A bounded exact/authoritative/local-calculation pass across eligible historical targets before the donor-fallback pass, followed by candidate-strategy-scoped donor reads and immediate per-target accounting transactions during service execution.",
+      "Per-target durable accounting decisions containing the selected donor strategy/tier, exact numerator and denominator, counts, deduplication evidence, membership hash, ratio, target basis, Fee, Net, source, and calculation time.",
+      "Automatic background handling after the user separately deploys the approved service build; no runtime artifact, donor file, donor SHA approval, ApplyEnabled gate, or second human approval."
+    ],
+    "outOfScope": [
+      "Any local, manual, one-off, or pre-deployment calculation of production donor coefficients or enumeration of the complete production donor universe by Codex.",
+      "Changing the Gross contribution set, Gross PnL/ROI formulas, historical cutoff, exact-accounting precedence, donor-distance tiers, Fee/basis formulas, 0.0333 terminal fallback, proved-component floor, Calculated/VenueReported rules, or no-on-chain-matcher decision approved by RC-20260814-historical-gross-net-parity.",
+      "Changing ordinary post-cutoff accounting, signal generation, order placement, execution, settlement facts, or adding Live open-position MtM.",
+      "Adding a new production index, rebuilding an index, or otherwise introducing an index/schema-maintenance operation for donor calculation. The implementation must use the existing strategy-scoped indexes named in REQ-003; if source/runtime inspection disproves their availability or sufficiency, implementation stops for a revised contract.",
+      "Production database mutation, service deployment, restart, configuration mutation, or trading action during the local implementation task."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Mutation targets retain the exact source-specific originating-entry cutoff < 2026-08-10T00:00:00Z from RC-20260814-historical-gross-net-parity. Donor observations remain exact lifetime observations from any date, but are queried only by the deployed service when an individual fallback target is processed.",
+    "firstVerification": "Inspect the current worker, processor, repository queries, plan schema/models, Live balance path, and tests read-only; verify that the proposed product/deployment dispatch contains no donor precompute path or full donor-universe load. Separately record Codex tool activity as task evidence rather than claiming tests can prove past tool behavior."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "The deployed background service, and only that service, calculates donor aggregates while it processes eligible historical targets; Codex does not precompute, store, or provide production donor coefficients during implementation or deployment preparation.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Пусть этим сервис занимается в процессе работы",
+      "acceptanceCriteria": [
+        "With HistoricalGrossNetParity.Enabled=true, the service processes bounded pages over worker cycles and performs donor work only after an eligible fallback target reaches the donor phase.",
+        "The exact/authoritative/local-calculation phase reaches its current-sweep boundary in bounded pages before donor fallback begins: each candidate is either completed exactly/locally, proved fallback-eligible, or explicitly deferred for a target-scoped operational, CAS, lineage, or invariant conflict. Donor eligibility depends only on the approved exact financial/evidence predicate: a deferred row whose exact Fee/Net/evidence is already proved remains an exact donor even when audit, ownership, reconciliation, or balance work is Pending; only rows lacking proved exact accounting/evidence are absent from the current donor pool. Deferred target work does not globally block fallback for other targets.",
+        "No local tool, deployment command, generated file, configuration value, or checked-in artifact contains a production donor coefficient or a precomputed production donor inventory.",
+        "A zero-candidate cycle performs no financial database mutation; pre-target diagnostics remain operational logging only."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillWorker.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused parity processor, worker, and configuration tests under the marked D:\\CodexTemp run.",
+          "expected": "Tests prove bounded exact-first processing, lazy service-side donor dispatch, absence of a product/deployment donor-precompute path, zero-candidate no-op, and no runtime approval gate.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Historical parity uses bounded incremental per-target processing rather than a complete all-target/all-donor preflight or HistoricalGrossNetParityPlanV1: each target is previewed read-only, revalidated, and committed atomically, and restart discovers unfinished work from canonical state and durable audit.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Пусть этим сервис занимается в процессе работы",
+      "acceptanceCriteria": [
+        "There is no full-system donor preflight, frozen donor universe, complete target manifest, immutable execution plan, active-plan slot, external artifact, or donor approval digest.",
+        "For each page or target the service first performs a bounded read-only eligibility, source, lineage, and donor preview; without pausing for a user it then runs the accounting mutation in a CAS/SERIALIZABLE transaction that revalidates every binding input.",
+        "For Paper, the accounting transaction atomically persists the canonical Fee/Net tuple, AccountingDecision, permanent audit, and required projection reconciliation. For Live, the exact two-transaction accounting/balance boundary is defined by REQ-004. Failure rolls back only the current transaction and target.",
+        "A later target conflict does not roll back independently completed targets. The conflicted target is retried on a later cycle and cannot receive a stale estimate.",
+        "After restart the service rescans unresolved or Pending canonical rows and audit state; terminal Calculated rows and committed operation identities are idempotent no-ops.",
+        "No external fee lookup is performed during donor fallback; exact/local lookup attempts remain target-scoped and precede the donor decision."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/*HistoricalGrossNetParity*"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused incremental parity storage and processor tests under the marked D:\\CodexTemp run.",
+          "expected": "Tests prove absence of a global plan/preflight, per-target atomicity, rollback on binding drift, partial conflict-free progress, restart rescan, terminal idempotency, and no lookup in donor fallback.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "For each fallback target the service lazily selects the approved same/nearest donor strategy and calculates the exact lifetime donor Fee-to-basis aggregate visible at that target's processing time, without materializing or persisting the complete donor-row identity list.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "А почему ты сейчас считаешь доноров?",
+      "acceptanceCriteria": [
+        "Candidate strategy IDs are produced by the approved typed matcher and read in deterministic pages no larger than the configured historical parity BatchSize. Every donor SQL statement has an explicit finite strategy-ID allowlist, the approved exact-donor predicate, a bounded statement timeout, and uses only the existing source-specific access paths as applicable: ix_strategy_market_paper_runs_strategy_settled; ix_strategy_paper_skip_rollups_strategy_last; ix_live_orders_strategy_settlement; ix_paper_orders_strategy_time; ix_paper_orders_id_strategy_side_cover; ix_paper_fills_order_time; ux_paper_positions_wallet_asset; ix_paper_positions_open_wallet; ux_paper_position_settlements_wallet_asset; and ix_paper_position_settlements_wallet_time. It never scans donors for unlisted strategies. No new index DDL is introduced. A timeout, cancellation, sequential full-corpus plan, or incomplete candidate page causes no financial mutation and retries later without using partial aggregates.",
+        "Paper targets use exact Paper donors; Live targets use the approved exact Paper plus exact Live pool with economic-lineage deduplication and representation precedence from RC-20260814-historical-gross-net-parity.",
+        "DonorHashEncodingV1 is a closed binary encoding. A payload begins with the ASCII domain tag HGNM1 or HGNS1, then an unsigned 32-bit big-endian record count, then fixed-field records. Every scalar starts with one type byte: 00 null; 01 exact UTF-8 string with unsigned 32-bit big-endian byte length and no Unicode normalization; 02 signed invariant base-10 integer with no leading zeros except 0, length-prefixed as UTF-8; 03 decimal as a type-02 unscaled signed integer followed by signed 32-bit big-endian scale; 04 false; 05 true; 06 UUID as 36 lowercase ASCII D-format bytes; 07 case-sensitive declared enum name as a type-01 string; 08 UTC timestamp as type-02 ticks since 0001-01-01T00:00:00Z after UTC conversion and truncation to PostgreSQL microsecond precision; 09 positive infinity. A field's domain type, not its text shape, chooses the type byte. Lists contain unsigned 32-bit big-endian count followed by elements. Byte comparison is unsigned lexicographic; null therefore sorts before non-null. Lowercase SHA-256 hex is used everywhere.",
+        "HistoricalGrossNetDonorMembershipHashV1 hashes an HGNM1 payload. Deduplicated selected representation records are sorted by encoded economicDedupKey, sourceKind, sourceId, allocationId, then by the entire encoded record as final tie-break. Each record has exactly this field order: economicDedupKey string, sourceKind enum, sourceId in its declared UUID-or-string domain type, allocationId nullable string, representationPrecedence integer, contributionKind enum, Gross decimal, basis decimal, Fee decimal, Net decimal, status enum, calculationSource string, evidenceVersion nullable string, liquidityRole enum, feeRate nullable decimal, feeExponent nullable integer, feeTakerOnly nullable boolean, calculatedAt nullable timestamp, componentAllocationHash string. componentAllocationHash is the lowercase SHA-256 of an HGNM1-domain nested list whose records are sorted by encoded allocationId, sourceChargeId, then whole record and contain allocationId string, sourceChargeId string, amount decimal, and evidenceVersion nullable string.",
+        "HistoricalGrossNetDonorSelectionHashV1 hashes an HGNS1 payload over every candidate aggregate the matcher must inspect to prove the winner or tier exhaustion. Records are sorted in exact HistoricalGrossNetDonorDistanceV1 matcher comparison order with candidate UUID as final tie-break. Each record has exactly this field order: candidateStrategyId UUID, tier integer, distanceComponents list, exactDonorCount integer, aggregateStake decimal, N decimal, D decimal, MembershipHashV1 string. distanceComponents appear in the exact field order declared by HistoricalGrossNetDonorDistanceV1; each component is a two-field record of case-sensitive component-name string and a typed value using DonorHashEncodingV1, including type 09 for positive infinity and type 00 for null. An empty candidate uses zero count/N/D/stake and the MembershipHashV1 of an empty HGNM1 payload.",
+        "The decision stores the chosen donor strategy and tier, exact numerator N, exact denominator D, raw/exact/deduplicated counts, aggregate exact donor stake, MembershipHashV1, SelectionHashV1, ratio, target basis, component floor, final Fee/Net, source, and timestamp.",
+        "Inside the target SERIALIZABLE mutation transaction the service recomputes the complete relevant tier candidate set, every required candidate aggregate/absence proof, both hashes, the deterministic winner, and the target stable tuple before writing. Revalidating only the previously selected strategy is forbidden. A concurrent donor or competing-strategy change yields either one complete serializable selection or a rollback/retry, never a mixed/stale choice.",
+        "Two targets processed at different times may legitimately use different exact donor membership and ratios. Each successfully stored Paper estimate remains terminal Calculated under its own audited decision.",
+        "The fixed 0.0333 fallback is used only after the service proves at target-processing time that every approved donor tier has no eligible exact aggregate."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetDonorMatcher.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetDonorMatcherTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/*HistoricalGrossNetParity*"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run deterministic donor matcher and incremental PostgreSQL aggregate tests under the marked D:\\CodexTemp run.",
+          "expected": "Tests cover every donor tier, exact-only filtering, Paper/Live deduplication, target-time aggregate changes, fixed known-answer vectors for both hashes (null, non-ASCII UTF-8, enum, boolean, timestamp normalization, positive infinity, non-UUID source ID, and equal-prefix sort), competing-candidate SERIALIZABLE races, no estimate cascade, fixed fallback only after full tier exhaustion, timeout rollback, and existing-index candidate-scoped query plans against a large unrelated corpus.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Historical settled Live accounting preserves immutable baseline and None-to-Pending-to-Completed ownership without a global Stage-C plan: the earliest unfinished Live order of each strategy gates only that strategy's later balance effects, while other strategies continue.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Остальное нормально",
+      "acceptanceCriteria": [
+        "Earliest-row gating applies only to the initial None/Pending historical parity balance application. For each strategy, only its earliest not-Completed historical Live order by settled_at_utc then canonical lowercase D-format UUID may perform that initial balance transaction; a deferred, stale, or Pending earlier row prevents later initial same-strategy balance application but does not block other strategies.",
+        "Live accounting uses two explicit durable transactions. Transaction A CAS-revalidates the target and atomically creates or reuses immutable AccountingBaseline, changes ownership None to Pending, writes the latest canonical Fee/Net accounting decision and permanent audit, and queues projection reconciliation; it never changes strategy balance. Transaction B later locks the strategy, order, baseline, latest evidence/accounting/audit, and current balance, rechecks under those locks that the row is still the earliest unfinished initial item, then atomically applies the cumulative requested delta with the approved clamp, records requested/actual/residual values, marks ownership Completed, and queues balance reconciliation.",
+        "A VenueReported revision for a Pending row changes authoritative evidence/desired accounting in Transaction A semantics but applies no balance immediately; Transaction B later uses the latest accepted evidence. Strictly newer VenueReported revision of a Completed row is not subject to earliest-initial gating and uses the previously approved atomic cumulative-delta correction path.",
+        "Restart resumes None/Pending rows from canonical ownership and audit state. Ordinary Live updates and settlement balance application remain permanently excluded once parity owns the row."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/DashboardNetProjectionStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/*HistoricalGrossNetParity*",
+        "tests/PolyCopyTrader.Tests/*StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run focused historical Live ownership, ordering, VenueReported, balance, concurrency, restart, and projection tests under the marked D:\\CodexTemp run.",
+          "expected": "Tests prove earliest-row gating without a plan, current-balance rebasing, clamp/cumulative audit correctness, Pending and Completed Venue paths, ordinary-writer exclusion, restart idempotency, and progress by unrelated strategies.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Every financial, cutoff, canonical-source, matching, rounding, status, reconciliation, and no-on-chain rule already approved by RC-20260814-historical-gross-net-parity remains unchanged; this supplemental contract supersedes only its global preflight, frozen donor universe, complete donor-identity provenance, database-plan, and plan-based restart/Live-ordering workflow as explicitly stated in DEV-001 through DEV-004.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Остальное нормально",
+      "acceptanceCriteria": [
+        "Gross membership, Gross values, source-specific basis B, cutoff proof/replay, exact preservation/repair, exact local calculation, typed donor distance, exact N/D arithmetic, single final rounding, component floors, fixed 0.0333 fallback, canonical target fields, and Calculated/VenueReported precedence match the prior approved contract and focused tests.",
+        "No on-chain matcher, new Live open MtM, order/execution change, synthesized economic row, or post-cutoff mutation is added.",
+        "Obsolete complete-plan runtime code, schema-creation definitions, models, configuration, documentation, and tests are removed or rewritten; no runtime plan/artifact/digest/ApplyEnabled setting survives in HistoricalGrossNetParity. No DROP TABLE, data deletion, or cleanup of any already-deployed orphan plan table is authorized; such a table, if present, is left unused pending a separate request.",
+        "README, configuration reference, Paper/Live parity documentation, active context, and daily history describe service-side incremental donor calculation and disclose that Net may remain blank until its target and reconciliation are processed.",
+        "The full solution builds with zero errors; focused and affected tests pass; git diff --check and requirement WorkingTree/Staged validators pass; an independent reviewer compares both verbatim requests, both approved contracts, the entire diff, and all verification evidence with no open findings."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "docs/configuration_reference.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PolymarketFeeAccountingService.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "src/PolyCopyTrader.Storage/PaperFakFeeBackfillEventModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillEventStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/PolymarketFeeAccountingServiceTests.cs",
+        "tests/PolyCopyTrader.Tests/*HistoricalGrossNet*",
+        "tests/PolyCopyTrader.Tests/DashboardNetProjectionStorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp run artifacts path>",
+          "expected": "Build exits 0 with zero errors; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Run focused affected tests, git diff --check, requirement WorkingTree/Staged validation, and independent semantic review under the marked D:\\CodexTemp run.",
+          "expected": "All selected tests and validators pass, documentation matches runtime behavior, and the independent reviewer records no open P0/P1/P2 findings.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "The phrase Пусть этим сервис занимается в процессе работы means that donor selection and coefficient calculation occur inside the deployed background service after the user deploys it, not inside Codex, a deployment script, configuration generation, or a manual production query.",
+      "impact": "The local task delivers code and tests only. Historical Net remains unchanged until the user deploys the service and its bounded worker reaches each eligible target.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
+        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "Остальное нормально preserves the prior exact-first precedence, so the deployed service reaches the bounded current-sweep exact/authoritative/local boundary before it begins lazy donor fallback; donor enumeration itself is never part of that pass. A row with unresolved financial/evidence exactness is explicitly deferred and absent from the current exact donor pool rather than blocking all fallback work. Audit, ownership, reconciliation, or balance deferral alone never removes a row whose exact financial/evidence predicate is already proved.",
+      "impact": "Fallback can start later than a one-pass target workflow, and every exact row successfully repaired in that pass or otherwise already proved exact is available as a donor. A financially unresolved deferred row can become exact only in a later cycle/sweep after some Paper estimates have already become terminal, so those earlier estimates are not retroactively changed and may have used a farther donor or fixed fallback.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
+        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+      }
+    },
+    {
+      "id": "ASM-003",
+      "text": "The approved three-distinct-cycle historical exact-lookup exhaustion counter remains in memory per unchanged target tuple and is reset by a service restart before exhaustion; database, cancellation, programming, and invariant failures never count toward financial fallback.",
+      "impact": "A restart can delay fallback by restarting the three-cycle count, but no durable global plan or attempt ledger is needed and the previously approved operational-failure boundary remains unchanged.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
+        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "As the approved implementation of service-side in-process donor calculation, this supplemental contract removes the previously approved full write-free preflight, complete immutable HistoricalGrossNetParityPlanV1, frozen rank/target/donor manifests, active-plan slot, and global A/B/C restart cursors even though the latest user sentence did not name those internal structures individually.",
+      "impact": "The service can commit each conflict-free target immediately. If a later target has corrupt lineage, a CAS conflict, or another invariant failure, earlier committed targets remain changed instead of the whole historical sweep being all-or-nothing. Only that target's financial mutation and, for Live, its initial balance Transaction B plus later same-strategy initial balance effects are deferred; Transaction A accounting for independent/later Live rows may continue Pending. Approval of this digest explicitly approves that internal architecture change rather than treating it as already implied by Делай сразу.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
+        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "The service does not freeze one donor universe for the entire sweep and does not persist every individual donor identity. It records the compact deterministic MembershipHashV1 and SelectionHashV1 plus the per-target aggregate selected when that target is processed, replacing the complete donor-identity dependency list required by the base contract.",
+      "impact": "Different targets, even in one service run, may use different donor membership and ratios as exact rows arrive or are repaired. The decision preserves chosen strategy/tier, N/D, counts, aggregate/deduplication evidence, both hashes, and result, but after donor source rows later change the audit row alone cannot enumerate the former full membership list; a stored terminal estimate is not recomputed for that reason. This is the explicit provenance exception to REQ-005.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
+        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+      }
+    },
+    {
+      "id": "DEV-003",
+      "text": "Without a global Stage-C plan, initial settled Live balance ordering is enforced by allowing only the earliest unfinished historical Live order of each strategy to execute Transaction B; any earlier deferred row gates later same-strategy initial balance Transaction B work until a later cycle succeeds. This gate does not prohibit Transaction A accounting/Pending persistence for the suffix and does not apply to a strictly newer VenueReported correction of an already Completed row.",
+      "impact": "One problematic Live order can delay later initial historical balance corrections for that strategy, preserving deterministic clamp order, while its later accounting Transaction A, Paper work, Completed-row Venue corrections, and other Live strategies continue independently.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
+        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+      }
+    },
+    {
+      "id": "DEV-004",
+      "text": "A target-scoped exact/local conflict no longer blocks the complete fallback phase. The service excludes the row from current exact donors only when its exact financial/evidence predicate is unproved, and continues conflict-free fallback work for other targets after the current-sweep exact boundary; audit, ownership, reconciliation, or balance deferral does not exclude an otherwise proved exact donor.",
+      "impact": "A later repair can add an exact donor that was absent when earlier terminal estimates were calculated. Those earlier Paper estimates stay unchanged, so service processing order and target-time evidence can permanently affect which donor or fixed fallback they used; the audit exposes that choice.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
+        "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518",
+    "semanticDigest": "sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/incremental_service_semantic_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
