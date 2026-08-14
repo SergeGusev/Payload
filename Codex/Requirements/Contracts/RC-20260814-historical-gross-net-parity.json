@@ -1,0 +1,590 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260814-historical-gross-net-parity",
+  "title": "Complete Net accounting for every historical Gross contribution",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Давай введём новое правило:\n\n1. Если какая-то ставка не может быть перерасчитана в Net из-за разных ошибок типа fee_calculation_source='mixed' и любой другой.\n2. То мы вычисляем по остальным ставкам этой стратегии коэффициент Gross/Net и просто делим Gross для этих ставок на полученный коэффициент. Получаем Net.\n\nЭто будет достаточно близко к правде"
+    },
+    {
+      "source": "user",
+      "text": "Давай не будем усложнять. Помечай сразу как Calculated, чтобы к этому не возвращаться. \n\nПо поводу коэффициентов и корректировки рассчёта - согласен"
+    },
+    {
+      "source": "user",
+      "text": "Мне нужно общее решение для таких проблем. Предлагаю такое:\n\n1. Если ставка учитывается в Gross Pnl и Gross ROI\n2. То она также должна учитываться в Net.  По тому же алгоритму, что мы только что ввели.\n3. Если ставка не учитывается в Gross, то и в Net она не должна учитываться.\n4. В обоих случах она не должна быть стоппером при вычислении Net всей стратегии"
+    },
+    {
+      "source": "user",
+      "text": "Re: Если у стратегии нет точных ставок-доноров, предлагаю использовать общий коэффициент по всем точным Paper-ставкам; если даже его нет — Fee=0, Net=Gross. Подтверждаете?\n\nНет. Ищём ближайшую по смыслу стратегию, например, если стратегия - ETH Up or Down 5m 2 bps Reference Average Premarket, то ищем ближайшую ETH Up or Down 5m N bps Reference Average Premarket, если не находим - то любую ETH стратегию. И оттуда берём коэффициент. Fee для нет не может быть пустой.\n\nRe: Gross оставляем полностью неизменным. Net зеркалит тот же набор ставок и ту же базу, которые уже выбраны текущей Gross-формулой. Правило распространяется на все Paper-показатели — lifetime, 1/6/24h, открытые позиции и стратегии без runs. \n\nПодтверждаем.\n\nRe: Реальные Live-ордера исключаем.\n\nНет, их тоже считаем. Если есть информация о реальном живом Fee - используем его. Если нет - считаем как для Gross\n\nRe: Допустимо ли временно пустое Net до прохода фонового воркера? Я рекомендую более строгий вариант: Dashboard сразу не блокирует Net для Gross-вклада, а воркер затем сохраняет тот же результат как terminal Calculated. Либо оставляем только фоновую обработку, но тогда Net может быть пустым несколько часов до очереди стратегии.\n\nЭто я не понял, объясни подробнее"
+    },
+    {
+      "source": "user",
+      "text": "Но ведь у нас все новые ставки уже считаются с Net. Мы проходим только по старым."
+    },
+    {
+      "source": "user",
+      "text": "Давай понимать по старыми ставки, сделанные до 10.08.20266"
+    },
+    {
+      "source": "user",
+      "text": "2026, конечно"
+    },
+    {
+      "source": "user",
+      "text": "Подтверждаю. И заново задай остальные вопросы для подтверждения, на которые я ещё не ответил"
+    },
+    {
+      "source": "user",
+      "text": "Re: Выбор ближайшей стратегии\n\nПодтверждаю твой путь.\n\nRe: Если в ближайшем семействе нет доноров\n\nПодтверждаю твой путь.\n\nRe: Если точных доноров нет вообще\n\nИсходи из того, что Net ROI меньше Gross ROI  на 3.5 %\n\nRe: Доноры для Live\n\nПодтверждаю\n\nRe: Что считается реальной Live Fee\n\nПодтверждаю\n\nRe: Поздняя точная Live Fee\n\nПодтверждаю\n\nRe: Live-метрики\n\nПодтверждаю\n\nRe: Время исторического пересчёта\n\nПодтверждаю\n\nRe: Что именно исправляем\n\nПодтверждаю.\n\nВопрос - мы с Live ставок получаем в итоге реальную Fee, которая использовалась? Или сами считаем?"
+    },
+    {
+      "source": "user",
+      "text": "Re: Под «Net ROI меньше Gross ROI на 3,5%» предлагаю понимать **на 3,5 процентных пункта**:\n\nПосмотри на скриншот. Там есть Net ROI и Gross ROI.  Разница между ними примерно **3,5. Сам реши, как её посчитать.**\n\nRe: Подтвердите, что в этой задаче мы **не создаём новый механизм сопоставления on-chain Fee с Live-ордерами**. Используем уже имеющуюся VenueReported, а при её отсутствии — точный локальный расчёт или коэффициент донора.\n\nПодтверждаю"
+    },
+    {
+      "source": "user",
+      "text": "Давай тогда не 3.5, а 3,33\n\nПродолжай"
+    },
+    {
+      "source": "user",
+      "text": "Вот это не нужно: Сначала выполняется полностью read-only preview. Он создаёт неизменяемый artifact; фактическое применение потребует отдельного последующего одобрения его SHA.\n\nДелай сразу\n\nОстальное нормально"
+    }
+  ],
+  "scope": {
+    "goal": "For every historical Paper or settled Live economic contribution selected by the existing Gross PnL/Gross ROI formulas, persist complete Fee and Net accounting so the same contribution participates in Net and no Gross-excluded row can block a strategy Net result.",
+    "inScope": [
+      "Only bets whose source-specific originating entry is strictly before 2026-08-10T00:00:00Z: every contributing originating Paper BUY fill must be pre-cutoff even when its SELL/settlement is later; Live uses the submitted/linked-fill/created precedence in REQ-001. Historical origin must be proved from the canonical row and closed replay of its order/fill chain.",
+      "The exact contribution set already selected by current Gross formulas: run-backed Settled Paper runs; positive open Paper positions; settlement and SELL-fill fallback for strategies without runs; lifetime and 1h/6h/24h Paper views; and settled Live orders already selected by Live Gross.",
+      "Exact accounting preservation and authoritative-Fee Net repair first, exact local Polymarket fee calculation when possible, then a deterministic exact-donor Fee-to-Gross-ROI-basis ratio, and finally a fixed 0.0333 Fee-to-basis coefficient when no exact donor strategy exists.",
+      "Terminal Calculated persistence on the canonical Gross-contributing row, Gross-ranked bounded background processing, compare-and-set/idempotency, projection reconciliation, database event observability, and transactional Live balance application or later authoritative-fee correction after an automatic internal fail-closed preflight with no artifact or second user approval.",
+      "Deterministic structured nearest-strategy selection, including the user example ETH Up or Down 5m N bps Reference Average Premarket, without parsing display names as financial semantics."
+    ],
+    "outOfScope": [
+      "Any bet whose originating entry is at or after 2026-08-10T00:00:00Z, any Paper aggregate with mixed pre/post-cutoff originating BUYs, and any row whose origin cannot be proved. A later SELL, settlement, mark, or reconciliation does not make a proved pre-cutoff bet new; the ordinary accounting path for genuinely new bets remains unchanged.",
+      "Changing any Gross PnL, Gross ROI, Gross-selected basis input, strategy rank formula, signal, entry timing, price, filled size/notional, order execution, or settlement result. The only derived-field exceptions are live_orders.cost_basis_usd normalization and the historical Net balance effect/authoritative correction in REQ-006; no other portfolio/risk behavior may change.",
+      "Creating a new on-chain-fee-to-live-order matcher, converting non-USD on-chain fee assets, or claiming that a locally modeled CLOB fee is VenueReported.",
+      "Adding Live open-position MtM metrics; Live scope remains the settled Live rows already used by the current Live Gross projection.",
+      "Synthesizing missing orders, fills, runs, positions, or settlements merely to complete Net accounting.",
+      "Production data mutation, deployment, service restart, configuration mutation, or trading action during the local implementation task."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Strict UTC historical cutoff: source-specific originating entry < 2026-08-10T00:00:00Z. For Paper pooled positions/SELL/settlement this is proved by the closed originating-BUY replay in REQ-001, regardless of later SELL/settlement time; Live uses submitted_at_utc, linked canonical Paper fill, then created_at_utc. A mixed or unproved origin is not silently classified and blocks that automatic sweep before financial mutation.",
+    "firstVerification": "Read-only map the exact Gross-selected source branches, historical lineage and unresolved counts, Fee/Net identities, strategy metadata available for deterministic donor matching, Live fee/balance path, and current background worker/reconciliation dispatch before editing product code."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Net accounting must mirror the exact historical contribution set and basis selected by the existing Gross formulas, while Gross and every execution fact remain unchanged.",
+      "sourceRequestIndexes": [2, 3, 4, 5, 6, 7],
+      "sourceQuote": "Если ставка учитывается в Gross Pnl и Gross ROI",
+      "acceptanceCriteria": [
+        "For each strategy and projection period, every pre-cutoff contribution included in the existing Gross numerator or Gross ROI basis is required exactly once in Net; every row excluded by the selected Gross branch contributes zero Net/Fee and zero required coverage.",
+        "The existing uses-runs branch remains authoritative: when runs are selected for closed Gross, settlement/SELL-fill fallback rows are excluded from both closed Gross and closed Net requirements; for a runless strategy, the existing settlement/SELL-fill Gross sources are mirrored by Net.",
+        "A Paper position with size_shares > 0 that contributes Gross open PnL and cost basis receives Fee and Net-open accounting; a zero-size position contributes neither Gross-open nor Net-open and never blocks Net.",
+        "A settled Live order is targeted only when the current Live Gross formula counts it; unsettled/cancelled/rejected Live rows remain excluded and cannot block Live Net.",
+        "Lifetime/MtM mirrors run-backed closed rows, runless settlement/SELL-fill fallback, and open positions exactly as today. Paper 1h/6h/24h mirrors only current Settled-run recent facts; runless settlement/SELL-fill and open-position rows do not gain a new recent contribution. Live recent mirrors only counted settled Live rows.",
+        "Gross ROI denominators remain unchanged. Net ROI retains the existing fee-inclusive denominator for the same selected Gross basis (basis plus accounted Fee); the fixed 0.0333 coefficient therefore targets an approximately 3.33-point observed gap rather than changing the global ROI formula.",
+        "Gross amounts, Gross ROI, Gross-selected stake/cost basis B, source selection, strategy ordering, and all order/execution/settlement facts are unchanged. For Live only, filled_notional/price/filled_size and frozen B remain unchanged while the derived cost_basis_usd is atomically normalized to B + new Fee so its existing fallback identity remains consistent.",
+        "Historical eligibility uses the source matrix: Settled Paper run = every linked originating BUY fill is before cutoff, falling back to entered_at_utc only when no paper order/fill exists; runless SELL fill = every originating BUY share in the proportional pool whose cost basis that SELL realizes is before cutoff, and the SELL filled_at_utc is not the origin date; open position and runless settlement = every originating BUY share remaining/contributing in the exact wallet/asset pool is before cutoff; Live order = submitted_at_utc when present, otherwise the linked canonical Paper fill time, otherwise created_at_utc. settled_at_utc, SELL filled_at_utc, and updated_at_utc are never substitutes for an older originating entry. All contributing shares must be pre-cutoff. Mixed pre/post-cutoff or unprovable lineage is an automatic-preflight conflict, prevents atomic plan commit, and is never mutated without a new approved contract.",
+        "The Paper originating-pool replay is closed and deterministic. Read all persisted fills joined to their Paper order for the exact copied_trader_wallet/asset_id, ordered by filled_at_utc ascending, canonical lowercase D-format paper_order_id ascending, then fill.id ascending. Financial state emulates only fields the engine actually persists: size_shares, average_price, and Fee. Each BUY entry source charge has canonical identity paper-fill:{buy_fill_id}:entry. On BUY, existingCost is the exact decimal product of the prior persisted/rounded size and average price, fillCost is the exact product of persisted fill price and shares, average_price=(existingCost+fillCost)/new size with no separately rounded virtual cost state, and newFeeUsd=ROUND_AWAY_8((currentPosition?.FeeUsd ?? 0)+persisted buy_fill.fee_usd). Record the source-charge-to-position-pool coverage edge before later allocations. On SELL, let sellFraction=min(1,persistedSellSize8/currentSize8), poolAllocatedRaw=currentFee8*sellFraction, grossRaw=(persistedSellPrice8-currentAveragePrice8)*persistedSellSize8, netRaw=grossRaw-poolAllocatedRaw-persistedExitFee8, Gross8=ROUND_AWAY_8(grossRaw), and Net8=ROUND_AWAY_8(netRaw). Canonical contributionEffectiveFee8=Gross8-Net8 and canonical effectiveEntrySlice8=contributionEffectiveFee8-persistedExitFee8; this effective slice, not ROUND_AWAY_8(poolAllocatedRaw), is the contribution amount used by exact Net, component floor, and donor numerator. Independently, remainingFraction=max(0,min(1,newSize8/currentSize8)), remainingPool8=ROUND_AWAY_8(currentFee8*remainingFraction), poolDecrement8=currentFee8-remainingPool8, and poolRoundingResidual8=effectiveEntrySlice8-poolDecrement8. The persisted position Fee becomes remainingPool8 and nonzero remaining average price is unchanged. A negative effective slice, stored Gross unequal to Gross8, stored Net unequal to Net8 when present, or any other inconsistency is an invariant conflict. After each event, only actually persisted position fields are rounded midpoint away from zero at their schema scales before feeding the next event: size/Fee numeric(28,8), average_price numeric(18,8). Target basis is then derived from the replayed persisted size/average using the existing Gross formula. Origin age is a separate exact-rational share composition: each BUY adds pre- or post-cutoff shares and each SELL removes the same sell_size/current_size proportionally; BigInteger numerator/denominator arithmetic from persisted 1e-8 share inputs is never rounded, and any positive post-cutoff residue, including below 1e-8, makes the pool mixed. For a SELL target use state immediately before that SELL's full event key. For an open position use state at the read-only snapshot. For a runless settlement use state immediately before settlement.settled_at_utc; fills strictly earlier are included, later fills excluded, and an equal-timestamp fill without proved event ordering is an invariant conflict. Replayed size, average price, derived basis, and when exact Fee is claimed the Fee must equal the canonical stored facts; otherwise the row is an invariant conflict. Dependent fills used by replay never donate separately.",
+        "A selected source uses exact fields: Settled run Gross=realized_pnl_usd, basis=stake_usd, Net=net_realized_pnl_usd; open position Gross=unrealized_pnl_usd, basis=average_price*size_shares, Net=net_unrealized_pnl_usd; runless settlement Gross=realized_pnl_usd, basis=cost_basis_usd, Net=net_realized_pnl_usd; runless SELL fill Gross=realized_pnl_usd, basis=(price*size_shares)-realized_pnl_usd, Net=net_realized_pnl_usd; counted settled Live Gross=realized_pnl_usd, basis=current GetLiveStakeUsd result, Net=net_realized_pnl_usd. Contribution-effective Fee is the stored fee_usd for run, position, settlement, and Live rows. For an ordinary exact SELL fill, stored fee_usd remains its exit-fee component while contribution-effective Fee is Gross-Net and includes allocated entry Fee; it must be nonnegative and at least the stored exit Fee. Only the separately approved estimated SELL exception in DEV-006 stores total contribution-effective Fee in paper_fills.fee_usd.",
+        "The uses-runs decision continues to include both raw strategy_market_paper_runs and compacted strategy_paper_skip_rollups exactly as the current projection does."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/DashboardProjectionCalculator.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Build.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/DashboardNetProjectionStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused Dashboard calculator/projection and historical parity tests under the marked D:\\CodexTemp run.",
+          "expected": "Paper run-backed, runless, open-position, recent-window, and settled-Live fixtures prove exact Gross/Net membership parity, excluded-row nonblocking, strict originating-BUY cutoff behavior including post-cutoff SELL/settlement, exact rational mixed-origin detection below 1e-8, engine-equivalent proportional replay and equal-time conflict handling, contribution-effective SELL Fee semantics, and unchanged Gross values.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preserve exact accounting first and estimate only a historical Gross contribution that still lacks a complete formula-valid Fee/Net tuple.",
+      "sourceRequestIndexes": [0, 1, 2, 3, 8, 9, 11],
+      "sourceQuote": "Если какая-то ставка не может быть перерасчитана в Net",
+      "acceptanceCriteria": [
+        "A complete Paper Calculated or VenueReported contribution with contribution-effective Fee >= 0 and Net = Gross - contribution-effective Fee keeps its Fee/Net/provenance tuple unchanged even when fee_calculation_source is mixed. For an ordinary exact SELL fill this means contribution-effective Fee=Gross-Net, contribution-effective Fee>=stored exit fee_usd, and the exit-fee field remains unchanged. A complete Live VenueReported Fee/Net/provenance tuple is immutable against parity/local calculation and same, older, or unlinked evidence, but may be replaced by a strictly newer valid superseding VenueReported revision under REQ-006. Another complete Live Calculated tuple remains unchanged unless a later valid VenueReported value arrives. The only other permitted changes to an otherwise complete canonical row are the explicitly described derived Live cost_basis normalization, balance-effect processing, and permanent audit operations.",
+        "An authoritative total Fee requires evidence, not merely schema-default Fee=0: VenueReported status with associated authoritative evidence, or Calculated status with non-null fee_calculated_at_utc, formula-valid metadata, and an exact source allowlist. The exact local allowlist is case-sensitive polymarket-clob-v2-fd-shares-rate-price-curve-round5-away-from-zero-v1, polymarket-clob-v2-no-fd-no-base-fees-v1, or historical-current-paper-model-v1: followed by exactly one of those; mixed is accepted only through the proved child lineage rule, never by text alone. LegacyUnknown/default-zero, blank/unknown/manual source, CalculationUnavailable, a PartiallyCalculated total tuple, and every estimated source are not authoritative total evidence by themselves, although individually identified exact components may contribute to the proved component floor.",
+        "When an authoritative nonnegative total Fee is already present, missing or inconsistent Net is repaired exactly as Gross - contribution-effective Fee while preserving authoritative status, source, role, rate, exponent, taker-only flag, and calculation time. For an ordinary SELL fill, stored exit fee_usd alone is not authoritative evidence of total Fee: the entry pool and exact SELL replay in REQ-001 must first produce raw net, then persisted Net8; contribution-effective Fee is derived only afterward as persisted Gross8-persisted Net8, never by independently rounding raw entry allocation plus exit Fee. If that replay cannot be proved, the contribution proceeds to donor/default fallback without relabeling the exit fee as total Fee. Every independently proved nonnegative exact Fee component remains part of a hard component floor on fallback total Fee and its original value/provenance is preserved in permanent audit.",
+        "The proved component floor is SUM of distinct non-overlapping contribution-allocation slices, not MAX of individual charges. Source-charge identity and allocation identity are separate. A proved BUY entry source charge is paper-fill:{buy_fill_id}:entry and enters the persisted position Fee pool through the exact BUY transition in REQ-001; a proved SELL exit charge is paper-fill:{sell_fill_id}:exit. The contribution allocation paper-entry-allocation:{sell_fill_id} has amount effectiveEntrySlice8 from REQ-001. The raw pool movement for that SELL is tracked separately as poolAllocatedRaw, remainingPool8, poolDecrement8, and poolRoundingResidual8; it proves charge coverage but is not substituted for the effective contribution slice. The exact remaining entry Fee assigned to an open position or runless settlement is paper-entry-remaining:{target_source_kind}:{target_id}. The replay maintains explicit charge-to-pool-to-allocation coverage edges and the aggregate persisted entry-Fee pool exactly as the engine: each SELL's raw pool allocation and independently rounded remainder feed later events, while each contribution slice follows persisted Gross8-Net8 semantics. Across partial SELL slices plus the final remainder, any difference from proved BUY input charges must equal the explicitly audited sum of pool/effective rounding residuals; no unexplained loss or overlap is allowed. Thus one BUY followed by two partial SELLs and an open remainder produces three different non-overlapping allocation identities, not three copies of the BUY charge. Live identities are live-venue:{authority_id}:{event_id} or live-local:{live_order_id}:{formula_source_version}; a canonical local component without fill lineage uses canonical-local:{source_kind}:{source_id}:{component_source_version}. A run/position/settlement/mixed aggregate is exact evidence only when its lineage enumerates the contribution-allocation identities it covers and its amount equals their sum; it replaces, never adds to, those slices. Duplicate source-charge evidence and duplicate allocation identities count once at their respective layer. Unknown coverage, unequal overlap, or inability to prove the partition is an invariant conflict and blocks mutation. Audit stores source charges, charge-to-pool/allocation coverage edges, raw pool movement, effective allocation identities/amounts, pool/effective rounding residuals, deduplication, and floor sum.",
+        "For a historical Live order, precedence is VenueReported, then the existing exact local public CLOB fee-schedule calculation, then the approved donor/default estimate; locally modeled Fee is never relabeled VenueReported.",
+        "This task adds no on-chain matching path. Existing separately stored fee_amount/fee_asset_id records are not treated as a live_orders Fee without an already existing authoritative association.",
+        "Transaction lock timeout, database/query cancellation, service cancellation, or programming/invariant failure defers and retries work and never becomes a financial estimate or increments a market-lookup exhaustion count. HTTP handling is total: a 2xx response is parsed and a semantically incomplete successful response is deterministic financial/data inability; 404 is proved market absence and terminal immediately; 408, 425, 429, every 5xx, socket/network failure, and market-info command timeout are operational lookup failures; every other surfaced non-success HTTP class/status is a protocol/invariant conflict with no attempt increment or fallback. Empty condition ID, invalid persisted price/shares/role, or other deterministic local financial-data inability is immediately eligible for donor fallback.",
+        "Operational attempts are keyed by HistoricalExactLookupTupleV1 SHA-256 plus distinct worker cycle ID. The canonical invariant-culture tuple contains common fields source kind/ID, strategy ID, condition ID, asset ID, side/outcome, Gross-ROI basis B, quantity, execution/retention source, complete current Fee/status/source/role/rate/exponent/taker/calculated-at/Net tuple, cutoff classification, lineage hash, and proved-component hash. For every source except an open position it also contains current Gross and expected PostgreSQL row version. Source-specific fields are: run status, entry price, stake, size, paper_order_id, entered/settled times, settlement price/value; position wallet, stable size and average price only; settlement wallet, settled size, average price, cost, value, PnL, settled time; SELL order status/source plus fill order ID, price, size, filled time, PnL and replay hash; Live status, price/order size, filled size/notional, average fill price, cost basis, realized PnL, submitted/created/settled times, balance_effect_applied and ownership. Open-position estimated_value_usd, unrealized_pnl_usd, net_unrealized_pnl_usd, updated_at_utc, and raw PostgreSQL row version are observed in the in-memory plan/audit but are mark-only state and are excluded from the lookup-attempt hash/reset key; size, average price, derived basis, accounting tuple, cutoff lineage, and component evidence remain in it. lineage_hash is over the full ordered canonical replay inputs; component_hash is over every source charge/allocation/coverage record. Any listed reset-key value change yields a new tuple and resets attempts; a mark-only open-position change does not. For an unchanged tuple, the automatic write-free internal preflight counts at most one in-memory operational attempt per distinct uninterrupted worker cycle; success clears it, service restart before durable plan commit discards the whole in-memory preflight ledger, and attempts never persist to PostgreSQL. After the third failed distinct uninterrupted preflight cycle, record HistoricalLookupExhausted in the in-memory plan and permit its virtual Stage-B fallback. Once the same preflight closes without forbidden conflicts, the worker atomically persists that plan and immediately replays the terminal decision without another lookup or user approval.",
+        "Selection for a canonical accounting-field mutation and its accounting UPDATE use compare-and-set predicates that recheck identity, cutoff lineage, incomplete accounting, and unchanged Gross/basis/economic tuple for every non-open source; a concurrent exact completion wins and is never overwritten. For an open position, the mutation transaction locks and rereads the row and compares exactly these stable CAS fields: source ID, strategy, wallet, asset/condition/outcome identity, size_shares, average_price, derived basis, fee_usd, fee_accounting_status, fee_calculation_source, fee_liquidity_role, fee_rate, fee_exponent, fee_taker_only, fee_calculated_at_utc, cutoff lineage, and component evidence. It explicitly does not compare estimated_value_usd, unrealized_pnl_usd, net_unrealized_pnl_usd, updated_at_utc, or raw row version; it preserves the latest Gross/estimated value and other mark fields and atomically writes Fee plus net_unrealized_pnl_usd=current locked unrealized_pnl_usd-Fee. A stable-field/basis/accounting/lineage change remains a CAS conflict, while a mark updater's Net/Gross/row-version change is rebased. The incomplete-accounting predicate does not remove a formula-complete historical Live row whose permanent AccountingBaseline, ExistingExactPreserved decision, ownership transition, or initial balance operation is still unfinished: such a row remains a parity-lifecycle candidate under REQ-005/REQ-006, receives no accounting-field overwrite, and proceeds through the audited zero- or nonzero-delta Stage-C path with its complete tuple rechecked by CAS."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PolymarketFeeAccountingService.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PolymarketFeeAccountingServiceTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run exact-preservation, authoritative repair, local Live schedule, CAS race, and operational deferral tests under the marked D:\\CodexTemp run.",
+          "expected": "Exact and VenueReported values win; mixed can remain exact; an ordinary exact SELL preserves exit fee_usd while persisted Gross8-Net8 supplies total effective Fee; missing SELL Net requires exact entry-pool lineage, raw Net replay, and independent persisted Net8 rounding or fallback. A multi-BUY fixture proves every paper-fill:{buy_fill_id}:entry charge is added once with ROUND_AWAY_8 into the persisted pool, then two partial SELLs plus the final remainder produce distinct effective allocation slices, separately rounded remaining pool, explicit residuals, duplicate-lineage deduplication, C#/PostgreSQL parity, and no unexplained loss/double count. The adversarial case price delta 0.00000001, sellSize 0.60000000, currentSize 1.50000000, currentFee8 0.00000001, exitFee8 0 gives grossRaw 0.000000006, Gross8 0.00000001, poolAllocatedRaw 0.000000004, Net8 0, effectiveEntrySlice8 0.00000001, and remainingPool8 0.00000001, proving the effective slice is not inferred from rounded raw allocation or pool decrement; aggregate overlap is deduplicated and ambiguity rejected. Every HistoricalExactLookupTupleV1 reset-key field change resets automatic-preflight attempts, while open-position mark-only/row-version changes between attempts and before the accounting CAS preserve the terminal decision, preserve the latest mark/Gross, and write Net from that latest locked Gross exactly once; 2xx/404/408/425/429/all 5xx/all remaining non-success/transport/cancellation classes follow the total map; exactly three uninterrupted in-memory preflight attempts exhaust, restart before plan commit resets them, and committed apply performs zero external lookup; DB/cancellation/programming failures never estimate; concurrent exact completion is never overwritten.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Choose one exact donor strategy deterministically, calculate an aggregate Fee-to-Gross-ROI-basis ratio, and exclude every estimated row from all donor pools.",
+      "sourceRequestIndexes": [0, 3, 8],
+      "sourceQuote": "Ищём ближайшую по смыслу стратегию",
+      "acceptanceCriteria": [
+        "The pre-2026-08-10 cutoff restricts mutation targets only. Exact donor observations are read-only lifetime observations from any date. Use exact complete donors of the target strategy first. Paper targets use exact Paper contributions; Live targets may combine exact Paper and exact settled Live contributions.",
+        "When a Live order links through paper_order_id/shadow lineage to the same exact Paper economic execution, count it once with precedence VenueReported Live, then exact local Live, then exact Paper. Unlinked rows count once. Audit raw donor candidates, deduplication key/count, and selected representation.",
+        "A donor contribution has contribution-effective Fee >= 0, positive corresponding Gross ROI basis, Gross and Net present, and exact Net = Gross - contribution-effective Fee. For an ordinary exact SELL fill, contribution-effective Fee is Gross-Net, must be at least stored exit fee_usd, and is the amount added to the donor numerator; the stored exit fee itself is not treated as total Fee. Exact evidence is VenueReported with associated evidence, one of the exact case-sensitive local sources/prefixed sources in REQ-002 with required metadata, or a proven aggregate such as mixed whose every dependent child has exact evidence. Calculated with blank/unknown/manual source or unproved mixed lineage is not an exact donor.",
+        "The exact case-sensitive non-donor source set strategy-settled-fee-stake-ratio-v1, historical-gross-net-parity-donor-v1, historical-gross-net-parity-fixed-0p0333-v1, and historical-gross-net-parity-nonpositive-basis-v1 is excluded from every donor pool even though those rows are Calculated.",
+        "The chosen coefficient is the exact rational R=N/D, where N=SUM(exact contribution-effective Fee) and D=SUM(exact positive Gross ROI basis) for exactly one selected donor strategy; it is not an average of per-bet ratios and not Gross/Net. Treat every persisted Fee and every source-specific Gross ROI basis from REQ-001 as an exact decimal represented by an integer significand plus its actual scale; align scales with powers of ten and sum without intermediate rounding. A basis that is derived from persisted price*size or another current Gross formula retains all exact product digits and is never rounded to the Fee field's 8-decimal scale. Retain exact rational N and D. A displayed/persisted decimal coefficient is diagnostic only and is never multiplied back into a target. For donor selection, aggregate exact donor stake means the exact-scale sum of that same contribution-specific stake/cost-basis field.",
+        "HistoricalGrossNetDonorDistanceV1 is the following closed typed descriptor, constructed only from BtcUpDown5mStrategyVariant and never from Name, Code, Description, or Category. Asset is uppercase ReferenceAssetSymbol. MarketInterval duration is the closed map FiveMinutes=300, FifteenMinutes=900, OneHour=3600, FourHours=14400 seconds. RequiredReferenceAverageWindow is the closed map NULL=NULL and 3h=10800 seconds; any other non-NULL value is an invariant failure. A linked descriptor is the linked catalog variant's exact (Behavior, MarketInterval, Direction, DecisionThresholdBps), never raw UUID proximity. Its family tuple, in fixed order, is (Behavior, MarketInterval, Direction, sign class of EntryDelaySeconds: negative/zero/positive, PreOpenLifetimeMode, FixedOutcome, DiffCounterTriggerOutcome, normalized RequiredReferenceAverageWindow, PaperOnly, presence of MakerMinBestAskExclusive, presence of FakMaximumOrderPrice, presence of MakerMaximumOrderPrice, nullable BaseSignal linked descriptor, nullable ConfirmationSignal linked descriptor, nullable LowerEnterSource linked descriptor). Linked descriptors use a closed equality rule: two NULL links are equal; exactly one NULL is unequal; two non-NULL links are equal only when all four typed descriptor fields are equal. Thus identical link presence with different linked behavior, interval, direction, or threshold is not an exact family match in Tier 1 or Tier 3. Its numeric vector, in fixed order and stated units, is (DecisionThresholdBps in bps, DecisionDepth as its declared integer value, EntryDelaySeconds in seconds, FixedLimitPrice in probability-price units, MakerMinBestAskExclusive in probability-price units, ShiftDiffCount as integer, FakMaximumOrderPrice in probability-price units, MakerMaximumOrderPrice in probability-price units). For each nullable numeric component: both NULL gives distance 0; exactly one NULL gives positive infinity; two values give absolute decimal difference. RequiredReferenceAverageWindow compares mapped duration seconds with the same NULL rule. Tier-2 Base/Confirmation/LowerEnter mismatch bits use that same linked-descriptor equality rule. An unresolved link or failure to construct this descriptor for any current catalog variant is a programming/invariant failure that defers the target and performs no mutation.",
+        "Tier 0 is the exact target strategy and requires no catalog metadata. Tier 1 requires proved same crypto asset and an exactly equal family tuple, then compares (numeric distance vector lexicographically, negative aggregate exact donor stake, negative exact donor count, donor numeric vector lexicographically ascending, canonical strategy UUID ascending).",
+        "Tier 2 requires proved same crypto asset and compares this closed lexicographic tuple: Behavior mismatch bit; absolute MarketInterval duration-seconds distance; EntryDelay sign-class mismatch bit; absolute EntryDelaySeconds distance; Direction mismatch bit; PreOpenLifetimeMode mismatch bit; FixedOutcome mismatch bit; DiffCounterTriggerOutcome mismatch bit; RequiredReferenceAverageWindow NULL/mismatch then duration-seconds distance; PaperOnly mismatch bit; MakerMinBestAskExclusive-presence mismatch bit; FakMaximumOrderPrice-presence mismatch bit; MakerMaximumOrderPrice-presence mismatch bit; Base-link descriptor mismatch bit; Confirmation-link descriptor mismatch bit; LowerEnter-link descriptor mismatch bit; the V1 numeric distance vector; negative aggregate exact donor stake; negative exact donor count; donor numeric vector lexicographically ascending; canonical strategy UUID ascending. Enum/category comparisons are exact equality bits and enum numeric ordinals are never used as semantic distance.",
+        "Tier 3 requires an exactly equal V1 family tuple and another proved crypto asset and reuses the Tier-1 tuple without an asset preference. Tier 4 chooses any proved crypto strategy with exact donors by (negative aggregate exact donor stake, negative exact donor count, canonical strategy UUID ascending).",
+        "Canonical strategy UUID ascending means ordinal ascending comparison of the lowercase D-format UUID string and must be identical in C#, PostgreSQL (C collation), tests, and audit output.",
+        "A current catalog strategy must have a complete V1 descriptor; missing mapping/linkage is an invariant failure and never falls through to an estimate. A retired/custom noncatalog target may still use Tier 0. If its crypto asset is independently proved but no complete family descriptor exists, family/distance Tiers 1-3 are skipped and a degraded same-asset tier chooses one donor by (negative aggregate exact donor stake, negative exact donor count, canonical strategy UUID ascending), then Tier 4. If crypto asset itself is not proved, every cross-strategy tier is skipped and fixed 0.0333 is used. Every degraded decision and the evidence proving or failing to prove asset metadata is stored in audit.",
+        "For donor rational N/D and target source-specific exact-scale basis B, base_estimated_fee is the single final midpoint-away-from-zero rounding to 8 decimals of the exact rational B*N/D, implemented from integer significands/scales with no basis rounding and no intermediate coefficient rounding. proved_component_floor=SUM(distinct non-overlapping contribution-allocation identities under REQ-002), total Fee=max(base_estimated_fee,proved_component_floor), and Net=unchanged Gross-total Fee. Different non-overlapping slices of one source charge are all summed; duplicate evidence for the same allocation identity counts once. For an ordinary SELL with proved exit plus proved allocated BUY slices, estimated total Fee can never be smaller than their sum. Audit records B with its exact scale, N, D, exact rational representation, base estimate, allocation identities/coverage/dedup, floor sum, chosen total, and Net.",
+        "The donor strategy ID, tier, distance/tie-break values, raw/deduplicated donor counts, deduplication keys, selected representations, numerator, denominator, coefficient, target type/ID, and calculation timestamp are durably auditable. Every Stage-B decision additionally stores its closed dependency set: every exact donor observation/evidence identity plus hash and every plan-bound virtual Stage-A AccountingDecision operation ID plus planned exact post-state hash whose overlay contributed to its donor availability, N, D, tier, or chosen strategy."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetDonorMatcher.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetDonorMatcherTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run deterministic donor-matcher and repository tests, including the ETH Reference Average 2 bps example, under the marked D:\\CodexTemp run.",
+          "expected": "Every current catalog variant constructs the closed V1 descriptor; every field/null/link/duration rule and all tiers/tie-breaks select exactly one reproducible donor. Same-presence Base/Confirmation/Lower links whose normalized linked threshold or another linked descriptor field differs are not Tier-1/Tier-3 exact family and set the Tier-2 mismatch bit; different linked UUIDs with identical four-field descriptors remain exact family; NULL versus non-NULL mismatches. A descriptor failure defers; the approved noncatalog degraded path is explicit; estimates never donate; canonical Paper and deduplicated Paper/Live pools obey scope; runless SELL, open-position, and Live price-times-size fixtures with nonzero digits in decimal places 9 through 16 prove C# BigInteger/scaled-integer and PostgreSQL numeric preserve the exact source-specific B and compute the same single ROUND_AWAY_8(B*N/D) without rounding B or reusing a rounded coefficient; persisted B scale/N/D and the closed donor/Stage-A dependency set reproduce every Fee exactly.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "If no exact donor exists in any approved tier, use the fixed coefficient R = 0.0333 against the same Gross ROI basis and still persist non-null Fee and Net.",
+      "sourceRequestIndexes": [8, 9, 10],
+      "sourceQuote": "Давай тогда не 3.5, а 3,33",
+      "acceptanceCriteria": [
+        "The terminal no-donor coefficient is exactly decimal 0.0333. It is a Fee-to-basis coefficient, not Gross ROI multiplied by 0.9667 and not direct subtraction of 3.33 from a stored ROI value.",
+        "For a target Gross ROI basis B, base_estimated_fee=ROUND(B*0.0333,8, midpoint away from zero), proved_component_floor=SUM(distinct non-overlapping contribution-allocation identities under REQ-002), total Fee=max(base_estimated_fee,proved_component_floor), and Net=unchanged Gross-total Fee; positive and negative Gross use the same nonnegative Fee formula.",
+        "When there is no proved exact Fee component, B=100 and Gross=10 gives fallback Fee 3.33000000 and Net 6.67000000; B=100 and Gross=-10 gives Fee 3.33000000 and Net -13.33000000.",
+        "Under the unchanged fee-inclusive Net ROI denominator B+Fee, those examples produce Net ROI 6.45504790% (a 3.54495210-point gap from Gross ROI 10%) and -12.90041614% (a 2.90041614-point gap from Gross ROI -10%). The coefficient is fixed at 0.0333; the aggregate ROI gap is approximate and depends on Gross.",
+        "A selected Gross contribution with zero or corrupt negative basis bypasses donor tiers, receives total Fee equal to the proved distinct-component floor or 0 when none exists, Net=Gross-total Fee, is marked exactly historical-gross-net-parity-nonpositive-basis-v1, and emits an invariant diagnostic; it never receives a negative Fee or discards a proved component and never remains a Net stopper.",
+        "A donor-derived result uses the exact case-sensitive source historical-gross-net-parity-donor-v1. A fixed result uses historical-gross-net-parity-fixed-0p0333-v1. Fixed-fallback rows never donate.",
+        "For a positive basis, the 0.0333 rule is reached only after same-strategy, nearest-family, any-same-asset, same-family-other-crypto, and any-crypto exact donor tiers are all empty. The separately sourced nonpositive-basis invariant path is the only bypass."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetDonorMatcher.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetDonorMatcherTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run fixed-fallback positive, negative, zero-basis, rounding, source, and no-donor-tier tests under the marked D:\\CodexTemp run.",
+          "expected": "The exact 0.0333 coefficient produces formula-valid non-null Fee/Net, never produces a negative Fee or a total below a proved exact component, remains excluded from donors, and is used only after every exact donor tier is exhausted; zero/negative basis uses its separately sourced component-or-zero terminal branch, is reported by the automatic preflight, and is terminally idempotent.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Persist historical estimates as ordinary terminal Calculated accounting on only the canonical Gross-contributing row and make Dashboard coverage nonblocking after reconciliation.",
+      "sourceRequestIndexes": [1, 2, 3, 8],
+      "sourceQuote": "Помечай сразу как Calculated, чтобы к этому не возвращаться.",
+      "acceptanceCriteria": [
+        "Every successful donor/default estimate writes fee_accounting_status=Calculated, Fee, Net, fee_calculated_at_utc, fee_liquidity_role=Unknown, NULL fee_rate/exponent/taker-only, and exactly historical-gross-net-parity-donor-v1 or historical-gross-net-parity-fixed-0p0333-v1 as applicable; no Estimated status or UI label is introduced.",
+        "Paper estimates are terminal, idempotent, excluded from exact candidate and donor selection, and are not recomputed when donors later change.",
+        "Only the canonical row selected by Gross is mutated: Settled run, positive open position, runless settlement/SELL fill, or settled Live order. Missing dependent objects are not synthesized and a Skipped/Entered run is not falsely settled because its position contributes Gross. Paper donor observations are the same current Gross-selected canonical branches: usesRuns contributes Settled runs only; runless mode contributes only the exact settlement/SELL-fill facts selected by the current projection; a positive open position is one separate open contribution. Dependent BUY fills prove lineage/aggregate exactness but never donate again as separate observations. Canonical source-kind plus source-ID and proved lineage deduplicate every Paper economic contribution before aggregation.",
+        "For a repaired open position, later mark updates preserve its fixed Fee and recompute Net unrealized as current Gross unrealized minus Fee without rerunning donor selection. When that historical position closes, the accounting lifecycle carries or exactly supersedes its Fee/Net on the canonical closed Gross source without double counting.",
+        "The prior historical FAK full-chain exact phase, its 2026-08-07 cutoff, and its atomic fill/run/position/settlement mutation remain unchanged and outside this new parity contract. Its candidate selection receives only the narrow terminal exclusion needed to skip a canonical row already recorded by the new parity audit or carrying any exact parity terminal source, so it cannot repeatedly surface a parity-completed row as an accounting conflict. New parity phases use the separate 2026-08-10 cutoff, never call the old full-chain apply method, and mutate only their selected canonical row.",
+        "Existing projection dispatch remains source-specific: fee-only Paper run/fill/position/settlement changes enqueue and coalesce the strategy reconciliation row; a Live-order accounting change emits the normal Live projection event. Every Stage-C or later Venue transaction whose actual_applied_delta changes strategies.live_available_balance also explicitly enqueues/coalesces strategy reconciliation in that same transaction, because the current strategy trigger does not observe balance alone. Tests run ReconcileNextStrategyAsync and prove lifetime/recent Net plus displayed live balance. No immediate wall-clock visibility is promised beyond the confirmed background workflow and UI cache.",
+        "Once every Gross-selected contribution is exact or approved Calculated, Net fields are non-null; excluded rows never increase required coverage and never blank the strategy.",
+        "The permanent append-only historical_gross_net_parity_audit identifies an operation by (source_kind, source_id, calculation_version, operation_kind, evidence_version). Operation kinds are AccountingBaseline, AccountingDecision, InitialBalanceApplication, and VenueReportedRevision. AccountingBaseline freezes the pre-task canonical tuple and, for Live, original balance flag/baseline classification before any accounting change, whether the tuple was complete or incomplete. Every accepted target then receives exactly one closed AccountingDecision subtype: ExistingExactPreserved, AuthoritativeNetRepair, LocalExactCalculated, DonorRatio, Fixed0p0333, or NonpositiveBasis. ExistingExactPreserved is written even when no canonical field changes. InitialBalanceApplication references its AccountingBaseline and AccountingDecision; VenueReportedRevision is keyed and ordered by authoritative evidence as defined in REQ-006 and references the prior accounting and latest balance event. Re-delivery of the same operation/evidence is a no-op, while a genuinely newer Venue evidence version appends a new event and never overwrites history. Each bounded accounting mutation transaction atomically inserts its audit event with old/new status, contribution-effective/stored Fee, Net, source, coefficient/donor decision, lineage/cutoff evidence, target identity, and row-version/CAS evidence. Balance events additionally contain the cumulative-effect fields in REQ-006. This financial audit is not the 24-hour operational paper_fak_fee_backfill_events journal and has no 24-hour retention deletion.",
+        "A whole-batch lock/query deferral retries the identical page; successful item conflicts advance normally and remain visible in structured database events."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/PaperFakFeeBackfillEventModels.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillEventRecorder.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillEventStorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "Run persistence, idempotency, phase/cursor, event, reconciliation, and projection tests under the marked D:\\CodexTemp run.",
+          "expected": "Canonical rows alone become Calculated; Gross/dependencies stay unchanged; the old FAK selector skips parity-terminal rows; every accepted target has one closed AccountingDecision subtype including ExistingExactPreserved; permanent append-only audit operation/evidence keys are idempotent; the automatic preflight writes no database rows and post-plan database events are correlated; completed coverage exposes Net without an excluded-row stopper.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "text": "For historical settled Live Gross rows, apply exact-or-estimated Net to Live balance exactly once and let strictly newer authoritative VenueReported evidence replace non-VenueReported or older VenueReported accounting through an audited transactional delta.",
+      "sourceRequestIndexes": [3, 8, 9, 11],
+      "sourceQuote": "Если есть информация о реальном живом Fee - используем его.",
+      "acceptanceCriteria": [
+        "Only settled historical Live rows already counted in Live Gross are processed; no Live open-MtM metric or execution behavior is added.",
+        "A modeled exact or estimated historical Live Net receives one idempotent bounded balance operation per audit evidence version with the existing 0..100 balance bounds. The dedicated historical adjustment never changes live_stakes, stake amount, lost counters, auto-pause state, or notifications; it never auto-enables or auto-disables Live.",
+        "Before Stage A or B changes any canonical Live accounting field, one transaction locks the order and strategy, records an immutable AccountingBaseline from the original tuple, and classifies the original balance state. balance_effect_applied=false gives baseline_effect_kind=None. The exact original signature balance_effect_applied=true, LegacyUnknown, blank source, fee_calculated_at_utc NULL, and net_realized_pnl_usd NULL gives LegacyGrossApplied because the verified pre-fee path applied Gross. A complete formula-valid true row gives NetAlreadyApplied and freezes baseline Net. Any other incomplete true cohort is an invariant conflict and no accounting mutation occurs. A complete Live target receives AccountingDecision=ExistingExactPreserved even with no field mutation; Stage C and every later revision reference that decision and the frozen baseline, never fields already replaced by Stage A/B.",
+        "The baseline transaction sets durable historical_gross_net_parity_ownership=Pending for every Live target accepted into the parity workflow. Every ordinary live-order candidate query and every ordinary UPDATE that can touch accounting or balance fields requires ownership=None plus the expected selected row version; this includes the intermediate full-row fee-refresh UpdateLiveOrderAsync path and the final settlement/balance CAS. Thus a row selected before ownership cannot write while Pending or after completion. Historical Stage-A/B accounting UPDATEs require Pending ownership. Stage C atomically applies the balance operation, sets balance_effect_applied=true when it was false, transitions ownership Pending to Completed (never back to None), appends audit, and enqueues strategy reconciliation. A formula-complete NetAlreadyApplied baseline also passes through Stage C with zero desired delta and becomes Completed. Future VenueReported CAS explicitly accepts the audited Pending/Completed owner; ordinary processing never does. Restart before atomic plan commit writes no ownership and restarts the automatic preflight; restart after plan commit leaves Pending work resumable from the committed plan. This is the sole narrow ordinary-dispatch change and applies only to proved pre-cutoff parity-owned rows.",
+        "After all accounting decisions are frozen, Stage C applies the database-plan-bound historical Live desired adjustments per strategy in deterministic settled_at_utc ascending, live_order.id canonical-UUID ascending order. From the frozen baseline, None has desired_cumulative_adjustment=Net; LegacyGrossApplied has desired_cumulative_adjustment=Net-Gross=-Fee; NetAlreadyApplied has desired_cumulative_adjustment=0. The committed plan binds each order's baseline, desired_cumulative_adjustment, and relative parity order, but its preflight balance_before/balance_after values are snapshot diagnostics rather than frozen mutation inputs. Immediately before each operation, the transaction locks and rereads the current strategy balance and target/audit state, so ordinary intervening Live balance changes are preserved rather than overwritten; it then records baseline_effect_kind; nominal baseline Gross or Net; plan-bound desired_cumulative_adjustment; prior_actual_cumulative_adjustment as the sum of post-baseline actual_applied_delta audit events for the order; requested_delta=desired_cumulative_adjustment-prior_actual_cumulative_adjustment; current balance_before; balance_after=clamp(balance_before+requested_delta,0,100); actual_applied_delta=balance_after-balance_before; new_actual_cumulative_adjustment; residual_unapplied_delta; and clamp flag. The durable Stage-C cursor prevents parity rows from being reordered even when ordinary balance changes interleave. Initial Stage-C processing is idempotent and does not repeatedly chase a clamp residual merely because unrelated trades later change balance.",
+        "A later strictly superseding VenueReported revision for a Live row whose latest accepted authority/order key is older, including an already VenueReported row, computes its new desired cumulative adjustment against the immutable nominal baseline: for None it is newNet; for LegacyGrossApplied it is newNet-Gross; for NetAlreadyApplied it is newNet-baselineNet. While ownership is Pending, the revision atomically replaces only accounting/evidence/audit state and Stage C later applies the latest accepted desired adjustment in the frozen settled-time/UUID order; no immediate balance delta is allowed for any Pending baseline kind. Only after ownership is Completed may a revision immediately request new_desired_cumulative_adjustment-prior_actual_cumulative_adjustment, not newNet-oldNet, then clamp and append the actual/cumulative/residual fields. Same, older, unlinked, or non-superseding evidence is rejected. This prevents a later revision from bypassing deterministic Stage-C order or crediting/debiting an amount that an earlier post-baseline parity operation never actually applied. Original pre-audit Gross/Net clamp history remains unknowable and is explicitly the nominal-baseline limitation in DEV-005. A Completed revision is a current-state correction, not a replay of historical risk decisions; intervening unrelated balance changes are preserved subject to the same bounds.",
+        "For every Pending owner, including baseline kinds None, LegacyGrossApplied, and NetAlreadyApplied, VenueReported changes accounting/evidence under Pending ownership but never applies balance immediately. If the resulting latest desired adjustment still equals the committed plan value, Stage C later applies or confirms it. A Pending Venue revision after the plan boundary changes frozen evidence/desired state, so one transaction performs no balance write and marks that item plus the entire not-yet-applied same-strategy settled_at_utc/UUID suffix HeldForReplan. HeldForReplan is terminal only for the current plan: ownership remains Pending, the financial Stage-C cursor records no application for any held row, and a separate durable strategy-lane state becomes TerminalHeld with the exact suffix start and order. Other strategies continue; after every lane is Applied or TerminalHeld, the current plan reaches Completed and releases the unique active-plan slot. The next automatic zero-write preflight admits, replans, and applies the whole held suffix in the original deterministic order without user approval. If required prior AccountingBaseline/AccountingDecision, balance baseline, valid Pending/Completed ownership, or CAS evidence is absent or inconsistent, the VenueReported revision and any balance change fail closed together. A future separately approved authoritative-Fee ingress must supply evidence associated with the live-order identity to the new atomic VenueReported CAS API before canonical Fee/Net fields change. Evidence has authority ID, authority-issued total-order key (venue event timestamp plus canonical event ID, or a stronger monotonic sequence), stable evidence_version hash, and supersedes_evidence_version equal to the latest accepted revision; both the order key and expected-latest link must advance atomically, otherwise stale/unrelated evidence is rejected. Under Pending ownership the transaction changes Fee/status/source/Net/derived cost basis, reconciliation, and audit but no balance; under Completed ownership it additionally applies the cumulative balance effect in the same transaction. This task adds no ingress and permits no prewrite of canonical VenueReported fields. Re-delivery of the same evidence version is a no-op; a strictly newer evidence version appends a revision.",
+        "Paper estimates remain terminal and are not replaced by later exact schedule data; the late-authoritative exception applies only to Live VenueReported accounting.",
+        "No new mapping from polymarket_onchain_fills or fee_asset_id to live_orders is implemented in this task. The workflow does not discover or import VenueReported Fee; it reacts only when an existing or future separately approved ingress supplies already-associated authoritative evidence for the order identity to the atomic CAS API, without pre-populating canonical Fee/Net fields. Production currently has zero such settled Gross-contributing rows."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/LiveTradingProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-006",
+          "kind": "test",
+          "command": "Run historical Live exact/model/donor/default, one-time balance application, authoritative replacement, delta, audit, and idempotency tests under the marked D:\\CodexTemp run.",
+          "expected": "Live precedence and derived cost-basis updates are exact; immutable pre-update baseline and ExistingExactPreserved decision are frozen; complete exact Live balance=false and balance=true/NetAlreadyApplied zero-delta cases both reach Stage C; permanent None/Pending/Completed ownership defeats a preselected CalculationUnavailable ordinary-processor race both during Pending and after Completed at candidate, intermediate full-row update, and final CAS; Stage C applies plan-bound desired effects in settled-time/UUID order to the latest strategy balance locked after an interleaved ordinary balance change, preserves that change, audits actual before/after/clamp/residual, and reconciles displayed balance; LegacyGrossApplied and invariant cohorts are tested; a strictly newer Venue revision arriving under each Pending baseline kind updates accounting but applies no immediate balance. A two-order same-strategy Venue race with a clamping balance proves a stale earlier item writes zero balance and atomically marks itself plus every later suffix item HeldForReplan with ownership still Pending; other strategies continue, the old plan reaches Completed, the next automatic plan is created, and it applies the entire suffix in settled-time/UUID order without user approval. Venue1 then strictly superseding Venue2 after Completed applies the correct cumulative delta while same/older/unlinked evidence, double adjustment, and unapplied post-baseline nominal delta are rejected; no on-chain matcher or post-cutoff Live behavior change appears.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-007",
+      "text": "Run the repair automatically through the bounded historical Gross-ranked background workflow after its internal fail-closed preflight, with no runtime artifact or second approval, and leave the ordinary new-bet path unchanged.",
+      "sourceRequestIndexes": [4, 5, 6, 8, 11],
+      "sourceQuote": "Делай сразу",
+      "acceptanceCriteria": [
+        "The new parity candidate union includes every eligible canonical target type, including open-only, runless-only, and Live-only strategies. It preserves the current historical rank key: Dashboard lifetime Paper gross_realized_pnl_usd descending, raw equivalent fallback when absent, then canonical lowercase D-format strategy UUID ascending; a strategy with no Paper realized Gross ranks at zero and still remains eligible.",
+        "One sweep has three deterministic global stages. At sweep start, alongside the target/rank manifest, freeze the complete read-only lifetime exact-donor aggregate/evidence universe for every strategy from any date. Stage A visits every eligible strategy in frozen Gross order and completes all bounded exact/local and authoritative-Fee accounting repairs without applying Live balance effects. At the Stage-A boundary, derive one immutable Stage-B donor snapshot by overlaying only the sweep's proved Stage-A exact decisions onto that start-frozen donor universe; new or changed external donor observations after sweep start are never admitted. Stage B then revisits eligible strategies in the same Gross order for donor and fixed fallback, still without applying Live balance effects. Repairs made later in Stage A therefore cannot make an earlier Stage-B target choose a farther or fixed donor, and concurrent new donors cannot change the sweep. Only after Stage B reaches its end does Stage C apply all initial historical Live balance effects per strategy in settled_at_utc/live_order.id order, so Gross-rank phase order cannot change clamp results.",
+        "Temporary blank Net is allowed until the background worker reaches and reconciles the historical strategy; this task adds no projection-time synthetic fallback for old rows.",
+        "The worker retains foreground fairness, command and lock timeout handling, restart safety, and bounded pages. When HistoricalGrossNetParity.Enabled=true and no committed active plan exists, it automatically starts one in-memory fail-closed preflight. The preflight performs zero PostgreSQL writes of any kind, including no progress event, work ledger, audit, ownership, attempt-counter, or accounting write; structured diagnostics go only to rolling file/output.",
+        "The automatic preflight opens one closed read-only snapshot boundary and freezes the complete target/rank manifest, normalized HistoricalExactLookupTupleV1 target hashes, exact donor observation/evidence universe, captured external lookup outcomes, virtual Stage-A decisions, final Stage-B donor decisions and closed dependency sets, exact-component/lineage evidence, and Stage-C baseline/desired-adjustment/order. It executes the complete virtual A/B/C sweep and final closure check. Open-position mark-only fields remain informational and nonbinding exactly as in REQ-002. New identities outside the frozen boundary wait for the next automatic sweep and do not invalidate this run; a changed or deleted frozen binding fact, replay/lineage/component conflict, donor dependency conflict, descriptor/invariant failure, or version/config mismatch fails the preflight with zero database or financial writes.",
+        "Immediately after one uninterrupted conflict-free closure check, with no pause, external artifact, SHA approval, or user interaction, one PostgreSQL SERIALIZABLE transaction rereads and reproduces every frozen binding fact and decision input, then atomically inserts the complete immutable HistoricalGrossNetParityPlanV1 and its unique active-run header. The plan contains contract/calculation/build versions, every remaining HistoricalGrossNetParity option, the closed boundary/manifest and target hashes, captured lookup evidence, start donor universe, virtual Stage-A overlay, final Stage-B snapshot/decisions/dependency graph, component/lineage evidence, and Stage-C baseline/desired-adjustment/order. It has a generated run ID but no file, path, global plan digest, approval token, or second user approval. Serialization failure, concurrent binding drift, duplicate active plan, or insert failure rolls back the transaction completely and leaves no plan, audit, ownership, or financial write.",
+        "Only after the complete plan transaction commits does bounded application begin, automatically and immediately. Stage A, Stage B, and Stage C replay only that committed plan; no application step performs an external lookup, ranking, donor selection, or plan rebuilding. Baseline/ownership/decision/canonical self-writes and expected post-state remain idempotent; whole-batch lock/query deferral retries the identical page. Each Stage-B dependency validation, target CAS, AccountingDecision/audit insert, and reconciliation enqueue occurs in one PostgreSQL SERIALIZABLE mutation transaction: reread every mutable dependency canonical row in deterministic source-kind/ID order, hash-check append-only audit dependencies, prove every Stage-A dependency reached its planned exact post-state or exact-matching idempotent no-op, and prove every direct donor evidence hash unchanged before target mutation. Serialization failure rolls back the complete page transaction. A stale dependency or target blocks its own accounting decision and returns to a later automatic preflight rather than waiting for user approval; independent planned identities may continue. For Live Stage C, any not-ready or stale item from any cause, including a Stage-A/Stage-B dependency or target conflict, makes that item and the entire later not-yet-applied same-strategy settled_at_utc/UUID suffix dependent. The hold transaction marks the suffix HeldForReplan without balance, financial-cursor, AccountingBaseline, AccountingDecision, or ownership writes and records each row's actual ownership state: an already baselined row remains Pending, while a row whose baseline/Pending CAS never committed remains None. HeldForReplan is terminal only for this plan so other strategies and plan completion can continue.",
+        "A service restart before atomic plan commit discards the entire in-memory preflight, including lookup attempts, and starts a fresh zero-write preflight. A restart after commit loads the sole active plan from PostgreSQL and resumes its exact phase/cursor without lookup, reranking, donor refreezing, or new work admission. An exact contract/calculation/build/config mismatch pauses fail-closed with zero further financial writes. A database uniqueness and locking invariant permits at most one Ready or Applying plan, so concurrent workers cannot commit competing plans.",
+        "After a plan reaches Completed, the next eligible worker cycle automatically preflights post-boundary, conflict-skipped, and HeldForReplan historical identities under the same approved contract. A zero-candidate preflight performs no database write. Every HeldForReplan Live suffix is admitted as one ordered unit and replanned from its earliest held settled_at_utc/UUID item without user approval. A held Pending row reuses its immutable baseline; a held None row is first revalidated and atomically receives AccountingBaseline, ownership Pending, and its AccountingDecision under the ordinary parity CAS before any Stage-C balance application. Any new drift holds that row and the remaining suffix again. Ownership remains Pending only after that baseline CAS and until actual application; Completed ownership continues to use the cumulative authoritative-delta path in REQ-006.",
+        "HistoricalGrossNetParity configuration contains Enabled with checked-in default true, the immutable cutoff 2026-08-10T00:00:00Z, and positive bounded batch, timeout, retry, and calculation-version options. There is no ApplyEnabled, ArtifactDirectory, ApprovedPreviewDigest, runtime approval command, or file-publication setting. Enabled=false is only an operational pause: it starts no preflight and performs no plan mutation; re-enabling with plan-bound versions/config resumes an active plan or starts the next preflight. These settings remain independent of the existing PaperFakFeeBackfill switches.",
+        "The internal preflight reports exact cutoff/timezone and snapshot boundary; strategy and row counts by canonical target type; donor-tier availability; ambiguous/unproved or mixed lineage; replay mismatches; duplicate Paper/Live economic links; descriptor failures; exact-component floors; DEV-008 rows; Live counts by status/source/balance-effect baseline; desired adjustments/order; diagnostic expected balance effects; and conflicts to rolling output. Successful counts, frozen plan run ID, and subsequent progress enter the database journal only in or after atomic plan commit. Stage-C preflight balance values are diagnostic because Stage C rereads and locks current balance; plan-bound desired adjustment/order and the 0..100 clamp formula remain binding.",
+        "README, configuration reference, Paper/Live parity documentation, active context, and daily history state the cutoff, automatic zero-write internal preflight, atomic database plan, immediate three-stage A/B/C workflow, donor hierarchy, 0.0333 edge, exact-component floor, source markers, permanent audit, Live Gross-applied legacy correction, no-on-chain limitation, and known background visibility delay.",
+        "The local implementation task performs no deployment or production mutation. Once the user separately deploys the approved build with HistoricalGrossNetParity.Enabled=true, the internal preflight and bounded application start automatically and require no second production approval."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillWorker.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "README.md",
+        "docs/configuration_reference.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-14.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-007",
+          "kind": "test",
+          "command": "Run focused worker/processor phase, cutoff, bounded paging, automatic-preflight, atomic-plan, restart, fairness, and retry tests under the marked D:\\CodexTemp run.",
+          "expected": "Only provably pre-cutoff frozen identities are visited. The automatic internal preflight freezes explicit target/donor evidence, ignores new post-boundary identities until the next sweep, detects changed/deleted binding evidence, performs all external lookup attempts in memory, writes zero PostgreSQL rows, resets entirely on pre-commit restart, and closes only after one uninterrupted conflict-free full virtual A/B/C sweep. Its SERIALIZABLE handoff either inserts one complete immutable HistoricalGrossNetParityPlanV1 and unique active-run header or rolls back with zero plan/audit/ownership/accounting writes; it then transitions immediately to Stage A with no artifact, file, digest, approval token, or user pause. Apply performs no external lookup or decision selection, persists exact phase/cursors/pages/start-donor/final-donor/dependency-graph/Stage-C desired-order state, and survives restart before/after A-to-B freeze and mid-B/mid-C without reranking or refreezing. Concurrent plan creation has one winner; config/build/calculation drift pauses; a zero-candidate preflight writes nothing. A Live page proves plan-to-baseline/Pending CAS-to-decision replay; recorded self-writes remain no-ops and whole-batch deferral retries the same page. A Stage-A overlay CAS failure or changed direct donor hash blocks every dependent Stage-B/Stage-C identity while independent identities continue; a donor race proves the SERIALIZABLE dependency-read/target-CAS/audit transaction either commits in a valid serial order or rolls back completely, never persisting a stale ratio. Open mark-only drift rebases Net on latest locked Gross. Stage C locks current balance, preserves intervening ordinary balance changes, and applies the plan-bound desired adjustment/order. A two-order same-strategy Pending Venue race with clamp proves the stale earlier item marks its complete later suffix HeldForReplan/TerminalHeld without a balance or financial-cursor write, does not block other strategies, and lets the old plan complete. A separate race changes the earliest row after plan commit but before its baseline/Pending CAS while a later row is already Pending: the hold transaction leaves the first None with no invented baseline, preserves the second Pending, and survives a crash after hold before plan completion; restart closes the old plan exactly once, the next automatic plan first creates the valid baseline/Pending/decision for the None row, then applies the whole suffix in original order. Completion automatically admits post-boundary/conflict-skipped work, with no second approval; ordinary post-cutoff accounting remains unchanged.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-008",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp run artifacts path>",
+          "expected": "The solution builds with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-009",
+          "kind": "inspection",
+          "command": "Run git diff --check, requirement WorkingTree/Staged validation, and independent review comparing every verbatim request, approved digest, complete diff, tests, docs, and evidence.",
+          "expected": "All mechanical checks pass and an independent reviewer records pass with no open P0/P1/P2 findings.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "Historical means the originating economic entry/fill occurred strictly before 2026-08-10T00:00:00Z; settlement time, current position update time, or later reconciliation time does not move an old bet across the cutoff.",
+      "impact": "Old positions or settlements completed later remain eligible when their source entry is proved, while a row without provable lineage is reported rather than silently mutated.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "The confirmed historical timing choice is background-only: old Net may remain blank until the Gross-ranked worker and subsequent projection reconciliation reach it; no Dashboard-only temporary estimate is added.",
+      "impact": "Net may remain blank during the uninterrupted automatic preflight, including up to three external-lookup worker cycles, bounded A/B/C pages, projection reconciliation, and UI refresh. After successful preflight there is no approval wait and application starts automatically.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "ASM-003",
+      "text": "The phrase closest by meaning is the versioned typed distance tables and exact lexicographic tier tuples in REQ-003 and selects one donor strategy, not a pool of equally close strategies.",
+      "impact": "Every comparison uses declared categorical/numeric components, aggregate exact donor stake, donor count, declared numeric vector, and canonical lowercase D-format UUID in the stated order; no fuzzy text or unspecified donor-quality judgment remains.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "ASM-004",
+      "text": "The user's final 3.33 instruction is implemented as the fixed Fee-to-Gross-ROI-basis coefficient 0.0333, not as a relative 3.33 percent reduction of Gross ROI or a direct subtraction from a stored aggregate ROI.",
+      "impact": "The method stays identical to donor Fee/basis accounting, always yields a nonnegative Fee for nonnegative basis, and under the unchanged fee-inclusive Net ROI denominator produces an aggregate gap close to the screenshot rather than forcing algebraic subtraction from a stored ROI value.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "ASM-005",
+      "text": "For Live targets, exact donor aggregates may combine formula-valid exact Paper and exact settled Live contributions after economic-lineage deduplication, while every estimated-source row is excluded; Paper targets use exact Paper donors.",
+      "impact": "Sparse historical Live strategies can use deeper exact evidence without double-counting their Paper shadows or allowing estimates to cascade, while Paper coefficients remain based on Paper economics.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "ASM-006",
+      "text": "The fixed 2026-08-10 cutoff restricts mutation targets, not read-only donor observations; exact donors from any date may contribute to the frozen lifetime donor aggregate.",
+      "impact": "Newer exactly accounted bets can improve historical estimates without themselves being mutated, and the chosen coefficient can differ from a pre-cutoff-only donor calculation.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "ASM-007",
+      "text": "HistoricalGrossNetDonorDistanceV1 is the closed field-by-field descriptor and lexicographic comparison defined in REQ-003; enum values are equality categories, nullable numeric distances use the explicit NULL rule, and names/codes/descriptions never participate.",
+      "impact": "The nearest donor is reproducible across C#, PostgreSQL, tests, and audit. A current catalog descriptor/link failure is a programming error with no mutation, while a retired/custom noncatalog row may use only the separately approved degraded metadata path.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "This contract narrows the earlier all-historical-and-future run fallback to bets entered before the fixed cutoff and broadens its canonical targets from Settled Paper runs to every Paper or settled-Live contribution actually selected by Gross.",
+      "impact": "Post-cutoff ordinary accounting is untouched; pre-cutoff open positions, runless sources, and settled Live rows can now be completed, superseding the earlier run-only scope for this historical repair.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "Approximate donor/default values are intentionally stored as ordinary Calculated accounting with no Estimated UI label; only exact internal source and audit data preserve how the value was obtained.",
+      "impact": "Dashboard coverage treats approximations as complete and users cannot distinguish them by status alone, matching the user's terminal Calculated instruction.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-003",
+      "text": "Paper estimates remain terminal, but Live accounting, whether locally exact, estimated, or an older VenueReported revision, is not terminal against strictly newer authoritative VenueReported evidence in the monotonic superseding chain; Live alone receives an audited Net/balance delta replacement.",
+      "impact": "Live reporting and available balance can converge from local exact, estimated, or corrected venue accounting to the newest accepted authoritative evidence without repeated fallback estimation; same/older/unlinked evidence cannot replace it, while Paper keeps the previously approved no-return behavior.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-004",
+      "text": "No new on-chain reconciliation is created even though separate on-chain fee records exist; VenueReported is used only when authoritative evidence is already associated with the live-order identity and supplied to the atomic CAS API before canonical Fee/Net fields change, otherwise the service uses exact local schedule calculation or the approved estimates.",
+      "impact": "Most historical Live rows will be locally calculated or estimated rather than proved from an actual charged on-chain amount; production currently has zero VenueReported settled Gross-contributing Live rows.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-005",
+      "text": "Applying historical settled Live Net intentionally changes strategies.live_available_balance and can therefore affect later Live risk capacity, but the parity workflow never changes live_stakes or any other Live control flag.",
+      "impact": "With checked-in HistoricalGrossNetParity.Enabled=true, a separately deployed approved build may change historical Live balance automatically after the same-run write-free preflight and atomic database-plan commit; there is no ApplyEnabled gate or later artifact approval. The plan fixes every per-order baseline, desired adjustment, and parity order; preflight balance before/after totals are snapshot diagnostics, because Stage C intentionally rebases the plan-bound adjustment onto the current locked balance so unrelated ordinary Live operations are not lost. The verified legacy signature is treated as having nominal Gross already applied; an existing complete true row is treated as having nominal Net applied. Original pre-audit Gross/Net clamp history cannot be reconstructed. Stage C records actual/residual post-baseline effects, and later Venue revisions target cumulative actually applied post-baseline corrections rather than a nominal old-Net delta. The permanent audit records actual before/after and effective corrections for any separately authorized rollback.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-006",
+      "text": "For a runless historical SELL fill, the approved fallback writes the complete estimated total Fee to paper_fills.fee_usd even though an ordinary exact SELL fill normally stores only its exit-fee component; the total is never below any proved exact exit Fee, and the versioned parity source identifies this exception.",
+      "impact": "The canonical fill can satisfy Net=Gross-total Fee and Dashboard complete-fee accounting without synthesizing entry rows; the original exit component/provenance remains in permanent audit, but the canonical fill-level Fee field changes semantics from exit-only to total Fee for this historical approximation.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-007",
+      "text": "An unresolved historical open Paper position uses the same full donor Fee-to-basis coefficient as a closed bet rather than estimating an entry-only fee component or reserving an additional exit fee later.",
+      "impact": "Open Net MtM becomes immediately complete and conservative under one terminal Fee, but the estimate can exceed the exact entry fee that would have been known at fill time; the value is not recomputed until ordinary position-close lifecycle carries or supersedes it.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-008",
+      "text": "A selected historical Gross contribution with zero or corrupt negative Gross-ROI basis bypasses every donor tier and the fixed 0.0333 calculation, and is terminally stored with Fee equal to the sum of its distinct non-overlapping proved exact components or 0 when none exists, Net=Gross-Fee, and source historical-gross-net-parity-nonpositive-basis-v1.",
+      "impact": "This prevents an undefined or negative Fee, preserves any proved component, and guarantees the row is not a Net stopper, but it treats the otherwise unresolved basis as zero additional estimated Fee. The automatic preflight reports this cohort separately and tests prove terminal idempotency.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-009",
+      "text": "A retired/custom strategy outside the typed catalog may degrade donor matching: same-strategy donors remain first; when asset is independently proved but the full family descriptor is unavailable, selection uses aggregate exact donor stake/count/UUID among same-asset donors instead of semantic distance; when asset is not proved, it reaches the fixed 0.0333 fallback.",
+      "impact": "Historical noncatalog rows can still receive non-null Fee/Net without parsing names or inventing semantics, but their donor can be less semantically close than a fully described catalog strategy. Every degraded choice and metadata proof is permanent audit data.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-010",
+      "text": "The sum of every distinct non-overlapping independently proved contribution-allocation Fee slice is a floor on donor/fixed total Fee, so a ratio estimate that is smaller is raised to that sum instead of applying the ratio literally; different slices of one source charge are summed, duplicate evidence for the same allocation identity is deduplicated, and ambiguous overlap fails closed.",
+      "impact": "Known charged Fee is never erased, reduced, undercounted, or accidentally collapsed across partial SELL allocations, especially for ordinary SELL and PartiallyCalculated evidence, but the resulting total Fee/Net can differ from the raw donor or 0.0333 formula. Base estimate, source charges, contribution-allocation identities, coverage/dedup, floor sum, original provenance, and chosen total are permanently audited.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-011",
+      "text": "During the strictly write-free automatic internal preflight, a historical public-CLOB market-info lookup that fails operationally with HTTP 408, 425, 429, any 5xx, network/socket failure, or timeout on three distinct uninterrupted worker cycles for the unchanged closed HistoricalExactLookupTupleV1 reset key is reclassified as HistoricalLookupExhausted and allowed to use donor/fixed fallback in the in-memory plan; one attempt is counted per cycle, restart before atomic plan commit discards all attempts, success clears them, any reset-key field change resets them, and open-position mark-only fields/Net/raw row version are not reset-key fields. A 404 is immediately terminal absence, and every other non-success status plus DB locks/query/service cancellation/programming/invariant errors never exhaust into a financial estimate. After the plan is atomically committed, every A/B/C application and restart resume performs no external lookup and only replays the captured outcome/evidence under CAS.",
+      "impact": "A persistent external lookup outage cannot leave an old Gross contribution as a permanent Net stopper, but a third failure may cause an approximation even if exact public data could become available later. Paper estimates remain terminal; Live may still be superseded only by later VenueReported evidence.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    },
+    {
+      "id": "DEV-012",
+      "text": "HistoricalGrossNetParity has no runtime preview mode, external artifact/file, approval digest, ApplyEnabled gate, or second user approval. With Enabled=true it automatically performs a strictly write-free in-memory preflight; immediately after that preflight closes successfully, one atomic SERIALIZABLE transaction commits the complete internal database plan and bounded A/B/C application starts without pausing.",
+      "impact": "A failed preflight cannot change accounting, ownership, audit, counters, event tables, or a work ledger and is visible only in rolling output; restart before plan commit resets its in-memory attempts. A successful plan commit is the first database write, begins database progress observability, and authorizes automatic accounting and settled-Live balance changes under this approved contract. Deployment therefore has no later per-run human pause, artifact review, or SHA approval.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+        "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b",
+    "semanticDigest": "sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/historical_gross_net_parity_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
