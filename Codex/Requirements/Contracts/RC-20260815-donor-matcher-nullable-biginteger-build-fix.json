@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260815-donor-matcher-nullable-biginteger-build-fix",
+  "title": "Fix nullable BigInteger conditional type inference in the historical donor matcher",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Type of conditional expression cannot be determined because there is no implicit conversion between '<null>' and 'BigInteger'"
+    }
+  ],
+  "scope": {
+    "goal": "Eliminate the reported conditional-expression compiler error in HistoricalGrossNetDonorMatcher.ValidateSharedSelection.",
+    "inScope": [
+      "The local expectedTierValue declaration in src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetDonorMatcher.cs.",
+      "Solution-build and focused donor-matcher test verification of that type declaration."
+    ],
+    "outOfScope": [
+      "Changing either conditional branch, donor matching, tier selection, hash calculation, accounting, persistence, service, database, or trading behavior.",
+      "Changing another product or test file, another compiler error, or existing warnings."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "not-applicable; this is a compile-time local type-inference correction with no data or time window",
+    "firstVerification": "Inspect the failing conditional, the SelectedTier declaration, all ValidateSharedSelection call sites, and the focused matcher tests to establish the required nullable target type."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Give expectedTierValue the explicit nullable BigInteger target type required by its null and BigInteger branches, without changing either branch or matcher behavior.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "there is no implicit conversion between '<null>' and 'BigInteger'",
+      "acceptanceCriteria": [
+        "The declaration is exactly BigInteger? expectedTierValue while the expectedStrategyId condition, null branch, BigInteger construction, and comparison remain unchanged.",
+        "A null expectedStrategyId still requires a null SelectedTier; a non-null expectedStrategyId still requires the BigInteger representation of expectedTier.",
+        "The reported CS0173 conditional-expression compiler failure is absent from the solution build and focused HistoricalGrossNetDonorMatcher tests pass.",
+        "No product or test file other than src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetDonorMatcher.cs is changed by this correction."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetDonorMatcher.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Inspect HistoricalGrossNetDonorSelectionEvaluationV1.SelectedTier, every ValidateSharedSelection call site, and the focused task diff.",
+          "expected": "SelectedTier is BigInteger?, the null/non-null expectations are unchanged, and the focused diff changes only the local declaration type.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp run artifacts path>",
+          "expected": "Build exits 0 without the reported CS0173 error; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --no-restore --filter FullyQualifiedName~HistoricalGrossNetDonorMatcherTests --artifacts-path <marked D:\\CodexTemp run artifacts path> --results-directory <marked D:\\CodexTemp run results path>",
+          "expected": "Focused HistoricalGrossNetDonorMatcher tests exit 0 with no failures.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260815-donor-matcher-nullable-biginteger-build-fix sha256:fc62ea0e0875fd171e9f69e7c8a368efc99c5522f57066b7149fda1fa19deae3",
+    "semanticDigest": "sha256:fc62ea0e0875fd171e9f69e7c8a368efc99c5522f57066b7149fda1fa19deae3"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/donor_matcher_nullable_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
