@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260815-maker-precision-resolved-ledger-settlement",
+  "title": "Fix Maker-GTD timestamp precision and resolved-ledger Paper settlement",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Проверь сервер и ставки"
+    },
+    {
+      "source": "user",
+      "text": "Доработай"
+    }
+  ],
+  "scope": {
+    "goal": "Implement the two corrections identified by the immediately preceding server and betting audit: prevent PostgreSQL timestamp precision from falsely invalidating exact ETH Reference Average Maker-GTD Paper evidence, and settle BTC/ETH/SOL 5-minute Paper runs from a strictly validated canonical resolved-market ledger when Gamma has no resolved winner.",
+    "inScope": [
+      "For the exact 28 ETH Reference Average Maker-GTD PaperOnly strategies, relax only the existing accepted_at_utc >= created_at_utc lower lifetime bound by the maximum 5-tick PostgreSQL half-microsecond round-trip difference while preserving accepted timestamps at or after created_at_utc and every other continuity and lifecycle gate.",
+      "Keep the exact existing Gamma success predicate as the unchanged primary Paper settlement source: the first metadata row with Resolved=true and a nonblank WinningOutcome. When that predicate succeeds, do not query, consult, reject, or override the Gamma result with ledger data.",
+      "Only when Gamma supplies no resolved winner, allow the canonical crypto_up_down_5m_websocket_resolved_markets ledger as a Paper settlement fallback after exact asset, market, condition, slug, start, end, winner outcome, winner asset, event timing, and selected-token mapping validation.",
+      "Propose explicit canonical fallback source values GammaClosedMarket, MarketWebSocket, and BinanceTimedClose. BinanceTimedClose is a derived close result rather than a direct Polymarket resolution event; it becomes approved Paper settlement authority only if the user approves this exact contract and DEV-001 because the verified 230-run backlog depends on it.",
+      "Persist a versioned settlement_resolution evidence object in every fallback-settled run's skip_diagnostics_json. Create a new JSON object when the existing SQL value is NULL; otherwise preserve every member of an existing JSON object. Accept an already identical settlement_resolution only as idempotent recovery, and fail closed on conflicting evidence or a non-object value. Persist an exact BtcUpDown5mResolvedLedger:<ledger-source> PaperPositionSettlement source whenever that row exists. Retain the existing position, stake, fee, Gross, Net, lost-counter, and run-settlement calculations.",
+      "Allow the ordinary settlement worker, after a later user deployment, to process eligible historical Entered runs including the currently verified 230-run 2026-08-05T15:00:00Z backlog; do not perform direct historical DML or deployment in this task.",
+      "Add focused regressions, update the current lifecycle and Paper/live parity documentation, and obtain an independent semantic review."
+    ],
+    "outOfScope": [
+      "Reopening, replaying, or rewriting any Maker-GTD record that is terminal before activation of the corrected build; the preview counted 251 such records and the count may grow before deployment. Correcting that historical Paper performance requires a separate explicitly approved history-repair task.",
+      "Using result-polling observations, market_resolved_event_diagnostics, ReferenceStartEnd, TerminalOrderBook, an unknown source, a malformed ledger row, or an identity/token mismatch as settlement authority.",
+      "Changing a valid Gamma winner because of local-ledger data; the existing valid Gamma path remains primary and unchanged.",
+      "Changing strategy signals, thresholds, selected outcomes, windows, entry timing, order pricing, GTD/PostOnly behavior, TouchNoDepth fill inference, stake sizing, risk gates, fee formulas, PnL formulas, or Live execution.",
+      "Changing database schema, configuration, the generic copied-trader settlement path, non-5-minute markets, or non-BTC/ETH/SOL strategies.",
+      "Deploying or restarting the service, changing production configuration, manually settling production rows, changing production data, or cleaning the separate 270 disabled Observed rows, Dashboard reconciliation backlog, Binance stale warnings, or OKX timeouts.",
+      "Modifying or incorporating the unrelated in-progress Historical Gross/Net parity working-tree changes."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Maker correction: future and still-active orders of the exact 28 group-8223 ETH Reference Average Maker-GTD PaperOnly strategies, with no terminal-history rewrite. Settlement correction: all due Entered BTC/ETH/SOL 5-minute Paper runs handled by BtcUpDown5mPaperStrategyProcessor when Gamma has no resolved winner and the exact canonical ledger gates pass; the current 230-run backlog is the verified production preview, not a direct mutation target in this local task.",
+    "firstVerification": "Trace the exact Maker acceptance timestamp through JSON and PostgreSQL persistence, and trace the exact due-run settlement path from Gamma lookup through the existing canonical WebSocket-resolved ledger using a forced READ ONLY production preview."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "PostgreSQL microsecond rounding must not falsely invalidate otherwise identical exact-family Maker-GTD acceptance evidence.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Доработай",
+      "acceptanceCriteria": [
+        "The lower lifetime bound treats JSON accepted_at_utc as valid when it is no more than 5 .NET ticks earlier than persisted paper_orders.created_at_utc, matching the maximum PostgreSQL half-microsecond round-trip difference verified in production.",
+        "A difference of exactly 5 ticks passes and a difference of 6 ticks fails closed as maker_gtd_evidence_unavailable with detail order_lifetime_mismatch.",
+        "An accepted_at_utc exactly equal to persisted created_at_utc and an accepted_at_utc later than created_at_utc but still before effective expiry remain valid, preserving the existing one-sided lower-bound semantics.",
+        "The effective-expiry equality and upper lifetime bound, root/nested accepted timestamp identity, asset subscription, stale state, reconnect continuity, market-data continuity, exact-family predicate, TouchNoDepth, pricing, GTD/PostOnly, PaperOnly, and Live-disabled gates remain unchanged.",
+        "A healthy uninterrupted expired order with a valid 1-5 tick round-trip difference becomes ordinary maker_gtd_expired_unfilled rather than evidence unavailable; a valid touch may fill exactly once.",
+        "No Maker-GTD record that is terminal before activation is reopened, replayed, or rewritten by this task; 251 is only the preview-cutoff count."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperEvidence.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "All Maker-GTD lifecycle tests pass, including equality, accepted timestamps later than created but before expiry, valid 1-5 tick round trips, the 6-tick fail-closed boundary, ordinary expiry, valid touch, and all existing continuity failures.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Atomic persistence and exact 28-strategy closed-exception tests pass without a pricing, lifecycle, family-membership, PaperOnly, or Live regression.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "When Gamma has no resolved winner, an exact canonical resolved-market ledger row must be able to settle eligible BTC/ETH/SOL five-minute Paper runs without weakening identity or source validation.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Доработай",
+      "acceptanceCriteria": [
+        "When the existing Gamma predicate finds a metadata row with Resolved=true and nonblank WinningOutcome, the processor performs zero ledger lookup and follows the existing Gamma path even if a conflicting ledger row exists.",
+        "Only when that Gamma predicate finds no winner may the processor use crypto_up_down_5m_websocket_resolved_markets, and only for source GammaClosedMarket, MarketWebSocket, or BinanceTimedClose.",
+        "The fallback requires exactly one ledger row for normalized variant reference asset plus market_start_utc; exact five-minute variant membership in current StrategyIds.UpDown5mStrategyVariants; exact market_id, condition_id, market_slug, market_start_utc, and market_end_utc; Up/Down winning outcome; nonempty winning asset; event timestamp at or after market end; and exact winning and selected token mappings from the persisted polymarket_gamma_markets outcomes_json/clob_token_ids_json pair.",
+        "When Gamma has no valid winner, ReferenceStartEnd, TerminalOrderBook, unknown sources, missing winner data, event-before-end rows, missing current variant membership, non-five-minute rows, and every identity or token mismatch remain Entered and do not create a settlement.",
+        "For SQL NULL skip_diagnostics_json, a fallback creates a new JSON object whose initial member is settlement_resolution. For an existing JSON object without settlement_resolution, it preserves every existing member and adds settlement_resolution. The evidence contains contract_version=btc_up_down_5m_resolved_ledger_settlement_v1, ledger id/source, normalized asset, exact market/condition/slug/start/end, winning outcome/asset, event timestamp, and validation_result=exact_identity_token_time_match.",
+        "An existing semantically identical approved settlement_resolution is accepted only for idempotent recovery. A conflicting settlement_resolution, a valid non-object JSON value including JSON null, or malformed in-memory JSON fails closed: the run remains Entered, no settlement, position, or lost-counter mutation occurs, and the service emits an explicit bounded error containing the run id and rejection detail. PostgreSQL cannot persist malformed JSON because the column type is jsonb.",
+        "Whenever the existing non-FixedOutcomeMaker path creates a PaperPositionSettlement, its SettlementSource is exactly BtcUpDown5mResolvedLedger:GammaClosedMarket, BtcUpDown5mResolvedLedger:MarketWebSocket, or BtcUpDown5mResolvedLedger:BinanceTimedClose. FixedOutcomeMaker and zero-remaining-position paths still carry the durable run evidence even when no PaperPositionSettlement row exists.",
+        "A fallback settlement otherwise uses the existing fill, position, stake, fee, Gross PnL, Net PnL, lost-counter, and run update logic unchanged.",
+        "Tests cover BTC, ETH, and SOL; Up and Down winners; enabled and disabled historical variants; winning and losing positions; idempotency; and the verified BinanceTimedClose shape needed by the 230-run backlog.",
+        "After a later deployment, the existing ordinary settlement worker can settle every still-eligible member of the verified 230-run backlog without a manual database update; this local task does not claim or perform that production mutation."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~SettlementResolvedLedger|FullyQualifiedName~SettlesEnteredRunFromClosedGammaMetadata\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Focused settlement tests pass for zero ledger lookup on Gamma success, exact accepted ledger sources, all identity/time/token/catalog gates, rejected provisional sources, BTC/ETH/SOL, Up/Down, enabled/disabled and FixedOutcomeMaker runs, SQL-NULL evidence-object creation, preservation of existing object members, identical-evidence idempotency, conflicting/non-object/malformed evidence fail-closed behavior with explicit bounded logging, exact position-settlement sources, and unchanged accounting.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Compare the final settlement diff and focused evidence with the forced READ ONLY 230-run production preview.",
+          "expected": "The implementation uses the existing bounded canonical ledger query, contains no schema or direct historical DML, and every still-eligible member of the 230-row preview is in the current five-minute variant catalog and satisfies the approved asset, identity, token, source, and event-time gates. The preview proves all 230 rows have SQL NULL skip_diagnostics_json and therefore follow deterministic new-object evidence creation; it does not claim that production was mutated.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Both corrections must remain local, auditable Paper behavior changes and must not broaden into deployment, Live trading, unrelated accounting, or concurrent Gross/Net work.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Доработай",
+      "acceptanceCriteria": [
+        "The solution builds with zero errors and focused tests pass from an isolated worktree and marked D:\\CodexTemp run.",
+        "The final diff contains only approved implementation, tests, and current documentation paths and does not include the unrelated dirty Gross/Net worktree changes.",
+        "No production database, service, configuration, strategy, order, position, settlement, deployment, restart, or external venue state is changed by Codex in this task.",
+        "An independent reviewer compares both verbatim user prompts, this approved contract, the complete isolated diff, and all test evidence and returns pass with no open findings."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperEvidence.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "Solution build completes with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "git diff --check",
+          "expected": "No whitespace errors or conflict markers exist in the isolated approved diff.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-007",
+          "kind": "inspection",
+          "command": "Independent semantic review of verbatim prompts, approved contract, full diff, and evidence.",
+          "expected": "A reviewer other than the implementation author returns pass with comparedOriginalRequests=true and findings=[].",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Permit a canonical BinanceTimedClose resolved-ledger row to become ordinary Paper settlement authority only when the existing Gamma success predicate yields no winner and every approved exact source, catalog, asset, identity, token, and event-time gate passes.",
+      "impact": "BinanceTimedClose is derived from the Binance timed close rather than a direct Polymarket resolution event. It can determine Paper win/loss, settlement value, Gross and Net PnL, position closure, and strategy lost counters for BTC/ETH/SOL five-minute Paper runs, including the verified 230-run backlog, and it could differ from a later Polymarket result. It never authorizes or changes Live trading.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260815-maker-precision-resolved-ledger-settlement sha256:74e87a0a82c2ded1c6452ae18b27b59cab0ac69863a22c3923b72050bcb5ef31",
+        "semanticDigest": "sha256:74e87a0a82c2ded1c6452ae18b27b59cab0ac69863a22c3923b72050bcb5ef31"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260815-maker-precision-resolved-ledger-settlement sha256:74e87a0a82c2ded1c6452ae18b27b59cab0ac69863a22c3923b72050bcb5ef31",
+    "semanticDigest": "sha256:74e87a0a82c2ded1c6452ae18b27b59cab0ac69863a22c3923b72050bcb5ef31"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
