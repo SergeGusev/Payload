@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260815-historical-gross-net-parity-details-build-fix",
+  "title": "Fix the missing Historical Gross/Net parity venue revision Details argument",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Во время билда вылезла вот такая ошибка:\n\nThere is no argument given that corresponds to the required parameter 'Details' of 'HistoricalGrossNetParityVenueRevisionResult.HistoricalGrossNetParityVenueRevisionResult(bool, bool, HistoricalGrossNetParityOwnership, decimal?, decimal?, decimal?, bool, string)'\n\nИсправь, пожалуйста"
+    }
+  ],
+  "scope": {
+    "goal": "Eliminate the reported missing-Details compiler error in the successful Historical Gross/Net parity VenueReported revision result construction.",
+    "inScope": [
+      "The successful HistoricalGrossNetParityVenueRevisionResult construction in src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs.",
+      "Build and focused test verification of that constructor-call correction."
+    ],
+    "outOfScope": [
+      "Changing the HistoricalGrossNetParityVenueRevisionResult record signature or any accounting, ownership, balance, database, service, trading, or runtime behavior.",
+      "Changing any other constructor call, product file, test behavior, documentation, or unrelated compiler error."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "not-applicable; this is a compile-time constructor-call correction with no data or time window",
+    "firstVerification": "Inspect the record declaration and every HistoricalGrossNetParityVenueRevisionResult construction, and confirm which exact call omits the required Details argument."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Supply the required Details argument on the successful HistoricalGrossNetParityVenueRevisionResult return while preserving its existing seven result values and all runtime accounting behavior.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "There is no argument given that corresponds to the required parameter 'Details'",
+      "acceptanceCriteria": [
+        "The successful return supplies the exact non-empty Details text VenueReported evidence revision applied.",
+        "The existing Applied, Idempotent, Ownership, RequestedDelta, ActualAppliedDelta, ResidualUnappliedDelta, and BalanceDeferred arguments remain unchanged, and the record declaration remains unchanged.",
+        "The reported CS7036/missing-Details compiler failure is absent from the solution build; the focused Historical Gross/Net parity Live-flow tests pass.",
+        "No product or test file other than src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs is changed by this correction."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Inspect every HistoricalGrossNetParityVenueRevisionResult construction with rg and inspect the focused diff.",
+          "expected": "Every construction supplies all eight parameters and the focused diff changes only the successful return's Details argument.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp run artifacts path>",
+          "expected": "Build exits 0 without the reported missing-Details compiler error; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --no-restore --filter FullyQualifiedName~HistoricalGrossNetParityLiveFlowTests --artifacts-path <marked D:\\CodexTemp run artifacts path> --results-directory <marked D:\\CodexTemp run results path>",
+          "expected": "Focused Historical Gross/Net parity Live-flow tests exit 0 with no failures.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260815-historical-gross-net-parity-details-build-fix sha256:bd1f9a8c0c3bbfde31d6bc6a4a8e342a206c474a0561379ff0c606d534d6df68",
+    "semanticDigest": "sha256:bd1f9a8c0c3bbfde31d6bc6a4a8e342a206c474a0561379ff0c606d534d6df68"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/details_build_fix_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
