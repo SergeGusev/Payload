@@ -50,6 +50,33 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     }
 
     [Fact]
+    public async Task MarketDataUpdater_AcceptedFiveTicksBeforePersistedCreatedAt_FillsExactlyOnce()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            acceptedAtOffsetFromCreatedTicks: -5);
+        var updater = CreateUpdater(scenario.Repository);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+        var update = LastTradeUpdate(
+            scenario.Order,
+            price: scenario.Order.Price,
+            sourceTimestampUtc,
+            receivedAtUtc);
+
+        await updater.ApplyUpdateAsync(update, receivedAtUtc);
+        await updater.ApplyUpdateAsync(update, receivedAtUtc);
+
+        Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Entered,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+    }
+
+    [Fact]
     public async Task MarketDataUpdater_OnePositionMarkConflict_RecomputesAndFillsExactlyOnce()
     {
         var now = DateTimeOffset.UtcNow;
@@ -319,6 +346,30 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
         var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
         Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skippedRun.Status);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
+        Assert.Contains("continuous_market_websocket_evidence", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_AcceptedFiveTicksBeforePersistedCreatedAt_ExpiresOrdinarily()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddSeconds(-1),
+            acceptedAtOffsetFromCreatedTicks: -5);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        var clobClient = new CountingClobClient();
+        var processor = CreateProcessor(scenario.Repository, cache, clobClient);
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(0, result.OrdersFilled);
+        Assert.Equal(1, result.OrdersExpired);
+        Assert.Equal(0, clobClient.OrderBookCalls);
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
         Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
         Assert.Contains("continuous_market_websocket_evidence", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
@@ -635,13 +686,64 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, result.ReasonCode);
     }
 
+    [Theory]
+    [InlineData(-5L)]
+    [InlineData(-4L)]
+    [InlineData(-3L)]
+    [InlineData(-2L)]
+    [InlineData(-1L)]
+    [InlineData(0L)]
+    [InlineData(1L)]
+    public void ContinuityEvaluator_AcceptedWithinLowerBoundOrLaterBeforeExpiry_RemainsContinuous(
+        long acceptedAtOffsetFromCreatedTicks)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            acceptedAtOffsetFromCreatedTicks: acceptedAtOffsetFromCreatedTicks);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+
+        var result = MakerGtdPaperContinuityEvaluator.Evaluate(
+            scenario.Order,
+            cache.Status,
+            cache.SubscribedAssetIds);
+
+        Assert.True(result.Continuous);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, result.ReasonCode);
+        Assert.Equal("continuous_market_websocket_evidence", result.Detail);
+    }
+
+    [Fact]
+    public void ContinuityEvaluator_AcceptedSixTicksBeforePersistedCreatedAt_FailsClosed()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(
+            now,
+            expiresAtUtc: now.AddMinutes(1),
+            acceptedAtOffsetFromCreatedTicks: -6);
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+
+        var result = MakerGtdPaperContinuityEvaluator.Evaluate(
+            scenario.Order,
+            cache.Status,
+            cache.SubscribedAssetIds);
+
+        Assert.False(result.Continuous);
+        Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, result.ReasonCode);
+        Assert.Equal("order_lifetime_mismatch", result.Detail);
+    }
+
     private static MakerScenario CreateScenario(
         DateTimeOffset now,
-        DateTimeOffset expiresAtUtc)
+        DateTimeOffset expiresAtUtc,
+        long? acceptedAtOffsetFromCreatedTicks = null)
     {
         var repository = new TestAppRepository();
         var createdAtUtc = now.AddMinutes(-2);
-        var acceptedAtUtc = createdAtUtc.AddSeconds(1);
+        var acceptedAtUtc = acceptedAtOffsetFromCreatedTicks is { } offsetTicks
+            ? createdAtUtc.AddTicks(offsetTicks)
+            : createdAtUtc.AddSeconds(1);
         var strategyId = Guid.NewGuid();
         var order = new PaperOrder(
             Guid.NewGuid(),

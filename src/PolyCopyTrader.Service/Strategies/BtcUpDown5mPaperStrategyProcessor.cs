@@ -106,6 +106,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private const string DiffCounterBinanceTimedCloseResultSource = "BinanceTimedClose";
     private const string DiffCounterTerminalOrderBookResultSource = "TerminalOrderBook";
     private const string DiffCounterGammaClosedMarketResultSource = "GammaClosedMarket";
+    private const string ResolvedLedgerSettlementContractVersion = "btc_up_down_5m_resolved_ledger_settlement_v1";
+    private const string ResolvedLedgerSettlementValidationResult = "exact_identity_token_time_match";
+    private const string ResolvedLedgerSettlementEvidenceProperty = "settlement_resolution";
+    private const string ResolvedLedgerSettlementSourcePrefix = "BtcUpDown5mResolvedLedger:";
     private const string PremarketPreviousResultSourcePrefix = "ReferencePricePremarketEndMinus";
     private const decimal DiffProgressMaxStakeMultiplier = 10m;
     private const int AdjustedDiffTrendZeroEmaPeriodPoints = 24;
@@ -6920,6 +6924,70 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return 0;
         }
 
+        IReadOnlyList<PolymarketOnChainTokenMetadata> metadata;
+        SettlementResolution settlementResolution;
+        try
+        {
+            using var metadataTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            metadataTimeout.CancelAfter(SettlementMetadataTimeout);
+            metadata = await GetSettlementMetadataAsync(
+                run,
+                metadataLookupTasks,
+                metadataTimeout.Token);
+
+            var gammaWinningOutcome = metadata
+                .FirstOrDefault(item => item.Resolved && !string.IsNullOrWhiteSpace(item.WinningOutcome))
+                ?.WinningOutcome;
+            if (!string.IsNullOrWhiteSpace(gammaWinningOutcome))
+            {
+                var gammaWinningAssetId = metadata
+                    .FirstOrDefault(item => string.Equals(item.Outcome, gammaWinningOutcome, StringComparison.OrdinalIgnoreCase))
+                    ?.TokenId;
+                settlementResolution = new SettlementResolution(
+                    gammaWinningOutcome,
+                    gammaWinningAssetId,
+                    "BtcUpDown5mGammaClosedMarket",
+                    run.SkipDiagnosticsJson);
+            }
+            else
+            {
+                var ledgerResolution = await TryResolveSettlementFromCanonicalLedgerAsync(
+                    run,
+                    runVariant,
+                    metadataTimeout.Token);
+                if (ledgerResolution is null)
+                {
+                    return 0;
+                }
+
+                settlementResolution = ledgerResolution;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            logger.LogInformation(
+                "BTC Up or Down 5m paper settlement metadata request timed out. Strategy={StrategyCode} MarketId={MarketId} TimeoutSeconds={TimeoutSeconds}",
+                runVariant.Code,
+                run.MarketId,
+                SettlementMetadataTimeout.TotalSeconds);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(
+                ex,
+                "BTC Up or Down 5m paper settlement failed. Strategy={StrategyCode} MarketId={MarketId}.",
+                runVariant.Code,
+                run.MarketId);
+            await TryRecordApiErrorAsync("SettleDueRun", ex.Message, cancellationToken);
+            return 0;
+        }
+
         OpeningLimitFillSummary? openingLimitFillSummary = null;
         if (UsesOpeningLimitEntry(runVariant))
         {
@@ -6956,24 +7024,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         try
         {
-            using var metadataTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            metadataTimeout.CancelAfter(SettlementMetadataTimeout);
-            var metadata = await GetSettlementMetadataAsync(
-                run,
-                metadataLookupTasks,
-                metadataTimeout.Token);
-
-            var winningOutcome = metadata
-                .FirstOrDefault(item => item.Resolved && !string.IsNullOrWhiteSpace(item.WinningOutcome))
-                ?.WinningOutcome;
-            if (string.IsNullOrWhiteSpace(winningOutcome))
-            {
-                return 0;
-            }
-
-            var winningAssetId = metadata
-                .FirstOrDefault(item => string.Equals(item.Outcome, winningOutcome, StringComparison.OrdinalIgnoreCase))
-                ?.TokenId;
+            var winningOutcome = settlementResolution.WinningOutcome;
+            var winningAssetId = settlementResolution.WinningAssetId;
             var won = string.Equals(run.SelectedAssetId, winningAssetId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(run.SelectedOutcome, winningOutcome, StringComparison.OrdinalIgnoreCase);
             var settlementPrice = won ? 1m : 0m;
@@ -7041,7 +7093,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     settlementValue,
                     settlementRealizedPnl,
                     won,
-                    "BtcUpDown5mGammaClosedMarket",
+                    settlementResolution.PositionSettlementSource,
                     nowUtc,
                     nowUtc,
                     FeeUsd: entrySizeShares > 0m
@@ -7102,17 +7154,19 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     FeeCalculatedAtUtc = totalFeeAccounting.CalculatedAtUtc,
                     NetRealizedPnlUsd = netRealizedPnl,
                     SettledAtUtc = nowUtc,
+                    SkipDiagnosticsJson = settlementResolution.SkipDiagnosticsJson,
                     UpdatedAtUtc = nowUtc
                 },
                 cancellationToken);
 
             logger.LogInformation(
-                "BTC Up or Down 5m paper run settled. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} Won={Won} RealizedPnlUsd={RealizedPnlUsd}",
+                "BTC Up or Down 5m paper run settled. Strategy={StrategyCode} Market={MarketSlug} Outcome={Outcome} Won={Won} RealizedPnlUsd={RealizedPnlUsd} SettlementSource={SettlementSource}",
                 runVariant.Code,
                 run.MarketSlug,
                 run.SelectedOutcome,
                 won,
-                realizedPnl);
+                realizedPnl,
+                settlementResolution.PositionSettlementSource);
 
             var settings = await strategyStateProvider.GetStrategySettingsAsync(runVariant.Id, cancellationToken);
             await UpdatePaperLostCounterAfterSettlementAsync(runVariant, settings, won, nowUtc, cancellationToken);
@@ -7180,6 +7234,212 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         return metadata;
+    }
+
+    private async Task<SettlementResolution?> TryResolveSettlementFromCanonicalLedgerAsync(
+        StrategyMarketPaperRun run,
+        BtcUpDown5mStrategyVariant runVariant,
+        CancellationToken cancellationToken)
+    {
+        if (!StrategyVariantsById.TryGetValue(StrategyIds.Normalize(run.StrategyId), out var catalogVariant) ||
+            catalogVariant != runVariant ||
+            catalogVariant.MarketInterval != BtcUpDownMarketInterval.FiveMinutes ||
+            run.MarketStartUtc is not { } marketStartUtc ||
+            run.MarketEndUtc is not { } marketEndUtc ||
+            marketEndUtc - marketStartUtc != TimeSpan.FromMinutes(5))
+        {
+            return null;
+        }
+
+        var assetSymbol = NormalizeAssetSymbol(GetReferenceAssetSymbol(catalogVariant));
+        if (assetSymbol is not ("BTC" or "ETH" or "SOL"))
+        {
+            return null;
+        }
+
+        var ledgerRows = await repository.GetCryptoUpDown5mWebSocketResolvedMarketsAsync(
+            [assetSymbol],
+            marketStartUtc,
+            marketStartUtc,
+            cancellationToken);
+        var matchingRows = ledgerRows
+            .Where(row => string.Equals(row.AssetSymbol, assetSymbol, StringComparison.Ordinal))
+            .Where(row => row.MarketStartUtc == marketStartUtc)
+            .ToArray();
+        if (matchingRows.Length != 1)
+        {
+            return null;
+        }
+
+        var ledger = matchingRows[0];
+        if (!IsApprovedSettlementResolvedLedgerSource(ledger.Source) ||
+            !string.Equals(ledger.MarketId, run.MarketId, StringComparison.Ordinal) ||
+            !string.Equals(ledger.ConditionId, run.ConditionId, StringComparison.Ordinal) ||
+            !string.Equals(ledger.MarketSlug, run.MarketSlug, StringComparison.Ordinal) ||
+            ledger.MarketStartUtc != marketStartUtc ||
+            ledger.MarketEndUtc != marketEndUtc ||
+            ledger.WinningOutcome is not ("Up" or "Down") ||
+            string.IsNullOrWhiteSpace(ledger.WinningAssetId) ||
+            ledger.EventTimestampUtc < marketEndUtc ||
+            run.SelectedOutcome is not ("Up" or "Down"))
+        {
+            return null;
+        }
+
+        var catalogMarket = await repository.GetPolymarketGammaMarketAsync(run.MarketId, cancellationToken);
+        if (catalogMarket is null ||
+            !string.Equals(catalogMarket.MarketId, run.MarketId, StringComparison.Ordinal) ||
+            !string.Equals(catalogMarket.ConditionId, run.ConditionId, StringComparison.Ordinal) ||
+            !string.Equals(catalogMarket.Slug, run.MarketSlug, StringComparison.Ordinal) ||
+            !TryGetExactCatalogTokenId(catalogMarket, ledger.WinningOutcome, out var expectedWinningAssetId) ||
+            !string.Equals(expectedWinningAssetId, ledger.WinningAssetId, StringComparison.Ordinal) ||
+            !TryGetExactCatalogTokenId(catalogMarket, run.SelectedOutcome, out var expectedSelectedAssetId) ||
+            !string.Equals(expectedSelectedAssetId, run.SelectedAssetId, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var settlementEvidence = new JsonObject
+        {
+            ["contract_version"] = ResolvedLedgerSettlementContractVersion,
+            ["ledger_id"] = ledger.Id.ToString("D", CultureInfo.InvariantCulture),
+            ["ledger_source"] = ledger.Source,
+            ["asset_symbol"] = assetSymbol,
+            ["market_id"] = ledger.MarketId,
+            ["condition_id"] = ledger.ConditionId,
+            ["market_slug"] = ledger.MarketSlug,
+            ["market_start_utc"] = FormatResolvedLedgerSettlementTimestamp(ledger.MarketStartUtc),
+            ["market_end_utc"] = FormatResolvedLedgerSettlementTimestamp(ledger.MarketEndUtc),
+            ["winning_outcome"] = ledger.WinningOutcome,
+            ["winning_asset_id"] = ledger.WinningAssetId,
+            ["event_timestamp_utc"] = FormatResolvedLedgerSettlementTimestamp(ledger.EventTimestampUtc),
+            ["validation_result"] = ResolvedLedgerSettlementValidationResult
+        };
+        var mergedDiagnostics = await TryMergeResolvedLedgerSettlementEvidenceAsync(
+            run,
+            settlementEvidence,
+            cancellationToken);
+        if (mergedDiagnostics is null)
+        {
+            return null;
+        }
+
+        return new SettlementResolution(
+            ledger.WinningOutcome,
+            ledger.WinningAssetId,
+            ResolvedLedgerSettlementSourcePrefix + ledger.Source,
+            mergedDiagnostics);
+    }
+
+    private async Task<string?> TryMergeResolvedLedgerSettlementEvidenceAsync(
+        StrategyMarketPaperRun run,
+        JsonObject settlementEvidence,
+        CancellationToken cancellationToken)
+    {
+        JsonObject root;
+        if (run.SkipDiagnosticsJson is null)
+        {
+            root = new JsonObject();
+        }
+        else
+        {
+            JsonNode? parsed;
+            try
+            {
+                parsed = JsonNode.Parse(run.SkipDiagnosticsJson);
+            }
+            catch (JsonException)
+            {
+                await RecordResolvedLedgerSettlementEvidenceRejectionAsync(
+                    run.Id,
+                    "skip_diagnostics_malformed_json",
+                    cancellationToken);
+                return null;
+            }
+
+            if (parsed is not JsonObject parsedObject)
+            {
+                await RecordResolvedLedgerSettlementEvidenceRejectionAsync(
+                    run.Id,
+                    "skip_diagnostics_not_object",
+                    cancellationToken);
+                return null;
+            }
+
+            root = parsedObject;
+        }
+
+        if (root.TryGetPropertyValue(ResolvedLedgerSettlementEvidenceProperty, out var existingEvidence))
+        {
+            if (!JsonNode.DeepEquals(existingEvidence, settlementEvidence))
+            {
+                await RecordResolvedLedgerSettlementEvidenceRejectionAsync(
+                    run.Id,
+                    "settlement_resolution_conflict",
+                    cancellationToken);
+                return null;
+            }
+
+            return root.ToJsonString();
+        }
+
+        root.Add(ResolvedLedgerSettlementEvidenceProperty, settlementEvidence);
+        return root.ToJsonString();
+    }
+
+    private async Task RecordResolvedLedgerSettlementEvidenceRejectionAsync(
+        Guid runId,
+        string detail,
+        CancellationToken cancellationToken)
+    {
+        logger.LogError(
+            "Resolved-ledger Paper settlement evidence rejected. RunId={RunId} Detail={Detail}",
+            runId,
+            detail);
+        await TryRecordApiErrorAsync(
+            "SettlementResolvedLedgerEvidence",
+            $"RunId={runId:D}; Detail={detail}",
+            cancellationToken);
+    }
+
+    private static bool IsApprovedSettlementResolvedLedgerSource(string source)
+    {
+        return string.Equals(source, DiffCounterGammaClosedMarketResultSource, StringComparison.Ordinal) ||
+            string.Equals(source, DiffCounterWebSocketResultSource, StringComparison.Ordinal) ||
+            string.Equals(source, DiffCounterBinanceTimedCloseResultSource, StringComparison.Ordinal);
+    }
+
+    private static bool TryGetExactCatalogTokenId(
+        PolymarketGammaMarket market,
+        string outcome,
+        out string tokenId)
+    {
+        tokenId = string.Empty;
+        if (market.Outcomes.Count != 2 ||
+            market.ClobTokenIds.Count != 2 ||
+            market.Outcomes.Count(item => string.Equals(item, "Up", StringComparison.Ordinal)) != 1 ||
+            market.Outcomes.Count(item => string.Equals(item, "Down", StringComparison.Ordinal)) != 1 ||
+            market.ClobTokenIds.Any(string.IsNullOrWhiteSpace) ||
+            market.ClobTokenIds.Distinct(StringComparer.Ordinal).Count() != 2)
+        {
+            return false;
+        }
+
+        var matchingIndexes = Enumerable.Range(0, market.Outcomes.Count)
+            .Where(index => string.Equals(market.Outcomes[index], outcome, StringComparison.Ordinal))
+            .ToArray();
+        if (matchingIndexes.Length != 1)
+        {
+            return false;
+        }
+
+        tokenId = market.ClobTokenIds[matchingIndexes[0]];
+        return !string.IsNullOrWhiteSpace(tokenId);
+    }
+
+    private static string FormatResolvedLedgerSettlementTimestamp(DateTimeOffset value)
+    {
+        return value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
     }
 
     private async Task<OpeningLimitFillSummary?> GetOpeningLimitFillSummaryAsync(
@@ -22522,6 +22782,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     {
         public static BtcMakerProcessResult Empty { get; } = new(0, 0, 0);
     }
+
+    private sealed record SettlementResolution(
+        string WinningOutcome,
+        string? WinningAssetId,
+        string PositionSettlementSource,
+        string? SkipDiagnosticsJson);
 
     private sealed record EntryVariantFlowResult(
         BtcUpDown5mPaperStrategyResult Result,

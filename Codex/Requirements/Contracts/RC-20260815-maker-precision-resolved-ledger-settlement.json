@@ -3,7 +3,7 @@
   "contractId": "RC-20260815-maker-precision-resolved-ledger-settlement",
   "title": "Fix Maker-GTD timestamp precision and resolved-ledger Paper settlement",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -66,16 +66,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "All Maker-GTD lifecycle tests pass, including equality, accepted timestamps later than created but before expiry, valid 1-5 tick round trips, the 6-tick fail-closed boundary, ordinary expiry, valid touch, and all existing continuity failures.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final focused TRX D:\\CodexTemp\\runs\\manual-6067b9e2c20945a68364aa778af772fc\\results\\maker\\maker.trx completed with 32 passed, 0 failed, and 0 skipped. It covers accepted_at_utc at -5..-1 ticks, equality, later-than-created, the -6 tick rejection boundary, ordinary expiry, authoritative touch, exactly-once fill, and the existing continuity failures. A later combined final run also passed all 50 Maker lifecycle/atomic/exact-family tests."
         },
         {
           "id": "VER-002",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Atomic persistence and exact 28-strategy closed-exception tests pass without a pricing, lifecycle, family-membership, PaperOnly, or Live regression.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final focused TRX D:\\CodexTemp\\runs\\manual-6067b9e2c20945a68364aa778af772fc\\results\\ver002\\ver002.trx completed with 18 passed, 0 failed, and 0 skipped: 14 MakerGtdPaperAtomicRepositoryTests plus 4 ReferenceAverageMakerGtdPremarketStrategyTests. The final combined Maker run at results\\maker-final\\maker-final.trx passed 50/50."
         }
       ]
     },
@@ -110,16 +110,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~SettlementResolvedLedger|FullyQualifiedName~SettlesEnteredRunFromClosedGammaMetadata\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Focused settlement tests pass for zero ledger lookup on Gamma success, exact accepted ledger sources, all identity/time/token/catalog gates, rejected provisional sources, BTC/ETH/SOL, Up/Down, enabled/disabled and FixedOutcomeMaker runs, SQL-NULL evidence-object creation, preservation of existing object members, identical-evidence idempotency, conflicting/non-object/malformed evidence fail-closed behavior with explicit bounded logging, exact position-settlement sources, and unchanged accounting.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final focused TRX D:\\CodexTemp\\runs\\manual-6067b9e2c20945a68364aa778af772fc\\results\\settlement\\settlement-final5.trx completed with 41 passed, 0 failed, and 0 skipped. It covers Gamma priority with zero ledger lookup, all three accepted sources, every catalog/identity/time/token/source rejection, BTC/ETH/SOL and Up/Down, enabled/disabled rows, accounting/source evidence, NULL/object/idempotent/conflicting/non-object/malformed diagnostics, and the write-capable opening-limit scenario proving evidence rejection occurs before fill/order/position/settlement/lost-counter/run mutation. The source-contract regression also proves durable run evidence is outside both position-settlement guards and records that the current catalog contains zero FixedOutcomeMaker variants."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Compare the final settlement diff and focused evidence with the forced READ ONLY 230-run production preview.",
           "expected": "The implementation uses the existing bounded canonical ledger query, contains no schema or direct historical DML, and every still-eligible member of the 230-row preview is in the current five-minute variant catalog and satisfies the approved asset, identity, token, source, and event-time gates. The preview proves all 230 rows have SQL NULL skip_diagnostics_json and therefore follow deterministic new-object evidence creation; it does not claim that production was mutated.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Forced production REPEATABLE READ READ ONLY UTC preview at cutoff 2026-08-15T06:34:11.223948Z, statement_timeout=15s, reconciled exactly 230 Entered runs for market_end_utc=2026-08-05T15:00:00Z: BTC 71 / $1,724 stake, ETH 60 / $823, SOL 99 / $1,873. All 230 were current five-minute catalog variants, had exact run/order/fill and ledger market/condition/slug/start/end/outcome/token/source/event mappings, and used BinanceTimedClose events after market end; all 230 had SQL NULL skip_diagnostics_json and therefore take deterministic new-object evidence creation. The final diff reuses the existing bounded repository reads, adds no schema or direct DML, and no production state was changed."
         }
       ]
     },
@@ -150,24 +150,24 @@
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "Solution build completes with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final Debug solution build after the ordering correction succeeded in 11.70 seconds with 0 errors and 121 pre-existing nullable warnings, using artifacts under D:\\CodexTemp\\runs\\manual-6067b9e2c20945a68364aa778af772fc\\artifacts\\build-final2. The final broad run contained 336 tests: 223 passed and 113 baseline failures. Compared with the exact approval parent (286 total, 172 passed, 114 failed), all 113 shared failures had identical names and messages, no current-only failure existed, and one stale baseline-only settlement test was fixed."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "git diff --check",
           "expected": "No whitespace errors or conflict markers exist in the isolated approved diff.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final git diff --check passed. The isolated implementation diff contains exactly the six approved README, parity-doc, Maker evidence, processor, and two test paths; no conflict marker, whitespace error, schema/configuration/Live path, unrelated Gross/Net work, production mutation, or deployment action is present."
         },
         {
           "id": "VER-007",
           "kind": "inspection",
           "command": "Independent semantic review of verbatim prompts, approved contract, full diff, and evidence.",
           "expected": "A reviewer other than the implementation author returns pass with comparedOriginalRequests=true and findings=[].",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/final_settlement_review compared both verbatim prompts, approved digest sha256:74e87a0a82c2ded1c6452ae18b27b59cab0ac69863a22c3923b72050bcb5ef31, the full final diff hash 2db9f9c0e06a2170967d3876600423d4dd7323a9, production preview, and all final TRX/build evidence. Verdict PASS, comparedOriginalRequests=true, findings=[]. The reviewer specifically rechecked that resolution/evidence preflight precedes both opening-limit write-capable calls and all financial mutations."
         }
       ]
     }
@@ -193,9 +193,9 @@
     "semanticDigest": "sha256:74e87a0a82c2ded1c6452ae18b27b59cab0ac69863a22c3923b72050bcb5ef31"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/final_settlement_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }
