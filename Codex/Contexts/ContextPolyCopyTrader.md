@@ -1,3 +1,17 @@
+## Active Update 2026-08-16 Maker Precision / Resolved Ledger Deployment Verification
+Goal: Verify the user's deployment of the approved Maker timestamp-precision and resolved-ledger Paper settlement corrections.
+Status: Completed read-only; alert — the corrected product commit was not deployed
+Done:
+- Verified production PostgreSQL only at `192.168.0.101:5432/polycopytrader` in UTC with `REPEATABLE READ READ ONLY` and `statement_timeout=15s`; no production writes, restarts, configuration changes, or order changes were made.
+- Production Service is `Running/Live`, started `2026-08-16T06:34:07.393091Z`, heartbeat advanced through `2026-08-16T06:46:07.703851Z`, and the deployed version is exactly `ede8399191a11ff6090ea2875038f2a1d0071a8b`.
+- Independently proved that deployed commit `ede83991` does not contain either approved correction: its relevant source blobs differ from corrected commit `35f72c0c1045851213a5062eda78393ee98ed888`, and it contains neither `PostgreSqlTimestampLowerBoundToleranceTicks` nor `TryResolveSettlementFromCanonicalLedgerAsync` / `ResolvedLedgerSettlementContractVersion`.
+- Runtime corroboration at cutoff `2026-08-16T06:46:41.304596Z`: all exact 230 backlog runs for the BTC/ETH/SOL markets ending `2026-08-05T15:00:00Z` remain `Entered`; `settlement_resolution` evidence count is 0 and matching position-settlement rows are 0. Total stake remains `$4,420` (BTC 71 / $1,724; ETH 60 / $823; SOL 99 / $1,873).
+- Core Paper flow is active: 325 post-start orders were all Filled with exact order/run/fill linkage, zero entries at/after market end, and maximum placement latency `2.842s`. The complete last-60-minute settlement slice contained 2,135 settlements, stake `$14,771.15550648`, Gross PnL `-$378.46767907`, and Net PnL `-$877.16840907`.
+- Current BTC/ETH/SOL reference samples and Polymarket aggregate/critical/shard-001 WebSockets were fresh/Connected. Warning only: brief recovered reference-staleness events and three post-start Copy-performance `Exception while reading from stream` errors did not stop heartbeat or Paper entries.
+Next: Deploy or merge/cherry-pick corrected commit `35f72c0c1045851213a5062eda78393ee98ed888` from `codex/maker-precision-resolved-ledger-settlement` into the intended release, then repeat the production verification and confirm automatic settlement/PnL of the 230 rows plus the first eligible Maker lifecycle record.
+Notes: Several broad hot-table aggregates reached the mandatory 15-second timeout and were read-only rolled back; all material conclusions were re-established through bounded indexed queries and independent build/source evidence.
+Blockers: The requested corrections are absent from the deployed build. No production-side repair was authorized or attempted.
+
 ## Active Update 2026-08-14 Historical Gross/Net Parity Incremental Service Pause
 Goal: Complete Fee and Net accounting for Gross-selected historical Paper and settled Live contributions originating before 2026-08-10 through the deployed service's bounded incremental workflow.
 Status: In Progress; paused at the user's request because the Codex usage limit was exhausted
