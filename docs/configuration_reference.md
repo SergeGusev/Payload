@@ -152,6 +152,80 @@ WHERE occurred_at_utc >= now() - interval '24 hours'
 ORDER BY occurred_at_utc DESC, id DESC;
 ```
 
+## HistoricalGrossNetParity
+
+This independent historical accounting workflow completes Fee and Net for the
+same economic contributions that the existing Gross formulas already select.
+It does not change Gross PnL, Gross ROI, fills, execution, settlement outcomes,
+or the ordinary accounting path for new bets.
+
+- `Enabled`: starts the workflow; checked-in default `true`. There is no
+  `ApplyEnabled`, approval digest, runtime artifact gate, or complete database
+  plan. The deployed service calculates donors lazily while processing old
+  targets and applies each conflict-free decision immediately.
+- `HistoricalCutoffUtc`: fixed at `2026-08-10T00:00:00Z`. Eligibility follows
+  the proved originating entry, not a later SELL, settlement, or mark. Mixed or
+  unproved Paper lineage defers that target without blocking independent work.
+- `BatchSize`: maximum targets or donor-candidate strategy IDs in one bounded
+  page; default `50`, maximum `250`.
+- `CycleIntervalSeconds`, `InitialDelaySeconds`, and `IdleDelaySeconds`: normal
+  turn, startup, and completed-sweep delays; defaults `15`, `300`, and `900`.
+- `ErrorDelaySeconds` / `MaxErrorDelaySeconds`: initial and capped operational
+  retry delays; defaults `60` and `900`.
+- `CommandTimeoutSeconds`, `LockTimeoutMilliseconds`, and
+  `LookupTimeoutSeconds`: bounded PostgreSQL/CLOB operations; defaults `10`,
+  `250`, and `10`.
+- `LookupMaxAttempts`: fixed at three distinct uninterrupted worker cycles for
+  retryable historical market lookup. A service restart resets the in-memory
+  attempt count. Donor fallback itself performs no external lookup.
+- `CalculationVersion`: fixed `historical-gross-net-parity-v1`.
+
+The service first completes the current exact/authoritative/local-calculation
+pass in bounded pages. A financially unresolved row is absent from the current
+exact donor pool but does not globally block fallback; an exact row remains a
+donor even if only its audit, ownership, reconciliation, or Live balance work is
+Pending. The old `PaperFakFeeBackfill` switch, cutoff, and apply gate remain
+independent.
+
+The fallback pass applies `Fee = ROUND_AWAY_8(B * R)` and
+`Net = Gross - Fee`, where `B` is the unchanged source-specific Gross ROI basis
+and `R` comes from exact lifetime observations. Estimated observations never
+donate. Donor selection is deterministic: same strategy, nearest typed
+same-asset family, another same-asset strategy, then the same typed family across
+crypto assets, then any proved crypto strategy; only after all tiers are empty
+does the fixed `R=0.0333` apply. The terminal sources are versioned and stored as
+ordinary `Calculated`; no visible Estimated status is introduced.
+
+For each target, the worker enumerates candidate strategy IDs in deterministic
+pages no larger than `BatchSize`. PostgreSQL reads only those explicit IDs using
+the existing strategy-scoped indexes; an incomplete page, timeout, cancellation,
+or sequential full-corpus plan produces no estimate. The serializable target
+transaction repeats the complete relevant candidate selection and stores exact
+`N/D`, counts, aggregate stake, membership/selection hashes, ratio, target basis,
+Fee, Net, and provenance. A competing target/donor change retries only that
+target. Consequently, targets processed at different times may use different
+exact donor membership; a terminal Paper estimate is not revisited.
+
+The selected canonical sources mirror the current projection branches:
+Settled runs when runs are authoritative, positive open Paper positions,
+runless settlement/SELL fallback, and counted settled Live orders. Excluded
+Gross rows are excluded from Net requirements and cannot block a strategy. Live
+uses already-associated `VenueReported` evidence first, then exact local CLOB
+calculation, then donor/fixed fallback; this workflow does not add an on-chain
+fee matcher. Live accounting first persists immutable baseline, Pending
+ownership, canonical accounting, audit, and reconciliation without changing
+balance. A separate transaction applies the earliest unfinished initial balance
+effect for each strategy in settlement/UUID order, rebases on the current locked
+balance, and marks it Completed. An earlier deferred row gates only later initial
+balance effects for that strategy. Strictly newer Venue evidence for a Completed
+row uses the existing cumulative-delta path. None of these operations changes
+`live_stakes`, loss counters, pause state, or notifications.
+
+Canonical state plus permanent financial audit provide restart/idempotency;
+restart rescans unresolved and Pending rows rather than resuming a global plan.
+The audit is not subject to the 24-hour operational-event cleanup. Rolling and
+operational events remain diagnostic.
+
 ## Polymarket
 
 - `DataApiBaseUrl`: public Data API base URL.

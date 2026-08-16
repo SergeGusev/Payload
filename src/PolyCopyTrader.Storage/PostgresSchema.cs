@@ -74,6 +74,7 @@ public static class PostgresSchema
         "paper_copied_leader_activity_events",
         "dry_run_orders",
         "live_orders",
+        "historical_gross_net_parity_audit",
         "paper_live_shadow_decisions",
         "paper_live_shadow_discrepancies",
         "live_trading_events",
@@ -4589,6 +4590,32 @@ ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS correlation_id uuid NULL;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS execution_source text NOT NULL DEFAULT '';
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS post_only boolean NULL;
 ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS paper_order_id uuid NULL REFERENCES paper_orders(id);
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS historical_gross_net_parity_ownership text NOT NULL DEFAULT 'None';
+ALTER TABLE live_orders ADD COLUMN IF NOT EXISTS row_version bigint NOT NULL DEFAULT 0;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_live_orders_historical_gross_net_parity_ownership'
+          AND conrelid = 'public.live_orders'::regclass
+    ) THEN
+        ALTER TABLE live_orders
+            ADD CONSTRAINT ck_live_orders_historical_gross_net_parity_ownership
+            CHECK (historical_gross_net_parity_ownership IN ('None', 'Pending', 'Completed'));
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_live_orders_row_version_nonnegative'
+          AND conrelid = 'public.live_orders'::regclass
+    ) THEN
+        ALTER TABLE live_orders
+            ADD CONSTRAINT ck_live_orders_row_version_nonnegative CHECK (row_version >= 0);
+    END IF;
+END $$;
 
 UPDATE live_orders
 SET average_fill_price = COALESCE(average_fill_price, CASE WHEN filled_size > 0 THEN price ELSE NULL END),
@@ -4642,6 +4669,72 @@ WHERE settled_at_utc IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_live_orders_pending_balance_settlement
 ON live_orders(status, balance_effect_applied, updated_at_utc)
 WHERE status = 'Matched' AND balance_effect_applied = false;
+
+CREATE TABLE IF NOT EXISTS historical_gross_net_parity_audit (
+    audit_id uuid PRIMARY KEY,
+    source_kind text NOT NULL,
+    source_id uuid NOT NULL,
+    strategy_id uuid NOT NULL,
+    calculation_version text NOT NULL,
+    operation_kind text NOT NULL,
+    evidence_version text NOT NULL,
+    operation_id uuid NULL,
+    decision_kind text NULL,
+    occurred_at_utc timestamptz NOT NULL DEFAULT clock_timestamp(),
+    old_payload_json jsonb NOT NULL,
+    new_payload_json jsonb NOT NULL,
+    evidence_payload_json jsonb NOT NULL,
+    expected_row_version bigint NULL,
+    resulting_row_version bigint NULL,
+    baseline_effect_kind text NULL,
+    nominal_baseline_gross_pnl_usd numeric(28,8) NULL,
+    nominal_baseline_net_pnl_usd numeric(28,8) NULL,
+    desired_cumulative_adjustment numeric(28,8) NULL,
+    prior_actual_cumulative_adjustment numeric(28,8) NULL,
+    requested_delta numeric(28,8) NULL,
+    balance_before numeric(28,8) NULL,
+    balance_after numeric(28,8) NULL,
+    actual_applied_delta numeric(28,8) NULL,
+    new_actual_cumulative_adjustment numeric(28,8) NULL,
+    residual_unapplied_delta numeric(28,8) NULL,
+    clamp_applied boolean NULL,
+    authority_id text NULL,
+    authority_order_key text NULL,
+    supersedes_evidence_version text NULL,
+    UNIQUE (source_kind, source_id, calculation_version, operation_kind, evidence_version),
+    CONSTRAINT ck_historical_gross_net_parity_audit_operation_kind
+        CHECK (operation_kind IN (
+            'AccountingBaseline', 'AccountingDecision',
+            'InitialBalanceApplication', 'VenueReportedRevision'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_historical_gross_net_parity_audit_baseline
+ON historical_gross_net_parity_audit(source_kind, source_id, calculation_version)
+WHERE operation_kind = 'AccountingBaseline';
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_historical_gross_net_parity_audit_decision
+ON historical_gross_net_parity_audit(source_kind, source_id, calculation_version)
+WHERE operation_kind = 'AccountingDecision';
+
+CREATE INDEX IF NOT EXISTS ix_historical_gross_net_parity_audit_venue
+ON historical_gross_net_parity_audit(source_kind, source_id, authority_id, authority_order_key)
+WHERE operation_kind = 'VenueReportedRevision';
+
+CREATE OR REPLACE FUNCTION public.reject_historical_gross_net_parity_immutable_change()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+    RAISE EXCEPTION '% is append-only and immutable', TG_TABLE_NAME
+        USING ERRCODE = '55000';
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS trg_historical_gross_net_parity_audit_immutable
+ON historical_gross_net_parity_audit;
+CREATE TRIGGER trg_historical_gross_net_parity_audit_immutable
+BEFORE UPDATE OR DELETE ON historical_gross_net_parity_audit
+FOR EACH ROW EXECUTE FUNCTION public.reject_historical_gross_net_parity_immutable_change();
 
 CREATE TABLE IF NOT EXISTS paper_live_shadow_decisions (
     correlation_id uuid PRIMARY KEY,

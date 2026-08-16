@@ -299,6 +299,23 @@ public sealed class ConfigurationTests
         Assert.Equal(900, configuration.PaperFakFeeBackfill.IdleDelaySeconds);
         Assert.Equal(60, configuration.PaperFakFeeBackfill.ErrorDelaySeconds);
         Assert.Equal(900, configuration.PaperFakFeeBackfill.MaxErrorDelaySeconds);
+        Assert.True(configuration.HistoricalGrossNetParity.Enabled);
+        Assert.Equal(
+            new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero),
+            configuration.HistoricalGrossNetParity.HistoricalCutoffUtc);
+        Assert.Equal(50, configuration.HistoricalGrossNetParity.BatchSize);
+        Assert.Equal(15, configuration.HistoricalGrossNetParity.CycleIntervalSeconds);
+        Assert.Equal(300, configuration.HistoricalGrossNetParity.InitialDelaySeconds);
+        Assert.Equal(900, configuration.HistoricalGrossNetParity.IdleDelaySeconds);
+        Assert.Equal(60, configuration.HistoricalGrossNetParity.ErrorDelaySeconds);
+        Assert.Equal(900, configuration.HistoricalGrossNetParity.MaxErrorDelaySeconds);
+        Assert.Equal(10, configuration.HistoricalGrossNetParity.CommandTimeoutSeconds);
+        Assert.Equal(250, configuration.HistoricalGrossNetParity.LockTimeoutMilliseconds);
+        Assert.Equal(10, configuration.HistoricalGrossNetParity.LookupTimeoutSeconds);
+        Assert.Equal(3, configuration.HistoricalGrossNetParity.LookupMaxAttempts);
+        Assert.Equal(
+            HistoricalGrossNetParityOptions.DefaultCalculationVersion,
+            configuration.HistoricalGrossNetParity.CalculationVersion);
         Assert.Equal(5, configuration.LiveTrading.MaintenancePollIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.RefreshIntervalSeconds);
         Assert.Equal(60, configuration.Dashboard.StrategyRefreshIntervalSeconds);
@@ -992,6 +1009,43 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.InitialDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.IdleDelaySeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PaperFakFeeBackfill.MaxErrorDelaySeconds", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void HistoricalGrossNetParityOptions_AreValidated()
+    {
+        var configuration = new AppConfiguration
+        {
+            HistoricalGrossNetParity = new HistoricalGrossNetParityOptions
+            {
+                HistoricalCutoffUtc = new DateTimeOffset(2026, 8, 10, 0, 0, 1, TimeSpan.Zero),
+                BatchSize = 251,
+                CycleIntervalSeconds = 0,
+                InitialDelaySeconds = -1,
+                IdleDelaySeconds = 0,
+                ErrorDelaySeconds = 60,
+                MaxErrorDelaySeconds = 59,
+                CommandTimeoutSeconds = 0,
+                LockTimeoutMilliseconds = 0,
+                LookupTimeoutSeconds = 0,
+                LookupMaxAttempts = 2,
+                CalculationVersion = "unexpected-version"
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.HistoricalCutoffUtc", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.BatchSize", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.CycleIntervalSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.InitialDelaySeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.IdleDelaySeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.MaxErrorDelaySeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.CommandTimeoutSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.LockTimeoutMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.LookupTimeoutSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.LookupMaxAttempts", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("HistoricalGrossNetParity.CalculationVersion", StringComparison.Ordinal));
     }
 
     [Fact]

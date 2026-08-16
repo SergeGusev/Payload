@@ -22,3 +22,10 @@ APPROVE RC-20260813-calculated-net-ratio-fallback sha256:833994ee210b3fb1a63fd1d
 
 Result:
 Implemented the approved Gross-ranked exact-repair-then-ratio workflow for unresolved Settled `PaperOnly` strategy runs. The terminal run-only fallback uses exact same-strategy donors, stores `Fee = ROUND(Stake * SUM(Fee)/SUM(Stake), 8)` and `Net = Gross - Fee`, marks the run `Calculated`, and records source `strategy-settled-fee-stake-ratio-v1`; complete exact runs, Gross, execution, Live accounting, and dependent rows remain unchanged. Debug solution build passed with 0 errors and one pre-existing nullable test warning; focused verification passed 66, failed 0, and skipped the five environment-gated PostgreSQL cases because no explicitly selected disposable test database was configured. No production mutation or deployment occurred.
+
+## 2026-08-14T17:41:56.6422033Z
+Request:
+Ты скушал весь мой лимит. Сможешь продолжить с точки останова, когда он появится?
+
+Result:
+Paused all active implementation and review agents immediately to avoid further usage. Persisted the exact continuation point at the top of the active context, including approved contract digests, pushed approval commit, completed code areas, remaining storage/Live/test work, known-answer hashes, marked `D:\CodexTemp` run, and the fact that build/tests have not yet run. No production, service, database, configuration, order, deployment, or trading state was changed.

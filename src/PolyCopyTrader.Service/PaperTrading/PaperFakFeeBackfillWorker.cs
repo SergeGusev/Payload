@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Storage;
@@ -11,19 +12,34 @@ public sealed class PaperFakFeeBackfillWorker(
     IPaperFakFeeBackfillProcessor processor,
     IPaperEntryPersistenceQueue paperEntryPersistenceQueue,
     IMarketDataSideEffectQueue marketDataSideEffectQueue,
-    IPaperFakFeeBackfillEventRecorder? eventRecorder = null) : BackgroundService
+    IPaperFakFeeBackfillEventRecorder? eventRecorder = null,
+    HistoricalGrossNetParityOptions? historicalGrossNetParityOptions = null,
+    IHistoricalGrossNetParityProcessor? historicalGrossNetParityProcessor = null,
+    AppConfiguration? appConfiguration = null,
+    IConfiguration? configuration = null,
+    IServiceProvider? serviceProvider = null) : BackgroundService
 {
+    private readonly HistoricalGrossNetParityOptions parityOptions =
+        historicalGrossNetParityOptions ??
+        configuration?.GetSection("HistoricalGrossNetParity").Get<HistoricalGrossNetParityOptions>() ??
+        appConfiguration?.HistoricalGrossNetParity ??
+        new HistoricalGrossNetParityOptions { Enabled = false };
+    private IHistoricalGrossNetParityProcessor? parityProcessor = historicalGrossNetParityProcessor;
     private bool deferNextCycleForForeground = true;
+    private bool legacySweepIdle;
+    private bool paritySweepIdle;
+    private HistoricalBackfillLane nextLane = HistoricalBackfillLane.Parity;
     private Guid? activeCycleId;
+    private HistoricalBackfillLane? activeCycleLane;
     private long activeCycleStartedTimestamp;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
-            if (!options.Enabled)
+            if (!options.Enabled && !parityOptions.Enabled)
             {
-                logger.LogInformation("Historical Paper FAK fee backfill is disabled.");
+                logger.LogInformation("Historical accounting backfill coordinator is disabled.");
                 await TryRecordEventAsync(
                     CreateWorkerEvent(
                         PaperFakFeeBackfillEventTypes.WorkerDisabled,
@@ -33,45 +49,65 @@ public sealed class PaperFakFeeBackfillWorker(
                 return;
             }
 
-            logger.LogInformation(
-                "Historical Paper FAK fee backfill worker started. ApplyEnabled={ApplyEnabled} " +
-                "HistoricalCutoffUtc={HistoricalCutoffUtc:O} BatchSize={BatchSize} " +
-                "CycleIntervalSeconds={CycleIntervalSeconds} InitialDelaySeconds={InitialDelaySeconds} " +
-                "IdleDelaySeconds={IdleDelaySeconds} ErrorDelaySeconds={ErrorDelaySeconds} " +
-                "MaxErrorDelaySeconds={MaxErrorDelaySeconds}",
-                options.ApplyEnabled,
-                options.HistoricalCutoffUtc,
-                options.BatchSize,
-                options.CycleIntervalSeconds,
-                options.InitialDelaySeconds,
-                options.IdleDelaySeconds,
-                options.ErrorDelaySeconds,
-                options.MaxErrorDelaySeconds);
-            await TryRecordEventAsync(
-                CreateWorkerEvent(
-                    PaperFakFeeBackfillEventTypes.WorkerStarted,
-                    PaperFakFeeBackfillEventLevels.Information,
-                    "Historical Paper FAK fee backfill worker started."),
-                stoppingToken).ConfigureAwait(false);
-
-            if (!options.ApplyEnabled)
+            if (options.Enabled || !parityOptions.Enabled)
             {
-                logger.LogWarning(
-                    "Historical Paper FAK fee backfill is running in read-only preview mode; no historical rows will be updated.");
+                logger.LogInformation(
+                    "Historical Paper FAK fee backfill lane started. ApplyEnabled={ApplyEnabled} " +
+                    "HistoricalCutoffUtc={HistoricalCutoffUtc:O} BatchSize={BatchSize}",
+                    options.ApplyEnabled,
+                    options.HistoricalCutoffUtc,
+                    options.BatchSize);
                 await TryRecordEventAsync(
                     CreateWorkerEvent(
-                        PaperFakFeeBackfillEventTypes.PreviewMode,
-                        PaperFakFeeBackfillEventLevels.Warning,
-                        "Historical Paper FAK fee backfill is running in read-only preview mode."),
+                        PaperFakFeeBackfillEventTypes.WorkerStarted,
+                        PaperFakFeeBackfillEventLevels.Information,
+                        "Historical Paper FAK fee backfill worker started."),
                     stoppingToken).ConfigureAwait(false);
+
+                if (!options.ApplyEnabled)
+                {
+                    logger.LogWarning(
+                        "Historical Paper FAK fee backfill is running in read-only preview mode; " +
+                        "no historical rows will be updated by the legacy lane.");
+                    await TryRecordEventAsync(
+                        CreateWorkerEvent(
+                            PaperFakFeeBackfillEventTypes.PreviewMode,
+                            PaperFakFeeBackfillEventLevels.Warning,
+                            "Historical Paper FAK fee backfill is running in read-only preview mode."),
+                        stoppingToken).ConfigureAwait(false);
+                }
+            }
+
+            if (parityOptions.Enabled)
+            {
+                var parityErrors = AppOptionsValidator.ValidateHistoricalGrossNetParity(parityOptions);
+                if (parityErrors.Count != 0)
+                {
+                    throw new InvalidOperationException(
+                        "Invalid HistoricalGrossNetParity configuration: " +
+                        string.Join("; ", parityErrors));
+                }
+
+                _ = GetParityProcessor();
+
+                logger.LogInformation(
+                    "Historical Gross/Net parity lane started. HistoricalCutoffUtc={HistoricalCutoffUtc:O} " +
+                    "BatchSize={BatchSize} LookupMaxAttempts={LookupMaxAttempts} CalculationVersion={CalculationVersion}",
+                    parityOptions.HistoricalCutoffUtc,
+                    parityOptions.BatchSize,
+                    parityOptions.LookupMaxAttempts,
+                    parityOptions.CalculationVersion);
             }
 
             try
             {
-                if (options.InitialDelaySeconds > 0)
+                var initialDelaySeconds = GetMinimumEnabledValue(
+                    options.InitialDelaySeconds,
+                    parityOptions.InitialDelaySeconds);
+                if (initialDelaySeconds > 0)
                 {
                     await Task.Delay(
-                        TimeSpan.FromSeconds(options.InitialDelaySeconds),
+                        TimeSpan.FromSeconds(initialDelaySeconds),
                         stoppingToken).ConfigureAwait(false);
                 }
             }
@@ -80,17 +116,23 @@ public sealed class PaperFakFeeBackfillWorker(
                 return;
             }
 
-            var errorDelaySeconds = options.ErrorDelaySeconds;
+            var legacyErrorDelaySeconds = options.ErrorDelaySeconds;
+            var parityErrorDelaySeconds = parityOptions.ErrorDelaySeconds;
             while (!stoppingToken.IsCancellationRequested)
             {
                 TimeSpan delay;
                 try
                 {
                     var disposition = await RunCycleAsync(stoppingToken).ConfigureAwait(false);
-                    errorDelaySeconds = options.ErrorDelaySeconds;
+                    legacyErrorDelaySeconds = options.ErrorDelaySeconds;
+                    parityErrorDelaySeconds = parityOptions.ErrorDelaySeconds;
                     delay = disposition == PaperFakFeeBackfillWorkerCycleDisposition.SweepIdle
-                        ? TimeSpan.FromSeconds(options.IdleDelaySeconds)
-                        : TimeSpan.FromSeconds(options.CycleIntervalSeconds);
+                        ? TimeSpan.FromSeconds(GetMinimumEnabledValue(
+                            options.IdleDelaySeconds,
+                            parityOptions.IdleDelaySeconds))
+                        : TimeSpan.FromSeconds(GetMinimumEnabledValue(
+                            options.CycleIntervalSeconds,
+                            parityOptions.CycleIntervalSeconds));
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -100,29 +142,44 @@ public sealed class PaperFakFeeBackfillWorker(
                 catch (Exception ex)
                 {
                     var failedCycleId = activeCycleId;
+                    var failedLane = activeCycleLane;
                     var durationMilliseconds = GetActiveCycleDurationMilliseconds();
+                    var errorDelaySeconds = failedLane == HistoricalBackfillLane.Parity
+                        ? parityErrorDelaySeconds
+                        : legacyErrorDelaySeconds;
                     ClearActiveCycle();
                     delay = TimeSpan.FromSeconds(errorDelaySeconds);
                     logger.LogError(
                         ex,
-                        "Historical Paper FAK fee backfill cycle failed. Retrying in {DelaySeconds} seconds.",
+                        "Historical accounting backfill {Lane} cycle failed. Retrying in {DelaySeconds} seconds.",
+                        failedLane,
                         errorDelaySeconds);
-                    await TryRecordEventAsync(
-                        CreateWorkerEvent(
-                            PaperFakFeeBackfillEventTypes.CycleFailed,
-                            PaperFakFeeBackfillEventLevels.Error,
-                            "Historical Paper FAK fee backfill cycle failed; a retry is scheduled.") with
-                        {
-                            CycleId = failedCycleId,
-                            DelaySeconds = errorDelaySeconds,
-                            DurationMilliseconds = durationMilliseconds,
-                            ExceptionType = ex.GetType().FullName,
-                            ExceptionMessage = ex.Message
-                        },
-                        stoppingToken).ConfigureAwait(false);
-                    errorDelaySeconds = (int)Math.Min(
-                        options.MaxErrorDelaySeconds,
-                        (long)errorDelaySeconds * 2L);
+
+                    if (failedLane == HistoricalBackfillLane.Legacy)
+                    {
+                        await TryRecordEventAsync(
+                            CreateWorkerEvent(
+                                PaperFakFeeBackfillEventTypes.CycleFailed,
+                                PaperFakFeeBackfillEventLevels.Error,
+                                "Historical Paper FAK fee backfill cycle failed; a retry is scheduled.") with
+                            {
+                                CycleId = failedCycleId,
+                                DelaySeconds = errorDelaySeconds,
+                                DurationMilliseconds = durationMilliseconds,
+                                ExceptionType = ex.GetType().FullName,
+                                ExceptionMessage = ex.Message
+                            },
+                            stoppingToken).ConfigureAwait(false);
+                        legacyErrorDelaySeconds = (int)Math.Min(
+                            options.MaxErrorDelaySeconds,
+                            (long)legacyErrorDelaySeconds * 2L);
+                    }
+                    else
+                    {
+                        parityErrorDelaySeconds = (int)Math.Min(
+                            parityOptions.MaxErrorDelaySeconds,
+                            (long)parityErrorDelaySeconds * 2L);
+                    }
                 }
 
                 try
@@ -138,12 +195,12 @@ public sealed class PaperFakFeeBackfillWorker(
         finally
         {
             ClearActiveCycle();
-            logger.LogInformation("Historical Paper FAK fee backfill worker stopped.");
+            logger.LogInformation("Historical accounting backfill coordinator stopped.");
             await TryRecordEventAsync(
                 CreateWorkerEvent(
                     PaperFakFeeBackfillEventTypes.WorkerStopped,
                     PaperFakFeeBackfillEventLevels.Information,
-                    "Historical Paper FAK fee backfill worker stopped."),
+                    "Historical accounting backfill coordinator stopped."),
                 CancellationToken.None).ConfigureAwait(false);
         }
     }
@@ -151,6 +208,11 @@ public sealed class PaperFakFeeBackfillWorker(
     internal async Task<PaperFakFeeBackfillWorkerCycleDisposition> RunCycleAsync(
         CancellationToken cancellationToken = default)
     {
+        if (!options.Enabled && !parityOptions.Enabled)
+        {
+            return PaperFakFeeBackfillWorkerCycleDisposition.SweepIdle;
+        }
+
         var pendingPaperEntryBatches = paperEntryPersistenceQueue.PendingBatches;
         var marketDataQueueMetrics = marketDataSideEffectQueue.GetMetrics();
         var foregroundWorkPending = pendingPaperEntryBatches > 0 ||
@@ -159,27 +221,31 @@ public sealed class PaperFakFeeBackfillWorker(
         {
             deferNextCycleForForeground = false;
             logger.LogDebug(
-                "Historical Paper FAK fee backfill cycle deferred once for foreground queues. " +
+                "Historical accounting backfill cycle deferred once for foreground queues. " +
                 "PendingPaperEntryBatches={PendingPaperEntryBatches} PendingMarketDataUpdates={PendingMarketDataUpdates}",
                 pendingPaperEntryBatches,
                 marketDataQueueMetrics.PendingUpdates);
-            await TryRecordEventAsync(
-                CreateWorkerEvent(
-                    PaperFakFeeBackfillEventTypes.ForegroundDeferred,
-                    PaperFakFeeBackfillEventLevels.Information,
-                    "Historical Paper FAK fee backfill cycle deferred once for foreground queues.") with
-                {
-                    PendingPaperEntryBatches = pendingPaperEntryBatches,
-                    PendingMarketDataUpdates = marketDataQueueMetrics.PendingUpdates
-                },
-                cancellationToken).ConfigureAwait(false);
+            if (options.Enabled)
+            {
+                await TryRecordEventAsync(
+                    CreateWorkerEvent(
+                        PaperFakFeeBackfillEventTypes.ForegroundDeferred,
+                        PaperFakFeeBackfillEventLevels.Information,
+                        "Historical Paper FAK fee backfill cycle deferred once for foreground queues.") with
+                    {
+                        PendingPaperEntryBatches = pendingPaperEntryBatches,
+                        PendingMarketDataUpdates = marketDataQueueMetrics.PendingUpdates
+                    },
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             return PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending;
         }
 
         if (foregroundWorkPending)
         {
             logger.LogInformation(
-                "Historical Paper FAK fee backfill is taking one bounded cycle after yielding to persistent " +
+                "Historical accounting backfill is taking one bounded cycle after yielding to persistent " +
                 "foreground queues. PendingPaperEntryBatches={PendingPaperEntryBatches} " +
                 "PendingMarketDataUpdates={PendingMarketDataUpdates}",
                 pendingPaperEntryBatches,
@@ -187,27 +253,103 @@ public sealed class PaperFakFeeBackfillWorker(
         }
 
         deferNextCycleForForeground = true;
+        var lane = SelectNextLane();
+        if (lane is null)
+        {
+            ResetSweepIdleState();
+            return PaperFakFeeBackfillWorkerCycleDisposition.SweepIdle;
+        }
 
         var cycleId = Guid.NewGuid();
         activeCycleId = cycleId;
+        activeCycleLane = lane;
         activeCycleStartedTimestamp = Stopwatch.GetTimestamp();
-        await TryRecordEventAsync(
-            CreateWorkerEvent(
-                PaperFakFeeBackfillEventTypes.CycleStarted,
-                PaperFakFeeBackfillEventLevels.Information,
-                "Historical Paper FAK fee backfill cycle started.") with
-            {
-                CycleId = cycleId,
-                PendingPaperEntryBatches = pendingPaperEntryBatches,
-                PendingMarketDataUpdates = marketDataQueueMetrics.PendingUpdates
-            },
-            cancellationToken).ConfigureAwait(false);
 
-        var result = await processor.RunCycleAsync(cycleId, cancellationToken).ConfigureAwait(false);
+        if (lane == HistoricalBackfillLane.Legacy)
+        {
+            await TryRecordEventAsync(
+                CreateWorkerEvent(
+                    PaperFakFeeBackfillEventTypes.CycleStarted,
+                    PaperFakFeeBackfillEventLevels.Information,
+                    "Historical Paper FAK fee backfill cycle started.") with
+                {
+                    CycleId = cycleId,
+                    PendingPaperEntryBatches = pendingPaperEntryBatches,
+                    PendingMarketDataUpdates = marketDataQueueMetrics.PendingUpdates
+                },
+                cancellationToken).ConfigureAwait(false);
+            var result = await processor.RunCycleAsync(cycleId, cancellationToken).ConfigureAwait(false);
+            legacySweepIdle = result.ReachedEnd;
+        }
+        else
+        {
+            var result = await GetParityProcessor()
+                .RunCycleAsync(cycleId, cancellationToken)
+                .ConfigureAwait(false);
+            paritySweepIdle = result.State is
+                HistoricalGrossNetParityCycleState.Idle or
+                HistoricalGrossNetParityCycleState.Disabled;
+        }
+
         ClearActiveCycle();
-        return result.ReachedEnd
-            ? PaperFakFeeBackfillWorkerCycleDisposition.SweepIdle
-            : PaperFakFeeBackfillWorkerCycleDisposition.Processed;
+        if (AllEnabledLanesAreIdle())
+        {
+            ResetSweepIdleState();
+            return PaperFakFeeBackfillWorkerCycleDisposition.SweepIdle;
+        }
+
+        return PaperFakFeeBackfillWorkerCycleDisposition.Processed;
+    }
+
+    private HistoricalBackfillLane? SelectNextLane()
+    {
+        var legacyReady = options.Enabled && !legacySweepIdle;
+        var parityReady = parityOptions.Enabled && !paritySweepIdle;
+        if (!legacyReady && !parityReady)
+        {
+            return null;
+        }
+
+        if (legacyReady && parityReady)
+        {
+            var selected = nextLane;
+            nextLane = selected == HistoricalBackfillLane.Legacy
+                ? HistoricalBackfillLane.Parity
+                : HistoricalBackfillLane.Legacy;
+            return selected;
+        }
+
+        return legacyReady ? HistoricalBackfillLane.Legacy : HistoricalBackfillLane.Parity;
+    }
+
+    private IHistoricalGrossNetParityProcessor GetParityProcessor()
+    {
+        return parityProcessor ??= serviceProvider is null
+            ? throw new InvalidOperationException(
+                "HistoricalGrossNetParity is enabled but no processor or service provider is available.")
+            : HistoricalGrossNetParityProcessor.Create(serviceProvider, parityOptions);
+    }
+
+    private bool AllEnabledLanesAreIdle()
+    {
+        return (!options.Enabled || legacySweepIdle) &&
+            (!parityOptions.Enabled || paritySweepIdle);
+    }
+
+    private void ResetSweepIdleState()
+    {
+        legacySweepIdle = false;
+        paritySweepIdle = false;
+    }
+
+    private int GetMinimumEnabledValue(int legacyValue, int parityValue)
+    {
+        if (!options.Enabled)
+        {
+            return parityValue;
+        }
+
+        return !parityOptions.Enabled ? legacyValue : Math.Min(legacyValue, parityValue);
     }
 
     private PaperFakFeeBackfillEvent CreateWorkerEvent(
@@ -263,8 +405,15 @@ public sealed class PaperFakFeeBackfillWorker(
     private void ClearActiveCycle()
     {
         activeCycleId = null;
+        activeCycleLane = null;
         activeCycleStartedTimestamp = 0;
     }
+}
+
+internal enum HistoricalBackfillLane
+{
+    Legacy,
+    Parity
 }
 
 internal enum PaperFakFeeBackfillWorkerCycleDisposition

@@ -170,6 +170,39 @@ candidate_keys AS MATERIALIZED (
             AND fallback_run.net_realized_pnl_usd IS NOT NULL
             AND fallback_run.net_realized_pnl_usd =
                 fallback_run.realized_pnl_usd - fallback_run.fee_usd)
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.historical_gross_net_parity_audit parity_audit
+          WHERE parity_audit.calculation_version =
+                    '{{HistoricalGrossNetParityConstants.CalculationVersion}}'
+            AND parity_audit.operation_kind = 'AccountingDecision'
+            AND (
+                (parity_audit.source_kind = 'PaperSellFill'
+                    AND parity_audit.source_id = fill.id)
+                OR
+                (parity_audit.source_kind = 'PaperRun'
+                    AND (
+                        parity_audit.old_payload_json ->> 'paper_order_id' =
+                            lower(fill.paper_order_id::text)
+                        OR EXISTS (
+                        SELECT 1
+                        FROM public.strategy_market_paper_runs parity_run
+                        WHERE parity_run.id = parity_audit.source_id
+                          AND parity_run.paper_order_id = fill.paper_order_id)))
+                OR
+                (parity_audit.source_kind IN ('PaperPosition', 'PaperSettlement')
+                    AND parity_audit.evidence_payload_json
+                            -> 'historicalGrossNetParityBindingV1'
+                            -> 'paperFillIds'
+                        ? lower(fill.id::text))))
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.strategy_market_paper_runs parity_terminal_run
+          WHERE parity_terminal_run.paper_order_id = fill.paper_order_id
+            AND parity_terminal_run.fee_calculation_source IN (
+                'historical-gross-net-parity-donor-v1',
+                'historical-gross-net-parity-fixed-0p0333-v1',
+                'historical-gross-net-parity-nonpositive-basis-v1'))
       AND (
           NOT @HasCursor
           OR fill.filled_at_utc > @AfterFilledAtUtc
@@ -471,6 +504,31 @@ run_structural_chain AS MATERIALIZED (
        AND run.settled_at_utc IS NOT NULL
     WHERE paper_order.price = fill.price
       AND paper_order.size_shares = fill.size_shares
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.historical_gross_net_parity_audit parity_audit
+          WHERE parity_audit.calculation_version =
+                    'historical-gross-net-parity-v1'
+            AND parity_audit.operation_kind = 'AccountingDecision'
+            AND (
+                (parity_audit.source_kind = 'PaperSellFill'
+                    AND parity_audit.source_id = fill.id)
+                OR
+                (parity_audit.source_kind = 'PaperRun'
+                    AND (
+                        parity_audit.old_payload_json ->> 'paper_order_id' =
+                            lower(fill.paper_order_id::text)
+                        OR EXISTS (
+                            SELECT 1
+                            FROM public.strategy_market_paper_runs parity_run
+                            WHERE parity_run.id = parity_audit.source_id
+                              AND parity_run.paper_order_id = fill.paper_order_id)))
+                OR
+                (parity_audit.source_kind IN ('PaperPosition', 'PaperSettlement')
+                    AND parity_audit.evidence_payload_json
+                            -> 'historicalGrossNetParityBindingV1'
+                            -> 'paperFillIds'
+                        ? lower(fill.id::text))))
       AND (
           SELECT count(*)
           FROM requested sibling_request

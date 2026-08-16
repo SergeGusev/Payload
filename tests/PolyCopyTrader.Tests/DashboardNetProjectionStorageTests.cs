@@ -314,6 +314,158 @@ public sealed class DashboardNetProjectionStorageTests
     }
 
     [Fact]
+    public void LifetimeProjection_SkipRollupKeepsRunBranchAuthoritative()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
+        var strategyId = Guid.NewGuid();
+        var state = new DashboardLifetimeProjectionState();
+        DashboardProjectionCalculator.Apply(
+            state,
+            DashboardProjectionCalculator.GetLifetimeContribution(
+                new StrategyPaperSkipRollupProjectionPayload(
+                    strategyId,
+                    1,
+                    nowUtc)),
+            1);
+        Apply(state, new PaperSettlementProjectionPayload(
+            Guid.NewGuid(),
+            strategyId,
+            50m,
+            5m,
+            true,
+            1m,
+            FeeAccountingStatus.LegacyUnknown.ToString(),
+            null));
+        Apply(state, new PaperFillProjectionPayload(
+            Guid.NewGuid(),
+            strategyId,
+            "SELL",
+            0.50m,
+            20m,
+            3m,
+            nowUtc,
+            0.50m,
+            FeeAccountingStatus.LegacyUnknown.ToString(),
+            null));
+
+        var result = DashboardProjectionCalculator.ToStrategyPerformance(
+            CreateDescriptor(strategyId),
+            state,
+            nowUtc);
+
+        Assert.Equal(0m, result.RealizedPnlUsd);
+        Assert.Equal(0, result.FeeRequiredSettledCount);
+        Assert.Equal(0m, result.NetRealizedPnlUsd);
+    }
+
+    [Fact]
+    public void LifetimeProjection_ZeroSizePositionIsExcludedFromGrossAndNetCoverage()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
+        var strategyId = Guid.NewGuid();
+        var state = new DashboardLifetimeProjectionState();
+        Apply(state, new PaperPositionProjectionPayload(
+            Guid.NewGuid(),
+            strategyId,
+            0m,
+            99m,
+            0.50m,
+            0m,
+            FeeAccountingStatus.LegacyUnknown.ToString(),
+            null));
+
+        var result = DashboardProjectionCalculator.ToStrategyPerformance(
+            CreateDescriptor(strategyId),
+            state,
+            nowUtc);
+
+        Assert.Equal(0m, result.UnrealizedPnlUsd);
+        Assert.Equal(0, result.FeeRequiredOpenPositionCount);
+        Assert.Equal(0m, result.NetUnrealizedPnlUsd);
+    }
+
+    [Fact]
+    public void LifetimeProjection_UnsettledLiveOrderIsExcludedFromGrossAndNetCoverage()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
+        var strategyId = Guid.NewGuid();
+        var state = new DashboardLifetimeProjectionState();
+        Apply(state, new LiveOrderProjectionPayload(
+            Guid.NewGuid(),
+            strategyId,
+            LiveOrderStatus.Matched.ToString(),
+            0.50m,
+            100m,
+            100m,
+            0m,
+            0m,
+            0m,
+            null,
+            null,
+            null,
+            null,
+            nowUtc,
+            nowUtc,
+            FeeAccountingStatus.LegacyUnknown.ToString(),
+            null));
+
+        var result = DashboardProjectionCalculator.ToStrategyPerformance(
+            CreateDescriptor(strategyId),
+            state,
+            nowUtc);
+
+        Assert.Equal(0m, result.LiveRealizedPnlUsd);
+        Assert.Equal(0, result.LiveFeeRequiredSettledCount);
+        Assert.Equal(0m, result.LiveNetRealizedPnlUsd);
+    }
+
+    [Fact]
+    public void LifetimeProjection_TerminalNetChangesNoGrossMetric()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
+        var strategyId = Guid.NewGuid();
+        var legacy = new DashboardLifetimeProjectionState();
+        var calculated = new DashboardLifetimeProjectionState();
+        var legacyRun = new StrategyRunProjectionPayload(
+            Guid.NewGuid(),
+            strategyId,
+            StrategyMarketPaperRunStatuses.Settled,
+            100m,
+            Guid.NewGuid(),
+            nowUtc.AddMinutes(-6),
+            nowUtc.AddMinutes(-5),
+            10m,
+            nowUtc,
+            null,
+            nowUtc,
+            null,
+            0m,
+            FeeAccountingStatus.LegacyUnknown.ToString(),
+            null);
+        Apply(legacy, legacyRun);
+        Apply(calculated, legacyRun with
+        {
+            FeeUsd = 2m,
+            FeeAccountingStatus = FeeAccountingStatus.Calculated.ToString(),
+            NetRealizedPnlUsd = 8m
+        });
+
+        var legacyResult = DashboardProjectionCalculator.ToStrategyPerformance(
+            CreateDescriptor(strategyId),
+            legacy,
+            nowUtc);
+        var calculatedResult = DashboardProjectionCalculator.ToStrategyPerformance(
+            CreateDescriptor(strategyId),
+            calculated,
+            nowUtc);
+
+        Assert.Equal(legacyResult.RealizedPnlUsd, calculatedResult.RealizedPnlUsd);
+        Assert.Equal(legacyResult.TotalPnlUsd, calculatedResult.TotalPnlUsd);
+        Assert.Equal(legacyResult.RoiPct, calculatedResult.RoiPct);
+        Assert.Equal(legacyResult.ClosedRoiPct, calculatedResult.ClosedRoiPct);
+    }
+
+    [Fact]
     public void ProjectionRejectsFeeAccountedCountsAboveRequiredCounts()
     {
         Assert.Throws<InvalidOperationException>(() => DashboardProjectionCalculator.Apply(

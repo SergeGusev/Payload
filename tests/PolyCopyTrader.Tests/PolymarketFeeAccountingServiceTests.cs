@@ -1,6 +1,9 @@
 using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
@@ -379,7 +382,327 @@ public sealed class PolymarketFeeAccountingServiceTests
         Assert.Same(batch, result);
     }
 
-    private static PolymarketFeeAccountingService CreateService(StubClobClient client)
+    [Fact]
+    public async Task CalculateHistoricalFeeAsync_ReturnsTypedCalculatedEvidence()
+    {
+        var service = CreateService(StubClobClient.Returning(FeeEnabledMarket()));
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker));
+
+        Assert.Equal(HistoricalFeeLookupDisposition.Calculated, result.Disposition);
+        Assert.Equal(1.75m, result.FeeUsd);
+        Assert.Equal(FeeAccountingStatus.Calculated.ToString(), result.FeeAccountingStatus);
+        Assert.Equal(PolymarketFeeCalculationConstants.FeeCurveCalculationSource, result.CalculationSource);
+        Assert.Equal(0.07m, result.FeeRate);
+        Assert.Equal(1, result.FeeExponent);
+        Assert.True(result.FeeTakerOnly);
+        Assert.NotNull(result.MarketEvidence);
+        Assert.True(result.MarketEvidence.FeeSchedulePresent);
+        Assert.Equal(1000, result.MarketEvidence.MakerBaseFeeBps);
+        Assert.Equal(1000, result.MarketEvidence.TakerBaseFeeBps);
+    }
+
+    [Theory]
+    [InlineData(404, HistoricalFeeLookupDisposition.ProvedMarketAbsent)]
+    [InlineData(408, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(425, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(429, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(500, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(503, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(300, HistoricalFeeLookupDisposition.ProtocolInvariantConflict)]
+    [InlineData(400, HistoricalFeeLookupDisposition.ProtocolInvariantConflict)]
+    [InlineData(401, HistoricalFeeLookupDisposition.ProtocolInvariantConflict)]
+    [InlineData(409, HistoricalFeeLookupDisposition.ProtocolInvariantConflict)]
+    public async Task CalculateHistoricalFeeAsync_ClassifiesEveryHttpFamily(
+        int statusCode,
+        HistoricalFeeLookupDisposition expected)
+    {
+        var client = new StubClobClient((_, _) => Task.FromException<PolymarketClobMarketInfo>(
+            new PolymarketApiException(
+                "test",
+                "market-info",
+                $"market-info failed with HTTP {statusCode} Synthetic.")));
+        var service = CreateService(client);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker));
+
+        Assert.Equal(expected, result.Disposition);
+        Assert.Equal(statusCode, result.HttpStatusCode);
+        Assert.Null(result.FeeUsd);
+    }
+
+    [Fact]
+    public async Task CalculateHistoricalFeeAsync_ClassifiesTransportFailureAsOperational()
+    {
+        var client = new StubClobClient((_, _) => Task.FromException<PolymarketClobMarketInfo>(
+            new HttpRequestException("network unavailable")));
+        var service = CreateService(client);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker));
+
+        Assert.Equal(HistoricalFeeLookupDisposition.OperationalFailure, result.Disposition);
+        Assert.Null(result.HttpStatusCode);
+    }
+
+    [Theory]
+    [InlineData("socket")]
+    [InlineData("io")]
+    [InlineData("timeout")]
+    [InlineData("task-canceled")]
+    public async Task CalculateHistoricalFeeAsync_ClassifiesEveryStatuslessTransportFailureAsOperational(
+        string failureKind)
+    {
+        Exception exception = failureKind switch
+        {
+            "socket" => new SocketException((int)SocketError.NetworkDown),
+            "io" => new IOException("connection stream failed"),
+            "timeout" => new TimeoutException("request timed out"),
+            "task-canceled" => new TaskCanceledException("client timed out without caller cancellation"),
+            _ => throw new ArgumentOutOfRangeException(nameof(failureKind), failureKind, null)
+        };
+        var client = new StubClobClient((_, _) =>
+            Task.FromException<PolymarketClobMarketInfo>(exception));
+        var service = CreateService(client);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker));
+
+        Assert.Equal(HistoricalFeeLookupDisposition.OperationalFailure, result.Disposition);
+        Assert.Null(result.HttpStatusCode);
+    }
+
+    [Theory]
+    [InlineData(400, HistoricalFeeLookupDisposition.ProtocolInvariantConflict)]
+    [InlineData(404, HistoricalFeeLookupDisposition.ProvedMarketAbsent)]
+    [InlineData(408, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(425, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(429, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(500, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(599, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(600, HistoricalFeeLookupDisposition.ProtocolInvariantConflict)]
+    public async Task CalculateHistoricalFeeAsync_ClassifiesHttpRequestExceptionStatusExactly(
+        int statusCode,
+        HistoricalFeeLookupDisposition expected)
+    {
+        var client = new StubClobClient((_, _) => Task.FromException<PolymarketClobMarketInfo>(
+            new HttpRequestException(
+                "synthetic HTTP failure",
+                inner: null,
+                (HttpStatusCode)statusCode)));
+        var service = CreateService(client);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker));
+
+        Assert.Equal(expected, result.Disposition);
+        Assert.Equal(statusCode, result.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task CalculateHistoricalFeeAsync_DeterministicInvalidInputDoesNotCallMarketInfo()
+    {
+        var client = StubClobClient.Returning(FeeEnabledMarket());
+        var service = CreateService(client);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(string.Empty, 100m, 0.5m, FeeLiquidityRole.Taker));
+
+        Assert.Equal(HistoricalFeeLookupDisposition.SemanticUnavailable, result.Disposition);
+        Assert.Equal(0, client.CallCount);
+    }
+
+    [Fact]
+    public async Task CalculateHistoricalFeeAsync_InvalidLiquidityRoleDoesNotCallMarketInfo()
+    {
+        var client = StubClobClient.Returning(FeeEnabledMarket());
+        var service = CreateService(client);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(
+                ConditionId,
+                100m,
+                0.5m,
+                (FeeLiquidityRole)999));
+
+        Assert.Equal(HistoricalFeeLookupDisposition.SemanticUnavailable, result.Disposition);
+        Assert.Equal(0, client.CallCount);
+    }
+
+    [Theory]
+    [InlineData("invalid-role-parse")]
+    [InlineData("zero-shares")]
+    [InlineData("negative-shares")]
+    [InlineData("zero-price")]
+    [InlineData("unit-price")]
+    [InlineData("negative-price")]
+    public async Task CalculateHistoricalFeeAsync_AllDeterministicInvalidInputsAvoidMarketLookup(
+        string invalidInput)
+    {
+        var client = StubClobClient.Returning(FeeEnabledMarket());
+        var service = CreateService(client);
+        var request = invalidInput switch
+        {
+            "invalid-role-parse" => new HistoricalFeeLookupRequest(
+                ConditionId,
+                100m,
+                0.5m,
+                FeeLiquidityRole.Unknown,
+                LiquidityRoleIsValid: false),
+            "zero-shares" => new HistoricalFeeLookupRequest(ConditionId, 0m, 0.5m, FeeLiquidityRole.Taker),
+            "negative-shares" => new HistoricalFeeLookupRequest(ConditionId, -1m, 0.5m, FeeLiquidityRole.Taker),
+            "zero-price" => new HistoricalFeeLookupRequest(ConditionId, 100m, 0m, FeeLiquidityRole.Taker),
+            "unit-price" => new HistoricalFeeLookupRequest(ConditionId, 100m, 1m, FeeLiquidityRole.Taker),
+            "negative-price" => new HistoricalFeeLookupRequest(ConditionId, 100m, -1m, FeeLiquidityRole.Taker),
+            _ => throw new ArgumentOutOfRangeException(nameof(invalidInput), invalidInput, null)
+        };
+
+        var result = await service.CalculateHistoricalFeeAsync(request);
+
+        Assert.Equal(HistoricalFeeLookupDisposition.SemanticUnavailable, result.Disposition);
+        Assert.Equal(0, client.CallCount);
+    }
+
+    [Theory]
+    [InlineData(null, 0L)]
+    [InlineData(0L, null)]
+    [InlineData(1L, 0L)]
+    [InlineData(0L, 1L)]
+    public async Task CalculateHistoricalFeeAsync_IncompleteOrNonzeroBaseFeeIsNotExactZero(
+        long? makerBaseFeeBps,
+        long? takerBaseFeeBps)
+    {
+        var client = StubClobClient.Returning(new PolymarketClobMarketInfo(
+            ConditionId,
+            makerBaseFeeBps,
+            takerBaseFeeBps,
+            FeeSchedule: null,
+            RawJson: "{}"));
+        var service = CreateService(client);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker));
+
+        Assert.Equal(HistoricalFeeLookupDisposition.SemanticUnavailable, result.Disposition);
+        Assert.NotNull(result.MarketEvidence);
+        Assert.False(result.MarketEvidence.FeeSchedulePresent);
+        Assert.Equal(makerBaseFeeBps, result.MarketEvidence.MakerBaseFeeBps);
+        Assert.Equal(takerBaseFeeBps, result.MarketEvidence.TakerBaseFeeBps);
+    }
+
+    [Fact]
+    public async Task CalculateHistoricalFeeAsync_ProvesExactZeroFromAbsentScheduleAndZeroBaseFees()
+    {
+        var client = StubClobClient.Returning(new PolymarketClobMarketInfo(
+            ConditionId,
+            0,
+            0,
+            FeeSchedule: null,
+            RawJson: "{}"));
+        var service = CreateService(client);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Unknown));
+
+        Assert.Equal(HistoricalFeeLookupDisposition.Calculated, result.Disposition);
+        Assert.Equal(0m, result.FeeUsd);
+        Assert.Equal(PolymarketFeeCalculationConstants.FeeFreeMarketCalculationSource, result.CalculationSource);
+        Assert.NotNull(result.MarketEvidence);
+        Assert.False(result.MarketEvidence.FeeSchedulePresent);
+        Assert.Equal(0, result.MarketEvidence.MakerBaseFeeBps);
+        Assert.Equal(0, result.MarketEvidence.TakerBaseFeeBps);
+    }
+
+    [Fact]
+    public async Task CalculateHistoricalFeeAsync_PropagatesServiceCancellation()
+    {
+        var client = new StubClobClient(async (_, cancellationToken) =>
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return FeeEnabledMarket();
+        });
+        var service = CreateService(client);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.CalculateHistoricalFeeAsync(
+                new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker),
+                cancellation.Token));
+    }
+
+    [Fact]
+    public async Task CalculateHistoricalFeeAsync_PropagatesInFlightServiceCancellation()
+    {
+        var lookupStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new StubClobClient(async (_, cancellationToken) =>
+        {
+            lookupStarted.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return FeeEnabledMarket();
+        });
+        var service = CreateService(client);
+        using var cancellation = new CancellationTokenSource();
+
+        var lookup = service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker),
+            cancellation.Token);
+        await lookupStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => lookup);
+    }
+
+    [Theory]
+    [InlineData(404, HistoricalFeeLookupDisposition.ProvedMarketAbsent)]
+    [InlineData(408, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(429, HistoricalFeeLookupDisposition.OperationalFailure)]
+    [InlineData(500, HistoricalFeeLookupDisposition.OperationalFailure)]
+    public async Task CalculateHistoricalFeeAsync_ClassifiesActualPublicClientHttpFailures(
+        int statusCode,
+        HistoricalFeeLookupDisposition expected)
+    {
+        var handler = new StatusHttpMessageHandler((HttpStatusCode)statusCode);
+        var publicClient = new PolymarketClobPublicClient(
+            new HttpClient(handler),
+            new PolymarketOptions
+            {
+                ClobBaseUrl = "https://clob.test",
+                TimeoutSeconds = 5,
+                MaxRetries = 0
+            },
+            new NoOpApiErrorSink());
+        var service = CreateService(publicClient);
+
+        var result = await service.CalculateHistoricalFeeAsync(
+            new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker));
+
+        Assert.Equal(expected, result.Disposition);
+        Assert.Equal(statusCode, result.HttpStatusCode);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task CalculateHistoricalFeeAsync_CancellationWinsTransportFailureRace()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = new StubClobClient((_, _) =>
+        {
+            cancellation.Cancel();
+            return Task.FromException<PolymarketClobMarketInfo>(
+                new HttpRequestException("transport failed after cancellation"));
+        });
+        var service = CreateService(client);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.CalculateHistoricalFeeAsync(
+                new HistoricalFeeLookupRequest(ConditionId, 100m, 0.5m, FeeLiquidityRole.Taker),
+                cancellation.Token));
+    }
+
+    private static PolymarketFeeAccountingService CreateService(IPolymarketClobPublicClient client)
     {
         return new PolymarketFeeAccountingService(
             NullLogger<PolymarketFeeAccountingService>.Instance,
@@ -584,5 +907,27 @@ public sealed class PolymarketFeeAccountingServiceTests
 
             return getMarketInfo(conditionId, cancellationToken);
         }
+    }
+
+    private sealed class StatusHttpMessageHandler(HttpStatusCode statusCode) : HttpMessageHandler
+    {
+        public List<HttpRequestMessage> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent("synthetic historical lookup failure")
+            });
+        }
+    }
+
+    private sealed class NoOpApiErrorSink : IPolymarketApiErrorSink
+    {
+        public Task RecordAsync(ApiError error, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

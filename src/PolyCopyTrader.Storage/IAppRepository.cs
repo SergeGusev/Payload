@@ -2,7 +2,7 @@ using PolyCopyTrader.Domain;
 
 namespace PolyCopyTrader.Storage;
 
-public interface IAppRepository
+public interface IAppRepository : IHistoricalGrossNetParityStore
 {
     Task<DateTimeOffset> GetDatabaseNowUtcAsync(CancellationToken cancellationToken = default)
     {
@@ -891,6 +891,14 @@ public interface IAppRepository
 
     Task UpdateLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default);
 
+    async Task<LiveOrder> UpdateLiveOrderWithConcurrencyAsync(
+        LiveOrder order,
+        CancellationToken cancellationToken = default)
+    {
+        await UpdateLiveOrderAsync(order, cancellationToken);
+        return order with { RowVersion = checked(order.RowVersion + 1) };
+    }
+
     Task<IReadOnlyList<LiveOrder>> GetOpenLiveOrdersAsync(CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<LiveOrder>> GetOpenLiveOrdersForStrategyOrCorrelationAsync(
@@ -928,6 +936,32 @@ public interface IAppRepository
         CancellationToken cancellationToken = default)
     {
         return Task.FromResult(new StrategyLiveBalanceAdjustmentResult(false, 0m, false));
+    }
+
+    Task<StrategyLiveBalanceAdjustmentResult> ApplyLiveOrderSettlementToStrategyBalanceWithConcurrencyAsync(
+        Guid liveOrderId,
+        Guid strategyId,
+        decimal settlementValueUsd,
+        decimal grossRealizedPnlUsd,
+        decimal? netRealizedPnlUsd,
+        string? winningAssetId,
+        string winningOutcome,
+        DateTimeOffset settledAtUtc,
+        DateTimeOffset updatedAtUtc,
+        long expectedRowVersion,
+        CancellationToken cancellationToken = default)
+    {
+        return ApplyLiveOrderSettlementToStrategyBalanceAsync(
+            liveOrderId,
+            strategyId,
+            settlementValueUsd,
+            grossRealizedPnlUsd,
+            netRealizedPnlUsd,
+            winningAssetId,
+            winningOutcome,
+            settledAtUtc,
+            updatedAtUtc,
+            cancellationToken);
     }
 
     Task AddLiveTradingEventAsync(LiveTradingEvent liveEvent, CancellationToken cancellationToken = default);

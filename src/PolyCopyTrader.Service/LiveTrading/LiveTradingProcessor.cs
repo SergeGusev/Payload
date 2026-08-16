@@ -272,7 +272,9 @@ public sealed class LiveTradingProcessor(
                     order.FeeCalculatedAtUtc is not null)
                 {
                     settlementOrder = await feeAccountingService.ApplyToLiveOrderAsync(order, cancellationToken);
-                    await repository.UpdateLiveOrderAsync(settlementOrder, cancellationToken);
+                    settlementOrder = await repository.UpdateLiveOrderWithConcurrencyAsync(
+                        settlementOrder,
+                        cancellationToken);
                 }
 
                 await TrySyncPaperShadowBeforeLiveSettlementAsync(settlementOrder, cancellationToken);
@@ -301,7 +303,7 @@ public sealed class LiveTradingProcessor(
                     ? grossRealizedPnl - settlementOrder.FeeUsd
                     : (decimal?)null;
                 var now = DateTimeOffset.UtcNow;
-                var result = await repository.ApplyLiveOrderSettlementToStrategyBalanceAsync(
+                var result = await repository.ApplyLiveOrderSettlementToStrategyBalanceWithConcurrencyAsync(
                     settlementOrder.Id,
                     settlementOrder.StrategyId,
                     settlementValue,
@@ -311,6 +313,7 @@ public sealed class LiveTradingProcessor(
                     winningOutcome,
                     now,
                     now,
+                    settlementOrder.RowVersion,
                     cancellationToken);
                 if (!result.Applied)
                 {

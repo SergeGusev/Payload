@@ -36,7 +36,7 @@ public sealed partial class PostgresAppRepository(PostgresConnectionFactory conn
 
 	private const string RecentPaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, NULL::text, correlation_id, execution_source";
 
-	private const string LiveOrderSelectColumns = "id, signal_id, strategy_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,\n       notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,\n       filled_size, remaining_size, average_fill_price, filled_notional_usd, cost_basis_usd, fee_usd,\n       cancel_status, raw_response_json::text, validation_summary, updated_at_utc,\n       balance_effect_applied, settlement_value_usd, realized_pnl_usd, settled_at_utc, winning_asset_id, winning_outcome,\n       won, settlement_source, correlation_id, execution_source, post_only, paper_order_id,\n       fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate, fee_exponent,\n       fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd";
+	private const string LiveOrderSelectColumns = "id, signal_id, strategy_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,\n       notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,\n       filled_size, remaining_size, average_fill_price, filled_notional_usd, cost_basis_usd, fee_usd,\n       cancel_status, raw_response_json::text, validation_summary, updated_at_utc,\n       balance_effect_applied, settlement_value_usd, realized_pnl_usd, settled_at_utc, winning_asset_id, winning_outcome,\n       won, settlement_source, correlation_id, execution_source, post_only, paper_order_id,\n       fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate, fee_exponent,\n       fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd,\n       historical_gross_net_parity_ownership, row_version";
 
 	public async Task<DateTimeOffset> GetDatabaseNowUtcAsync(CancellationToken cancellationToken = default(CancellationToken))
 	{
@@ -5782,6 +5782,14 @@ WHERE id = @PositionId;
 
 	public async Task AddLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default(CancellationToken))
 	{
+		if (order.HistoricalGrossNetParityOwnership != HistoricalGrossNetParityOwnership.None ||
+			order.RowVersion != 0)
+		{
+			throw new ArgumentException(
+				"A new Live order must start with parity ownership None and row version zero.",
+				nameof(order));
+		}
+
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO live_orders (
@@ -5793,6 +5801,7 @@ INSERT INTO live_orders (
     won, settlement_source, correlation_id, execution_source, post_only, paper_order_id,
     fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate, fee_exponent,
     fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd,
+    historical_gross_net_parity_ownership, row_version,
     updated_at_utc
 ) VALUES (
     @Id, @SignalId, @StrategyId, @Status, @OrderId, @Side, @AssetId, @ConditionId, @Outcome, @Price, @SizeShares,
@@ -5803,6 +5812,7 @@ INSERT INTO live_orders (
     @Won, @SettlementSource, @CorrelationId, @ExecutionSource, @PostOnly, @PaperOrderId,
     @FeeAccountingStatus, @FeeLiquidityRole, @FeeCalculationSource, @FeeRate, @FeeExponent,
     @FeeTakerOnly, @FeeCalculatedAtUtc, @NetRealizedPnlUsd,
+    @HistoricalGrossNetParityOwnership, @RowVersion,
     @UpdatedAtUtc
 );
 """);
@@ -5812,6 +5822,20 @@ INSERT INTO live_orders (
 
 	public async Task UpdateLiveOrderAsync(LiveOrder order, CancellationToken cancellationToken = default(CancellationToken))
 	{
+		_ = await UpdateLiveOrderWithConcurrencyAsync(order, cancellationToken);
+	}
+
+	public async Task<LiveOrder> UpdateLiveOrderWithConcurrencyAsync(
+		LiveOrder order,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		if (order.HistoricalGrossNetParityOwnership != HistoricalGrossNetParityOwnership.None ||
+			order.RowVersion < 0)
+		{
+			throw new DBConcurrencyException(
+				"Ordinary Live-order updates require parity ownership None and a valid expected row version.");
+		}
+
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 UPDATE live_orders
@@ -5849,11 +5873,22 @@ SET status = @Status,
     execution_source = @ExecutionSource,
     post_only = @PostOnly,
     paper_order_id = @PaperOrderId,
-    updated_at_utc = @UpdatedAtUtc
-WHERE id = @Id;
+    updated_at_utc = @UpdatedAtUtc,
+    row_version = row_version + 1
+WHERE id = @Id
+  AND historical_gross_net_parity_ownership = 'None'
+  AND row_version = @RowVersion
+RETURNING row_version;
 """);
 		AddLiveOrderParameters(command, order);
-		await command.ExecuteNonQueryAsync(cancellationToken);
+		var resultingRowVersion = await command.ExecuteScalarAsync(cancellationToken);
+		if (resultingRowVersion is null or DBNull)
+		{
+			throw new DBConcurrencyException(
+				$"Live order {order.Id:D} changed or is owned by Historical Gross/Net parity.");
+		}
+
+		return order with { RowVersion = (long)resultingRowVersion };
 	}
 
 	public async Task<IReadOnlyList<LiveOrder>> GetOpenLiveOrdersAsync(CancellationToken cancellationToken = default(CancellationToken))
@@ -5862,7 +5897,7 @@ WHERE id = @Id;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<LiveOrder> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders\nWHERE status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested')\nORDER BY created_at_utc DESC;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders\nWHERE status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested')\n  AND historical_gross_net_parity_ownership = 'None'\nORDER BY created_at_utc DESC;"))
 			{
 				IReadOnlyList<LiveOrder> readOnlyList;
 				await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -5884,7 +5919,7 @@ WHERE id = @Id;
 		IReadOnlyList<LiveOrder> result;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
-			await using NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders\nWHERE status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested')\n  AND (strategy_id = @StrategyId OR (@CorrelationId IS NOT NULL AND correlation_id = @CorrelationId))\nORDER BY created_at_utc DESC;");
+			await using NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders\nWHERE status IN ('Submitted', 'Live', 'Delayed', 'Unmatched', 'CancelRequested')\n  AND historical_gross_net_parity_ownership = 'None'\n  AND (strategy_id = @StrategyId OR (@CorrelationId IS NOT NULL AND correlation_id = @CorrelationId))\nORDER BY created_at_utc DESC;");
 			command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(strategyId));
 			command.Parameters.AddWithValue("CorrelationId", ((object)correlationId) ?? ((object)DBNull.Value));
 			await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -5900,7 +5935,7 @@ WHERE id = @Id;
 		await using (NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken))
 		{
 			IReadOnlyList<LiveOrder> readOnlyList2;
-			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders\nWHERE status = 'Matched'\n  AND balance_effect_applied = false\n  AND filled_size > 0\nORDER BY updated_at_utc ASC, created_at_utc ASC\nLIMIT @Limit;"))
+			await using (NpgsqlCommand command = CreateCommand(connection, "SELECT " + LiveOrderSelectColumns + "\nFROM live_orders\nWHERE status = 'Matched'\n  AND balance_effect_applied = false\n  AND filled_size > 0\n  AND historical_gross_net_parity_ownership = 'None'\nORDER BY updated_at_utc ASC, created_at_utc ASC\nLIMIT @Limit;"))
 			{
 				command.Parameters.AddWithValue("Limit", limit);
 				IReadOnlyList<LiveOrder> readOnlyList;
@@ -5927,6 +5962,60 @@ WHERE id = @Id;
 		DateTimeOffset updatedAtUtc,
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
+		return await ApplyLiveOrderSettlementToStrategyBalanceCoreAsync(
+			liveOrderId,
+			strategyId,
+			settlementValueUsd,
+			grossRealizedPnlUsd,
+			netRealizedPnlUsd,
+			winningAssetId,
+			winningOutcome,
+			settledAtUtc,
+			updatedAtUtc,
+			null,
+			cancellationToken);
+	}
+
+	public async Task<StrategyLiveBalanceAdjustmentResult> ApplyLiveOrderSettlementToStrategyBalanceWithConcurrencyAsync(
+		Guid liveOrderId,
+		Guid strategyId,
+		decimal settlementValueUsd,
+		decimal grossRealizedPnlUsd,
+		decimal? netRealizedPnlUsd,
+		string? winningAssetId,
+		string winningOutcome,
+		DateTimeOffset settledAtUtc,
+		DateTimeOffset updatedAtUtc,
+		long expectedRowVersion,
+		CancellationToken cancellationToken = default)
+	{
+		return await ApplyLiveOrderSettlementToStrategyBalanceCoreAsync(
+			liveOrderId,
+			strategyId,
+			settlementValueUsd,
+			grossRealizedPnlUsd,
+			netRealizedPnlUsd,
+			winningAssetId,
+			winningOutcome,
+			settledAtUtc,
+			updatedAtUtc,
+			expectedRowVersion,
+			cancellationToken);
+	}
+
+	private async Task<StrategyLiveBalanceAdjustmentResult> ApplyLiveOrderSettlementToStrategyBalanceCoreAsync(
+		Guid liveOrderId,
+		Guid strategyId,
+		decimal settlementValueUsd,
+		decimal grossRealizedPnlUsd,
+		decimal? netRealizedPnlUsd,
+		string? winningAssetId,
+		string winningOutcome,
+		DateTimeOffset settledAtUtc,
+		DateTimeOffset updatedAtUtc,
+		long? expectedRowVersion,
+		CancellationToken cancellationToken)
+	{
 		var normalizedStrategyId = StrategyIds.Normalize(strategyId);
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -5942,10 +6031,13 @@ SET balance_effect_applied = @NetRealizedPnlUsd IS NOT NULL,
     winning_outcome = @WinningOutcome,
     won = @Won,
     settlement_source = 'gamma_resolved_metadata',
-    updated_at_utc = @UpdatedAtUtc
+    updated_at_utc = @UpdatedAtUtc,
+    row_version = row_version + 1
 WHERE id = @LiveOrderId
   AND strategy_id = @StrategyId
   AND balance_effect_applied = false
+  AND historical_gross_net_parity_ownership = 'None'
+  AND row_version = @ExpectedRowVersion
 RETURNING balance_effect_applied;
 """))
 		{
@@ -5960,6 +6052,7 @@ RETURNING balance_effect_applied;
 			command.Parameters.AddWithValue("WinningOutcome", winningOutcome);
 			command.Parameters.AddWithValue("Won", settlementValueUsd > 0m);
 			command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
+			command.Parameters.AddWithValue("ExpectedRowVersion", expectedRowVersion ?? -1L);
 			var balanceEffectApplied = await command.ExecuteScalarAsync(cancellationToken);
 			if (balanceEffectApplied is null or DBNull)
 			{
@@ -6018,7 +6111,10 @@ RETURNING live_available_balance, live_stakes, live_stake_amount;
 
 		Guid? normalizedStrategyId = strategyId.HasValue ? StrategyIds.Normalize(strategyId.GetValueOrDefault()) : null;
 		int normalizedOffset = Math.Max(0, offset);
-		List<string> filters = new List<string>();
+		List<string> filters = new List<string>
+		{
+			"historical_gross_net_parity_ownership = 'None'"
+		};
 		if (normalizedStrategyId.HasValue)
 		{
 			filters.Add("strategy_id = @StrategyId");
@@ -11574,6 +11670,10 @@ FROM claimed;
 		command.Parameters.AddWithValue("ExecutionSource", order.ExecutionSource ?? string.Empty);
 		command.Parameters.AddWithValue("PostOnly", ((object)order.PostOnly) ?? ((object)DBNull.Value));
 		command.Parameters.AddWithValue("PaperOrderId", ((object)order.PaperOrderId) ?? ((object)DBNull.Value));
+		command.Parameters.AddWithValue(
+			"HistoricalGrossNetParityOwnership",
+			order.HistoricalGrossNetParityOwnership.ToString());
+		command.Parameters.AddWithValue("RowVersion", order.RowVersion);
 		command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(order.UpdatedAtUtc));
 	}
 
@@ -12934,7 +13034,9 @@ FROM claimed;
 				reader.IsDBNull(43) ? null : reader.GetInt32(43),
 				reader.IsDBNull(44) ? null : reader.GetBoolean(44),
 				reader.IsDBNull(45) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(45)),
-				reader.IsDBNull(46) ? null : reader.GetDecimal(46)));
+				reader.IsDBNull(46) ? null : reader.GetDecimal(46),
+				Enum.Parse<HistoricalGrossNetParityOwnership>(reader.GetString(47), ignoreCase: false),
+				reader.GetInt64(48)));
 		}
 		return results;
 	}

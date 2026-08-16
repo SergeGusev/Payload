@@ -1,9 +1,52 @@
 using System.Collections.Concurrent;
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.PaperTrading;
+
+public enum HistoricalFeeLookupDisposition
+{
+    Calculated,
+    ProvedMarketAbsent,
+    SemanticUnavailable,
+    OperationalFailure,
+    ProtocolInvariantConflict
+}
+
+public sealed record HistoricalFeeLookupRequest(
+    string ConditionId,
+    decimal Shares,
+    decimal Price,
+    FeeLiquidityRole LiquidityRole,
+    bool LiquidityRoleIsValid = true);
+
+public sealed record HistoricalFeeLookupMarketEvidence(
+    bool FeeSchedulePresent,
+    long? MakerBaseFeeBps,
+    long? TakerBaseFeeBps);
+
+public sealed record HistoricalFeeLookupResult(
+    HistoricalFeeLookupDisposition Disposition,
+    decimal? FeeUsd,
+    string FeeAccountingStatus,
+    string FeeLiquidityRole,
+    string CalculationSource,
+    decimal? FeeRate,
+    int? FeeExponent,
+    bool? FeeTakerOnly,
+    DateTimeOffset CalculatedAtUtc,
+    int? HttpStatusCode,
+    string Evidence,
+    HistoricalFeeLookupMarketEvidence? MarketEvidence = null)
+{
+    public bool IsCalculated => Disposition == HistoricalFeeLookupDisposition.Calculated;
+
+    public bool IsOperationalFailure => Disposition == HistoricalFeeLookupDisposition.OperationalFailure;
+}
 
 public interface IPolymarketFeeAccountingService
 {
@@ -19,6 +62,13 @@ public interface IPolymarketFeeAccountingService
     Task<PaperEntryPersistenceBatch> ApplyToEntryBatchAsync(
         PaperEntryPersistenceBatch batch,
         CancellationToken cancellationToken = default);
+
+    Task<HistoricalFeeLookupResult> CalculateHistoricalFeeAsync(
+        HistoricalFeeLookupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Historical fee lookup is not implemented by this service.");
+    }
 }
 
 public sealed class PolymarketFeeAccountingService(
@@ -163,6 +213,134 @@ public sealed class PolymarketFeeAccountingService(
         };
     }
 
+    public async Task<HistoricalFeeLookupResult> CalculateHistoricalFeeAsync(
+        HistoricalFeeLookupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        var calculatedAtUtc = DateTimeOffset.UtcNow;
+        if (string.IsNullOrWhiteSpace(request.ConditionId))
+        {
+            return HistoricalUnavailable(
+                HistoricalFeeLookupDisposition.SemanticUnavailable,
+                request,
+                calculatedAtUtc,
+                null,
+                "Condition ID is missing.");
+        }
+
+        if (request.Shares <= 0m)
+        {
+            return HistoricalUnavailable(
+                HistoricalFeeLookupDisposition.SemanticUnavailable,
+                request,
+                calculatedAtUtc,
+                null,
+                "Filled shares must be greater than zero.");
+        }
+
+        if (request.Price <= 0m || request.Price >= 1m)
+        {
+            return HistoricalUnavailable(
+                HistoricalFeeLookupDisposition.SemanticUnavailable,
+                request,
+                calculatedAtUtc,
+                null,
+                "Fill price must be greater than zero and less than one.");
+        }
+
+        if (!request.LiquidityRoleIsValid || !Enum.IsDefined(request.LiquidityRole))
+        {
+            return HistoricalUnavailable(
+                HistoricalFeeLookupDisposition.SemanticUnavailable,
+                request,
+                calculatedAtUtc,
+                null,
+                "Liquidity role is invalid.");
+        }
+
+        PolymarketClobMarketInfo marketInfo;
+        try
+        {
+            marketInfo = await clobClient
+                .GetClobMarketInfoAsync(request.ConditionId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var statusCode = GetStatusCode(ex);
+            if (statusCode == HttpStatusCode.NotFound)
+            {
+                return HistoricalUnavailable(
+                    HistoricalFeeLookupDisposition.ProvedMarketAbsent,
+                    request,
+                    calculatedAtUtc,
+                    (int)statusCode.Value,
+                    "CLOB market info returned HTTP 404.");
+            }
+
+            if (IsOperationalLookupFailure(ex, statusCode))
+            {
+                return HistoricalUnavailable(
+                    HistoricalFeeLookupDisposition.OperationalFailure,
+                    request,
+                    calculatedAtUtc,
+                    statusCode is null ? null : (int)statusCode.Value,
+                    ex.GetType().Name);
+            }
+
+            return HistoricalUnavailable(
+                HistoricalFeeLookupDisposition.ProtocolInvariantConflict,
+                request,
+                calculatedAtUtc,
+                statusCode is null ? null : (int)statusCode.Value,
+                ex.GetType().Name);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var calculation = PolymarketFeeCalculator.CalculatePlatformFee(
+            request.Shares,
+            request.Price,
+            request.LiquidityRole,
+            marketInfo);
+        if (!FeeAccountingRules.IsAccounted(calculation.Status) || calculation.FeeUsd is null)
+        {
+            return new HistoricalFeeLookupResult(
+                HistoricalFeeLookupDisposition.SemanticUnavailable,
+                null,
+                calculation.Status.ToString(),
+                request.LiquidityRole.ToString(),
+                calculation.CalculationSource,
+                marketInfo.FeeSchedule?.Rate,
+                marketInfo.FeeSchedule?.Exponent,
+                marketInfo.FeeSchedule?.TakerOnly,
+                calculatedAtUtc,
+                null,
+                calculation.UnavailableReason ?? "CLOB fee schedule is incomplete.",
+                CreateHistoricalMarketEvidence(marketInfo));
+        }
+
+        return new HistoricalFeeLookupResult(
+            HistoricalFeeLookupDisposition.Calculated,
+            calculation.FeeUsd,
+            calculation.Status.ToString(),
+            request.LiquidityRole.ToString(),
+            calculation.CalculationSource,
+            marketInfo.FeeSchedule?.Rate,
+            marketInfo.FeeSchedule?.Exponent,
+            marketInfo.FeeSchedule?.TakerOnly,
+            calculatedAtUtc,
+            null,
+            "CLOB market info and local fee formula completed.",
+            CreateHistoricalMarketEvidence(marketInfo));
+    }
+
     private async Task<FeeApplication> CalculateAsync(
         string conditionId,
         decimal shares,
@@ -304,6 +482,110 @@ public sealed class PolymarketFeeAccountingService(
             NetRealizedPnlUsd = netRealizedPnlUsd
         };
     }
+
+    private static HistoricalFeeLookupResult HistoricalUnavailable(
+        HistoricalFeeLookupDisposition disposition,
+        HistoricalFeeLookupRequest request,
+        DateTimeOffset calculatedAtUtc,
+        int? httpStatusCode,
+        string evidence)
+    {
+        return new HistoricalFeeLookupResult(
+            disposition,
+            null,
+            FeeAccountingStatus.CalculationUnavailable.ToString(),
+            request.LiquidityRole.ToString(),
+            PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource,
+            null,
+            null,
+            null,
+            calculatedAtUtc,
+            httpStatusCode,
+            evidence);
+    }
+
+    private static HttpStatusCode? GetStatusCode(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PolymarketApiException apiException &&
+                TryParsePolymarketHttpStatusCode(apiException.Message, out var parsedStatusCode))
+            {
+                return parsedStatusCode;
+            }
+
+            if (current is HttpRequestException httpException && httpException.StatusCode is not null)
+            {
+                return httpException.StatusCode;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryParsePolymarketHttpStatusCode(
+        string message,
+        out HttpStatusCode statusCode)
+    {
+        const string marker = "failed with HTTP ";
+        var markerIndex = message.IndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            statusCode = default;
+            return false;
+        }
+
+        var digitsStart = markerIndex + marker.Length;
+        var digitsEnd = digitsStart;
+        while (digitsEnd < message.Length && char.IsAsciiDigit(message[digitsEnd]))
+        {
+            digitsEnd++;
+        }
+
+        if (digitsEnd == digitsStart ||
+            !int.TryParse(
+                message.AsSpan(digitsStart, digitsEnd - digitsStart),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var numericStatusCode) ||
+            numericStatusCode is < 100 or > 599)
+        {
+            statusCode = default;
+            return false;
+        }
+
+        statusCode = (HttpStatusCode)numericStatusCode;
+        return true;
+    }
+
+    private static bool IsOperationalLookupFailure(Exception exception, HttpStatusCode? statusCode)
+    {
+        if (statusCode is not null)
+        {
+            var numericStatusCode = (int)statusCode.Value;
+            return statusCode is HttpStatusCode.RequestTimeout or
+                       (HttpStatusCode)425 or
+                       HttpStatusCode.TooManyRequests ||
+                   numericStatusCode is >= 500 and <= 599;
+        }
+
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is HttpRequestException or SocketException or IOException or TimeoutException or TaskCanceledException)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static HistoricalFeeLookupMarketEvidence CreateHistoricalMarketEvidence(
+        PolymarketClobMarketInfo marketInfo) =>
+        new(
+            marketInfo.FeeSchedule is not null,
+            marketInfo.MakerBaseFeeBps,
+            marketInfo.TakerBaseFeeBps);
 
     private static StrategyMarketPaperRun ApplyAggregateFee(
         StrategyMarketPaperRun run,

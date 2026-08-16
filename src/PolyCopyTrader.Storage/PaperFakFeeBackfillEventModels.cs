@@ -117,6 +117,10 @@ public static class PaperFakFeeBackfillEventTypes
 
     public const string CycleFailed = nameof(CycleFailed);
 
+    public const string ParityTargetCommitted = nameof(ParityTargetCommitted);
+
+    public const string ParityPageCompleted = nameof(ParityPageCompleted);
+
     public const string WorkerStopped = nameof(WorkerStopped);
 }
 

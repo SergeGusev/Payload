@@ -1080,6 +1080,45 @@ After the exact phase, every historical or future `Settled` Paper run with posit
 
 The approximate fallback stores `Fee = ROUND(Stake * R, 8)` and `Net = Gross - Fee` on the canonical strategy run only, marks it ordinary `Calculated`, and uses the exact case-sensitive source `strategy-settled-fee-stake-ratio-v1`. It adds no visible `Estimated` status or label and never revisits or replaces a successfully finalized run when donors change or exact fee evidence later becomes available. Related fill, order, position, and settlement rows may therefore retain earlier statuses or blank Net in detailed exports even though run-backed strategy Net PnL and Net ROI become complete. Lock/query deferrals, transport or programming failures, service cancellation, and a concurrent exact completion never create or overwrite a financial estimate; they leave the applicable work unchanged for retry. Gross ordering, Paper/Live execution semantics, risk gates, and Live accounting remain unaffected.
 
+`HistoricalGrossNetParity` closes the remaining pre-fee history for originating
+entries strictly before `2026-08-10T00:00:00Z`. It targets exactly the canonical
+contributions already selected by Gross: Settled Paper runs, positive open Paper
+positions, the existing runless settlement/SELL fallback, and counted settled
+Live orders. Gross-excluded rows are also excluded from Net coverage and never
+block the strategy. Gross values, bases, execution, fills, and settlement facts
+are not changed.
+
+The workflow preserves exact accounting first, then tries the existing exact
+CLOB model, then uses a deterministic exact-donor Fee-to-Gross-basis ratio from
+the same or nearest typed strategy, falling through to any proved crypto donor.
+If every donor tier is empty it uses `R=0.0333`. It stores
+`Fee = ROUND_AWAY_8(B * R)` and `Net = Gross - Fee` as
+ordinary terminal `Calculated`, excluding all estimated rows from future donor
+pools. Live prefers already-associated `VenueReported` evidence and does not add
+an on-chain fee matcher. Its historical balance correction is audited and does
+not toggle Live or modify loss counters.
+
+With `HistoricalGrossNetParity:Enabled=true`, the service does the work itself
+in bounded background cycles. It first exhausts the current exact/authoritative/
+local-calculation pass. It then selects unresolved old targets in Gross order,
+queries only the finite strategy candidates required by the deterministic donor
+tiers, calculates the target-time exact aggregate, and immediately applies that
+one decision through compare-and-set/serializable storage. There is no global
+donor scan or frozen donor universe, complete database plan, file artifact,
+`ApplyEnabled` switch, digest command, or second approval after deployment.
+
+Each target stores the selected donor strategy and tier, exact numerator and
+denominator, counts, deterministic membership/selection hashes, ratio, basis,
+Fee, Net, and provenance. A concurrent target or donor change rolls back that
+target for a later cycle without undoing independent completed targets. Different
+targets may legitimately see different exact donor membership as the service
+progresses; a terminal Paper estimate is not recalculated for that reason.
+Restart simply rescans unresolved or Pending canonical rows and durable audit.
+For historical Live balance application, the earliest unfinished order gates
+only later initial balance effects of the same strategy; accounting and other
+strategies continue. Dashboard visibility still waits for the applicable cycle
+and projection reconciliation.
+
 Each strategy-bound candidate page first materializes that strategy's exact
 allowlisted BUY order IDs, probes their fills through the existing per-order
 index, and sorts and limits only the strategy-local candidate keys before loading

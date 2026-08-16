@@ -56,6 +56,13 @@ public enum LiveOrderStatus
     Error
 }
 
+public enum HistoricalGrossNetParityOwnership
+{
+    None,
+    Pending,
+    Completed
+}
+
 public enum ServiceRunState
 {
     Starting,
@@ -4053,7 +4060,9 @@ public sealed record LiveOrder(
     int? FeeExponent = null,
     bool? FeeTakerOnly = null,
     DateTimeOffset? FeeCalculatedAtUtc = null,
-    decimal? NetRealizedPnlUsd = null);
+    decimal? NetRealizedPnlUsd = null,
+    HistoricalGrossNetParityOwnership HistoricalGrossNetParityOwnership = HistoricalGrossNetParityOwnership.None,
+    long RowVersion = 0);
 
 public sealed record PaperLiveShadowDecision(
     Guid CorrelationId,

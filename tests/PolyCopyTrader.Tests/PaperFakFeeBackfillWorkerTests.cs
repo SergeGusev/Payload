@@ -123,6 +123,57 @@ public sealed class PaperFakFeeBackfillWorkerTests
     }
 
     [Fact]
+    public async Task RunCycle_ParitySweepCompletionStartsFreshExactPassBeforeLongLegacySweepEnds()
+    {
+        var legacy = new RecordingProcessor
+        {
+            Result = new PaperFakFeeBackfillCycleResult(1, 1, 0, false, true, null)
+        };
+        var parity = new RecordingParityProcessor(
+            new HistoricalGrossNetParityCycleResult(
+                HistoricalGrossNetParityCycleState.SweepCompleted,
+                false,
+                HistoricalGrossNetParityProcessingPhase.Fallback,
+                1,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "completed"),
+            new HistoricalGrossNetParityCycleResult(
+                HistoricalGrossNetParityCycleState.Idle,
+                true,
+                HistoricalGrossNetParityProcessingPhase.Exact,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                "fresh exact pass is empty"));
+        var worker = new PaperFakFeeBackfillWorker(
+            NullLogger<PaperFakFeeBackfillWorker>.Instance,
+            new PaperFakFeeBackfillOptions { Enabled = true, ApplyEnabled = true },
+            legacy,
+            new StubPaperEntryPersistenceQueue(0),
+            new StubMarketDataSideEffectQueue(0),
+            historicalGrossNetParityOptions: new HistoricalGrossNetParityOptions { Enabled = true },
+            historicalGrossNetParityProcessor: parity);
+
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.Processed, await worker.RunCycleAsync());
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.Processed, await worker.RunCycleAsync());
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.Processed, await worker.RunCycleAsync());
+
+        Assert.Equal(2, parity.CycleIds.Count);
+        Assert.Equal(1, legacy.Calls);
+    }
+
+    [Fact]
     public async Task Worker_WhenDisabled_RecordsDisabledAndStoppedWithoutCallingProcessor()
     {
         var processor = new RecordingProcessor();
@@ -279,6 +330,23 @@ public sealed class PaperFakFeeBackfillWorkerTests
         {
             CycleIds.Add(cycleId);
             return RunCycleAsync(cancellationToken);
+        }
+    }
+
+    private sealed class RecordingParityProcessor(
+        params HistoricalGrossNetParityCycleResult[] results) : IHistoricalGrossNetParityProcessor
+    {
+        private readonly Queue<HistoricalGrossNetParityCycleResult> pending = new(results);
+
+        public List<Guid> CycleIds { get; } = [];
+
+        public Task<HistoricalGrossNetParityCycleResult> RunCycleAsync(
+            Guid workerCycleId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CycleIds.Add(workerCycleId);
+            return Task.FromResult(pending.Dequeue());
         }
     }
 

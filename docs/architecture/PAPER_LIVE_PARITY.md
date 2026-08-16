@@ -331,6 +331,70 @@ settlement, balance effects, or canonical multi-fill replacement, so those rows
 require a separate Live-accounting reconciliation rather than a Paper-only
 estimate.
 
+### Historical Gross/Net contribution parity
+
+The separate `HistoricalGrossNetParity` workflow is an accounting-only repair
+for originating entries strictly before `2026-08-10T00:00:00Z`. It mirrors the
+existing Gross branch instead of inventing a second trade population: a
+Gross-selected contribution receives exactly one Fee/Net contribution, while a
+Gross-excluded row contributes no Net requirement and cannot blank the strategy.
+Gross values, ROI bases, fills, execution intents, prices, sizes, settlement
+facts, and recent-window membership remain unchanged.
+
+The canonical set is run-backed Settled Paper runs, positive open Paper
+positions, the existing runless settlement/SELL fallback, and counted settled
+Live orders. `usesRuns` retains the current raw-run plus compacted-skip-rollup
+meaning. Paper recent windows still use Settled-run facts only; open and runless
+fallback accounting remains lifetime/MtM. Live remains settled-realized only;
+no Live open-MtM metric is added.
+
+Accounting precedence is proved `VenueReported`, complete exact local evidence,
+authoritative-Fee Net repair, exact historical CLOB calculation, deterministic
+exact-donor Fee-to-basis ratio, and finally fixed `0.0333`. The donor matcher
+uses typed catalog semantics rather than names, resolves same-strategy and
+nearest-family tiers deterministically, then falls through to any proved crypto
+strategy before the fixed coefficient. It deduplicates linked Paper/Live
+evidence and never lets estimated rows donate. Final Fee is rounded once to eight
+decimal places away from zero, cannot fall below proved non-overlapping Fee
+components, and Net remains exactly `Gross - Fee`. A fallback is stored as
+ordinary terminal `Calculated` with versioned provenance; Gross is never
+rewritten.
+
+Paper pooled lineage is replayed with the persisted engine rounding and
+proportional entry-Fee allocation. Every contributing originating BUY must be
+pre-cutoff. Mixed/unproved origin, overlapping Fee evidence, unexpected nonzero
+runless BUY PnL, or a Settled run whose projected Gross is not explicitly stored
+as zero is a fail-closed conflict, not an estimate.
+
+For Live, the workflow uses only authoritative Fee already associated with the
+order; it does not create an on-chain matcher. A modeled public-schedule Fee is
+`Calculated`, never `VenueReported`. A strictly newer associated
+`VenueReported` revision may supersede earlier non-authoritative accounting and
+applies an audited cumulative balance correction. Historical balance writes are
+serialized in settlement order, clamped by the existing balance bounds, and do
+not toggle Live, alter loss counters, pause trading, or emit ordinary settlement
+notifications.
+
+The deployed service performs this historical repair incrementally. It first
+reaches the current exact/authoritative/local-calculation boundary, then handles
+each unresolved fallback target in Gross order. Donor candidates are generated
+from typed strategy descriptors and queried only for finite strategy-ID pages;
+there is no full donor-universe scan, frozen universe, or durable global plan.
+The target-time aggregate and the complete winning/absence proof are revalidated
+inside the target's serializable accounting transaction. A conflict retries only
+that target, while independent committed targets remain complete. Restarts rescan
+unresolved/Pending canonical state and permanent audit.
+
+Different targets can therefore observe different exact donor membership while
+the service progresses; the stored numerator, denominator, counts, deterministic
+membership/selection hashes, ratio, and provenance preserve each decision. A
+terminal Paper estimate is not recalculated when later exact donors appear. Live
+initial balance effects remain ordered by settlement time and UUID per strategy:
+an earlier unfinished row gates later initial balance transactions for that
+strategy, while accounting and other strategies continue. The background cadence
+and projection reconciliation can leave Net temporarily blank until the relevant
+target and snapshot refresh complete.
+
 The current model has three material limits:
 
 - a Paper depth sweep can be stored as one aggregate VWAP fill, while the

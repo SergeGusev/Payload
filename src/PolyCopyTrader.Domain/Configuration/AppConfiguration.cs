@@ -18,6 +18,8 @@ public sealed class AppConfiguration
 
     public PaperFakFeeBackfillOptions PaperFakFeeBackfill { get; init; } = new();
 
+    public HistoricalGrossNetParityOptions HistoricalGrossNetParity { get; init; } = new();
+
     public PolymarketAuthOptions PolymarketAuth { get; init; } = new();
 
     public PolymarketAutoRedeemOptions PolymarketAutoRedeem { get; init; } = new();
@@ -601,6 +603,40 @@ public sealed class PaperFakFeeBackfillOptions
     public int ErrorDelaySeconds { get; init; } = 60;
 
     public int MaxErrorDelaySeconds { get; init; } = 900;
+}
+
+public sealed class HistoricalGrossNetParityOptions
+{
+    public const string DefaultCalculationVersion = "historical-gross-net-parity-v1";
+
+    public const int RequiredLookupMaxAttempts = 3;
+
+    public bool Enabled { get; init; } = true;
+
+    public DateTimeOffset HistoricalCutoffUtc { get; init; } =
+        new(2026, 8, 10, 0, 0, 0, TimeSpan.Zero);
+
+    public int BatchSize { get; init; } = 50;
+
+    public int CycleIntervalSeconds { get; init; } = 15;
+
+    public int InitialDelaySeconds { get; init; } = 300;
+
+    public int IdleDelaySeconds { get; init; } = 900;
+
+    public int ErrorDelaySeconds { get; init; } = 60;
+
+    public int MaxErrorDelaySeconds { get; init; } = 900;
+
+    public int CommandTimeoutSeconds { get; init; } = 10;
+
+    public int LockTimeoutMilliseconds { get; init; } = 250;
+
+    public int LookupTimeoutSeconds { get; init; } = 10;
+
+    public int LookupMaxAttempts { get; init; } = RequiredLookupMaxAttempts;
+
+    public string CalculationVersion { get; init; } = DefaultCalculationVersion;
 }
 
 public sealed class LiveTradingOptions

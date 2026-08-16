@@ -1,3 +1,27 @@
+## Active Update 2026-08-14 Historical Gross/Net Parity Incremental Service Pause
+Goal: Complete Fee and Net accounting for Gross-selected historical Paper and settled Live contributions originating before 2026-08-10 through the deployed service's bounded incremental workflow.
+Status: In Progress; paused at the user's request because the Codex usage limit was exhausted
+Done:
+- Approved the base contract at `sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b`, the incremental-service contract at `sha256:bb69de8905712614e7f9a512c012acf55b347da1c09b0151e7fd23dbcede7518`, and its aggregate SELL evidence revision at `sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40`; approval commits through `cb2fc53d` are pushed.
+- Replaced the planned global donor precomputation with bounded exact-first and lazy per-target donor processing. The service, not Codex, will calculate production donor aggregates after deployment.
+- Implemented most of the incremental processor/worker, deterministic matcher/hash chain, `ComponentEvidenceGraphV1`, ordinary Live explicit row-version flow, ownership guards, bounded donor SQL, and storage transaction skeletons. No production database, service, deployment, configuration, order, or trading state was touched.
+- Removed stale global `Plan/Preflight/Stage A/B/C` runtime/test names. Matcher/hash known-answer tests now cover the approved aggregate multi-BUY SELL graph; the known hash chain is component `15aa292181bb089791370c70a82a7205589a07caa3eb2d18d5c2b80bae2c8b56`, membership `5a7967d8f5c0dc1bd5c25ef2fe572d7292fa9fa0268fb6c193118680fdb23d43`, selection `4ce2a051cc09b990ba68949a27f2ebc888a7ca4d9c340afa9a4819ab2e660b05`.
+Next: Resume from the dirty working tree. Finish storage audit/read/reconciliation helpers, Live Transaction B/Venue CAS, candidate-scoped exact SELL and proved `mixed` replay, and remaining source/PG tests; then build and run focused tests under marked run `D:\CodexTemp\runs\manual-fc9b98625cf34cff9f23750c7d3b16e9`, perform independent semantic review, complete evidence/context/history, commit, and push.
+Notes: Parallel agents were explicitly interrupted when the user reported the exhausted limit. Latest verified fixes include removal of fabricated per-BUY `RawAllocatedUsd`, explicit ordinary Live row-version propagation, ownership filters, and the nested donor SQL path `{decisionEvidence,componentAllocationHashV1}`. Build/tests have not yet run for this product diff. Preserve every current dirty-tree edit; do not restart implementation from scratch.
+Blockers: Codex usage limit must become available again. No product or production blocker is currently known; the implementation remains incomplete and unverified.
+
+## Active Update 2026-08-14 Historical Gross/Net Parity
+Goal: Complete Fee and Net accounting for every Gross-selected historical Paper and settled Live contribution originating before 2026-08-10, without changing Gross or ordinary new-bet accounting.
+Status: In Progress
+Done:
+- Approved `RC-20260814-historical-gross-net-parity` at semantic digest `sha256:104d65a925086e0b38b40b9aa6e98d27c64560fe4e14048b29b9b02a5b7f4b7b`; approval is committed and pushed in `d7aa1be3`.
+- Mapped the exact Dashboard Gross branches, source-specific ROI bases, Paper lineage replay, typed strategy catalog, historical worker scheduling, Live Fee/balance path, and projection reconciliation.
+- Began the local implementation: immutable/restartable plan and audit schema, Live-row ownership/version CAS, typed historical CLOB lookup outcomes, deterministic donor matching, automatic preflight/apply orchestration, configuration, focused tests, and documentation.
+- Preserved the scope boundary: no deployment, production mutation, service restart, configuration mutation, order action, or change to post-cutoff ordinary accounting.
+Next: Integrate the parallel implementation parts, compile, fix integration failures, run focused/full verification, obtain independent semantic diff review, complete the requirement evidence, then commit and push.
+Notes: The approved service behavior is internal write-free preflight followed by atomic durable plan commit and automatic bounded Stage A/B/C application; it has no artifact, runtime digest, `ApplyEnabled`, or second approval. Build and tests have not yet run for the in-progress product diff.
+Blockers: None.
+
 ## Active Update 2026-08-14 Calculated Net Ratio Fallback
 Goal: Finalize unresolved Settled Paper run Net values after exact accounting has priority, using the approved same-strategy fee-to-stake ratio and ordinary `Calculated` status.
 Status: Completed in branch; deployment is not part of this task

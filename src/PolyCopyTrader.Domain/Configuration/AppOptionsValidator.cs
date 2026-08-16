@@ -34,6 +34,7 @@ public static class AppOptionsValidator
         ValidatePolymarketHttpLogging(configuration.PolymarketHttpLogging, errors);
         ValidateStrategyRunRetention(configuration.StrategyRunRetention, errors);
         ValidatePaperFakFeeBackfill(configuration.PaperFakFeeBackfill, errors);
+        errors.AddRange(ValidateHistoricalGrossNetParity(configuration.HistoricalGrossNetParity));
         ValidateLiveTrading(configuration.Bot, configuration.PolymarketAuth, configuration.LiveTrading, errors);
         ValidateDashboard(configuration.Dashboard, errors);
         ValidateAnalytics(configuration.Analytics, errors);
@@ -91,6 +92,19 @@ public static class AppOptionsValidator
             $"Paper FAK fee backfill idle delay seconds: {configuration.PaperFakFeeBackfill.IdleDelaySeconds}",
             $"Paper FAK fee backfill error delay seconds: {configuration.PaperFakFeeBackfill.ErrorDelaySeconds}",
             $"Paper FAK fee backfill max error delay seconds: {configuration.PaperFakFeeBackfill.MaxErrorDelaySeconds}",
+            $"Historical Gross/Net parity enabled: {configuration.HistoricalGrossNetParity.Enabled}",
+            $"Historical Gross/Net parity cutoff UTC: {configuration.HistoricalGrossNetParity.HistoricalCutoffUtc:O}",
+            $"Historical Gross/Net parity batch size: {configuration.HistoricalGrossNetParity.BatchSize}",
+            $"Historical Gross/Net parity cycle interval seconds: {configuration.HistoricalGrossNetParity.CycleIntervalSeconds}",
+            $"Historical Gross/Net parity initial delay seconds: {configuration.HistoricalGrossNetParity.InitialDelaySeconds}",
+            $"Historical Gross/Net parity idle delay seconds: {configuration.HistoricalGrossNetParity.IdleDelaySeconds}",
+            $"Historical Gross/Net parity error delay seconds: {configuration.HistoricalGrossNetParity.ErrorDelaySeconds}",
+            $"Historical Gross/Net parity max error delay seconds: {configuration.HistoricalGrossNetParity.MaxErrorDelaySeconds}",
+            $"Historical Gross/Net parity command timeout seconds: {configuration.HistoricalGrossNetParity.CommandTimeoutSeconds}",
+            $"Historical Gross/Net parity lock timeout milliseconds: {configuration.HistoricalGrossNetParity.LockTimeoutMilliseconds}",
+            $"Historical Gross/Net parity lookup timeout seconds: {configuration.HistoricalGrossNetParity.LookupTimeoutSeconds}",
+            $"Historical Gross/Net parity lookup max attempts: {configuration.HistoricalGrossNetParity.LookupMaxAttempts}",
+            $"Historical Gross/Net parity calculation version: {configuration.HistoricalGrossNetParity.CalculationVersion}",
             $"Auth enabled: {configuration.PolymarketAuth.Enabled}",
             $"Auth provider: {configuration.PolymarketAuth.SecretProvider}",
             $"Auth configured: {configuration.PolymarketAuth.Enabled && IsAddressLike(configuration.PolymarketAuth.SigningAddress)}",
@@ -1226,6 +1240,86 @@ public static class AppOptionsValidator
                 "PaperFakFeeBackfill.MaxErrorDelaySeconds must be greater than or equal to " +
                 "PaperFakFeeBackfill.ErrorDelaySeconds.");
         }
+    }
+
+    public static IReadOnlyList<string> ValidateHistoricalGrossNetParity(
+        HistoricalGrossNetParityOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var errors = new List<string>();
+        var requiredCutoffUtc = new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero);
+        if (options.HistoricalCutoffUtc != requiredCutoffUtc)
+        {
+            errors.Add(
+                "HistoricalGrossNetParity.HistoricalCutoffUtc must be the immutable " +
+                "2026-08-10T00:00:00.0000000+00:00 cutoff.");
+        }
+
+        if (options.BatchSize is <= 0 or > 250)
+        {
+            errors.Add("HistoricalGrossNetParity.BatchSize must be between 1 and 250.");
+        }
+
+        if (options.CycleIntervalSeconds is <= 0 or > 3_600)
+        {
+            errors.Add("HistoricalGrossNetParity.CycleIntervalSeconds must be between 1 and 3600.");
+        }
+
+        if (options.InitialDelaySeconds is < 0 or > 86_400)
+        {
+            errors.Add("HistoricalGrossNetParity.InitialDelaySeconds must be between 0 and 86400.");
+        }
+
+        if (options.IdleDelaySeconds is <= 0 or > 86_400)
+        {
+            errors.Add("HistoricalGrossNetParity.IdleDelaySeconds must be between 1 and 86400.");
+        }
+
+        if (options.ErrorDelaySeconds is <= 0 or > 3_600)
+        {
+            errors.Add("HistoricalGrossNetParity.ErrorDelaySeconds must be between 1 and 3600.");
+        }
+
+        if (options.MaxErrorDelaySeconds < options.ErrorDelaySeconds ||
+            options.MaxErrorDelaySeconds > 86_400)
+        {
+            errors.Add(
+                "HistoricalGrossNetParity.MaxErrorDelaySeconds must be at least " +
+                "HistoricalGrossNetParity.ErrorDelaySeconds and at most 86400.");
+        }
+
+        if (options.CommandTimeoutSeconds is <= 0 or > 300)
+        {
+            errors.Add("HistoricalGrossNetParity.CommandTimeoutSeconds must be between 1 and 300.");
+        }
+
+        if (options.LockTimeoutMilliseconds is <= 0 or > 60_000)
+        {
+            errors.Add("HistoricalGrossNetParity.LockTimeoutMilliseconds must be between 1 and 60000.");
+        }
+
+        if (options.LookupTimeoutSeconds is <= 0 or > 300)
+        {
+            errors.Add("HistoricalGrossNetParity.LookupTimeoutSeconds must be between 1 and 300.");
+        }
+
+        if (options.LookupMaxAttempts != HistoricalGrossNetParityOptions.RequiredLookupMaxAttempts)
+        {
+            errors.Add(
+                "HistoricalGrossNetParity.LookupMaxAttempts must equal 3 distinct worker cycles.");
+        }
+
+        if (!string.Equals(
+                options.CalculationVersion,
+                HistoricalGrossNetParityOptions.DefaultCalculationVersion,
+                StringComparison.Ordinal))
+        {
+            errors.Add(
+                "HistoricalGrossNetParity.CalculationVersion must equal " +
+                $"'{HistoricalGrossNetParityOptions.DefaultCalculationVersion}'.");
+        }
+
+        return errors;
     }
 
     private static void ValidateAnalytics(AnalyticsOptions options, List<string> errors)

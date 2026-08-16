@@ -89,6 +89,37 @@ public sealed class PaperFakFeeBackfillEventStorageTests
             repository.PaperFakFeeBackfillEventCleanupCalls);
     }
 
+    [Fact]
+    public async Task TestRepository_PersistsIncrementalParityJournalAfterTargetCommit()
+    {
+        var repository = new TestAppRepository();
+        var cycleId = Guid.Parse("81000000-0000-0000-0000-000000000001");
+        var targetCommitted = CreateEvent(Guid.NewGuid(), DateTimeOffset.UtcNow) with
+        {
+            CycleId = cycleId,
+            EventType = PaperFakFeeBackfillEventTypes.ParityTargetCommitted,
+            Candidates = 1,
+            EvaluatedForApply = 1,
+            ReachedSweepEnd = false
+        };
+        var page = CreateEvent(Guid.NewGuid(), targetCommitted.OccurredAtUtc.AddSeconds(1)) with
+        {
+            CycleId = cycleId,
+            EventType = PaperFakFeeBackfillEventTypes.ParityPageCompleted,
+            Candidates = 5,
+            EvaluatedForApply = 4,
+            StructuralConflicts = 1,
+            ReachedSweepEnd = true
+        };
+
+        await repository.AddPaperFakFeeBackfillEventAsync(targetCommitted);
+        await repository.AddPaperFakFeeBackfillEventAsync(page);
+
+        Assert.Equal([targetCommitted, page], repository.PaperFakFeeBackfillEvents);
+        Assert.All(repository.PaperFakFeeBackfillEvents, entry => Assert.Equal(cycleId, entry.CycleId));
+        Assert.All(repository.PaperFakFeeBackfillEvents, entry => Assert.Null(entry.SweepId));
+    }
+
     private static PaperFakFeeBackfillEvent CreateEvent(Guid id, DateTimeOffset occurredAtUtc)
     {
         return new PaperFakFeeBackfillEvent
