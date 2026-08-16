@@ -1,3 +1,17 @@
+## Active Update 2026-08-16 Merge Maker Precision / Resolved Ledger Fixes Into Release Branch
+Goal: Merge the already approved and independently reviewed Maker timestamp-precision and resolved-ledger Paper settlement corrections into `codex/reference-average-available-windows` for user deployment.
+Status: Completed
+Done:
+- Proved the corrections had been developed in a separate isolated-worktree branch `codex/maker-precision-resolved-ledger-settlement` from common base `264eea93`, while the deployed release branch had continued independently; no product changes were invented or recreated during this merge.
+- Merged exact corrected commit `35f72c0c1045851213a5062eda78393ee98ed888` without squash into merge commit `022998904759898fa3fbf5267f09f5e0b8f9bd37`, preserving the approved requirement-contract history and both parents.
+- Resolved the sole merge conflict in `Codex/Contexts/ContextPolyCopyTrader.md` by preserving both context histories. Product source, tests, contract, README, and Paper/live parity documentation merged without conflicts.
+- Confirmed the merged source contains `PostgreSqlTimestampLowerBoundToleranceTicks=5`, `ResolvedLedgerSettlementContractVersion`, and `TryResolveSettlementFromCanonicalLedgerAsync`.
+- Debug solution build passed with 0 errors. Focused merged regression set passed 90/90: Maker lifecycle, Maker atomic/exact-family contract, Reference Average Maker-GTD strategy contract, and resolved-ledger settlement cases.
+- Requirement gate passed in staged and exact range modes; range preserved two commits and reported `governedFiles=12`, `contracts=2`. Diff check passed.
+Next: User redeploys the tip of `codex/reference-average-available-windows`; then repeat production read-only verification of build identity, the exact 230-run auto-settlement, settlement provenance/PnL, and Maker evidence behavior.
+Notes: Build/test artifacts were isolated under the marked `D:\CodexTemp` run and production was not touched. The merge conflict was context-only; no semantic product conflict was resolved by preference.
+Blockers: None.
+
 ## Active Update 2026-08-16 Maker Precision / Resolved Ledger Deployment Verification
 Goal: Verify the user's deployment of the approved Maker timestamp-precision and resolved-ledger Paper settlement corrections.
 Status: Completed read-only; alert — the corrected product commit was not deployed
