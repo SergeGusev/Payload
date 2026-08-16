@@ -27,6 +27,7 @@ internal static class MakerGtdPaperOrderEvidenceParser
 {
     private const string MakerGtdProperty = "maker_gtd";
     private const string MarketDataStatusProperty = "market_data_status_at_acceptance";
+    private const long PostgreSqlTimestampLowerBoundToleranceTicks = 5;
 
     public static bool TryParse(
         PaperOrder order,
@@ -115,7 +116,7 @@ internal static class MakerGtdPaperOrderEvidenceParser
             }
 
             if (!SameTimestamp(effectiveExpiresAtUtc, order.ExpiresAtUtc) ||
-                acceptedAtUtc < order.CreatedAtUtc ||
+                IsEarlierThanPersistedTimestampLowerBound(acceptedAtUtc, order.CreatedAtUtc) ||
                 acceptedAtUtc >= effectiveExpiresAtUtc)
             {
                 failureDetail = "order_lifetime_mismatch";
@@ -233,6 +234,15 @@ internal static class MakerGtdPaperOrderEvidenceParser
     private static bool SameTimestamp(DateTimeOffset left, DateTimeOffset right)
     {
         return left.UtcDateTime.Ticks / 10 == right.UtcDateTime.Ticks / 10;
+    }
+
+    private static bool IsEarlierThanPersistedTimestampLowerBound(
+        DateTimeOffset timestamp,
+        DateTimeOffset persistedTimestamp)
+    {
+        return timestamp < persistedTimestamp &&
+            persistedTimestamp.UtcDateTime.Ticks - timestamp.UtcDateTime.Ticks >
+            PostgreSqlTimestampLowerBoundToleranceTicks;
     }
 }
 

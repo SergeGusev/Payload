@@ -98,6 +98,18 @@ the persisted contract version and formula distinguish them from v2. Runtime v2
 placement is fail-closed unless the exact asset, behavior, ID, threshold, code,
 timing, Paper-only flag, and `0.99` cap predicates pass.
 
+The acceptance-evidence lifetime check permits only the verified one-sided
+PostgreSQL timestamp round-trip tolerance on its lower bound. JSON
+`accepted_at_utc` may be at most five .NET ticks (half a microsecond) earlier than
+persisted `paper_orders.created_at_utc`; exactly five ticks passes and six ticks
+fails closed as `maker_gtd_evidence_unavailable` with detail
+`order_lifetime_mismatch`. Equality and an accepted timestamp later than creation
+but before effective expiry remain valid. Effective-expiry equality, the upper
+lifetime bound, root/nested accepted-timestamp identity, subscription,
+stale/reconnect/market-data continuity, exact-family, TouchNoDepth, pricing,
+GTD/PostOnly, PaperOnly, and Live-disabled gates do not change. The correction
+does not reopen, replay, or rewrite a record already terminal before deployment.
+
 For these exact 28 strategies, ordinary Paper orders, positions, fills, PnL, win
 rate, and performance inclusion is intentional. Every result must carry the label
 `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. The
@@ -190,6 +202,59 @@ the order; explicit reconciliation is required.
 `PaperOnly` means that the intent is not sent externally. It does not relax any
 rule in this contract except the ordinary-Paper classification explicitly granted
 to the exact closed exception above; that exception still cannot submit Live.
+
+## BTC/ETH/SOL five-minute Paper settlement authority
+
+The ordinary due-run settlement path keeps the current Gamma result as its primary
+authority. It first selects the first metadata row satisfying `Resolved=true` and
+a nonblank `WinningOutcome`. When that predicate succeeds, the processor performs
+zero `crypto_up_down_5m_websocket_resolved_markets` lookups; a ledger row cannot
+confirm, reject, or override the Gamma winner.
+
+Only when Gamma supplies no resolved winner may the processor use the canonical
+ledger. The fallback requires exactly one row for normalized reference asset plus
+`market_start_utc`, current exact membership in
+`StrategyIds.UpDown5mStrategyVariants`, an exact five-minute variant, exact market
+id, condition id, slug, start and end, an `Up` or `Down` winning outcome, a
+nonempty winning asset, an event timestamp at or after market end, and exact
+winning and selected token mappings from the paired
+`polymarket_gamma_markets.outcomes_json` and `clob_token_ids_json` arrays. Only
+ledger sources `GammaClosedMarket`, `MarketWebSocket`, and `BinanceTimedClose` are
+accepted. `ReferenceStartEnd`, `TerminalOrderBook`, unknown sources, absent winner
+data, event-before-end rows, duplicate rows, non-five-minute or non-current
+variants, and every asset, market, condition, slug, time, outcome, or token
+mismatch leave the run `Entered` and create no settlement.
+
+`BinanceTimedClose` is derived from the Binance timed close rather than a direct
+Polymarket resolution event. Its user-approved Paper authority exists only in the
+fallback above, after Gamma has no winner and all exact validation gates pass. It
+may differ from a later Polymarket result, cannot authorize Live trading, and does
+not change Live settlement or execution.
+
+Every fallback-settled run persists `settlement_resolution` inside
+`skip_diagnostics_json` with
+`contract_version=btc_up_down_5m_resolved_ledger_settlement_v1`, ledger id/source,
+normalized asset, exact market/condition/slug/start/end, winning outcome/asset,
+event timestamp, and `validation_result=exact_identity_token_time_match`. SQL
+`NULL` becomes a new JSON object. An existing object keeps every member and gains
+the evidence member. Semantically identical existing evidence is accepted only
+for idempotent recovery. Conflicting evidence, any valid non-object JSON value
+including JSON `null`, or malformed in-memory JSON fails closed: the run remains
+`Entered`, no settlement, position, or lost-counter mutation occurs, and the
+bounded error includes the run id and rejection detail. PostgreSQL itself cannot
+store malformed JSON in the `jsonb` column.
+
+When the existing non-`FixedOutcomeMaker` path creates a
+`PaperPositionSettlement`, its source is exactly
+`BtcUpDown5mResolvedLedger:GammaClosedMarket`,
+`BtcUpDown5mResolvedLedger:MarketWebSocket`, or
+`BtcUpDown5mResolvedLedger:BinanceTimedClose`. `FixedOutcomeMaker` and
+zero-remaining-position paths still retain the durable run evidence when no
+position-settlement row exists. The fallback otherwise reuses the existing fill,
+position, stake, fee, Gross, Net, lost-counter, and run-settlement calculations.
+Eligible historical `Entered` runs may be processed only by the ordinary worker
+after deployment; this contract authorizes no direct history rewrite, database
+mutation, or Live behavior change.
 
 ## Fee accounting and performance reporting
 
