@@ -1,3 +1,18 @@
+## Active Update 2026-08-16 Post-Restart Deployment Verification
+Goal: Verify the user-restarted production deployment after the startup-lock incident, including service health, current Paper betting, and automatic settlement of the exact 230 Aug-05 backlog runs.
+Status: Completed read-only; core runtime and betting healthy, recovered transient startup warnings remain
+Done:
+- Verified only PostgreSQL `192.168.0.101:5432/polycopytrader` in UTC with `REPEATABLE READ READ ONLY` and `statement_timeout=15s`; no production, service, configuration, strategy, or order mutation was performed.
+- Confirmed `Running/Live` on exact build `31acec45a3bac0c0d9ca7690881f435b70893269`, started `2026-08-16T07:20:46.538081Z`, `last_error=NULL`; heartbeat advanced independently through `07:29:46.890468Z`. Service DB sessions were active, idle-in-transaction was 0, and a single transient lock wait at `07:30:01Z` had cleared by `07:30:15Z` with zero blockers/ungranted locks.
+- Proved the exact 230 old BTC/ETH/SOL runs ending `2026-08-05T15:00:00Z` all auto-settled during `07:25:28.760386Z..07:25:39.932875Z`: 0 remain Entered, stake `$4,420`, settlement value `$4,906.1834`, Gross Paper PnL `+$486.1834` (BTC `+$1,377.2157`, ETH `-$477.8884`, SOL `-$413.1439`).
+- Independently reconciled 230/230 `paper_position_settlements` to the same stake/value/PnL; all carry `BtcUpDown5mResolvedLedger:BinanceTimedClose`, winner `Up`, and exact versioned identity/token/time evidence. Run settlement arithmetic mismatches and terminal-state mismatches were both 0.
+- Current Paper flow is active. The `07:29:30Z` cycle produced 91/91 Filled orders across BTC/ETH/SOL with 91 single fills, zero missing run links, zero entries after market end, p95 placement latency `0.935s`, max `0.964s`, and zero errors after that cycle. Live orders and Paper/Live shadow decisions since start were 0.
+- BTC/ETH/SOL reference samples were fresh (about 3 seconds at the sampled cutoff); current Polymarket aggregate/critical/shard-001 rows were Connected, non-stale, with no last error or reconnect. The 270 old overdue Observed rows are all disabled/paused and create no active-entry exposure; overdue Entered is 0.
+- Warning: 26 startup/recovery diagnostics occurred after start, including six Paper worker and eight related observer `Exception while reading from stream` errors through `07:24:41Z` and intermittent BTC/ETH/SOL stale-tick warnings through `07:27:52Z`. Subsequent full Paper cycle and fresh references prove recovery; no error occurred after the `07:29:30Z` cycle.
+Next: Continue ordinary monitoring. Runtime verification of the Maker 5-tick precision fix remains pending until the exact 8223 family produces a post-deployment Maker order; no such order existed by the verification cutoff because current cycles compacted/skipped before placement.
+Notes: The copied files in `D:\1\logs` did not yet contain the current `07:20:46Z` start, so current-state conclusions use database heartbeat/runtime evidence. One local diagnostic wait was terminated by the 30-second command limit before SQL execution; it had no production impact.
+Blockers: None. Residual warning only: monitor recurrence of stream/stale-tick diagnostics.
+
 ## Active Update 2026-08-16 Merge Maker Precision / Resolved Ledger Fixes Into Release Branch
 Goal: Merge the already approved and independently reviewed Maker timestamp-precision and resolved-ledger Paper settlement corrections into `codex/reference-average-available-windows` for user deployment.
 Status: Completed

@@ -1,5 +1,12 @@
 # PolyCopyTrader History — 2026-08-16 UTC
 
+## 2026-08-16T07:30:15.922586Z — Corrected deployment healthy; 230-run backlog settled
+- User request: `Выложил, проверяй` after restarting the corrected deployment.
+- Strict read-only production verification confirmed exact build `31acec45a3bac0c0d9ca7690881f435b70893269`, `Running/Live`, fresh advancing heartbeat, no `last_error`, no persistent lock waits, and fresh BTC/ETH/SOL reference plus Connected current Polymarket WebSockets.
+- All exact 230 old BTC/ETH/SOL Paper runs auto-settled from the approved canonical `BinanceTimedClose` ledger during `07:25:28Z..07:25:39Z`: stake `$4,420`, settlement value `$4,906.1834`, Gross PnL `+$486.1834`. Independent run and position-settlement aggregates matched; all 230 provenance/version/identity/token/time checks passed and no run arithmetic mismatch remained.
+- The next complete `07:29:30Z` cycle placed and filled 91 Paper orders across all three assets with zero linkage/fill defects, zero post-market-end entries, p95 latency `0.935s`, and max `0.964s`. No Live orders or shadow decisions were created.
+- Recovered warning: startup produced transient stream errors through `07:24:41Z` and intermittent stale reference warnings through `07:27:52Z`; no errors followed the `07:29:30Z` cycle. The single sampled lock wait at `07:30:01Z` cleared within 15 seconds without a blocker. No production mutations were performed by Codex.
+
 ## 2026-08-16T06:46:41.304596Z — Maker precision / resolved-ledger deployment verification
 - User request: `Выложил, проверяй`.
 - Mode: production read-only verification against PostgreSQL `192.168.0.101:5432/polycopytrader`, UTC, `REPEATABLE READ READ ONLY`, `statement_timeout=15s`.
