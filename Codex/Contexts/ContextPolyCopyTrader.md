@@ -1,3 +1,19 @@
+## Active Update 2026-08-17 Production Server And Betting Audit
+Goal: Verify current production service health, BTC/ETH/SOL Paper betting, settlement progress, latency, and operational errors.
+Status: Completed read-only; core service and ordinary betting healthy, localized feed/Maker/settlement warnings require monitoring
+Done:
+- Audited only PostgreSQL `192.168.0.101:5432/polycopytrader` in UTC with `REPEATABLE READ READ ONLY` and `statement_timeout=15s`; no production/service/configuration/order mutation was made.
+- At final sampled cutoff `2026-08-17T05:05:51.910942Z`, Service remained `Running/Live` on exact product build `31acec45a3bac0c0d9ca7690881f435b70893269`, started `2026-08-16T07:20:46.538081Z`, with advancing heartbeat, `last_error=NULL`, zero persistent lock waits/blockers, and zero idle-in-transaction sessions.
+- Fixed 60-minute window from `2026-08-17T04:02:01.795999Z`: 1,579 Paper orders (1,571 Filled, 8 Expired), 1,571 fills, zero missing run links/strategy mismatches/Filled-without-single-fill, zero entries at/after market end, p50/p95/max placement latency `0.354s/1.898s/3.824s`. Settlements were 1,694 with stake `$11,205.3014`, Gross PnL `+$1,056.8042`, and Net PnL `+$679.6653`. Live orders and shadow decisions were 0.
+- Fresh `05:04/05:05Z` processing produced 130 Filled and one intentional FAK `PartiallyFilledExpired` order across BTC/ETH/SOL, all linked, with max placement latency `0.644s` and zero late entries. The partial status is relative to requested stake; its single fill exactly matches the persisted reduced order size.
+- BTC/ETH/SOL reference data and current Polymarket aggregate/critical/shard-001 WebSockets were current and Connected. Last-hour tick max gaps were BTC `10.018s`, ETH `20.016s`, SOL `40.010s`; none exceeded 60 seconds. Dashboard projection remained Running and current through `05:05:51Z` with no error.
+- Active backlog is clean: overdue Entered 0, Pending/PartiallyFilled open orders 0, and the 270 old overdue Observed rows are all disabled/paused (`overdue_enabled=0`).
+- Operational warnings: 71 API errors in 60 minutes and 2,301 in 24 hours, dominated by intermittent SOL/ETH reference staleness and OKX 2-second timeout/no-ticker diagnostics. Four settlement deadlocks occurred around `04:47:03Z..04:47:05Z`, but 416 later settlements and zero overdue Entered prove recovery.
+- Exact ETH Reference Average Maker-GTD post-deployment verification: 247 orders since service start (119 Filled, 128 Expired), mandatory root+nested warning labels 247/247, and the fixed false `order_lifetime_mismatch` count is 0. The only three such rows in the last 24 hours predate this deployment. However, 124 post-start Expired rows were classified evidence-unavailable (105 delivery apply failed, 15 reconnect changed, 4 incomplete failure history); in the latest hour 7 of 13 Maker orders had delivery-apply evidence failure while 6 Filled.
+Next: Continue monitoring ordinary flow. A focused read-only/code diagnosis is warranted if the user wants the recurring reference-feed staleness, settlement deadlocks, or Maker-GTD market-data delivery evidence failures reduced.
+Notes: One initial broad last-hour linkage query reached the 15-second statement timeout and was read-only rolled back; the same checks were completed from a bounded 5,000-order indexed slice. Causality between settlement deadlocks and Maker evidence failures is not established.
+Blockers: None for current operation. Residual localized reliability warnings remain.
+
 ## Active Update 2026-08-16 Post-Restart Deployment Verification
 Goal: Verify the user-restarted production deployment after the startup-lock incident, including service health, current Paper betting, and automatic settlement of the exact 230 Aug-05 backlog runs.
 Status: Completed read-only; core runtime and betting healthy, recovered transient startup warnings remain
