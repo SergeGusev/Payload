@@ -1,3 +1,16 @@
+## Active Update 2026-08-17 Startup Lock Diagnosis
+Goal: Determine from production PostgreSQL whether a database lock was preventing Service startup, without using unavailable service logs.
+Status: Completed read-only; exact blocking lock identified and naturally released
+Done:
+- Checked only PostgreSQL `192.168.0.101:5432/polycopytrader` in UTC with read-only transactions and `statement_timeout=15s`; no backend, vacuum, lock, service, configuration, or data was changed.
+- At cutoff `2026-08-17T18:48:19.472253Z`, the persisted Service heartbeat was stale at `08:19:03.562058Z` (age `37,755.912s`) and there were zero active `PolyCopyTrader.Service` database sessions, confirming the service was not running.
+- Found autovacuum PID `9128`, started `08:18:32.913059Z`, holding `ShareUpdateExclusiveLock` for about 10.5 hours on `dashboard_strategy_recent_projection_facts`. The deployed startup schema path explicitly attempts `ShareRowExclusiveLock NOWAIT` on that same table, making the lock an exact startup blocker.
+- Confirmed the vacuum was progressing rather than hung: phase `vacuuming heap`, scanned `44,755/44,755` blocks; vacuumed progress advanced `26.290% -> 40.833% -> 78.063%` during observation.
+- The autovacuum completed naturally at `18:51:13.149117Z`; final cutoff `18:51:36.540948Z` had 0 ungranted locks, 0 waiting backends, 0 blocking chains, and the table lock was gone. Dead tuples fell to 1,771.
+Next: User can start the service now, then verify a fresh started_at/advancing heartbeat and first Paper cycle. Separately, the startup migration should be corrected so an already-applied retired-family cleanup does not reacquire broad `NOWAIT` locks on every restart.
+Notes: Service logs were explicitly unavailable and were not used. One progress query referenced unavailable view columns and read-only rolled back; one 30-second diagnostic wait was externally terminated before SQL execution. Neither affected production.
+Blockers: None at final cutoff.
+
 ## Active Update 2026-08-17 Production Server And Betting Audit
 Goal: Verify current production service health, BTC/ETH/SOL Paper betting, settlement progress, latency, and operational errors.
 Status: Completed read-only; core service and ordinary betting healthy, localized feed/Maker/settlement warnings require monitoring
