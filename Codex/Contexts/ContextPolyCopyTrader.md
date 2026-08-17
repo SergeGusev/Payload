@@ -1,3 +1,16 @@
+## Active Update 2026-08-17 Top Net Strategy Reports By Asset
+Goal: Produce a fresh Net-only PnL chart with the matching crypto price and a daily Excel report for the best lifetime Net PnL strategy in each of BTC, ETH, and SOL.
+Status: Completed read-only
+Done:
+- Ranked every fee-complete Settled Paper candidate at the single cutoff `2026-08-17T20:50:20.448477Z`; the complete all-history and enabled/unpaused Paper universes produced the same winners: BTC `BTC Up or Down 5m 5 Child Progress ROI`, ETH `ETH Up or Down 5m 20 Diff Down Progress`, and SOL `SOL Up or Down 5m Up 3 bps Reference Average Premarket`.
+- Reconciled the winners against raw production rows: BTC 3,441 settlements / Net `+$1,069.40598290`; ETH 410 / `+$470.27736816`; SOL 1,443 / `+$274.31102228`. Every included row had complete valid Fee/Net accounting and exact `Net = Gross - Fee`; no Live rows were included.
+- Created three 1800x1000 Net-only cumulative charts with the corresponding BTCUSDT/ETHUSDT/SOLUSDT overlay and maximum Net drawdown region under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/top-net-strategies-by-asset-20260817-2050z`; all lines are solid and all three images passed final visual inspection.
+- Created three one-sheet daily Net PnL XLSX reports in the same output directory. Each workbook has continuous UTC dates, a formula-based daily total and final total, red negative values on white with a visible minus, and exact B2 freeze panes.
+- Replaced an interim 20:43 UTC draft after new BTC/SOL settlements arrived during generation; only the validated 20:50 UTC outputs remain in the durable report directory.
+Next: None
+Notes: Independent Decimal CSV plus production `REPEATABLE READ READ ONLY` reconciliation passed with zero failures. Ranking recheck, chart data checks, artifact-tool import/render/error scans, Excel COM checks, and OpenXML checks all passed. Production, strategy state, service state, orders, and product code were not changed.
+Blockers: None
+
 ## Active Update 2026-08-17 Startup Lock Diagnosis
 Goal: Determine from production PostgreSQL whether a database lock was preventing Service startup, without using unavailable service logs.
 Status: Completed read-only; exact blocking lock identified and naturally released

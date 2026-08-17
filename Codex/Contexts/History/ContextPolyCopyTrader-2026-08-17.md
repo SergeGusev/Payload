@@ -15,3 +15,10 @@ Request:
 
 Result:
 Strict read-only PostgreSQL inspection found the exact startup blocker without using logs. Autovacuum PID 9128 held `ShareUpdateExclusiveLock` on `dashboard_strategy_recent_projection_facts` from `08:18:32Z`, while the current startup schema path requests `ShareRowExclusiveLock NOWAIT` on the same table. Service heartbeat had stopped at `08:19:03Z` and no Service database session remained. The vacuum was not hung: heap-vacuum progress advanced from 26.290% to 78.063%, then completed naturally at `18:51:13Z`. Final state had zero waiting/ungranted locks and zero blocking chains, so the user could retry startup. Codex did not cancel the vacuum, terminate a backend, or mutate production.
+
+## 2026-08-17T20:59:17.8357256Z
+Request:
+Теперь сделай то же самое, но три раза - по лучшим (смотри по Net PnL) стратегиями для каждой из валют.
+
+Result:
+At the fixed UTC cutoff `2026-08-17T20:50:20.448477Z`, the best fully Net-accounted Settled Paper strategy for each asset was selected and independently reconciled against production: BTC `BTC Up or Down 5m 5 Child Progress ROI` (3,441 settlements, Net +$1,069.40598290), ETH `ETH Up or Down 5m 20 Diff Down Progress` (410, +$470.27736816), and SOL `SOL Up or Down 5m Up 3 bps Reference Average Premarket` (1,443, +$274.31102228). Three Net-only cumulative charts with matching asset-price overlays and maximum-drawdown regions, plus three verified daily Net PnL Excel reports, were created in `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/top-net-strategies-by-asset-20260817-2050z`. Independent ranking, raw-row/Decimal/production, chart, artifact-tool, Excel COM, and OpenXML checks all passed. No production or product behavior was changed.
