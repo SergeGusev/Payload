@@ -22,3 +22,14 @@ Request:
 
 Result:
 At the fixed UTC cutoff `2026-08-17T20:50:20.448477Z`, the best fully Net-accounted Settled Paper strategy for each asset was selected and independently reconciled against production: BTC `BTC Up or Down 5m 5 Child Progress ROI` (3,441 settlements, Net +$1,069.40598290), ETH `ETH Up or Down 5m 20 Diff Down Progress` (410, +$470.27736816), and SOL `SOL Up or Down 5m Up 3 bps Reference Average Premarket` (1,443, +$274.31102228). Three Net-only cumulative charts with matching asset-price overlays and maximum-drawdown regions, plus three verified daily Net PnL Excel reports, were created in `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/top-net-strategies-by-asset-20260817-2050z`. Independent ranking, raw-row/Decimal/production, chart, artifact-tool, Excel COM, and OpenXML checks all passed. No production or product behavior was changed.
+
+## 2026-08-17T21:22:48.0708909Z
+Request:
+Чорт, не предупредил. Progress не считаем.
+
+Переделай для обычых стратегий. И на будущее - только обычные стратегии
+
+SOL можешь не пересчитывать, он нормальный
+
+Result:
+The prior BTC and ETH Progress selections were withdrawn and replaced using the Dashboard's exact ordinary-strategy rule: exclude names containing `Progress` case-insensitively. At fixed cutoff `2026-08-17T21:09:14.826487Z`, the corrected winners were BTC `BTC Up or Down 5m Down 25 Diff Premarket` (261 settlements, Net +$143.58725811) and ETH `ETH Up or Down 5m 4 bps Reference Average Premarket` (2,155, +$391.07136904). Their Net-only cumulative charts with matching asset-price overlays/max-drawdown regions and their daily Net Excel reports were rebuilt and independently verified. The existing SOL PNG/XLSX were confirmed byte-for-byte unchanged. Future strategy reports default to ordinary/non-Progress strategies unless the user explicitly says otherwise. No production or product behavior was changed.

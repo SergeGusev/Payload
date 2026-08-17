@@ -1,3 +1,15 @@
+## Active Update 2026-08-17 Ordinary Top Net Strategy Report Correction
+Goal: Replace the previously selected BTC and ETH Progress winners with the best ordinary/non-Progress strategies, retain the already-correct SOL deliverables unchanged, and make ordinary/non-Progress the default for future strategy reports.
+Status: Completed read-only
+Done:
+- Applied the Dashboard's exact ordinary-strategy rule: exclude a strategy when its displayed name contains `Progress` case-insensitively. Ranked lifetime authoritative Settled Paper Net PnL at one fixed UTC cutoff; the complete eligible universe and active Paper universe produced the same BTC and ETH winners.
+- Replaced only BTC and ETH at cutoff `2026-08-17T21:09:14.826487Z`: BTC `BTC Up or Down 5m Down 25 Diff Premarket` (`261` settlements, Net `+$143.58725811`) and ETH `ETH Up or Down 5m 4 bps Reference Average Premarket` (`2,155`, Net `+$391.07136904`). Every included row had complete authoritative Fee/Net accounting and exact `Net = Gross - Fee`.
+- Rebuilt the BTC/ETH 1800x1000 Net-only cumulative charts with matching asset-price overlays and maximum Net drawdown regions, and rebuilt their one-sheet daily Net PnL XLSX reports with formulas, red negatives on white, visible minus signs, and exact B2 freeze panes.
+- Left both SOL files byte-for-byte unchanged: PNG SHA-256 `0ce6bc15eabd3e67c4588d9d8dce45d35019bf00458c352dbf05d6ac0113f558`; XLSX SHA-256 `d14e25631c7e10e2965ba1605094672755b3704dcd71e18322d0c54eb0a55dd5`.
+Next: For future strategy rankings and reports, include only ordinary/non-Progress strategies unless the user explicitly overrides that default.
+Notes: Independent Decimal CSV plus separate production `REPEATABLE READ READ ONLY` reconciliation passed with zero failures. Both corrected workbooks passed artifact-tool import/render/error scan, Excel COM, and OpenXML checks; both corrected charts passed data reconciliation and visual inspection. Production, strategy state, service state, orders, and product code were not changed. The earlier BTC/ETH Progress selections are withdrawn and replaced by this correction; the earlier SOL result remains verified.
+Blockers: None
+
 ## Active Update 2026-08-17 Top Net Strategy Reports By Asset
 Goal: Produce a fresh Net-only PnL chart with the matching crypto price and a daily Excel report for the best lifetime Net PnL strategy in each of BTC, ETH, and SOL.
 Status: Completed read-only
