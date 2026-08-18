@@ -1,3 +1,15 @@
+## Active Update 2026-08-18 Fresh Ordinary Top Net Strategy Reports
+Goal: Repeat the three best-strategy reports for BTC, ETH, and SOL using only ordinary/non-Progress strategies and authoritative Net PnL.
+Status: Completed read-only
+Done:
+- Ranked lifetime fee-complete Settled Paper Net PnL at the single production cutoff `2026-08-18T18:38:25.404418Z`, using the Dashboard ordinary rule: strategy name must not contain `Progress` case-insensitively. All candidate and winner checks were read-only.
+- Selected BTC `BTC Up or Down 5m Down 25 Diff Premarket` (`261` settlements, Net `+$143.58725811`), ETH `ETH Up or Down 5m 4 bps Reference Average Premarket` (`2,188`, Net `+$428.27733115`), and SOL `SOL Up or Down 5m Up 4 bps Reference Average Premarket` (`1,352`, Net `+$269.54677489`).
+- Created three 1800x1000 cumulative Paper Net PnL charts with matching BTCUSDT/ETHUSDT/SOLUSDT price overlays and maximum Net drawdown regions, plus three one-sheet daily Net PnL XLSX reports, under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/top-ordinary-net-strategies-by-asset-20260818-1838z`.
+- Verified every workbook has continuous UTC dates, formula-based daily/final totals, visible red negatives on white, and exact B2 freeze panes. All chart lines are solid; no Gross metric is user-visible.
+Next: Keep ordinary/non-Progress as the default for future strategy reports unless the user explicitly overrides it; continue reporting Net rather than Gross.
+Notes: Independent Decimal CSV plus a separate production `REPEATABLE READ READ ONLY` reconciliation passed 90/90 checks. The BTC lead over its runner-up was only `$0.04292017`; the SOL lead was `$0.97566222`. Fresh ranking changed the SOL winner from the prior 3 bps strategy to the 4 bps strategy, so SOL was regenerated. Production, strategy state, service state, orders, and product code were not changed.
+Blockers: None.
+
 ## Active Update 2026-08-18 Production Server And Betting Audit
 Goal: Verify the restarted production service, current BTC/ETH/SOL Paper betting, settlement health, latency, locks, feeds, and operational warnings.
 Status: Completed read-only; core runtime/betting healthy, recurring short feed warnings and recovered settlement deadlock remain
