@@ -1,3 +1,19 @@
+## Active Update 2026-08-18 Production Server And Betting Audit
+Goal: Verify the restarted production service, current BTC/ETH/SOL Paper betting, settlement health, latency, locks, feeds, and operational warnings.
+Status: Completed read-only; core runtime/betting healthy, recurring short feed warnings and recovered settlement deadlock remain
+Done:
+- Audited only PostgreSQL `192.168.0.101:5432/polycopytrader` in UTC with `REPEATABLE READ READ ONLY`, `statement_timeout=15s`, and no production/service/configuration/order mutation.
+- Confirmed the user restart succeeded: Service is `Running/Live`, started `2026-08-17T18:56:09.009719Z`, exact build `31acec45a3bac0c0d9ca7690881f435b70893269`, advancing heartbeat through `2026-08-18T05:20:16.902817Z`, and `last_error=NULL`. Service had 14 DB sessions, zero idle-in-transaction/blocked sessions, zero waiting/ungranted locks, and no vacuum on the prior problem table.
+- Fixed 60-minute window from `2026-08-18T04:19:49.676905Z`: 1,545 Paper orders and 1,545 fills, all Filled, covering BTC 572 / ETH 450 / SOL 523. Missing run links, strategy mismatches, bad fill counts, and entries at/after market end were all 0; p50/p95/max placement latency was `0.281s/2.948s/4.663s`.
+- The same window contained 1,449 settlements with stake `$11,302.6500`, Gross PnL `+$1,739.9823`, and Net PnL `+$1,353.9478`. Live orders and Paper/Live shadow decisions were 0.
+- Active lifecycle backlog is clean: overdue Entered 0, open Pending/PartiallyFilled orders 0, and all 270 old overdue Observed rows belong to disabled/paused strategies (`overdue_enabled=0`). Dashboard projection remained Running/current with no error through `05:20:20.656439Z`.
+- BTC/ETH/SOL reference streams were current and current Polymarket aggregate/critical/shard-001 WebSockets were Connected/non-stale. Last-hour maximum tick gaps were BTC `20.007s`, ETH `30.025s`, SOL `20.054s`; none exceeded 60 seconds.
+- Warning: 74 API errors in 60 minutes / 1,102 in 24 hours, dominated by short SOL/ETH stale-tick warnings, 13 reference lookup rejections, four OKX two-second timeouts, and four Copy-performance stream errors. Data recovered continuously despite those warnings.
+- One settlement deadlock pair occurred at `04:37:36Z..04:37:37Z`; 1,027 later settlements and zero overdue Entered prove recovery. Exact Maker-GTD had no orders in the sampled hour, so there was no new runtime evidence either for or against recurrence of its prior delivery-evidence failure.
+Next: Continue monitoring. The recurring short feed errors and settlement deadlock pattern remain candidates for focused diagnosis; no restart or immediate operational action is required now.
+Notes: Two independent heartbeat samples advanced by one minute. No SQL query timed out or failed in this audit.
+Blockers: None.
+
 ## Active Update 2026-08-17 Ordinary Top Net Strategy Report Correction
 Goal: Replace the previously selected BTC and ETH Progress winners with the best ordinary/non-Progress strategies, retain the already-correct SOL deliverables unchanged, and make ordinary/non-Progress the default for future strategy reports.
 Status: Completed read-only
