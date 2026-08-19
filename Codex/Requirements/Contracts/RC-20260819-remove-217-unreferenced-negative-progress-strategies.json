@@ -1,0 +1,319 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260819-remove-217-unreferenced-negative-progress-strategies",
+  "title": "Remove 217 unreferenced product-negative Progress strategies",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Давай предварительно удалим все Progress стратегии с отрицательным Gross Pnl. Включая их логику и историю но локальном и продуктовом серверах"
+    },
+    {
+      "source": "user",
+      "text": "1 - Да, удаляем всё. Но, наверное, надо сначала остановить эти стратегии, чтобы новых не создавали ордеров.\n\n2. Удаляем без резервной копии"
+    },
+    {
+      "source": "user",
+      "text": "Сервис останавливать не будем. Сейчас просто остановим стратегии, подождём сутки, а потом всё удалим."
+    },
+    {
+      "source": "user",
+      "text": "Я имею в виду - остановим те стратегии, которые будем удалять, а не все стратегии вообще"
+    },
+    {
+      "source": "user",
+      "text": "Рестарт - да. Остановка - нет"
+    },
+    {
+      "source": "user",
+      "text": "Ок, можем удалять?"
+    },
+    {
+      "source": "user",
+      "text": "Нет, давай удалим только те стратегии, на которые никто не ссылается"
+    },
+    {
+      "source": "user",
+      "text": "Да, именно это я имею в виду"
+    },
+    {
+      "source": "user",
+      "text": "Да, удаляем 217 стратегий"
+    }
+  ],
+  "scope": {
+    "goal": "Irreversibly remove exactly 217 product-negative Progress strategies that have no incoming current strategy reference after the same removal, together with their runnable catalog/seed membership and exactly attributable structured history on the local and product databases, while preserving the three referenced source strategies, every other strategy, and the running service outside one normal deployment restart.",
+    "inScope": [
+      "The immutable starting set is the exact 220 UUID/code pairs approved in RC-20260813-remove-negative-progress-strategies at semantic digest sha256:2f622b5976b862f6c32ec92bb0a7834e9f09b6ba15ec0fbedbf59f749b36dc6e; Gross and Progress are not recalculated.",
+      "A current incoming strategy reference is a BaseSignalStrategyId, ConfirmationSignalStrategyId, LowerEnterSourceStrategyId, or active strategy_child_parent_assignments child-to-parent reference whose owner/child remains after the same removal.",
+      "The reference calculation is a fixed point: if retaining one target because of an incoming reference makes it an owner of another target reference, that referenced target is retained too.",
+      "The exact 217 target set is the approved 220-pair set minus three source strategies: b7c50005-0000-4000-8166-000000000003 / btc_up_down_5m_3_diff_shift_progress_premarket; b7c50005-0000-4000-8172-000000000004 / btc_up_down_5m_4_diff_real_limit_progress_premarket; and b7c50005-0000-4000-8172-000000000005 / btc_up_down_5m_5_diff_real_limit_progress_premarket.",
+      "The three excluded source strategies and their complete structured history remain. Their retained LowerEnter owners remain unchanged: b7c50005-0001-4000-8166-000000000003, b7c50005-0001-4000-8172-000000000004, and b7c50005-0001-4000-8172-000000000005.",
+      "Stage 1 already stopped the original 220 targets. Stage 2 operates on exactly 217 product rows and the expected 129 locally present rows; the three excluded source rows are not updated or deleted by Stage 2.",
+      "Ended strategy_child_parent_assignments rows are historical relationships rather than current references and do not remove a strategy from the 217 target set. The fresh product preview at 2026-08-19T19:26:07.791187Z found 12603 ended rows across 121 target parents and 18 retained children, with zero active rows.",
+      "Stage 2 requires a fresh read-only gate confirming all 217 targets are still disabled, Live-off, and permanently paused; no active incoming reference, active Live order, or target Paper/Live order or strategy run created after the applicable Stage 1 witness may exist.",
+      "Delete exactly attributable structured target rows from strategies; Paper orders, fills, runs, positions and settlements; Live/dry-run/shadow rows; unshared signals and rejections; onchain Paper results; Progress state; Child assignments including ended rows involving a target; retention guards, rollups, v1/v2 target tombstones; fee and historical parity audit rows; copied-leader/performance rows; Dashboard snapshots, projection state/facts/events/queues/cursors; and exact legacy maintenance rows when present.",
+      "Remove the exact 217 variants from the runtime registry and every static or dynamic SQL seed path so they cannot dispatch or be recreated. Retain shared Progress algorithms and all catalog entries needed by non-target strategies.",
+      "Use one fail-closed atomic transaction per database. A normal brief service restart may deploy and activate the new build; the initializer completes cleanup before workers start and the service returns automatically.",
+      "No backup is created. After deletion, verify exact target absence, zero structured residuals, no reseed after at least two worker cycles, service health, and unchanged non-target identities/counts on both databases."
+    ],
+    "outOfScope": [
+      "Deleting, detaching, remapping, re-enabling, or otherwise modifying the three excluded source strategies or their three retained LowerEnter owners.",
+      "Treating ended Child-to-Parent assignment history as a current reference blocker; the user selected the fixed 217 result after this distinction was reported.",
+      "Selecting additional local-only negatives, recalculating PnL, or changing the product-derived starting set.",
+      "Deleting shared Progress processor methods still used by retained variants or changing retained trading behavior.",
+      "Deleting shared/global v2 dimension rows or shared market/API/onchain rows without an exact target owner.",
+      "Creating a backup, dump, archive, restore point, or recovery copy.",
+      "Deliberately stopping the Windows service as a quiescence or maintenance method, stopping all strategies, or cancelling unrelated Paper/Live activity. This does not exclude the normal brief deployment restart.",
+      "VACUUM FULL, pg_repack, database-file shrink, compact-v2 activation, or any separate storage-reclaim operation."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "Exact fixed 217-pair subset of the previously approved fixed 220 product-negative Progress set. The three explicit referenced source strategies are excluded. Stage 2 remains gated by the Stage 1 witnesses 2026-08-13T21:23:40.824312Z local and 2026-08-13T21:25:10.499570Z product and by a fresh no-new-identity/current-reference check.",
+    "firstVerification": "Build the current Domain project and compute the full incoming-reference fixed point over BaseSignalStrategyId, ConfirmationSignalStrategyId, LowerEnterSourceStrategyId, and active Child-to-Parent assignments; then revalidate exact product/local membership and quiet-period gates in UTC REPEATABLE READ READ ONLY snapshots."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Delete exactly the 217 confirmed strategies and preserve every strategy that currently has an incoming reference from a retained strategy.",
+      "sourceRequestIndexes": [6, 7, 8],
+      "sourceQuote": "Да, удаляем 217 стратегий",
+      "acceptanceCriteria": [
+        "The predecessor compact family specification expands to exactly 220 unique UUID/code pairs; subtracting the three explicit source UUID/code pairs produces exactly 217 unique targets.",
+        "A fresh build of the current Domain source finds exactly three incoming retained-owner references into the original 220 set, all LowerEnterSourceStrategyId references to the three explicit exclusions, and no BaseSignalStrategyId or ConfirmationSignalStrategyId blocker.",
+        "A fresh product read finds zero active retained-child to target-parent assignments. Any new active assignment or current catalog reference into the 217 set aborts deletion and requires a new contract.",
+        "Product membership is exactly 217 and local membership is exactly 129, with zero UUID/code collisions or near aliases; any mismatch aborts mutation.",
+        "The three excluded source rows, their three retained owners, and all other non-target strategy rows remain present and byte-for-byte unchanged by Stage 2."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused retired-Progress catalog tests that expand the predecessor 220 set, assert the three exact exclusions, assert the final 217 set, and enumerate every retained descriptor reference.",
+          "expected": "Exactly 217 target variants are absent; the three excluded sources and their retained owners remain with unchanged reference fields; no retained descriptor points to a removed strategy.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "runtime",
+          "command": "Run bounded UTC REPEATABLE READ READ ONLY membership and active-reference queries against 192.168.0.101:5432/polycopytrader and 127.0.0.1:5432/polycopytrader immediately before mutation.",
+          "expected": "Exact 217 product and 129 local targets, zero identity collisions, zero active incoming references, and exact presence of all six retained source/owner rows where expected by each environment.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep only the 217 targets stopped through the deletion gate without stopping the service or other strategies.",
+      "sourceRequestIndexes": [1, 2, 3, 4, 5],
+      "sourceQuote": "Сейчас просто остановим стратегии, подождём сутки, а потом всё удалим.",
+      "acceptanceCriteria": [
+        "All 217 targets remain enabled=false, live_stakes=false, paused=true with no expiry and cleared Live/auto-pause anchors immediately before deletion.",
+        "No target Paper order, Live order, or strategy-run identity was created after the applicable Stage 1 witness; updates or settlement of older rows are allowed.",
+        "Two bounded read-only observations have identical empty post-witness identity ledgers, and any state reversal or new identity aborts deletion.",
+        "The service remains healthy until the normal deployment restart; no global strategy pause or deliberate stopped maintenance interval is used."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "runtime",
+          "command": "Repeat the Stage 2 UTC read-only control-state, active-Live, active-reference, and post-witness Paper/Live/run identity gates twice before deployment.",
+          "expected": "All target controls remain stopped, all forbidden counts and post-witness ledgers are zero, and the product service heartbeat/build identity is current and healthy.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Atomically delete all exactly attributable structured history for the 217 targets on each database, including unfinished state and ended relationship history.",
+      "sourceRequestIndexes": [0, 1, 6, 8],
+      "sourceQuote": "Включая их логику и историю",
+      "acceptanceCriteria": [
+        "One atomic fail-closed transaction per database collects exact target-owned IDs, rejects active Live orders, current incoming references, shared ownership conflicts, and count mismatches, deletes in FK-safe order, and proves collected-versus-deleted equality.",
+        "Every current structured target dependency listed in scope is deleted or proven absent, including v2 target tombstones without shared dimensions and historical_gross_net_parity_audit rows under a migration-controlled immutable-audit exception.",
+        "Ended Child-to-Parent rows involving a target are deleted as target-attributable relationship history even when the other endpoint is retained; no active such row may exist.",
+        "Postconditions find zero target UUID, code, wallet, order, run, position, settlement, tombstone, rollup, assignment, snapshot, projection, queue, and exactly attributable audit rows.",
+        "Non-target identities/counts and focused payload fingerprints, especially the three excluded sources and their owners, remain unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run focused PostgreSQL cleanup tests with target Paper/Live/shadow/state/projection/v1-v2/parity-audit/ended-assignment fixtures plus active-reference, active-Live, shared-owner, and count-mismatch rollback cases.",
+          "expected": "All 217-shaped target fixtures are atomically removed, excluded/non-target rows survive unchanged, and every guard failure rolls back the whole database transaction.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "runtime",
+          "command": "After each database transaction, run exact zero-residual and non-target fingerprint queries immediately and after at least two worker cycles.",
+          "expected": "Zero target structured residuals or reseeded rows, unchanged excluded/non-target fingerprints, and explicit commit or rollback evidence for each database.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Remove runnable catalog and seed membership for the exact 217 targets while preserving linked and shared strategy behavior.",
+      "sourceRequestIndexes": [0, 6, 7, 8],
+      "sourceQuote": "только те стратегии, на которые никто не ссылается",
+      "acceptanceCriteria": [
+        "The exact 217 variants are excluded from StrategyIds runtime registries, static SQL seeds, dynamic LowerEnter generation, and every startup reseed path.",
+        "The three excluded source strategies remain catalogued and seeded, and their three retained LowerEnter owners retain the exact original LowerEnterSourceStrategyId values.",
+        "No retained variant references any removed target through BaseSignalStrategyId, ConfirmationSignalStrategyId, or LowerEnterSourceStrategyId.",
+        "Shared behavior enum values and processor implementations remain wherever a retained strategy consumes them; no retained strategy execution behavior changes.",
+        "Startup after deployment cannot recreate or dispatch a removed target and does not remove, detach, or remap an excluded source or owner."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetDonorMatcherTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-006",
+          "kind": "test",
+          "command": "Run focused catalog, seed, reference-closure, retained LowerEnter owner, donor-matcher, Child-assignment, and processor regression tests.",
+          "expected": "All 217 targets are absent and cannot reseed or dispatch; all excluded and other retained strategies resolve their unchanged descriptors and behavior.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-007",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln with TEMP, TMP, TMPDIR, NuGet cache, and artifacts under the active marked D:\\CodexTemp run.",
+          "expected": "The solution builds with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Perform the irreversible cleanup without a backup or deliberate service-wide stop, allowing only the normal brief deployment restart.",
+      "sourceRequestIndexes": [1, 2, 3, 4],
+      "sourceQuote": "Рестарт - да. Остановка - нет",
+      "acceptanceCriteria": [
+        "No dump, backup, archive, restore point, or copied target history is created.",
+        "The user is informed that each committed database deletion is irreversible and local/product commits cannot be atomic with each other.",
+        "No deliberate service stop or global pause is used for quiescence. One normal brief restart activates the new binary; schema initialization completes cleanup before workers start and the service then returns healthy automatically.",
+        "If a database transaction fails, that database rolls back fully. If one database commits and the other fails, the split state is reported and completion is not claimed.",
+        "Deployment does not include unrelated dirty worktree changes; implementation is based on an isolated clean revision or waits until unrelated work is safely integrated."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-008",
+          "kind": "inspection",
+          "command": "Inspect the exact implementation diff, deployment revision, executed database commands, transaction results, service restart interval, and artifact inventory.",
+          "expected": "Only approved paths and behavior changed; no backup or deliberate stopped interval exists; each database has an explicit commit or rollback result; the service returns healthy.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-009",
+          "kind": "inspection",
+          "command": "Run git diff --check, the relevant focused tests/build, .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree, and staged contract validation before commit.",
+          "expected": "All checks pass, the independent semantic review has no findings, and the approved contract is completed with exact evidence.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "The predecessor product-derived 220 UUID/code set remains the authoritative starting set for both databases; no local-only or newly negative strategy is added.",
+      "impact": "The new target is a deterministic 217-row subset of the already approved product selection. Product expects 217 target rows and local expects 129; other negative rows remain.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260819-remove-217-unreferenced-negative-progress-strategies sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac",
+        "semanticDigest": "sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "The three excluded source strategies remain in their current disabled, Live-off, permanently paused state; Stage 2 neither re-enables nor otherwise updates them.",
+      "impact": "They continue to satisfy retained descriptor references without creating new orders, but they remain stopped after the 217 targets are deleted.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260819-remove-217-unreferenced-negative-progress-strategies sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac",
+        "semanticDigest": "sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The 12603 observed ended Child-to-Parent assignment rows do not block target selection and are deleted when they involve a target, even if their other endpoint is retained.",
+      "impact": "The final target count remains 217 rather than 99. Historical parent-assignment evidence for 18 retained child strategies is partially removed where the parent is one of 121 deleted targets; active assignments and trading behavior are unaffected because the observed active count is zero and is rechecked fail-closed.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260819-remove-217-unreferenced-negative-progress-strategies sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac",
+        "semanticDigest": "sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "Shared Progress processor methods remain when a retained strategy still uses them; logic removal means removing the exact 217 catalog, seed, reference, and dispatch identities.",
+      "impact": "The 217 strategies cannot run or be recreated, while generic shared implementation code remains for retained strategies.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260819-remove-217-unreferenced-negative-progress-strategies sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac",
+        "semanticDigest": "sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac"
+      }
+    },
+    {
+      "id": "DEV-003",
+      "text": "Shared or unstructured global text logs and API/risk/live event rows without a verified exact target key are not deleted.",
+      "impact": "Exactly attributable structured target history is deleted, but an unattributable text message may remain when removing it would also affect retained strategies.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260819-remove-217-unreferenced-negative-progress-strategies sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac",
+        "semanticDigest": "sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260819-remove-217-unreferenced-negative-progress-strategies sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac",
+    "semanticDigest": "sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
