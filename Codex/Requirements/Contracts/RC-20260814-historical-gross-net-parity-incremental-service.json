@@ -16,6 +16,10 @@
     {
       "source": "user",
       "text": "Подтверждаю"
+    },
+    {
+      "source": "user",
+      "text": "Подтверждаю"
     }
   ],
   "scope": {
@@ -261,6 +265,38 @@
           "evidence": ""
         }
       ]
+    },
+    {
+      "id": "REQ-007",
+      "text": "When a composite exact Paper position or settlement overlaps an exact linked Live representation but replay cannot prove the exact non-overlapping Paper residual without inventing a per-BUY allocation of aggregate rounding residual, the service excludes that entire composite Paper aggregate from the current donor pool, retains the exact Live representation, and continues the remaining donor tiers through the fixed 0.0333 fallback rather than double-counting or leaving Net unresolved.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Подтверждаю",
+      "acceptanceCriteria": [
+        "Direct one-economic-execution Paper/Live links continue to use VenueReported Live, then exact local Live, then exact Paper precedence, and the exact-before-dedup count records every valid representation before one selected representation is retained.",
+        "For PaperPosition/PaperSettlement, wallet/asset equality alone never proves overlap. Replay must prove that the Live paper_order_id contributes source charges to that exact composite aggregate. A fully consumed older linked Paper order that is absent from the remaining aggregate is not treated as overlapping.",
+        "If an overlapping composite Paper residual is not exactly provable under ComponentEvidenceGraphV1 without a prohibited per-BUY residual distribution, the whole composite Paper aggregate is absent from exact donors for that target-time snapshot; the exact linked Live row remains eligible. Other exact donors remain eligible and the matcher continues every approved tier, then 0.0333 if all tiers are empty.",
+        "The service never manufactures a synthetic residual Paper Gross, basis, Fee, Net, allocation, or membership record. Audit counts preserve raw candidates, valid exact representations before deduplication, and selected representations after deduplication with selected <= exact <= raw; MembershipHashV1 hashes only selected records.",
+        "Tests cover differing Live/Paper Fee, direct Live precedence, a fully consumed linked order followed by an unrelated Paper pool, a partially consumed or otherwise indivisible composite overlap, linked plus unlinked BUY source charges, zero-basis Live, and actual raw/exact/deduplicated count reduction."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetDonorMatcher.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetDonorMatcherTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityLiveFlowTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-008",
+          "kind": "test",
+          "command": "Run focused donor deduplication unit tests and the isolated PostgreSQL integration fixture under the marked D:\\CodexTemp run.",
+          "expected": "Tests prove direct Live precedence, replay-proved overlap rather than pool-name matching, fail-closed exclusion of an indivisible composite Paper aggregate with continued donor tiers/fixed fallback, positive-basis Live eligibility, and raw/exact/selected audit counts with selected membership hashing.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
     }
   ],
   "assumptions": [
@@ -271,8 +307,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     },
     {
@@ -282,8 +318,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     },
     {
@@ -293,8 +329,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     },
     {
@@ -304,8 +340,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     }
   ],
@@ -317,8 +353,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     },
     {
@@ -328,8 +364,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     },
     {
@@ -339,8 +375,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     },
     {
@@ -350,8 +386,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     },
     {
@@ -361,16 +397,27 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-        "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
+      }
+    },
+    {
+      "id": "DEV-006",
+      "text": "When exact replay proves that a composite PaperPosition/PaperSettlement contains a Live-linked source charge but the exact remaining nonlinked Paper Gross/basis/Fee/Net cannot be partitioned under ComponentEvidenceGraphV1 without inventing the prohibited per-BUY allocation of aggregate rounding residual, the service excludes the entire composite Paper aggregate from the current donor snapshot, retains the eligible exact Live representation, and continues farther donor tiers or fixed 0.0333.",
+      "impact": "The coefficient never double-counts the linked execution or reverses Live precedence, and historical Net still completes. The donor aggregate can omit otherwise exact nonlinked Paper economics contained in the same indivisible composite row, so N/D can differ from a hypothetical accurately partitioned aggregate; no synthetic residual financial row is created.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+        "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40",
-    "semanticDigest": "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40"
+    "evidenceText": "APPROVE RC-20260814-historical-gross-net-parity-incremental-service sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb",
+    "semanticDigest": "sha256:8af30dba481024273accea33407fb5f98d6bb93f2831181a3085178eb5268efb"
   },
   "independentReview": {
     "reviewer": "agent:/root/incremental_service_semantic_review",
