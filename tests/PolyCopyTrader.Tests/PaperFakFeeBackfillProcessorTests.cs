@@ -1245,6 +1245,55 @@ public sealed class PaperFakFeeBackfillProcessorTests
     }
 
     [Fact]
+    public void HistoricalParityPaperPrepare_CanonicalizesTimezoneBearingLineageBeforeHashing()
+    {
+        var strategyId = Guid.Parse("76500000-0000-0000-0000-000000000001");
+        var buy = CreateParityFill(
+            Guid.Parse("76500000-0000-0000-0000-000000000002"),
+            strategyId,
+            TradeSide.Buy,
+            DateTimeOffset.Parse("2026-07-10T02:25:05.354423+00:00"),
+            1m,
+            0.5m,
+            0.01m) with
+        {
+            CanonicalPayloadJson =
+                "{\"filledAtUtc\":\"2026-07-10T05:25:05.354423+03:00\",\"nested\":{\"role\":\"Taker\"}}"
+        };
+        var sell = CreateParityFill(
+            Guid.Parse("76500000-0000-0000-0000-000000000003"),
+            strategyId,
+            TradeSide.Sell,
+            DateTimeOffset.Parse("2026-07-10T02:30:05.354423+00:00"),
+            1m,
+            0.6m,
+            0.01m,
+            realizedPnlUsd: 0.1m,
+            netRealizedPnlUsd: 0.08m) with
+        {
+            CanonicalPayloadJson =
+                "{\"filledAtUtc\":\"2026-07-10T05:30:05.354423+03:00\",\"nested\":{\"role\":\"Taker\"}}"
+        };
+        var page = CreatePaperSellPage(strategyId, sell, [buy, sell]);
+
+        var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(
+            page,
+            HistoricalGrossNetParityConstants.CutoffUtc);
+
+        Assert.Empty(prepared.Conflicts);
+        var target = Assert.Single(prepared.Targets);
+        using var lineageDocument = System.Text.Json.JsonDocument.Parse(target.LineagePayloadJson);
+        var canonicalLineage = System.Text.Json.JsonSerializer.Serialize(lineageDocument.RootElement);
+        var expectedHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(canonicalLineage)))
+            .ToLowerInvariant();
+
+        Assert.Equal(canonicalLineage, target.LineagePayloadJson);
+        Assert.Equal(expectedHash, target.LineageHash);
+        Assert.Contains("\\u002B03:00", target.LineagePayloadJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void HistoricalParityPaperPrepare_DerivesRunlessSellExitLookupBeforeFallback()
     {
         var strategyId = Guid.Parse("77000000-0000-0000-0000-000000000001");

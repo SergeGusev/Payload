@@ -3,7 +3,7 @@
   "contractId": "RC-20260819-historical-parity-lineage-hash-fix",
   "title": "Fix Historical Gross/Net parity lineage hash validation",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -53,24 +53,24 @@
           "kind": "inspection",
           "command": "Inspect the focused diff and producer/validator hash call sites.",
           "expected": "The producer canonicalizes LineagePayloadJson before hashing/storing it, while the existing storage validator remains unchanged and reproduces the same bytes.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused inspection confirmed the preparer normalizes lineage JSON with JsonDocument.Parse plus JsonSerializer.Serialize, hashes and stores that canonical payload, while the storage validator remains unchanged and uses the identical normalization."
         },
         {
           "id": "VER-002",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --no-restore --filter FullyQualifiedName~PaperFakFeeBackfillProcessorTests --artifacts-path <marked D:\\CodexTemp run artifacts path> --results-directory <marked D:\\CodexTemp run results path>",
           "expected": "Focused processor tests pass, including the canonical lineage regression.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PaperFakFeeBackfillProcessorTests passed 34/34 from the marked D:\\CodexTemp run."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --no-restore --artifacts-path <marked D:\\CodexTemp run artifacts path>",
           "expected": "Solution build exits 0; warnings are reported exactly.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln build exited 0 with 0 errors and 126 pre-existing warnings."
         }
       ]
     },
@@ -96,16 +96,16 @@
           "kind": "test",
           "command": "Run the focused lineage regression directly by its fully qualified test name.",
           "expected": "The regression exits 0 and proves canonical hash reproduction.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "HistoricalParityPaperPrepare_CanonicalizesTimezoneBearingLineageBeforeHashing passed 1/1 and asserted canonical payload/hash equality plus the observed \\u002B03:00 escaping boundary."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "git diff --check -- src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
           "expected": "No whitespace error is reported in the two governed files.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "git diff --check reported no whitespace errors in the two governed files; only line-ending conversion warnings were emitted."
         }
       ]
     }
@@ -119,9 +119,9 @@
     "semanticDigest": "sha256:e2fea05be160c8bc7565b49dfd5665dd355da037dabfc99f433940e8483bf53a"
   },
   "independentReview": {
-    "reviewer": "agent:/root/historical_parity_lineage_hash_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/final_parity_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

@@ -3197,7 +3197,8 @@ internal static class HistoricalGrossNetParityPaperPreparer
                 ? HistoricalGrossNetParityExactEligibility.AuthoritativeNetRepair
                 : HistoricalGrossNetParityExactEligibility.FallbackRequired;
         var componentPayload = JsonSerializer.Serialize(components);
-        var lineageHash = Hash(lineagePayload);
+        var canonicalLineagePayload = NormalizeJson(lineagePayload);
+        var lineageHash = Hash(canonicalLineagePayload);
         var componentHash = HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(components);
         var stableTargetPayload = openStableHashPayload ?? canonicalPayload;
         var targetHash = Hash(stableTargetPayload);
@@ -3251,7 +3252,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             null,
             null,
             canonicalPayload,
-            lineagePayload,
+            canonicalLineagePayload,
             componentPayload,
             bindingHash);
     }
@@ -3770,6 +3771,12 @@ internal static class HistoricalGrossNetParityPaperPreparer
 
     private static decimal Round8(decimal value) =>
         Math.Round(value, 8, MidpointRounding.AwayFromZero);
+
+    private static string NormalizeJson(string value)
+    {
+        using var document = JsonDocument.Parse(value);
+        return JsonSerializer.Serialize(document.RootElement);
+    }
 
     private static string Hash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty)))
