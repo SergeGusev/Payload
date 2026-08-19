@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260819-historical-parity-lineage-hash-fix",
+  "title": "Fix Historical Gross/Net parity lineage hash validation",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Выложил логи в D:\\1\\logs, проверяй"
+    },
+    {
+      "source": "user",
+      "text": "Исправляй что нужно"
+    }
+  ],
+  "scope": {
+    "goal": "Make the deployed incremental Historical Gross/Net parity workflow accept a lineage binding that it prepared itself, so eligible historical Paper targets can reach their existing accounting transaction instead of all being deferred on a deterministic hash mismatch.",
+    "inScope": [
+      "Use one canonical JSON byte representation when HistoricalGrossNetParityPaperPreparer produces LineagePayloadJson/LineageHash and when storage validates that same pair.",
+      "Add a focused regression for lineage JSON containing UTC offsets and nested canonical fill JSON, including the plus-sign escaping difference observed in production.",
+      "Build and focused-test verification of the correction."
+    ],
+    "outOfScope": [
+      "Changing Fee, Gross, Net, ROI, donor, sorting, cutoff, candidate paging, ownership, Live balance, or VenueReported behavior.",
+      "Changing PostgreSQL schema or production data; deploying or restarting the service.",
+      "Adding a new logging framework or changing unrelated parity diagnostics, documentation, or historical rows."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Historical Gross/Net parity targets originated before 2026-08-10T00:00:00Z; the code correction itself applies to every Paper lineage payload prepared by the incremental workflow.",
+    "firstVerification": "Compare the producer and validator hash inputs against one fresh production candidate page in a server-enforced read-only transaction and prove the exact mismatch before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Correct the lineage binding contract so preparation stores the canonical normalized lineage JSON and its SHA-256, which the existing mutation validator reproduces exactly.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Исправляй что нужно",
+      "acceptanceCriteria": [
+        "For a prepared Paper target, SHA-256(LineagePayloadJson encoded as UTF-8) equals LineageHash and remains equal after the validator's JSON normalization step.",
+        "A production-shaped lineage payload containing a DateTimeOffset with +00:00 and nested fill JSON no longer changes hash when preparation hands it to validation.",
+        "The correction changes no accounting number, target eligibility, donor choice, target order, cutoff, or database field."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Inspect the focused diff and producer/validator hash call sites.",
+          "expected": "The producer canonicalizes LineagePayloadJson before hashing/storing it, while the existing storage validator remains unchanged and reproduces the same bytes.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --no-restore --filter FullyQualifiedName~PaperFakFeeBackfillProcessorTests --artifacts-path <marked D:\\CodexTemp run artifacts path> --results-directory <marked D:\\CodexTemp run results path>",
+          "expected": "Focused processor tests pass, including the canonical lineage regression.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --no-restore --artifacts-path <marked D:\\CodexTemp run artifacts path>",
+          "expected": "Solution build exits 0; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Add a regression test that fails with the deployed raw-versus-normalized lineage hash behavior and passes only when both sides use the same canonical representation.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Исправляй что нужно",
+      "acceptanceCriteria": [
+        "The test fixture includes the observed escaping boundary rather than only JSON without timezone offsets.",
+        "The test asserts both the stored payload/hash pair and validator-style normalization equality.",
+        "No production database connection is required by the regression test."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run the focused lineage regression directly by its fully qualified test name.",
+          "expected": "The regression exits 0 and proves canonical hash reproduction.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "git diff --check -- src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+          "expected": "No whitespace error is reported in the two governed files.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260819-historical-parity-lineage-hash-fix sha256:e2fea05be160c8bc7565b49dfd5665dd355da037dabfc99f433940e8483bf53a",
+    "semanticDigest": "sha256:e2fea05be160c8bc7565b49dfd5665dd355da037dabfc99f433940e8483bf53a"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/historical_parity_lineage_hash_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
