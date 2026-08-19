@@ -1,3 +1,19 @@
+## Active Update 2026-08-19 Production Server And Betting Audit
+Goal: Verify current production runtime, BTC/ETH/SOL Paper betting and settlements, latency, locks, feeds, Dashboard, backlog, and recurrence of prior operational warnings.
+Status: Completed read-only; core runtime and betting healthy, recovered WebSocket interruptions and short feed-stale warnings remain
+Done:
+- Audited only PostgreSQL `192.168.0.101:5432/polycopytrader` in UTC using `REPEATABLE READ READ ONLY`, `statement_timeout=15s`, and no production/service/configuration/order mutation.
+- At final cutoff `2026-08-19T05:16:40.400571Z`, Service was `Running/Live`, started `2026-08-17T18:56:09.009719Z`, exact build `31acec45a3bac0c0d9ca7690881f435b70893269`, heartbeat age `9.460s`, `last_error=NULL`. There were 26 Service DB sessions, zero idle-in-transaction/blocked sessions, zero waiting/ungranted locks, and no vacuum on the previously blocking Dashboard table.
+- Fixed 60-minute window from `2026-08-19T04:15:36.338248Z`: 2,183 Paper orders and 2,183 fills, all Filled, covering BTC 820 / ETH 577 / SOL 786. Missing run links, strategy mismatches, bad fill counts, and entries at/after market end were all 0; p50/p95/max placement latency was `0.340s/1.845s/4.329s`.
+- The same window contained 2,075 settlements with stake `$18,304.5000`, Gross PnL `+$1,673.8803`, and Net PnL `+$1,048.8760`. Live orders and Paper/Live shadow decisions were 0.
+- Active lifecycle backlog remained clean: overdue Entered 0, open Pending/PartiallyFilled orders 0, and all 270 old overdue Observed rows belong to disabled/paused strategies (`overdue_enabled=0`). Dashboard projection was Running/current with no error through `05:16:05Z`.
+- BTC/ETH/SOL reference streams were fresh and the current Polymarket aggregate/critical/shard-001 rows were Connected/non-stale. Last-hour maximum tick gaps were BTC `20.013s`, ETH `30.015s`, SOL `39.996s`; none exceeded 60 seconds.
+- Warning: 61 API errors in 60 minutes / 2,145 in 24 hours, dominated by short SOL/ETH stale-tick warnings. There were two critical-WS connect failures around `04:29:43Z..04:29:47Z`, one shard premature-close at `04:54:57Z`, two order-book refresh timeouts, and two OKX timeouts. Current connections recovered and current betting continued.
+- No settlement deadlock/error and no exact Maker-GTD order occurred in the sampled hour, so there was no new Maker delivery-evidence sample. Aggregate reconnect counters increased to 97 / critical 84 / shard 13 since service start, confirming recurrent network interruptions despite current recovery.
+Next: Continue monitoring. Focused remediation remains appropriate for recurrent WebSocket reconnects and short reference-feed staleness, but no restart or immediate operational intervention is required now.
+Notes: Two heartbeat samples advanced independently. No audit query failed or timed out.
+Blockers: None.
+
 ## Active Update 2026-08-18 Fresh Ordinary Top Net Strategy Reports
 Goal: Repeat the three best-strategy reports for BTC, ETH, and SOL using only ordinary/non-Progress strategies and authoritative Net PnL.
 Status: Completed read-only
