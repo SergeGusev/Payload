@@ -13,12 +13,12 @@
   "scope": {
     "goal": "Merge the already approved and verified Progress-217 source-release history into the exact deployment branch codex/reference-average-available-windows, preserve all newer deployment-branch work, validate the merged result, and push that branch so the user's ordinary deployment contains the correction.",
     "inScope": [
-      "Require the deployment branch to remain exactly codex/reference-average-available-windows at 1892a926fdf64ce9c4f19a1a82fc70aa7bc1053b and synchronized 0/0 with origin/codex/reference-average-available-windows before the merge.",
+      "Require the deployment branch to remain exactly codex/reference-average-available-windows, preserve product tip 1892a926fdf64ce9c4f19a1a82fc70aa7bc1053b as an ancestor, and allow only requirement-contract approval/history merge commits before the implementation merge.",
       "Merge codex/progress-purge-217 through exact tip 6cec2351fe83ed3aefa6ea8d99f92ff5159519d1 with a non-squashed merge so approval commits 1d5361cc, a735d5ff, and 510b036b remain in history.",
       "Preserve every current deployment-branch product change and the complete approved Progress-217 behavior: exact 217 catalog/seed exclusion, preservation of the three referenced sources and three retained LowerEnter owners, and absence of automatic database/history cleanup.",
       "Resolve only the three conflicts proven by the aborted no-commit merge: retain both histories in Codex/Contexts/ContextPolyCopyTrader.md, Codex/Contexts/History/ContextPolyCopyTrader-2026-08-19.md, and Codex/Contexts/History/ContextPolyCopyTrader-2026-08-20.md. Inspect the automatically merged README to confirm that both current release documentation and the staged Progress-217 wording remain.",
       "Run the complete Release solution build, focused Progress catalog/seed/reference tests, and the isolated PostgreSQL double-initializer history-preservation tests against the merged source.",
-      "Obtain independent semantic review, complete requirement validation and diff checks, create the merge commit, and push the exact deployment branch to its existing origin upstream.",
+      "Obtain independent semantic review, complete requirement validation and diff checks, create the merge commit, then immediately perform the repository workflow finalization by pushing that exact commit normally to the existing deployment-branch upstream and comparing local/upstream identities.",
       "Record the standing workflow rule that future feature branches must be merged into the user's deployment branch before reporting them ready to deploy."
     ],
     "outOfScope": [
@@ -77,7 +77,7 @@
         "The complete Release solution build finishes with zero errors.",
         "Focused exact catalog, seed, retained-reference, Child Progress, and processor tests pass.",
         "A fresh isolated PostgreSQL fixture proves two schema initializations preserve existing stopped target rows and representative structured history exactly and create no cleanup marker.",
-        "WorkingTree, staged/range requirement gates and diff checks pass, and independent review reports PASS with no findings."
+        "WorkingTree and staged requirement gates and diff checks pass before the merge commit; range validation passes for the committed range; independent review reports PASS with no findings."
       ],
       "implementationPaths": [
         "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
@@ -113,13 +113,13 @@
     },
     {
       "id": "REQ-003",
-      "text": "Make the verified merge available on the existing deployment branch upstream.",
+      "text": "Prepare the verified merge for immediate normal publication on the existing deployment branch upstream after the contract-completing merge commit exists.",
       "sourceRequestIndexes": [0],
       "sourceQuote": "основную ветку, из которой я выкладываю",
       "acceptanceCriteria": [
         "A non-squashed merge commit is created on codex/reference-average-available-windows after the approval parent commit and all verification.",
-        "The exact merge commit is pushed normally to origin/codex/reference-average-available-windows without force.",
-        "The local deployment branch and origin upstream point to the same exact commit after push.",
+        "The configured upstream is origin/codex/reference-average-available-windows, the pre-merge local history is a strict fast-forward of that upstream, and no force push is used.",
+        "Immediately after the contract-completing merge commit exists, repository workflow finalization pushes that exact commit normally and verifies that local and origin deployment branches point to it.",
         "The handoff identifies that exact commit and instructs the user to redeploy it before any history cleanup."
       ],
       "implementationPaths": [
@@ -130,8 +130,8 @@
         {
           "id": "VER-005",
           "kind": "inspection",
-          "command": "Push the verified merge to the existing deployment-branch upstream and compare local/upstream commit identities.",
-          "expected": "Local and origin deployment branches are identical at the new merge commit.",
+          "command": "Before creating the merge commit, verify the exact configured upstream, prove origin is an ancestor of the staged deployment history, and verify that the resulting publication requires a normal fast-forward push; after the contract-completing commit, perform the push and local/upstream equality check as repository workflow finalization.",
+          "expected": "The pre-commit publication path is verified as normal and non-force; the exact completed merge is then pushed and equality-checked immediately after it exists.",
           "result": "pending",
           "evidence": ""
         }
@@ -143,8 +143,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260820-merge-progress217-into-deployment-branch sha256:df5296268c74da53894bb0513e28ad594c56a5003e0013731ddc2d6ba0e92384",
-    "semanticDigest": "sha256:df5296268c74da53894bb0513e28ad594c56a5003e0013731ddc2d6ba0e92384"
+    "evidenceText": "APPROVE RC-20260820-merge-progress217-into-deployment-branch sha256:7cec2ed0808effdb7bc23d8910fb325740d252dbd64553c254a8a70a3440c2d2",
+    "semanticDigest": "sha256:7cec2ed0808effdb7bc23d8910fb325740d252dbd64553c254a8a70a3440c2d2"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
