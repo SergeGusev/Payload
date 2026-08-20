@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260820-maker-expiry-admission-fairness",
+  "title": "Prevent Maker-GTD expiry admission starvation",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Выложил, проверяй"
+    },
+    {
+      "source": "user",
+      "text": "То есть сейчас какой статус?"
+    },
+    {
+      "source": "user",
+      "text": "Делай доработку"
+    }
+  ],
+  "scope": {
+    "goal": "Eliminate starvation of expired exact ETH Reference Average Maker-GTD Paper orders at the market-data receipt/expiry admission fence while preserving every existing fill-evidence, outstanding-update, continuity, atomic-persistence, and Paper-only rule.",
+    "inScope": [
+      "Replace the current opportunistic expiry admission, which returns null whenever any market-data receipt is active, with a starvation-free asynchronous admission: receipts already active when expiry requests admission finish first, receipts arriving later cannot overtake that expiry request, and expiry obtains an exclusive lease before evaluating the order.",
+      "Make PaperTradingProcessor await the starvation-free expiry admission instead of silently deferring an expired Maker-GTD order to another five-second cycle solely because a receipt is active.",
+      "Preserve concurrent processing of market-data receipts when no expiry admission is pending and preserve cancellation without leaking an admission lease or permanently blocking later receipts/expiries.",
+      "Keep the existing per-order outstanding pre-expiry side-effect update check: an actually queued or in-flight eligible update still defers that order until the update completes; this task adds no timeout, grace period, event drop, or guessed terminal result.",
+      "Add deterministic concurrency and lifecycle regressions that reproduce continuous-receipt starvation and prove a queued expiry request completes before later receipts while the existing Maker-GTD evidence and atomic expiry paths remain unchanged.",
+      "Document the starvation-free admission ordering and its explicit limitation for a genuinely hung receipt or outstanding side-effect update.",
+      "Build, run focused tests, mechanically validate, independently review, commit, and push the correction to codex/reference-average-available-windows."
+    ],
+    "outOfScope": [
+      "Changing Reference Average signals, thresholds, windows, outcomes, order price, stake, entry timing, GTD/PostOnly intent, TouchNoDepth fill inference, mandatory label, fee/PnL/settlement accounting, or Live behavior.",
+      "Adding an arbitrary expiry timeout, dropping or ignoring an eligible pre-expiry market-data update, treating an unprocessed frame as a fill or no-fill, or changing market-data continuity classifications.",
+      "Changing PaperPositionMarkWorker, position-mark calculations, worker cadence/configuration, database schema, repository queries, WebSocket subscriptions, queue capacity, or copied-performance processing.",
+      "Directly expiring, replaying, filling, rewriting, or otherwise mutating the currently observed production backlog; restarting, deploying, or reconfiguring production.",
+      "Claiming that this admission-fairness correction resolves a genuinely hung receipt or permanently hung side-effect update; those require separate evidence and approval if observed after deployment."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact closed-exception ETH neutral Reference Average Maker-GTD Paper lifecycle plus the shared admission primitive. Production preview at 2026-08-20T09:08:31.233102Z found 15 Pending/Resting orders overdue across effective expiries 08:49Z, 08:54Z, 08:59Z, and 09:04Z; ordinary BTC/ETH/SOL Paper entries and position marks remained active.",
+    "firstVerification": "Trace the exact deployed 6ceddfca call path from MarketDataWebSocketShardRunner receipt admission through MakerGtdPaperPlacementHandoff.TryEnterExpiryAdmissionAsync and PaperTradingProcessor.TryExpireMakerGtdPaperOrderAsync, then reproduce the no-fairness behavior deterministically in a focused test without production mutation."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "An expiry admission request must not be starved by a continuing stream of later market-data receipts.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "Делай доработку",
+      "acceptanceCriteria": [
+        "If one or more receipt leases are already active, an expiry admission request remains asynchronously pending until those exact active receipts finish; it does not return a normal null/deferred result.",
+        "After an expiry request is pending, every receipt request that arrives later remains pending until the expiry lease is released; later receipts cannot overtake the queued expiry.",
+        "When no expiry request is pending, multiple receipt leases may remain concurrently active exactly as before.",
+        "Cancellation while expiry waits releases its queue position and leaves the handoff usable by subsequent receipt and expiry admissions.",
+        "The no-op handoff preserves its nonblocking test/default behavior under the non-null expiry-admission contract."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperPlacementHandoff.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperPlacementHandoffTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperPlacementHandoffTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Deterministic tests prove active receipts drain before expiry, later receipts cannot overtake, receipt concurrency remains, cancellation recovers, and no sleep/timing guess is required.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Paper Maker-GTD expiry must await fair admission while preserving all existing evidence and financial semantics.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "Делай доработку",
+      "acceptanceCriteria": [
+        "PaperTradingProcessor awaits a non-null expiry admission for each expired Maker-GTD evaluation and no longer records the ordinary active-receipt deferral branch.",
+        "Once admitted, the existing order-evidence parser, queued/in-flight eligible pre-expiry update check, market-data failure lookup, exact linked-run requirement, continuity evaluation, skip reason/diagnostics, and atomic order/run mutation execute unchanged.",
+        "An actually outstanding eligible pre-expiry side-effect update still defers only the affected order; no timeout, event drop, fabricated no-fill, or post-expiry touch is introduced.",
+        "A deterministic lifecycle test holds an earlier receipt, starts expiry processing, then starts later receipts; after the earlier receipt is released, the expired exact-family order reaches the existing terminal path before the later receipts are admitted.",
+        "Existing Maker placement, authoritative TouchNoDepth fill, PostgreSQL timestamp-precision, evidence-unavailable expiry, atomic repository, worker-isolation, and Paper/live exception tests remain passing.",
+        "Documentation states both the new fair ordering and the unchanged limitation that a genuinely non-completing active receipt or outstanding side-effect update remains fail-closed rather than being discarded."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperPlacementHandoff.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperPlacementHandoffTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingWorkerIsolationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "All fair-admission lifecycle and unchanged exact-family Maker safety/atomic/parity regressions pass.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "Complete solution build succeeds with zero errors; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the complete diff, run requirement-gate WorkingTree/Staged validation and git diff --check, and obtain independent semantic review against the verbatim prompts and approved digest.",
+          "expected": "Only approved files change; no signal, execution intent, accounting, Live, schema, configuration, production, timeout, or event-drop behavior changes; reviewer verdict is pass with no findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "pending",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260820-maker-expiry-admission-fairness sha256:<pending>",
+    "semanticDigest": "pending"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}

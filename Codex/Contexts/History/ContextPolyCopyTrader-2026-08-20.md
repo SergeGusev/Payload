@@ -20,3 +20,10 @@ Request:
 
 Result:
 Current read-only production recheck found core Service, ordinary BTC/ETH/SOL Paper betting, references, WebSockets, DB locks, and position marks healthy, but exact ETH Maker-GTD lifecycle not healthy: 15 Pending/Resting orders were overdue across expiries `08:49Z..09:04Z`, oldest by `1,171.456s`, and the backlog was not draining. No persisted lifecycle/mark worker error explained the delay; the decisive deferral state is in-memory/log-only. One further copied-performance stream error occurred at `09:05:32Z`. No production mutation was made.
+
+## 2026-08-20T09:31:45.3424171+00:00
+Request:
+Делай доработку
+
+Result:
+Traced the exact deployed Maker-GTD receipt/expiry admission path and identified a source-level starvation mechanism: expiry returns null whenever any receipt is active and has no priority over later receipts. Drafted and mechanically validated `RC-20260820-maker-expiry-admission-fairness` at digest `sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc`. The proposed behavior waits for already active receipts, prevents later receipts from overtaking expiry, and preserves every existing evidence/outstanding-update/atomic gate without adding a timeout or dropping events. Product and production state were not changed; implementation awaits exact approval.

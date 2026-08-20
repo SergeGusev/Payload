@@ -1,3 +1,16 @@
+## Active Update 2026-08-20 Maker Expiry Admission Fairness Contract
+Goal: Define the approved-behavior boundary for eliminating Maker-GTD expiry starvation under continuous market-data receipts.
+Status: Blocked pending requirement-contract approval
+Done:
+- Traced deployed build `6ceddfca` from `MarketDataWebSocketShardRunner` through `MakerGtdPaperPlacementHandoff.TryEnterExpiryAdmissionAsync` and `PaperTradingProcessor.TryExpireMakerGtdPaperOrderAsync`.
+- Verified the starvation mechanism in source: expiry admission returns a normal null whenever any receipt is active, records no error, and offers no ordering guarantee against later receipts; a continuous receipt stream can therefore defer expiry indefinitely.
+- Drafted `RC-20260820-maker-expiry-admission-fairness` to make expiry admission starvation-free: already active receipts finish, later receipts cannot overtake, and existing evidence/outstanding-update/continuity/atomic gates remain unchanged.
+- Explicitly excluded arbitrary timeouts, event drops, fabricated terminal outcomes, production backlog mutation, signal/execution/accounting changes, and any claim that the correction handles a genuinely hung receipt or side-effect update.
+- Mechanical draft validation passed with semantic digest `sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc`.
+Next: Obtain exact user approval, commit the approved contract parent revision, then implement and verify the bounded source/test/docs change.
+Notes: No product source, production database, service, configuration, strategy, or order was changed during diagnosis/contract drafting.
+Blockers: User must send `APPROVE RC-20260820-maker-expiry-admission-fairness sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc` before material edits.
+
 ## Active Update 2026-08-20 Current Post-Deployment Status Recheck
 Goal: Recheck the current production status after the initial deployment verification.
 Status: Completed read-only; core runtime and ordinary betting healthy, active Maker-GTD expiry backlog is an alert
