@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260819-align-child-progress-catalog-tests-after-217-removal",
+  "title": "Align Child Progress catalog tests after approved 217-strategy removal",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Да, удаляем 217 стратегий"
+    },
+    {
+      "source": "user",
+      "text": "Ок, делай"
+    }
+  ],
+  "scope": {
+    "goal": "Update the existing Child mirror catalog test so its exact Progress lookback expectations match the already approved removal of 217 strategy variants.",
+    "inScope": [
+      "Change only the expected retained Child Progress and Child Progress ROI lookback lists in ChildMirrorStrategyCatalogTests.",
+      "Verify that ordinary Child and Child ROI catalogs remain complete and that the retained Progress subsets match the approved 217-strategy removal."
+    ],
+    "outOfScope": [
+      "Any additional product, catalog, database, trading, deployment, or cleanup behavior change.",
+      "Changing the approved 217 UUID/code allowlist or the three preserved source strategies and their owners."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact ChildProgressMirror and ChildProgressRoiMirror catalog expectations affected by RC-20260819-remove-217-unreferenced-negative-progress-strategies.",
+    "firstVerification": "Run the existing ChildMirrorStrategyCatalogTests against the approved 217-strategy catalog and identify only the stale Progress lookback expectations."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Keep the Child mirror catalog test aligned with the exact retained variants after deleting the approved 217 strategies.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Да, удаляем 217 стратегий",
+      "acceptanceCriteria": [
+        "The test expects zero retained BTC and ETH Child Progress variants and exact retained SOL Child Progress lookbacks 15, 17, 19, 20, 21, 22, 23, and 24.",
+        "The test expects exact retained Child Progress ROI lookbacks BTC 4, 5, 6, 7, 8, 9, and 22; ETH 1 and 20; SOL 9.",
+        "Ordinary Child and Child ROI expectations remain unchanged.",
+        "The ChildMirrorStrategyCatalogTests class and the focused 217-strategy test set pass."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/ChildMirrorStrategyCatalogTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --filter FullyQualifiedName~ChildMirrorStrategyCatalogTests",
+          "expected": "All ChildMirrorStrategyCatalogTests pass with the exact retained Progress lookback sets and unchanged ordinary Child/Child ROI expectations.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260819-align-child-progress-catalog-tests-after-217-removal sha256:49a532d10a4dc81d72e6ff21cc6764c88ba4c7c5a9c1c9b846a63dc52725801a",
+    "semanticDigest": "sha256:49a532d10a4dc81d72e6ff21cc6764c88ba4c7c5a9c1c9b846a63dc52725801a"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/progress_217_diff_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
