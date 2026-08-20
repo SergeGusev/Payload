@@ -41,3 +41,10 @@ APPROVE RC-20260820-maker-expiry-admission-fairness sha256:3377cd58a796cb051825a
 
 Result:
 Implemented the approved starvation-free Maker-GTD expiry admission fence. Active receipts drain first, later receipts cannot overtake expiry, cancellation recovers, and the existing outstanding-update/evidence/continuity/atomic rules remain unchanged. Final focused tests passed 58/58; the full Debug build completed with 0 errors and 126 existing warnings; independent semantic review passed with no findings. No production mutation occurred; final gated commit and push remain.
+
+## 2026-08-20T11:04:28.8727750+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Verified exact deployed build `4934b60f216ad4835d4cdde1c783c81de9edfa12` read-only. Service, heartbeat, PostgreSQL locks, BTC/ETH/SOL references, current Polymarket WebSockets, ordinary Paper entries, linkage, settlements, and position marks were healthy; no Live/shadow activity or enabled overdue run backlog existed. Exact Maker open/overdue was 0/0, but the sole new terminal cohort still reproduced a material delay: six orders expired at `10:24:00Z` and terminalized together at `10:28:44.329197Z` (`284.329s`) as `maker_gtd_evidence_unavailable / maker_gtd_market_data_apply_failed`, with failure evidence received at `10:19:33.212579Z`. Therefore the deployment removed the current open backlog but did not prove timely expiry; the remaining in-memory long-receipt versus outstanding-side-effect cause is not persisted. No production mutation occurred.

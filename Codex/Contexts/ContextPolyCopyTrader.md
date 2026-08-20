@@ -1,3 +1,17 @@
+## Active Update 2026-08-20 Maker Expiry Fairness Deployment Verification
+Goal: Verify production server, betting flow, and exact ETH Maker-GTD expiry behavior after deploying commit `4934b60f`.
+Status: Completed read-only; core runtime and ordinary betting healthy, Maker expiry delay still reproduced
+Done:
+- Verified exact production `192.168.0.101:5432/polycopytrader` in UTC READ ONLY sessions: service runs exact build `4934b60f216ad4835d4cdde1c783c81de9edfa12`, started `2026-08-20T10:18:16.376061Z`, and heartbeat advanced from `11:00:17.189835Z` to `11:04:17.228930Z`; final age was `12.345s`, status `Running / Live`, and `last_error=NULL`.
+- Confirmed current BTC/ETH/SOL references were about 10–11 seconds old; aggregate, crypto-critical, and shard-001 Polymarket WebSockets were Connected/non-stale; PostgreSQL had no idle-in-transaction session, lock waiter, or blocker.
+- Since service start, Paper created 1,846 orders: 1,839 Filled, 6 Expired ETH Maker-GTD, and 1 BTC PartiallyFilledExpired. The last 60-minute bounded linkage audit covered 2,176 orders and found zero missing/multiple run links and zero Filled orders without exactly one fill. At final cutoff `2026-08-20T11:04:28.872775Z`, there were 448 orders in 15 minutes and 117 in 5 minutes; latest order/fill was `11:00:01.751461Z`, latest settlement `11:00:11.889511Z`, and position marks advanced through `11:02:32.847464Z`.
+- Exact Maker inventory remained 28/28, all enabled, unpaused, auto-unpaused, and non-Live. Current Maker open/overdue counts were 0/0; enabled overdue Observed/Entered run counts were also zero. No Live order or Paper/Live shadow decision was created after start.
+- The restart terminalized 29 pre-start expired Maker rows at startup. The only new Maker cohort contained 11 orders created around `10:19:31Z`: 5 Filled and 6 Expired. All six expired at `10:24:00Z` but reached terminal Skipped state together only at `10:28:44.329197Z`, exact delay `284.329s`, with `maker_gtd_evidence_unavailable / market_data_delivery_failed:maker_gtd_market_data_apply_failed`; their persisted failure receipt was `10:19:33.212579Z`.
+- Recorded seven post-start API errors: three one-time BTC/ETH/SOL reference startup writes and four copied-performance ProjectionCycle errors through `10:30:49.378684Z`; no API errors existed in the final 20-minute window.
+Next: Do not claim the fairness deployment fully solved timely Maker expiry. A separate focused diagnosis is required to distinguish a long active receipt from the preserved outstanding side-effect deferral and to remove the remaining approximately 4m44s terminal delay without dropping evidence.
+Notes: Two optional 15-minute latency JOIN queries hit the enforced 15-second timeout and rolled back; one shadow query rolled back on a corrected column-name error. All sessions were READ ONLY and production was unaffected. No service, DB, configuration, strategy, order, or venue mutation occurred.
+Blockers: Database evidence proves the remaining delay and the early `maker_gtd_market_data_apply_failed` record, but the exact in-memory waiting state during `10:24..10:28:44Z` is not persisted, so causation between a long receipt and an outstanding side-effect item remains unknown.
+
 ## Active Update 2026-08-20 Maker Expiry Admission Fairness Implemented
 Goal: Prevent exact ETH Maker-GTD expiry admission from being starved by continuous later market-data receipts.
 Status: Completed locally; final gated commit and push pending
