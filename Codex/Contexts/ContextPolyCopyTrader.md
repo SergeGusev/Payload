@@ -1,3 +1,16 @@
+## Active Update 2026-08-20 Current Post-Deployment Status Recheck
+Goal: Recheck the current production status after the initial deployment verification.
+Status: Completed read-only; core runtime and ordinary betting healthy, active Maker-GTD expiry backlog is an alert
+Done:
+- At exact cutoff `2026-08-20T09:08:31.233102Z`, build `6ceddfcaed35fee713c2a8ab4c2d63cb5e2d8365` remained `Running / Live` with fresh heartbeat, `last_error=NULL`, no idle-in-transaction session, DB lock wait, ungranted lock, or blocker.
+- The preceding five minutes contained 202 new Filled Paper orders: BTC 27, ETH 95, SOL 80. BTC/ETH/SOL reference samples were about 11.5 seconds old; current aggregate/critical/shard-001 WebSockets were Connected/non-stale; position marks remained current.
+- Overdue Entered and enabled overdue Observed runs remained zero, but 15 exact ETH Maker-GTD orders were still `Pending / Resting` after effective expiry: 1 expired at `08:49Z`, 5 at `08:54Z`, 5 at `08:59Z`, and 4 at `09:04Z`. The oldest was overdue by `1,171.456s`.
+- No persisted `PaperTradingWorker`, `PaperPositionMarkWorker`, `MarketDataSideEffectQueue`, or `PaperTradingMarketDataUpdater` error existed after the deployment. The last Maker terminal expiry remained the earlier `08:38:14Z` row, so the 15-row backlog was not draining at the sample.
+- One additional copied-performance `ProjectionCycle / Exception while reading from stream` occurred at `09:05:32.211278Z`; it did not stop ordinary entries or core runtime.
+Next: Treat Maker-GTD lifecycle as not healthy and perform a focused diagnosis/repair only on user request. Do not infer the in-memory deferral cause from database evidence alone.
+Notes: Production inspection was strictly read-only with UTC and bounded statement timeouts; no service, database, configuration, strategy, or order mutation occurred.
+Blockers: Current database evidence cannot distinguish expiry-admission starvation from a permanently outstanding market-data side-effect item because those decisive states are in-memory/log-only.
+
 ## Active Update 2026-08-20 Post-Deployment Server And Betting Verification
 Goal: Verify the deployed lifecycle-worker isolation build, production runtime, Paper betting, Maker-GTD expiry, position marks, feeds, and operational backlogs.
 Status: Completed read-only; core runtime and betting are healthy, but Maker expiry latency and copied-performance stream errors remain warnings

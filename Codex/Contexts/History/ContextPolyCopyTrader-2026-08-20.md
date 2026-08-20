@@ -13,3 +13,10 @@ Request:
 
 Result:
 Verified exact deployed build `6ceddfcaed35fee713c2a8ab4c2d63cb5e2d8365` read-only on production. Service, heartbeat, BTC/ETH/SOL references, current Polymarket WebSockets, position marks, betting, linkage, latency, and active backlogs were healthy; the `08:40Z` cycle had 302 orders with zero linkage/fill defects or late entries. Four exact ETH Maker-GTD orders eventually expired automatically but `239–254s` late with `maker_gtd_market_data_apply_failed`, so lifecycle isolation is active but expiry latency remains a warning. Five copied-performance stream errors stopped by `08:37:02Z` and refreshes resumed, while a 555-row queue remained. No production mutation was made.
+
+## 2026-08-20T09:08:31.2331020Z
+Request:
+То есть сейчас какой статус?
+
+Result:
+Current read-only production recheck found core Service, ordinary BTC/ETH/SOL Paper betting, references, WebSockets, DB locks, and position marks healthy, but exact ETH Maker-GTD lifecycle not healthy: 15 Pending/Resting orders were overdue across expiries `08:49Z..09:04Z`, oldest by `1,171.456s`, and the backlog was not draining. No persisted lifecycle/mark worker error explained the delay; the decisive deferral state is in-memory/log-only. One further copied-performance stream error occurred at `09:05:32Z`. No production mutation was made.
