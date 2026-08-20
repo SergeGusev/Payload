@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260820-paper-lifecycle-worker-isolation",
+  "title": "Isolate Paper order lifecycle from position-mark refresh",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Доработай"
+    },
+    {
+      "source": "user",
+      "text": "Делаем вариант 1"
+    }
+  ],
+  "scope": {
+    "goal": "Run Paper open-order lifecycle processing independently from Paper position mark refresh so a slow or blocked mark-refresh pass cannot delay Maker-GTD expiry or any other open-order lifecycle action.",
+    "inScope": [
+      "Keep PaperTradingWorker as the dedicated open-order lifecycle worker using the existing PaperTrading:OpenOrderProcessingIntervalSeconds cadence.",
+      "Remove position mark refresh from IPaperTradingProcessor.ProcessOpenOrdersAsync while preserving every existing open-order priority, fill, expiry, persistence, and error path.",
+      "Expose the existing position-mark refresh operation through a separate IPaperPositionMarkProcessor contract implemented by the same stateless PaperTradingProcessor singleton.",
+      "Add a separately registered PaperPositionMarkWorker that awaits one complete mark-refresh pass before its next delay and uses the existing PaperTrading:OpenOrderProcessingIntervalSeconds cadence without adding configuration.",
+      "Preserve the existing position mark calculation, fresh WebSocket cache preference, REST fallback, optimistic concurrency update, exposure-cache update, and per-position error handling.",
+      "Add deterministic tests proving that a blocked mark refresh does not block an expired exact-family Maker-GTD lifecycle pass and that mark refresh continues through the separate worker path.",
+      "Update the current README Paper worker description to state the independent lifecycle and mark-refresh loops.",
+      "Build, focused-test, mechanically validate, independently review, commit, and push the local correction."
+    ],
+    "outOfScope": [
+      "Changing any strategy signal, threshold, selected outcome, lookback window, entry timing, order price, stake, risk gate, Maker-GTD TouchNoDepth evidence, fill model, GTD/PostOnly behavior, Paper PnL, fee formula, settlement formula, or Live execution.",
+      "Adding a position-mark batch-size or time-budget policy, changing mark calculations, deduplicating positions by asset, changing cache freshness rules, or adding a new configuration option.",
+      "Changing database schema, repository queries, persisted records, Dashboard projections, external APIs, or market-data subscriptions.",
+      "Expiring, filling, settling, replaying, or rewriting production records directly; restarting, deploying, or reconfiguring the service.",
+      "Modifying, staging, committing, or incorporating the unrelated dirty Historical Gross/Net and Progress-strategy worktree changes."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "All Paper open orders handled by PaperTradingProcessor, with the observed production incident specifically covering 13 expired exact ETH Reference Average Maker-GTD group-8223 Pending/Resting orders at the final 2026-08-20T06:58:52.521591Z read-only snapshot. No production row is a mutation target.",
+    "firstVerification": "Trace the deployed ca24eff3 PaperTradingWorker, PaperTradingProcessor, DI registration, position-mark loop, and focused tests; independently verify from production read-only evidence that open-order lifecycle was delayed while core betting remained active."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Paper open-order lifecycle processing must run independently from Paper position mark refresh.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Делаем вариант 1",
+      "acceptanceCriteria": [
+        "IPaperTradingProcessor.ProcessOpenOrdersAsync performs no whole-portfolio position-mark refresh before returning, including when there are zero open orders.",
+        "PaperTradingWorker continues awaiting only the open-order lifecycle operation and then its existing configured delay; it does not await the separate mark-refresh worker.",
+        "A separately hosted PaperPositionMarkWorker invokes IPaperPositionMarkProcessor.RefreshPositionMarksAsync and cannot run overlapping refresh passes within its own loop.",
+        "Both workers use the existing positive PaperTrading:OpenOrderProcessingIntervalSeconds value; no new cadence, batch, timeout, or configuration default is introduced.",
+        "When a mark-refresh call is deliberately blocked in a test, an independently started PaperTradingWorker still executes its open-order cycle and an expired valid Maker-GTD order reaches the existing terminal expiry path.",
+        "The service registers exactly one PaperTradingProcessor singleton and maps both processor interfaces to that same instance, then hosts both workers independently."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperPositionMarkProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperPositionMarkWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingWorkerIsolationTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "All isolation and Maker lifecycle tests pass, including a blocked mark-refresh worker concurrent with a successful open-order cycle and an expired Maker-GTD terminal transition.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Inspect Program.cs registrations and the complete worker/processor diff.",
+          "expected": "Exactly one PaperTradingProcessor singleton backs both interfaces; PaperTradingWorker and PaperPositionMarkWorker are separate hosted services; ProcessOpenOrdersAsync contains no call to RefreshPositionMarksAsync or UpdatePositionMarksAsync.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "The isolation must preserve existing Paper order, mark, accounting, and safety semantics while changing only scheduling ownership.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Доработай",
+      "acceptanceCriteria": [
+        "Open-order priority remains expired first, then initial-executable opening-limit orders, then earliest expiry; the configured fill-simulation batch cap remains unchanged.",
+        "Exact Maker-GTD expiry continues using the existing atomic evidence/mutation path, mandatory label, PaperOnly boundary, and Live-disabled closed exception without changing fill or expiry classification.",
+        "RefreshPositionMarksAsync uses the same snapshot positions and unchanged estimated value, Gross unrealized PnL, Net unrealized PnL, WebSocket-cache-first/REST-fallback lookup, optimistic repository update, exposure-cache update, and per-position error persistence logic.",
+        "Concurrent settlement or fill cannot be overwritten by a stale mark update; existing optimistic-concurrency regressions remain passing through the new mark-refresh entry point.",
+        "No product database, service, strategy, order, position, settlement, configuration, deployment, restart, or external venue state is changed by Codex in this task.",
+        "README describes two independent workers without claiming that position marks have a new freshness guarantee or batch bound."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperPositionMarkProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperPositionMarkWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/ResilienceTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingWorkerIsolationTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~ResilienceTests.PaperTradingProcessor|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Existing mark timeout, missing-book, stale-update CAS, successful mark, open-order resilience, Maker lifecycle, and new worker-isolation tests all pass through their correct separated entry points.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "The complete solution builds with zero errors; warnings and any baseline test debt are reported exactly.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Run git diff --check, requirement-gate WorkingTree/Staged validation, and an independent semantic review of the verbatim requests, approved contract, complete isolated diff, and evidence.",
+          "expected": "All mechanical checks pass and the independent reviewer records comparedOriginalRequests=true, verdict=pass, findings=[].",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260820-paper-lifecycle-worker-isolation sha256:08bd4998940c9e8c18e5d855610aa6128a3fde7a559217006aacf97822edcf41",
+    "semanticDigest": "sha256:08bd4998940c9e8c18e5d855610aa6128a3fde7a559217006aacf97822edcf41"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
