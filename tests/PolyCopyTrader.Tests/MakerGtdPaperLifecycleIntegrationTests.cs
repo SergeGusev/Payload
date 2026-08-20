@@ -491,39 +491,36 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     }
 
     [Fact]
-    public async Task Processor_ActiveFrameReceipt_DefersExpiryUntilReceiptAdmissionCompletes()
+    public async Task Processor_QueuedExpiryCompletesBeforeLaterFrameReceiptIsAdmitted()
     {
         var now = DateTimeOffset.UtcNow;
         var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
         var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
         var clobClient = new CountingClobClient();
-        var handoff = new MakerGtdPaperPlacementHandoff();
+        var handoff = new CoordinatedExpiryHandoff();
         var processor = CreateProcessor(
             scenario.Repository,
             cache,
             clobClient,
             makerGtdPaperPlacementHandoff: handoff);
-        var receiptAdmission = await handoff.EnterMarketDataReceiptAsync();
+        var activeReceipt = await handoff.EnterMarketDataReceiptAsync();
+        var processingTask = processor.ProcessOpenOrdersAsync();
 
-        try
-        {
-            var deferredResult = await processor.ProcessOpenOrdersAsync();
+        await handoff.ExpiryRequested.Task;
+        var laterReceiptTask = handoff.EnterMarketDataReceiptAsync().AsTask();
+        Assert.False(processingTask.IsCompleted);
+        Assert.False(laterReceiptTask.IsCompleted);
 
-            Assert.Equal(0, deferredResult.OrdersExpired);
-            Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
-            Assert.Equal(
-                StrategyMarketPaperRunStatuses.Resting,
-                Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
-        }
-        finally
-        {
-            await receiptAdmission.DisposeAsync();
-        }
+        await activeReceipt.DisposeAsync();
+        await handoff.ExpiryDisposalStarted.Task;
 
-        var expiredResult = await processor.ProcessOpenOrdersAsync();
-
-        Assert.Equal(1, expiredResult.OrdersExpired);
         Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.False(laterReceiptTask.IsCompleted);
+
+        handoff.AllowExpiryRelease.TrySetResult();
+        var expiredResult = await processingTask;
+        await using var laterReceipt = await laterReceiptTask;
+        Assert.Equal(1, expiredResult.OrdersExpired);
         var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
         Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
         Assert.Equal(0, clobClient.OrderBookCalls);
@@ -963,6 +960,119 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         TestAppRepository Repository,
         PaperOrder Order,
         StrategyMarketPaperRun Run);
+
+    private sealed class CoordinatedExpiryHandoff : IMakerGtdPaperPlacementHandoff
+    {
+        private readonly MakerGtdPaperPlacementHandoff inner = new();
+
+        public TaskCompletionSource ExpiryRequested { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ExpiryDisposalStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource AllowExpiryRelease { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ValueTask<IMakerGtdPaperPlacementAdmission> EnterPlacementAdmissionAsync(
+            string assetId,
+            CancellationToken cancellationToken = default)
+        {
+            return inner.EnterPlacementAdmissionAsync(assetId, cancellationToken);
+        }
+
+        public ValueTask<IAsyncDisposable> EnterMarketDataAdmissionAsync(
+            string assetId,
+            CancellationToken cancellationToken = default)
+        {
+            return inner.EnterMarketDataAdmissionAsync(assetId, cancellationToken);
+        }
+
+        public ValueTask<IAsyncDisposable> EnterMarketDataReceiptAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return inner.EnterMarketDataReceiptAsync(cancellationToken);
+        }
+
+        public async ValueTask<IAsyncDisposable> EnterExpiryAdmissionAsync(
+            CancellationToken cancellationToken = default)
+        {
+            var admissionTask = inner.EnterExpiryAdmissionAsync(cancellationToken);
+            ExpiryRequested.TrySetResult();
+            var admission = await admissionTask.ConfigureAwait(false);
+            return new CoordinatedExpiryLease(this, admission);
+        }
+
+        public IReadOnlySet<Guid> GetPendingOrderIds(string assetId) => inner.GetPendingOrderIds(assetId);
+
+        public Task WaitForPublicationAsync(
+            IReadOnlySet<Guid>? eligiblePaperOrderIds,
+            CancellationToken cancellationToken = default)
+        {
+            return inner.WaitForPublicationAsync(eligiblePaperOrderIds, cancellationToken);
+        }
+
+        public void MarkPublished(Guid paperOrderId) => inner.MarkPublished(paperOrderId);
+
+        public void MarkFailed(Guid paperOrderId) => inner.MarkFailed(paperOrderId);
+
+        public void TrackMakerGtdPaperOrder(Guid paperOrderId, string executionSource) =>
+            inner.TrackMakerGtdPaperOrder(paperOrderId, executionSource);
+
+        public void RecordMarketDataFailure(
+            string? assetId,
+            string? conditionId,
+            DateTimeOffset receivedAtUtc,
+            IReadOnlySet<Guid>? affectedPaperOrderIds,
+            string failureCode)
+        {
+            inner.RecordMarketDataFailure(
+                assetId,
+                conditionId,
+                receivedAtUtc,
+                affectedPaperOrderIds,
+                failureCode);
+        }
+
+        public bool TryGetMarketDataFailure(
+            Guid paperOrderId,
+            string assetId,
+            string conditionId,
+            DateTimeOffset acceptedAfterUtc,
+            DateTimeOffset expiresBeforeUtc,
+            out MakerGtdPaperMarketDataFailure? failure)
+        {
+            return inner.TryGetMarketDataFailure(
+                paperOrderId,
+                assetId,
+                conditionId,
+                acceptedAfterUtc,
+                expiresBeforeUtc,
+                out failure);
+        }
+
+        public void ClearMarketDataFailures(Guid paperOrderId) => inner.ClearMarketDataFailures(paperOrderId);
+
+        private sealed class CoordinatedExpiryLease(
+            CoordinatedExpiryHandoff owner,
+            IAsyncDisposable innerLease) : IAsyncDisposable
+        {
+            private IAsyncDisposable? currentLease = innerLease;
+
+            public async ValueTask DisposeAsync()
+            {
+                var lease = Interlocked.Exchange(ref currentLease, null);
+                if (lease is null)
+                {
+                    return;
+                }
+
+                owner.ExpiryDisposalStarted.TrySetResult();
+                await owner.AllowExpiryRelease.Task.ConfigureAwait(false);
+                await lease.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
 
     private sealed class ThrowingExposureSnapshotCache : IExposureSnapshotCache
     {

@@ -110,6 +110,17 @@ stale/reconnect/market-data continuity, exact-family, TouchNoDepth, pricing,
 GTD/PostOnly, PaperOnly, and Live-disabled gates do not change. The correction
 does not reopen, replay, or rewrite a record already terminal before deployment.
 
+Expiry evaluation for this exact family uses a starvation-free market-data
+receipt handoff. Receipts already active when expiry requests admission finish
+first; receipts arriving later wait until the exclusive expiry lease is released
+and therefore cannot continually overtake it. Receipt processing remains
+concurrent while no expiry request is pending. After admission, the existing
+queued/in-flight eligible pre-expiry update check, evidence parsing, continuity,
+and atomic terminal mutation remain unchanged. No timeout, frame drop, or guessed
+terminal result is introduced: a genuinely non-completing receipt or outstanding
+side-effect update remains fail-closed and can still block the affected lifecycle
+work.
+
 For these exact 28 strategies, ordinary Paper orders, positions, fills, PnL, win
 rate, and performance inclusion is intentional. Every result must carry the label
 `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. The

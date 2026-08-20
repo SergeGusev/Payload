@@ -1,3 +1,16 @@
+## Active Update 2026-08-20 Maker Expiry Admission Fairness Implemented
+Goal: Prevent exact ETH Maker-GTD expiry admission from being starved by continuous later market-data receipts.
+Status: Completed locally; final gated commit and push pending
+Done:
+- Replaced opportunistic nullable expiry admission with a starvation-free asynchronous handoff: already active receipts drain, later receipts wait, queued expiries receive exclusive leases, and receipt concurrency remains unchanged when no expiry is pending.
+- Updated `PaperTradingProcessor` to await non-null expiry admission while preserving the existing queued/in-flight side-effect deferral, evidence, continuity, and atomic terminal paths.
+- Added deterministic regressions for 64 later receipts, multiple expiry waiters, cancellation recovery, no-op behavior, and real processor terminal ordering; documented the unchanged fail-closed limit for genuinely hung receipts/updates.
+- Final focused verification passed 58/58; complete Debug build passed with 0 errors and 126 existing warnings; WorkingTree gate and diff check passed.
+- Independent reviewer `agent:/root/maker_expiry_fairness_review` compared the verbatim prompts, approved digest, parent approval commit, complete diff, and evidence and returned PASS with no findings.
+Next: Run completed-contract WorkingTree/Staged gates, commit, push, and clean the marked temp run.
+Notes: The first combined VSTest launch hit a local `PlatformEqtTrace` CLR `0x80131506` startup crash after compilation; the immediate no-build/no-restore rerun passed 58/58. Production, database, service, configuration, strategies, and orders were not mutated.
+Blockers: None.
+
 ## Active Update 2026-08-20 Maker Expiry Admission Fairness Approved
 Goal: Implement the approved starvation-free Maker-GTD receipt/expiry admission ordering.
 Status: Approved; parent approval commit pending

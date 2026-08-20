@@ -13,7 +13,7 @@ public interface IMakerGtdPaperPlacementHandoff
     ValueTask<IAsyncDisposable> EnterMarketDataReceiptAsync(
         CancellationToken cancellationToken = default);
 
-    ValueTask<IAsyncDisposable?> TryEnterExpiryAdmissionAsync(
+    ValueTask<IAsyncDisposable> EnterExpiryAdmissionAsync(
         CancellationToken cancellationToken = default);
 
     IReadOnlySet<Guid> GetPendingOrderIds(string assetId);
@@ -68,7 +68,8 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
         .ToArray();
     private readonly object pendingSync = new();
     private readonly object failureSync = new();
-    private readonly SemaphoreSlim receiptExpiryGate = new(1, 1);
+    private readonly object receiptExpirySync = new();
+    private readonly LinkedList<ExpiryAdmissionWaiter> pendingExpiryAdmissions = [];
     private readonly Dictionary<Guid, PendingOrder> pendingOrders = [];
     private readonly Dictionary<string, HashSet<Guid>> pendingOrderIdsByAsset = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, List<MakerGtdPaperMarketDataFailure>> failuresByOrderId = [];
@@ -76,6 +77,8 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
     private readonly List<MakerGtdPaperMarketDataFailure> unattributedFailures = [];
     private DateTimeOffset? failureHistoryIncompleteFromUtc;
     private DateTimeOffset? failureHistoryIncompleteThroughUtc;
+    private TaskCompletionSource<bool>? receiptAdmissionSignal;
+    private bool expiryAdmissionActive;
     private int activeMarketDataReceipts;
     private int trackedOrderFailureCount;
 
@@ -144,30 +147,44 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
     public async ValueTask<IAsyncDisposable> EnterMarketDataReceiptAsync(
         CancellationToken cancellationToken = default)
     {
-        await receiptExpiryGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        while (true)
         {
-            Interlocked.Increment(ref activeMarketDataReceipts);
-        }
-        finally
-        {
-            receiptExpiryGate.Release();
-        }
+            Task admissionTask;
+            lock (receiptExpirySync)
+            {
+                if (!expiryAdmissionActive && pendingExpiryAdmissions.Count == 0)
+                {
+                    activeMarketDataReceipts++;
+                    return new MarketDataReceiptLease(this);
+                }
 
-        return new MarketDataReceiptLease(this);
+                receiptAdmissionSignal ??= new TaskCompletionSource<bool>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                admissionTask = receiptAdmissionSignal.Task;
+            }
+
+            await admissionTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
-    public async ValueTask<IAsyncDisposable?> TryEnterExpiryAdmissionAsync(
+    public ValueTask<IAsyncDisposable> EnterExpiryAdmissionAsync(
         CancellationToken cancellationToken = default)
     {
-        await receiptExpiryGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        if (activeMarketDataReceipts > 0)
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (receiptExpirySync)
         {
-            receiptExpiryGate.Release();
-            return null;
-        }
+            if (!expiryAdmissionActive &&
+                activeMarketDataReceipts == 0 &&
+                pendingExpiryAdmissions.Count == 0)
+            {
+                expiryAdmissionActive = true;
+                return ValueTask.FromResult<IAsyncDisposable>(new ExpiryAdmissionLease(this));
+            }
 
-        return new AdmissionLease(receiptExpiryGate);
+            var waiter = new ExpiryAdmissionWaiter();
+            waiter.Node = pendingExpiryAdmissions.AddLast(waiter);
+            return WaitForExpiryAdmissionAsync(waiter, cancellationToken);
+        }
     }
 
     public IReadOnlySet<Guid> GetPendingOrderIds(string assetId)
@@ -440,20 +457,105 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
         return assetId.Trim();
     }
 
-    private async ValueTask CompleteMarketDataReceiptAsync()
+    private ValueTask CompleteMarketDataReceiptAsync()
     {
-        await receiptExpiryGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
-        try
+        lock (receiptExpirySync)
         {
             if (activeMarketDataReceipts > 0)
             {
-                Interlocked.Decrement(ref activeMarketDataReceipts);
+                activeMarketDataReceipts--;
+            }
+
+            TryGrantNextExpiryAdmissionUnderLock();
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    private async ValueTask<IAsyncDisposable> WaitForExpiryAdmissionAsync(
+        ExpiryAdmissionWaiter waiter,
+        CancellationToken cancellationToken)
+    {
+        using var registration = cancellationToken.CanBeCanceled
+            ? cancellationToken.Register(
+                static state =>
+                {
+                    var registrationState = (ExpiryCancellationState)state!;
+                    registrationState.Owner.CancelExpiryAdmission(
+                        registrationState.Waiter,
+                        registrationState.CancellationToken);
+                },
+                new ExpiryCancellationState(this, waiter, cancellationToken))
+            : default;
+        return await waiter.Admission.Task.ConfigureAwait(false);
+    }
+
+    private void CancelExpiryAdmission(
+        ExpiryAdmissionWaiter waiter,
+        CancellationToken cancellationToken)
+    {
+        TaskCompletionSource<bool>? receiptSignal = null;
+        lock (receiptExpirySync)
+        {
+            if (waiter.Node?.List is null)
+            {
+                return;
+            }
+
+            pendingExpiryAdmissions.Remove(waiter.Node);
+            waiter.Node = null;
+            waiter.Admission.TrySetCanceled(cancellationToken);
+            if (!expiryAdmissionActive && pendingExpiryAdmissions.Count == 0)
+            {
+                receiptSignal = ReleaseReceiptAdmissionsUnderLock();
             }
         }
-        finally
+
+        receiptSignal?.TrySetResult(true);
+    }
+
+    private void CompleteExpiryAdmission()
+    {
+        TaskCompletionSource<bool>? receiptSignal = null;
+        lock (receiptExpirySync)
         {
-            receiptExpiryGate.Release();
+            if (!expiryAdmissionActive)
+            {
+                return;
+            }
+
+            expiryAdmissionActive = false;
+            if (!TryGrantNextExpiryAdmissionUnderLock())
+            {
+                receiptSignal = ReleaseReceiptAdmissionsUnderLock();
+            }
         }
+
+        receiptSignal?.TrySetResult(true);
+    }
+
+    private bool TryGrantNextExpiryAdmissionUnderLock()
+    {
+        if (expiryAdmissionActive ||
+            activeMarketDataReceipts > 0 ||
+            pendingExpiryAdmissions.First is not { } first)
+        {
+            return false;
+        }
+
+        var waiter = first.Value;
+        pendingExpiryAdmissions.RemoveFirst();
+        waiter.Node = null;
+        expiryAdmissionActive = true;
+        waiter.Admission.TrySetResult(new ExpiryAdmissionLease(this));
+        return true;
+    }
+
+    private TaskCompletionSource<bool>? ReleaseReceiptAdmissionsUnderLock()
+    {
+        var signal = receiptAdmissionSignal;
+        receiptAdmissionSignal = null;
+        return signal;
     }
 
     private void AddUnattributedFailure(MakerGtdPaperMarketDataFailure failure)
@@ -504,6 +606,19 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
         string AssetId,
         TaskCompletionSource<bool> Publication);
 
+    private sealed class ExpiryAdmissionWaiter
+    {
+        public TaskCompletionSource<IAsyncDisposable> Admission { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public LinkedListNode<ExpiryAdmissionWaiter>? Node { get; set; }
+    }
+
+    private sealed record ExpiryCancellationState(
+        MakerGtdPaperPlacementHandoff Owner,
+        ExpiryAdmissionWaiter Waiter,
+        CancellationToken CancellationToken);
+
     private sealed class AdmissionLease(SemaphoreSlim admissionGate) : IAsyncDisposable
     {
         private SemaphoreSlim? gate = admissionGate;
@@ -525,6 +640,17 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
             return capturedOwner is null
                 ? ValueTask.CompletedTask
                 : capturedOwner.CompleteMarketDataReceiptAsync();
+        }
+    }
+
+    private sealed class ExpiryAdmissionLease(MakerGtdPaperPlacementHandoff owner) : IAsyncDisposable
+    {
+        private MakerGtdPaperPlacementHandoff? currentOwner = owner;
+
+        public ValueTask DisposeAsync()
+        {
+            Interlocked.Exchange(ref currentOwner, null)?.CompleteExpiryAdmission();
+            return ValueTask.CompletedTask;
         }
     }
 
@@ -581,10 +707,10 @@ internal sealed class NoOpMakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacemen
         return ValueTask.FromResult<IAsyncDisposable>(NoOpLease.Instance);
     }
 
-    public ValueTask<IAsyncDisposable?> TryEnterExpiryAdmissionAsync(
+    public ValueTask<IAsyncDisposable> EnterExpiryAdmissionAsync(
         CancellationToken cancellationToken = default)
     {
-        return ValueTask.FromResult<IAsyncDisposable?>(NoOpLease.Instance);
+        return ValueTask.FromResult<IAsyncDisposable>(NoOpLease.Instance);
     }
 
     public IReadOnlySet<Guid> GetPendingOrderIds(string assetId)

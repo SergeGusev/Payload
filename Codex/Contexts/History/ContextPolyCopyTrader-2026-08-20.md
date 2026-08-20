@@ -34,3 +34,10 @@ APPROVE RC-20260820-maker-expiry-admission-fairness sha256:3377cd58a796cb051825a
 
 Result:
 Recorded exact approval for `RC-20260820-maker-expiry-admission-fairness` without changing its semantic payload. The approved contract must now be mechanically validated and committed as the parent revision before any product edit.
+
+## 2026-08-20T09:45:33.1694981+00:00
+Request:
+APPROVE RC-20260820-maker-expiry-admission-fairness sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc
+
+Result:
+Implemented the approved starvation-free Maker-GTD expiry admission fence. Active receipts drain first, later receipts cannot overtake expiry, cancellation recovers, and the existing outstanding-update/evidence/continuity/atomic rules remain unchanged. Final focused tests passed 58/58; the full Debug build completed with 0 errors and 126 existing warnings; independent semantic review passed with no findings. No production mutation occurred; final gated commit and push remain.

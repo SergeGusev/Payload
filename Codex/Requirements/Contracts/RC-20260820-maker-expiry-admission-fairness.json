@@ -3,7 +3,7 @@
   "contractId": "RC-20260820-maker-expiry-admission-fairness",
   "title": "Prevent Maker-GTD expiry admission starvation",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -65,8 +65,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperPlacementHandoffTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Deterministic tests prove active receipts drain before expiry, later receipts cannot overtake, receipt concurrency remains, cancellation recovers, and no sleep/timing guess is required.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Combined final focused TRX D:\\CodexTemp\\runs\\manual-cc234b913d6c49519bcf265fb12a875d\\results\\ver002-rerun\\ver002-rerun.trx completed with total/executed/passed=58, failed/error/skipped=0. It includes all MakerGtdPaperPlacementHandoffTests: active receipts drain, 64 later receipts cannot overtake, concurrent receipts remain admitted without pending expiry, multiple queued expiries precede later receipts, cancellation recovers, and the no-op admission is non-null/nonblocking."
         }
       ]
     },
@@ -100,24 +100,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "All fair-admission lifecycle and unchanged exact-family Maker safety/atomic/parity regressions pass.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Combined final focused TRX D:\\CodexTemp\\runs\\manual-cc234b913d6c49519bcf265fb12a875d\\results\\ver002-rerun\\ver002-rerun.trx completed with 58/58 passed and no failures/errors/skips. The lifecycle regression proves terminal expiry is reached before a later receipt is admitted; worker isolation, atomic repository, exact-family Reference Average Maker, PostgreSQL precision, evidence, and outstanding-update regressions pass. The first combined VSTest launch crashed in PlatformEqtTrace with CLR 0x80131506 after successful compilation; the immediate no-build/no-restore rerun produced this clean final TRX."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "Complete solution build succeeds with zero errors; warnings are reported exactly.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path D:\\CodexTemp\\runs\\manual-cc234b913d6c49519bcf265fb12a875d\\artifacts\\build -v:minimal completed with 0 errors and 126 existing warnings."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Inspect the complete diff, run requirement-gate WorkingTree/Staged validation and git diff --check, and obtain independent semantic review against the verbatim prompts and approved digest.",
           "expected": "Only approved files change; no signal, execution intent, accounting, Live, schema, configuration, production, timeout, or event-drop behavior changes; reviewer verdict is pass with no findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Only the six approved product/test/doc paths changed. WorkingTree requirement gate passed with governedFiles=6; git diff --check passed with EOL advisories only. Independent reviewer agent:/root/maker_expiry_fairness_review compared the verbatim prompts, approved contract/digest, approval parent 18c182c6, full diff d54f5acd6d7f0ea6525572b255dc0276f0535f06, tests, and build, and returned PASS with findings=[]."
         }
       ]
     }
@@ -131,9 +131,9 @@
     "semanticDigest": "sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/maker_expiry_fairness_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

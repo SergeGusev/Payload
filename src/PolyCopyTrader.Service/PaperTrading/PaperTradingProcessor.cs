@@ -849,17 +849,7 @@ public sealed class PaperTradingProcessor(
             return false;
         }
 
-        var expiryAdmission = await makerGtdHandoff.TryEnterExpiryAdmissionAsync(cancellationToken);
-        if (expiryAdmission is null)
-        {
-            logger.LogDebug(
-                "Maker-GTD Paper expiry deferred while a received market-data frame is being admitted. PaperOrderId={PaperOrderId} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
-                order.Id,
-                order.ExpiresAtUtc);
-            return false;
-        }
-
-        await using var acquiredExpiryAdmission = expiryAdmission;
+        await using var expiryAdmission = await makerGtdHandoff.EnterExpiryAdmissionAsync(cancellationToken);
         var hasOrderEvidence = MakerGtdPaperOrderEvidenceParser.TryParse(
             order,
             out var orderEvidence,
