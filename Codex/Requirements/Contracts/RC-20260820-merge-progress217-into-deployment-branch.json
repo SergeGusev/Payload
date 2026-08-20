@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260820-merge-progress217-into-deployment-branch",
+  "title": "Merge verified Progress-217 release into the deployment branch",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Почему ты вдруг начал делать в отдельных ветках? Можешь делать, если тебе удобно, но в конце обязательно мерж в основную ветку, из которой я выкладываю"
+    }
+  ],
+  "scope": {
+    "goal": "Merge the already approved and verified Progress-217 source-release history into the exact deployment branch codex/reference-average-available-windows, preserve all newer deployment-branch work, validate the merged result, and push that branch so the user's ordinary deployment contains the correction.",
+    "inScope": [
+      "Require the deployment branch to remain exactly codex/reference-average-available-windows at 1892a926fdf64ce9c4f19a1a82fc70aa7bc1053b and synchronized 0/0 with origin/codex/reference-average-available-windows before the merge.",
+      "Merge codex/progress-purge-217 through exact tip 6cec2351fe83ed3aefa6ea8d99f92ff5159519d1 with a non-squashed merge so approval commits 1d5361cc, a735d5ff, and 510b036b remain in history.",
+      "Preserve every current deployment-branch product change and the complete approved Progress-217 behavior: exact 217 catalog/seed exclusion, preservation of the three referenced sources and three retained LowerEnter owners, and absence of automatic database/history cleanup.",
+      "Resolve only the three previewed text conflicts: retain both context histories in Codex/Contexts/ContextPolyCopyTrader.md and Codex/Contexts/History/ContextPolyCopyTrader-2026-08-19.md, and combine current README behavior documentation with the staged Progress-217 catalog/history wording.",
+      "Run the complete Release solution build, focused Progress catalog/seed/reference tests, and the isolated PostgreSQL double-initializer history-preservation tests against the merged source.",
+      "Obtain independent semantic review, complete requirement validation and diff checks, create the merge commit, and push the exact deployment branch to its existing origin upstream.",
+      "Record the standing workflow rule that future feature branches must be merged into the user's deployment branch before reporting them ready to deploy."
+    ],
+    "outOfScope": [
+      "Changing the exact 217 target set, Progress behavior, retained references, or database cleanup semantics.",
+      "Deleting or rewriting any local/product strategy row or history, executing cleanup SQL, backing up a database, or reclaiming database space.",
+      "Deploying or restarting the service; the user performs the ordinary deployment after the pushed merge.",
+      "Resolving an unexpected product-code conflict by preference. Any conflict outside the three previewed text files is a fail-closed blocker requiring a revised contract.",
+      "Squashing, rebasing, cherry-picking away approval history, force-pushing, or changing another branch."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact Git range from merge base d27b5f385c8d4848f3facc0d799c0cae2f9e6540 through deployment tip 1892a926fdf64ce9c4f19a1a82fc70aa7bc1053b and Progress tip 6cec2351fe83ed3aefa6ea8d99f92ff5159519d1; no database data period.",
+    "firstVerification": "Read-only verify branch identity, clean status, upstream divergence, merge base, unique commits, and exact conflict paths before any merge."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Merge the verified Progress-217 branch into the exact deployment branch while preserving both histories and all approved behavior.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "обязательно мерж в основную ветку, из которой я выкладываю",
+      "acceptanceCriteria": [
+        "The merge parentage contains deployment tip 1892a926 and Progress tip 6cec2351 without squash or rewritten approval commits.",
+        "The exact 217 remain absent from runtime/static/dynamic catalog output, while the three referenced sources and three retained owners remain exact.",
+        "The merged service contains no automatic 217 strategy/history cleanup path or enabled cleanup migration.",
+        "All deployment-branch product work after merge base d27b5f38 remains present.",
+        "Only README and context/history conflicts are manually combined; any unexpected product conflict stops the merge."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/ChildMirrorStrategyCatalogTests.cs",
+        "README.md",
+        "docs/configuration_reference.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-19.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Inspect merge parents, retained unique commits, exact merged catalog cardinalities, six retained links, seed SQL, and absence of automatic cleanup SQL.",
+          "expected": "Both histories and all exact Progress-217 semantics are present with no unapproved product conflict or cleanup path.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Verify the merged deployment source before making it available for deployment.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "в конце",
+      "acceptanceCriteria": [
+        "The complete Release solution build finishes with zero errors.",
+        "Focused exact catalog, seed, retained-reference, Child Progress, and processor tests pass.",
+        "A fresh isolated PostgreSQL fixture proves two schema initializations preserve existing stopped target rows and representative structured history exactly and create no cleanup marker.",
+        "WorkingTree, staged/range requirement gates and diff checks pass, and independent review reports PASS with no findings."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/ChildMirrorStrategyCatalogTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln in Release with all temporary outputs under one marked D:\\CodexTemp run.",
+          "expected": "Build completes with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run focused non-PostgreSQL Progress catalog tests and the fresh isolated PostgreSQL initializer/history-preservation tests against the merged branch.",
+          "expected": "All selected tests pass with no target/history rewrite and no cleanup marker.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Independent reviewer compares this verbatim request, approved contract, merge result, conflict resolutions, and build/test/gate evidence.",
+          "expected": "PASS with no open finding.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Make the verified merge available on the existing deployment branch upstream.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "основную ветку, из которой я выкладываю",
+      "acceptanceCriteria": [
+        "A non-squashed merge commit is created on codex/reference-average-available-windows after the approval parent commit and all verification.",
+        "The exact merge commit is pushed normally to origin/codex/reference-average-available-windows without force.",
+        "The local deployment branch and origin upstream point to the same exact commit after push.",
+        "The handoff identifies that exact commit and instructs the user to redeploy it before any history cleanup."
+      ],
+      "implementationPaths": [
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-20.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Push the verified merge to the existing deployment-branch upstream and compare local/upstream commit identities.",
+          "expected": "Local and origin deployment branches are identical at the new merge commit.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260820-merge-progress217-into-deployment-branch sha256:0c2038cba3d35877eb19260a28d41918ae8a417ca260d9bdcd7293157e7af40b",
+    "semanticDigest": "sha256:0c2038cba3d35877eb19260a28d41918ae8a417ca260d9bdcd7293157e7af40b"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
