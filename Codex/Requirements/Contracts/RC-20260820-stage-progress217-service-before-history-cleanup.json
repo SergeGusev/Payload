@@ -24,8 +24,8 @@
       "Remove the automatic target-history cleanup transaction from this service release. Starting or initializing this build must not delete or update an existing target strategy row or any target-owned Paper, Live, run, position, settlement, relationship, projection, audit, tombstone, rollup, event, queue, or other history row as a consequence of this change.",
       "Keep the existing 217 target database rows stopped until the later cleanup: enabled=false, live_stakes=false, paused=true with no pause expiry. This release does not re-enable or otherwise rewrite them.",
       "Build and test the corrected service, then hand it off through the user's normal deployment workflow rather than requiring the temporary D:\\CodexTemp publish folder as the deployment interface.",
-      "After the user's normal brief restart, verify the deployed build is healthy, the 217 variants cannot dispatch or reseed, target database identities and history remain present and unchanged, and no new target Paper/Live/run identity appears.",
-      "After that verification, prepare and execute the local/product history cleanup as a separate later mutation step under its own fresh read-only gates and explicit authorization state."
+      "Commit the verified correction on the normal source branch and hand that exact commit to the user for the normal brief deployment restart.",
+      "Treat post-deployment read-only verification and local/product history cleanup as the next separate operational tasks; neither is claimed as completed evidence for this source-release commit."
     ],
     "outOfScope": [
       "Deleting, truncating, archiving, compacting, migrating, or otherwise mutating existing target strategy rows or target history in either local or product PostgreSQL during this service-correction task.",
@@ -34,7 +34,8 @@
       "Removing shared Progress algorithms still used by retained strategies or changing any retained trading behavior.",
       "Creating a database backup, dump, archive, or restore point.",
       "Stopping the service as a maintenance state, stopping unrelated strategies, cancelling orders, or changing Live/Paper mode; the user's normal brief deployment restart remains allowed.",
-      "Vacuuming, shrinking, compacting, or otherwise reclaiming physical database space."
+      "Vacuuming, shrinking, compacting, or otherwise reclaiming physical database space.",
+      "Post-deployment runtime verification and the later local/product history-deletion transaction; they begin only after this source release is committed and the user deploys it."
     ],
     "mode": "local-edit",
     "periodOrFilter": "Exact fixed 217 UUID/code set from the previously approved 220 product-negative Progress set minus the same three referenced source strategies; no database-history period is selected because history mutation is deferred.",
@@ -68,16 +69,16 @@
           "kind": "test",
           "command": "Run focused exact catalog, seed, retained-reference, Child Progress, and processor catalog tests.",
           "expected": "Exactly 217 targets are absent from runtime/seed outputs; the three sources, three owners, and all retained references/behaviors remain correct.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused run passed 10/10 in D:\\CodexTemp\\runs\\manual-b2045dd89ca74e9897fa9b582870e169\\results\\staged-catalog-focused\\staged-catalog-focused.trx."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "Build PolyCopyTrader.sln in Release with all temporary output under the active marked D:\\CodexTemp run.",
           "expected": "Solution build completes with zero errors.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Release solution build completed with 0 errors and 126 existing warnings; log: D:\\CodexTemp\\runs\\manual-b2045dd89ca74e9897fa9b582870e169\\logs\\staged-catalog-solution.log."
         }
       ]
     },
@@ -105,30 +106,29 @@
           "kind": "test",
           "command": "Run a focused isolated PostgreSQL initializer test with existing stopped target rows and representative target history, capture exact rows/counts/fingerprints before initialization, initialize twice, and compare afterward.",
           "expected": "Every target database row and history fingerprint is unchanged; no cleanup marker or deletion side effect is created.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Fresh isolated PostgreSQL run passed 6/6 in D:\\CodexTemp\\runs\\manual-b2045dd89ca74e9897fa9b582870e169\\results\\staged-catalog-pg-2\\staged-catalog-pg-2.trx; the double-initializer fixture preserved exact target/history count and MD5 and created no cleanup marker."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Inspect the final PostgresSchema diff and search all startup SQL for the 217 cleanup key, target DELETE statements, and automatic cleanup dispatch.",
           "expected": "No automatic 217-target cleanup remains in this service release; only catalog/seed exclusion remains.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final source inspection found the superseded cleanup key only in negative assertions/marker-count test queries; PostgresSchema contains no automatic 217-target cleanup dispatch or DELETE block. git diff --check passed with line-ending notices only."
         }
       ]
     },
     {
       "id": "REQ-003",
-      "text": "Hand off a normal source release for the user to redeploy and verify it before any later history cleanup.",
+      "text": "Commit and hand off a normal source release for the user to redeploy before any later history cleanup.",
       "sourceRequestIndexes": [0, 1],
       "sourceQuote": "я его перевыложу",
       "acceptanceCriteria": [
         "The corrected changes are available through the repository's normal branch/commit workflow; the temporary D:\\CodexTemp publish directory is not required as the user-facing deployment mechanism.",
-        "The deployment handoff identifies the exact commit/build and requires only the user's normal brief restart, not a deliberate maintenance stop.",
-        "Post-deployment read-only verification confirms the new build is Running/Live with a fresh heartbeat and no startup error.",
-        "Post-deployment reads confirm all existing target rows/history are still present and stopped, the three sources/owners remain correct, and no new target Paper order, Live order, or strategy-run identity was created after deployment.",
-        "History cleanup does not begin until the corrected deployment has passed these checks."
+        "The deployment handoff identifies the exact commit and requires only the user's normal brief restart, not a deliberate maintenance stop.",
+        "The implementation commit contains no local/product database mutation and no automatic history cleanup.",
+        "The handoff states that post-deployment read-only verification is the immediate next task and that history cleanup cannot begin before that verification passes."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Domain/Models.cs",
@@ -139,9 +139,9 @@
       "verification": [
         {
           "id": "VER-005",
-          "kind": "runtime",
-          "command": "After the user redeploys, run two bounded UTC read-only observations of product/local build health, exact target/source/owner membership and control state, target-history counts/fingerprints, and post-deployment target Paper/Live/run identity ledgers.",
-          "expected": "Corrected build healthy; target history unchanged and stopped; retained references unchanged; no target reseed, dispatch, or new identity.",
+          "kind": "inspection",
+          "command": "Validate the staged requirement contract and exact source diff, commit the verified implementation on codex/progress-purge-217, and record the commit identity and upstream state.",
+          "expected": "A normal Git source commit contains the exact verified correction, has no automatic cleanup path, and is ready for the user's deployment; post-deployment verification remains explicitly next.",
           "result": "pending",
           "evidence": ""
         },
@@ -161,8 +161,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260820-stage-progress217-service-before-history-cleanup sha256:8e6782f7d48bda9c81abe72ca7b6c5d2d723193703857b07e395fe9fc0e03b6f",
-    "semanticDigest": "sha256:8e6782f7d48bda9c81abe72ca7b6c5d2d723193703857b07e395fe9fc0e03b6f"
+    "evidenceText": "APPROVE RC-20260820-stage-progress217-service-before-history-cleanup sha256:cb22fa52ba4a6e14395a274f6d224297b485ee4ed8fda61f48b54f66ef75e190",
+    "semanticDigest": "sha256:cb22fa52ba4a6e14395a274f6d224297b485ee4ed8fda61f48b54f66ef75e190"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
