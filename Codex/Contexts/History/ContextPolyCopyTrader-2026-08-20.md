@@ -76,3 +76,10 @@ Request:
 
 Result:
 Verified exact production build `e01fdd92074f381514cbc525c69f89019eab57eb` read-only. Service, heartbeat, PostgreSQL locks, BTC/ETH/SOL references, current Polymarket WebSockets, Paper entries, linkage, latency, settlements, and position marks were healthy; 685 post-start orders had zero linkage/fill defects or late entries, and all enabled lifecycle backlogs cleared normally. Exact Maker inventory was 28/28 with no Live/open/overdue orders, but six post-start cycles produced 168 threshold skips and zero Maker orders, so the deployed code is confirmed while the new priority-drain expiry path has not yet been exercised by a real order. Warning-only diagnostics were two copied-performance stream errors and two isolated OKX two-second HTTP timeouts; processing remained active and no OKX-related strategy skip was persisted. No production mutation occurred.
+
+## 2026-08-20T17:30:47.7367250Z
+Request:
+Повтори
+
+Result:
+Repeated the fresh top ordinary-strategy report at fixed production cutoff `2026-08-20T17:20:30.859440Z`, excluding every `Progress` strategy and showing only authoritative Settled Paper Net PnL after fees. Exhaustive raw ranking and a separate read-only production/CSV audit confirmed BTC Down 25 Diff at `$226.45731425`, ETH 4 bps Reference Average at `$331.73618372`, and SOL Up 5 bps Reference Average at `$259.36946471`. Created and visually/structurally verified three price-overlay/max-drawdown PNGs and three daily Net XLSX reports with totals, red negatives, and freeze `B2`; the durable output contains exactly six files. Independent audit passed 61/61 and the marked temporary run was removed.

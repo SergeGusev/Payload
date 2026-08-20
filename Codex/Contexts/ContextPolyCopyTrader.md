@@ -1,3 +1,16 @@
+## Active Update 2026-08-20 Fresh Top Ordinary Net Reports
+Goal: Repeat the three best ordinary BTC/ETH/SOL strategy reports using fresh authoritative Net PnL after fees.
+Status: Completed
+Done:
+- Fixed one production PostgreSQL snapshot at `2026-08-20T17:20:30.859440Z` in `REPEATABLE READ READ ONLY`, UTC, and exhaustively ranked 2,169 BTC/ETH/SOL catalog strategies after excluding every name containing `Progress`.
+- Required every eligible Settled row to have non-negative Fee, Fee status `Calculated` or `VenueReported`, and exact `Net = Gross - Fee`; 292 strategies were complete, and active versus all-history winner IDs were identical.
+- Confirmed winners: BTC `BTC Up or Down 5m Down 25 Diff Premarket` with 289 settlements and Net `$226.45731425`; ETH `ETH Up or Down 5m 4 bps Reference Average Premarket` with 2,305 settlements and Net `$331.73618372`; SOL `SOL Up or Down 5m Up 5 bps Reference Average Premarket` with 1,312 settlements and Net `$259.36946471`.
+- Created three 1800x1000 Net-only PNG charts with matching asset price overlays, solid lines, direct endpoint labels, and maximum Net drawdown regions, plus three one-sheet daily Net PnL XLSX reports with formulas, red negative values on white, totals, and exact freeze pane `B2`.
+- Independent financial/production audit passed 61/61; artifact-tool re-import/render, Excel COM, OpenXML, formula, formatting, external-link, and visual checks passed. The durable output directory contains exactly the six requested files.
+Next: None.
+Notes: Production access was strictly read-only; no strategy, service, order, configuration, schema, or product source was changed. The marked `D:\CodexTemp` run was removed successfully. Output: `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/top-ordinary-net-strategies-by-asset-20260820-1720z`.
+Blockers: None.
+
 ## Active Update 2026-08-20 Maker Side-Effect Priority Deployment Verification
 Goal: Verify production runtime, betting flow, and the first post-deployment exact ETH Maker-GTD cohorts after deploying `e01fdd92`.
 Status: Completed read-only; core runtime and betting healthy, new Maker expiry path not yet exercised
