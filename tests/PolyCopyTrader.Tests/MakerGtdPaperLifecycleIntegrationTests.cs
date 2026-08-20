@@ -351,6 +351,53 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     }
 
     [Fact]
+    public async Task Processor_BlockedPositionMarkRefresh_DoesNotDelayMakerExpiry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var markPosition = new PaperPosition(
+            "asset-blocked-mark",
+            "condition-blocked-mark",
+            "Up",
+            2m,
+            0.40m,
+            0.80m,
+            0m,
+            now.AddMinutes(-10),
+            "strategy:blocked-mark");
+        scenario.Repository.PaperPositions.Add(markPosition);
+        var exposureCache = new ExposureSnapshotCache(scenario.Repository);
+        await exposureCache.RefreshAsync();
+        var clobClient = new CountingClobClient(markPosition.AssetId);
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            clobClient,
+            exposureSnapshotCache: exposureCache);
+        var markRefresh = processor.RefreshPositionMarksAsync();
+
+        await clobClient.OrderBookRequested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            var result = await processor.ProcessOpenOrdersAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(1, result.OrdersExpired);
+            Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+            var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+            Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skippedRun.Status);
+            Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
+            Assert.False(markRefresh.IsCompleted);
+            Assert.Equal(1, clobClient.OrderBookCalls);
+        }
+        finally
+        {
+            clobClient.ReleaseOrderBook();
+        }
+
+        Assert.Equal(0, await markRefresh.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task Processor_AcceptedFiveTicksBeforePersistedCreatedAt_ExpiresOrdinarily()
     {
         var now = DateTimeOffset.UtcNow;
@@ -848,7 +895,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         IMarketDataCache marketDataCache,
         CountingClobClient clobClient,
         IMarketDataSideEffectQueue? marketDataSideEffectQueue = null,
-        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null)
+        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
+        IExposureSnapshotCache? exposureSnapshotCache = null)
     {
         var options = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
         return new PaperTradingProcessor(
@@ -858,7 +906,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             marketDataCache,
             options,
             new PaperTradingOptions(),
-            new ExposureSnapshotCache(repository, makerGtdPaperPlacementHandoff),
+            exposureSnapshotCache ?? new ExposureSnapshotCache(repository, makerGtdPaperPlacementHandoff),
             new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository,
             feeAccountingService: null,
@@ -954,16 +1002,34 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         }
     }
 
-    private sealed class CountingClobClient : IPolymarketClobPublicClient
+    private sealed class CountingClobClient(string? blockedAssetId = null) : IPolymarketClobPublicClient
     {
+        private readonly TaskCompletionSource releaseOrderBook =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource OrderBookRequested { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public int OrderBookCalls { get; private set; }
 
-        public Task<OrderBookSnapshot?> GetOrderBookAsync(
+        public async Task<OrderBookSnapshot?> GetOrderBookAsync(
             string assetId,
             CancellationToken cancellationToken = default)
         {
             OrderBookCalls++;
+            if (string.Equals(assetId, blockedAssetId, StringComparison.Ordinal))
+            {
+                OrderBookRequested.TrySetResult();
+                await releaseOrderBook.Task.WaitAsync(cancellationToken);
+                return null;
+            }
+
             throw new InvalidOperationException("Maker-GTD lifecycle must not fetch a REST order book.");
+        }
+
+        public void ReleaseOrderBook()
+        {
+            releaseOrderBook.TrySetResult();
         }
 
         public Task<DateTimeOffset> GetServerTimeAsync(CancellationToken cancellationToken = default)

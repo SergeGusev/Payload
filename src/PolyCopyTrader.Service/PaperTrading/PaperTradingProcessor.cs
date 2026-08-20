@@ -23,7 +23,9 @@ public sealed class PaperTradingProcessor(
     IAppRepository repository,
     IPolymarketFeeAccountingService? feeAccountingService = null,
     IMarketDataSideEffectQueue? marketDataSideEffectQueue = null,
-    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IPaperTradingProcessor
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) :
+    IPaperTradingProcessor,
+    IPaperPositionMarkProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const string BtcFakTakerPaperExecutionSource = "btc_updown5m_fak_taker_paper";
@@ -38,13 +40,12 @@ public sealed class PaperTradingProcessor(
     {
         var now = DateTimeOffset.UtcNow;
         var openOrders = PrioritizeOpenOrders(await repository.GetOpenPaperOrdersAsync(cancellationToken), now);
-        var positions = (await exposureCache.GetSnapshotAsync(cancellationToken)).PaperPositions.ToList();
         if (openOrders.Count == 0)
         {
-            var updatedPositionMarks = await UpdatePositionMarksAsync(positions, cancellationToken);
-            return new PaperTradingProcessingResult(0, 0, 0, updatedPositionMarks);
+            return new PaperTradingProcessingResult(0, 0, 0, 0);
         }
 
+        var positions = (await exposureCache.GetSnapshotAsync(cancellationToken)).PaperPositions.ToList();
         var ordersFilled = 0;
         var ordersExpired = 0;
         var positionsUpdated = 0;
@@ -261,8 +262,13 @@ public sealed class PaperTradingProcessor(
             }
         }
 
-        positionsUpdated += await UpdatePositionMarksAsync(positions, cancellationToken);
         return new PaperTradingProcessingResult(openOrders.Count, ordersFilled, ordersExpired, positionsUpdated);
+    }
+
+    public async Task<int> RefreshPositionMarksAsync(CancellationToken cancellationToken = default)
+    {
+        var positions = (await exposureCache.GetSnapshotAsync(cancellationToken)).PaperPositions.ToArray();
+        return await UpdatePositionMarksAsync(positions, cancellationToken);
     }
 
     private static bool IsFakTakerPaperOrder(PaperOrder order)

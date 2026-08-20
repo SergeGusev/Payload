@@ -1,3 +1,17 @@
+## Active Update 2026-08-20 Isolate Paper Lifecycle From Position Marks
+Goal: Implement approved variant 1 so slow Paper position mark refresh cannot delay open-order lifecycle and Maker-GTD expiry.
+Status: Completed locally; independently reviewed and ready for branch publication
+Done:
+- Split whole-portfolio mark-to-market refresh out of `PaperTradingProcessor.ProcessOpenOrdersAsync` into `IPaperPositionMarkProcessor.RefreshPositionMarksAsync` and a separately hosted `PaperPositionMarkWorker`.
+- Kept one concrete `PaperTradingProcessor` singleton behind both interfaces; both workers retain the existing `PaperTrading:OpenOrderProcessingIntervalSeconds` cadence and independently await their own passes.
+- Preserved the existing mark snapshot, calculations, WebSocket-cache-first/REST-fallback lookup, optimistic CAS, exposure-cache update, and per-position error handling.
+- Added deterministic worker and Maker-GTD regressions proving a blocked mark pass does not block open-order execution or terminal Maker expiry and cannot overlap itself across the configured cadence.
+- Verified 34/34 contract isolation/Maker tests, 39/39 focused tests, 62/62 broader Paper/resilience/pipeline tests, and a complete Debug solution build with 0 errors (126 existing warnings).
+- Requirement contract `RC-20260820-paper-lifecycle-worker-isolation` completed against approved digest `sha256:08bd4998940c9e8c18e5d855610aa6128a3fde7a559217006aacf97822edcf41`; independent review passed with no findings.
+Next: Publish the integrated release branch; deployment and production verification remain user-operated follow-up actions.
+Notes: Implementation was isolated from the unrelated Historical Gross/Net and Progress-strategy changes; the merge preserves both histories. No production database, service, configuration, order, or venue mutation occurred.
+Blockers: None.
+
 ## Active Update 2026-08-19 Historical Parity Continued Progress Check
 Goal: Verify that the deployed historical Gross/Net parity workflow continues processing without new conflicts or stalls.
 Status: Completed read-only; continuous healthy progress confirmed

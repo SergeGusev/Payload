@@ -3,7 +3,7 @@
   "contractId": "RC-20260820-paper-lifecycle-worker-isolation",
   "title": "Isolate Paper order lifecycle from position-mark refresh",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -69,16 +69,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "All isolation and Maker lifecycle tests pass, including a blocked mark-refresh worker concurrent with a successful open-order cycle and an expired Maker-GTD terminal transition.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-08-20 isolated-worktree TRX ver001-final.trx: 34 passed, 0 failed, 0 skipped. The blocked mark worker stayed at one invocation beyond the shared one-second cadence while PaperTradingWorker ran independently; the focused Maker lifecycle suite, including expired exact-family handling during a blocked mark refresh, passed."
         },
         {
           "id": "VER-002",
           "kind": "inspection",
           "command": "Inspect Program.cs registrations and the complete worker/processor diff.",
           "expected": "Exactly one PaperTradingProcessor singleton backs both interfaces; PaperTradingWorker and PaperPositionMarkWorker are separate hosted services; ProcessOpenOrdersAsync contains no call to RefreshPositionMarksAsync or UpdatePositionMarksAsync.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Complete diff inspection confirmed one PaperTradingProcessor singleton is mapped to IPaperTradingProcessor and IPaperPositionMarkProcessor, both workers are independently hosted, and ProcessOpenOrdersAsync has no whole-portfolio mark-refresh call."
         }
       ]
     },
@@ -114,24 +114,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~ResilienceTests.PaperTradingProcessor|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Existing mark timeout, missing-book, stale-update CAS, successful mark, open-order resilience, Maker lifecycle, and new worker-isolation tests all pass through their correct separated entry points.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-08-20 isolated-worktree TRX focused-final.trx: 39 passed, 0 failed, 0 skipped. A broader related run broader-final.trx passed 62/62 across worker isolation, Maker lifecycle, all ResilienceTests, and PipelineIntegrationTests."
         },
         {
           "id": "VER-004",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "The complete solution builds with zero errors; warnings and any baseline test debt are reported exactly.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-08-20 Debug build of PolyCopyTrader.sln completed with 0 errors and 126 existing warnings; disposable outputs remained under the marked D:\\CodexTemp run."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "Run git diff --check, requirement-gate WorkingTree/Staged validation, and an independent semantic review of the verbatim requests, approved contract, complete isolated diff, and evidence.",
           "expected": "All mechanical checks pass and the independent reviewer records comparedOriginalRequests=true, verdict=pass, findings=[].",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-08-20 git diff --check and WorkingTree requirement validation passed. Independent reviewer agent:/root/paper_lifecycle_final_review compared both verbatim requests, approved digest, complete tracked and untracked diff from approval commit 45304f76, DI/call paths, and TRX/build evidence; verdict pass with no findings."
         }
       ]
     }
@@ -145,9 +145,9 @@
     "semanticDigest": "sha256:08bd4998940c9e8c18e5d855610aa6128a3fde7a559217006aacf97822edcf41"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/paper_lifecycle_final_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

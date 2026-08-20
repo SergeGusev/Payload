@@ -151,10 +151,9 @@ public sealed class ResilienceTests
             new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
-        var result = await processor.ProcessOpenOrdersAsync();
+        var positionsUpdated = await processor.RefreshPositionMarksAsync();
 
-        Assert.Equal(0, result.OpenOrdersChecked);
-        Assert.Equal(0, result.PositionsUpdated);
+        Assert.Equal(0, positionsUpdated);
         Assert.Empty(repository.ApiErrors);
         Assert.Equal(position, Assert.Single(repository.PaperPositions));
     }
@@ -185,10 +184,9 @@ public sealed class ResilienceTests
             new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
-        var result = await processor.ProcessOpenOrdersAsync();
+        var positionsUpdated = await processor.RefreshPositionMarksAsync();
 
-        Assert.Equal(0, result.OpenOrdersChecked);
-        Assert.Equal(0, result.PositionsUpdated);
+        Assert.Equal(0, positionsUpdated);
         Assert.Contains(repository.ApiErrors, error => error.Operation == "UpdatePositionMarkTimeout");
         Assert.Equal(position, Assert.Single(repository.PaperPositions));
     }
@@ -223,7 +221,7 @@ public sealed class ResilienceTests
             new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
-        var processing = processor.ProcessOpenOrdersAsync();
+        var processing = processor.RefreshPositionMarksAsync();
         await clobClient.OrderBookRequested.WaitAsync(TimeSpan.FromSeconds(5));
 
         var settledAtUtc = initialUpdatedAtUtc.AddSeconds(1);
@@ -263,9 +261,9 @@ public sealed class ResilienceTests
             [new OrderBookLevel(0.76m, 100m)],
             settledAtUtc,
             position.ConditionId));
-        var result = await processing.WaitAsync(TimeSpan.FromSeconds(5));
+        var positionsUpdated = await processing.WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.Equal(0, result.PositionsUpdated);
+        Assert.Equal(0, positionsUpdated);
         Assert.Equal(1, repository.TryUpdatePaperPositionMarkCalls);
         Assert.Equal(settledPosition, Assert.Single(repository.PaperPositions));
         Assert.Single(repository.PaperPositionSettlements);
@@ -311,9 +309,9 @@ public sealed class ResilienceTests
             new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
-        var result = await processor.ProcessOpenOrdersAsync();
+        var positionsUpdated = await processor.RefreshPositionMarksAsync();
 
-        Assert.Equal(1, result.PositionsUpdated);
+        Assert.Equal(1, positionsUpdated);
         Assert.Equal(1, repository.TryUpdatePaperPositionMarkCalls);
         var updatedPosition = Assert.Single(repository.PaperPositions);
         Assert.Equal(position.AssetId, updatedPosition.AssetId);
