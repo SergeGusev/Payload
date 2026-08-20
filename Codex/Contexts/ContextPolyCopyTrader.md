@@ -1,3 +1,18 @@
+## Active Update 2026-08-20 Post-Deployment Server And Betting Verification
+Goal: Verify the deployed lifecycle-worker isolation build, production runtime, Paper betting, Maker-GTD expiry, position marks, feeds, and operational backlogs.
+Status: Completed read-only; core runtime and betting are healthy, but Maker expiry latency and copied-performance stream errors remain warnings
+Done:
+- Verified exact production `192.168.0.101:5432/polycopytrader` in UTC `REPEATABLE READ READ ONLY` sessions with bounded statement timeouts and no mutation.
+- Confirmed exact deployed build `6ceddfcaed35fee713c2a8ab4c2d63cb5e2d8365`, started `2026-08-20T08:29:01.596059Z`, `Running / Live`, advancing heartbeat, and `last_error=NULL`; final DB sample had no idle-in-transaction session, lock wait, ungranted lock, or blocker.
+- At cutoff `2026-08-20T08:40:59.681197Z`, 787 post-start Paper orders existed: BTC 208 Filled; ETH 378 Filled, 4 Expired, 6 future Pending; SOL 191 Filled. The complete 302-order `08:40Z` cycle had zero missing/mismatched run links, zero missing/duplicate fills, zero entries at/after market end, and max placement latency `2.111s`.
+- Position marks advanced independently through `08:40:15.727986Z` while Paper entries and lifecycle work continued, proving the separately deployed mark loop is active. Overdue Entered, enabled overdue Observed, and expired open Paper-order backlogs were all zero at the final health sample.
+- Exact ETH Maker-GTD produced 16 orders after start; all 16 carried the mandatory root+nested label and `maker_gtd_paper_v2`. Six were Filled, four were Expired, and six newly created orders remained future Pending. The four expired rows were eventually cleared automatically, but only `239.235..254.344s` after effective expiry and all were classified `maker_gtd_evidence_unavailable / market_data_delivery_failed:maker_gtd_market_data_apply_failed`.
+- BTC/ETH/SOL references were fresh and aggregate/critical/shard-001 Polymarket WebSockets were current Connected/non-stale with no reconnect after start. No Live order or Paper/Live shadow decision was created after deployment.
+- Recorded 38 post-start diagnostics: 32 one-time OKX fixed-expiry no-ticker warnings at startup, one initial ETH no-price warning that recovered, and five copied-performance ProjectionCycle stream errors through `08:37:02.396615Z`. Copied performance subsequently refreshed 240 rows by `08:39:31.895625Z`; its queue still contained 555 rows, oldest `08:15:04.093936Z`. Dashboard projection was current and error-free.
+Next: Deploy no further change from this audit. Monitor the next Maker expiries; a focused correction is warranted if the 4-minute lifecycle delay or `maker_gtd_market_data_apply_failed` recurs. Monitor the copied-performance queue/error recurrence separately.
+Notes: One broad linkage query reached the 15-second statement timeout and two diagnostic SQL batches later rolled back on local query-shape errors; each session was read-only and production was unaffected. The same checks were completed with bounded indexed queries. Exact cause of the 239–254 second Maker delay cannot be distinguished from database evidence alone because the relevant expiry-admission/outstanding-update deferrals are in-memory/log diagnostics.
+Blockers: None for current core runtime; residual reliability warnings remain.
+
 ## Active Update 2026-08-20 Isolate Paper Lifecycle From Position Marks
 Goal: Implement approved variant 1 so slow Paper position mark refresh cannot delay open-order lifecycle and Maker-GTD expiry.
 Status: Completed locally; independently reviewed and ready for branch publication
