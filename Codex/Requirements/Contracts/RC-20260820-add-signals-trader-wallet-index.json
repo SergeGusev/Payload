@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260820-add-signals-trader-wallet-index",
+  "title": "Add a permanent signals trader-wallet index",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "А почему бы не сделать нормальный постоянный индекс?"
+    },
+    {
+      "source": "user",
+      "text": "Давай добавим."
+    }
+  ],
+  "scope": {
+    "goal": "Add and retain a normal permanent PostgreSQL B-tree index on public.signals(trader_wallet, id) in the PolyCopyTrader schema and in the exact local and product databases, using concurrent database creation so the running product service is not deliberately stopped and ordinary writes are not held for the full index build.",
+    "inScope": [
+      "Add the exact permanent index public.ix_signals_trader_wallet_id on public.signals using B-tree key order (trader_wallet, id).",
+      "Add an idempotent CREATE INDEX CONCURRENTLY IF NOT EXISTS definition for the same exact index to src/PolyCopyTrader.Storage/PostgresSchema.cs so future schema initialization preserves the index.",
+      "Create the exact index with CREATE INDEX CONCURRENTLY IF NOT EXISTS on local 127.0.0.1:5432/polycopytrader and product 192.168.0.101:5432/polycopytrader after fresh read-only identity, relation, existing-index, lock, disk-space, and service-health previews pass.",
+      "Run each CREATE INDEX CONCURRENTLY as a standalone PostgreSQL statement outside an explicit transaction; do not stop the product service or disable signal writes.",
+      "After each creation, verify the index is present, valid, ready, live, has the exact two key columns and ordering, and has no predicate or included columns.",
+      "On product, run read-only EXPLAIN for the exact 217 target-wallet lookup and require an index-driven plan rather than a sequential scan of public.signals before treating the index task as successful.",
+      "Record the actual index size and recheck product service heartbeat/error state after the concurrent build.",
+      "Add focused source/schema tests for the exact permanent index definition and run the relevant build/tests and requirement gates.",
+      "If a same-named index already exists with any different, invalid, not-ready, or not-live definition, stop without dropping, rebuilding, or replacing it and report the conflict for a new decision.",
+      "If concurrent creation fails or is cancelled, stop without automatically dropping any resulting invalid index; inspect and report the exact state before any separate repair decision."
+    ],
+    "outOfScope": [
+      "Deleting the 217 strategies or any strategy/order/signal/run/position/history row; the approved Progress-217 cleanup remains paused until this index is independently complete and a later mutation turn resumes it.",
+      "Creating a temporary or partial target-only index, changing the requested permanent index into another key order, or adding a predicate, INCLUDE list, uniqueness, or another signals index.",
+      "Dropping or replacing ix_signals_created_time, signals_pkey, or any other existing index.",
+      "Stopping or restarting the product service, pausing strategies, cancelling orders, or changing Paper/Live behavior.",
+      "Creating a backup, dump, archive, database clone, or restore point.",
+      "Vacuuming, reindexing, shrinking, compacting, or otherwise reclaiming database space.",
+      "Changing application queries, signal-writing behavior, retention rules, trading logic, dashboards, reports, or unrelated documentation.",
+      "Promising an exact build duration, index size, or performance improvement before the actual concurrent build and post-build plan are observed."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "Permanent unfiltered index over all rows of public.signals in the exact local and product polycopytrader databases; no historical time window or row subset.",
+    "firstVerification": "Read current source/schema/tests and run read-only product catalog/statistics/EXPLAIN checks to confirm the exact signals relation, current index absence, row scale, planner bottleneck, endpoint identity, and expected index definition before any edit or DDL."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Define the requested normal permanent signals trader-wallet index in the application schema.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "нормальный постоянный индекс",
+      "acceptanceCriteria": [
+        "PostgresSchema contains exactly one idempotent concurrent definition named ix_signals_trader_wallet_id on public.signals(trader_wallet, id).",
+        "The definition is a non-unique, unfiltered B-tree with trader_wallet first and id second, with no included columns.",
+        "Existing signals primary-key and created-time index definitions remain unchanged.",
+        "A focused source test fails if the name, relation, key order, concurrency, or permanence contract is removed or altered."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run the focused StorageTests schema assertion for ix_signals_trader_wallet_id using outputs under the active marked D:\\CodexTemp run.",
+          "expected": "The test passes and proves the exact concurrent permanent B-tree definition and key order.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln in Release with temporary outputs under the active marked D:\\CodexTemp run.",
+          "expected": "Build completes with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Create and keep the exact permanent index on both the local and product databases without a deliberate service stop.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "Давай добавим.",
+      "acceptanceCriteria": [
+        "Fresh read-only previews independently identify local 127.0.0.1:5432/polycopytrader and product 192.168.0.101:5432/polycopytrader, their PostgreSQL versions, public.signals identity, current indexes, database free-space evidence available to PostgreSQL, and product service health before mutation.",
+        "Before creation, neither database has a conflicting relation or same-named index definition; any conflict aborts the operation without replacement.",
+        "Each database executes one standalone CREATE INDEX CONCURRENTLY IF NOT EXISTS public.ix_signals_trader_wallet_id ON public.signals USING btree (trader_wallet, id).",
+        "The product service is not deliberately stopped or restarted, and the index build does not run inside the Progress-217 deletion transaction.",
+        "Post-creation catalog checks show indisvalid=true, indisready=true, indislive=true, exactly two key attributes trader_wallet then id, non-unique B-tree, no predicate, no expressions, and no included columns on both databases.",
+        "Product service heartbeat advances after the build and its recorded last_error remains empty; any contrary state is reported rather than called successful.",
+        "Actual local and product index sizes are reported from PostgreSQL after creation."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "runtime",
+          "command": "Run bounded read-only identity/catalog/lock/space/service previews, then standalone CREATE INDEX CONCURRENTLY IF NOT EXISTS on local and product, followed by independent read-only catalog and service postchecks.",
+          "expected": "Both exact databases retain one valid, ready, live index with the approved definition; product service remains healthy and no data row is changed by this task.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Demonstrate that the permanent index removes the verified full-table planner bottleneck for the exact Progress-217 wallet lookup without resuming deletion.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "постоянный индекс",
+      "acceptanceCriteria": [
+        "Before creation, read-only EXPLAIN evidence records the current sequential scan over public.signals for the exact 217 target-wallet lookup.",
+        "After creation, read-only EXPLAIN for the same exact 217-wallet logical lookup uses ix_signals_trader_wallet_id through an index or bitmap-index access path and does not sequentially scan public.signals.",
+        "No DELETE, target-history cleanup, cleanup marker insertion, VACUUM, REINDEX, or Progress-217 mutation is executed in this task.",
+        "The handoff states the actual measured index size and that Progress-217 deletion remains the next separate operation."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "runtime",
+          "command": "Compare read-only EXPLAIN plans for the identical exact 217-wallet lookup before and after index creation on product.",
+          "expected": "The post-index plan names ix_signals_trader_wallet_id in an index-driven access path and has no Seq Scan node on public.signals.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Inspect database mutation logs, Git diff, and Progress-217 marker/target counts read-only after the index task.",
+          "expected": "Only the approved index/schema/test state changed; Progress-217 deletion remains uncommitted and all 217 product target strategies remain present until the later cleanup.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260820-add-signals-trader-wallet-index sha256:ac417d1812f145ae6dde9357e28dcc43125bb1f8a92d4d737935d793f3d91c16",
+    "semanticDigest": "sha256:ac417d1812f145ae6dde9357e28dcc43125bb1f8a92d4d737935d793f3d91c16"
+  },
+  "independentReview": {
+    "reviewer": "pending",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
