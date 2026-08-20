@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260820-stage-progress217-service-before-history-cleanup",
+  "title": "Remove 217 Progress strategies from service before history cleanup",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "А что такое /D:/CodexTemp/runs/manual-b2045dd89ca74e9897fa9b582870e169/artifacts/deploy-progress217 и зачем его надо выкладывать? Раньше ты прекрасно удалял стратегии и их историю сам. У тебя же есть доступ к базе сервера"
+    },
+    {
+      "source": "user",
+      "text": "Ок, скорректируй сервис и я его перевыложу. Потом очистим историю."
+    }
+  ],
+  "scope": {
+    "goal": "Prepare a normal service source release that removes the exact previously approved 217 unreferenced negative-Gross Progress variants from runnable catalog and seed paths without deleting or rewriting their existing local or product database rows or history; database history cleanup happens only after the user deploys this release and is verified separately.",
+    "inScope": [
+      "Use the exact immutable 217 UUID/code target set approved by RC-20260819-remove-217-unreferenced-negative-progress-strategies at sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac; do not recalculate Gross PnL or target membership.",
+      "Exclude exactly those 217 variants from the runtime StrategyIds registries, static PostgreSQL strategy seeds, dynamic LowerEnter generation, and every service startup reseed path.",
+      "Preserve the three referenced source strategies b7c50005-0000-4000-8166-000000000003, b7c50005-0000-4000-8172-000000000004, and b7c50005-0000-4000-8172-000000000005 and their three retained LowerEnter owners with prefix b7c50005-0001 and matching group/suffix.",
+      "Preserve shared Progress processor algorithms and every retained strategy behavior and reference.",
+      "Remove the automatic target-history cleanup transaction from this service release. Starting or initializing this build must not delete or update an existing target strategy row or any target-owned Paper, Live, run, position, settlement, relationship, projection, audit, tombstone, rollup, event, queue, or other history row as a consequence of this change.",
+      "Keep the existing 217 target database rows stopped until the later cleanup: enabled=false, live_stakes=false, paused=true with no pause expiry. This release does not re-enable or otherwise rewrite them.",
+      "Build and test the corrected service, then hand it off through the user's normal deployment workflow rather than requiring the temporary D:\\CodexTemp publish folder as the deployment interface.",
+      "After the user's normal brief restart, verify the deployed build is healthy, the 217 variants cannot dispatch or reseed, target database identities and history remain present and unchanged, and no new target Paper/Live/run identity appears.",
+      "After that verification, prepare and execute the local/product history cleanup as a separate later mutation step under its own fresh read-only gates and explicit authorization state."
+    ],
+    "outOfScope": [
+      "Deleting, truncating, archiving, compacting, migrating, or otherwise mutating existing target strategy rows or target history in either local or product PostgreSQL during this service-correction task.",
+      "Executing the previously prepared automatic cleanup migration during deployment of this release.",
+      "Changing the exact 217 target set, adding local-only negatives, recalculating PnL, or deleting the three referenced sources or their retained owners.",
+      "Removing shared Progress algorithms still used by retained strategies or changing any retained trading behavior.",
+      "Creating a database backup, dump, archive, or restore point.",
+      "Stopping the service as a maintenance state, stopping unrelated strategies, cancelling orders, or changing Live/Paper mode; the user's normal brief deployment restart remains allowed.",
+      "Vacuuming, shrinking, compacting, or otherwise reclaiming physical database space."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact fixed 217 UUID/code set from the previously approved 220 product-negative Progress set minus the same three referenced source strategies; no database-history period is selected because history mutation is deferred.",
+    "firstVerification": "Inspect the current service catalog, all static/dynamic seed paths, and the prepared automatic cleanup block/tests to separate catalog retirement from database deletion without changing the exact 217 set or retained references."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Correct the service so exactly the approved 217 strategies cannot be seeded, resolved, or dispatched after deployment.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "скорректируй сервис",
+      "acceptanceCriteria": [
+        "The exact 217 UUID/code variants are absent from the effective runtime registry and every static or dynamic seed output.",
+        "A startup against an empty strategy catalog does not create any of the 217 targets.",
+        "A startup against a database that still contains the stopped target rows does not make those rows runnable and does not create any new catalog alias for them.",
+        "The three referenced source strategies and their three retained LowerEnter owners remain present with their exact original reference fields.",
+        "No retained descriptor references a removed catalog target, and shared Progress behavior remains available to retained variants."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/ChildMirrorStrategyCatalogTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused exact catalog, seed, retained-reference, Child Progress, and processor catalog tests.",
+          "expected": "Exactly 217 targets are absent from runtime/seed outputs; the three sources, three owners, and all retained references/behaviors remain correct.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln in Release with all temporary output under the active marked D:\\CodexTemp run.",
+          "expected": "Solution build completes with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Do not clean or rewrite target database history during this service deployment; history cleanup happens afterward.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Потом очистим историю.",
+      "acceptanceCriteria": [
+        "The service source contains no enabled startup migration or dispatch path that deletes the 217 target strategy rows or any target-owned structured history.",
+        "Running schema initialization twice over a fixture containing stopped target rows and representative Paper, Live, run, position, settlement, relationship, projection, audit, v1/v2 archive, rollup, event, and queue history preserves exact target row identities, counts, and payload fingerprints.",
+        "The correction does not update target control fields, timestamps, reference fields, or history payloads.",
+        "Documentation clearly states that this release only retires catalog/seed logic and that database deletion is a separate later step.",
+        "No local or product database DML is executed as part of implementing or testing this correction outside an isolated disposable PostgreSQL fixture."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run a focused isolated PostgreSQL initializer test with existing stopped target rows and representative target history, capture exact rows/counts/fingerprints before initialization, initialize twice, and compare afterward.",
+          "expected": "Every target database row and history fingerprint is unchanged; no cleanup marker or deletion side effect is created.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the final PostgresSchema diff and search all startup SQL for the 217 cleanup key, target DELETE statements, and automatic cleanup dispatch.",
+          "expected": "No automatic 217-target cleanup remains in this service release; only catalog/seed exclusion remains.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Hand off a normal source release for the user to redeploy and verify it before any later history cleanup.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "я его перевыложу",
+      "acceptanceCriteria": [
+        "The corrected changes are available through the repository's normal branch/commit workflow; the temporary D:\\CodexTemp publish directory is not required as the user-facing deployment mechanism.",
+        "The deployment handoff identifies the exact commit/build and requires only the user's normal brief restart, not a deliberate maintenance stop.",
+        "Post-deployment read-only verification confirms the new build is Running/Live with a fresh heartbeat and no startup error.",
+        "Post-deployment reads confirm all existing target rows/history are still present and stopped, the three sources/owners remain correct, and no new target Paper order, Live order, or strategy-run identity was created after deployment.",
+        "History cleanup does not begin until the corrected deployment has passed these checks."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "runtime",
+          "command": "After the user redeploys, run two bounded UTC read-only observations of product/local build health, exact target/source/owner membership and control state, target-history counts/fingerprints, and post-deployment target Paper/Live/run identity ledgers.",
+          "expected": "Corrected build healthy; target history unchanged and stopped; retained references unchanged; no target reseed, dispatch, or new identity.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Independent reviewer compares both verbatim requests, this approved contract, the final diff, build/tests, and deployment evidence.",
+          "expected": "PASS with no open semantic or safety finding.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260820-stage-progress217-service-before-history-cleanup sha256:8e6782f7d48bda9c81abe72ca7b6c5d2d723193703857b07e395fe9fc0e03b6f",
+    "semanticDigest": "sha256:8e6782f7d48bda9c81abe72ca7b6c5d2d723193703857b07e395fe9fc0e03b6f"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
