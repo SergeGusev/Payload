@@ -1,3 +1,42 @@
+## Active Update 2026-08-20 Stage Progress-217 Service Before History Cleanup
+Goal: Remove the exact approved 217 strategies from runnable catalog and seed paths, deploy that service first, and leave all existing database rows/history unchanged until the later cleanup.
+Status: In Progress; source correction verified, deployment pending
+Done:
+- Approved the lifecycle-corrected `RC-20260820-stage-progress217-service-before-history-cleanup` at `sha256:cb22fa52ba4a6e14395a274f6d224297b485ee4ed8fda61f48b54f66ef75e190`; approval is committed separately in `510b036b`.
+- Removed the automatic 217-row/history cleanup from service startup. The exact 217 remain excluded from runtime/static/dynamic catalog seed paths; the three referenced sources and their three retained LowerEnter owners remain catalogued.
+- Replaced destructive migration tests with an isolated PostgreSQL initializer test that fingerprints existing stopped target rows plus representative Paper, Live, run, position, settlement, relationship, projection, audit, v1/v2 archive, rollup, event, and queue history before and after two initializations.
+- Focused non-PostgreSQL tests passed 10/10; fresh isolated PostgreSQL tests passed 6/6; the full Release solution build completed with 0 errors and 126 existing warnings; diff check passed.
+- Removed the stale temporary `artifacts/deploy-progress217` package because it contained the superseded automatic-cleanup build and must not be deployed. The disposable PG17 test database was dropped and its server stopped.
+Next: Record the mandatory independent final-diff review, commit the corrected source on `codex/progress-purge-217`, and hand that commit to the user for the normal deployment restart. After deployment, perform bounded read-only product/local verification before any separate history deletion.
+Notes: Neither local nor product PostgreSQL was read or mutated during this implementation phase. The contract remains `approved`, not `completed`, because post-deployment runtime evidence is intentionally pending. The isolated branch has no configured upstream.
+Blockers: User deployment/restart and post-deployment verification are required before history cleanup and contract completion.
+
+## Active Update 2026-08-20 Remove 217 Unreferenced Negative Progress Strategies
+Goal: Remove exactly the approved 217 unreferenced negative-Gross Progress strategies and their structured local/product history while preserving the three referenced sources and their retained LowerEnter owners.
+Status: In Progress; implementation and deploy artifact ready, database cleanup pending deployment
+Done:
+- Both exact contracts are approved: main `RC-20260819-remove-217-unreferenced-negative-progress-strategies` at `sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac` and auxiliary catalog-test alignment at `sha256:49a532d10a4dc81d72e6ff21cc6764c88ba4c7c5a9c1c9b846a63dc52725801a`.
+- Implemented and independently reviewed the exact 217 catalog/seed exclusion and atomic fail-closed cleanup migration. The three referenced source strategies and three retained LowerEnter owners remain preserved.
+- Fresh local/product read-only gates passed twice: exact target membership was local 129/product 217, all targets remained disabled/live-off/permanently paused, active references and active Live orders were zero, post-witness Paper/Live/run/v1-archive identities were zero, and preserved-source/owner membership matched each environment.
+- Solution build passed with zero errors; focused owned tests passed 30/30, including the two isolated PostgreSQL cleanup tests and both aligned Child Progress catalog tests. Independent semantic review passed both approved contracts with no open finding.
+- Published the deployable service at version `1.0.0+1d5361cc-progress217-4225c3d2daba`; its embedded diff prefix matches the verified implementation diff used for that build (`4225c3d2daba864b22b579ccc2d5f8cc07ac3e2d`).
+Next: User deploys the prepared artifact with the normal brief service restart to product and local environments. Then verify exact deletion, zero structured residuals, preserved references, migration markers, healthy service/build, and no reseed over two worker cycles before completing contracts and committing/pushing.
+Notes: No backup was created. No local or production cleanup transaction has run yet. The disposable PG17 test server is stopped. The implementation remains isolated from unrelated dirty Historical Gross/Net work in the main worktree.
+Blockers: Deployment/restart on both environments is required before destructive acceptance and requirement-contract completion.
+
+## Active Update 2026-08-19 Remove 217 Unreferenced Negative Progress Strategies
+Goal: Remove exactly the approved 217 unreferenced negative-Gross Progress strategies and their structured local/product history while preserving the three referenced source strategies and their retained LowerEnter owners.
+Status: In Progress
+Done:
+- Approved requirement contract `RC-20260819-remove-217-unreferenced-negative-progress-strategies` at semantic digest `sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac`; approval is committed separately in `d27b5f38`.
+- Implemented the exact 217 UUID/code retirement catalog, seed exclusions, and an atomic fail-closed PostgreSQL cleanup migration in isolated branch `codex/progress-purge-217`; the three referenced sources and their retained LowerEnter owners remain catalogued.
+- The migration accepts only the approved product/local membership shapes, requires stopped controls, rejects active Live/shared/post-witness identities, deletes exact structured dependencies and history, preserves shared v2 dictionaries, verifies collected/deleted counts and zero residuals, and is idempotent on later starts.
+- Updated focused catalog, retained-reference, cleanup-source, and processor catalog tests plus README/configuration reference documentation.
+- Solution build passed with 0 errors; focused retirement/catalog tests passed 24/24 and retained behavior tests passed 2/2. The full processor suite had no new failures versus the approved parent (113 current failures versus 114 baseline); Historical Gross/Net matcher retained the same six unrelated baseline failures.
+Next: Obtain the mandatory independent actual-diff review and PostgreSQL cleanup verification, commit/push the implementation, then perform fresh local/product read-only gates before the user deploys the normal restart. After deployment, verify exact deletion, preserved references, migration markers, service health, and no reseed over two worker cycles.
+Notes: No local or production database mutation, deployment, service stop, backup, or order action has occurred in this implementation phase. Work is isolated under the marked `D:\CodexTemp` session so unrelated dirty Historical Gross/Net changes in the main worktree remain untouched. The requirement contract intentionally remains `approved`, not `completed`, until database/deployment acceptance evidence exists.
+Blockers: Independent reviewer permission is required by repository policy because proactive subagent delegation is disabled. No disposable PostgreSQL test connection is configured, so the approved focused cleanup transaction test cannot currently run without a user-authorized test database/environment.
+
 ## Active Update 2026-08-19 Production Server And Betting Audit
 Goal: Verify current production runtime, BTC/ETH/SOL Paper betting and settlements, latency, locks, feeds, Dashboard, backlog, and recurrence of prior operational warnings.
 Status: Completed read-only; core runtime and betting healthy, recovered WebSocket interruptions and short feed-stale warnings remain

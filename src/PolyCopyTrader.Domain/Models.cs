@@ -1320,6 +1320,9 @@ public static class StrategyIds
     public static readonly Guid BtcUpDown5mMore270Below60 = Guid.Parse(BtcUpDown5mMore270Below60IdValue);
     public static readonly Guid BtcUpDown5mStatistics = Guid.Parse(BtcUpDown5mStatisticsIdValue);
 
+    public static readonly IReadOnlyDictionary<Guid, string> NegativeProgressPurgeTargets =
+        CreateNegativeProgressPurgeTargets();
+
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcUpDown5mVariants =
         CreateBtcUpDown5mVariants();
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcLowerEnterPremarketVariants =
@@ -1994,6 +1997,11 @@ public static class StrategyIds
 
     private static bool IsRetiredProgressVariant(BtcUpDown5mStrategyVariant variant)
     {
+        if (NegativeProgressPurgeTargets.ContainsKey(variant.Id))
+        {
+            return true;
+        }
+
         var threshold = variant.DecisionDepth;
         if (string.Equals(variant.ReferenceAssetSymbol, "BTC", StringComparison.OrdinalIgnoreCase))
         {
@@ -2020,6 +2028,125 @@ public static class StrategyIds
         return string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase) &&
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror &&
             threshold is 4 or 5 or 6 or 13 or 14 or 19 or 21 or 23;
+    }
+
+    private static IReadOnlyDictionary<Guid, string> CreateNegativeProgressPurgeTargets()
+    {
+        var targets = new Dictionary<Guid, string>(217);
+
+        AddDiffProgressTargets(targets, "btc", 8154, "up", Enumerable.Range(1, 19));
+        AddDiffProgressTargets(targets, "btc", 8155, "down", [1, 10, 11, 12, 13, 14]);
+        AddDiffProgressTargets(targets, "eth", 8156, "up", Enumerable.Range(3, 10).Concat(Enumerable.Range(17, 12)));
+        AddDiffProgressTargets(targets, "eth", 8157, "down", Enumerable.Range(1, 15));
+        AddDiffProgressTargets(targets, "sol", 8158, "up", Enumerable.Range(3, 23).Concat(Enumerable.Range(30, 10)));
+        AddDiffProgressTargets(targets, "sol", 8159, "down", Enumerable.Range(1, 10));
+
+        AddTarget(targets, 8162, 1, "eth_up_down_5m_diff_up_shift_progress");
+        AddTarget(targets, 8164, 1, "sol_up_down_5m_diff_up_shift_progress");
+
+        AddPremarketTargets(targets, "eth", 8167, "diff_shift_progress", [1, 2, 3, 5]);
+        AddPremarketTargets(targets, "sol", 8168, "diff_shift_progress", [1, 4]);
+        AddPremarketTargets(targets, "eth", 8170, "diff_limit_progress", Enumerable.Range(1, 5));
+        AddPremarketTargets(targets, "sol", 8171, "diff_limit_progress", [4, 5]);
+        AddPremarketTargets(targets, "btc", 8172, "diff_real_limit_progress", [1, 2, 3]);
+        AddPremarketTargets(targets, "eth", 8173, "diff_real_limit_progress", [3, 4, 5]);
+        AddPremarketTargets(targets, "sol", 8174, "diff_real_limit_progress", [1, 2, 5]);
+
+        AddChildTargets(targets, "btc", 8188, "child_progress", Enumerable.Range(1, 24));
+        AddChildTargets(targets, "eth", 8189, "child_progress", [7, 12, 15, 16, 17, 18, 20, 22, 23]);
+        AddChildTargets(targets, "sol", 8190, "child_progress", Enumerable.Range(1, 14).Concat([16, 18]));
+        AddChildTargets(targets, "btc", 8197, "child_progress_roi", [1, 2, 3, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24]);
+        AddChildTargets(targets, "eth", 8198, "child_progress_roi", [2, 4, 6, 10]);
+        AddChildTargets(targets, "sol", 8199, "child_progress_roi", [1, 2, 3, 7, 8, 10, 11, 12, 15, 16, 17, 18, 20, 22, 24]);
+
+        AddLowerEnterTarget(targets, 8172, 1, "btc_up_down_5m_1_diff_real_limit_progress_lower_enter_premarket");
+        AddLowerEnterTarget(targets, 8172, 2, "btc_up_down_5m_2_diff_real_limit_progress_lower_enter_premarket");
+        AddLowerEnterTarget(targets, 8172, 3, "btc_up_down_5m_3_diff_real_limit_progress_lower_enter_premarket");
+
+        if (targets.Count != 217)
+        {
+            throw new InvalidOperationException(
+                $"The negative Progress purge allowlist must contain exactly 217 strategies, but contains {targets.Count}.");
+        }
+
+        return targets;
+    }
+
+    private static void AddDiffProgressTargets(
+        IDictionary<Guid, string> targets,
+        string assetCode,
+        int idGroup,
+        string directionCode,
+        IEnumerable<int> thresholds)
+    {
+        foreach (var threshold in thresholds)
+        {
+            AddTarget(
+                targets,
+                idGroup,
+                threshold,
+                $"{assetCode}_up_down_5m_diff_{threshold}_{directionCode}_progress");
+        }
+    }
+
+    private static void AddPremarketTargets(
+        IDictionary<Guid, string> targets,
+        string assetCode,
+        int idGroup,
+        string familyCode,
+        IEnumerable<int> thresholds)
+    {
+        foreach (var threshold in thresholds)
+        {
+            AddTarget(
+                targets,
+                idGroup,
+                threshold,
+                $"{assetCode}_up_down_5m_{threshold}_{familyCode}_premarket");
+        }
+    }
+
+    private static void AddChildTargets(
+        IDictionary<Guid, string> targets,
+        string assetCode,
+        int idGroup,
+        string familyCode,
+        IEnumerable<int> lookbackHours)
+    {
+        foreach (var lookbackHour in lookbackHours)
+        {
+            AddTarget(
+                targets,
+                idGroup,
+                lookbackHour,
+                $"{assetCode}_up_down_5m_{lookbackHour}_{familyCode}");
+        }
+    }
+
+    private static void AddTarget(
+        IDictionary<Guid, string> targets,
+        int idGroup,
+        int suffix,
+        string code)
+    {
+        var id = Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{suffix:000000000000}");
+        if (!targets.TryAdd(id, code))
+        {
+            throw new InvalidOperationException($"Duplicate negative Progress purge target '{id}'.");
+        }
+    }
+
+    private static void AddLowerEnterTarget(
+        IDictionary<Guid, string> targets,
+        int idGroup,
+        int suffix,
+        string code)
+    {
+        var id = Guid.Parse($"b7c50005-0001-4000-{idGroup:0000}-{suffix:000000000000}");
+        if (!targets.TryAdd(id, code))
+        {
+            throw new InvalidOperationException($"Duplicate negative Progress purge target '{id}'.");
+        }
     }
 
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateDiffCounterTrendFakPremarketVariants(
