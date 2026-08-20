@@ -414,7 +414,9 @@ builder.Services.AddSingleton<IMarketDataSideEffectHandler, MarketDataSideEffect
 builder.Services.AddSingleton<MarketDataSideEffectQueue>();
 builder.Services.AddSingleton<IMarketDataSideEffectQueue>(sp => sp.GetRequiredService<MarketDataSideEffectQueue>());
 builder.Services.AddSingleton<ConservativePaperGtdFillEstimator>();
-builder.Services.AddSingleton<IPaperTradingProcessor, PaperTradingProcessor>();
+builder.Services.AddSingleton<PaperTradingProcessor>();
+builder.Services.AddSingleton<IPaperTradingProcessor>(sp => sp.GetRequiredService<PaperTradingProcessor>());
+builder.Services.AddSingleton<IPaperPositionMarkProcessor>(sp => sp.GetRequiredService<PaperTradingProcessor>());
 builder.Services.AddSingleton<IPaperSettlementProcessor, PaperSettlementProcessor>();
 builder.Services.AddSingleton<ILeaderActivityExitProcessor, LeaderActivityExitProcessor>();
 builder.Services.AddSingleton<IPaperLiveShadowFillReconciler, PaperLiveShadowFillReconciler>();
@@ -455,6 +457,7 @@ builder.Services.AddHostedService<DashboardStrategyProjectionReconciliationWorke
 builder.Services.AddHostedService<DateDependentStrategyHourlyPaperPnlWorker>();
 builder.Services.AddHostedService<StrategyRunRetentionWorker>();
 builder.Services.AddHostedService<PaperTradingWorker>();
+builder.Services.AddHostedService<PaperPositionMarkWorker>();
 builder.Services.AddHostedService<PaperCopiedTraderPerformanceWorker>();
 builder.Services.AddHostedService<LiveTradingMaintenanceWorker>();
 builder.Services.AddHostedService<PolymarketAutoRedeemWorker>();
