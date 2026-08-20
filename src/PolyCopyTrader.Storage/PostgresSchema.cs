@@ -1769,6 +1769,36 @@ WHERE NOT (
         AND mode_code = 'child_progress_roi'
         AND lookback_hours IN (4, 5, 6, 13, 14, 19, 21, 23)
     )
+  AND NOT (
+        asset_symbol = 'BTC'
+        AND mode_code = 'child_progress'
+        AND lookback_hours BETWEEN 1 AND 24
+    )
+  AND NOT (
+        asset_symbol = 'ETH'
+        AND mode_code = 'child_progress'
+        AND lookback_hours IN (7, 12, 15, 16, 17, 18, 20, 22, 23)
+    )
+  AND NOT (
+        asset_symbol = 'SOL'
+        AND mode_code = 'child_progress'
+        AND lookback_hours IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18)
+    )
+  AND NOT (
+        asset_symbol = 'BTC'
+        AND mode_code = 'child_progress_roi'
+        AND lookback_hours IN (1, 2, 3, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24)
+    )
+  AND NOT (
+        asset_symbol = 'ETH'
+        AND mode_code = 'child_progress_roi'
+        AND lookback_hours IN (2, 4, 6, 10)
+    )
+  AND NOT (
+        asset_symbol = 'SOL'
+        AND mode_code = 'child_progress_roi'
+        AND lookback_hours IN (1, 2, 3, 7, 8, 10, 11, 12, 15, 16, 17, 18, 20, 22, 24)
+    )
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -2236,6 +2266,36 @@ WHERE NOT (
     AND diff_code = 'up'
     AND threshold_value IN (1, 2, 13, 14, 15, 16)
 )
+  AND NOT (
+    asset_symbol = 'BTC'
+    AND diff_code = 'up'
+    AND threshold_value BETWEEN 1 AND 19
+)
+  AND NOT (
+    asset_symbol = 'BTC'
+    AND diff_code = 'down'
+    AND threshold_value IN (1, 10, 11, 12, 13, 14)
+)
+  AND NOT (
+    asset_symbol = 'ETH'
+    AND diff_code = 'up'
+    AND (threshold_value BETWEEN 3 AND 12 OR threshold_value BETWEEN 17 AND 28)
+)
+  AND NOT (
+    asset_symbol = 'ETH'
+    AND diff_code = 'down'
+    AND threshold_value BETWEEN 1 AND 15
+)
+  AND NOT (
+    asset_symbol = 'SOL'
+    AND diff_code = 'up'
+    AND (threshold_value BETWEEN 3 AND 25 OR threshold_value BETWEEN 30 AND 39)
+)
+  AND NOT (
+    asset_symbol = 'SOL'
+    AND diff_code = 'down'
+    AND threshold_value BETWEEN 1 AND 10
+)
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -2279,6 +2339,10 @@ SELECT
     now(),
     now()
 FROM formatted
+WHERE NOT (
+    diff_code = 'up'
+    AND asset_symbol IN ('ETH', 'SOL')
+)
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -2316,11 +2380,17 @@ WHERE NOT (
         asset_symbol = 'ETH'
         AND threshold_value = 4
     )
+  AND asset_symbol <> 'ETH'
+  AND NOT (
+        asset_symbol = 'SOL'
+        AND threshold_value IN (1, 4)
+    )
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
     description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
+    updated_at_utc = excluded.updated_at_utc
+WHERE excluded.id <> 'b7c50005-0000-4000-8166-000000000003'::uuid;
 
 INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH limits(limit_value) AS (
@@ -2346,6 +2416,11 @@ SELECT
 FROM assets
 CROSS JOIN limits
 WHERE asset_symbol <> 'BTC'
+  AND asset_symbol <> 'ETH'
+  AND NOT (
+        asset_symbol = 'SOL'
+        AND limit_value IN (4, 5)
+    )
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
@@ -2375,11 +2450,26 @@ SELECT
     now()
 FROM assets
 CROSS JOIN limits
+WHERE NOT (
+        asset_symbol = 'BTC'
+        AND limit_value IN (1, 2, 3)
+    )
+  AND NOT (
+        asset_symbol = 'ETH'
+        AND limit_value IN (3, 4, 5)
+    )
+  AND NOT (
+        asset_symbol = 'SOL'
+        AND limit_value IN (1, 2, 5)
+    )
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
     description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
+    updated_at_utc = excluded.updated_at_utc
+WHERE excluded.id NOT IN (
+    'b7c50005-0000-4000-8172-000000000004'::uuid,
+    'b7c50005-0000-4000-8172-000000000005'::uuid);
 
 INSERT INTO strategies (id, code, name, description, enabled, live_stakes, paper_stake_amount, created_at_utc, updated_at_utc)
 WITH thresholds(threshold_value) AS (
@@ -10400,7 +10490,29 @@ INSERT INTO strategies (
     live_lost_counter,
     created_at_utc,
     updated_at_utc)
-VALUES
+SELECT
+    seed.id::uuid,
+    seed.code,
+    seed.name,
+    seed.description,
+    seed.enabled,
+    seed.live_stakes,
+    seed.paper_stake_amount,
+    seed.live_stake_amount,
+    seed.live_available_balance,
+    seed.paused,
+    seed.paused_until_utc::timestamptz,
+    seed.auto_live_paused,
+    seed.auto_live_paused_at_utc::timestamptz,
+    seed.auto_live_pause_window_start_utc::timestamptz,
+    seed.live_enabled_at_utc::timestamptz,
+    seed.paper_lost_coeff,
+    seed.live_lost_coeff,
+    seed.paper_lost_counter,
+    seed.live_lost_counter,
+    seed.created_at_utc,
+    seed.updated_at_utc
+FROM (VALUES
 """);
 
         for (var index = 0; index < variants.Length; index++)
@@ -10419,11 +10531,46 @@ VALUES
         }
 
         sql.AppendLine("""
+) AS seed (
+    id,
+    code,
+    name,
+    description,
+    enabled,
+    live_stakes,
+    paper_stake_amount,
+    live_stake_amount,
+    live_available_balance,
+    paused,
+    paused_until_utc,
+    auto_live_paused,
+    auto_live_paused_at_utc,
+    auto_live_pause_window_start_utc,
+    live_enabled_at_utc,
+    paper_lost_coeff,
+    live_lost_coeff,
+    paper_lost_counter,
+    live_lost_counter,
+    created_at_utc,
+    updated_at_utc)
+WHERE seed.id::uuid NOT IN (
+        'b7c50005-0001-4000-8166-000000000003'::uuid,
+        'b7c50005-0001-4000-8172-000000000004'::uuid,
+        'b7c50005-0001-4000-8172-000000000005'::uuid)
+   OR EXISTS (
+        SELECT 1
+        FROM strategies existing
+        WHERE existing.id = seed.id::uuid
+          AND existing.code = seed.code)
 ON CONFLICT (id) DO UPDATE SET
     code = excluded.code,
     name = excluded.name,
     description = excluded.description,
-    updated_at_utc = excluded.updated_at_utc;
+    updated_at_utc = excluded.updated_at_utc
+WHERE excluded.id NOT IN (
+    'b7c50005-0001-4000-8166-000000000003'::uuid,
+    'b7c50005-0001-4000-8172-000000000004'::uuid,
+    'b7c50005-0001-4000-8172-000000000005'::uuid);
 """);
         return sql.ToString();
     }

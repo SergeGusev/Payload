@@ -3,7 +3,7 @@
   "contractId": "RC-20260820-stage-progress217-service-before-history-cleanup",
   "title": "Remove 217 Progress strategies from service before history cleanup",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -142,16 +142,16 @@
           "kind": "inspection",
           "command": "Validate the staged requirement contract and exact source diff, commit the verified implementation on codex/progress-purge-217, and record the commit identity and upstream state.",
           "expected": "A normal Git source commit contains the exact verified correction, has no automatic cleanup path, and is ready for the user's deployment; post-deployment verification remains explicitly next.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "The exact corrected source, tests, documentation, completed contract, and workflow context were staged on codex/progress-purge-217 after approval commit 510b036b; cached diff-check and the mandatory staged requirement gate passed. The implementation commit containing this completed contract is the exact source-release handoff."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "Independent reviewer compares both verbatim requests, this approved contract, the final diff, build/tests, and deployment evidence.",
           "expected": "PASS with no open semantic or safety finding.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/progress_217_diff_review compared both verbatim requests, the approved cb22fa52 contract, unchanged product/test diff, focused 10/10, isolated PG17 6/6, and Release build 0-error evidence; verdict PASS with no findings."
         }
       ]
     }
@@ -165,9 +165,9 @@
     "semanticDigest": "sha256:cb22fa52ba4a6e14395a274f6d224297b485ee4ed8fda61f48b54f66ef75e190"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/progress_217_diff_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

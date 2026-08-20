@@ -3,7 +3,7 @@
   "contractId": "RC-20260820-merge-progress217-into-deployment-branch",
   "title": "Merge verified Progress-217 release into the deployment branch",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -63,8 +63,8 @@
           "kind": "inspection",
           "command": "Inspect merge parents, retained unique commits, exact merged catalog cardinalities, six retained links, seed SQL, and absence of automatic cleanup SQL.",
           "expected": "Both histories and all exact Progress-217 semantics are present with no unapproved product conflict or cleanup path.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Current staged merge has HEAD ca43c12e and exact MERGE_HEAD 6cec2351; deployment product tip 1892a926 and original approval commits 1d5361cc, a735d5ff, and 510b036b are ancestors. Product/test/config blobs match the verified feature tip, exact 217 exclusion and six retained links remain, automatic cleanup is absent, only the three approved context/history conflicts were combined, and README retains both branches' documentation."
         }
       ]
     },
@@ -90,24 +90,24 @@
           "kind": "build",
           "command": "Build PolyCopyTrader.sln in Release with all temporary outputs under one marked D:\\CodexTemp run.",
           "expected": "Build completes with zero errors.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Release build of PolyCopyTrader.sln completed with 0 errors and 126 existing warnings; evidence log merge-solution-restored.log in the marked CodexTemp run."
         },
         {
           "id": "VER-003",
           "kind": "test",
           "command": "Run focused non-PostgreSQL Progress catalog tests and the fresh isolated PostgreSQL initializer/history-preservation tests against the merged branch.",
           "expected": "All selected tests pass with no target/history rewrite and no cleanup marker.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused Progress catalog/seed/reference tests passed 12/12 in merge-progress-focused.trx; the exact two fresh isolated PostgreSQL 17 initializer/history-preservation tests passed 2/2 in merge-progress-postgres.trx. The disposable test database was dropped and its PostgreSQL process stopped."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Independent reviewer compares this verbatim request, approved contract, merge result, conflict resolutions, and build/test/gate evidence.",
           "expected": "PASS with no open finding.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent agent /root/progress_217_diff_review compared the original request, approved digest 7cec2ed0, current staged merge, conflict resolutions, parentage, build/tests, and gates; verdict PASS with no blocking findings."
         }
       ]
     },
@@ -132,8 +132,8 @@
           "kind": "inspection",
           "command": "Before creating the merge commit, verify the exact configured upstream, prove origin is an ancestor of the staged deployment history, and verify that the resulting publication requires a normal fast-forward push; after the contract-completing commit, perform the push and local/upstream equality check as repository workflow finalization.",
           "expected": "The pre-commit publication path is verified as normal and non-force; the exact completed merge is then pushed and equality-checked immediately after it exists.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Configured upstream is origin/codex/reference-average-available-windows at product tip 1892a926; git merge-base --is-ancestor proves it is an ancestor of pre-merge HEAD ca43c12e, so the completed merge can be published by a normal fast-forward push without force. Exact local/upstream equality will be checked immediately after the merge commit as repository workflow finalization."
         }
       ]
     }
@@ -148,8 +148,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

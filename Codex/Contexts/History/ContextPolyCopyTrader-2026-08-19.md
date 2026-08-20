@@ -81,3 +81,12 @@ Request:
 
 Result:
 Confirmed read-only that the same deployed build remains Running/Live with a fresh heartbeat and no last error. Historical parity audit count grew from the prior 100 to 2,500, then independently to 2,550 on the next observed page. All 51 pages processed 50/50 targets with zero accounting conflicts, query deferrals, lock deferrals, or recorded parity errors. The specific ETH LegacyUnknown run remains the strategy's only incomplete pre-cutoff row and has not yet been reached. No production or product mutation was made.
+
+## 2026-08-19T20:12:46.2704746Z
+Request:
+Да, удаляем 217 стратегий
+
+APPROVE RC-20260819-remove-217-unreferenced-negative-progress-strategies sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac
+
+Result:
+Implementation is in progress in isolated branch `codex/progress-purge-217`. The exact 217 strategy catalog exclusions and fail-closed atomic cleanup migration were implemented with focused tests and documentation; solution build passed and focused tests passed. The databases, services, orders, and deployment remain unchanged. Completion is pending mandatory independent diff review, focused PostgreSQL transaction verification, fresh pre-deploy gates, deployment, and post-delete verification.

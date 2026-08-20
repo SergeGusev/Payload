@@ -88,20 +88,23 @@ public sealed class ChildMirrorStrategyCatalogTests
 
     private static int[] GetExpectedChildProgressLookbacks(string assetSymbol)
     {
-        return string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)
-            ? [7, 12, 15, 16, 17, 18, 20, 22, 23]
-            : Enumerable.Range(1, 24).ToArray();
+        return assetSymbol.ToUpperInvariant() switch
+        {
+            "BTC" => [],
+            "ETH" => [],
+            "SOL" => [15, 17, 19, 20, 21, 22, 23, 24],
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, null)
+        };
     }
 
     private static int[] GetExpectedChildProgressRoiLookbacks(string assetSymbol)
     {
-        if (string.Equals(assetSymbol, "ETH", StringComparison.OrdinalIgnoreCase))
+        return assetSymbol.ToUpperInvariant() switch
         {
-            return [1, 2, 4, 6, 10, 20];
-        }
-
-        return string.Equals(assetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)
-            ? [1, 2, 3, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 20, 22, 24]
-            : Enumerable.Range(1, 24).ToArray();
+            "BTC" => [4, 5, 6, 7, 8, 9, 22],
+            "ETH" => [1, 20],
+            "SOL" => [9],
+            _ => throw new ArgumentOutOfRangeException(nameof(assetSymbol), assetSymbol, null)
+        };
     }
 }
