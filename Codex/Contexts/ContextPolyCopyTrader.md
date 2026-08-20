@@ -1,6 +1,19 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-20 Verify Deployed Progress-217 Catalog Correction
+Goal: Verify read-only that production runs the merged Progress-217 deployment and no retired target resumed creating activity.
+Status: Completed
+Done:
+- Verified exact production PostgreSQL `192.168.0.101:5432/polycopytrader` / PostgreSQL 18.3 in bounded UTC `REPEATABLE READ READ ONLY` sessions.
+- Confirmed service start `2026-08-20T18:30:32.280719Z`, exact deployed revision `26d6287454e6b45393d49515b7cca4454f2c77ce`, `Running / Live`, advancing heartbeat, and empty `last_error`.
+- Reconstructed the exact 217 UUID/code allowlist independently: all 217 persisted rows still exist, all remain disabled, Live-off and permanently paused, and none was updated or created a Paper order, Live order, or strategy run after the new service start.
+- Confirmed cleanup marker count is zero, so history was not deleted; all three referenced source strategies and all three retained LowerEnter owners remain exact.
+- Ordinary Paper run/order timestamps advanced after deployment. One transient service lock wait observed at `18:35:32Z` cleared by the bounded `18:35:52Z` recheck; final idle-in-transaction, service lock-wait, and ungranted-lock counts were all zero.
+Next: Run a fresh exact deletion preview and then perform the separately approved local/product structured-history cleanup for the 217 targets; do not delete the six retained strategies.
+Notes: All production access was read-only with 15-second statement and 2-second lock timeouts. No database, service, configuration, file, deployment, order, or trading state changed.
+Blockers: None.
+
 ## Active Update 2026-08-20 Merge Progress-217 Into Deployment Branch
 Goal: Put the verified Progress-217 catalog correction into the exact branch used for deployment without losing newer deployment work or approval history.
 Status: Completed locally; immediate repository-workflow push follows this merge commit

@@ -116,3 +116,10 @@ APPROVE RC-20260820-merge-progress217-into-deployment-branch sha256:7cec2ed0808e
 
 Result:
 The exact verified Progress-217 tip was merged non-squashed into `codex/reference-average-available-windows` while preserving the newer deployment product history and original approval commits. Only the three approved context/history conflicts were combined, and the standing deployment-branch handoff rule was recorded. Release build passed with zero errors, focused tests passed 12/12, fresh isolated PostgreSQL 17 tests passed 2/2, and independent review passed. No database, service, deployment, or trading state was changed; the normal upstream push follows immediately after this merge commit exists.
+
+## 2026-08-20T18:36:06.4959053Z
+Request:
+Выложил, проверяй
+
+Result:
+Strictly read-only production verification confirmed PostgreSQL 18.3 and a newly started `PolyCopyTrader.Service` running exact merged revision `26d6287454e6b45393d49515b7cca4454f2c77ce`, with advancing heartbeat and empty error. The exact 217 target UUID/code rows remain present but disabled, Live-off and permanently paused; zero target strategy updates, Paper orders, Live orders, or strategy runs appeared after the new service start. Cleanup marker count remains zero, so history has not been deleted. All three referenced source strategies and three retained LowerEnter owners remain exact. One transient service lock wait cleared within the bounded recheck; final idle-transaction, lock-wait and ungranted-lock counts were zero. No production or service state was mutated.
