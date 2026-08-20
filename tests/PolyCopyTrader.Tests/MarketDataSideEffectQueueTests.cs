@@ -350,6 +350,304 @@ public sealed class MarketDataSideEffectQueueTests
     }
 
     [Fact]
+    public async Task DrainOutstandingPaperOrderUpdates_PrioritizesMatchingAssetOverUnrelatedBacklog()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        var orderId = Guid.NewGuid();
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receivedAtUtc = acceptedAtUtc.AddSeconds(10);
+        var expiresAtUtc = acceptedAtUtc.AddMinutes(1);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+            EnqueueAt(queue, Quote("unrelated-1", 0.20m), receivedAtUtc, new HashSet<Guid>());
+            EnqueueAt(queue, Quote("unrelated-2", 0.30m), receivedAtUtc, new HashSet<Guid>());
+            EnqueueAt(queue, Quote("asset-maker", 0.49m), receivedAtUtc, new HashSet<Guid> { orderId });
+
+            var drainTask = queue.DrainOutstandingPaperOrderUpdatesAsync(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc);
+            Assert.False(drainTask.IsCompleted);
+
+            handler.ReleaseFirstUpdate();
+            await drainTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await queue.StopAsync(CancellationToken.None);
+
+            var processedAssets = handler.ProcessedUpdates
+                .Select(item => item.Update.AssetId!)
+                .ToArray();
+            Assert.Equal("blocker", processedAssets[0]);
+            Assert.Equal("asset-maker", processedAssets[1]);
+            Assert.Equal(["unrelated-1", "unrelated-2"], processedAssets[2..]);
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task DrainOutstandingPaperOrderUpdates_PreservesSameAssetFifoBeforeMatchingItem()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        var orderId = Guid.NewGuid();
+        var otherOrderId = Guid.NewGuid();
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receivedAtUtc = acceptedAtUtc.AddSeconds(10);
+        var expiresAtUtc = acceptedAtUtc.AddMinutes(1);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+            EnqueueAt(queue, Quote("asset-maker", 0.31m), receivedAtUtc, new HashSet<Guid> { otherOrderId });
+            EnqueueAt(queue, Quote("asset-maker", 0.49m), receivedAtUtc.AddTicks(1), new HashSet<Guid> { orderId });
+            EnqueueAt(queue, Quote("unrelated", 0.20m), receivedAtUtc, new HashSet<Guid>());
+
+            var drainTask = queue.DrainOutstandingPaperOrderUpdatesAsync(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc);
+            handler.ReleaseFirstUpdate();
+            await drainTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await queue.StopAsync(CancellationToken.None);
+
+            var makerBids = handler.ProcessedUpdates
+                .Where(item => item.Update.AssetId == "asset-maker")
+                .Select(item => item.Update.OrderBookSnapshot!.BestBid!.Value)
+                .ToArray();
+            Assert.Equal([0.31m, 0.49m], makerBids);
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task DrainOutstandingPaperOrderUpdates_WaitsForMatchingInFlightItem()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        var orderId = Guid.NewGuid();
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receivedAtUtc = acceptedAtUtc.AddSeconds(10);
+        var expiresAtUtc = acceptedAtUtc.AddMinutes(1);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            EnqueueAt(queue, Quote("asset-maker", 0.49m), receivedAtUtc, new HashSet<Guid> { orderId });
+            await handler.WaitForFirstUpdateAsync();
+            var drainTask = queue.DrainOutstandingPaperOrderUpdatesAsync(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc);
+            Assert.False(drainTask.IsCompleted);
+
+            handler.ReleaseFirstUpdate();
+            await drainTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(queue.HasOutstandingPaperOrderUpdate(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc));
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task DrainOutstandingPaperOrderUpdates_CancellationRemovesWaiterAndLaterDrainSucceeds()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        var orderId = Guid.NewGuid();
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receivedAtUtc = acceptedAtUtc.AddSeconds(10);
+        var expiresAtUtc = acceptedAtUtc.AddMinutes(1);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+            EnqueueAt(queue, Quote("asset-maker", 0.49m), receivedAtUtc, new HashSet<Guid> { orderId });
+            using var cancellation = new CancellationTokenSource();
+            var canceledDrain = queue.DrainOutstandingPaperOrderUpdatesAsync(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc,
+                cancellation.Token);
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceledDrain);
+
+            var laterDrain = queue.DrainOutstandingPaperOrderUpdatesAsync(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc);
+            handler.ReleaseFirstUpdate();
+            await laterDrain.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task DrainOutstandingPaperOrderUpdates_HandlerFailurePublishesPoisonBeforeCompletion()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true, throwOnUpdate: true);
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var queue = CreateQueue(handler, makerGtdPaperPlacementHandoff: handoff);
+        var orderId = Guid.NewGuid();
+        handoff.TrackMakerGtdPaperOrder(orderId, MakerGtdPaperExecutionContract.ExecutionSource);
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receivedAtUtc = acceptedAtUtc.AddSeconds(10);
+        var expiresAtUtc = acceptedAtUtc.AddMinutes(1);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+            EnqueueAt(queue, Quote("asset-maker", 0.49m), receivedAtUtc, new HashSet<Guid> { orderId });
+            var drainTask = queue.DrainOutstandingPaperOrderUpdatesAsync(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc);
+
+            handler.ReleaseFirstUpdate();
+            await drainTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.True(handoff.TryGetMarketDataFailure(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc,
+                out var failure));
+            Assert.Equal(
+                MakerGtdPaperExecutionContract.MarketDataHandlerFailureCode,
+                Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task DrainOutstandingPaperOrderUpdates_OneItemCompletesAllMatchingOrderWaitersExactlyOnce()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        var firstOrderId = Guid.NewGuid();
+        var secondOrderId = Guid.NewGuid();
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var receivedAtUtc = acceptedAtUtc.AddSeconds(10);
+        var expiresAtUtc = acceptedAtUtc.AddMinutes(1);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+            EnqueueAt(
+                queue,
+                Quote("asset-maker", 0.49m),
+                receivedAtUtc,
+                new HashSet<Guid> { firstOrderId, secondOrderId });
+            var firstDrain = queue.DrainOutstandingPaperOrderUpdatesAsync(
+                firstOrderId, "asset-maker", "condition-1", acceptedAtUtc, expiresAtUtc);
+            var secondDrain = queue.DrainOutstandingPaperOrderUpdatesAsync(
+                secondOrderId, "asset-maker", "condition-1", acceptedAtUtc, expiresAtUtc);
+
+            handler.ReleaseFirstUpdate();
+            await Task.WhenAll(firstDrain, secondDrain).WaitAsync(TimeSpan.FromSeconds(5));
+            await queue.StopAsync(CancellationToken.None);
+
+            Assert.Equal(
+                1,
+                handler.ProcessedUpdates.Count(item => item.Update.AssetId == "asset-maker"));
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task DrainOutstandingPaperOrderUpdates_DoesNotWaitForPostExpiryItemAndStillProcessesItNormally()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        var orderId = Guid.NewGuid();
+        var acceptedAtUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var expiresAtUtc = acceptedAtUtc.AddSeconds(30);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+            EnqueueAt(
+                queue,
+                Quote("asset-maker", 0.49m),
+                expiresAtUtc,
+                new HashSet<Guid> { orderId });
+
+            await queue.DrainOutstandingPaperOrderUpdatesAsync(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc);
+            Assert.True(queue.GetMetrics().PendingUpdates > 0);
+
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+            Assert.Equal(
+                1,
+                handler.ProcessedUpdates.Count(item => item.Update.AssetId == "asset-maker"));
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task EnqueueFrameDiagnostic_DropsRoutineSamplesBeforeImportantDiagnostics()
     {
         var handler = new ControlledHandler(blockFirstDiagnostic: true);
@@ -460,6 +758,20 @@ public sealed class MarketDataSideEffectQueueTests
             update,
             null,
             DateTimeOffset.UtcNow,
+            eligiblePaperOrderIds ?? new HashSet<Guid>());
+    }
+
+    private static MarketDataSideEffectEnqueueOutcome EnqueueAt(
+        IMarketDataSideEffectQueue queue,
+        MarketDataUpdate update,
+        DateTimeOffset receivedAtUtc,
+        IReadOnlySet<Guid>? eligiblePaperOrderIds = null)
+    {
+        return queue.EnqueueUpdate(
+            "test-component",
+            update,
+            null,
+            receivedAtUtc,
             eligiblePaperOrderIds ?? new HashSet<Guid>());
     }
 

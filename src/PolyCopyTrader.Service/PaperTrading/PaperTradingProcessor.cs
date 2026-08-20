@@ -864,11 +864,56 @@ public sealed class PaperTradingProcessor(
                 orderEvidence.AcceptedAtUtc,
                 order.ExpiresAtUtc))
         {
+            await marketDataSideEffectQueue.DrainOutstandingPaperOrderUpdatesAsync(
+                order.Id,
+                order.AssetId,
+                order.ConditionId,
+                orderEvidence.AcceptedAtUtc,
+                order.ExpiresAtUtc,
+                cancellationToken);
+
+            if (marketDataSideEffectQueue.HasOutstandingPaperOrderUpdate(
+                    order.Id,
+                    order.AssetId,
+                    order.ConditionId,
+                    orderEvidence.AcceptedAtUtc,
+                    order.ExpiresAtUtc))
+            {
+                logger.LogWarning(
+                    "Maker-GTD Paper expiry remains deferred after the priority drain reported completion. PaperOrderId={PaperOrderId} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
+                    order.Id,
+                    order.ExpiresAtUtc);
+                return false;
+            }
+
             logger.LogDebug(
-                "Maker-GTD Paper expiry deferred for a queued pre-expiry market-data update. PaperOrderId={PaperOrderId} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
+                "Maker-GTD Paper expiry processed all accepted pre-expiry market-data updates before terminal evaluation. PaperOrderId={PaperOrderId} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
                 order.Id,
                 order.ExpiresAtUtc);
-            return false;
+
+            var refreshedOrder = await repository.GetPaperOrderAsync(order.Id, cancellationToken);
+            if (refreshedOrder is null)
+            {
+                logger.LogWarning(
+                    "Maker-GTD Paper expiry stopped after the priority drain because the order could not be reloaded. PaperOrderId={PaperOrderId}",
+                    order.Id);
+                return false;
+            }
+
+            if (refreshedOrder.Status != PaperOrderStatus.Pending)
+            {
+                logger.LogDebug(
+                    "Maker-GTD Paper expiry stopped after the priority drain because accepted market data already finalized the order. PaperOrderId={PaperOrderId} Status={Status}",
+                    order.Id,
+                    refreshedOrder.Status);
+                return false;
+            }
+
+            order = refreshedOrder;
+            var refreshedRuns = await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
+                [order.Id],
+                cancellationToken);
+            restingRun = refreshedRuns.Count == 1 ? refreshedRuns[0] : null;
         }
 
         MakerGtdPaperMarketDataFailure? marketDataFailure = null;

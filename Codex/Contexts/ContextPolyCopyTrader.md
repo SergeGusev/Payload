@@ -1,3 +1,15 @@
+## Active Update 2026-08-20 Maker Expiry Side-Effect Priority Implemented
+Goal: Remove the remaining exact ETH Maker-GTD terminal delay caused by accepted pre-expiry side-effect work waiting behind unrelated assets.
+Status: Completed locally; final gated commit and push pending
+Done:
+- Added an exact per-order asynchronous queue drain that temporarily prioritizes the affected asset while preserving same-asset FIFO, current in-flight completion, cancellation recovery, failure evidence, and exactly-once/no-drop processing.
+- Kept the fair exclusive expiry admission while draining, then rechecked outstanding work and reloaded persisted order/run state before using the existing fill-or-terminal path in the same lifecycle pass.
+- Added real queue/processor regressions for a prioritized valid touch and handler failure, plus deterministic queue tests for unrelated backlog, FIFO, in-flight work, multiple callers, cancellation, and post-expiry events.
+- Final focused verification passed 80/80; the complete Debug build passed with 0 errors and 126 existing warnings; independent reviewer `agent:/root/maker_expiry_fairness_review` returned PASS with no findings.
+Next: Run completed-contract WorkingTree/Staged validation, commit, push, and clean the marked temp run.
+Notes: Product diff hash reviewed was `5583cf97a836f5b4e34b7aa5c5d277d197d1588b`. A truly non-completing in-flight handler still blocks expiry by design; no timeout, drop, fabricated result, production mutation, deployment, or historical rewrite was introduced.
+Blockers: None.
+
 ## Active Update 2026-08-20 Maker Expiry Side-Effect Priority Approved
 Goal: Implement the approved priority drain for accepted pre-expiry Maker-GTD side effects.
 Status: Approved; parent approval commit pending

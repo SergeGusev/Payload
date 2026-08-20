@@ -57,6 +57,17 @@ public interface IMarketDataSideEffectQueue
     {
         return false;
     }
+
+    Task DrainOutstandingPaperOrderUpdatesAsync(
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
 }
 
 public sealed class MarketDataSideEffectQueue(
@@ -74,7 +85,8 @@ public sealed class MarketDataSideEffectQueue(
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
         makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
     private readonly Dictionary<string, PendingAssetUpdates> pendingUpdatesByAsset = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Queue<string> readyAssetKeys = new();
+    private readonly LinkedList<string> readyAssetKeys = [];
+    private readonly List<PaperOrderDrainRequest> paperOrderDrainRequests = [];
     private readonly LinkedList<DiagnosticWorkItem> pendingDiagnostics = [];
     private readonly SemaphoreSlim updateSignal = new(0);
     private readonly SemaphoreSlim frameDiagnosticSignal = new(0);
@@ -246,7 +258,7 @@ public sealed class MarketDataSideEffectQueue(
             if (!pendingAssetUpdates.Scheduled)
             {
                 pendingAssetUpdates.Scheduled = true;
-                readyAssetKeys.Enqueue(assetKey);
+                readyAssetKeys.AddLast(assetKey);
                 shouldSignal = true;
             }
         }
@@ -368,25 +380,90 @@ public sealed class MarketDataSideEffectQueue(
 
         lock (updateSync)
         {
-            if (IsOutstandingPaperOrderUpdate(
-                    inFlightUpdate,
+            return CountOutstandingPaperOrderUpdates(
+                paperOrderId,
+                assetId,
+                conditionId,
+                acceptedAfterUtc,
+                expiresBeforeUtc) > 0;
+        }
+    }
+
+    public async Task DrainOutstandingPaperOrderUpdatesAsync(
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        if (paperOrderId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(assetId) ||
+            string.IsNullOrWhiteSpace(conditionId) ||
+            acceptedAfterUtc >= expiresBeforeUtc)
+        {
+            return;
+        }
+
+        PaperOrderDrainRequest request;
+        lock (updateSync)
+        {
+            if (CountOutstandingPaperOrderUpdates(
                     paperOrderId,
                     assetId,
                     conditionId,
                     acceptedAfterUtc,
-                    expiresBeforeUtc))
+                    expiresBeforeUtc) == 0)
             {
-                return true;
+                return;
             }
 
-            return pendingUpdatesByAsset.Values.Any(pending =>
-                pending.Items.Any(item => IsOutstandingPaperOrderUpdate(
-                    item,
+            request = new PaperOrderDrainRequest(
+                paperOrderId,
+                assetId,
+                conditionId,
+                acceptedAfterUtc,
+                expiresBeforeUtc,
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
+            paperOrderDrainRequests.Add(request);
+        }
+
+        var waitStarted = Stopwatch.GetTimestamp();
+        var canceled = false;
+        try
+        {
+            await request.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            canceled = true;
+            throw;
+        }
+        finally
+        {
+            int remainingMatches;
+            lock (updateSync)
+            {
+                paperOrderDrainRequests.Remove(request);
+                remainingMatches = CountOutstandingPaperOrderUpdates(
                     paperOrderId,
                     assetId,
                     conditionId,
                     acceptedAfterUtc,
-                    expiresBeforeUtc)));
+                    expiresBeforeUtc);
+            }
+
+            var waitDuration = Stopwatch.GetElapsedTime(waitStarted);
+            if (waitDuration.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds)
+            {
+                logger.LogWarning(
+                    "Maker-GTD Paper expiry side-effect drain was slow. PaperOrderId={PaperOrderId} AssetId={AssetId} WaitDurationMs={WaitDurationMs} RemainingMatchingUpdates={RemainingMatchingUpdates} Canceled={Canceled}",
+                    paperOrderId,
+                    assetId,
+                    waitDuration.TotalMilliseconds,
+                    remainingMatches,
+                    canceled);
+            }
         }
     }
 
@@ -477,7 +554,9 @@ public sealed class MarketDataSideEffectQueue(
         {
             while (readyAssetKeys.Count > 0)
             {
-                var assetKey = readyAssetKeys.Dequeue();
+                var readyNode = FindPriorityReadyAssetNode() ?? readyAssetKeys.First!;
+                var assetKey = readyNode.Value;
+                readyAssetKeys.Remove(readyNode);
                 if (!pendingUpdatesByAsset.TryGetValue(assetKey, out var pendingAssetUpdates) ||
                     pendingAssetUpdates.Items.First is not { } firstNode)
                 {
@@ -493,7 +572,15 @@ public sealed class MarketDataSideEffectQueue(
                 if (pendingAssetUpdates.Items.Count > 0)
                 {
                     pendingAssetUpdates.Scheduled = true;
-                    readyAssetKeys.Enqueue(assetKey);
+                    if (HasPendingDrainMatch(pendingAssetUpdates.Items))
+                    {
+                        readyAssetKeys.AddFirst(assetKey);
+                    }
+                    else
+                    {
+                        readyAssetKeys.AddLast(assetKey);
+                    }
+
                     shouldSignal = true;
                 }
                 else
@@ -670,7 +757,77 @@ public sealed class MarketDataSideEffectQueue(
             {
                 inFlightUpdate = null;
             }
+
+            for (var index = paperOrderDrainRequests.Count - 1; index >= 0; index--)
+            {
+                var request = paperOrderDrainRequests[index];
+                if (CountOutstandingPaperOrderUpdates(
+                        request.PaperOrderId,
+                        request.AssetId,
+                        request.ConditionId,
+                        request.AcceptedAfterUtc,
+                        request.ExpiresBeforeUtc) == 0)
+                {
+                    paperOrderDrainRequests.RemoveAt(index);
+                    request.Completion.TrySetResult(true);
+                }
+            }
         }
+    }
+
+    private LinkedListNode<string>? FindPriorityReadyAssetNode()
+    {
+        foreach (var request in paperOrderDrainRequests)
+        {
+            for (var node = readyAssetKeys.First; node is not null; node = node.Next)
+            {
+                if (pendingUpdatesByAsset.TryGetValue(node.Value, out var pending) &&
+                    pending.Items.Any(item => IsOutstandingPaperOrderUpdate(item, request)))
+                {
+                    return node;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private bool HasPendingDrainMatch(LinkedList<MarketDataSideEffectWorkItem> items)
+    {
+        return paperOrderDrainRequests.Any(request =>
+            items.Any(item => IsOutstandingPaperOrderUpdate(item, request)));
+    }
+
+    private int CountOutstandingPaperOrderUpdates(
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc)
+    {
+        var count = IsOutstandingPaperOrderUpdate(
+            inFlightUpdate,
+            paperOrderId,
+            assetId,
+            conditionId,
+            acceptedAfterUtc,
+            expiresBeforeUtc)
+            ? 1
+            : 0;
+
+        var assetKey = "asset:" + assetId.Trim();
+        if (pendingUpdatesByAsset.TryGetValue(assetKey, out var pending))
+        {
+            count += pending.Items.Count(item => IsOutstandingPaperOrderUpdate(
+                item,
+                paperOrderId,
+                assetId,
+                conditionId,
+                acceptedAfterUtc,
+                expiresBeforeUtc));
+        }
+
+        return count;
     }
 
     private static bool IsOutstandingPaperOrderUpdate(
@@ -697,6 +854,19 @@ public sealed class MarketDataSideEffectQueue(
 
         return workItem.EligiblePaperOrderIds is null ||
             workItem.EligiblePaperOrderIds.Contains(paperOrderId);
+    }
+
+    private static bool IsOutstandingPaperOrderUpdate(
+        MarketDataSideEffectWorkItem workItem,
+        PaperOrderDrainRequest request)
+    {
+        return IsOutstandingPaperOrderUpdate(
+            workItem,
+            request.PaperOrderId,
+            request.AssetId,
+            request.ConditionId,
+            request.AcceptedAfterUtc,
+            request.ExpiresBeforeUtc);
     }
 
     private bool IsReplaceable(MarketDataUpdate update, IReadOnlySet<Guid>? eligiblePaperOrderIds)
@@ -763,6 +933,14 @@ public sealed class MarketDataSideEffectQueue(
 
         public bool Scheduled { get; set; }
     }
+
+    private sealed record PaperOrderDrainRequest(
+        Guid PaperOrderId,
+        string AssetId,
+        string ConditionId,
+        DateTimeOffset AcceptedAfterUtc,
+        DateTimeOffset ExpiresBeforeUtc,
+        TaskCompletionSource<bool> Completion);
 
     private sealed record DiagnosticWorkItem(
         MarketWebSocketFrameDiagnostic? FrameDiagnostic,

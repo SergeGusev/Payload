@@ -3,7 +3,7 @@
   "contractId": "RC-20260820-maker-expiry-side-effect-priority",
   "title": "Prioritize accepted pre-expiry Maker updates before terminal evaluation",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -64,8 +64,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Deterministic tests prove priority over unrelated backlog, same-asset FIFO, in-flight completion, failure publication, multiple callers/orders, cancellation recovery, and exactly-once/no-drop behavior.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final post-edit TRX D:\\CodexTemp\\runs\\manual-093c320baa0c495088dd43eeaf47bda4\\results\\final-tests2\\final-tests2.trx passed as part of the exact approved 80-test filter: 80 passed, 0 failed, 0 skipped. The MarketDataSideEffectQueue regressions cover priority over unrelated backlog, same-asset FIFO, in-flight completion, failure publication before drain completion, multiple callers, cancellation recovery, post-expiry nonblocking behavior, and exactly-once/no-drop processing."
         }
       ]
     },
@@ -100,24 +100,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~MakerGtdPaperPlacementHandoffTests|FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "The real queue/processor integration proves matching update priority and same-pass fill-or-terminal behavior while all existing Maker admission, evidence, atomic, worker-isolation, and exception tests pass.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final post-edit exact approved filter in D:\\CodexTemp\\runs\\manual-093c320baa0c495088dd43eeaf47bda4\\results\\final-tests2\\final-tests2.trx passed 80/80 with 0 failed and 0 skipped. Real queue/processor integration verifies prioritized pre-expiry touch fills exactly once, persisted-order reload prevents stale terminalization, and failure evidence reaches the existing same-pass evidence-unavailable expiry path."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "Complete solution build succeeds with zero errors; warnings are reported exactly.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final complete Debug solution build after the last source edit succeeded with 0 errors and 126 existing warnings. Artifacts: D:\\CodexTemp\\runs\\manual-093c320baa0c495088dd43eeaf47bda4\\artifacts\\build-final; log: D:\\CodexTemp\\runs\\manual-093c320baa0c495088dd43eeaf47bda4\\logs\\build-final.log."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Inspect the complete diff, run requirement-gate WorkingTree/Staged validation and git diff --check, and obtain independent semantic review against the verbatim prompts and approved digest.",
           "expected": "Only approved paths change; no signal, execution intent, accounting, Live, schema, configuration, timeout, event-drop, or production behavior outside the approved queue scheduling boundary changes; reviewer verdict is pass with no findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Exactly the six approved product/test/documentation paths changed; current diff hash 5583cf97a836f5b4e34b7aa5c5d277d197d1588b. git diff --check and WorkingTree requirement validation passed. Independent reviewer agent:/root/maker_expiry_fairness_review compared the verbatim prompts, approved contract/digest, complete final diff, and post-edit evidence and returned PASS with findings=[]."
         }
       ]
     }
@@ -131,9 +131,9 @@
     "semanticDigest": "sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c"
   },
   "independentReview": {
-    "reviewer": "agent:/root/maker-expiry-side-effect-priority-review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/maker_expiry_fairness_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

@@ -479,7 +479,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             StrategyMarketPaperRunStatuses.Resting,
             Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
         Assert.Equal(0, clobClient.OrderBookCalls);
-        Assert.Equal(1, queue.OutstandingChecks);
+        Assert.Equal(2, queue.OutstandingChecks);
 
         queue.HasOutstandingUpdate = false;
         var expiredResult = await processor.ProcessOpenOrdersAsync();
@@ -488,6 +488,183 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
         Assert.Empty(scenario.Repository.PaperFills);
         Assert.Equal(0, clobClient.OrderBookCalls);
+    }
+
+    [Fact]
+    public async Task Processor_QueuedPreExpiryMakerUpdate_DrainsAndExpiresInSamePass()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
+        var clobClient = new CountingClobClient();
+        var queue = new OutstandingMarketDataSideEffectQueue
+        {
+            HasOutstandingUpdate = true,
+            ClearOutstandingOnDrain = true
+        };
+        var processor = CreateProcessor(scenario.Repository, cache, clobClient, queue);
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersExpired);
+        Assert.Equal(1, queue.DrainCalls);
+        Assert.Equal(2, queue.OutstandingChecks);
+        Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Skipped,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+        Assert.Equal(0, clobClient.OrderBookCalls);
+    }
+
+    [Fact]
+    public async Task Processor_PriorityDrainProcessesAcceptedTouchBeforeExpiryWithoutDuplicateTerminalMutation()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now.AddMinutes(-1), expiresAtUtc: now.AddSeconds(-1));
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        handoff.TrackMakerGtdPaperOrder(
+            scenario.Order.Id,
+            MakerGtdPaperExecutionContract.ExecutionSource);
+        var updater = CreateUpdater(scenario.Repository, handoff);
+        var handler = new BlockingPaperUpdateHandler(updater);
+        var queue = new MarketDataSideEffectQueue(
+            NullLogger<MarketDataSideEffectQueue>.Instance,
+            new MarketDataWebSocketOptions
+            {
+                SideEffectMaxPendingUpdatesPerAsset = 32,
+                SideEffectDiagnosticQueueCapacity = 256,
+                SideEffectMetricsIntervalSeconds = 3_600
+            },
+            handler,
+            scenario.Repository,
+            handoff);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            queue.EnqueueUpdate(
+                "test",
+                LastTradeUpdate(
+                    scenario.Order with { AssetId = "unrelated-asset" },
+                    0.10m,
+                    scenario.Order.ExpiresAtUtc.AddSeconds(-2),
+                    scenario.Order.ExpiresAtUtc.AddSeconds(-2)),
+                null,
+                scenario.Order.ExpiresAtUtc.AddSeconds(-2),
+                new HashSet<Guid>());
+            await handler.WaitForFirstUpdateAsync();
+
+            var touchReceivedAtUtc = scenario.Order.ExpiresAtUtc.AddMilliseconds(-10);
+            queue.EnqueueUpdate(
+                "test",
+                LastTradeUpdate(
+                    scenario.Order,
+                    scenario.Order.Price,
+                    touchReceivedAtUtc.AddMilliseconds(-1),
+                    touchReceivedAtUtc),
+                null,
+                touchReceivedAtUtc,
+                new HashSet<Guid> { scenario.Order.Id });
+            var processor = CreateProcessor(
+                scenario.Repository,
+                CreateHealthyCache(scenario.Order, reconnectCount: 2),
+                new CountingClobClient(),
+                queue,
+                handoff);
+            var processingTask = processor.ProcessOpenOrdersAsync();
+
+            handler.ReleaseFirstUpdate();
+            var result = await processingTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(0, result.OrdersExpired);
+            Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+            Assert.Single(scenario.Repository.PaperFills);
+            Assert.Equal(
+                StrategyMarketPaperRunStatuses.Entered,
+                Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task Processor_PriorityDrainPublishesHandlerFailureAndExpiresEvidenceUnavailableInSamePass()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now.AddMinutes(-1), expiresAtUtc: now.AddSeconds(-1));
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        handoff.TrackMakerGtdPaperOrder(
+            scenario.Order.Id,
+            MakerGtdPaperExecutionContract.ExecutionSource);
+        var handler = new BlockingPaperUpdateHandler(
+            CreateUpdater(scenario.Repository, handoff),
+            throwAfterFirstUpdate: true);
+        var queue = new MarketDataSideEffectQueue(
+            NullLogger<MarketDataSideEffectQueue>.Instance,
+            new MarketDataWebSocketOptions
+            {
+                SideEffectMaxPendingUpdatesPerAsset = 32,
+                SideEffectDiagnosticQueueCapacity = 256,
+                SideEffectMetricsIntervalSeconds = 3_600
+            },
+            handler,
+            scenario.Repository,
+            handoff);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            var preExpiryUtc = scenario.Order.ExpiresAtUtc.AddMilliseconds(-10);
+            queue.EnqueueUpdate(
+                "test",
+                LastTradeUpdate(
+                    scenario.Order with { AssetId = "unrelated-asset" },
+                    0.10m,
+                    preExpiryUtc.AddMilliseconds(-1),
+                    preExpiryUtc),
+                null,
+                preExpiryUtc,
+                new HashSet<Guid>());
+            await handler.WaitForFirstUpdateAsync();
+            queue.EnqueueUpdate(
+                "test",
+                LastTradeUpdate(
+                    scenario.Order,
+                    0.10m,
+                    preExpiryUtc.AddMilliseconds(-1),
+                    preExpiryUtc),
+                null,
+                preExpiryUtc,
+                new HashSet<Guid> { scenario.Order.Id });
+            var processor = CreateProcessor(
+                scenario.Repository,
+                CreateHealthyCache(scenario.Order, reconnectCount: 2),
+                new CountingClobClient(),
+                queue,
+                handoff);
+            var processingTask = processor.ProcessOpenOrdersAsync();
+
+            handler.ReleaseFirstUpdate();
+            var result = await processingTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.Equal(1, result.OrdersExpired);
+            Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+            Assert.Empty(scenario.Repository.PaperFills);
+            var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+            Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, skippedRun.SkipReason);
+            Assert.Contains(
+                MakerGtdPaperExecutionContract.MarketDataHandlerFailureCode,
+                skippedRun.SkipDiagnosticsJson,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
@@ -1173,7 +1350,11 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     {
         public bool HasOutstandingUpdate { get; set; }
 
+        public bool ClearOutstandingOnDrain { get; set; }
+
         public int OutstandingChecks { get; private set; }
+
+        public int DrainCalls { get; private set; }
 
         public MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
             string component,
@@ -1227,6 +1408,70 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             OutstandingChecks++;
             return HasOutstandingUpdate;
         }
+
+        public Task DrainOutstandingPaperOrderUpdatesAsync(
+            Guid paperOrderId,
+            string assetId,
+            string conditionId,
+            DateTimeOffset acceptedAfterUtc,
+            DateTimeOffset expiresBeforeUtc,
+            CancellationToken cancellationToken = default)
+        {
+            DrainCalls++;
+            if (ClearOutstandingOnDrain)
+            {
+                HasOutstandingUpdate = false;
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class BlockingPaperUpdateHandler(
+        PaperTradingMarketDataUpdater updater,
+        bool throwAfterFirstUpdate = false) : IMarketDataSideEffectHandler
+    {
+        private readonly TaskCompletionSource<bool> firstUpdateStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> releaseFirstUpdate =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int updateCalls;
+
+        public async Task ProcessUpdateAsync(
+            MarketDataSideEffectWorkItem workItem,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref updateCalls) == 1)
+            {
+                firstUpdateStarted.TrySetResult(true);
+                await releaseFirstUpdate.Task.WaitAsync(cancellationToken);
+                return;
+            }
+
+            if (throwAfterFirstUpdate)
+            {
+                throw new InvalidOperationException("simulated queued paper update failure");
+            }
+
+            await updater.ApplyUpdateAsync(
+                workItem.Update,
+                workItem.ReceivedAtUtc,
+                workItem.EligiblePaperOrderIds,
+                cancellationToken);
+        }
+
+        public Task PersistFrameDiagnosticAsync(
+            MarketWebSocketFrameDiagnostic diagnostic,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task PersistApiErrorAsync(
+            ApiError apiError,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task WaitForFirstUpdateAsync() =>
+            firstUpdateStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        public void ReleaseFirstUpdate() => releaseFirstUpdate.TrySetResult(true);
     }
 
     private sealed class NoOpPaperSettlementProcessor : IPaperSettlementProcessor

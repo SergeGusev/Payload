@@ -62,3 +62,10 @@ APPROVE RC-20260820-maker-expiry-side-effect-priority sha256:97b9af821cacc246901
 
 Result:
 Recorded exact approval for `RC-20260820-maker-expiry-side-effect-priority` without changing its semantic payload. The approved contract must now be mechanically validated and committed as the parent revision before product edits.
+
+## 2026-08-20T11:51:22.2527628Z
+Request:
+APPROVE RC-20260820-maker-expiry-side-effect-priority sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c
+
+Result:
+Implemented the approved priority drain for accepted pre-expiry exact ETH Maker-GTD side-effect updates. The affected asset is prioritized without breaking same-asset FIFO or interrupting current in-flight work; expiry retains exclusive admission, reloads persisted state after the drain, and reaches the existing fill-or-terminal path in the same lifecycle pass. Final focused tests passed 80/80; the complete Debug build had 0 errors and 126 existing warnings; independent semantic review passed with no findings. No production mutation or deployment occurred; final gated commit and push remain.

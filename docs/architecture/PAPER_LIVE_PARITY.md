@@ -115,10 +115,17 @@ receipt handoff. Receipts already active when expiry requests admission finish
 first; receipts arriving later wait until the exclusive expiry lease is released
 and therefore cannot continually overtake it. Receipt processing remains
 concurrent while no expiry request is pending. After admission, the existing
-queued/in-flight eligible pre-expiry update check, evidence parsing, continuity,
-and atomic terminal mutation remain unchanged. No timeout, frame drop, or guessed
-terminal result is introduced: a genuinely non-completing receipt or outstanding
-side-effect update remains fail-closed and can still block the affected lifecycle
+queued/in-flight eligible pre-expiry update check becomes an awaited priority
+drain. The affected asset is selected ahead of unrelated asset backlog while its
+matching work remains, but FIFO within that asset is preserved, the current
+in-flight work item is never interrupted, and each accepted update is processed
+exactly once. Only updates received strictly after acceptance and strictly before
+effective expiry are eligible. When the drain completes, the same lifecycle pass
+rechecks outstanding state and then applies the unchanged evidence parsing,
+continuity, fill, and atomic terminal rules. Handler failures publish the existing
+failure evidence before the drain completes. No timeout, frame drop, guessed
+no-fill, or post-expiry fill evidence is introduced; a genuinely non-completing
+in-flight handler remains fail-closed and can still block the affected lifecycle
 work.
 
 For these exact 28 strategies, ordinary Paper orders, positions, fills, PnL, win
