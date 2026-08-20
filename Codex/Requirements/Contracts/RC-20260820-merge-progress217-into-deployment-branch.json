@@ -16,7 +16,7 @@
       "Require the deployment branch to remain exactly codex/reference-average-available-windows at 1892a926fdf64ce9c4f19a1a82fc70aa7bc1053b and synchronized 0/0 with origin/codex/reference-average-available-windows before the merge.",
       "Merge codex/progress-purge-217 through exact tip 6cec2351fe83ed3aefa6ea8d99f92ff5159519d1 with a non-squashed merge so approval commits 1d5361cc, a735d5ff, and 510b036b remain in history.",
       "Preserve every current deployment-branch product change and the complete approved Progress-217 behavior: exact 217 catalog/seed exclusion, preservation of the three referenced sources and three retained LowerEnter owners, and absence of automatic database/history cleanup.",
-      "Resolve only the three previewed text conflicts: retain both context histories in Codex/Contexts/ContextPolyCopyTrader.md and Codex/Contexts/History/ContextPolyCopyTrader-2026-08-19.md, and combine current README behavior documentation with the staged Progress-217 catalog/history wording.",
+      "Resolve only the three conflicts proven by the aborted no-commit merge: retain both histories in Codex/Contexts/ContextPolyCopyTrader.md, Codex/Contexts/History/ContextPolyCopyTrader-2026-08-19.md, and Codex/Contexts/History/ContextPolyCopyTrader-2026-08-20.md. Inspect the automatically merged README to confirm that both current release documentation and the staged Progress-217 wording remain.",
       "Run the complete Release solution build, focused Progress catalog/seed/reference tests, and the isolated PostgreSQL double-initializer history-preservation tests against the merged source.",
       "Obtain independent semantic review, complete requirement validation and diff checks, create the merge commit, and push the exact deployment branch to its existing origin upstream.",
       "Record the standing workflow rule that future feature branches must be merged into the user's deployment branch before reporting them ready to deploy."
@@ -25,7 +25,7 @@
       "Changing the exact 217 target set, Progress behavior, retained references, or database cleanup semantics.",
       "Deleting or rewriting any local/product strategy row or history, executing cleanup SQL, backing up a database, or reclaiming database space.",
       "Deploying or restarting the service; the user performs the ordinary deployment after the pushed merge.",
-      "Resolving an unexpected product-code conflict by preference. Any conflict outside the three previewed text files is a fail-closed blocker requiring a revised contract.",
+      "Resolving an unexpected product-code conflict by preference. Any conflict outside the three proven context/history files is a fail-closed blocker requiring a revised contract.",
       "Squashing, rebasing, cherry-picking away approval history, force-pushing, or changing another branch."
     ],
     "mode": "local-edit",
@@ -43,7 +43,7 @@
         "The exact 217 remain absent from runtime/static/dynamic catalog output, while the three referenced sources and three retained owners remain exact.",
         "The merged service contains no automatic 217 strategy/history cleanup path or enabled cleanup migration.",
         "All deployment-branch product work after merge base d27b5f38 remains present.",
-        "Only README and context/history conflicts are manually combined; any unexpected product conflict stops the merge."
+        "Only the three proven context/history conflicts are manually combined; README must retain both auto-merged documentation changes, and any unexpected product conflict stops the merge."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Domain/Models.cs",
@@ -54,7 +54,8 @@
         "README.md",
         "docs/configuration_reference.md",
         "Codex/Contexts/ContextPolyCopyTrader.md",
-        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-19.md"
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-19.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-20.md"
       ],
       "verification": [
         {
@@ -142,8 +143,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260820-merge-progress217-into-deployment-branch sha256:0c2038cba3d35877eb19260a28d41918ae8a417ca260d9bdcd7293157e7af40b",
-    "semanticDigest": "sha256:0c2038cba3d35877eb19260a28d41918ae8a417ca260d9bdcd7293157e7af40b"
+    "evidenceText": "APPROVE RC-20260820-merge-progress217-into-deployment-branch sha256:df5296268c74da53894bb0513e28ad594c56a5003e0013731ddc2d6ba0e92384",
+    "semanticDigest": "sha256:df5296268c74da53894bb0513e28ad594c56a5003e0013731ddc2d6ba0e92384"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
