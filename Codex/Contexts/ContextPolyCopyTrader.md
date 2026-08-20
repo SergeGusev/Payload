@@ -1,3 +1,25 @@
+## Active Update 2026-08-20 Maker Expiry Side-Effect Priority Approved
+Goal: Implement the approved priority drain for accepted pre-expiry Maker-GTD side effects.
+Status: Approved; parent approval commit pending
+Done:
+- Received exact user approval for `RC-20260820-maker-expiry-side-effect-priority` at semantic digest `sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c`.
+- Recorded the approval without changing the semantic payload.
+Next: Mechanically validate and commit this approval as the parent revision, then implement only the approved source, test, and documentation paths.
+Notes: Product code and production remain unchanged at this checkpoint.
+Blockers: None.
+
+## Active Update 2026-08-20 Maker Expiry Side-Effect Priority Contract
+Goal: Define the exact correction for the remaining post-deployment Maker-GTD terminal delay without dropping accepted pre-expiry market data.
+Status: Blocked pending requirement-contract approval
+Done:
+- Revalidated the deployed cohort evidence: six exact ETH Maker-GTD orders expired at `2026-08-20T10:24:00Z` and terminalized at `10:28:44.329197Z`, while matching apply-failure evidence had already been recorded at `10:19:33.212579Z`.
+- Traced the current source path: the receipt admission covers parsing/enqueue only; after fair expiry admission, `PaperTradingProcessor` releases admission and retries later whenever the single global side-effect worker still has any matching queued/in-flight pre-expiry update.
+- Preserved the required correctness boundary: accepted pre-expiry updates may still contain a valid authoritative touch and cannot be dropped or treated as no-fill merely because the order's wall-clock expiry passed.
+- Drafted and mechanically validated `RC-20260820-maker-expiry-side-effect-priority` at semantic digest `sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c`; it prioritizes and awaits the affected asset's already accepted queue work inside exclusive expiry admission while preserving same-asset FIFO, handler failure evidence, exactly-once processing, and every existing fill/expiry/accounting rule.
+Next: Obtain a later exact user approval for this digest before any product edit.
+Notes: The six historical rows remain terminal and read-only. This source mechanism can produce the observed delay, but persisted production data does not prove it was the sole in-memory state during the whole interval. No product, production, database, service, strategy, order, or configuration mutation occurred.
+Blockers: User must send `APPROVE RC-20260820-maker-expiry-side-effect-priority sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c` before material edits.
+
 ## Active Update 2026-08-20 Maker Expiry Fairness Deployment Verification
 Goal: Verify production server, betting flow, and exact ETH Maker-GTD expiry behavior after deploying commit `4934b60f`.
 Status: Completed read-only; core runtime and ordinary betting healthy, Maker expiry delay still reproduced

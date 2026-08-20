@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260820-maker-expiry-side-effect-priority",
+  "title": "Prioritize accepted pre-expiry Maker updates before terminal evaluation",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Выложил, проверяй"
+    },
+    {
+      "source": "user",
+      "text": "Ок, делай доработку"
+    }
+  ],
+  "scope": {
+    "goal": "Remove the remaining multi-minute exact ETH Reference Average Maker-GTD Paper terminal delay caused by already accepted eligible pre-expiry market-data updates waiting behind unrelated side-effect work, without dropping those updates or changing their fill meaning.",
+    "inScope": [
+      "When an expired exact-family Maker-GTD order has an eligible queued or in-flight market-data update whose receipt timestamp is strictly after order acceptance and strictly before effective expiry, keep the exclusive receipt/expiry admission and asynchronously wait for those accepted updates to complete instead of releasing admission and retrying on a later Paper lifecycle poll.",
+      "Give the affected asset's already queued work temporary priority over unrelated asset work while the drain request is active, preserving FIFO order within that asset and preserving every eligible pre-expiry update; an already in-flight work item finishes first and is never interrupted.",
+      "Complete the per-order drain only after no matching queued or in-flight eligible pre-expiry update remains; then execute the existing persisted order-evidence, recorded failure, continuity, linked-run, and atomic fill-or-expiry rules in the same lifecycle pass.",
+      "Allow multiple expired orders covered by the same accepted update stream to reuse the naturally drained state without duplicating processing; cancellation removes only the waiting drain request and leaves the queue and later lifecycle passes usable.",
+      "Add bounded queue metrics/log evidence for a slow Maker expiry drain, including order id, asset id, wait duration, and remaining matching count, without logging secrets or changing persistence schema.",
+      "Add deterministic queue and lifecycle regressions for unrelated backlog, matching FIFO preservation, an in-flight blocker, handler failure publication, multiple affected orders, cancellation recovery, and the existing no-drop/fill/expiry semantics.",
+      "Document the priority-drain ordering and its remaining fail-closed limit for a truly non-completing in-flight handler.",
+      "Build, run focused tests, mechanically validate, independently review, commit, and push the correction to codex/reference-average-available-windows."
+    ],
+    "outOfScope": [
+      "Changing Reference Average signals, windows, thresholds, direction, price, stake, entry timing, GTD/PostOnly intent, TouchNoDepth evidence, mandatory label, Paper PnL/accounting, or Live behavior.",
+      "Dropping, coalescing, fabricating, or treating an unprocessed eligible pre-expiry market-data update as a no-fill; accepting a market-data update received at or after effective expiry as fill evidence.",
+      "Adding an arbitrary timeout that converts an outstanding update into a terminal result, interrupting an in-flight handler, or claiming recovery from a permanently hung database/network/handler operation.",
+      "Changing general queue capacity, WebSocket subscriptions, frame parsing, diagnostics queue, Paper worker cadence, position marks, copied-performance processing, database schema, repository queries, or configuration.",
+      "Replaying or rewriting the six already terminal delayed production orders, directly mutating production, restarting or deploying the service, or claiming the source mechanism was the sole runtime cause without persisted in-memory evidence."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact closed-exception ETH neutral Reference Average Maker-GTD Paper lifecycle plus the shared market-data side-effect queue primitive. Production preview on deployed build 4934b60f found six post-start orders with effective expiry 2026-08-20T10:24:00Z and terminal evaluation 2026-08-20T10:28:44.329197Z; recorded apply-failure receipt was 2026-08-20T10:19:33.212579Z. Existing terminal history is read-only.",
+    "firstVerification": "Trace the current receipt lease, side-effect enqueue/dequeue/outstanding bookkeeping, failure publication, and expiry order in source, and verify that an outstanding match currently causes expiry admission to be released and retried while a single global worker drains unrelated work."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Accepted eligible pre-expiry Maker-GTD market-data work must be processed with bounded scheduling priority before terminal evaluation, without being discarded or reordered within its asset stream.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "делай доработку",
+      "acceptanceCriteria": [
+        "The side-effect queue exposes an asynchronous per-order drain operation using the existing order id, asset id, condition id, accepted-at, and effective-expiry identity; invalid identity/window inputs return without changing queue state.",
+        "If matching work is pending behind unrelated asset work, the matching asset becomes the next selectable asset after the current in-flight item; all earlier same-asset items remain ahead of the match, and matching items retain their original FIFO order.",
+        "While the drain is active, subsequent selections continue prioritizing only as far as necessary to remove matching eligible pre-expiry work; later or unrelated work is not discarded and resumes normal round-robin scheduling afterward.",
+        "The drain remains incomplete while a matching item is in flight and completes after that item records success or failure and leaves in-flight state.",
+        "A handler failure still records the existing exact Maker market-data failure before the drain completes; it is not converted to success or silently ignored.",
+        "Cancellation stops that caller's wait and removes its priority request without canceling, dropping, duplicating, or corrupting queued/in-flight work; a later drain can succeed.",
+        "Multiple drain callers and multiple eligible orders are isolated by exact identity and complete without processing any work item more than once."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Deterministic tests prove priority over unrelated backlog, same-asset FIFO, in-flight completion, failure publication, multiple callers/orders, cancellation recovery, and exactly-once/no-drop behavior.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Expired exact-family Maker-GTD orders must drain their already accepted eligible pre-expiry updates inside the fair exclusive admission and then reach the existing fill-or-terminal path in that same lifecycle pass.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "делай доработку",
+      "acceptanceCriteria": [
+        "PaperTradingProcessor enters the existing fair expiry admission, awaits the exact queue drain only when matching work exists, and does not release admission merely to poll the same outstanding work again five seconds later.",
+        "No market-data receipt arriving after the expiry request can create additional eligible pre-expiry work because later receipts remain behind the existing exclusive admission fence.",
+        "After the drain, the processor rechecks outstanding state and fails closed without terminal mutation if a matching item is still reported; it never guesses a no-fill result.",
+        "A pre-expiry touch processed by the prioritized drain can still fill exactly once under the unchanged authoritative TouchNoDepth path; terminal expiry must not overtake it.",
+        "If prioritized processing records the existing market-data apply/handler failure and no valid touch fills the order, the same pass reaches the existing evidence-unavailable terminal path with the original reason and diagnostic evidence.",
+        "Current continuity, order-evidence, effective-expiry, linked-run, atomic repository, Paper-only exception, and accounting rules remain unchanged.",
+        "The six already terminal production rows are not reopened, replayed, or rewritten; post-deployment verification must use only newly created cohorts."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperAtomicRepositoryTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~MakerGtdPaperPlacementHandoffTests|FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "The real queue/processor integration proves matching update priority and same-pass fill-or-terminal behavior while all existing Maker admission, evidence, atomic, worker-isolation, and exception tests pass.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "Complete solution build succeeds with zero errors; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the complete diff, run requirement-gate WorkingTree/Staged validation and git diff --check, and obtain independent semantic review against the verbatim prompts and approved digest.",
+          "expected": "Only approved paths change; no signal, execution intent, accounting, Live, schema, configuration, timeout, event-drop, or production behavior outside the approved queue scheduling boundary changes; reviewer verdict is pass with no findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260820-maker-expiry-side-effect-priority sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c",
+    "semanticDigest": "sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/maker-expiry-side-effect-priority-review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}

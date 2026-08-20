@@ -48,3 +48,17 @@ Request:
 
 Result:
 Verified exact deployed build `4934b60f216ad4835d4cdde1c783c81de9edfa12` read-only. Service, heartbeat, PostgreSQL locks, BTC/ETH/SOL references, current Polymarket WebSockets, ordinary Paper entries, linkage, settlements, and position marks were healthy; no Live/shadow activity or enabled overdue run backlog existed. Exact Maker open/overdue was 0/0, but the sole new terminal cohort still reproduced a material delay: six orders expired at `10:24:00Z` and terminalized together at `10:28:44.329197Z` (`284.329s`) as `maker_gtd_evidence_unavailable / maker_gtd_market_data_apply_failed`, with failure evidence received at `10:19:33.212579Z`. Therefore the deployment removed the current open backlog but did not prove timely expiry; the remaining in-memory long-receipt versus outstanding-side-effect cause is not persisted. No production mutation occurred.
+
+## 2026-08-20T11:10:04.4814581+00:00
+Request:
+Ок, делай доработку
+
+Result:
+Traced the remaining Maker-GTD terminal-delay path without mutating product or production. Receipt admission is short and ends after frame parsing/enqueue; the existing expiry path instead releases its fair admission whenever any accepted eligible pre-expiry side-effect update remains behind the single global worker. Drafted and mechanically validated `RC-20260820-maker-expiry-side-effect-priority` at digest `sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c` to prioritize and await that exact accepted work without dropping events, changing fill semantics, or rewriting the six terminal production rows. Product edits await exact approval.
+
+## 2026-08-20T11:34:53.1374804+00:00
+Request:
+APPROVE RC-20260820-maker-expiry-side-effect-priority sha256:97b9af821cacc2469010ab121145af731ccae23d3938f1d88e3a2acabd04424c
+
+Result:
+Recorded exact approval for `RC-20260820-maker-expiry-side-effect-priority` without changing its semantic payload. The approved contract must now be mechanically validated and committed as the parent revision before product edits.
