@@ -315,15 +315,21 @@ internal sealed class HistoricalGrossNetDonorMatcher
         bool requireHashes)
     {
         ArgumentNullException.ThrowIfNull(donorAggregates);
-        var donors = ValidateAndFilterDonors(donorAggregates);
         var candidateIds = completeCandidates.Select(candidate => candidate.StrategyId).ToHashSet();
-        var foreignDonor = donorAggregates.FirstOrDefault(donor => !candidateIds.Contains(donor.StrategyId));
-        if (foreignDonor is not null)
+        if (requireHashes)
         {
-            throw new InvalidOperationException(
-                $"Donor aggregate {CanonicalUuid(foreignDonor.StrategyId)} is outside the complete candidate list.");
+            var foreignDonor = donorAggregates.FirstOrDefault(donor => !candidateIds.Contains(donor.StrategyId));
+            if (foreignDonor is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Donor aggregate {CanonicalUuid(foreignDonor.StrategyId)} is outside the complete candidate list.");
+            }
         }
 
+        var candidateDonorAggregates = requireHashes
+            ? donorAggregates
+            : donorAggregates.Where(donor => candidateIds.Contains(donor.StrategyId)).ToArray();
+        var donors = ValidateAndFilterDonors(candidateDonorAggregates);
         var donorsByStrategy = donors.ToDictionary(donor => donor.StrategyId);
         var sharedSelection = requireHashes
             ? HistoricalGrossNetDonorSelectionV1.Evaluate(
@@ -453,7 +459,7 @@ internal sealed class HistoricalGrossNetDonorMatcher
             donor => donor.StrategyId,
             donor => new HistoricalGrossNetDonorSelectionAggregateV1(
                 donor.StrategyId,
-                new BigInteger(donor.ExactDonorCount),
+                new BigInteger(GetSelectedDonorCount(donor)),
                 ToHashDecimal(donor.ExactBasisDenominator),
                 ToHashDecimal(donor.ExactFeeNumerator),
                 ToHashDecimal(donor.ExactBasisDenominator),
@@ -792,7 +798,8 @@ internal sealed class HistoricalGrossNetDonorMatcher
                     $"Exact donor aggregate for strategy {CanonicalUuid(donor.StrategyId)} has a negative count.");
             }
 
-            if (donor.ExactDonorCount == 0)
+            var selectedDonorCount = GetSelectedDonorCount(donor);
+            if (selectedDonorCount == 0)
             {
                 if (donor.ExactBasisDenominator.CompareTo(HistoricalGrossNetExactDecimal.Zero) != 0 ||
                     donor.ExactFeeNumerator.CompareTo(HistoricalGrossNetExactDecimal.Zero) != 0)
@@ -816,7 +823,7 @@ internal sealed class HistoricalGrossNetDonorMatcher
                 donor.DeduplicatedDonorCount is < 0 ||
                 donor.RawDonorCount is { } rawCount && rawCount < donor.ExactDonorCount ||
                 donor.DeduplicatedDonorCount is { } deduplicatedCount &&
-                deduplicatedCount < donor.ExactDonorCount)
+                deduplicatedCount > donor.ExactDonorCount)
             {
                 throw new InvalidOperationException(
                     $"Donor counts for strategy {CanonicalUuid(donor.StrategyId)} are inconsistent.");
@@ -838,6 +845,9 @@ internal sealed class HistoricalGrossNetDonorMatcher
 
         return exact;
     }
+
+    private static int GetSelectedDonorCount(HistoricalGrossNetDonorAggregate donor) =>
+        donor.DeduplicatedDonorCount ?? donor.ExactDonorCount;
 
     private string? ResolveTargetAsset(
         HistoricalGrossNetDonorTarget target,
@@ -1009,7 +1019,7 @@ internal sealed class HistoricalGrossNetDonorMatcher
         var comparison = right.ExactBasisDenominator.CompareTo(left.ExactBasisDenominator);
         return comparison != 0
             ? comparison
-            : right.ExactDonorCount.CompareTo(left.ExactDonorCount);
+            : GetSelectedDonorCount(right).CompareTo(GetSelectedDonorCount(left));
     }
 
     private static IReadOnlyList<HistoricalGrossNetDistance> CreateNumericDistanceVector(
@@ -1064,8 +1074,7 @@ internal sealed class HistoricalGrossNetDonorMatcher
 
         if (left is null || right is null)
         {
-            throw new InvalidOperationException(
-                "Equal V1 distance vectors cannot have different nullable-value presence.");
+            return left is null ? -1 : 1;
         }
 
         return left.Value.CompareTo(right.Value);
@@ -1217,7 +1226,7 @@ internal sealed class HistoricalGrossNetDonorMatcher
         [
             "distance:" + string.Join(",", CreateNumericDistanceVector(target.NumericVector, donorDescriptor.NumericVector)),
             "stake-desc:" + donor.ExactBasisDenominator,
-            "count-desc:" + donor.ExactDonorCount.ToString(CultureInfo.InvariantCulture),
+            "count-desc:" + GetSelectedDonorCount(donor).ToString(CultureInfo.InvariantCulture),
             "numeric:" + DescribeNumericVector(donorDescriptor.NumericVector),
             "uuid:" + CanonicalUuid(donor.StrategyId)
         ];
@@ -1234,7 +1243,7 @@ internal sealed class HistoricalGrossNetDonorMatcher
     private static IReadOnlyList<string> DescribeTier4Key(HistoricalGrossNetDonorAggregate donor) =>
         [
             "stake-desc:" + donor.ExactBasisDenominator,
-            "count-desc:" + donor.ExactDonorCount.ToString(CultureInfo.InvariantCulture),
+            "count-desc:" + GetSelectedDonorCount(donor).ToString(CultureInfo.InvariantCulture),
             "uuid:" + CanonicalUuid(donor.StrategyId)
         ];
 

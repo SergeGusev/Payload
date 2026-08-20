@@ -132,15 +132,29 @@ public sealed partial class PostgresAppRepository
             checked(request.CandidateOffset + request.PageSize));
         var aggregates = new List<HistoricalGrossNetParityDonorCandidateAggregate>(
             end - request.CandidateOffset);
-        for (var index = request.CandidateOffset; index < end; index++)
+        try
         {
-            aggregates.Add(await LoadHistoricalGrossNetParityDonorAggregateAsync(
-                connection,
-                transaction,
-                request.TargetSourceKind,
-                request.OrderedCandidates[index],
-                request.CommandTimeoutSeconds,
-                cancellationToken));
+            for (var index = request.CandidateOffset; index < end; index++)
+            {
+                aggregates.Add(await LoadHistoricalGrossNetParityDonorAggregateStreamingAsync(
+                    connection,
+                    transaction,
+                    request.TargetSourceKind,
+                    request.OrderedCandidates[index],
+                    request.PageSize,
+                    request.CommandTimeoutSeconds,
+                    cancellationToken));
+            }
+        }
+        catch (HistoricalGrossNetParitySequentialDonorPlanException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new HistoricalGrossNetParityDonorPreviewResult(
+                HistoricalGrossNetParityReadStatus.DeferredOperational,
+                [],
+                request.CandidateOffset,
+                false,
+                exception.Message);
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -197,6 +211,15 @@ public sealed partial class PostgresAppRepository
                 null,
                 exception.SqlState);
         }
+        catch (HistoricalGrossNetParitySequentialDonorPlanException exception)
+        {
+            return new HistoricalGrossNetParityApplyResult(
+                HistoricalGrossNetParityApplyStatus.DeferredOperational,
+                false,
+                request.Target.TargetTupleHash,
+                null,
+                exception.Message);
+        }
     }
 
     public async Task<HistoricalGrossNetParityApplyResult>
@@ -243,6 +266,15 @@ public sealed partial class PostgresAppRepository
                 request.Target.TargetTupleHash,
                 request.Target.Ownership,
                 exception.SqlState);
+        }
+        catch (HistoricalGrossNetParitySequentialDonorPlanException exception)
+        {
+            return new HistoricalGrossNetParityApplyResult(
+                HistoricalGrossNetParityApplyStatus.DeferredOperational,
+                false,
+                request.Target.TargetTupleHash,
+                request.Target.Ownership,
+                exception.Message);
         }
     }
 
@@ -1198,12 +1230,23 @@ FROM paper_fills fill WHERE fill.paper_order_id=@Id;
                 HistoricalGrossNetParitySourceKind.PaperSellFill => target.SettledAtUtc,
                 _ => null
             };
+            Guid? endOrderId = null;
+            Guid? endFillId = null;
+            if (target.SourceKind == HistoricalGrossNetParitySourceKind.PaperSellFill)
+            {
+                endOrderId = Guid.Parse(root.GetProperty("paper_order_id").GetString()!);
+                endFillId = target.SourceId;
+            }
             sql = """
 SELECT fill.id
 FROM paper_orders paper_order
 INNER JOIN paper_fills fill ON fill.paper_order_id=paper_order.id
 WHERE paper_order.copied_trader_wallet=@Wallet AND paper_order.asset_id=@AssetId
-  AND (@EndAt IS NULL OR fill.filled_at_utc <= @EndAt)
+  AND (@EndAt IS NULL OR fill.filled_at_utc < @EndAt
+       OR (fill.filled_at_utc = @EndAt AND
+           (@EndFillId IS NULL OR
+            ROW(lower(paper_order.id::text), lower(fill.id::text)) <=
+            ROW(lower(@EndOrderId::uuid::text), lower(@EndFillId::uuid::text)))))
 ORDER BY lower(fill.id::text);
 """;
             parameters.Add(new NpgsqlParameter("Wallet", wallet));
@@ -1211,6 +1254,14 @@ ORDER BY lower(fill.id::text);
             parameters.Add(new NpgsqlParameter("EndAt", NpgsqlDbType.TimestampTz)
             {
                 Value = endAt is null ? DBNull.Value : UtcDateTime(endAt.Value)
+            });
+            parameters.Add(new NpgsqlParameter("EndOrderId", NpgsqlDbType.Uuid)
+            {
+                Value = endOrderId is null ? DBNull.Value : endOrderId.Value
+            });
+            parameters.Add(new NpgsqlParameter("EndFillId", NpgsqlDbType.Uuid)
+            {
+                Value = endFillId is null ? DBNull.Value : endFillId.Value
             });
         }
 
@@ -1251,6 +1302,8 @@ ORDER BY lower(fill.id::text);
             },
             componentEvidenceGraphV1 =
                 HistoricalGrossNetParityComponentGraphV1.ToEvidenceRecords(target.ProvedComponents),
+            componentEvidenceProvedComplete =
+                target.AuthoritativeEffectiveFeeUsd is not null && target.ProvedComponents.Count > 0,
             decisionEvidence = decisionEvidence.RootElement
         });
     }
@@ -1288,8 +1341,9 @@ ORDER BY lower(fill.id::text);
 
         var descriptor = orderedCandidates.Single(value =>
             value.StrategyId == actual.SelectedStrategyId.Value);
-        var aggregate = await LoadHistoricalGrossNetParityDonorAggregateAsync(
+        var aggregate = await LoadHistoricalGrossNetParityDonorAggregateStreamingAsync(
             connection, transaction, targetSourceKind, descriptor,
+            donorPageSize,
             commandTimeoutSeconds, cancellationToken);
         return decision.DecisionKind == HistoricalGrossNetParityDecisionKind.DonorRatio &&
                decision.DonorDecision.RawDonorCount == aggregate.RawDonorCount &&
@@ -2137,156 +2191,196 @@ WITH strategy_gross AS (
     FROM strategies strategy
     LEFT JOIN dashboard_strategy_performance_snapshots performance
       ON performance.strategy_id = strategy.id
-), ranked AS (
+), ranked AS MATERIALIZED (
     SELECT id, code, gross_pnl,
            row_number() OVER (ORDER BY gross_pnl DESC, lower(id::text))::integer AS strategy_rank
     FROM strategy_gross
-), uses_runs AS (
-    SELECT strategy_id FROM strategy_market_paper_runs GROUP BY strategy_id
-    UNION
-    SELECT strategy_id FROM strategy_paper_skip_rollups GROUP BY strategy_id
-), mapped_positions AS (
-    SELECT position.*,
-           CASE
-               WHEN lower(position.copied_trader_wallet) LIKE 'strategy:%' THEN strategy_by_wallet.id
-               ELSE @FollowLeaderStrategyId
-           END AS mapped_strategy_id
-    FROM paper_positions position
-    LEFT JOIN strategies strategy_by_wallet
-      ON strategy_by_wallet.code = lower(substring(position.copied_trader_wallet from 10))
-     AND lower(position.copied_trader_wallet) LIKE 'strategy:%'
-), mapped_settlements AS (
-    SELECT settlement.*,
-           CASE
-               WHEN lower(settlement.copied_trader_wallet) LIKE 'strategy:%' THEN strategy_by_wallet.id
-               ELSE @FollowLeaderStrategyId
-           END AS mapped_strategy_id
-    FROM paper_position_settlements settlement
-    LEFT JOIN strategies strategy_by_wallet
-      ON strategy_by_wallet.code = lower(substring(settlement.copied_trader_wallet from 10))
-     AND lower(settlement.copied_trader_wallet) LIKE 'strategy:%'
-), raw_candidates AS (
-    SELECT 'PaperRun'::text AS source_kind, run.id AS source_id, run.strategy_id,
-           1 AS source_order,
-           COALESCE(run.entered_at_utc, run.created_at_utc) AS originated_at,
-           run.xmin::text::bigint AS row_version,
-           'None'::text AS ownership
-    FROM strategy_market_paper_runs run
-    WHERE run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'
-      AND COALESCE(run.entered_at_utc, run.created_at_utc) < @CutoffUtc
-      AND NOT EXISTS (
-          SELECT 1 FROM historical_gross_net_parity_audit audit
-          WHERE audit.source_kind = 'PaperRun' AND audit.source_id = run.id
-            AND audit.calculation_version = @CalculationVersion
-            AND audit.operation_kind = 'AccountingDecision')
-
-    UNION ALL
-
-    SELECT 'PaperPosition', position.id, position.mapped_strategy_id, 2,
-           origin.originated_at, position.xmin::text::bigint, 'None'
-    FROM mapped_positions position
-    INNER JOIN LATERAL (
-        SELECT MIN(fill.filled_at_utc) AS originated_at
-        FROM paper_orders paper_order
-        INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
-        WHERE paper_order.strategy_id = position.mapped_strategy_id
-          AND paper_order.copied_trader_wallet = position.copied_trader_wallet
-          AND paper_order.asset_id = position.asset_id
-          AND paper_order.side = '{{TradeSide.Buy}}'
-    ) origin ON origin.originated_at IS NOT NULL
-    WHERE position.mapped_strategy_id IS NOT NULL
-      AND position.size_shares > 0
-      AND origin.originated_at < @CutoffUtc
-      AND NOT EXISTS (
-          SELECT 1 FROM historical_gross_net_parity_audit audit
-          WHERE audit.source_kind = 'PaperPosition' AND audit.source_id = position.id
-            AND audit.calculation_version = @CalculationVersion
-            AND audit.operation_kind = 'AccountingDecision')
-
-    UNION ALL
-
-    SELECT 'PaperSettlement', settlement.id, settlement.mapped_strategy_id, 3,
-           origin.originated_at, settlement.xmin::text::bigint, 'None'
-    FROM mapped_settlements settlement
-    INNER JOIN LATERAL (
-        SELECT MIN(fill.filled_at_utc) AS originated_at
-        FROM paper_orders paper_order
-        INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
-        WHERE paper_order.strategy_id = settlement.mapped_strategy_id
-          AND paper_order.copied_trader_wallet = settlement.copied_trader_wallet
-          AND paper_order.asset_id = settlement.asset_id
-          AND paper_order.side = '{{TradeSide.Buy}}'
-          AND fill.filled_at_utc <= settlement.settled_at_utc
-    ) origin ON origin.originated_at IS NOT NULL
-    WHERE settlement.mapped_strategy_id IS NOT NULL
-      AND origin.originated_at < @CutoffUtc
-      AND NOT EXISTS (
-          SELECT 1 FROM uses_runs WHERE uses_runs.strategy_id = settlement.mapped_strategy_id)
-      AND NOT EXISTS (
-          SELECT 1 FROM historical_gross_net_parity_audit audit
-          WHERE audit.source_kind = 'PaperSettlement' AND audit.source_id = settlement.id
-            AND audit.calculation_version = @CalculationVersion
-            AND audit.operation_kind = 'AccountingDecision')
-
-    UNION ALL
-
-    SELECT 'PaperSellFill', sell_fill.id, sell_order.strategy_id, 4,
-           origin.originated_at, sell_fill.xmin::text::bigint, 'None'
-    FROM paper_fills sell_fill
-    INNER JOIN paper_orders sell_order ON sell_order.id = sell_fill.paper_order_id
-    INNER JOIN LATERAL (
-        SELECT MIN(buy_fill.filled_at_utc) AS originated_at
-        FROM paper_orders buy_order
-        INNER JOIN paper_fills buy_fill ON buy_fill.paper_order_id = buy_order.id
-        WHERE buy_order.strategy_id = sell_order.strategy_id
-          AND buy_order.copied_trader_wallet = sell_order.copied_trader_wallet
-          AND buy_order.asset_id = sell_order.asset_id
-          AND buy_order.side = '{{TradeSide.Buy}}'
-          AND buy_fill.filled_at_utc <= sell_fill.filled_at_utc
-    ) origin ON origin.originated_at IS NOT NULL
-    WHERE sell_order.side = '{{TradeSide.Sell}}'
-      AND origin.originated_at < @CutoffUtc
-      AND NOT EXISTS (
-          SELECT 1 FROM uses_runs WHERE uses_runs.strategy_id = sell_order.strategy_id)
-      AND NOT EXISTS (
-          SELECT 1 FROM historical_gross_net_parity_audit audit
-          WHERE audit.source_kind = 'PaperSellFill' AND audit.source_id = sell_fill.id
-            AND audit.calculation_version = @CalculationVersion
-            AND audit.operation_kind = 'AccountingDecision')
-
-    UNION ALL
-
-    SELECT 'LiveOrder', live_order.id, live_order.strategy_id, 5,
-           COALESCE(live_order.submitted_at_utc, linked_fill.originated_at, live_order.created_at_utc),
-           live_order.row_version, live_order.historical_gross_net_parity_ownership
-    FROM live_orders live_order
-    LEFT JOIN LATERAL (
-        SELECT MIN(fill.filled_at_utc) AS originated_at
-        FROM paper_fills fill WHERE fill.paper_order_id = live_order.paper_order_id
-    ) linked_fill ON true
-    WHERE live_order.settled_at_utc IS NOT NULL
-      AND live_order.realized_pnl_usd IS NOT NULL
-      AND COALESCE(live_order.submitted_at_utc, linked_fill.originated_at, live_order.created_at_utc) < @CutoffUtc
-      AND live_order.historical_gross_net_parity_ownership IN ('None', 'Pending')
-      AND (
-          live_order.historical_gross_net_parity_ownership = 'Pending'
-          OR NOT EXISTS (
-              SELECT 1 FROM historical_gross_net_parity_audit audit
-              WHERE audit.source_kind = 'LiveOrder' AND audit.source_id = live_order.id
-                AND audit.calculation_version = @CalculationVersion
-                AND audit.operation_kind = 'AccountingDecision'))
+), ordered_strategies AS MATERIALIZED (
+    SELECT id, code, gross_pnl, strategy_rank
+    FROM ranked
+    WHERE NOT @HasAfter
+       OR strategy_rank > @AfterRank
+       OR (strategy_rank = @AfterRank AND lower(id::text) >= @AfterStrategyId)
+    ORDER BY strategy_rank, lower(id::text)
 ), ordered AS (
-    SELECT candidate.*, ranked.code, ranked.strategy_rank, ranked.gross_pnl
-    FROM raw_candidates candidate
-    INNER JOIN ranked ON ranked.id = candidate.strategy_id
+    SELECT candidate.source_kind, candidate.source_id, ranked.id AS strategy_id,
+           ranked.code, ranked.strategy_rank, ranked.gross_pnl,
+           candidate.originated_at, candidate.source_order,
+           candidate.row_version, candidate.ownership
+    FROM ordered_strategies ranked
+    CROSS JOIN LATERAL (
+      SELECT bounded_candidate.*
+      FROM (
+        SELECT 'PaperRun'::text AS source_kind, run.id AS source_id,
+            1 AS source_order,
+            CASE
+                WHEN linked_run_fill.originated_at IS NULL
+                    THEN COALESCE(run.entered_at_utc, run.created_at_utc)
+                ELSE linked_run_fill.originated_at
+            END AS originated_at,
+            run.xmin::text::bigint AS row_version,
+            'None'::text AS ownership
+        FROM strategy_market_paper_runs run
+        LEFT JOIN LATERAL (
+            SELECT MIN(fill.filled_at_utc) AS originated_at
+            FROM paper_fills fill
+            WHERE fill.paper_order_id = run.paper_order_id
+        ) linked_run_fill ON true
+        WHERE run.strategy_id = ranked.id
+          AND run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'
+          AND CASE
+                  WHEN linked_run_fill.originated_at IS NULL
+                      THEN COALESCE(run.entered_at_utc, run.created_at_utc) < @CutoffUtc
+                  ELSE linked_run_fill.originated_at < @CutoffUtc
+              END
+          AND NOT EXISTS (
+              SELECT 1 FROM historical_gross_net_parity_audit audit
+              WHERE audit.source_kind = 'PaperRun' AND audit.source_id = run.id
+                AND audit.calculation_version = @CalculationVersion
+                AND audit.operation_kind = 'AccountingDecision')
+
+        UNION ALL
+
+        SELECT 'PaperPosition', position.id, 2,
+               origin.originated_at, position.xmin::text::bigint, 'None'
+        FROM paper_positions position
+        INNER JOIN LATERAL (
+            SELECT MIN(fill.filled_at_utc) AS originated_at
+            FROM paper_orders paper_order
+            INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
+            WHERE paper_order.copied_trader_wallet = position.copied_trader_wallet
+              AND paper_order.asset_id = position.asset_id
+              AND paper_order.side = '{{TradeSide.Buy}}'
+        ) origin ON origin.originated_at IS NOT NULL
+        WHERE position.size_shares > 0
+          AND (
+              (ranked.id = @FollowLeaderStrategyId
+               AND lower(position.copied_trader_wallet) NOT LIKE 'strategy:%')
+              OR
+              (ranked.id <> @FollowLeaderStrategyId
+               AND lower(position.copied_trader_wallet) = lower('strategy:' || ranked.code)))
+          AND origin.originated_at < @CutoffUtc
+          AND NOT EXISTS (
+              SELECT 1 FROM historical_gross_net_parity_audit audit
+              WHERE audit.source_kind = 'PaperPosition' AND audit.source_id = position.id
+                AND audit.calculation_version = @CalculationVersion
+                AND audit.operation_kind = 'AccountingDecision')
+
+        UNION ALL
+
+        SELECT 'PaperSettlement', settlement.id, 3,
+               origin.originated_at, settlement.xmin::text::bigint, 'None'
+        FROM paper_position_settlements settlement
+        INNER JOIN LATERAL (
+            SELECT MIN(fill.filled_at_utc) AS originated_at
+            FROM paper_orders paper_order
+            INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
+            WHERE paper_order.copied_trader_wallet = settlement.copied_trader_wallet
+              AND paper_order.asset_id = settlement.asset_id
+              AND paper_order.side = '{{TradeSide.Buy}}'
+              AND fill.filled_at_utc <= settlement.settled_at_utc
+        ) origin ON origin.originated_at IS NOT NULL
+        WHERE (
+              (ranked.id = @FollowLeaderStrategyId
+               AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
+              OR
+              (ranked.id <> @FollowLeaderStrategyId
+               AND lower(settlement.copied_trader_wallet) = lower('strategy:' || ranked.code)))
+          AND origin.originated_at < @CutoffUtc
+          AND NOT EXISTS (
+              SELECT 1 FROM strategy_market_paper_runs run_presence
+              WHERE run_presence.strategy_id = ranked.id)
+          AND NOT EXISTS (
+              SELECT 1 FROM strategy_paper_skip_rollups rollup_presence
+              WHERE rollup_presence.strategy_id = ranked.id)
+          AND NOT EXISTS (
+              SELECT 1 FROM historical_gross_net_parity_audit audit
+              WHERE audit.source_kind = 'PaperSettlement' AND audit.source_id = settlement.id
+                AND audit.calculation_version = @CalculationVersion
+                AND audit.operation_kind = 'AccountingDecision')
+
+        UNION ALL
+
+        SELECT 'PaperSellFill', sell_fill.id, 4,
+               origin.originated_at, sell_fill.xmin::text::bigint, 'None'
+        FROM paper_orders sell_order
+        INNER JOIN paper_fills sell_fill ON sell_fill.paper_order_id = sell_order.id
+        INNER JOIN LATERAL (
+            SELECT MIN(buy_fill.filled_at_utc) AS originated_at
+            FROM paper_orders buy_order
+            INNER JOIN paper_fills buy_fill ON buy_fill.paper_order_id = buy_order.id
+            WHERE buy_order.copied_trader_wallet = sell_order.copied_trader_wallet
+              AND buy_order.asset_id = sell_order.asset_id
+              AND buy_order.side = '{{TradeSide.Buy}}'
+              AND (
+                  buy_fill.filled_at_utc < sell_fill.filled_at_utc
+                  OR (
+                      buy_fill.filled_at_utc = sell_fill.filled_at_utc
+                      AND ROW(lower(buy_order.id::text), lower(buy_fill.id::text)) <=
+                          ROW(lower(sell_order.id::text), lower(sell_fill.id::text))))
+        ) origin ON origin.originated_at IS NOT NULL
+        WHERE sell_order.strategy_id = ranked.id
+          AND sell_order.side = '{{TradeSide.Sell}}'
+          AND origin.originated_at < @CutoffUtc
+          AND NOT EXISTS (
+              SELECT 1 FROM strategy_market_paper_runs run_presence
+              WHERE run_presence.strategy_id = ranked.id)
+          AND NOT EXISTS (
+              SELECT 1 FROM strategy_paper_skip_rollups rollup_presence
+              WHERE rollup_presence.strategy_id = ranked.id)
+          AND NOT EXISTS (
+              SELECT 1 FROM historical_gross_net_parity_audit audit
+              WHERE audit.source_kind = 'PaperSellFill' AND audit.source_id = sell_fill.id
+                AND audit.calculation_version = @CalculationVersion
+                AND audit.operation_kind = 'AccountingDecision')
+
+        UNION ALL
+
+        SELECT 'LiveOrder', live_order.id, 5,
+               COALESCE(live_order.submitted_at_utc, linked_fill.originated_at, live_order.created_at_utc),
+               live_order.row_version, live_order.historical_gross_net_parity_ownership
+        FROM live_orders live_order
+        LEFT JOIN LATERAL (
+            SELECT MIN(fill.filled_at_utc) AS originated_at
+            FROM paper_fills fill WHERE fill.paper_order_id = live_order.paper_order_id
+        ) linked_fill ON true
+        WHERE live_order.strategy_id = ranked.id
+          AND live_order.settled_at_utc IS NOT NULL
+          AND live_order.realized_pnl_usd IS NOT NULL
+          AND COALESCE(live_order.submitted_at_utc, linked_fill.originated_at, live_order.created_at_utc) < @CutoffUtc
+          AND live_order.historical_gross_net_parity_ownership IN ('None', 'Pending')
+          AND (
+              live_order.historical_gross_net_parity_ownership = 'Pending'
+              OR NOT EXISTS (
+                  SELECT 1 FROM historical_gross_net_parity_audit audit
+                  WHERE audit.source_kind = 'LiveOrder' AND audit.source_id = live_order.id
+                    AND audit.calculation_version = @CalculationVersion
+                    AND audit.operation_kind = 'AccountingDecision'))
+      ) bounded_candidate
+      WHERE NOT @HasAfter
+         OR ranked.strategy_rank > @AfterRank
+         OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) > @AfterStrategyId)
+         OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+             AND bounded_candidate.source_order > @AfterSourceOrder)
+         OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+             AND bounded_candidate.source_order = @AfterSourceOrder
+             AND bounded_candidate.originated_at > @AfterOriginatedAt)
+         OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+             AND bounded_candidate.source_order = @AfterSourceOrder
+             AND bounded_candidate.originated_at = @AfterOriginatedAt
+             AND lower(bounded_candidate.source_id::text) > @AfterSourceId)
+      ORDER BY bounded_candidate.source_order, bounded_candidate.originated_at,
+               lower(bounded_candidate.source_id::text)
+      LIMIT @PageSize
+    ) candidate
     WHERE NOT @HasAfter
        OR ranked.strategy_rank > @AfterRank
-       OR (ranked.strategy_rank = @AfterRank AND lower(candidate.strategy_id::text) > @AfterStrategyId)
-       OR (ranked.strategy_rank = @AfterRank AND lower(candidate.strategy_id::text) = @AfterStrategyId
+       OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) > @AfterStrategyId)
+       OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
            AND candidate.source_order > @AfterSourceOrder)
-       OR (ranked.strategy_rank = @AfterRank AND lower(candidate.strategy_id::text) = @AfterStrategyId
+       OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
            AND candidate.source_order = @AfterSourceOrder AND candidate.originated_at > @AfterOriginatedAt)
-       OR (ranked.strategy_rank = @AfterRank AND lower(candidate.strategy_id::text) = @AfterStrategyId
+       OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
            AND candidate.source_order = @AfterSourceOrder AND candidate.originated_at = @AfterOriginatedAt
            AND lower(candidate.source_id::text) > @AfterSourceId)
 )
@@ -2356,7 +2450,8 @@ LIMIT @PageSize;
             NpgsqlTransaction transaction,
             IReadOnlyList<HistoricalGrossNetParityCandidateKey> candidates,
             int commandTimeoutSeconds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool ensureIndexedDonorPlan = false)
     {
         var ids = GetHistoricalGrossNetParityIds(candidates, HistoricalGrossNetParitySourceKind.PaperRun);
         if (ids.Length == 0) return [];
@@ -2397,6 +2492,10 @@ ORDER BY run.strategy_id, COALESCE(run.entered_at_utc, run.created_at_utc), lowe
             CommandTimeout = commandTimeoutSeconds
         };
         command.Parameters.Add("Ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = ids;
+        if (ensureIndexedDonorPlan)
+        {
+            await EnsureHistoricalGrossNetParityDonorPlanIsIndexedAsync(command, cancellationToken);
+        }
         var result = new List<HistoricalGrossNetParityPaperRunObservation>(ids.Length);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -2432,7 +2531,8 @@ ORDER BY run.strategy_id, COALESCE(run.entered_at_utc, run.created_at_utc), lowe
             NpgsqlTransaction transaction,
             IReadOnlyList<HistoricalGrossNetParityCandidateKey> candidates,
             int commandTimeoutSeconds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool ensureIndexedDonorPlan = false)
     {
         var ids = GetHistoricalGrossNetParityIds(candidates, HistoricalGrossNetParitySourceKind.PaperPosition);
         if (ids.Length == 0) return [];
@@ -2475,6 +2575,10 @@ ORDER BY strategy_id, lower(id::text);
         };
         command.Parameters.Add("Ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = ids;
         command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+        if (ensureIndexedDonorPlan)
+        {
+            await EnsureHistoricalGrossNetParityDonorPlanIsIndexedAsync(command, cancellationToken);
+        }
         var result = new List<HistoricalGrossNetParityPaperPositionObservation>(ids.Length);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -2502,7 +2606,8 @@ ORDER BY strategy_id, lower(id::text);
             NpgsqlTransaction transaction,
             IReadOnlyList<HistoricalGrossNetParityCandidateKey> candidates,
             int commandTimeoutSeconds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool ensureIndexedDonorPlan = false)
     {
         var ids = GetHistoricalGrossNetParityIds(candidates, HistoricalGrossNetParitySourceKind.PaperSettlement);
         if (ids.Length == 0) return [];
@@ -2550,6 +2655,10 @@ ORDER BY strategy_id, settled_at_utc, lower(id::text);
         };
         command.Parameters.Add("Ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = ids;
         command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+        if (ensureIndexedDonorPlan)
+        {
+            await EnsureHistoricalGrossNetParityDonorPlanIsIndexedAsync(command, cancellationToken);
+        }
         var result = new List<HistoricalGrossNetParityPaperSettlementObservation>(ids.Length);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -2577,7 +2686,8 @@ ORDER BY strategy_id, settled_at_utc, lower(id::text);
             NpgsqlTransaction transaction,
             IReadOnlyList<HistoricalGrossNetParityCandidateKey> candidates,
             int commandTimeoutSeconds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool ensureIndexedDonorPlan = false)
     {
         var runIds = GetHistoricalGrossNetParityIds(candidates, HistoricalGrossNetParitySourceKind.PaperRun);
         var positionIds = GetHistoricalGrossNetParityIds(candidates, HistoricalGrossNetParitySourceKind.PaperPosition);
@@ -2588,38 +2698,46 @@ ORDER BY strategy_id, settled_at_utc, lower(id::text);
         await using var command = new NpgsqlCommand(
             """
 WITH direct_orders AS (
-    SELECT run.paper_order_id AS paper_order_id, NULL::timestamptz AS end_at
+    SELECT run.paper_order_id AS paper_order_id, NULL::timestamptz AS end_at,
+           NULL::uuid AS end_order_id, NULL::uuid AS end_fill_id
     FROM strategy_market_paper_runs run
     WHERE run.id = ANY(@RunIds) AND run.paper_order_id IS NOT NULL
 ), target_pools AS (
     SELECT position.copied_trader_wallet AS wallet, position.asset_id,
-           NULL::timestamptz AS end_at
+           NULL::timestamptz AS end_at, NULL::uuid AS end_order_id,
+           NULL::uuid AS end_fill_id
     FROM paper_positions position WHERE position.id = ANY(@PositionIds)
     UNION ALL
-    SELECT settlement.copied_trader_wallet, settlement.asset_id, settlement.settled_at_utc
+    SELECT settlement.copied_trader_wallet, settlement.asset_id, settlement.settled_at_utc,
+           NULL::uuid, NULL::uuid
     FROM paper_position_settlements settlement WHERE settlement.id = ANY(@SettlementIds)
     UNION ALL
-    SELECT paper_order.copied_trader_wallet, paper_order.asset_id, fill.filled_at_utc
+    SELECT paper_order.copied_trader_wallet, paper_order.asset_id, fill.filled_at_utc,
+           paper_order.id, fill.id
     FROM paper_fills fill
     INNER JOIN paper_orders paper_order ON paper_order.id = fill.paper_order_id
     WHERE fill.id = ANY(@SellFillIds)
-), page_strategies AS (
-    SELECT DISTINCT unnest(@StrategyIds::uuid[]) AS strategy_id
 ), selected_orders AS (
-    SELECT direct_order.paper_order_id, direct_order.end_at
+    SELECT direct_order.paper_order_id, direct_order.end_at,
+           direct_order.end_order_id, direct_order.end_fill_id
     FROM direct_orders direct_order
     UNION
-    SELECT paper_order.id, target_pool.end_at
+    SELECT paper_order.id, target_pool.end_at,
+           target_pool.end_order_id, target_pool.end_fill_id
     FROM target_pools target_pool
     INNER JOIN paper_orders paper_order
       ON paper_order.copied_trader_wallet = target_pool.wallet
      AND paper_order.asset_id = target_pool.asset_id
-    INNER JOIN page_strategies page_strategy ON page_strategy.strategy_id = paper_order.strategy_id
 ), selected_fills AS (
     SELECT DISTINCT fill.id
     FROM selected_orders selected_order
     INNER JOIN paper_fills fill ON fill.paper_order_id = selected_order.paper_order_id
-    WHERE selected_order.end_at IS NULL OR fill.filled_at_utc <= selected_order.end_at
+    WHERE selected_order.end_at IS NULL
+       OR fill.filled_at_utc < selected_order.end_at
+       OR (fill.filled_at_utc = selected_order.end_at AND
+           (selected_order.end_fill_id IS NULL OR
+            ROW(lower(selected_order.paper_order_id::text), lower(fill.id::text)) <=
+            ROW(lower(selected_order.end_order_id::text), lower(selected_order.end_fill_id::text))))
 )
 SELECT fill.id, fill.xmin::text::bigint, paper_order.id, paper_order.xmin::text::bigint,
        paper_order.strategy_id, paper_order.copied_trader_wallet, paper_order.status,
@@ -2663,8 +2781,10 @@ ORDER BY lower(paper_order.copied_trader_wallet), paper_order.asset_id,
         command.Parameters.Add("PositionIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = positionIds;
         command.Parameters.Add("SettlementIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = settlementIds;
         command.Parameters.Add("SellFillIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = sellFillIds;
-        command.Parameters.Add("StrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value =
-            GetHistoricalGrossNetParityStrategyIds(candidates);
+        if (ensureIndexedDonorPlan)
+        {
+            await EnsureHistoricalGrossNetParityDonorPlanIsIndexedAsync(command, cancellationToken);
+        }
         var result = new List<HistoricalGrossNetParityPaperFillObservation>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -3025,6 +3145,543 @@ ORDER BY run.strategy_id, lower(run.id::text);
         return result;
     }
 
+    private sealed record HistoricalGrossNetParityDonorReplayCharge(
+        string SourceChargeId,
+        Guid PaperOrderId,
+        decimal AmountUsd,
+        string EvidenceHash,
+        string EvidenceJson);
+
+    private sealed record HistoricalGrossNetParityFreshPaperEvidence(
+        IReadOnlyDictionary<
+            (HistoricalGrossNetParitySourceKind SourceKind, Guid SourceId), string> ComponentHashes,
+        IReadOnlyDictionary<
+            (HistoricalGrossNetParitySourceKind SourceKind, Guid SourceId), IReadOnlyList<Guid>>
+            RemainingPaperOrderIds);
+
+    private sealed record HistoricalGrossNetParityDonorReplayState(
+        decimal SizeShares,
+        decimal AveragePrice,
+        decimal FeeUsd,
+        bool EntryFeesExact,
+        bool HasPriorSell,
+        IReadOnlyList<HistoricalGrossNetParityDonorReplayCharge> EntryCharges)
+    {
+        public static HistoricalGrossNetParityDonorReplayState Empty { get; } =
+            new(0m, 0m, 0m, true, false, []);
+    }
+
+    private sealed record HistoricalGrossNetParityDonorSellReplay(
+        HistoricalGrossNetParityDonorReplayState Before,
+        HistoricalGrossNetParityDonorReplayState After,
+        decimal GrossPnlUsd,
+        decimal NetPnlUsd,
+        HistoricalGrossNetParityComponentAllocationV1? EntryAllocation);
+
+    private sealed record HistoricalGrossNetParityDonorReplayEvent(
+        HistoricalGrossNetParityPaperFillObservation Fill,
+        HistoricalGrossNetParityDonorReplayState Before,
+        HistoricalGrossNetParityDonorReplayState After,
+        HistoricalGrossNetParityDonorSellReplay? Sell);
+
+    private static async Task<HistoricalGrossNetParityFreshPaperEvidence>
+        LoadHistoricalGrossNetParityFreshPaperComponentHashesAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            Guid strategyId,
+            int commandTimeoutSeconds,
+            CancellationToken cancellationToken)
+    {
+        var candidates = await LoadHistoricalGrossNetParityFreshPaperEvidenceCandidatesAsync(
+            connection, transaction, strategyId, commandTimeoutSeconds, cancellationToken,
+            ensureIndexedDonorPlan: true);
+        if (candidates.Count == 0)
+        {
+            return new HistoricalGrossNetParityFreshPaperEvidence(
+                new Dictionary<(HistoricalGrossNetParitySourceKind, Guid), string>(),
+                new Dictionary<(HistoricalGrossNetParitySourceKind, Guid), IReadOnlyList<Guid>>());
+        }
+
+        var fills = await LoadHistoricalGrossNetParityPagePaperFillsAsync(
+            connection, transaction, candidates, commandTimeoutSeconds, cancellationToken,
+            ensureIndexedDonorPlan: true);
+        var runs = await LoadHistoricalGrossNetParityPagePaperRunsAsync(
+            connection, transaction, candidates, commandTimeoutSeconds, cancellationToken,
+            ensureIndexedDonorPlan: true);
+        var positions = await LoadHistoricalGrossNetParityPagePaperPositionsAsync(
+            connection, transaction, candidates, commandTimeoutSeconds, cancellationToken,
+            ensureIndexedDonorPlan: true);
+        var settlements = await LoadHistoricalGrossNetParityPagePaperSettlementsAsync(
+            connection, transaction, candidates, commandTimeoutSeconds, cancellationToken,
+            ensureIndexedDonorPlan: true);
+        var fillsByOrder = fills.GroupBy(fill => fill.PaperOrderId)
+            .ToDictionary(group => group.Key, group => group.ToArray());
+        var replayByPool = fills.GroupBy(fill => (fill.CopiedTraderWallet, fill.AssetId))
+            .ToDictionary(
+                group => group.Key,
+                group => ReplayHistoricalGrossNetParityDonorPool(group.ToArray()));
+        var hashes = new Dictionary<(HistoricalGrossNetParitySourceKind, Guid), string>();
+        var remainingPaperOrderIds = new Dictionary<
+            (HistoricalGrossNetParitySourceKind, Guid), IReadOnlyList<Guid>>();
+
+        foreach (var run in runs)
+        {
+            if (!string.Equals(run.FeeCalculationSource, "mixed", StringComparison.Ordinal) ||
+                run.PaperOrderId is null ||
+                !fillsByOrder.TryGetValue(run.PaperOrderId.Value, out var linked) ||
+                linked.Length == 0 || linked.Any(fill => !IsHistoricalGrossNetParityExactFill(fill)) ||
+                RoundHistoricalGrossNetParity8(linked.Sum(fill => fill.FeeUsd)) != run.FeeUsd)
+            {
+                continue;
+            }
+
+            var components = linked.Select(fill =>
+                    CreateHistoricalGrossNetParityDirectComponent(
+                        $"paper-run-entry:{run.RunId:D}:{fill.FillId:D}",
+                        $"paper-fill:{fill.FillId:D}:entry",
+                        fill.FeeUsd,
+                        fill.CanonicalPayloadJson))
+                .ToArray();
+            hashes[(HistoricalGrossNetParitySourceKind.PaperRun, run.RunId)] =
+                HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(components);
+        }
+
+        foreach (var position in positions)
+        {
+            if (!replayByPool.TryGetValue(
+                    (position.CopiedTraderWallet, position.AssetId),
+                    out var replay))
+            {
+                continue;
+            }
+
+            var state = replay.Count == 0
+                ? HistoricalGrossNetParityDonorReplayState.Empty
+                : replay[^1].After;
+            if (!state.EntryFeesExact || state.EntryCharges.Count == 0 ||
+                RoundHistoricalGrossNetParity8(state.SizeShares) != position.SizeShares ||
+                RoundHistoricalGrossNetParity8(state.AveragePrice) != position.AveragePrice ||
+                RoundHistoricalGrossNetParity8(state.FeeUsd) != position.FeeUsd)
+            {
+                continue;
+            }
+
+            remainingPaperOrderIds[(HistoricalGrossNetParitySourceKind.PaperPosition, position.PositionId)] =
+                state.EntryCharges.Select(charge => charge.PaperOrderId).Distinct().Order().ToArray();
+            if (!string.Equals(position.FeeCalculationSource, "mixed", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var allocationId = $"paper-entry-remaining:PaperPosition:{position.PositionId:D}";
+            var poolId = CreateHistoricalGrossNetParityDonorPoolId(
+                position.CopiedTraderWallet,
+                position.AssetId);
+            var component = state.HasPriorSell
+                ? CreateHistoricalGrossNetParityRemainingComponent(
+                    allocationId,
+                    state,
+                    position.CopiedTraderWallet,
+                    position.AssetId,
+                    position.CanonicalPayloadJson)
+                : CreateHistoricalGrossNetParityEntryPoolComponent(
+                    allocationId,
+                    RoundHistoricalGrossNetParity8(state.FeeUsd),
+                    state,
+                    poolId,
+                    position.CanonicalPayloadJson,
+                    null);
+            hashes[(HistoricalGrossNetParitySourceKind.PaperPosition, position.PositionId)] =
+                HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash([component]);
+        }
+
+        foreach (var settlement in settlements)
+        {
+            if (!replayByPool.TryGetValue(
+                    (settlement.CopiedTraderWallet, settlement.AssetId),
+                    out var replay) ||
+                replay.Any(value => value.Fill.FilledAtUtc == settlement.SettledAtUtc))
+            {
+                continue;
+            }
+
+            var state = replay.LastOrDefault(value => value.Fill.FilledAtUtc < settlement.SettledAtUtc)?.After ??
+                HistoricalGrossNetParityDonorReplayState.Empty;
+            if (!state.EntryFeesExact || state.EntryCharges.Count == 0 ||
+                RoundHistoricalGrossNetParity8(state.SizeShares) != settlement.SettledSizeShares ||
+                RoundHistoricalGrossNetParity8(state.AveragePrice) != settlement.AveragePrice ||
+                RoundHistoricalGrossNetParity8(state.AveragePrice * state.SizeShares) != settlement.CostBasisUsd ||
+                RoundHistoricalGrossNetParity8(state.FeeUsd) != settlement.FeeUsd)
+            {
+                continue;
+            }
+
+            remainingPaperOrderIds[(HistoricalGrossNetParitySourceKind.PaperSettlement, settlement.SettlementId)] =
+                state.EntryCharges.Select(charge => charge.PaperOrderId).Distinct().Order().ToArray();
+            if (!string.Equals(settlement.FeeCalculationSource, "mixed", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var allocationId = $"paper-entry-remaining:PaperSettlement:{settlement.SettlementId:D}";
+            var poolId = CreateHistoricalGrossNetParityDonorPoolId(
+                settlement.CopiedTraderWallet,
+                settlement.AssetId);
+            var component = state.HasPriorSell
+                ? CreateHistoricalGrossNetParityRemainingComponent(
+                    allocationId,
+                    state,
+                    settlement.CopiedTraderWallet,
+                    settlement.AssetId,
+                    settlement.CanonicalPayloadJson)
+                : CreateHistoricalGrossNetParityEntryPoolComponent(
+                    allocationId,
+                    RoundHistoricalGrossNetParity8(state.FeeUsd),
+                    state,
+                    poolId,
+                    settlement.CanonicalPayloadJson,
+                    null);
+            hashes[(HistoricalGrossNetParitySourceKind.PaperSettlement, settlement.SettlementId)] =
+                HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash([component]);
+        }
+
+        foreach (var fill in fills.Where(fill => string.Equals(fill.OrderSide, "Sell", StringComparison.Ordinal)))
+        {
+            if (!replayByPool.TryGetValue((fill.CopiedTraderWallet, fill.AssetId), out var replay))
+            {
+                continue;
+            }
+            var sell = replay.SingleOrDefault(value => value.Fill.FillId == fill.FillId)?.Sell;
+            if (sell is null || sell.EntryAllocation is null ||
+                !IsHistoricalGrossNetParityExactFill(fill) || fill.NetRealizedPnlUsd is null ||
+                fill.RealizedPnlUsd != sell.GrossPnlUsd ||
+                fill.NetRealizedPnlUsd.Value != sell.NetPnlUsd)
+            {
+                continue;
+            }
+
+            var exit = CreateHistoricalGrossNetParityDirectComponent(
+                $"paper-exit-allocation:{fill.FillId:D}",
+                $"paper-fill:{fill.FillId:D}:exit",
+                fill.FeeUsd,
+                fill.CanonicalPayloadJson);
+            hashes[(HistoricalGrossNetParitySourceKind.PaperSellFill, fill.FillId)] =
+                HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(
+                    [sell.EntryAllocation, exit]);
+        }
+
+        return new HistoricalGrossNetParityFreshPaperEvidence(hashes, remainingPaperOrderIds);
+    }
+
+    private static async Task<IReadOnlyList<HistoricalGrossNetParityCandidateKey>>
+        LoadHistoricalGrossNetParityFreshPaperEvidenceCandidatesAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+        Guid strategyId,
+        int commandTimeoutSeconds,
+        CancellationToken cancellationToken,
+        bool ensureIndexedDonorPlan = false)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+WITH candidate_strategy AS MATERIALIZED (
+    SELECT id, code FROM strategies WHERE id=@StrategyId
+), uses_runs AS MATERIALIZED (
+    SELECT EXISTS (
+        SELECT 1 FROM strategy_market_paper_runs WHERE strategy_id=@StrategyId
+        UNION ALL
+        SELECT 1 FROM strategy_paper_skip_rollups WHERE strategy_id=@StrategyId) AS value
+)
+SELECT 'PaperRun'::text, run.id, run.xmin::text::bigint
+FROM strategy_market_paper_runs run
+WHERE run.strategy_id=@StrategyId AND (SELECT value FROM uses_runs)
+  AND run.status='Settled' AND run.fee_calculation_source='mixed'
+UNION ALL
+SELECT 'PaperPosition', position.id, position.xmin::text::bigint
+FROM paper_positions position CROSS JOIN candidate_strategy strategy
+WHERE position.size_shares>0
+  AND ((strategy.id=@FollowLeaderStrategyId
+        AND lower(position.copied_trader_wallet) NOT LIKE 'strategy:%')
+       OR (strategy.id<>@FollowLeaderStrategyId
+        AND lower(position.copied_trader_wallet)=lower('strategy:'||strategy.code)))
+UNION ALL
+SELECT 'PaperSettlement', settlement.id, settlement.xmin::text::bigint
+FROM paper_position_settlements settlement CROSS JOIN candidate_strategy strategy
+WHERE NOT (SELECT value FROM uses_runs)
+  AND ((strategy.id=@FollowLeaderStrategyId
+        AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
+       OR (strategy.id<>@FollowLeaderStrategyId
+        AND lower(settlement.copied_trader_wallet)=lower('strategy:'||strategy.code)))
+UNION ALL
+SELECT 'PaperSellFill', fill.id, fill.xmin::text::bigint
+FROM paper_orders paper_order
+INNER JOIN paper_fills fill ON fill.paper_order_id=paper_order.id
+WHERE paper_order.strategy_id=@StrategyId AND paper_order.side='Sell'
+  AND NOT (SELECT value FROM uses_runs);
+""",
+            connection,
+            transaction)
+        {
+            CommandTimeout = commandTimeoutSeconds
+        };
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+        if (ensureIndexedDonorPlan)
+        {
+            await EnsureHistoricalGrossNetParityDonorPlanIsIndexedAsync(command, cancellationToken);
+        }
+        var result = new List<HistoricalGrossNetParityCandidateKey>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var sourceKind = Enum.Parse<HistoricalGrossNetParitySourceKind>(reader.GetString(0), false);
+            result.Add(new HistoricalGrossNetParityCandidateKey(
+                sourceKind,
+                reader.GetGuid(1),
+                strategyId,
+                string.Empty,
+                0,
+                0m,
+                DateTimeOffset.UnixEpoch,
+                sourceKind switch
+                {
+                    HistoricalGrossNetParitySourceKind.PaperRun => 1,
+                    HistoricalGrossNetParitySourceKind.PaperPosition => 2,
+                    HistoricalGrossNetParitySourceKind.PaperSettlement => 3,
+                    _ => 4
+                },
+                reader.GetInt64(2),
+                HistoricalGrossNetParityOwnership.None));
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<HistoricalGrossNetParityDonorReplayEvent>
+        ReplayHistoricalGrossNetParityDonorPool(
+            IReadOnlyList<HistoricalGrossNetParityPaperFillObservation> fills)
+    {
+        var ordered = fills
+            .OrderBy(fill => fill.FilledAtUtc)
+            .ThenBy(fill => fill.PaperOrderId.ToString("D"), StringComparer.Ordinal)
+            .ThenBy(fill => fill.FillId.ToString("D"), StringComparer.Ordinal)
+            .ToArray();
+        var events = new List<HistoricalGrossNetParityDonorReplayEvent>(ordered.Length);
+        var state = HistoricalGrossNetParityDonorReplayState.Empty;
+        foreach (var fill in ordered)
+        {
+            var before = state;
+            HistoricalGrossNetParityDonorSellReplay? sell = null;
+            if (string.Equals(fill.OrderSide, "Buy", StringComparison.Ordinal))
+            {
+                var newSize = RoundHistoricalGrossNetParity8(state.SizeShares + fill.FillSizeShares);
+                if (newSize <= 0m)
+                {
+                    continue;
+                }
+                var average = RoundHistoricalGrossNetParity8(
+                    ((state.SizeShares * state.AveragePrice) +
+                     (fill.FillPrice * fill.FillSizeShares)) / newSize);
+                var newFee = RoundHistoricalGrossNetParity8(state.FeeUsd + fill.FeeUsd);
+                var sourceChargeId = $"paper-fill:{fill.FillId:D}:entry";
+                var sourceEvidence = JsonSerializer.Serialize(new
+                {
+                    version = "HistoricalGrossNetParityPaperBuySourceChargeV1",
+                    fill.FillId,
+                    fill.PaperOrderId,
+                    sourceChargeId,
+                    amountUsd = newFee - state.FeeUsd,
+                    fill.CanonicalPayloadJson
+                });
+                state = new HistoricalGrossNetParityDonorReplayState(
+                    newSize,
+                    average,
+                    newFee,
+                    state.EntryFeesExact && IsHistoricalGrossNetParityExactFill(fill),
+                    state.HasPriorSell,
+                    state.EntryCharges.Append(new HistoricalGrossNetParityDonorReplayCharge(
+                        sourceChargeId,
+                        fill.PaperOrderId,
+                        newFee - state.FeeUsd,
+                        HashHistoricalGrossNetParityPayload(sourceEvidence),
+                        sourceEvidence)).ToArray());
+            }
+            else if (string.Equals(fill.OrderSide, "Sell", StringComparison.Ordinal) &&
+                     state.SizeShares > 0m)
+            {
+                var sellSize = RoundHistoricalGrossNetParity8(fill.FillSizeShares);
+                var currentSize = RoundHistoricalGrossNetParity8(state.SizeShares);
+                var sellFraction = Math.Min(1m, sellSize / currentSize);
+                var rawAllocation = state.FeeUsd * sellFraction;
+                var grossRaw = (fill.FillPrice - state.AveragePrice) * sellSize;
+                var netRaw = grossRaw - rawAllocation - fill.FeeUsd;
+                var gross8 = RoundHistoricalGrossNetParity8(grossRaw);
+                var net8 = RoundHistoricalGrossNetParity8(netRaw);
+                var effectiveEntry = (gross8 - net8) - fill.FeeUsd;
+                var newSize = RoundHistoricalGrossNetParity8(Math.Max(0m, currentSize - sellSize));
+                var remainingFraction = Math.Max(0m, Math.Min(1m, newSize / currentSize));
+                var remainingFee = RoundHistoricalGrossNetParity8(state.FeeUsd * remainingFraction);
+                var decrement = state.FeeUsd - remainingFee;
+                var residual = effectiveEntry - decrement;
+                var poolId = CreateHistoricalGrossNetParityDonorPoolId(
+                    fill.CopiedTraderWallet, fill.AssetId);
+                var movementEvidence = JsonSerializer.Serialize(new
+                {
+                    version = "HistoricalGrossNetParityPaperSellPoolMovementV1",
+                    Wallet = fill.CopiedTraderWallet,
+                    fill.AssetId,
+                    fill.FillId,
+                    poolId,
+                    poolAllocatedRaw = rawAllocation,
+                    remainingBeforeUsd = state.FeeUsd,
+                    poolDecrement8 = decrement,
+                    remainingPool8 = remainingFee,
+                    residual8 = residual,
+                    effectiveEntrySlice8 = effectiveEntry
+                });
+                var movement = new HistoricalGrossNetParityPoolMovementV1(
+                    poolId,
+                    rawAllocation,
+                    state.FeeUsd,
+                    decrement,
+                    remainingFee,
+                    residual,
+                    HashHistoricalGrossNetParityPayload(movementEvidence),
+                    movementEvidence);
+                var entry = state.EntryFeesExact && state.EntryCharges.Count > 0 && effectiveEntry >= 0m
+                    ? CreateHistoricalGrossNetParityEntryPoolComponent(
+                        $"paper-entry-allocation:{fill.FillId:D}",
+                        effectiveEntry,
+                        state,
+                        poolId,
+                        movementEvidence,
+                        movement)
+                    : null;
+                state = new HistoricalGrossNetParityDonorReplayState(
+                    newSize,
+                    newSize == 0m ? 0m : state.AveragePrice,
+                    newSize == 0m ? 0m : remainingFee,
+                    newSize == 0m || state.EntryFeesExact,
+                    true,
+                    newSize == 0m ? [] : state.EntryCharges);
+                sell = new HistoricalGrossNetParityDonorSellReplay(
+                    before, state, gross8, net8, entry);
+            }
+            events.Add(new HistoricalGrossNetParityDonorReplayEvent(fill, before, state, sell));
+        }
+        return events;
+    }
+
+    private static HistoricalGrossNetParityComponentAllocationV1
+        CreateHistoricalGrossNetParityRemainingComponent(
+            string allocationId,
+            HistoricalGrossNetParityDonorReplayState state,
+            string wallet,
+            string assetId,
+            string contextPayload)
+    {
+        var remainingFee = RoundHistoricalGrossNetParity8(state.FeeUsd);
+        var poolId = CreateHistoricalGrossNetParityDonorPoolId(wallet, assetId);
+        var movementEvidence = JsonSerializer.Serialize(new
+        {
+            version = "HistoricalGrossNetParityRemainingEntryPoolMovementV1",
+            allocationId,
+            poolId,
+            remainingFee,
+            contextEvidenceHash = HashHistoricalGrossNetParityPayload(contextPayload)
+        });
+        var movement = new HistoricalGrossNetParityPoolMovementV1(
+            poolId, remainingFee, remainingFee, remainingFee, 0m, 0m,
+            HashHistoricalGrossNetParityPayload(movementEvidence), movementEvidence);
+        return CreateHistoricalGrossNetParityEntryPoolComponent(
+            allocationId, remainingFee, state, poolId, contextPayload, movement);
+    }
+
+    private static HistoricalGrossNetParityComponentAllocationV1
+        CreateHistoricalGrossNetParityEntryPoolComponent(
+            string allocationId,
+            decimal amountUsd,
+            HistoricalGrossNetParityDonorReplayState state,
+            string poolId,
+            string contextPayload,
+            HistoricalGrossNetParityPoolMovementV1? movement)
+    {
+        var charges = state.EntryCharges.Select(charge =>
+            new HistoricalGrossNetParitySourceChargeV1(
+                charge.SourceChargeId, charge.AmountUsd, charge.EvidenceHash, charge.EvidenceJson)).ToArray();
+        var contextHash = HashHistoricalGrossNetParityPayload(contextPayload);
+        var edges = state.EntryCharges.Select(charge =>
+        {
+            var edgeEvidence = JsonSerializer.Serialize(new
+            {
+                version = "HistoricalGrossNetParityEntryPoolCoverageV1",
+                charge.SourceChargeId,
+                poolId,
+                allocationId,
+                chargeEvidenceHash = charge.EvidenceHash,
+                contextEvidenceHash = contextHash
+            });
+            return new HistoricalGrossNetParityChargeCoverageEdgeV1(
+                charge.SourceChargeId, poolId, allocationId,
+                HashHistoricalGrossNetParityPayload(edgeEvidence), edgeEvidence);
+        }).ToArray();
+        return HistoricalGrossNetParityComponentGraphV1.Create(
+            allocationId, RoundHistoricalGrossNetParity8(amountUsd), charges, edges, movement);
+    }
+
+    private static HistoricalGrossNetParityComponentAllocationV1
+        CreateHistoricalGrossNetParityDirectComponent(
+            string allocationId,
+            string sourceChargeId,
+            decimal amountUsd,
+            string evidencePayload)
+    {
+        var amount = RoundHistoricalGrossNetParity8(amountUsd);
+        var sourceEvidence = JsonSerializer.Serialize(new
+        {
+            version = "HistoricalGrossNetParityDirectSourceChargeV1",
+            allocationId,
+            sourceChargeId,
+            amountUsd = amount,
+            evidencePayload
+        });
+        var poolId = "canonical-direct:" + HashHistoricalGrossNetParityPayload(sourceChargeId);
+        var edgeEvidence = JsonSerializer.Serialize(new
+        {
+            version = "HistoricalGrossNetParityDirectCoverageV1",
+            sourceChargeId,
+            poolId,
+            allocationId
+        });
+        return HistoricalGrossNetParityComponentGraphV1.Create(
+            allocationId,
+            amount,
+            [new HistoricalGrossNetParitySourceChargeV1(
+                sourceChargeId, amount,
+                HashHistoricalGrossNetParityPayload(sourceEvidence), sourceEvidence)],
+            [new HistoricalGrossNetParityChargeCoverageEdgeV1(
+                sourceChargeId, poolId, allocationId,
+                HashHistoricalGrossNetParityPayload(edgeEvidence), edgeEvidence)]);
+    }
+
+    private static bool IsHistoricalGrossNetParityExactFill(
+        HistoricalGrossNetParityPaperFillObservation fill) =>
+        string.Equals(fill.FeeAccountingStatus, "Calculated", StringComparison.Ordinal) &&
+        fill.FeeUsd >= 0m && fill.FeeCalculatedAtUtc is not null &&
+        IsHistoricalGrossNetParityExactLocalSource(
+            fill.FeeCalculationSource, fill.FeeUsd, fill.FeeLiquidityRole,
+            fill.FeeRate, fill.FeeExponent, fill.FeeTakerOnly);
+
+    private static string CreateHistoricalGrossNetParityDonorPoolId(string wallet, string assetId) =>
+        "paper-entry-pool:" + HashHistoricalGrossNetParityPayload(JsonSerializer.Serialize(new
+        {
+            version = "HistoricalGrossNetParityPaperEntryPoolV1",
+            Wallet = wallet,
+            AssetId = assetId
+        }));
+
+    private static decimal RoundHistoricalGrossNetParity8(decimal value) =>
+        Math.Round(value, 8, MidpointRounding.AwayFromZero);
+
     private static async Task<HistoricalGrossNetParityDonorCandidateAggregate>
         LoadHistoricalGrossNetParityDonorAggregateAsync(
             NpgsqlConnection connection,
@@ -3035,6 +3692,22 @@ ORDER BY run.strategy_id, lower(run.id::text);
             CancellationToken cancellationToken)
     {
         var emptyComponentHash = HistoricalGrossNetDonorHashV1.ComputeComponentAllocationHash([]);
+        var freshPaperEvidence = await LoadHistoricalGrossNetParityFreshPaperComponentHashesAsync(
+            connection,
+            transaction,
+            candidate.StrategyId,
+            commandTimeoutSeconds,
+            cancellationToken);
+        var freshComponentHashesJson = JsonSerializer.Serialize(
+            freshPaperEvidence.ComponentHashes.ToDictionary(
+                value => $"{value.Key.SourceKind}:{value.Key.SourceId:D}",
+                value => value.Value,
+                StringComparer.Ordinal));
+        var freshCompositePaperOrderIdsJson = JsonSerializer.Serialize(
+            freshPaperEvidence.RemainingPaperOrderIds.ToDictionary(
+                value => $"{value.Key.SourceKind}:{value.Key.SourceId:D}",
+                value => value.Value.Select(id => id.ToString("D")).ToArray(),
+                StringComparer.Ordinal));
         await using var command = new NpgsqlCommand(
             """
 WITH candidate_strategy AS MATERIALIZED (
@@ -3064,7 +3737,14 @@ WITH candidate_strategy AS MATERIALIZED (
            run.fee_rate, run.fee_exponent, run.fee_taker_only,
            run.fee_calculated_at_utc AS calculated_at,
            NULL::text AS venue_evidence_version,
-           @EmptyComponentHash::text AS component_hash
+           CASE WHEN run.fee_calculation_source = 'mixed'
+                THEN @FreshComponentHashes::jsonb ->>
+                     ('PaperRun:' || lower(run.id::text))
+                ELSE @EmptyComponentHash::text END AS component_hash,
+           run.paper_order_id AS paper_order_id,
+           NULL::text AS pool_wallet,
+           NULL::text AS pool_asset,
+           '[]'::jsonb AS remaining_paper_order_ids
     FROM strategy_market_paper_runs run
     WHERE run.strategy_id = @StrategyId
       AND (SELECT value FROM uses_runs)
@@ -3083,12 +3763,22 @@ WITH candidate_strategy AS MATERIALIZED (
            position.fee_accounting_status, position.fee_calculation_source,
            position.fee_liquidity_role, position.fee_rate, position.fee_exponent,
            position.fee_taker_only, position.fee_calculated_at_utc,
-           NULL, @EmptyComponentHash
+           NULL, CASE WHEN position.fee_calculation_source = 'mixed'
+                      THEN @FreshComponentHashes::jsonb ->>
+                           ('PaperPosition:' || lower(position.id::text))
+                      ELSE @EmptyComponentHash::text END,
+           NULL::uuid,
+           lower(position.copied_trader_wallet),
+           position.asset_id,
+           COALESCE(
+               @FreshCompositePaperOrderIds::jsonb ->
+                   ('PaperPosition:' || lower(position.id::text)),
+               '[]'::jsonb)
     FROM paper_positions position
     INNER JOIN candidate_strategy strategy
       ON (strategy.id = @FollowLeaderStrategyId
           AND lower(position.copied_trader_wallet) NOT LIKE 'strategy:%')
-      OR (strategy.id <> @FollowLeaderStrategyId
+          OR (strategy.id <> @FollowLeaderStrategyId
           AND lower(position.copied_trader_wallet) = lower('strategy:' || strategy.code))
     WHERE position.size_shares > 0
 
@@ -3103,12 +3793,22 @@ WITH candidate_strategy AS MATERIALIZED (
            settlement.fee_accounting_status, settlement.fee_calculation_source,
            settlement.fee_liquidity_role, settlement.fee_rate, settlement.fee_exponent,
            settlement.fee_taker_only, settlement.fee_calculated_at_utc,
-           NULL, @EmptyComponentHash
+           NULL, CASE WHEN settlement.fee_calculation_source = 'mixed'
+                      THEN @FreshComponentHashes::jsonb ->>
+                           ('PaperSettlement:' || lower(settlement.id::text))
+                      ELSE @EmptyComponentHash::text END,
+           NULL::uuid,
+           lower(settlement.copied_trader_wallet),
+           settlement.asset_id,
+           COALESCE(
+               @FreshCompositePaperOrderIds::jsonb ->
+                   ('PaperSettlement:' || lower(settlement.id::text)),
+               '[]'::jsonb)
     FROM paper_position_settlements settlement
     INNER JOIN candidate_strategy strategy
       ON (strategy.id = @FollowLeaderStrategyId
           AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
-      OR (strategy.id <> @FollowLeaderStrategyId
+          OR (strategy.id <> @FollowLeaderStrategyId
           AND lower(settlement.copied_trader_wallet) = lower('strategy:' || strategy.code))
     WHERE NOT (SELECT value FROM uses_runs)
 
@@ -3126,24 +3826,18 @@ WITH candidate_strategy AS MATERIALIZED (
            sell_fill.fee_accounting_status, sell_fill.fee_calculation_source,
            sell_fill.fee_liquidity_role, sell_fill.fee_rate, sell_fill.fee_exponent,
            sell_fill.fee_taker_only, sell_fill.fee_calculated_at_utc,
-           NULL, decision.component_hash
+           NULL, @FreshComponentHashes::jsonb ->>
+                 ('PaperSellFill:' || lower(sell_fill.id::text)),
+           sell_order.id,
+           NULL::text,
+           NULL::text,
+           '[]'::jsonb
     FROM paper_orders sell_order
     INNER JOIN paper_fills sell_fill ON sell_fill.paper_order_id = sell_order.id
     INNER JOIN LATERAL (
         SELECT count(*)::bigint AS fill_count FROM paper_fills sibling
         WHERE sibling.paper_order_id = sell_order.id
     ) order_fill_count ON true
-    LEFT JOIN LATERAL (
-        SELECT NULLIF(
-                   audit.evidence_payload_json #>>
-                       '{decisionEvidence,componentAllocationHashV1}',
-                   '') AS component_hash
-        FROM historical_gross_net_parity_audit audit
-        WHERE audit.source_kind = 'PaperSellFill' AND audit.source_id = sell_fill.id
-          AND audit.calculation_version = @CalculationVersion
-          AND audit.operation_kind = 'AccountingDecision'
-        LIMIT 1
-    ) decision ON true
     WHERE sell_order.strategy_id = @StrategyId
       AND sell_order.side = 'Sell'
       AND NOT (SELECT value FROM uses_runs)
@@ -3151,11 +3845,7 @@ WITH candidate_strategy AS MATERIALIZED (
     SELECT 'LiveOrder'::text AS source_kind,
            live_order.id AS source_id,
            CASE
-               WHEN live_order.paper_order_id IS NOT NULL AND (
-                    EXISTS (SELECT 1 FROM strategy_market_paper_runs run
-                            WHERE run.paper_order_id = live_order.paper_order_id)
-                    OR (SELECT count(*) FROM paper_fills fill
-                        WHERE fill.paper_order_id = live_order.paper_order_id) = 1)
+               WHEN live_order.paper_order_id IS NOT NULL
                THEN 'paper-order:' || lower(live_order.paper_order_id::text)
                ELSE 'live-order:' || lower(live_order.id::text)
            END AS economic_key,
@@ -3176,8 +3866,13 @@ WITH candidate_strategy AS MATERIALIZED (
            live_order.fee_rate, live_order.fee_exponent, live_order.fee_taker_only,
            live_order.fee_calculated_at_utc AS calculated_at,
            venue.evidence_version AS venue_evidence_version,
-           @EmptyComponentHash::text AS component_hash
+           @EmptyComponentHash::text AS component_hash,
+           live_order.paper_order_id,
+           lower(linked_paper_order.copied_trader_wallet),
+           linked_paper_order.asset_id,
+           '[]'::jsonb
     FROM live_orders live_order
+    LEFT JOIN paper_orders linked_paper_order ON linked_paper_order.id = live_order.paper_order_id
     LEFT JOIN LATERAL (
         SELECT audit.evidence_version
         FROM historical_gross_net_parity_audit audit
@@ -3197,7 +3892,7 @@ WITH candidate_strategy AS MATERIALIZED (
     SELECT * FROM paper_raw
     UNION ALL
     SELECT * FROM live_raw
-), exact AS MATERIALIZED (
+), exact_pre_dedup AS MATERIALIZED (
     SELECT raw.*,
            CASE WHEN raw.status = 'VenueReported' THEN raw.venue_evidence_version
                 ELSE raw.calculation_source END AS evidence_version
@@ -3206,6 +3901,7 @@ WITH candidate_strategy AS MATERIALIZED (
       AND raw.stored_fee >= 0
       AND raw.effective_fee >= 0
       AND raw.net = raw.gross - raw.effective_fee
+      AND (raw.source_kind = 'PaperSellFill' OR raw.effective_fee = raw.stored_fee)
       AND (
           (raw.status = 'VenueReported'
            AND raw.source_kind = 'LiveOrder'
@@ -3221,34 +3917,65 @@ WITH candidate_strategy AS MATERIALIZED (
                 AND raw.fee_exponent IS NOT NULL
                 AND raw.fee_taker_only IS NOT NULL)
                OR
-               ((raw.calculation_source = @ExactNoFeeSource
-                 OR raw.calculation_source = @HistoricalPrefix || @ExactNoFeeSource)
-                AND raw.effective_fee = 0)))
+                ((raw.calculation_source = @ExactNoFeeSource
+                  OR raw.calculation_source = @HistoricalPrefix || @ExactNoFeeSource)
+                 AND raw.effective_fee = 0)))
+               OR
+               (raw.source_kind <> 'LiveOrder'
+                AND raw.calculation_source = 'mixed'
+                AND raw.component_hash IS NOT NULL)
           )
       AND (raw.source_kind <> 'PaperSellFill'
            OR (raw.effective_fee >= raw.stored_fee AND raw.component_hash IS NOT NULL))
+), exact_linked_live_orders AS MATERIALIZED (
+    SELECT DISTINCT candidate.paper_order_id
+    FROM exact_pre_dedup candidate
+    WHERE candidate.source_kind = 'LiveOrder'
+      AND candidate.paper_order_id IS NOT NULL
+), exact_after_lineage AS MATERIALIZED (
+    SELECT candidate.*
+    FROM exact_pre_dedup candidate
+    WHERE NOT (
+        candidate.source_kind IN ('PaperRun', 'PaperSellFill')
+        AND candidate.paper_order_id IS NOT NULL
+        AND EXISTS (
+            SELECT 1 FROM exact_linked_live_orders linked_live
+            WHERE linked_live.paper_order_id = candidate.paper_order_id))
+      AND NOT (
+        candidate.source_kind IN ('PaperPosition', 'PaperSettlement')
+        AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(candidate.remaining_paper_order_ids) active_order(value)
+            INNER JOIN exact_linked_live_orders linked_live
+              ON lower(linked_live.paper_order_id::text) = active_order.value))
 ), precedence AS MATERIALIZED (
-    SELECT exact.*,
+    SELECT exact_after_lineage.*,
            row_number() OVER (
-               PARTITION BY exact.economic_key
-               ORDER BY exact.representation_precedence DESC,
-                        octet_length(exact.source_kind), exact.source_kind COLLATE "C",
-                        lower(exact.source_id::text)) AS representation_rank
-    FROM exact
+               PARTITION BY exact_after_lineage.economic_key
+               ORDER BY exact_after_lineage.representation_precedence DESC,
+                        octet_length(exact_after_lineage.source_kind),
+                        exact_after_lineage.source_kind COLLATE "C",
+                        lower(exact_after_lineage.source_id::text)) AS representation_rank
+    FROM exact_after_lineage
 ), selected AS MATERIALIZED (
     SELECT * FROM precedence WHERE representation_rank = 1
+), counts AS MATERIALIZED (
+    SELECT (SELECT count(*) FROM raw)::bigint AS raw_count,
+           (SELECT count(*) FROM exact_pre_dedup)::bigint AS exact_count,
+           (SELECT count(*) FROM selected)::bigint AS deduplicated_count
 )
-SELECT source_kind, source_id, economic_key, representation_precedence,
-       contribution_kind, gross, basis, effective_fee, net, status,
-       calculation_source, evidence_version, liquidity_role, fee_rate,
-       fee_exponent, fee_taker_only, calculated_at, component_hash,
-       (SELECT count(*) FROM raw)::bigint AS raw_count,
-       (SELECT count(*) FROM exact)::bigint AS exact_count,
-       count(*) OVER ()::bigint AS deduplicated_count
-FROM selected
-ORDER BY octet_length(economic_key), economic_key COLLATE "C",
-         octet_length(source_kind), source_kind COLLATE "C",
-         lower(source_id::text);
+SELECT selected.source_kind, selected.source_id, selected.economic_key,
+       selected.representation_precedence, selected.contribution_kind,
+       selected.gross, selected.basis, selected.effective_fee, selected.net,
+       selected.status, selected.calculation_source, selected.evidence_version,
+       selected.liquidity_role, selected.fee_rate, selected.fee_exponent,
+       selected.fee_taker_only, selected.calculated_at, selected.component_hash,
+       counts.raw_count, counts.exact_count, counts.deduplicated_count
+FROM counts
+LEFT JOIN selected ON true
+ORDER BY octet_length(selected.economic_key), selected.economic_key COLLATE "C",
+         octet_length(selected.source_kind), selected.source_kind COLLATE "C",
+         lower(selected.source_id::text);
 """,
             connection,
             transaction)
@@ -3265,6 +3992,14 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         command.Parameters.AddWithValue("ExactNoFeeSource", HistoricalGrossNetParityExactNoFeeSource);
         command.Parameters.AddWithValue("HistoricalPrefix", HistoricalGrossNetParityHistoricalModelPrefix);
         command.Parameters.AddWithValue("EmptyComponentHash", emptyComponentHash);
+        command.Parameters.Add("FreshComponentHashes", NpgsqlDbType.Jsonb).Value =
+            freshComponentHashesJson;
+        command.Parameters.Add("FreshCompositePaperOrderIds", NpgsqlDbType.Jsonb).Value =
+            freshCompositePaperOrderIdsJson;
+
+        await EnsureHistoricalGrossNetParityDonorPlanIsIndexedAsync(
+            command,
+            cancellationToken);
 
         long rawCount = 0;
         long exactCount = 0;
@@ -3283,6 +4018,11 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
                 deduplicatedCount = reader.GetInt64(20);
                 membership = HistoricalGrossNetDonorHashV1.CreateMembershipHashBuilder(
                     checked((uint)deduplicatedCount));
+            }
+
+            if (reader.IsDBNull(0))
+            {
+                continue;
             }
 
             var sourceKind = Enum.Parse<HistoricalGrossNetParitySourceKind>(reader.GetString(0), false);
@@ -3332,6 +4072,121 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
             membershipHash);
     }
 
+    private static async Task EnsureHistoricalGrossNetParityDonorPlanIsIndexedAsync(
+        NpgsqlCommand donorCommand,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(donorCommand);
+        await using var explain = new NpgsqlCommand(
+            "EXPLAIN (FORMAT JSON) " + donorCommand.CommandText,
+            donorCommand.Connection,
+            donorCommand.Transaction)
+        {
+            CommandTimeout = donorCommand.CommandTimeout
+        };
+        foreach (NpgsqlParameter parameter in donorCommand.Parameters)
+        {
+            var clone = new NpgsqlParameter(parameter.ParameterName, parameter.NpgsqlDbType)
+            {
+                Value = parameter.Value
+            };
+            if (!string.IsNullOrWhiteSpace(parameter.DataTypeName))
+            {
+                clone.DataTypeName = parameter.DataTypeName;
+            }
+            explain.Parameters.Add(clone);
+        }
+
+        var rawPlan = Convert.ToString(
+            await explain.ExecuteScalarAsync(cancellationToken),
+            CultureInfo.InvariantCulture);
+        if (string.IsNullOrWhiteSpace(rawPlan))
+        {
+            throw new HistoricalGrossNetParitySequentialDonorPlanException(
+                "The exact donor statement returned no EXPLAIN plan.");
+        }
+
+        using var document = JsonDocument.Parse(rawPlan);
+        var sequentialRelations = new HashSet<string>(StringComparer.Ordinal);
+        CollectHistoricalGrossNetParitySequentialDonorRelations(
+            document.RootElement,
+            sequentialRelations);
+        var oversizedSequentialRelations = new List<string>();
+        foreach (var relation in sequentialRelations.OrderBy(value => value, StringComparer.Ordinal))
+        {
+            var quotedRelation = new NpgsqlCommandBuilder().QuoteIdentifier(relation);
+            await using var boundedSizeProof = new NpgsqlCommand(
+                $"SELECT EXISTS (SELECT 1 FROM {quotedRelation} OFFSET @MaximumRows LIMIT 1);",
+                donorCommand.Connection,
+                donorCommand.Transaction)
+            {
+                CommandTimeout = donorCommand.CommandTimeout
+            };
+            boundedSizeProof.Parameters.AddWithValue(
+                "MaximumRows",
+                HistoricalGrossNetParityMaximumPageSize);
+            if (await boundedSizeProof.ExecuteScalarAsync(cancellationToken) is true)
+            {
+                oversizedSequentialRelations.Add(relation);
+            }
+        }
+
+        if (oversizedSequentialRelations.Count != 0)
+        {
+            throw new HistoricalGrossNetParitySequentialDonorPlanException(
+                "The exact donor statement planned a forbidden sequential full-corpus scan " +
+                $"over more than {HistoricalGrossNetParityMaximumPageSize.ToString(CultureInfo.InvariantCulture)} rows: " +
+                string.Join(", ", oversizedSequentialRelations));
+        }
+    }
+
+    private static void CollectHistoricalGrossNetParitySequentialDonorRelations(
+        JsonElement element,
+        ISet<string> result)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            if (element.TryGetProperty("Node Type", out var nodeType) &&
+                nodeType.ValueKind == JsonValueKind.String &&
+                string.Equals(nodeType.GetString(), "Seq Scan", StringComparison.Ordinal) &&
+                element.TryGetProperty("Relation Name", out var relationName) &&
+                relationName.ValueKind == JsonValueKind.String &&
+                relationName.GetString() is { } relation &&
+                HistoricalGrossNetParityDonorRelations.Contains(relation))
+            {
+                result.Add(relation);
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                CollectHistoricalGrossNetParitySequentialDonorRelations(property.Value, result);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var child in element.EnumerateArray())
+            {
+                CollectHistoricalGrossNetParitySequentialDonorRelations(child, result);
+            }
+        }
+    }
+
+    private static readonly HashSet<string> HistoricalGrossNetParityDonorRelations =
+        new(StringComparer.Ordinal)
+        {
+            "strategy_market_paper_runs",
+            "strategy_paper_skip_rollups",
+            "paper_positions",
+            "paper_position_settlements",
+            "paper_orders",
+            "paper_fills",
+            "live_orders",
+            "historical_gross_net_parity_audit"
+        };
+
+    private sealed class HistoricalGrossNetParitySequentialDonorPlanException(string message)
+        : InvalidOperationException(message);
+
     private static async Task<HistoricalGrossNetDonorSelectionEvaluationV1>
         RecomputeHistoricalGrossNetParitySelectionAsync(
             NpgsqlConnection connection,
@@ -3355,11 +4210,12 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
             var end = Math.Min(orderedCandidates.Count, checked(offset + donorPageSize));
             for (var index = offset; index < end; index++)
             {
-                var aggregate = await LoadHistoricalGrossNetParityDonorAggregateAsync(
+                var aggregate = await LoadHistoricalGrossNetParityDonorAggregateStreamingAsync(
                     connection,
                     transaction,
                     targetSourceKind,
                     orderedCandidates[index],
+                    donorPageSize,
                     commandTimeoutSeconds,
                     cancellationToken);
                 aggregates.Add(aggregate.CandidateStrategyId, new HistoricalGrossNetDonorSelectionAggregateV1(
@@ -3439,6 +4295,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         bool forUpdate = false)
     {
         var lockClause = forUpdate ? " FOR UPDATE" : string.Empty;
+        var paperFillLockClause = forUpdate ? " FOR UPDATE OF fill, paper_order" : string.Empty;
         var sql = sourceKind switch
         {
             HistoricalGrossNetParitySourceKind.PaperRun => $$"""
@@ -3532,7 +4389,7 @@ SELECT jsonb_build_object(
            'net_realized_pnl_usd', fill.net_realized_pnl_usd)::text
 FROM paper_fills fill
 INNER JOIN paper_orders paper_order ON paper_order.id = fill.paper_order_id
-WHERE fill.id = @Id{{lockClause}} OF fill, paper_order;
+WHERE fill.id = @Id{{paperFillLockClause}};
 """,
             HistoricalGrossNetParitySourceKind.LiveOrder => $$"""
 SELECT to_jsonb(live_order)::text FROM live_orders live_order WHERE live_order.id = @Id{{lockClause}};

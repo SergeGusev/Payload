@@ -460,7 +460,20 @@ strategy, while accounting and other strategies continue. The background cadence
 and projection reconciliation can leave Net temporarily blank until the relevant
 target and snapshot refresh complete.
 
-The current model has three material limits:
+Linked Live/Paper donor deduplication is replay-based, not inferred from a
+shared wallet/asset name. If an exact Live order is still represented inside a
+composite Paper position or settlement and the aggregate rounding residual
+cannot be split between linked and unlinked BUY charges without inventing
+per-BUY economics, the exact Live row is retained and the entire indivisible
+Paper composite is excluded from that target-time donor aggregate. Matching
+continues through the remaining tiers and fixed `0.0333`. This prevents double
+counting and preserves Live precedence, but can omit otherwise exact unlinked
+Paper economics from `N/D` compared with a hypothetical exactly partitioned
+aggregate. No synthetic residual Paper row is created. A fully consumed older
+linked order that replay proves is absent from the remaining composite does not
+cause that exclusion.
+
+The current model has five material limits:
 
 - a Paper depth sweep can be stored as one aggregate VWAP fill, while the
   nonlinear curve and per-result rounding can differ from a sum over individual
@@ -471,6 +484,10 @@ The current model has three material limits:
 - maker rebates and builder-attribution fees are excluded. Rebates need a
   separate authoritative payout ledger, and builder fees need their own evidence
   and calculation rather than being folded into the CLOB platform-fee field.
+- an indivisible Paper composite overlapping an exact linked Live row is
+  excluded in full when its nonlinked residual cannot be proved exactly; the
+  retained Live row prevents duplicate accounting, but donor `N/D` may omit
+  exact nonlinked Paper economics contained in that same aggregate;
 - legacy Paper/Live-shadow replacement inside an aggregate with additional
   non-shadow size cannot reconstruct the removed component's provenance because
   no versioned pre-shadow fee snapshot exists. The aggregate must therefore stay

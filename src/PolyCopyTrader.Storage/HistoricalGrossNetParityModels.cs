@@ -277,7 +277,7 @@ public static class HistoricalGrossNetParityComponentGraphV1
             .ToArray();
 
         ValidateGraph(allocationId, amountUsd, orderedCharges, orderedEdges, poolMovement);
-        var allocationHash = Hash(EncodeAllocation(allocationId, amountUsd));
+        var allocationHash = ComputeAllocationHash(allocationId, amountUsd);
         var coverageHash = Hash(EncodeCoverage(
             allocationHash,
             orderedCharges,
@@ -300,6 +300,17 @@ public static class HistoricalGrossNetParityComponentGraphV1
             orderedCharges,
             orderedEdges,
             poolMovement);
+    }
+
+    public static string ComputeAllocationHash(string allocationId, decimal amountUsd)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(allocationId);
+        if (amountUsd < 0m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amountUsd));
+        }
+
+        return Hash(EncodeAllocation(allocationId, amountUsd));
     }
 
     public static void Validate(HistoricalGrossNetParityComponentAllocationV1 component)
@@ -336,6 +347,12 @@ public static class HistoricalGrossNetParityComponentGraphV1
             .ThenBy(value => value.AllocationHash, StringComparer.Ordinal)
             .ThenBy(value => value.CoverageHash, StringComparer.Ordinal)
             .ToArray();
+        if (ordered.GroupBy(value => value.AllocationId, StringComparer.Ordinal)
+            .Any(group => group.Count() != 1))
+        {
+            throw new InvalidOperationException(
+                "Component allocations must have globally unique canonical identities.");
+        }
         foreach (var component in ordered)
         {
             Validate(component);
@@ -413,6 +430,12 @@ public static class HistoricalGrossNetParityComponentGraphV1
                 throw new InvalidOperationException(
                     "Coverage edges must identify one proved source charge, pool, and the canonical allocation.");
             }
+        }
+
+        if (!coveredCharges.SetEquals(chargeIds))
+        {
+            throw new InvalidOperationException(
+                "Every proved source charge must have exactly one canonical coverage edge.");
         }
 
         if (movement is null)
@@ -825,6 +848,12 @@ public sealed record HistoricalGrossNetHashDecimalV1(BigInteger UnscaledValue, i
         return new HistoricalGrossNetHashDecimalV1(
             magnitude,
             (bits[3] >> 16) & 0x7f);
+    }
+
+    public decimal ToDecimal()
+    {
+        var divisor = BigInteger.Pow(10, Scale);
+        return checked((decimal)UnscaledValue / (decimal)divisor);
     }
 }
 
@@ -1314,6 +1343,9 @@ public sealed record HistoricalGrossNetParityVenueRevisionResult(
 
 public static class HistoricalGrossNetDonorHashV1
 {
+    public static HistoricalGrossNetComponentEvidenceHashBuilderV1 CreateComponentEvidenceHashBuilder(
+        uint recordCount) => new(recordCount);
+
     public static HistoricalGrossNetDonorMembershipHashBuilderV1 CreateMembershipHashBuilder(
         uint recordCount) => new(recordCount);
 
@@ -1370,13 +1402,13 @@ public static class HistoricalGrossNetDonorHashV1
         return Convert.ToHexString(stream.ToArray()).ToLowerInvariant();
     }
 
-    private sealed record EncodedComponentEvidence(
+    internal sealed record EncodedComponentEvidence(
         byte[] RecordKind,
         byte[] AllocationId,
         byte[] SourceChargeId,
         byte[] Record);
 
-    private static EncodedComponentEvidence EncodeComponentEvidence(
+    internal static EncodedComponentEvidence EncodeComponentEvidence(
         HistoricalGrossNetComponentEvidenceRecordV1 record)
     {
         var recordKindName = Enum.GetName(record.RecordKind) ??
@@ -1464,7 +1496,7 @@ public static class HistoricalGrossNetDonorHashV1
         return stream.ToArray();
     }
 
-    private static int CompareComponentRecords(
+    internal static int CompareComponentRecords(
         EncodedComponentEvidence left,
         EncodedComponentEvidence right)
     {
@@ -1810,6 +1842,67 @@ public static class HistoricalGrossNetParityBindingV1
         var payload = Encoding.ASCII.GetBytes(
             "HGNB1" + targetTupleHash + lineageHash + componentHash);
         return Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant();
+    }
+}
+
+public sealed class HistoricalGrossNetComponentEvidenceHashBuilderV1 : IDisposable
+{
+    private readonly IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+    private readonly uint expectedCount;
+    private uint appendedCount;
+    private HistoricalGrossNetDonorHashV1.EncodedComponentEvidence? previous;
+    private bool completed;
+
+    internal HistoricalGrossNetComponentEvidenceHashBuilderV1(uint recordCount)
+    {
+        expectedCount = recordCount;
+        hash.AppendData(Encoding.ASCII.GetBytes(HistoricalGrossNetParityConstants.DonorMembershipEncodingDomain));
+        Span<byte> count = stackalloc byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(count, recordCount);
+        hash.AppendData(count);
+    }
+
+    public void Append(HistoricalGrossNetComponentEvidenceRecordV1 record)
+    {
+        ObjectDisposedException.ThrowIf(completed, this);
+        var encoded = HistoricalGrossNetDonorHashV1.EncodeComponentEvidence(record);
+        if (previous is not null &&
+            HistoricalGrossNetDonorHashV1.CompareComponentRecords(previous, encoded) > 0)
+        {
+            throw new InvalidOperationException("Component evidence records are not in canonical HGNM1 order.");
+        }
+
+        if (appendedCount == expectedCount)
+        {
+            throw new InvalidOperationException("More component evidence records were appended than declared.");
+        }
+
+        hash.AppendData(encoded.Record);
+        previous = encoded;
+        appendedCount++;
+    }
+
+    public string Complete()
+    {
+        ObjectDisposedException.ThrowIf(completed, this);
+        if (appendedCount != expectedCount)
+        {
+            throw new InvalidOperationException(
+                $"Expected {expectedCount} component evidence records but appended {appendedCount}.");
+        }
+
+        completed = true;
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
+    public void Dispose()
+    {
+        if (!completed)
+        {
+            completed = true;
+        }
+
+        hash.Dispose();
     }
 }
 

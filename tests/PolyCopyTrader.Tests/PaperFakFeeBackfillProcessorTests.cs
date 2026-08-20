@@ -981,6 +981,73 @@ public sealed class PaperFakFeeBackfillProcessorTests
     }
 
     [Fact]
+    public async Task HistoricalParityProcessor_PartialLookupFallbackKeepsSuccessfulComponentAsFeeFloor()
+    {
+        var target = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("72500000-0000-0000-0000-000000000001"),
+            Guid.Parse("72500000-0000-0000-0000-000000000002"),
+            HistoricalGrossNetParityExactEligibility.LocalLookupRequired,
+            gross: 2m,
+            basis: 10m,
+            fee: 0m,
+            net: null);
+        var first = CreateParityLookup(target, FeeLiquidityRole.Taker.ToString()) with
+        {
+            FeeApplicationKind =
+                HistoricalGrossNetParityLookupFeeApplicationKind.AdditionalNonoverlappingComponent
+        };
+        var second = first with
+        {
+            TupleHash = target.SourceId.ToString("N") + "lookup-2",
+            FeeAllocationId = $"lookup-allocation:{target.SourceId:D}:2",
+            FeeSourceChargeId = $"canonical-local:{target.SourceKind}:{target.SourceId:D}:2"
+        };
+        var store = new RecordingParityStore
+        {
+            CandidatePageFactory = _ => CreateParityPage(target, [first, second])
+        };
+        var feeService = new RecordingHistoricalFeeService((_, call) => call == 1
+            ? new HistoricalFeeLookupResult(
+                HistoricalFeeLookupDisposition.Calculated,
+                0.75m,
+                FeeAccountingStatus.Calculated.ToString(),
+                FeeLiquidityRole.Taker.ToString(),
+                PolymarketFeeCalculationConstants.FeeCurveCalculationSource,
+                0.01m,
+                2,
+                true,
+                HistoricalGrossNetParityConstants.CutoffUtc,
+                200,
+                "exact-component")
+            : new HistoricalFeeLookupResult(
+                HistoricalFeeLookupDisposition.SemanticUnavailable,
+                null,
+                FeeAccountingStatus.CalculationUnavailable.ToString(),
+                FeeLiquidityRole.Unknown.ToString(),
+                PolymarketFeeCalculationConstants.MarketInfoUnavailableCalculationSource,
+                null,
+                null,
+                null,
+                HistoricalGrossNetParityConstants.CutoffUtc,
+                404,
+                "missing-component"));
+        var processor = CreateHistoricalParityProcessor(store, feeService);
+
+        var exact = await processor.RunCycleAsync(Guid.NewGuid());
+        var fallback = await processor.RunCycleAsync(Guid.NewGuid());
+
+        Assert.Equal(1, exact.FallbackEligible);
+        Assert.Equal(HistoricalGrossNetParityCycleState.SweepCompleted, fallback.State);
+        var request = Assert.Single(store.LiveAccountingRequests);
+        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p0333, request.Decision.DecisionKind);
+        Assert.Equal(0.75m, request.Decision.ComponentFloorUsd);
+        Assert.Equal(0.75m, request.Decision.ContributionEffectiveFeeUsd);
+        Assert.Single(request.Target.ProvedComponents);
+        Assert.Equal(2, feeService.Requests.Count);
+    }
+
+    [Fact]
     public async Task HistoricalParityProcessor_RestartResetsOperationalLookupLedger()
     {
         var target = CreateParityTarget(
@@ -1335,6 +1402,339 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.Equal(TradeSide.Sell.ToString(), lookup.Side);
         Assert.Equal($"paper-fill:{sell.FillId:D}:exit", lookup.FeeSourceChargeId);
         Assert.Equal(0.05m, target.ProvedComponentFloorUsd);
+
+        var outcome = new HistoricalGrossNetParityLookupOutcome(
+            lookup.TupleHash,
+            HistoricalGrossNetParityLookupOutcomeStatus.Success,
+            0.01m,
+            PolymarketFeeCalculationConstants.FeeCurveCalculationSource,
+            FeeLiquidityRole.Taker.ToString(),
+            0.01m,
+            2,
+            true,
+            lookup.FeeApplicationKind,
+            lookup.FeeAllocationId,
+            lookup.FeeSourceChargeId,
+            CutoffUtc.AddMinutes(3),
+            "lookup-evidence");
+        var augmented = HistoricalGrossNetParityDecisionFactory.WithLookupEvidence(target, [outcome]);
+        var exact = HistoricalGrossNetParityDecisionFactory.TryCreateExact(
+            augmented,
+            [outcome],
+            CutoffUtc.AddMinutes(3),
+            HistoricalGrossNetParityConstants.CalculationVersion);
+
+        Assert.NotNull(exact);
+        Assert.Equal(0.06m, augmented.ProvedComponentFloorUsd);
+        Assert.Equal(2, augmented.ProvedComponents.Count);
+        Assert.Contains(lookup.FeeAllocationId, exact!.EvidenceJson, StringComparison.Ordinal);
+        Assert.Equal("mixed", exact.FeeCalculationSource);
+        Assert.Equal(FeeLiquidityRole.Unknown.ToString(), exact.FeeLiquidityRole);
+    }
+
+    [Fact]
+    public void HistoricalParityPaperPrepare_InvalidPoolDefersOnlyItsOwnTarget()
+    {
+        var strategyId = Guid.Parse("78000000-0000-0000-0000-000000000001");
+        var goodBuy = CreateParityFill(
+            Guid.Parse("78000000-0000-0000-0000-000000000002"),
+            strategyId,
+            TradeSide.Buy,
+            CutoffUtc.AddMinutes(-3),
+            1m,
+            0.5m,
+            0.1m) with
+        {
+            CopiedTraderWallet = "good-wallet",
+            AssetId = "good-asset"
+        };
+        var goodSell = CreateParityFill(
+            Guid.Parse("78000000-0000-0000-0000-000000000003"),
+            strategyId,
+            TradeSide.Sell,
+            CutoffUtc.AddMinutes(1),
+            0.5m,
+            0.7m,
+            0m,
+            realizedPnlUsd: 0.1m,
+            netRealizedPnlUsd: 0.05m) with
+        {
+            CopiedTraderWallet = "good-wallet",
+            AssetId = "good-asset"
+        };
+        var invalidSell = CreateParityFill(
+            Guid.Parse("78000000-0000-0000-0000-000000000004"),
+            strategyId,
+            TradeSide.Sell,
+            CutoffUtc.AddMinutes(2),
+            1m,
+            0.6m,
+            0m) with
+        {
+            CopiedTraderWallet = "invalid-wallet",
+            AssetId = "invalid-asset"
+        };
+        HistoricalGrossNetParityCandidateKey Candidate(
+            HistoricalGrossNetParityPaperFillObservation sell) => new(
+                HistoricalGrossNetParitySourceKind.PaperSellFill,
+                sell.FillId,
+                strategyId,
+                $"strategy-{strategyId:N}",
+                1,
+                sell.RealizedPnlUsd,
+                CutoffUtc.AddMinutes(-3),
+                4,
+                sell.FillRowVersion,
+                HistoricalGrossNetParityOwnership.None);
+        var page = new HistoricalGrossNetParityCandidatePage(
+            HistoricalGrossNetParityReadStatus.Complete,
+            [Candidate(goodSell), Candidate(invalidSell)],
+            [],
+            [goodBuy, goodSell, invalidSell],
+            [],
+            [],
+            [],
+            [CreatePaperSourceSelection(strategyId, usesRuns: false)],
+            [],
+            [],
+            null,
+            true);
+
+        var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(page, CutoffUtc);
+
+        Assert.Equal(goodSell.FillId, Assert.Single(prepared.Targets).SourceId);
+        var conflict = Assert.Single(
+            prepared.Conflicts,
+            value => value.SourceId == invalidSell.FillId);
+        Assert.Equal("paper_sell_replay_missing", conflict.Code);
+        Assert.Contains("no positive replayed", conflict.Details, StringComparison.Ordinal);
+        Assert.DoesNotContain(prepared.Conflicts, value => value.SourceId is null);
+    }
+
+    [Fact]
+    public void HistoricalParityPaperPrepare_MixedPositionAfterPartialSellKeepsAggregateRemainingPoolProof()
+    {
+        var strategyId = Guid.Parse("79000000-0000-0000-0000-000000000001");
+        var wallet = "mixed-position-wallet";
+        var assetId = "mixed-position-asset";
+        var buy1 = CreateParityFill(
+            Guid.Parse("79000000-0000-0000-0000-000000000002"),
+            strategyId,
+            TradeSide.Buy,
+            CutoffUtc.AddMinutes(-3),
+            1m,
+            0.4m,
+            0.1m) with
+        {
+            CopiedTraderWallet = wallet,
+            AssetId = assetId
+        };
+        var buy2 = CreateParityFill(
+            Guid.Parse("79000000-0000-0000-0000-000000000003"),
+            strategyId,
+            TradeSide.Buy,
+            CutoffUtc.AddMinutes(-2),
+            1m,
+            0.6m,
+            0.2m) with
+        {
+            CopiedTraderWallet = wallet,
+            AssetId = assetId,
+            FeeCalculationSource = "historical-current-paper-model-v1:" +
+                PolymarketFeeCalculationConstants.FeeCurveCalculationSource
+        };
+        var sell = CreateParityFill(
+            Guid.Parse("79000000-0000-0000-0000-000000000004"),
+            strategyId,
+            TradeSide.Sell,
+            CutoffUtc.AddMinutes(1),
+            1m,
+            0.7m,
+            0m,
+            realizedPnlUsd: 0.2m,
+            netRealizedPnlUsd: 0.05m) with
+        {
+            CopiedTraderWallet = wallet,
+            AssetId = assetId
+        };
+        var positionId = Guid.Parse("79000000-0000-0000-0000-000000000005");
+        var position = new HistoricalGrossNetParityPaperPositionObservation(
+            positionId,
+            7,
+            strategyId,
+            wallet,
+            assetId,
+            "condition",
+            "Yes",
+            1m,
+            0.5m,
+            0.6m,
+            0.1m,
+            0.15m,
+            FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole.Taker.ToString(),
+            "mixed",
+            null,
+            null,
+            null,
+            CutoffUtc.AddMinutes(2),
+            -0.05m,
+            CutoffUtc.AddMinutes(2),
+            "position-payload");
+        var candidate = new HistoricalGrossNetParityCandidateKey(
+            HistoricalGrossNetParitySourceKind.PaperPosition,
+            positionId,
+            strategyId,
+            $"strategy-{strategyId:N}",
+            1,
+            position.UnrealizedPnlUsd,
+            CutoffUtc.AddMinutes(-3),
+            2,
+            position.RowVersion,
+            HistoricalGrossNetParityOwnership.None);
+        var page = new HistoricalGrossNetParityCandidatePage(
+            HistoricalGrossNetParityReadStatus.Complete,
+            [candidate],
+            [],
+            [buy1, buy2, sell],
+            [position],
+            [],
+            [],
+            [CreatePaperSourceSelection(strategyId, usesRuns: false)],
+            [],
+            [],
+            null,
+            true);
+
+        var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(page, CutoffUtc);
+
+        Assert.Empty(prepared.Conflicts);
+        var target = Assert.Single(prepared.Targets);
+        Assert.Equal(HistoricalGrossNetParityExactEligibility.ExistingExactPreserved, target.ExactEligibility);
+        var component = Assert.Single(target.ProvedComponents);
+        Assert.Equal(0.15m, component.AmountUsd);
+        Assert.Equal(2, component.SourceCharges?.Count);
+        Assert.Equal(2, component.CoverageEdges?.Count);
+        Assert.Equal(0.15m, component.PoolMovement?.RemainingBeforeUsd);
+        Assert.Equal(0m, component.PoolMovement?.RemainingAfterUsd);
+        Assert.Equal(0.15m, component.PoolMovement?.DecrementUsd);
+        Assert.Equal(0m, component.PoolMovement?.ResidualUsd);
+
+        var venuePosition = position with
+        {
+            FeeAccountingStatus = FeeAccountingStatus.VenueReported.ToString(),
+            FeeLiquidityRole = FeeLiquidityRole.Unknown.ToString(),
+            FeeCalculationSource = "paper-venue-reported-integration-v1",
+            FeeRate = null,
+            FeeExponent = null,
+            FeeTakerOnly = null
+        };
+        var venuePrepared = HistoricalGrossNetParityPaperPreparer.Prepare(
+            page with { PaperPositionObservations = [venuePosition] },
+            CutoffUtc);
+        Assert.Empty(venuePrepared.Conflicts);
+        Assert.Equal(
+            HistoricalGrossNetParityExactEligibility.ExistingExactPreserved,
+            Assert.Single(venuePrepared.Targets).ExactEligibility);
+    }
+
+    [Fact]
+    public void HistoricalParityPaperPrepare_PositionReplaysWholeWalletAssetPoolAcrossStrategies()
+    {
+        var targetStrategyId = Guid.Parse("7a000000-0000-0000-0000-000000000001");
+        var otherStrategyId = Guid.Parse("7a000000-0000-0000-0000-000000000002");
+        var wallet = "cross-strategy-wallet";
+        var assetId = "cross-strategy-asset";
+        var firstBuy = CreateParityFill(
+            Guid.Parse("7a000000-0000-0000-0000-000000000003"),
+            targetStrategyId,
+            TradeSide.Buy,
+            CutoffUtc.AddMinutes(-3),
+            1m,
+            0.4m,
+            0.1m) with
+        {
+            CopiedTraderWallet = wallet,
+            AssetId = assetId
+        };
+        var secondBuy = CreateParityFill(
+            Guid.Parse("7a000000-0000-0000-0000-000000000004"),
+            otherStrategyId,
+            TradeSide.Buy,
+            CutoffUtc.AddMinutes(-2),
+            1m,
+            0.6m,
+            0.2m) with
+        {
+            CopiedTraderWallet = wallet,
+            AssetId = assetId
+        };
+        var positionId = Guid.Parse("7a000000-0000-0000-0000-000000000005");
+        var position = new HistoricalGrossNetParityPaperPositionObservation(
+            positionId,
+            3,
+            targetStrategyId,
+            wallet,
+            assetId,
+            "condition",
+            "Yes",
+            2m,
+            0.5m,
+            0.6m,
+            0.2m,
+            0.3m,
+            FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole.Taker.ToString(),
+            "mixed",
+            null,
+            null,
+            null,
+            CutoffUtc.AddMinutes(1),
+            -0.1m,
+            CutoffUtc.AddMinutes(1),
+            "cross-strategy-position-payload");
+        var candidate = new HistoricalGrossNetParityCandidateKey(
+            HistoricalGrossNetParitySourceKind.PaperPosition,
+            positionId,
+            targetStrategyId,
+            $"strategy-{targetStrategyId:N}",
+            1,
+            position.UnrealizedPnlUsd,
+            firstBuy.FilledAtUtc,
+            2,
+            position.RowVersion,
+            HistoricalGrossNetParityOwnership.None);
+        var page = new HistoricalGrossNetParityCandidatePage(
+            HistoricalGrossNetParityReadStatus.Complete,
+            [candidate],
+            [],
+            [firstBuy, secondBuy],
+            [position],
+            [],
+            [],
+            [CreatePaperSourceSelection(targetStrategyId, usesRuns: false)],
+            [],
+            [],
+            null,
+            true);
+
+        var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(page, CutoffUtc);
+
+        Assert.Empty(prepared.Conflicts);
+        var target = Assert.Single(prepared.Targets);
+        var component = Assert.Single(target.ProvedComponents);
+        Assert.Equal(0.3m, component.AmountUsd);
+        Assert.Equal(
+            [
+                $"paper-fill:{firstBuy.FillId:D}:entry",
+                $"paper-fill:{secondBuy.FillId:D}:entry"
+            ],
+            component.SourceCharges!
+                .Select(charge => charge.SourceChargeId)
+                .OrderBy(value => value, StringComparer.Ordinal)
+                .ToArray());
+        Assert.Equal(2, component.CoverageEdges?.Count);
+        Assert.Equal(firstBuy.FilledAtUtc, target.OriginatedAtUtc);
     }
 
     private static HistoricalGrossNetParityTargetSnapshot CreateParityTarget(

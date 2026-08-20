@@ -1,3 +1,130 @@
+## Active Update 2026-08-19 Historical Parity Continued Progress Check
+Goal: Verify that the deployed historical Gross/Net parity workflow continues processing without new conflicts or stalls.
+Status: Completed read-only; continuous healthy progress confirmed
+Done:
+- Compared production against the prior 100-audit checkpoint at `2026-08-19T17:18:22Z` using UTC `REPEATABLE READ READ ONLY` snapshots.
+- Confirmed the same exact deployed build `ca24eff3c90d33dd54cbc95290415e149379de5a` remains `Running / Live`, heartbeat is current, and `last_error=NULL`.
+- Audit count reached 2,500 at `18:12:19.941206Z`, adding 2,400 distinct targets after the prior checkpoint. All were PaperRun `AccountingDecision / ExistingExactPreserved` rows.
+- Across 50 completed pages since service start, all 2,500 candidates were evaluated; accounting conflicts, query deferrals, lock deferrals, and recorded parity errors were all zero.
+- Independently observed the next page commit at `18:14:17.300617Z`; audit count increased to 2,550 and the page again completed 50/50 with zero conflicts/deferrals.
+- The specific ETH run `9e355f39-93a4-4910-a4ed-78a2ac1833bb` remains the strategy's sole incomplete pre-cutoff row and has not yet been reached.
+Next: Let the background queue continue; recheck only if the ETH row remains incomplete after the exact pass has advanced materially further or if a runtime error appears.
+Notes: No stale file logs were used and no production or product mutation was made.
+Blockers: None.
+
+## Active Update 2026-08-19 Historical Parity Lineage Fix Deployment Verification
+Goal: Verify the redeployed lineage-hash correction and prove production parity progress.
+Status: Completed read-only; exact deployed fix is committing parity targets
+Done:
+- Verified exact production `192.168.0.101:5432/polycopytrader` in UTC `REPEATABLE READ READ ONLY` snapshots with 12-second statement timeouts.
+- Confirmed Service is `Running / Live` on exact commit `ca24eff3c90d33dd54cbc95290415e149379de5a`, started `2026-08-19T17:11:59.221806Z`, with fresh heartbeat and `last_error=NULL`.
+- Accounted for the configured 300-second initial delay. The first parity page then committed 50/50 PaperRun targets at `17:17:17.780595Z..17:17:18.645192Z`; all 50 audits were `AccountingDecision / ExistingExactPreserved`, and the page reported zero accounting conflicts.
+- Independently confirmed the next page: audit count increased from 50 to 100 distinct PaperRun sources by `17:18:06.913010Z`; both page summaries reported 50 candidates / 50 evaluated / 0 already / 0 accounting conflicts.
+- Checked the previously identified ETH run `9e355f39-93a4-4910-a4ed-78a2ac1833bb`: it remains LegacyUnknown with null Net and zero parity audit at the final snapshot, so the worker is healthy but has not reached that target yet.
+Next: Let the background queue continue; a later check can confirm when the specific ETH row is repaired and Dashboard coverage becomes complete.
+Notes: No stale file logs were used. No service, database, configuration, order, trading, or repository product state was changed.
+Blockers: None; the lineage-hash blocker is resolved in production.
+
+## Active Update 2026-08-19 Historical Parity Lineage Hash Repair
+Goal: Correct the deterministic raw-versus-normalized lineage hash mismatch that deferred every historical Paper parity target.
+Status: Completed
+Done:
+- Approved contract `RC-20260819-historical-parity-lineage-hash-fix` with semantic digest `sha256:e2fea05be160c8bc7565b49dfd5665dd355da037dabfc99f433940e8483bf53a`.
+- Changed the Paper preparer to normalize lineage JSON before both SHA-256 calculation and persistence, matching the unchanged storage validator.
+- Added a production-shaped regression with timezone offsets and nested canonical fill JSON; the test checks the stored canonical payload/hash pair and the observed `\\u002B` escaping boundary.
+- Full solution build completed with 0 errors and 126 pre-existing warnings; focused regression passed 1/1; `PaperFakFeeBackfillProcessorTests` passed 34/34; independent review passed with no P0/P1/P2 findings.
+Next: User deploys the rebuilt service; a later read-only runtime check can verify the first committed parity audit and decreasing incomplete coverage.
+Notes: No production database, service, schema, financial formula, donor selection, sorting, cutoff, paging, ownership, Live balance, or VenueReported behavior was changed. Disposable build/test artifacts were isolated under the marked `D:\CodexTemp` run.
+Blockers: None for the local correction; runtime effect requires deployment.
+
+## Active Update 2026-08-19 Historical Parity Lineage Hash Repair Contract
+Goal: Correct the deterministic raw-versus-normalized lineage hash mismatch that defers every historical Paper parity target.
+Status: Blocked pending requirement-contract approval
+Done:
+- Locked the repair to canonical lineage JSON/hash production plus one production-shaped regression; Fee/Net/donor/sort/cutoff/schema/deployment behavior is excluded.
+- Drafted `RC-20260819-historical-parity-lineage-hash-fix` from the user's verbatim diagnosis and repair prompts.
+- Requirement validation passed in draft mode with semantic digest `sha256:e2fea05be160c8bc7565b49dfd5665dd355da037dabfc99f433940e8483bf53a`.
+Next: Obtain the exact approval, then edit the two governed files, build/test, and obtain independent semantic review.
+Notes: No product source or production state changed during contract drafting. Branch is one commit ahead of its configured upstream and the existing historical parity implementation remains a dirty working tree owned by the ongoing task.
+Blockers: User must send `APPROVE RC-20260819-historical-parity-lineage-hash-fix sha256:e2fea05be160c8bc7565b49dfd5665dd355da037dabfc99f433940e8483bf53a` before material edits.
+
+## Active Update 2026-08-19 Historical Parity Fresh-Log Diagnosis
+Goal: Inspect the refreshed service logs and determine why historical Gross/Net parity has not committed any targets.
+Status: Completed read-only diagnosis; a deterministic lineage-hash validation defect blocks every target
+Done:
+- Inspected only fresh files `D:\1\logs\polycopytrader-service-20260819_060.log` through `_071.log`. Across `2026-08-19T15:32:03.347+03:00..17:24:41.374+03:00`, all 113 parity page summaries were identical: Exact phase, 50 candidates, 0 applied, 0 terminal no-ops, 0 fallback-eligible, 50 deferred, and 0 lookup attempts. Total observed was 5,650 candidates / 5,650 deferred / 0 applied.
+- Reproduced the current first production candidate page against exact `192.168.0.101:5432/polycopytrader` in `REPEATABLE READ READ ONLY`, UTC, with bounded timeouts. It contained 50 prepared targets, all `ExistingExactPreserved`, with zero preparation conflicts and zero lookup requests.
+- Proved the common rejection mechanism: the preparer stores `LineageHash = SHA256(raw lineage JSON)`, while mutation validation recalculates `SHA256(Normalize(lineage JSON))`. For the first real target the stored/raw hash was `a081d18d...4159161`, while the validator's normalized hash was `efb4a46f...435aa46`; the same mismatch occurred on 50/50 sampled targets. Validation therefore returns `InvariantConflict` before any accounting/audit transaction can commit.
+- Independently confirmed at production snapshot `2026-08-19T14:47:58.252098Z` that `historical_gross_net_parity_audit` still has 0 rows and ETH run `9e355f39-93a4-4910-a4ed-78a2ac1833bb` remains `LegacyUnknown` with null Net and no parity audit.
+Next: Correct the producer/validator to hash one canonical lineage representation, add a regression that uses timezone-bearing nested lineage JSON, build/test, redeploy, and verify the first committed audit plus ETH coverage.
+Notes: Diagnosis used a disposable .NET probe under a marked `D:\CodexTemp` run and server-enforced read-only transactions. No product source, production row, service, configuration, order, or trading state was changed.
+Blockers: The deployed build cannot make parity progress until the lineage hash contract is corrected and redeployed.
+
+## Active Update 2026-08-19 Historical Net Preservation Clarification
+Goal: Clarify whether the historical Gross/Net workflow treats every prior Net PnL calculation as wrong and recalculates it.
+Status: Completed read-only; formula-valid exact prior accounting is preserved, not recalculated
+Done:
+- Rechecked approved REQ-002 and the deployed decision/apply path. A complete formula-valid Paper Calculated or VenueReported tuple, and a complete Live Calculated/VenueReported tuple, receives `ExistingExactPreserved`; the canonical Fee/Net/provenance fields are not updated.
+- Verified the Paper mutation core explicitly skips the accounting UPDATE for `ExistingExactPreserved` and writes only the permanent idempotent AccountingDecision audit plus projection reconciliation.
+- Confirmed the workflow changes only incomplete or inconsistent targets: exact authoritative Fee with missing/bad Net gets `AuthoritativeNetRepair`; missing exact accounting gets a local exact calculation when provable; otherwise donor/fixed fallback supplies the approved estimate.
+- Confirmed a stored Paper donor/fixed estimate is terminal and is not recalculated merely because the donor pool later changes. Live remains replaceable only by a strictly newer valid VenueReported revision under the approved precedence.
+Next: None.
+Notes: This was a source/contract clarification only; no production query, runtime log, or mutation was needed.
+Blockers: None.
+
+## Active Update 2026-08-19 ETH/SOL Historical Net Ordering Audit
+Goal: Explain why ETH Up 2 bps still has blank Net while lower-Gross SOL Up 3 bps is complete despite Gross-descending historical parity ordering.
+Status: Completed read-only; ordering is correct, but SOL completion predates the new parity queue
+Done:
+- Verified production at `192.168.0.101:5432/polycopytrader` in UTC `REPEATABLE READ READ ONLY`. ETH Gross is `$766.50642378` at exact snapshot rank 31; SOL Gross is `$579.03906301` at rank 56.
+- Verified SOL's 1,356 pre-cutoff settled runs were already formula-complete by `2026-08-13T17:11:00.331845Z`. SOL has no `historical_gross_net_parity_audit` record, so the new incremental Gross-ranked workflow did not calculate it.
+- Verified ETH has 1,674 settled runs and only one incomplete pre-cutoff run: run `9e355f39-93a4-4910-a4ed-78a2ac1833bb`, entered `2026-07-03T06:34:42.610995Z`, with `LegacyUnknown` Fee and null Net. That single missing row makes Dashboard lifetime Net null while coverage is 1,673/1,674.
+- Verified the legacy FAK worker visited ETH at its frozen ranks 23/24 on 2026-08-19; its exact batches recorded structural conflicts and no updates. This does not prove that the remaining July run was one of those conflicting batch rows.
+- Independently sampled the new parity audit twice through `2026-08-19T14:06:08.945346Z`: the table still has zero rows globally. Therefore the new sorter has not successfully committed any parity target yet and cannot have processed SOL out of order.
+Next: If the precise pre-commit reason for zero new parity decisions is required, refresh the current service logs; unsuccessful target diagnostics are rolling-log-only and are not persisted in the database.
+Notes: No stale file logs were used. One schema-probe and one broad ahead-of-rank count query failed inside read-only transactions and rolled back; no production state changed.
+Blockers: Fresh service logs are required only to identify the exact target-level reason why the new parity worker has made zero commits.
+
+## Active Update 2026-08-19 New Live Fee Accounting Audit
+Goal: Explain and verify how Polymarket commission is calculated for new Live bets.
+Status: Completed read-only; current FAK/Buy platform-fee math is internally correct, venue-reported exact Fee is not ingested
+Done:
+- Verified the current dispatch path: placement/status responses provide filled making/taking amounts but no Fee; for a positive fill the service resolves the Live liquidity role, loads current CLOB market info by condition ID, and locally calculates the platform Fee.
+- Verified the implementation formula `round5(shares * rate * (price * (1-price))^exponent)` with midpoint rounding away from zero and a minimum non-zero Fee of `0.00001`. Taker-only schedules yield zero for Maker; explicitly fee-free markets require both base-fee fields to be zero; missing schedule/role evidence yields `CalculationUnavailable` and null Net rather than a guessed accounted Fee.
+- Verified settlement accounting: `cost_basis = filled_notional + fee`, `Gross = settlement_value - filled_notional`, and `Net = Gross - fee`; only accounted Net is eligible for the one-time Live balance settlement CAS.
+- Independently reconciled all production Live fills created since `2026-08-10T00:00:00Z`: 13/13 are Buy FAK Taker orders with rate `0.07`, exponent `1`, taker-only true; all 13 saved Fees exactly match an independent SQL recomputation, all 13 settled rows have exact `Net = Gross - Fee`, and Fee total is `$2.58453000`.
+- Verified all 13 have locally modeled status `Calculated`; zero have `VenueReported`. Source-wide inspection found no application caller that imports a venue-reported Fee into a new Live order, and the separate on-chain Fee tables are not joined to `live_orders`.
+Next: If exact venue reconciliation is required, design and separately approve a per-fill/on-chain-to-live-order evidence join; otherwise retain the current local platform-fee model and its disclosed limitations.
+Notes: Official Polymarket documentation confirms fees are applied per match, makers pay zero, the current category formula is `C * feeRate * p * (1-p)`, parameters should come from `getClobMarketInfo(conditionID)`, and fees are rounded to five decimals. The current cumulative Live calculation uses total shares at aggregate average fill price; because the curve is nonlinear, a multi-price order can differ from the sum of actual per-match Fees. The one-minute post-fill market-info cache also means the stored schedule is current lookup evidence, not immutable match-time evidence. Builder fees, rebates, and non-platform charges are outside this Fee.
+Blockers: None for current single/aggregate-price FAK accounting. Exact venue-charged Fee remains unproved without per-match venue evidence.
+
+## Active Update 2026-08-19 Historical Gross/Net Redeployment Verification
+Goal: Verify the redeployed service and confirm that the bounded historical Gross/Net candidate query runs in production.
+Status: Completed read-only; deployment healthy and candidate timeout fixed, first parity accounting commit not yet observed
+Done:
+- Verified exact production `192.168.0.101:5432/polycopytrader` in UTC `REPEATABLE READ READ ONLY` transactions. The newly started service has `started_at_utc=2026-08-19T12:26:44.168684Z`, is `Running / Live`, reports build MVID `6ce0f14c24ce`, advances its heartbeat, and keeps `last_error=NULL`.
+- Captured the deployed bounded `WITH strategy_gross ... ranked AS MATERIALIZED ... CROSS JOIN LATERAL` candidate SQL in `pg_stat_activity` during an actual parity lane turn. It appeared at age `99ms` and the worker continued to later scheduled legacy cycles without a candidate-query failure or 10-second retry pattern, proving the prior full-corpus timeout path is no longer blocking runtime.
+- Confirmed the shared worker remains active under foreground load: legacy cycles completed in `22ms..1024ms` in the final observation window, with no `CycleFailed` event or stored exception.
+- Two independent post-deployment snapshots through `2026-08-19T12:46:43.770578Z` found zero `historical_gross_net_parity_audit` rows. The pre-cutoff Live cohort remains `3,113` Gross rows, `2` formula-complete, `3,111` formula-incomplete, `0` Pending, and `0` Completed. The parity lane is executing its exact pass but has not yet committed a target.
+Next: Allow the background exact pass to continue; on the next requested runtime check, verify the first parity audit/accounting commit and decreasing incomplete cohort.
+Notes: Old file logs were not used. Production, service state, database, configuration, orders, and trading state were not changed. One initial query accidentally reached the configured old local database and failed read-only because its schema lacks the parity table; the authoritative production endpoint was then hard-pinned and all reported results come only from it.
+Blockers: No deployment or startup blocker. Completion progress is not yet proven because the first parity financial commit has not occurred.
+
+## Active Update 2026-08-19 Historical Gross/Net Deployment Runtime Check
+Goal: Verify the newly deployed service and identify why the historical Gross/Net repair is not progressing.
+Status: Local fix verified; revised service build is ready for user deployment
+Done:
+- Verified exact database `192.168.0.101:5432/polycopytrader` in `READ ONLY` transactions. Deployed build `fd4492faf92dad2d403cbd0c0773fa0fdd4c31ca` started at `2026-08-19T10:10:28.997559Z`, remained `Running / Live`, advanced its heartbeat, and kept `last_error` empty.
+- Verified legacy Paper FAK backfill continued normally with 39 completed cycles in the observed deployment interval.
+- Verified historical parity made zero commits: `historical_gross_net_parity_audit` had 0 rows, parity events had 0 rows, and the pre-cutoff Live cohort remained 3,113 Gross rows / 2 formula-complete / 3,111 formula-incomplete / 0 Pending / 0 Completed.
+- Independently matched the retry timing and live SQL: each parity attempt occupied approximately 10 seconds, then used the configured 60-second error delay; `pg_stat_activity` captured the exact `WITH strategy_gross AS (...)` candidate query active for `9.132s` immediately before cancellation.
+- Rewrote only `LoadHistoricalGrossNetParityCandidateKeysAsync` so the unchanged Gross-ranked keyset page evaluates source candidates through a per-ranked-strategy bounded LATERAL query instead of materializing the entire historical candidate corpus before `LIMIT 50`; cursor filtering now occurs before the inner limit.
+- Verified the exact revised SQL against production in read-only transactions: first page 50 rows in about `2.23s`, next same-strategy page in `1.48s`, and probes after ranks 999/1999/2499/2600 in `0.75s..5.13s`, all under the unchanged 10-second command timeout.
+- Added a source-contract regression plus an environment-gated PostgreSQL pagination test covering 120 candidates in one strategy, a transition to the next strategy, audited/post-cutoff exclusions, and exact no-gap/no-duplicate cursor order. Full solution build passed with 0 errors; focused historical parity tests passed 84/84 with two PostgreSQL mutation tests skipped because no disposable test connection is configured.
+Next: User redeploys the revised service; then repeat the read-only heartbeat/parity-audit/progress check and confirm the worker begins committing historical decisions.
+Notes: Old file logs were not used. Production inspection and SQL timing were strictly read-only; no service, database, configuration, deployment, or trading state changed. No timeout, fee formula, donor rule, cutoff, schema, or Live/Paper accounting behavior changed.
+Blockers: None in the local fix. Runtime completion still requires user redeployment and a post-deploy read-only progress check.
+
 ## Active Update 2026-08-19 Production Server And Betting Audit
 Goal: Verify current production runtime, BTC/ETH/SOL Paper betting and settlements, latency, locks, feeds, Dashboard, backlog, and recurrence of prior operational warnings.
 Status: Completed read-only; core runtime and betting healthy, recovered WebSocket interruptions and short feed-stale warnings remain

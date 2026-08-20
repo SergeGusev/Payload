@@ -1127,6 +1127,17 @@ only later initial balance effects of the same strategy; accounting and other
 strategies continue. Dashboard visibility still waits for the applicable cycle
 and projection reconciliation.
 
+Historical donor deduplication proves linked overlap from replayed active
+`paper_order_id` source charges; wallet/asset equality alone is insufficient.
+When an exact linked Live row remains inside an indivisible composite Paper
+position/settlement and the exact nonlinked residual cannot be partitioned
+without inventing a per-BUY share of aggregate rounding residual, the service
+keeps the Live row and excludes the whole Paper composite for that target-time
+donor snapshot. It then continues the remaining donor tiers and fixed `0.0333`.
+This avoids double counting but may omit exact unlinked Paper economics from
+`N/D`; no synthetic residual Paper row is created. A fully consumed linked order
+proved absent from the remaining composite does not trigger the exclusion.
+
 Each strategy-bound candidate page first materializes that strategy's exact
 allowlisted BUY order IDs, probes their fills through the existing per-order
 index, and sorts and limits only the strategy-local candidate keys before loading

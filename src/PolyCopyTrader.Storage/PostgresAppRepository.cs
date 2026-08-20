@@ -6019,6 +6019,28 @@ RETURNING row_version;
 		var normalizedStrategyId = StrategyIds.Normalize(strategyId);
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		if (expectedRowVersion is null)
+		{
+			await using NpgsqlCommand versionCommand = CreateCommand(connection, """
+SELECT row_version
+FROM live_orders
+WHERE id = @LiveOrderId
+  AND strategy_id = @StrategyId
+  AND balance_effect_applied = false
+  AND historical_gross_net_parity_ownership = 'None'
+FOR UPDATE;
+""");
+			versionCommand.Transaction = transaction;
+			versionCommand.Parameters.AddWithValue("LiveOrderId", liveOrderId);
+			versionCommand.Parameters.AddWithValue("StrategyId", normalizedStrategyId);
+			var currentVersion = await versionCommand.ExecuteScalarAsync(cancellationToken);
+			if (currentVersion is null or DBNull)
+			{
+				await transaction.RollbackAsync(cancellationToken);
+				return new StrategyLiveBalanceAdjustmentResult(false, 0m, false);
+			}
+			expectedRowVersion = Convert.ToInt64(currentVersion);
+		}
 
 		await using (NpgsqlCommand command = CreateCommand(connection, """
 UPDATE live_orders
@@ -6052,7 +6074,7 @@ RETURNING balance_effect_applied;
 			command.Parameters.AddWithValue("WinningOutcome", winningOutcome);
 			command.Parameters.AddWithValue("Won", settlementValueUsd > 0m);
 			command.Parameters.AddWithValue("UpdatedAtUtc", UtcDateTime(updatedAtUtc));
-			command.Parameters.AddWithValue("ExpectedRowVersion", expectedRowVersion ?? -1L);
+			command.Parameters.AddWithValue("ExpectedRowVersion", expectedRowVersion.Value);
 			var balanceEffectApplied = await command.ExecuteScalarAsync(cancellationToken);
 			if (balanceEffectApplied is null or DBNull)
 			{

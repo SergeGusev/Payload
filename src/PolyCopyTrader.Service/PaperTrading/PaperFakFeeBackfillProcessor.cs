@@ -1145,6 +1145,9 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
             return;
         }
 
+        target = HistoricalGrossNetParityDecisionFactory.WithLookupEvidence(
+            target,
+            resolution.Outcomes);
         var decision = HistoricalGrossNetParityDecisionFactory.TryCreateExact(
             target,
             resolution.Outcomes,
@@ -1186,6 +1189,24 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
             return;
         }
 
+        if (requests.Count != 0)
+        {
+            var identity = TargetLookupIdentity.Create(target, requests);
+            if (!lookupLedgers.TryGetValue(identity, out var ledger) ||
+                !ledger.IsClosed ||
+                ledger.ProtocolInvariantConflict)
+            {
+                counters.Deferred++;
+                return;
+            }
+
+            target = HistoricalGrossNetParityDecisionFactory.WithLookupEvidence(
+                target,
+                ledger.Outcomes.Values
+                    .OrderBy(outcome => outcome.TupleHash, StringComparer.Ordinal)
+                    .ToArray());
+        }
+
         IReadOnlyList<HistoricalGrossNetDonorCandidateDescriptorV1> orderedCandidates = [];
         HistoricalGrossNetDonorMatch? match = null;
         HistoricalGrossNetParityDonorCandidateAggregate? selectedAggregate = null;
@@ -1212,7 +1233,7 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                     aggregate.CandidateStrategyId,
                     HistoricalGrossNetExactDecimal.FromDecimal(aggregate.N),
                     HistoricalGrossNetExactDecimal.FromDecimal(aggregate.D),
-                    checked((int)aggregate.DeduplicatedDonorCount),
+                    checked((int)aggregate.ExactDonorCount),
                     IsExact: true,
                     ProvedCryptoAssetSymbol: aggregate.CandidateStrategyId == target.StrategyId
                         ? target.ProvedCryptoAssetSymbol
@@ -1827,6 +1848,56 @@ internal static class HistoricalGrossNetParityDecisionFactory
 {
     private const string CalculatedStatus = "Calculated";
 
+    public static HistoricalGrossNetParityTargetSnapshot WithLookupEvidence(
+        HistoricalGrossNetParityTargetSnapshot target,
+        IReadOnlyList<HistoricalGrossNetParityLookupOutcome> outcomes)
+    {
+        var additional = outcomes
+            .Where(outcome => outcome.Status == HistoricalGrossNetParityLookupOutcomeStatus.Success &&
+                              outcome.FeeApplicationKind ==
+                                  HistoricalGrossNetParityLookupFeeApplicationKind.AdditionalNonoverlappingComponent)
+            .Select(CreateLookupComponent)
+            .ToArray();
+        if (additional.Length == 0)
+        {
+            return target;
+        }
+
+        var components = target.ProvedComponents
+            .Concat(additional)
+            .GroupBy(component => component.AllocationId, StringComparer.Ordinal)
+            .Select(group => group.Count() == 1
+                ? group.Single()
+                : throw new InvalidOperationException(
+                    $"Lookup evidence duplicates allocation {group.Key}."))
+            .OrderBy(component => component.AllocationId, StringComparer.Ordinal)
+            .ToArray();
+        var componentFloor = components.Sum(component => component.AmountUsd);
+        var componentHash = HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(components);
+        var bindingHash = HistoricalGrossNetParityBindingV1.Compute(
+            target.TargetTupleHash,
+            target.LineageHash,
+            componentHash);
+        var references = target.ExactEvidenceReferences.Concat(outcomes
+                .Where(outcome => outcome.Status == HistoricalGrossNetParityLookupOutcomeStatus.Success)
+                .Select(outcome => new HistoricalGrossNetParityEvidenceReferenceV1(
+                    "historical-local-fee-lookup",
+                    outcome.CalculationSource,
+                    HashEvidence(outcome.EvidenceJson),
+                    target.SourceKind,
+                    target.SourceId)))
+            .ToArray();
+        return target with
+        {
+            ProvedComponents = components,
+            ProvedComponentFloorUsd = componentFloor,
+            ComponentHash = componentHash,
+            ComponentPayloadJson = JsonSerializer.Serialize(components),
+            BindingHash = bindingHash,
+            ExactEvidenceReferences = references
+        };
+    }
+
     public static HistoricalGrossNetParityAccountingDecisionV1? TryCreateExact(
         HistoricalGrossNetParityTargetSnapshot target,
         IReadOnlyList<HistoricalGrossNetParityLookupOutcome> outcomes,
@@ -2012,6 +2083,13 @@ internal static class HistoricalGrossNetParityDecisionFactory
                 .Select(outcome => outcome.FeeUsd)
                 .SingleOrDefault() ?? target.FeeUsd
             : effectiveFee;
+        var calculationSources = outcomes.Select(outcome => outcome.CalculationSource)
+            .Distinct(StringComparer.Ordinal).ToArray();
+        var roles = outcomes.Select(outcome => outcome.FeeLiquidityRole)
+            .Distinct(StringComparer.Ordinal).ToArray();
+        var rates = outcomes.Select(outcome => outcome.FeeRate).Distinct().ToArray();
+        var exponents = outcomes.Select(outcome => outcome.FeeExponent).Distinct().ToArray();
+        var takerOnlyValues = outcomes.Select(outcome => outcome.FeeTakerOnly).Distinct().ToArray();
         var representative = outcomes[0];
         return Create(
             target,
@@ -2020,16 +2098,71 @@ internal static class HistoricalGrossNetParityDecisionFactory
             effectiveFee,
             Round8(target.GrossPnlUsd - effectiveFee),
             CalculatedStatus,
-            representative.FeeLiquidityRole,
-            representative.CalculationSource,
-            representative.FeeRate,
-            representative.FeeExponent,
-            representative.FeeTakerOnly,
+            target.ProvedComponents.Count == 0 && roles.Length == 1
+                ? roles[0]
+                : FeeLiquidityRole.Unknown.ToString(),
+            target.ProvedComponents.Count == 0 && calculationSources.Length == 1
+                ? calculationSources[0]
+                : "mixed",
+            target.ProvedComponents.Count == 0 && rates.Length == 1 ? rates[0] : null,
+            target.ProvedComponents.Count == 0 && exponents.Length == 1 ? exponents[0] : null,
+            target.ProvedComponents.Count == 0 && takerOnlyValues.Length == 1
+                ? takerOnlyValues[0]
+                : null,
             representative.CapturedAtUtc,
             null,
             calculationVersion,
             new { decision = "local-exact-calculated", outcomes });
     }
+
+    private static HistoricalGrossNetParityComponentAllocationV1 CreateLookupComponent(
+        HistoricalGrossNetParityLookupOutcome outcome)
+    {
+        var fee = outcome.FeeUsd ?? throw new InvalidOperationException(
+            "A successful component lookup has no Fee.");
+        var sourceEvidence = JsonSerializer.Serialize(new
+        {
+            version = "HistoricalGrossNetParityLocalLookupSourceChargeV1",
+            outcome.TupleHash,
+            outcome.FeeSourceChargeId,
+            fee,
+            outcome.CalculationSource,
+            outcome.FeeLiquidityRole,
+            outcome.FeeRate,
+            outcome.FeeExponent,
+            outcome.FeeTakerOnly,
+            outcome.CapturedAtUtc,
+            outcome.EvidenceJson
+        });
+        var evidenceHash = HashEvidence(sourceEvidence);
+        var poolId = "canonical-local-lookup:" + evidenceHash;
+        var edgeEvidence = JsonSerializer.Serialize(new
+        {
+            version = "HistoricalGrossNetParityLocalLookupCoverageV1",
+            outcome.FeeSourceChargeId,
+            poolId,
+            outcome.FeeAllocationId,
+            evidenceHash
+        });
+        return HistoricalGrossNetParityComponentGraphV1.Create(
+            outcome.FeeAllocationId,
+            fee,
+            [new HistoricalGrossNetParitySourceChargeV1(
+                outcome.FeeSourceChargeId,
+                fee,
+                evidenceHash,
+                sourceEvidence)],
+            [new HistoricalGrossNetParityChargeCoverageEdgeV1(
+                outcome.FeeSourceChargeId,
+                poolId,
+                outcome.FeeAllocationId,
+                HashEvidence(edgeEvidence),
+                edgeEvidence)]);
+    }
+
+    private static string HashEvidence(string payload) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)))
+            .ToLowerInvariant();
 
     private static HistoricalGrossNetParityAccountingDecisionV1 Create(
         HistoricalGrossNetParityTargetSnapshot target,
@@ -2164,13 +2297,22 @@ internal static class HistoricalGrossNetParityPaperPreparer
                     fill => fill.FillId,
                     (_, fill) => new PoolKey(fill.CopiedTraderWallet, fill.AssetId)))
             .ToHashSet(PoolKeyComparer.Instance);
-        var pools = page.PaperFillObservations
-            .Where(fill => poolKeys.Contains(new PoolKey(fill.CopiedTraderWallet, fill.AssetId)))
-            .GroupBy(fill => new PoolKey(fill.CopiedTraderWallet, fill.AssetId), PoolKeyComparer.Instance)
-            .ToDictionary(
-                group => group.Key,
-                group => ReplayPool(group.Key, group, cutoffUtc, conflicts),
-                PoolKeyComparer.Instance);
+        var pools = new Dictionary<PoolKey, PoolReplay>(PoolKeyComparer.Instance);
+        var poolErrors = new Dictionary<PoolKey, string>(PoolKeyComparer.Instance);
+        foreach (var group in page.PaperFillObservations
+                     .Where(fill => poolKeys.Contains(new PoolKey(fill.CopiedTraderWallet, fill.AssetId)))
+                     .GroupBy(fill => new PoolKey(fill.CopiedTraderWallet, fill.AssetId), PoolKeyComparer.Instance))
+        {
+            try
+            {
+                pools.Add(group.Key, ReplayPool(group.Key, group, cutoffUtc, conflicts));
+            }
+            catch (Exception exception) when (exception is ArgumentException or ArithmeticException or
+                                               InvalidOperationException)
+            {
+                poolErrors[group.Key] = exception.Message;
+            }
+        }
         var liveTargets = UniqueBy(
             page.LiveTargets,
             target => target.SourceId,
@@ -2272,10 +2414,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
                 }
                 case HistoricalGrossNetParitySourceKind.PaperPosition:
                 {
-                    if (!positions.TryGetValue(candidate.SourceId, out var position) ||
-                        !pools.TryGetValue(
-                            new PoolKey(position.CopiedTraderWallet, position.AssetId),
-                            out var replay))
+                    if (!positions.TryGetValue(candidate.SourceId, out var position))
                     {
                         AddConflict(
                             conflicts,
@@ -2283,6 +2422,20 @@ internal static class HistoricalGrossNetParityPaperPreparer
                             candidate.SourceKind,
                             candidate.SourceId,
                             candidate.StrategyId,
+                            "An open Gross-contributing position has no replayable wallet/asset fill pool.");
+                        break;
+                    }
+
+                    var positionPoolKey = new PoolKey(position.CopiedTraderWallet, position.AssetId);
+                    if (!pools.TryGetValue(positionPoolKey, out var replay))
+                    {
+                        AddConflict(
+                            conflicts,
+                            "paper_position_pool_missing",
+                            candidate.SourceKind,
+                            candidate.SourceId,
+                            candidate.StrategyId,
+                            poolErrors.GetValueOrDefault(positionPoolKey) ??
                             "An open Gross-contributing position has no replayable wallet/asset fill pool.");
                         break;
                     }
@@ -2302,10 +2455,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
                 case HistoricalGrossNetParitySourceKind.PaperSettlement:
                 {
                     if (selection.UsesRuns ||
-                        !settlements.TryGetValue(candidate.SourceId, out var settlement) ||
-                        !pools.TryGetValue(
-                            new PoolKey(settlement.CopiedTraderWallet, settlement.AssetId),
-                            out var replay))
+                        !settlements.TryGetValue(candidate.SourceId, out var settlement))
                     {
                         AddConflict(
                             conflicts,
@@ -2313,6 +2463,20 @@ internal static class HistoricalGrossNetParityPaperPreparer
                             candidate.SourceKind,
                             candidate.SourceId,
                             candidate.StrategyId,
+                            "A runless Gross-contributing settlement has no replayable wallet/asset fill pool.");
+                        break;
+                    }
+
+                    var settlementPoolKey = new PoolKey(settlement.CopiedTraderWallet, settlement.AssetId);
+                    if (!pools.TryGetValue(settlementPoolKey, out var replay))
+                    {
+                        AddConflict(
+                            conflicts,
+                            "paper_settlement_pool_missing",
+                            candidate.SourceKind,
+                            candidate.SourceId,
+                            candidate.StrategyId,
+                            poolErrors.GetValueOrDefault(settlementPoolKey) ??
                             "A runless Gross-contributing settlement has no replayable wallet/asset fill pool.");
                         break;
                     }
@@ -2335,10 +2499,20 @@ internal static class HistoricalGrossNetParityPaperPreparer
                 {
                     if (selection.UsesRuns ||
                         !fills.TryGetValue(candidate.SourceId, out var fill) ||
-                        !IsSell(fill) ||
-                        !pools.TryGetValue(
-                            new PoolKey(fill.CopiedTraderWallet, fill.AssetId),
-                            out var replay) ||
+                        !IsSell(fill))
+                    {
+                        AddConflict(
+                            conflicts,
+                            "paper_sell_replay_missing",
+                            candidate.SourceKind,
+                            candidate.SourceId,
+                            candidate.StrategyId,
+                            "A runless Gross-contributing SELL has no deterministic pool replay state.");
+                        break;
+                    }
+
+                    var sellPoolKey = new PoolKey(fill.CopiedTraderWallet, fill.AssetId);
+                    if (!pools.TryGetValue(sellPoolKey, out var replay) ||
                         !replay.Sells.TryGetValue(fill.FillId, out var sell))
                     {
                         AddConflict(
@@ -2347,6 +2521,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
                             candidate.SourceKind,
                             candidate.SourceId,
                             candidate.StrategyId,
+                            poolErrors.GetValueOrDefault(sellPoolKey) ??
                             "A runless Gross-contributing SELL has no deterministic pool replay state.");
                         break;
                     }
@@ -2829,7 +3004,21 @@ internal static class HistoricalGrossNetParityPaperPreparer
             return null;
         }
 
-        var components = state.EntryEvidence == EntryEvidence.Exact
+        var mixedSource = string.Equals(
+            position.FeeCalculationSource,
+            "mixed",
+            StringComparison.Ordinal);
+
+        var components = state.EntryEvidence == EntryEvidence.Exact && state.HasPriorSell
+            ? new[]
+            {
+                CreateRemainingEntryPoolComponent(
+                    $"paper-entry-remaining:PaperPosition:{position.PositionId:D}",
+                    state,
+                    replay.PoolId,
+                    replay.LineagePayload)
+            }
+            : state.EntryEvidence == EntryEvidence.Exact
             ? new[]
             {
                 CreateEntryPoolComponent(
@@ -2873,7 +3062,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             position.FeeExponent,
             position.FeeTakerOnly,
             position.FeeCalculatedAtUtc) ||
-            (string.Equals(position.FeeCalculationSource, "mixed", StringComparison.Ordinal) && poolExact);
+            (mixedSource && poolExact);
         return CreateTarget(
             HistoricalGrossNetParitySourceKind.PaperPosition,
             position.PositionId,
@@ -2975,7 +3164,21 @@ internal static class HistoricalGrossNetParityPaperPreparer
             return null;
         }
 
-        var components = state.EntryEvidence == EntryEvidence.Exact
+        var mixedSource = string.Equals(
+            settlement.FeeCalculationSource,
+            "mixed",
+            StringComparison.Ordinal);
+
+        var components = state.EntryEvidence == EntryEvidence.Exact && state.HasPriorSell
+            ? new[]
+            {
+                CreateRemainingEntryPoolComponent(
+                    $"paper-entry-remaining:PaperSettlement:{settlement.SettlementId:D}",
+                    state,
+                    replay.PoolId,
+                    replay.LineagePayloadBefore(settlement.SettledAtUtc))
+            }
+            : state.EntryEvidence == EntryEvidence.Exact
             ? new[]
             {
                 CreateEntryPoolComponent(
@@ -3020,7 +3223,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             settlement.FeeExponent,
             settlement.FeeTakerOnly,
             settlement.FeeCalculatedAtUtc) ||
-            (string.Equals(settlement.FeeCalculationSource, "mixed", StringComparison.Ordinal) && poolExact);
+            (mixedSource && poolExact);
         return CreateTarget(
             HistoricalGrossNetParitySourceKind.PaperSettlement,
             settlement.SettlementId,
@@ -3183,12 +3386,10 @@ internal static class HistoricalGrossNetParityPaperPreparer
             netPnlUsd is not null
                 ? grossPnlUsd - netPnlUsd.Value
                 : feeUsd;
-        var parsedStatus = FeeAccountingRules.ParseStatus(feeAccountingStatus);
         var existingComplete = FeeAccountingRules.IsAccounted(feeAccountingStatus) &&
             netPnlUsd is not null &&
             contributionEffectiveFee >= 0m &&
             Round8(grossPnlUsd - contributionEffectiveFee) == netPnlUsd.Value &&
-            (parsedStatus != FeeAccountingStatus.VenueReported || authoritative) &&
             (sourceKind != HistoricalGrossNetParitySourceKind.PaperSellFill ||
                 contributionEffectiveFee >= feeUsd);
         var eligibility = existingComplete
@@ -3644,6 +3845,39 @@ internal static class HistoricalGrossNetParityPaperPreparer
             Round8(effectiveAmountUsd),
             sourceCharges,
             edges,
+            movement);
+    }
+
+    private static HistoricalGrossNetParityComponentAllocationV1 CreateRemainingEntryPoolComponent(
+        string allocationId,
+        PoolState state,
+        string poolId,
+        string evidencePayload)
+    {
+        var remainingFee = Round8(state.FeeUsd);
+        var movementEvidence = JsonSerializer.Serialize(new
+        {
+            version = "HistoricalGrossNetParityRemainingEntryPoolMovementV1",
+            allocationId,
+            poolId,
+            remainingFee,
+            contextEvidenceHash = Hash(evidencePayload)
+        });
+        var movement = new HistoricalGrossNetParityPoolMovementV1(
+            poolId,
+            remainingFee,
+            remainingFee,
+            remainingFee,
+            0m,
+            0m,
+            Hash(movementEvidence),
+            movementEvidence);
+        return CreateEntryPoolComponent(
+            allocationId,
+            remainingFee,
+            state,
+            poolId,
+            evidencePayload,
             movement);
     }
 

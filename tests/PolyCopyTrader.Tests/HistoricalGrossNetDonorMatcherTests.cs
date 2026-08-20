@@ -721,6 +721,31 @@ public sealed class HistoricalGrossNetDonorMatcherTests
     }
 
     [Fact]
+    public void DonorHashV1_StreamingComponentBuilderMatchesMaterializedKnownAnswer()
+    {
+        var records = ComponentEvidenceKnownAnswerRecords();
+        var ordered = records
+            .Select(record => (Record: record, Encoded: HistoricalGrossNetDonorHashV1.EncodeComponentEvidence(record)))
+            .OrderBy(
+                value => value.Encoded,
+                Comparer<HistoricalGrossNetDonorHashV1.EncodedComponentEvidence>.Create(
+                    HistoricalGrossNetDonorHashV1.CompareComponentRecords))
+            .Select(value => value.Record)
+            .ToArray();
+
+        using var builder = HistoricalGrossNetDonorHashV1.CreateComponentEvidenceHashBuilder(
+            checked((uint)ordered.Length));
+        foreach (var record in ordered)
+        {
+            builder.Append(record);
+        }
+
+        Assert.Equal(
+            HistoricalGrossNetDonorHashV1.ComputeComponentAllocationHash(records),
+            builder.Complete());
+    }
+
+    [Fact]
     public void DonorHashV1_ComponentEvidenceGraphRejectsClosedDomainAndPerChargeResidualSplit()
     {
         var undefinedKind = new HistoricalGrossNetComponentEvidenceRecordV1(
@@ -823,6 +848,38 @@ public sealed class HistoricalGrossNetDonorMatcherTests
             HistoricalGrossNetComponentEvidenceGraphV1.ComputeHash([.. records, overlappingEdge]));
         Assert.Throws<InvalidOperationException>(() =>
             HistoricalGrossNetComponentEvidenceGraphV1.ComputeHash(unexplainedExit));
+    }
+
+    [Fact]
+    public void ComponentGraphV1_RejectsUncoveredChargeAndDuplicateAllocationAcrossComponents()
+    {
+        var chargeA = new HistoricalGrossNetParitySourceChargeV1("charge-a", 0.10m, "evidence-a", "{}");
+        var chargeB = new HistoricalGrossNetParitySourceChargeV1("charge-b", 0.20m, "evidence-b", "{}");
+        var edgeA = new HistoricalGrossNetParityChargeCoverageEdgeV1(
+            "charge-a", "pool", "allocation", "edge-a", "{}");
+
+        Assert.Throws<InvalidOperationException>(() =>
+            HistoricalGrossNetParityComponentGraphV1.Create(
+                "allocation",
+                0.30m,
+                [chargeA, chargeB],
+                [edgeA]));
+
+        var directA = HistoricalGrossNetParityComponentGraphV1.Create(
+            "duplicate-allocation",
+            0.10m,
+            [chargeA],
+            [new HistoricalGrossNetParityChargeCoverageEdgeV1(
+                "charge-a", "pool-a", "duplicate-allocation", "edge-a", "{}")] );
+        var directB = HistoricalGrossNetParityComponentGraphV1.Create(
+            "duplicate-allocation",
+            0.20m,
+            [chargeB],
+            [new HistoricalGrossNetParityChargeCoverageEdgeV1(
+                "charge-b", "pool-b", "duplicate-allocation", "edge-b", "{}")] );
+
+        Assert.Throws<InvalidOperationException>(() =>
+            HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash([directA, directB]));
     }
 
     [Fact]
@@ -1068,6 +1125,8 @@ public sealed class HistoricalGrossNetDonorMatcherTests
         Assert.Matches("^[0-9a-f]{64}$", Assert.IsType<string>(forward.SelectionHashV1));
         Assert.Throws<InvalidOperationException>(() =>
             matcher.Match(targetKey, candidates.Skip(1).ToArray(), [lowAggregate, highAggregate]));
+        Assert.Throws<InvalidOperationException>(() =>
+            matcher.Match(targetKey, candidates, [lowAggregate, Aggregate(Id(429))]));
     }
 
     [Fact]
@@ -1102,6 +1161,33 @@ public sealed class HistoricalGrossNetDonorMatcherTests
         Assert.Matches("^[0-9a-f]{64}$", Assert.IsType<string>(result.SelectionHashV1));
         Assert.Throws<InvalidOperationException>(() =>
             matcher.Match(targetKey, candidates.Reverse().ToArray(), []));
+    }
+
+    [Fact]
+    public void StrictMatch_AcceptsRawExactAndSelectedCountReduction()
+    {
+        var target = Variant(435);
+        var matcher = new HistoricalGrossNetDonorMatcher([target]);
+        var targetKey = new HistoricalGrossNetDonorTarget(target.Id);
+        var candidates = matcher.GetOrderedCandidates(targetKey);
+        var aggregate = new HistoricalGrossNetDonorAggregate(
+            target.Id,
+            HistoricalGrossNetExactDecimal.Parse("0.35"),
+            HistoricalGrossNetExactDecimal.Parse("10"),
+            ExactDonorCount: 2,
+            RawDonorCount: 3,
+            DeduplicatedDonorCount: 1,
+            MembershipHashV1:
+                "194f4e918f294e79bf58c58affe58bb285f458b6b774b276bd53e4230277fc74");
+
+        var match = matcher.Match(targetKey, candidates, [aggregate]);
+
+        Assert.Equal(target.Id, match.Donor?.StrategyId);
+        Assert.Equal(BigInteger.One, Assert.Single(match.InspectedCandidateRecords).ExactDonorCount);
+        Assert.Throws<InvalidOperationException>(() =>
+            matcher.Match(targetKey, candidates, [aggregate with { RawDonorCount = 1 }]));
+        Assert.Throws<InvalidOperationException>(() =>
+            matcher.Match(targetKey, candidates, [aggregate with { DeduplicatedDonorCount = 3 }]));
     }
 
     private static IReadOnlyList<HistoricalGrossNetComponentEvidenceRecordV1>
