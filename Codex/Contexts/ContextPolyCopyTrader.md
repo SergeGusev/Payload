@@ -1,3 +1,13 @@
+## Active Update 2026-08-20 Maker Expiry Admission Fairness Approved
+Goal: Implement the approved starvation-free Maker-GTD receipt/expiry admission ordering.
+Status: Approved; parent approval commit pending
+Done:
+- Received user approval for `RC-20260820-maker-expiry-admission-fairness` at semantic digest `sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc`.
+- Recorded the approval without changing the approved semantic payload.
+Next: Mechanically validate and commit this approval as the parent revision, then implement only the approved source, test, and documentation paths.
+Notes: Product code and production remain unchanged at this checkpoint.
+Blockers: None.
+
 ## Active Update 2026-08-20 Maker Expiry Admission Fairness Contract
 Goal: Define the approved-behavior boundary for eliminating Maker-GTD expiry starvation under continuous market-data receipts.
 Status: Blocked pending requirement-contract approval

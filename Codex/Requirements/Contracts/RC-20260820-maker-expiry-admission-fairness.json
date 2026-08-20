@@ -3,7 +3,7 @@
   "contractId": "RC-20260820-maker-expiry-admission-fairness",
   "title": "Prevent Maker-GTD expiry admission starvation",
   "author": "agent:/root",
-  "status": "draft",
+  "status": "approved",
   "originalRequests": [
     {
       "source": "user",
@@ -125,10 +125,10 @@
   "assumptions": [],
   "deviations": [],
   "approval": {
-    "status": "pending",
+    "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260820-maker-expiry-admission-fairness sha256:<pending>",
-    "semanticDigest": "pending"
+    "evidenceText": "APPROVE RC-20260820-maker-expiry-admission-fairness sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc",
+    "semanticDigest": "sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",

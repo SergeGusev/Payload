@@ -27,3 +27,10 @@ Request:
 
 Result:
 Traced the exact deployed Maker-GTD receipt/expiry admission path and identified a source-level starvation mechanism: expiry returns null whenever any receipt is active and has no priority over later receipts. Drafted and mechanically validated `RC-20260820-maker-expiry-admission-fairness` at digest `sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc`. The proposed behavior waits for already active receipts, prevents later receipts from overtaking expiry, and preserves every existing evidence/outstanding-update/atomic gate without adding a timeout or dropping events. Product and production state were not changed; implementation awaits exact approval.
+
+## 2026-08-20T09:34:41.3578263+00:00
+Request:
+APPROVE RC-20260820-maker-expiry-admission-fairness sha256:3377cd58a796cb051825a438376467b63fad572807e15f22d43bc96943394efc
+
+Result:
+Recorded exact approval for `RC-20260820-maker-expiry-admission-fairness` without changing its semantic payload. The approved contract must now be mechanically validated and committed as the parent revision before any product edit.
