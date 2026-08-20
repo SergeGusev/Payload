@@ -1,3 +1,17 @@
+## Active Update 2026-08-20 Maker Side-Effect Priority Deployment Verification
+Goal: Verify production runtime, betting flow, and the first post-deployment exact ETH Maker-GTD cohorts after deploying `e01fdd92`.
+Status: Completed read-only; core runtime and betting healthy, new Maker expiry path not yet exercised
+Done:
+- Verified exact production `192.168.0.101:5432/polycopytrader` in UTC READ ONLY sessions: service runs exact build `e01fdd92074f381514cbc525c69f89019eab57eb`, started `2026-08-20T12:18:15.787795Z`, heartbeat advanced through `12:46:16.373856Z`, status `Running / Live`, and `last_error=NULL`.
+- Confirmed fresh BTC/ETH/SOL references, current Connected/non-stale aggregate/critical/shard-001 WebSockets, no DB blocker/lock wait/idle-in-transaction session, fresh position marks, and no Live orders or Paper/Live shadows after start.
+- Audited 685 post-start Paper orders: zero missing/multiple run links, zero Filled-without-exactly-one-fill, zero duplicate fills, zero strategy mismatch, zero entries at/after market end; max entry latency was `1.783s`. A final five-minute sample had 239 orders, 239 fills, and 133 settlements.
+- The temporary 49 ended SOL Entered rows were all from the immediately preceding slot and under two minutes old; by final cutoff enabled overdue Entered/Observed older than five minutes and expired open Paper orders were all zero.
+- Exact Maker inventory remained 28/28, enabled/unpaused/non-Live. Six complete post-start cycles from `12:19:30Z` through `12:44:30Z` produced 168 ordinary threshold skips and zero Maker orders; current Maker open/overdue was 0/0. Therefore the deployed build is proven, but the new priority-drain/expiry behavior has not yet been exercised by a new accepted Maker order.
+- Recorded warning-only transient diagnostics: two copied-performance ProjectionCycle stream errors through `12:38:24.060615Z` and two OKX two-second HTTP timeouts at `12:42:06.402066Z` and `12:46:44.918205Z`. Core flow continued; copied-performance control/inflight work remained fresh, and no OKX-related strategy skip was persisted.
+Next: Recheck the first new Maker order that reaches fill or expiry; only that cohort can prove the priority-drain effect in production.
+Notes: Final cutoff `2026-08-20T12:47:53.802133Z`. Two broad diagnostic joins hit the enforced 15-second timeout and one corrected metadata query rolled back on a column-name error; all sessions were READ ONLY and production was unaffected.
+Blockers: No core-runtime blocker. Runtime verification of the specific Maker fix is pending a naturally accepted Maker signal/order.
+
 ## Active Update 2026-08-20 Maker Expiry Side-Effect Priority Implemented
 Goal: Remove the remaining exact ETH Maker-GTD terminal delay caused by accepted pre-expiry side-effect work waiting behind unrelated assets.
 Status: Completed locally; final gated commit and push pending

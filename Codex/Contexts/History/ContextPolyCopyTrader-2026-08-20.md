@@ -69,3 +69,10 @@ APPROVE RC-20260820-maker-expiry-side-effect-priority sha256:97b9af821cacc246901
 
 Result:
 Implemented the approved priority drain for accepted pre-expiry exact ETH Maker-GTD side-effect updates. The affected asset is prioritized without breaking same-asset FIFO or interrupting current in-flight work; expiry retains exclusive admission, reloads persisted state after the drain, and reaches the existing fill-or-terminal path in the same lifecycle pass. Final focused tests passed 80/80; the complete Debug build had 0 errors and 126 existing warnings; independent semantic review passed with no findings. No production mutation or deployment occurred; final gated commit and push remain.
+
+## 2026-08-20T12:47:53.8021330Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified exact production build `e01fdd92074f381514cbc525c69f89019eab57eb` read-only. Service, heartbeat, PostgreSQL locks, BTC/ETH/SOL references, current Polymarket WebSockets, Paper entries, linkage, latency, settlements, and position marks were healthy; 685 post-start orders had zero linkage/fill defects or late entries, and all enabled lifecycle backlogs cleared normally. Exact Maker inventory was 28/28 with no Live/open/overdue orders, but six post-start cycles produced 168 threshold skips and zero Maker orders, so the deployed code is confirmed while the new priority-drain expiry path has not yet been exercised by a real order. Warning-only diagnostics were two copied-performance stream errors and two isolated OKX two-second HTTP timeouts; processing remained active and no OKX-related strategy skip was persisted. No production mutation occurred.
