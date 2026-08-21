@@ -8,5 +8,6 @@ public interface IPaperTradingMarketDataUpdater
         MarketDataUpdate update,
         DateTimeOffset? receivedAtUtc = null,
         IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        MarketDataSideEffectExecutionTrace? executionTrace = null);
 }

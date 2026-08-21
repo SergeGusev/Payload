@@ -11,7 +11,8 @@ public sealed record MarketDataSideEffectWorkItem(
     DateTimeOffset ReceivedAtUtc,
     DateTimeOffset EnqueuedAtUtc,
     IReadOnlySet<Guid>? EligiblePaperOrderIds,
-    bool Replaceable);
+    bool Replaceable,
+    MarketDataSideEffectExecutionTrace? ExecutionTrace = null);
 
 public interface IMarketDataSideEffectHandler
 {
@@ -42,7 +43,8 @@ public sealed class MarketDataSideEffectHandler(
         CancellationToken cancellationToken = default)
     {
         await RunPhaseAsync(
-            "RecordResolvedEvent",
+            MarketDataSideEffectPhases.RecordResolvedEvent,
+            workItem.ExecutionTrace,
             () => cryptoResolvedEventRecorder.RecordAsync(
                 workItem.Component,
                 workItem.Update,
@@ -51,30 +53,35 @@ public sealed class MarketDataSideEffectHandler(
                 cancellationToken));
 
         await RunPhaseAsync(
-            "RecordTradeTick",
+            MarketDataSideEffectPhases.RecordTradeTick,
+            workItem.ExecutionTrace,
             () => tradeTickDiagnosticService.RecordAsync(workItem.Update, cancellationToken));
 
         if (options.PersistOrderBookSnapshots && workItem.Update.OrderBookSnapshot is not null)
         {
             await RunPhaseAsync(
-                "PersistOrderBookSnapshot",
+                MarketDataSideEffectPhases.PersistOrderBookSnapshot,
+                workItem.ExecutionTrace,
                 () => repository.AddOrderBookSnapshotAsync(workItem.Update.OrderBookSnapshot, cancellationToken));
         }
 
         if (options.PersistMarketDataEvents)
         {
             await RunPhaseAsync(
-                "PersistMarketDataEvent",
+                MarketDataSideEffectPhases.PersistMarketDataEvent,
+                workItem.ExecutionTrace,
                 () => repository.AddMarketDataEventAsync(ToMarketDataEvent(workItem.Update), cancellationToken));
         }
 
         await RunPhaseAsync(
-            "ApplyPaperTradingUpdate",
+            MarketDataSideEffectPhases.ApplyPaperTradingUpdate,
+            workItem.ExecutionTrace,
             () => paperTradingUpdater.ApplyUpdateAsync(
                 workItem.Update,
                 workItem.ReceivedAtUtc,
                 workItem.EligiblePaperOrderIds,
-                cancellationToken));
+                cancellationToken,
+                workItem.ExecutionTrace));
     }
 
     public Task PersistFrameDiagnosticAsync(
@@ -89,8 +96,12 @@ public sealed class MarketDataSideEffectHandler(
         return repository.AddApiErrorAsync(apiError, cancellationToken);
     }
 
-    private static async Task RunPhaseAsync(string phase, Func<Task> action)
+    private static async Task RunPhaseAsync(
+        string phase,
+        MarketDataSideEffectExecutionTrace? executionTrace,
+        Func<Task> action)
     {
+        executionTrace?.EnterPhase(phase, DateTimeOffset.UtcNow);
         try
         {
             await action();

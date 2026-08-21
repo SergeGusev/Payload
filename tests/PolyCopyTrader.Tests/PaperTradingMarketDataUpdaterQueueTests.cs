@@ -125,11 +125,13 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
             new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository);
 
+        var trace = CreateTrace(receivedAtUtc);
         await updater.ApplyUpdateAsync(
             BookUpdate(receivedAtUtc),
             receivedAtUtc,
             new HashSet<Guid>(),
-            CancellationToken.None);
+            CancellationToken.None,
+            trace);
 
         var apiError = Assert.Single(repository.ApiErrors);
         Assert.Equal("PaperTradingMarketDataUpdater", apiError.Component);
@@ -138,6 +140,155 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         Assert.Contains("EventType=Book", apiError.Message, StringComparison.Ordinal);
         Assert.Contains("Operation=IAppRepository.TryUpdatePaperPositionMarks", apiError.Message, StringComparison.Ordinal);
         Assert.Contains("simulated paper position mark update failure", apiError.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            MarketDataSideEffectPhases.UpdatePositionMarks,
+            trace.Capture(DateTimeOffset.UtcNow).Phase);
+    }
+
+    [Fact]
+    public async Task ApplyUpdateAsync_ReportsPublicationWaitWithoutChangingTheWait()
+    {
+        var repository = new TestAppRepository();
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var orderId = Guid.NewGuid();
+        await using (var admission = await handoff.EnterPlacementAdmissionAsync("asset-1"))
+        {
+            admission.ActivatePendingOrder(
+                orderId,
+                MakerGtdPaperExecutionContract.ExecutionSource);
+        }
+
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository,
+            makerGtdPaperPlacementHandoff: handoff);
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        var trace = CreateTrace(receivedAtUtc);
+
+        var applyTask = updater.ApplyUpdateAsync(
+            BookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid> { orderId },
+            CancellationToken.None,
+            trace);
+        await WaitForPhaseAsync(trace, MarketDataSideEffectPhases.WaitForPublication);
+
+        Assert.False(applyTask.IsCompleted);
+        handoff.MarkPublished(orderId);
+        await applyTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(
+            MarketDataSideEffectPhases.UpdatePositionMarks,
+            trace.Capture(DateTimeOffset.UtcNow).Phase);
+    }
+
+    [Fact]
+    public async Task ApplyUpdateAsync_ReportsSerializationLockWaitWithoutChangingSerialization()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            receivedAtUtc.AddMinutes(-1),
+            "0xleader"));
+        var firstMarkStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstMark = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var markCalls = 0;
+        repository.BeforeTryUpdatePaperPositionMarksAsync = async () =>
+        {
+            if (Interlocked.Increment(ref markCalls) == 1)
+            {
+                firstMarkStarted.TrySetResult(true);
+                await releaseFirstMark.Task;
+            }
+        };
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+        var firstTrace = CreateTrace(receivedAtUtc);
+        var secondTrace = CreateTrace(receivedAtUtc.AddMilliseconds(1));
+
+        var firstApply = updater.ApplyUpdateAsync(
+            BookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid>(),
+            CancellationToken.None,
+            firstTrace);
+        await firstMarkStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondApply = updater.ApplyUpdateAsync(
+            BookUpdate(receivedAtUtc.AddMilliseconds(1), 0.39m),
+            receivedAtUtc.AddMilliseconds(1),
+            new HashSet<Guid>(),
+            CancellationToken.None,
+            secondTrace);
+        await WaitForPhaseAsync(secondTrace, MarketDataSideEffectPhases.WaitForSerializationLock);
+
+        Assert.False(secondApply.IsCompleted);
+        releaseFirstMark.TrySetResult(true);
+        await Task.WhenAll(firstApply, secondApply).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(2, markCalls);
+        Assert.Equal(
+            MarketDataSideEffectPhases.UpdatePositionMarks,
+            secondTrace.Capture(DateTimeOffset.UtcNow).Phase);
+    }
+
+    [Fact]
+    public async Task ApplyUpdateAsync_ReportsMarketResolutionSettlementPhase()
+    {
+        var repository = new TestAppRepository();
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        var trace = CreateTrace(receivedAtUtc);
+        var update = BookUpdate(receivedAtUtc) with { MarketResolved = true };
+
+        await updater.ApplyUpdateAsync(
+            update,
+            receivedAtUtc,
+            new HashSet<Guid>(),
+            CancellationToken.None,
+            trace);
+
+        Assert.Equal(
+            MarketDataSideEffectPhases.SettleMarketResolution,
+            trace.Capture(DateTimeOffset.UtcNow).Phase);
+    }
+
+    [Fact]
+    public void DiagnosticPhaseNames_AreStable()
+    {
+        Assert.Equal("Queued", MarketDataSideEffectPhases.Queued);
+        Assert.Equal("Processing", MarketDataSideEffectPhases.Processing);
+        Assert.Equal("RecordResolvedEvent", MarketDataSideEffectPhases.RecordResolvedEvent);
+        Assert.Equal("RecordTradeTick", MarketDataSideEffectPhases.RecordTradeTick);
+        Assert.Equal("PersistOrderBookSnapshot", MarketDataSideEffectPhases.PersistOrderBookSnapshot);
+        Assert.Equal("PersistMarketDataEvent", MarketDataSideEffectPhases.PersistMarketDataEvent);
+        Assert.Equal("ApplyPaperTradingUpdate", MarketDataSideEffectPhases.ApplyPaperTradingUpdate);
+        Assert.Equal("ApplyPaperTradingUpdate/WaitForPublication", MarketDataSideEffectPhases.WaitForPublication);
+        Assert.Equal("ApplyPaperTradingUpdate/WaitForSerializationLock", MarketDataSideEffectPhases.WaitForSerializationLock);
+        Assert.Equal("ApplyPaperTradingUpdate/LoadExposureSnapshot", MarketDataSideEffectPhases.LoadExposureSnapshot);
+        Assert.Equal("ApplyPaperTradingUpdate/SettleMarketResolution", MarketDataSideEffectPhases.SettleMarketResolution);
+        Assert.Equal("ApplyPaperTradingUpdate/ApplyMakerGtdPaperUpdate", MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate);
+        Assert.Equal("ApplyPaperTradingUpdate/ApplyOrdinaryPaperUpdate", MarketDataSideEffectPhases.ApplyOrdinaryPaperUpdate);
+        Assert.Equal("ApplyPaperTradingUpdate/UpdatePositionMarks", MarketDataSideEffectPhases.UpdatePositionMarks);
     }
 
     [Fact]
@@ -279,12 +430,12 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         Assert.Null(exposureCache.GetPaperPosition(position.CopiedTraderWallet, position.AssetId));
     }
 
-    private static MarketDataUpdate BookUpdate(DateTimeOffset timestamp)
+    private static MarketDataUpdate BookUpdate(DateTimeOffset timestamp, decimal bestBid = 0.40m)
     {
         var orderBook = new OrderBookSnapshot(
             "asset-1",
-            [new OrderBookLevel(0.40m, 10m)],
-            [new OrderBookLevel(0.45m, 10m)],
+            [new OrderBookLevel(bestBid, 10m)],
+            [new OrderBookLevel(bestBid + 0.05m, 10m)],
             timestamp,
             "condition-1");
         return new MarketDataUpdate(
@@ -293,13 +444,38 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
             "asset-1",
             "condition-1",
             orderBook,
-            0.40m,
-            0.45m,
+            bestBid,
+            bestBid + 0.05m,
             null,
             null,
             TradeSide.Unknown,
             false,
             timestamp);
+    }
+
+    private static MarketDataSideEffectExecutionTrace CreateTrace(DateTimeOffset receivedAtUtc)
+    {
+        return new MarketDataSideEffectExecutionTrace(
+            "test-component",
+            MarketDataEventType.Book,
+            "asset-1",
+            "condition-1",
+            receivedAtUtc,
+            DateTimeOffset.UtcNow);
+    }
+
+    private static async Task WaitForPhaseAsync(
+        MarketDataSideEffectExecutionTrace trace,
+        string expectedPhase)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!string.Equals(
+                   trace.Capture(DateTimeOffset.UtcNow).Phase,
+                   expectedPhase,
+                   StringComparison.Ordinal))
+        {
+            await Task.Delay(10, timeout.Token);
+        }
     }
 
     private sealed class NoOpPaperSettlementProcessor : IPaperSettlementProcessor

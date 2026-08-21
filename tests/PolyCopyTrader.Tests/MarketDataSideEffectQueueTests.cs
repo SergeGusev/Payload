@@ -248,6 +248,33 @@ public sealed class MarketDataSideEffectQueueTests
                 "condition-1",
                 acceptedAtUtc,
                 expiresAtUtc));
+            var capturedAtUtc = DateTimeOffset.UtcNow;
+            var snapshot = queue.GetPaperOrderPreflightSnapshot(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc,
+                capturedAtUtc);
+            Assert.Equal(MarketDataSideEffectDiagnosticSchema.Available, snapshot.Availability);
+            Assert.Null(snapshot.UnavailableReason);
+            Assert.Equal(1, snapshot.MatchingOutstandingCount);
+            Assert.Equal(0, snapshot.MatchingInFlightCount);
+            Assert.Equal(1, snapshot.MatchingPendingCount);
+            Assert.NotNull(snapshot.OldestMatchingReceivedAtUtc);
+            Assert.NotNull(snapshot.OldestMatchingReceivedAgeMilliseconds);
+            Assert.NotNull(snapshot.OldestMatchingEnqueuedAtUtc);
+            Assert.NotNull(snapshot.OldestMatchingEnqueuedAgeMilliseconds);
+            Assert.Equal(1, snapshot.TotalPendingUpdates);
+            Assert.Equal(1, snapshot.TrackedAssets);
+            Assert.NotEqual(MarketDataSideEffectDiagnosticSchema.NotAvailable, snapshot.UpdateWorkerState);
+            var inFlight = Assert.IsType<MarketDataSideEffectExecutionTraceSnapshot>(snapshot.InFlightUpdate);
+            Assert.Equal("blocker", inFlight.AssetId);
+            Assert.Equal(MarketDataSideEffectPhases.Processing, inFlight.Phase);
+            Assert.NotNull(inFlight.ProcessingStartedAtUtc);
+            Assert.True(inFlight.QueueAgeMilliseconds >= 0d);
+            Assert.True(inFlight.ProcessingAgeMilliseconds >= 0d);
+            Assert.True(inFlight.PhaseAgeMilliseconds >= 0d);
             Assert.False(queue.HasOutstandingPaperOrderUpdate(
                 Guid.NewGuid(),
                 "asset-maker",
@@ -294,6 +321,21 @@ public sealed class MarketDataSideEffectQueueTests
                 "condition-1",
                 acceptedAtUtc,
                 expiresAtUtc));
+            var snapshot = queue.GetPaperOrderPreflightSnapshot(
+                orderId,
+                "asset-maker",
+                "condition-1",
+                acceptedAtUtc,
+                expiresAtUtc,
+                DateTimeOffset.UtcNow);
+            Assert.Equal(1, snapshot.MatchingOutstandingCount);
+            Assert.Equal(1, snapshot.MatchingInFlightCount);
+            Assert.Equal(0, snapshot.MatchingPendingCount);
+            var inFlight = Assert.IsType<MarketDataSideEffectExecutionTraceSnapshot>(snapshot.InFlightUpdate);
+            Assert.Equal("asset-maker", inFlight.AssetId);
+            Assert.Equal("condition-1", inFlight.ConditionId);
+            Assert.Equal(MarketDataEventType.BestBidAsk, inFlight.EventType);
+            Assert.Equal(MarketDataSideEffectPhases.Processing, inFlight.Phase);
         }
         finally
         {

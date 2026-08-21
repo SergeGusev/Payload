@@ -68,6 +68,19 @@ public interface IMarketDataSideEffectQueue
     {
         return Task.CompletedTask;
     }
+
+    MarketDataSideEffectPreflightSnapshot GetPaperOrderPreflightSnapshot(
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc,
+        DateTimeOffset capturedAtUtc)
+    {
+        return MarketDataSideEffectPreflightSnapshot.NotAvailable(
+            capturedAtUtc,
+            "queue_diagnostics_not_implemented");
+    }
 }
 
 public sealed class MarketDataSideEffectQueue(
@@ -206,14 +219,23 @@ public sealed class MarketDataSideEffectQueue(
         IReadOnlySet<Guid>? eligiblePaperOrderIds)
     {
         var replaceable = IsReplaceable(update, eligiblePaperOrderIds);
+        var enqueuedAtUtc = DateTimeOffset.UtcNow;
+        var executionTrace = new MarketDataSideEffectExecutionTrace(
+            component,
+            update.EventType,
+            update.AssetId,
+            update.ConditionId,
+            receivedAtUtc,
+            enqueuedAtUtc);
         var workItem = new MarketDataSideEffectWorkItem(
             component,
             update,
             activeMarketSnapshot,
             receivedAtUtc,
-            DateTimeOffset.UtcNow,
+            enqueuedAtUtc,
             eligiblePaperOrderIds is { Count: 0 } ? EmptyPaperOrderIds : eligiblePaperOrderIds,
-            replaceable);
+            replaceable,
+            executionTrace);
         var assetKey = GetAssetKey(component, update);
         var shouldSignal = false;
         MarketDataSideEffectEnqueueOutcome outcome;
@@ -387,6 +409,102 @@ public sealed class MarketDataSideEffectQueue(
                 acceptedAfterUtc,
                 expiresBeforeUtc) > 0;
         }
+    }
+
+    public MarketDataSideEffectPreflightSnapshot GetPaperOrderPreflightSnapshot(
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc,
+        DateTimeOffset capturedAtUtc)
+    {
+        if (paperOrderId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(assetId) ||
+            string.IsNullOrWhiteSpace(conditionId) ||
+            acceptedAfterUtc >= expiresBeforeUtc)
+        {
+            return MarketDataSideEffectPreflightSnapshot.NotAvailable(
+                capturedAtUtc,
+                "invalid_order_evidence");
+        }
+
+        string updateWorkerState;
+        lock (lifecycleSync)
+        {
+            updateWorkerState = updateWorkerTask?.Status.ToString() ??
+                MarketDataSideEffectDiagnosticSchema.NotAvailable;
+        }
+
+        lock (updateSync)
+        {
+            var matchingInFlight = IsOutstandingPaperOrderUpdate(
+                inFlightUpdate,
+                paperOrderId,
+                assetId,
+                conditionId,
+                acceptedAfterUtc,
+                expiresBeforeUtc)
+                ? 1
+                : 0;
+            var assetKey = "asset:" + assetId.Trim();
+            var matchingPendingCount = 0;
+            DateTimeOffset? oldestMatchingReceivedAtUtc = matchingInFlight == 1
+                ? inFlightUpdate!.ReceivedAtUtc
+                : null;
+            DateTimeOffset? oldestMatchingEnqueuedAtUtc = matchingInFlight == 1
+                ? inFlightUpdate!.EnqueuedAtUtc
+                : null;
+            if (pendingUpdatesByAsset.TryGetValue(assetKey, out var pending))
+            {
+                foreach (var item in pending.Items)
+                {
+                    if (!IsOutstandingPaperOrderUpdate(
+                            item,
+                            paperOrderId,
+                            assetId,
+                            conditionId,
+                            acceptedAfterUtc,
+                            expiresBeforeUtc))
+                    {
+                        continue;
+                    }
+
+                    matchingPendingCount++;
+                    oldestMatchingReceivedAtUtc = Oldest(
+                        oldestMatchingReceivedAtUtc,
+                        item.ReceivedAtUtc);
+                    oldestMatchingEnqueuedAtUtc = Oldest(
+                        oldestMatchingEnqueuedAtUtc,
+                        item.EnqueuedAtUtc);
+                }
+            }
+
+            return new MarketDataSideEffectPreflightSnapshot(
+                MarketDataSideEffectDiagnosticSchema.Available,
+                null,
+                capturedAtUtc,
+                matchingInFlight + matchingPendingCount,
+                matchingInFlight,
+                matchingPendingCount,
+                oldestMatchingReceivedAtUtc,
+                MarketDataSideEffectPreflightSnapshot.AgeMilliseconds(
+                    capturedAtUtc,
+                    oldestMatchingReceivedAtUtc),
+                oldestMatchingEnqueuedAtUtc,
+                MarketDataSideEffectPreflightSnapshot.AgeMilliseconds(
+                    capturedAtUtc,
+                    oldestMatchingEnqueuedAtUtc),
+                pendingUpdateCount,
+                pendingUpdatesByAsset.Count,
+                updateWorkerState,
+                inFlightUpdate?.ExecutionTrace?.Capture(capturedAtUtc));
+        }
+    }
+
+    private static DateTimeOffset Oldest(DateTimeOffset? current, DateTimeOffset candidate)
+    {
+        return current is null || candidate < current.Value ? candidate : current.Value;
     }
 
     public async Task DrainOutstandingPaperOrderUpdatesAsync(
@@ -568,6 +686,7 @@ public sealed class MarketDataSideEffectQueue(
                 pendingAssetUpdates.Items.RemoveFirst();
                 pendingUpdateCount--;
                 inFlightUpdate = workItem;
+                workItem.ExecutionTrace?.MarkProcessingStarted(DateTimeOffset.UtcNow);
 
                 if (pendingAssetUpdates.Items.Count > 0)
                 {

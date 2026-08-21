@@ -20,6 +20,16 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         var updater = CreateUpdater(scenario.Repository);
         var sourceTimestampUtc = now.AddMilliseconds(-20);
         var receivedAtUtc = now.AddMilliseconds(-10);
+        var trace = new MarketDataSideEffectExecutionTrace(
+            "test-component",
+            MarketDataEventType.LastTradePrice,
+            scenario.Order.AssetId,
+            scenario.Order.ConditionId,
+            receivedAtUtc,
+            now);
+        scenario.Repository.BeforeTryApplyMakerGtdPaperFullFill = (_, _) => Assert.Equal(
+            MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+            trace.Capture(DateTimeOffset.UtcNow).Phase);
 
         await updater.ApplyUpdateAsync(
             LastTradeUpdate(
@@ -27,7 +37,9 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 price: scenario.Order.Price,
                 sourceTimestampUtc,
                 receivedAtUtc),
-            receivedAtUtc);
+            receivedAtUtc,
+            cancellationToken: CancellationToken.None,
+            executionTrace: trace);
 
         var fill = Assert.Single(scenario.Repository.PaperFills);
         Assert.Equal(scenario.Order.Price, fill.Price);
@@ -546,6 +558,27 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(
             scenario.Order.ExpiresAtUtc.AddSeconds(30),
             preflightDeadline.GetProperty("deadline_utc").GetDateTimeOffset());
+        var snapshot = preflightDeadline.GetProperty("diagnostic_snapshot");
+        Assert.Equal(
+            MarketDataSideEffectDiagnosticSchema.Version,
+            snapshot.GetProperty("schema_version").GetString());
+        var handoffSnapshot = snapshot.GetProperty("handoff");
+        Assert.Equal("Available", handoffSnapshot.GetProperty("availability").GetString());
+        Assert.Equal(1, handoffSnapshot.GetProperty("active_market_data_receipt_count").GetInt32());
+        Assert.Equal(
+            "Available",
+            handoffSnapshot.GetProperty("oldest_active_market_data_receipt_availability").GetString());
+        Assert.True(handoffSnapshot.GetProperty("oldest_active_market_data_receipt_age_ms").GetDouble() >= 0d);
+        Assert.False(handoffSnapshot.GetProperty("expiry_admission_active").GetBoolean());
+        Assert.Equal(0, handoffSnapshot.GetProperty("pending_expiry_admission_count").GetInt32());
+        var exactOrderQueue = snapshot.GetProperty("exact_order_queue");
+        Assert.Equal("NotAvailable", exactOrderQueue.GetProperty("availability").GetString());
+        Assert.Equal(
+            "queue_dependency_not_configured",
+            exactOrderQueue.GetProperty("unavailable_reason").GetString());
+        Assert.Equal(0, exactOrderQueue.GetProperty("matching_outstanding_count").GetInt32());
+        Assert.Equal(JsonValueKind.Null, snapshot.GetProperty("global_queue").GetProperty("in_flight_update").ValueKind);
+        Assert.DoesNotContain("order_book", skippedRun.SkipDiagnosticsJson, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             "maker_gtd_expiry_preflight_deadline_exceeded",
             diagnostics.RootElement
@@ -572,6 +605,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
         Assert.Contains("continuous_market_websocket_evidence", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
         Assert.DoesNotContain("preflight_deadline_exceeded", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("diagnostic_snapshot", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -583,7 +617,42 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         var queue = new OutstandingMarketDataSideEffectQueue
         {
             HasOutstandingUpdate = true,
-            BlockDrainUntilCancellation = true
+            BlockDrainUntilCancellation = true,
+            DiagnosticSnapshotFactory = capturedAtUtc =>
+            {
+                var receivedAtUtc = scenario.Order.ExpiresAtUtc.AddMilliseconds(-20);
+                var enqueuedAtUtc = receivedAtUtc.AddMilliseconds(1);
+                var processingStartedAtUtc = enqueuedAtUtc.AddMilliseconds(2);
+                return new MarketDataSideEffectPreflightSnapshot(
+                    MarketDataSideEffectDiagnosticSchema.Available,
+                    null,
+                    capturedAtUtc,
+                    1,
+                    1,
+                    0,
+                    receivedAtUtc,
+                    MarketDataSideEffectPreflightSnapshot.AgeMilliseconds(capturedAtUtc, receivedAtUtc),
+                    enqueuedAtUtc,
+                    MarketDataSideEffectPreflightSnapshot.AgeMilliseconds(capturedAtUtc, enqueuedAtUtc),
+                    0,
+                    0,
+                    TaskStatus.WaitingForActivation.ToString(),
+                    new MarketDataSideEffectExecutionTraceSnapshot(
+                        "MarketWebSocket",
+                        MarketDataEventType.LastTradePrice,
+                        scenario.Order.AssetId,
+                        scenario.Order.ConditionId,
+                        receivedAtUtc,
+                        enqueuedAtUtc,
+                        processingStartedAtUtc,
+                        MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+                        processingStartedAtUtc,
+                        capturedAtUtc,
+                        29_020d,
+                        2d,
+                        29_017d,
+                        29_017d));
+            }
         };
         var handoff = new MakerGtdPaperPlacementHandoff();
         var processor = CreateProcessor(
@@ -616,6 +685,21 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
                 .GetProperty("market_data_failure")
                 .GetProperty("failure_code")
                 .GetString());
+        var preflightDeadline = diagnostics.RootElement.GetProperty("preflight_deadline");
+        var snapshot = preflightDeadline.GetProperty("diagnostic_snapshot");
+        var exactOrderQueue = snapshot.GetProperty("exact_order_queue");
+        Assert.Equal(1, exactOrderQueue.GetProperty("matching_outstanding_count").GetInt32());
+        Assert.Equal(1, exactOrderQueue.GetProperty("matching_in_flight_count").GetInt32());
+        Assert.Equal(0, exactOrderQueue.GetProperty("matching_pending_count").GetInt32());
+        var inFlight = snapshot.GetProperty("global_queue").GetProperty("in_flight_update");
+        Assert.Equal(
+            MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+            inFlight.GetProperty("phase").GetString());
+        Assert.Equal(scenario.Order.AssetId, inFlight.GetProperty("asset_id").GetString());
+        Assert.Equal(scenario.Order.ConditionId, inFlight.GetProperty("condition_id").GetString());
+        Assert.True(inFlight.GetProperty("processing_age_ms").GetDouble() >= 0d);
+        Assert.True(inFlight.GetProperty("phase_age_ms").GetDouble() >= 0d);
+        Assert.DoesNotContain("order_book", skippedRun.SkipDiagnosticsJson, StringComparison.OrdinalIgnoreCase);
 
         var touchReceivedAtUtc = scenario.Order.ExpiresAtUtc.AddMilliseconds(-10);
         await CreateUpdater(scenario.Repository, handoff).ApplyUpdateAsync(
@@ -1698,6 +1782,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
 
         public bool DrainCancellationObserved { get; private set; }
 
+        public Func<DateTimeOffset, MarketDataSideEffectPreflightSnapshot>? DiagnosticSnapshotFactory { get; set; }
+
         public TaskCompletionSource DrainStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -1793,6 +1879,20 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             {
                 HasOutstandingUpdate = false;
             }
+        }
+
+        public MarketDataSideEffectPreflightSnapshot GetPaperOrderPreflightSnapshot(
+            Guid paperOrderId,
+            string assetId,
+            string conditionId,
+            DateTimeOffset acceptedAfterUtc,
+            DateTimeOffset expiresBeforeUtc,
+            DateTimeOffset capturedAtUtc)
+        {
+            return DiagnosticSnapshotFactory?.Invoke(capturedAtUtc) ??
+                MarketDataSideEffectPreflightSnapshot.NotAvailable(
+                    capturedAtUtc,
+                    "test_snapshot_not_configured");
         }
     }
 

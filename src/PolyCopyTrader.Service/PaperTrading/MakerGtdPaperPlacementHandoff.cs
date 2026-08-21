@@ -46,6 +46,36 @@ public interface IMakerGtdPaperPlacementHandoff
         out MakerGtdPaperMarketDataFailure? failure);
 
     void ClearMarketDataFailures(Guid paperOrderId);
+
+    MakerGtdPaperHandoffDiagnosticSnapshot GetPreflightDiagnosticSnapshot(
+        DateTimeOffset capturedAtUtc)
+    {
+        return MakerGtdPaperHandoffDiagnosticSnapshot.NotAvailable(capturedAtUtc);
+    }
+}
+
+public sealed record MakerGtdPaperHandoffDiagnosticSnapshot(
+    string Availability,
+    DateTimeOffset CapturedAtUtc,
+    int ActiveMarketDataReceiptCount,
+    string OldestActiveMarketDataReceiptAvailability,
+    DateTimeOffset? OldestActiveMarketDataReceiptStartedAtUtc,
+    double? OldestActiveMarketDataReceiptAgeMilliseconds,
+    bool ExpiryAdmissionActive,
+    int PendingExpiryAdmissionCount)
+{
+    public static MakerGtdPaperHandoffDiagnosticSnapshot NotAvailable(DateTimeOffset capturedAtUtc)
+    {
+        return new MakerGtdPaperHandoffDiagnosticSnapshot(
+            "NotAvailable",
+            capturedAtUtc,
+            0,
+            "NotAvailable",
+            null,
+            null,
+            false,
+            0);
+    }
 }
 
 public sealed record MakerGtdPaperMarketDataFailure(
@@ -64,6 +94,7 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
     private const int AdmissionStripeCount = 256;
     private const int MaximumTrackedOrderFailures = 16384;
     private const int MaximumUnattributedFailures = 1024;
+    private const int MaximumTrackedConcurrentReceipts = 256;
     private static readonly IReadOnlySet<Guid> EmptyOrderIds = new HashSet<Guid>();
     private readonly SemaphoreSlim[] admissionGates = Enumerable.Range(0, AdmissionStripeCount)
         .Select(_ => new SemaphoreSlim(1, 1))
@@ -77,11 +108,14 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
     private readonly Dictionary<Guid, List<MakerGtdPaperMarketDataFailure>> failuresByOrderId = [];
     private readonly HashSet<Guid> knownMakerGtdPaperOrderIds = [];
     private readonly List<MakerGtdPaperMarketDataFailure> unattributedFailures = [];
+    private readonly DateTimeOffset?[] activeMarketDataReceiptStarts =
+        new DateTimeOffset?[MaximumTrackedConcurrentReceipts];
     private DateTimeOffset? failureHistoryIncompleteFromUtc;
     private DateTimeOffset? failureHistoryIncompleteThroughUtc;
     private TaskCompletionSource<bool>? receiptAdmissionSignal;
     private bool expiryAdmissionActive;
     private int activeMarketDataReceipts;
+    private int untrackedActiveMarketDataReceipts;
     private int trackedOrderFailureCount;
 
     public async ValueTask<IMakerGtdPaperPlacementAdmission> EnterPlacementAdmissionAsync(
@@ -156,8 +190,19 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
             {
                 if (!expiryAdmissionActive && pendingExpiryAdmissions.Count == 0)
                 {
+                    var startedAtUtc = DateTimeOffset.UtcNow;
+                    var trackingSlot = FindAvailableReceiptTrackingSlot();
+                    if (trackingSlot >= 0)
+                    {
+                        activeMarketDataReceiptStarts[trackingSlot] = startedAtUtc;
+                    }
+                    else
+                    {
+                        untrackedActiveMarketDataReceipts++;
+                    }
+
                     activeMarketDataReceipts++;
-                    return new MarketDataReceiptLease(this);
+                    return new MarketDataReceiptLease(this, trackingSlot);
                 }
 
                 receiptAdmissionSignal ??= new TaskCompletionSource<bool>(
@@ -203,6 +248,56 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
             expiryAdmissionActive = true;
             return new ExpiryAdmissionLease(this);
         }
+    }
+
+    public MakerGtdPaperHandoffDiagnosticSnapshot GetPreflightDiagnosticSnapshot(
+        DateTimeOffset capturedAtUtc)
+    {
+        lock (receiptExpirySync)
+        {
+            var oldestStartedAtUtc = untrackedActiveMarketDataReceipts == 0
+                ? GetOldestTrackedReceiptStart()
+                : null;
+            return new MakerGtdPaperHandoffDiagnosticSnapshot(
+                "Available",
+                capturedAtUtc,
+                activeMarketDataReceipts,
+                untrackedActiveMarketDataReceipts == 0 ? "Available" : "NotAvailable",
+                oldestStartedAtUtc,
+                oldestStartedAtUtc is { } startedAtUtc
+                    ? Math.Max(0d, (capturedAtUtc - startedAtUtc).TotalMilliseconds)
+                    : null,
+                expiryAdmissionActive,
+                pendingExpiryAdmissions.Count);
+        }
+    }
+
+    private int FindAvailableReceiptTrackingSlot()
+    {
+        for (var index = 0; index < activeMarketDataReceiptStarts.Length; index++)
+        {
+            if (activeMarketDataReceiptStarts[index] is null)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private DateTimeOffset? GetOldestTrackedReceiptStart()
+    {
+        DateTimeOffset? oldest = null;
+        foreach (var startedAtUtc in activeMarketDataReceiptStarts)
+        {
+            if (startedAtUtc is { } candidate &&
+                (oldest is null || candidate < oldest.Value))
+            {
+                oldest = candidate;
+            }
+        }
+
+        return oldest;
     }
 
     public IReadOnlySet<Guid> GetPendingOrderIds(string assetId)
@@ -475,13 +570,21 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
         return assetId.Trim();
     }
 
-    private ValueTask CompleteMarketDataReceiptAsync()
+    private ValueTask CompleteMarketDataReceiptAsync(int trackingSlot)
     {
         lock (receiptExpirySync)
         {
             if (activeMarketDataReceipts > 0)
             {
                 activeMarketDataReceipts--;
+                if (trackingSlot >= 0 && trackingSlot < activeMarketDataReceiptStarts.Length)
+                {
+                    activeMarketDataReceiptStarts[trackingSlot] = null;
+                }
+                else if (untrackedActiveMarketDataReceipts > 0)
+                {
+                    untrackedActiveMarketDataReceipts--;
+                }
             }
 
             TryGrantNextExpiryAdmissionUnderLock();
@@ -648,7 +751,9 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
         }
     }
 
-    private sealed class MarketDataReceiptLease(MakerGtdPaperPlacementHandoff owner) : IAsyncDisposable
+    private sealed class MarketDataReceiptLease(
+        MakerGtdPaperPlacementHandoff owner,
+        int trackingSlot) : IAsyncDisposable
     {
         private MakerGtdPaperPlacementHandoff? currentOwner = owner;
 
@@ -657,7 +762,7 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
             var capturedOwner = Interlocked.Exchange(ref currentOwner, null);
             return capturedOwner is null
                 ? ValueTask.CompletedTask
-                : capturedOwner.CompleteMarketDataReceiptAsync();
+                : capturedOwner.CompleteMarketDataReceiptAsync(trackingSlot);
         }
     }
 
@@ -729,6 +834,12 @@ internal sealed class NoOpMakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacemen
         CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult<IAsyncDisposable>(NoOpLease.Instance);
+    }
+
+    public MakerGtdPaperHandoffDiagnosticSnapshot GetPreflightDiagnosticSnapshot(
+        DateTimeOffset capturedAtUtc)
+    {
+        return MakerGtdPaperHandoffDiagnosticSnapshot.NotAvailable(capturedAtUtc);
     }
 
     public IAsyncDisposable? TryEnterExpiryAdmission()

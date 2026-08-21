@@ -1000,6 +1000,29 @@ public sealed class PaperTradingProcessor(
             var terminalEvaluatedAtUtc = preflightTimeoutDetail is null
                 ? evaluatedAtUtc
                 : clock.GetUtcNow();
+            MakerGtdPaperHandoffDiagnosticSnapshot? handoffDiagnosticSnapshot = null;
+            MarketDataSideEffectPreflightSnapshot? sideEffectDiagnosticSnapshot = null;
+            if (preflightTimeoutDetail is not null)
+            {
+                handoffDiagnosticSnapshot = makerGtdHandoff.GetPreflightDiagnosticSnapshot(
+                    terminalEvaluatedAtUtc);
+                sideEffectDiagnosticSnapshot = marketDataSideEffectQueue is null
+                    ? MarketDataSideEffectPreflightSnapshot.NotAvailable(
+                        terminalEvaluatedAtUtc,
+                        "queue_dependency_not_configured")
+                    : !hasOrderEvidence || orderEvidence is null
+                        ? MarketDataSideEffectPreflightSnapshot.NotAvailable(
+                            terminalEvaluatedAtUtc,
+                            "order_evidence_unavailable")
+                        : marketDataSideEffectQueue.GetPaperOrderPreflightSnapshot(
+                            order.Id,
+                            order.AssetId,
+                            order.ConditionId,
+                            orderEvidence.AcceptedAtUtc,
+                            order.ExpiresAtUtc,
+                            terminalEvaluatedAtUtc);
+            }
+
             var expiredOrder = order with
             {
                 Status = PaperOrderStatus.Expired,
@@ -1024,7 +1047,60 @@ public sealed class PaperTradingProcessor(
                         {
                             phase = preflightTimeoutDetail,
                             deadline_utc = preflightDeadlineUtc,
-                            stale_after_seconds = staleAfterSeconds
+                            stale_after_seconds = staleAfterSeconds,
+                            diagnostic_snapshot = new
+                            {
+                                schema_version = MarketDataSideEffectDiagnosticSchema.Version,
+                                captured_at_utc = terminalEvaluatedAtUtc,
+                                handoff = new
+                                {
+                                    availability = handoffDiagnosticSnapshot!.Availability,
+                                    active_market_data_receipt_count = handoffDiagnosticSnapshot.ActiveMarketDataReceiptCount,
+                                    oldest_active_market_data_receipt_availability = handoffDiagnosticSnapshot.OldestActiveMarketDataReceiptAvailability,
+                                    oldest_active_market_data_receipt_started_at_utc = handoffDiagnosticSnapshot.OldestActiveMarketDataReceiptStartedAtUtc,
+                                    oldest_active_market_data_receipt_age_ms = handoffDiagnosticSnapshot.OldestActiveMarketDataReceiptAgeMilliseconds,
+                                    expiry_admission_active = handoffDiagnosticSnapshot.ExpiryAdmissionActive,
+                                    pending_expiry_admission_count = handoffDiagnosticSnapshot.PendingExpiryAdmissionCount
+                                },
+                                exact_order_queue = new
+                                {
+                                    availability = sideEffectDiagnosticSnapshot!.Availability,
+                                    unavailable_reason = sideEffectDiagnosticSnapshot.UnavailableReason,
+                                    matching_outstanding_count = sideEffectDiagnosticSnapshot.MatchingOutstandingCount,
+                                    matching_in_flight_count = sideEffectDiagnosticSnapshot.MatchingInFlightCount,
+                                    matching_pending_count = sideEffectDiagnosticSnapshot.MatchingPendingCount,
+                                    oldest_matching_received_at_utc = sideEffectDiagnosticSnapshot.OldestMatchingReceivedAtUtc,
+                                    oldest_matching_received_age_ms = sideEffectDiagnosticSnapshot.OldestMatchingReceivedAgeMilliseconds,
+                                    oldest_matching_enqueued_at_utc = sideEffectDiagnosticSnapshot.OldestMatchingEnqueuedAtUtc,
+                                    oldest_matching_enqueued_age_ms = sideEffectDiagnosticSnapshot.OldestMatchingEnqueuedAgeMilliseconds
+                                },
+                                global_queue = new
+                                {
+                                    availability = sideEffectDiagnosticSnapshot!.Availability,
+                                    total_pending_updates = sideEffectDiagnosticSnapshot.TotalPendingUpdates,
+                                    tracked_assets = sideEffectDiagnosticSnapshot.TrackedAssets,
+                                    update_worker_state = sideEffectDiagnosticSnapshot.UpdateWorkerState,
+                                    in_flight_update = sideEffectDiagnosticSnapshot.InFlightUpdate is not { } inFlight
+                                        ? null
+                                        : new
+                                        {
+                                            component = inFlight.Component,
+                                            event_type = inFlight.EventType.ToString(),
+                                            asset_id = inFlight.AssetId,
+                                            condition_id = inFlight.ConditionId,
+                                            received_at_utc = inFlight.ReceivedAtUtc,
+                                            enqueued_at_utc = inFlight.EnqueuedAtUtc,
+                                            processing_started_at_utc = inFlight.ProcessingStartedAtUtc,
+                                            phase = inFlight.Phase,
+                                            phase_entered_at_utc = inFlight.PhaseEnteredAtUtc,
+                                            captured_at_utc = inFlight.CapturedAtUtc,
+                                            received_age_ms = inFlight.ReceivedAgeMilliseconds,
+                                            queue_age_ms = inFlight.QueueAgeMilliseconds,
+                                            processing_age_ms = inFlight.ProcessingAgeMilliseconds,
+                                            phase_age_ms = inFlight.PhaseAgeMilliseconds
+                                        }
+                                }
+                            }
                         },
                     market_data_failure = marketDataFailure is null
                         ? null

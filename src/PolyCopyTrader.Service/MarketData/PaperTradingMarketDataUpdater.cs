@@ -31,19 +31,22 @@ public sealed class PaperTradingMarketDataUpdater(
         MarketDataUpdate update,
         DateTimeOffset? receivedAtUtc = null,
         IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        MarketDataSideEffectExecutionTrace? executionTrace = null)
     {
         if (string.IsNullOrWhiteSpace(update.AssetId))
         {
             return;
         }
 
+        executionTrace?.EnterPhase(MarketDataSideEffectPhases.WaitForPublication, DateTimeOffset.UtcNow);
         await makerGtdHandoff.WaitForPublicationAsync(
             eligiblePaperOrderIds,
             cancellationToken);
 
         var operationStarted = Stopwatch.GetTimestamp();
         var lockWaitStarted = Stopwatch.GetTimestamp();
+        executionTrace?.EnterPhase(MarketDataSideEffectPhases.WaitForSerializationLock, DateTimeOffset.UtcNow);
         await sync.WaitAsync(cancellationToken);
         var lockWaitDuration = Stopwatch.GetElapsedTime(lockWaitStarted);
         if (lockWaitDuration >= TimeSpan.FromSeconds(1))
@@ -63,6 +66,7 @@ public sealed class PaperTradingMarketDataUpdater(
         {
             if (update.MarketResolved)
             {
+                executionTrace?.EnterPhase(MarketDataSideEffectPhases.SettleMarketResolution, DateTimeOffset.UtcNow);
                 phase = "SettleMarketResolution";
                 operation = "PaperSettlementProcessor.SettleMarketResolution";
                 await paperSettlementProcessor.SettleMarketResolutionAsync(
@@ -78,6 +82,7 @@ public sealed class PaperTradingMarketDataUpdater(
             }
 
             var observedAtUtc = receivedAtUtc ?? DateTimeOffset.UtcNow;
+            executionTrace?.EnterPhase(MarketDataSideEffectPhases.LoadExposureSnapshot, DateTimeOffset.UtcNow);
             phase = "LoadExposureSnapshot";
             operation = "ExposureSnapshotCache.GetSnapshot";
             var exposure = await exposureCache.GetSnapshotAsync(cancellationToken);
@@ -100,6 +105,7 @@ public sealed class PaperTradingMarketDataUpdater(
                 paperOrderId = order.Id;
                 if (MakerGtdPaperExecutionContract.IsMakerGtdOrder(order))
                 {
+                    executionTrace?.EnterPhase(MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate, DateTimeOffset.UtcNow);
                     phase = "ApplyMakerGtdPaperUpdate";
                     operation = "IAppRepository.TryApplyMakerGtdPaperFullFill";
                     await TryApplyMakerGtdPaperUpdateAsync(
@@ -112,6 +118,7 @@ public sealed class PaperTradingMarketDataUpdater(
                     continue;
                 }
 
+                executionTrace?.EnterPhase(MarketDataSideEffectPhases.ApplyOrdinaryPaperUpdate, DateTimeOffset.UtcNow);
                 phase = "LoadPaperFills";
                 operation = "IAppRepository.GetPaperFillsForOrder";
                 var existingFills = await repository.GetPaperFillsForOrderAsync(order.Id, cancellationToken);
@@ -231,6 +238,7 @@ public sealed class PaperTradingMarketDataUpdater(
 
             if (update.OrderBookSnapshot?.BestBid is { } bestBid)
             {
+                executionTrace?.EnterPhase(MarketDataSideEffectPhases.UpdatePositionMarks, DateTimeOffset.UtcNow);
                 paperOrderId = null;
                 phase = "UpdatePositionMarks";
                 operation = "IAppRepository.TryUpdatePaperPositionMarks";

@@ -3,7 +3,7 @@
   "contractId": "RC-20260821-maker-preflight-phase-telemetry",
   "title": "Persist bounded Maker expiry preflight phase telemetry",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -69,8 +69,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperPlacementHandoffTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Deterministic tests prove bounded handoff/queue snapshots and exact persisted JSON for both timeout phases without changing terminal outcomes or successful pre-deadline behavior.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Fresh amended-tree focused TRX D:\\CodexTemp\\runs\\manual-dcacdf7e3d244b70b4a6ed97a4dfb086\\results\\focused\\focused-review-fix.trx passed 85/85 with 0 failed and 0 skipped. Deterministic tests prove exact receipt count/oldest state including R1/R2/R3 overlap and explicit bounded overflow, pending versus in-flight exact-order queue counts, both timeout JSON shapes, scalar-only content, and ordinary-expiry non-interference."
         }
       ]
     },
@@ -107,24 +107,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Focused phase, timeout, worker-isolation, and exact-family regressions pass and prove phase reporting is observational only.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Fresh amended-tree regression TRX D:\\CodexTemp\\runs\\manual-dcacdf7e3d244b70b4a6ed97a4dfb086\\results\\regression\\regression-review-fix.trx passed 78/78 with 0 failed and 0 skipped. It covers updater publication/serialization/Maker/settlement/position phases, queue/lifecycle behavior, Paper worker isolation, and exact Reference Average Maker-GTD family regressions."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "The complete solution builds with zero errors; warnings are reported exactly.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Fresh post-review-fix complete Debug solution build succeeded with 0 errors. The final incremental build reported 6 pre-existing warnings, all in unrelated PaperFakFeeBackfillProcessor, BtcUpDown5mPaperStrategyProcessorTests, and HistoricalGrossNetDonorMatcherTests paths; the clean restore build reported the established 126-warning baseline. Artifacts are under D:\\CodexTemp\\runs\\manual-dcacdf7e3d244b70b4a6ed97a4dfb086\\artifacts\\solution-build."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Inspect the complete diff, run git diff --check and WorkingTree/Staged/approval-parent Range requirement validation, and obtain independent semantic review against both verbatim prompts, the approved contract, the actual diff, and final evidence.",
           "expected": "Only approved paths change; no execution, expiry, queue scheduling, schema, configuration, production, Live, or unrelated dirty-worktree behavior changes; reviewer verdict is pass with no findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/reviewer compared the verbatim prompts, approved contract/digest, complete amended diff including the new diagnostics file, fresh tests/build evidence, lock ordering, boundedness, timeout-only persistence, and unrelated dirty files. The reviewer returned PASS with no open findings after identifying and verifying correction of overlapping-receipt oldest-age tracking. git diff --check and pending-evidence WorkingTree validation passed; final WorkingTree, Staged, and approval-parent Range gates are completed by the commit workflow."
         }
       ]
     }
@@ -139,8 +139,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

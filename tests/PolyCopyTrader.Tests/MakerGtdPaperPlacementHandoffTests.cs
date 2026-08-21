@@ -120,6 +120,106 @@ public sealed class MakerGtdPaperPlacementHandoffTests
     }
 
     [Fact]
+    public async Task PreflightSnapshot_ReportsBoundedReceiptAndExpiryAdmissionState()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var beforeReceiptUtc = DateTimeOffset.UtcNow;
+        var activeReceipt = await handoff.EnterMarketDataReceiptAsync();
+        var expiryTask = handoff.EnterExpiryAdmissionAsync().AsTask();
+        var capturedAtUtc = DateTimeOffset.UtcNow;
+
+        var snapshot = handoff.GetPreflightDiagnosticSnapshot(capturedAtUtc);
+
+        Assert.Equal("Available", snapshot.Availability);
+        Assert.Equal(capturedAtUtc, snapshot.CapturedAtUtc);
+        Assert.Equal(1, snapshot.ActiveMarketDataReceiptCount);
+        Assert.Equal("Available", snapshot.OldestActiveMarketDataReceiptAvailability);
+        Assert.InRange(
+            snapshot.OldestActiveMarketDataReceiptStartedAtUtc!.Value,
+            beforeReceiptUtc,
+            capturedAtUtc);
+        Assert.NotNull(snapshot.OldestActiveMarketDataReceiptAgeMilliseconds);
+        Assert.True(snapshot.OldestActiveMarketDataReceiptAgeMilliseconds >= 0d);
+        Assert.False(snapshot.ExpiryAdmissionActive);
+        Assert.Equal(1, snapshot.PendingExpiryAdmissionCount);
+
+        await activeReceipt.DisposeAsync();
+        await using var expiryAdmission = await expiryTask;
+        var expirySnapshot = handoff.GetPreflightDiagnosticSnapshot(DateTimeOffset.UtcNow);
+        Assert.Equal(0, expirySnapshot.ActiveMarketDataReceiptCount);
+        Assert.Equal("Available", expirySnapshot.OldestActiveMarketDataReceiptAvailability);
+        Assert.Null(expirySnapshot.OldestActiveMarketDataReceiptStartedAtUtc);
+        Assert.True(expirySnapshot.ExpiryAdmissionActive);
+        Assert.Equal(0, expirySnapshot.PendingExpiryAdmissionCount);
+    }
+
+    [Fact]
+    public void NoOpHandoff_PreflightSnapshot_IsExplicitlyNotAvailable()
+    {
+        var capturedAtUtc = DateTimeOffset.UtcNow;
+
+        var snapshot = NoOpMakerGtdPaperPlacementHandoff.Instance
+            .GetPreflightDiagnosticSnapshot(capturedAtUtc);
+
+        Assert.Equal("NotAvailable", snapshot.Availability);
+        Assert.Equal(capturedAtUtc, snapshot.CapturedAtUtc);
+        Assert.Equal(0, snapshot.ActiveMarketDataReceiptCount);
+        Assert.Equal("NotAvailable", snapshot.OldestActiveMarketDataReceiptAvailability);
+        Assert.Null(snapshot.OldestActiveMarketDataReceiptStartedAtUtc);
+        Assert.False(snapshot.ExpiryAdmissionActive);
+        Assert.Equal(0, snapshot.PendingExpiryAdmissionCount);
+    }
+
+    [Fact]
+    public async Task PreflightSnapshot_OverlappingReceiptsRetainsTheTrueOldestStart()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var firstReceipt = await handoff.EnterMarketDataReceiptAsync();
+        await using var secondReceipt = await handoff.EnterMarketDataReceiptAsync();
+
+        await firstReceipt.DisposeAsync();
+        var afterFirstCompleted = handoff.GetPreflightDiagnosticSnapshot(DateTimeOffset.UtcNow);
+        var secondReceiptStartedAtUtc = Assert.IsType<DateTimeOffset>(
+            afterFirstCompleted.OldestActiveMarketDataReceiptStartedAtUtc);
+        await using var thirdReceipt = await handoff.EnterMarketDataReceiptAsync();
+
+        var withThirdReceipt = handoff.GetPreflightDiagnosticSnapshot(DateTimeOffset.UtcNow);
+
+        Assert.Equal(2, withThirdReceipt.ActiveMarketDataReceiptCount);
+        Assert.Equal("Available", withThirdReceipt.OldestActiveMarketDataReceiptAvailability);
+        Assert.Equal(secondReceiptStartedAtUtc, withThirdReceipt.OldestActiveMarketDataReceiptStartedAtUtc);
+        Assert.True(withThirdReceipt.OldestActiveMarketDataReceiptAgeMilliseconds >= 0d);
+    }
+
+    [Fact]
+    public async Task PreflightSnapshot_TrackingCapacityExceeded_ReportsUnknownOldestWithoutLosingCount()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var receipts = new List<IAsyncDisposable>();
+        try
+        {
+            for (var index = 0; index < 257; index++)
+            {
+                receipts.Add(await handoff.EnterMarketDataReceiptAsync());
+            }
+
+            var snapshot = handoff.GetPreflightDiagnosticSnapshot(DateTimeOffset.UtcNow);
+
+            Assert.Equal(257, snapshot.ActiveMarketDataReceiptCount);
+            Assert.Equal("NotAvailable", snapshot.OldestActiveMarketDataReceiptAvailability);
+            Assert.Null(snapshot.OldestActiveMarketDataReceiptStartedAtUtc);
+            Assert.Null(snapshot.OldestActiveMarketDataReceiptAgeMilliseconds);
+        }
+        finally
+        {
+            foreach (var receipt in receipts)
+            {
+                await receipt.DisposeAsync();
+            }
+        }
+    }
+
+    [Fact]
     public void FailureLookup_UsesStrictLifetimeExactIdentityAndClear()
     {
         var handoff = new MakerGtdPaperPlacementHandoff();
