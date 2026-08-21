@@ -24,7 +24,7 @@
       "Replace unconditional execution of the complete PostgresSchema.SchemaSql on every service start with a durable versioned schema-migration history and ordered pending-migration runner.",
       "Treat the exact committed schema at parent revision a3b0457fc113fc5ef482aabd5c090c3162045001 as immutable legacy baseline version 1; the unrelated uncommitted ix_signals_trader_wallet_id working-tree change is not part of this baseline or this contract.",
       "On a genuinely empty application database, execute the legacy baseline exactly once, record its semantic checksum only after success, and execute only later pending migrations on subsequent starts.",
-      "On the existing production database, automatically verify exact legacy-baseline eligibility from the prior successful service initialization evidence for build b661b473641508ef48ca5b84f0b7baa10a36352c plus required terminal schema sentinels, then transactionally create the migration-history table and record the baseline without executing legacy schema statements again.",
+      "On the existing production database, automatically verify exact legacy-baseline eligibility from the current successful service initialization evidence for build a3b0457fc113fc5ef482aabd5c090c3162045001 plus required terminal schema sentinels, then transactionally create the migration-history table and record the baseline without executing legacy schema statements again.",
       "Reject automatic baseline registration for a non-empty database that does not match the exact approved legacy evidence; do not execute the legacy baseline or mark it applied in that state.",
       "Record a migration as applied only after its SQL succeeds, leave a failed migration pending, reject an applied migration whose stored checksum differs from code, and prevent two concurrent initializers from executing the same migration.",
       "Make an ordinary no-pending-migration startup perform only bounded migration metadata reads and no DDL against application tables.",
@@ -38,7 +38,7 @@
       "Silently accepting a partially initialized, unknown-version, checksum-mismatched, or otherwise unverified existing database as the legacy baseline."
     ],
     "mode": "local-edit",
-    "periodOrFilter": "Service startup schema initialization only; exact legacy baseline is repository parent a3b0457fc113fc5ef482aabd5c090c3162045001 and existing production eligibility is tied to prior successful build b661b473641508ef48ca5b84f0b7baa10a36352c.",
+    "periodOrFilter": "Service startup schema initialization only; exact legacy baseline is repository parent a3b0457fc113fc5ef482aabd5c090c3162045001 and existing production eligibility is tied to the currently verified successful build a3b0457fc113fc5ef482aabd5c090c3162045001.",
     "firstVerification": "Inspect PostgresSchemaInitializer, the complete composed PostgresSchema SQL, startup ordering, existing schema_data_migrations behavior, current production heartbeat/migration/sentinel evidence read-only, relevant tests, and the exact unrelated dirty diff before implementation."
   },
   "requirements": [
@@ -69,8 +69,8 @@
           "kind": "test",
           "command": "Run focused PostgresSchemaMigrationTests under the marked D:\\CodexTemp run.",
           "expected": "Tests prove deterministic ordering, duplicate rejection, applied-same-checksum skip, checksum-mismatch failure, success-only recording, failed-migration retry eligibility, and zero application DDL on a no-pending second initialization.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "2026-08-21 isolated PostgreSQL focused run passed 8/8; covered ordering/duplicates, no-replay second start, checksum/unknown/gap rejection, rollback/retry, and pending-only history. TRX was stored under the marked D:\\CodexTemp run before protected cleanup."
         }
       ]
     },
@@ -85,7 +85,7 @@
       "sourceQuote": "однократного безопасного перехода существующей production-БД на baseline",
       "acceptanceCriteria": [
         "Legacy baseline version 1 is bound to a semantic SHA-256 checksum of the exact committed composed PostgresSchema SQL at parent a3b0457fc113fc5ef482aabd5c090c3162045001 and excludes unrelated uncommitted working-tree schema changes.",
-        "Automatic existing-production baseline registration requires a non-empty database, the exact prior successful service build b661b473641508ef48ca5b84f0b7baa10a36352c in service_heartbeats, the latest required schema_data_migrations marker, and exact terminal relation/function/trigger sentinels proving the previous initializer reached the end of the composed schema.",
+        "Automatic existing-production baseline registration requires a non-empty database, the exact currently verified successful service build a3b0457fc113fc5ef482aabd5c090c3162045001 in service_heartbeats, the latest required schema_data_migrations marker, and exact terminal relation/function/trigger sentinels proving the previous initializer reached the end of the composed schema.",
         "Baseline eligibility is verified before legacy application schema SQL runs; an eligibility mismatch stops initialization with a specific diagnostic and records no baseline row.",
         "History-table creation and the baseline marker are committed together only after eligibility passes, so a failed eligibility check does not leave a baseline marker.",
         "Once recorded, later starts validate the baseline identifier/checksum from history and do not repeat production baseline eligibility queries or execute legacy schema SQL.",
@@ -103,16 +103,16 @@
           "kind": "test",
           "command": "Run isolated PostgreSQL migration integration tests against an ephemeral PostgreSQL data directory inside the marked D:\\CodexTemp run.",
           "expected": "An empty database applies and records baseline once; a second start executes no baseline DDL; an eligible legacy database records baseline without replay; an ineligible or partial database records nothing and fails explicitly.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Ephemeral PostgreSQL 17 at 127.0.0.1:55439 passed empty full-baseline bootstrap plus unchanged second start, exact eligible existing baseline without legacy replay, partial relation rejection, and function-only/type-only public-schema rejection; focused total 8/8."
         },
         {
           "id": "VER-003",
           "kind": "runtime",
           "command": "Run bounded UTC READ ONLY queries only against 192.168.0.101:5432/polycopytrader for exact heartbeat build, schema_data_migrations marker, terminal sentinels, current migration-history absence, locks, and object counts; perform no production mutation.",
           "expected": "The preview reports exact identifiers/counts and proves whether current production satisfies the contract's automatic baseline eligibility without creating or updating any row or schema object.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Atomic cutoff 2026-08-21T20:28:08.668978Z on exact 192.168.0.101:5432/polycopytrader, PostgreSQL 18.3 primary, UTC REPEATABLE READ READ ONLY, statement_timeout=15s: heartbeat Running/Live on exact a3b0457fc113fc5ef482aabd5c090c3162045001 with last_error NULL; schema_migration_history absent; required data marker count 1; all four required relations present; exact terminal triggers matched tgtype 29/O and tgtype 8/O with old_paper_positions; application_object_count=797; ungranted locks=0; migration advisory locks=0; lock-waiter sessions=0. No production mutation occurred."
         }
       ]
     },
@@ -143,8 +143,8 @@
           "kind": "test",
           "command": "Run focused concurrency, failure, cancellation, transaction-mode, and log-redaction migration tests under the marked D:\\CodexTemp run.",
           "expected": "Only one initializer can execute migrations; failures and cancellation release coordination state; no ambiguous migration is marked applied; diagnostics contain identifiers but no secret-bearing connection string or raw SQL payload.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused isolated suite passed 8/8. It proves contention rejection, independent pre-opened-session advisory-lock availability after both PostgreSQL failure and cancellation, transactional rollback, non-transactional completion checks, and suppression of raw database marker/connection string from Console and escaped host exception."
         }
       ]
     },
@@ -176,8 +176,8 @@
           "kind": "build",
           "command": "Build PolyCopyTrader.sln with temporary outputs under the marked D:\\CodexTemp run.",
           "expected": "The complete solution builds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Complete Debug PolyCopyTrader.sln build under the marked D:\\CodexTemp run completed with 0 errors and 126 pre-existing warnings."
         },
         {
           "id": "VER-006",
@@ -185,7 +185,7 @@
           "command": "Compare pre-task and post-task hashes/diffs for unrelated dirty files, inspect governed diffs, run requirement validation in WorkingTree and Staged modes, and obtain independent semantic review.",
           "expected": "Unrelated dirty edits are unchanged and outside commits; every governed path maps to this contract; validators pass; reviewer returns PASS with no findings.",
           "result": "pending",
-          "evidence": "pending"
+          "evidence": "Unrelated dirty files remain unstaged and byte-for-diff restored: PostgresSchema.cs F9B3C5336A269798B3B68001769E84B24B0A18AEFC0A778A538253EC030E8D25; StorageTests.cs EFD6E40FB486FD71FD6AE44DA59C3A5336E81C9B31922A1C9E39243EB74C8D6E. Reviewer reports no remaining code finding but cannot issue final PASS until VER-003 production evidence exists; validators/staged commit therefore remain pending."
         }
       ]
     }
@@ -195,8 +195,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260821-versioned-schema-migrations sha256:17e174ebd90ee8ca1e9210acf950d7c40cbd41c92c6484a4ebeeb4963939d34b",
-    "semanticDigest": "sha256:17e174ebd90ee8ca1e9210acf950d7c40cbd41c92c6484a4ebeeb4963939d34b"
+    "evidenceText": "APPROVE RC-20260821-versioned-schema-migrations sha256:b9a86624444228a2c81b361f2382e4461370c6be49855ff169ff214ac092b719",
+    "semanticDigest": "sha256:b9a86624444228a2c81b361f2382e4461370c6be49855ff169ff214ac092b719"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
