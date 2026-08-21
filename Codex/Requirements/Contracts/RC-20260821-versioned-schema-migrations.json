@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260821-versioned-schema-migrations",
+  "title": "Apply only pending PostgreSQL schema migrations at service startup",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "А мы можем сделать так, чтобы при старте сервиса не применялись заново все миграции, а только те, которые ещё не применились?"
+    },
+    {
+      "source": "user",
+      "text": "Я не понимаю: однократного безопасного перехода существующей production-БД на baseline &#x20;"
+    },
+    {
+      "source": "user",
+      "text": "Ок, сделай"
+    }
+  ],
+  "scope": {
+    "goal": "Change PolyCopyTrader service startup so an already applied PostgreSQL schema baseline or migration is never executed again and only unapplied ordered migrations run.",
+    "inScope": [
+      "Replace unconditional execution of the complete PostgresSchema.SchemaSql on every service start with a durable versioned schema-migration history and ordered pending-migration runner.",
+      "Treat the exact committed schema at parent revision a3b0457fc113fc5ef482aabd5c090c3162045001 as immutable legacy baseline version 1; the unrelated uncommitted ix_signals_trader_wallet_id working-tree change is not part of this baseline or this contract.",
+      "On a genuinely empty application database, execute the legacy baseline exactly once, record its semantic checksum only after success, and execute only later pending migrations on subsequent starts.",
+      "On the existing production database, automatically verify exact legacy-baseline eligibility from the prior successful service initialization evidence for build b661b473641508ef48ca5b84f0b7baa10a36352c plus required terminal schema sentinels, then transactionally create the migration-history table and record the baseline without executing legacy schema statements again.",
+      "Reject automatic baseline registration for a non-empty database that does not match the exact approved legacy evidence; do not execute the legacy baseline or mark it applied in that state.",
+      "Record a migration as applied only after its SQL succeeds, leave a failed migration pending, reject an applied migration whose stored checksum differs from code, and prevent two concurrent initializers from executing the same migration.",
+      "Make an ordinary no-pending-migration startup perform only bounded migration metadata reads and no DDL against application tables.",
+      "Add focused unit and isolated PostgreSQL integration coverage, update startup documentation, and preserve unrelated dirty working-tree changes byte-for-diff and outside this task's commits."
+    ],
+    "outOfScope": [
+      "Deploying or starting the new build, restarting or stopping production services, or directly creating or updating the production migration-history table in this implementation task.",
+      "Applying, committing, moving, redesigning, or creating the unrelated pending ix_signals_trader_wallet_id index or completing RC-20260820-add-signals-trader-wallet-index.",
+      "Changing existing application tables, strategy catalog data, historical schema_data_migrations rows, trading behavior, Paper/Live execution, strategies, orders, configuration, or Dashboard calculations.",
+      "Deleting or rewriting the legacy PostgresSchema SQL, converting every historical schema_data_migrations row into a new migration, creating a backup, or introducing an external migration framework or non-.NET sidecar.",
+      "Silently accepting a partially initialized, unknown-version, checksum-mismatched, or otherwise unverified existing database as the legacy baseline."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Service startup schema initialization only; exact legacy baseline is repository parent a3b0457fc113fc5ef482aabd5c090c3162045001 and existing production eligibility is tied to prior successful build b661b473641508ef48ca5b84f0b7baa10a36352c.",
+    "firstVerification": "Inspect PostgresSchemaInitializer, the complete composed PostgresSchema SQL, startup ordering, existing schema_data_migrations behavior, current production heartbeat/migration/sentinel evidence read-only, relevant tests, and the exact unrelated dirty diff before implementation."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Service startup must execute only schema migrations that are not already recorded as successfully applied.",
+      "sourceRequestIndexes": [
+        0,
+        2
+      ],
+      "sourceQuote": "только те, которые ещё не применились",
+      "acceptanceCriteria": [
+        "A durable public.schema_migration_history table stores a stable migration identifier, semantic SHA-256 checksum, applied UTC timestamp, and non-secret details for each applied baseline or migration.",
+        "The migration catalog has deterministic ordering and rejects duplicate identifiers before any migration SQL runs.",
+        "An applied identifier with the same checksum is skipped without executing its SQL; an applied identifier with a different checksum stops initialization before any pending migration runs.",
+        "A pending transactional migration executes once and its history row is committed atomically with its successful SQL; failure rolls back the SQL and leaves no applied row.",
+        "A no-pending startup issues no CREATE, ALTER, DROP, data-migration DO block, strategy seed, trigger replacement, or other PostgresSchema application-table statement."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused PostgresSchemaMigrationTests under the marked D:\\CodexTemp run.",
+          "expected": "Tests prove deterministic ordering, duplicate rejection, applied-same-checksum skip, checksum-mismatch failure, success-only recording, failed-migration retry eligibility, and zero application DDL on a no-pending second initialization.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "The exact existing production schema must be registered once as an already applied legacy baseline without replaying its schema SQL.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        2
+      ],
+      "sourceQuote": "однократного безопасного перехода существующей production-БД на baseline",
+      "acceptanceCriteria": [
+        "Legacy baseline version 1 is bound to a semantic SHA-256 checksum of the exact committed composed PostgresSchema SQL at parent a3b0457fc113fc5ef482aabd5c090c3162045001 and excludes unrelated uncommitted working-tree schema changes.",
+        "Automatic existing-production baseline registration requires a non-empty database, the exact prior successful service build b661b473641508ef48ca5b84f0b7baa10a36352c in service_heartbeats, the latest required schema_data_migrations marker, and exact terminal relation/function/trigger sentinels proving the previous initializer reached the end of the composed schema.",
+        "Baseline eligibility is verified before legacy application schema SQL runs; an eligibility mismatch stops initialization with a specific diagnostic and records no baseline row.",
+        "History-table creation and the baseline marker are committed together only after eligibility passes, so a failed eligibility check does not leave a baseline marker.",
+        "Once recorded, later starts validate the baseline identifier/checksum from history and do not repeat production baseline eligibility queries or execute legacy schema SQL.",
+        "The first launch against an empty database applies the same exact baseline once and records the same identifier/checksum only after the full baseline succeeds."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run isolated PostgreSQL migration integration tests against an ephemeral PostgreSQL data directory inside the marked D:\\CodexTemp run.",
+          "expected": "An empty database applies and records baseline once; a second start executes no baseline DDL; an eligible legacy database records baseline without replay; an ineligible or partial database records nothing and fails explicitly.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "runtime",
+          "command": "Run bounded UTC READ ONLY queries only against 192.168.0.101:5432/polycopytrader for exact heartbeat build, schema_data_migrations marker, terminal sentinels, current migration-history absence, locks, and object counts; perform no production mutation.",
+          "expected": "The preview reports exact identifiers/counts and proves whether current production satisfies the contract's automatic baseline eligibility without creating or updating any row or schema object.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Migration execution must fail closed on concurrency, mutation, or partial-application ambiguity rather than replaying an already applied change.",
+      "sourceRequestIndexes": [
+        0,
+        2
+      ],
+      "sourceQuote": "не применялись заново",
+      "acceptanceCriteria": [
+        "A database-scoped PostgreSQL advisory migration lock serializes initializers; an initializer that cannot obtain it does not execute migration SQL and returns an explicit error rather than waiting indefinitely.",
+        "The advisory lock is released on success, failure, or cancellation.",
+        "Every catalog migration declares whether it is transactional; transactional migrations use one transaction with their history insert.",
+        "Any future non-transactional migration must be explicitly idempotent and independently verify its completed database state before its history row is inserted; no non-transactional migration is added by this task.",
+        "Initialization logs exact migration identifiers and outcomes without logging connection strings, credentials, or migration SQL containing data values."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run focused concurrency, failure, cancellation, transaction-mode, and log-redaction migration tests under the marked D:\\CodexTemp run.",
+          "expected": "Only one initializer can execute migrations; failures and cancellation release coordination state; no ambiguous migration is marked applied; diagnostics contain identifiers but no secret-bearing connection string or raw SQL payload.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "The change must be deployable without altering trading behavior or absorbing unrelated working-tree changes.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "Ок, сделай",
+      "acceptanceCriteria": [
+        "Only storage startup migration infrastructure, its focused tests, and startup documentation change under this contract.",
+        "No strategy, order, Paper/Live, Dashboard calculation, service configuration, production database, service state, or deployment state is changed by implementation or verification.",
+        "The pre-existing PostgresSchema.cs and StorageTests.cs ix_signals_trader_wallet_id edits remain byte-for-diff preserved, unstaged, uncommitted, and outside this contract.",
+        "README documents empty-database bootstrap, exact existing-production automatic baseline, pending-only startup, checksum mismatch behavior, failure retry behavior, and the limitation that unknown non-empty databases require a separately approved baseline decision.",
+        "Focused tests pass, the relevant PostgreSQL integration suite passes against the isolated ephemeral cluster, and the complete solution builds with zero errors.",
+        "Independent semantic review compares the verbatim requests, approved contract, actual diff, and verification evidence and returns PASS with no open findings."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln with temporary outputs under the marked D:\\CodexTemp run.",
+          "expected": "The complete solution builds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Compare pre-task and post-task hashes/diffs for unrelated dirty files, inspect governed diffs, run requirement validation in WorkingTree and Staged modes, and obtain independent semantic review.",
+          "expected": "Unrelated dirty edits are unchanged and outside commits; every governed path maps to this contract; validators pass; reviewer returns PASS with no findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260821-versioned-schema-migrations sha256:17e174ebd90ee8ca1e9210acf950d7c40cbd41c92c6484a4ebeeb4963939d34b",
+    "semanticDigest": "sha256:17e174ebd90ee8ca1e9210acf950d7c40cbd41c92c6484a4ebeeb4963939d34b"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
