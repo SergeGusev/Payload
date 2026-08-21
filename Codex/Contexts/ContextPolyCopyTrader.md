@@ -1,6 +1,36 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-21 Versioned Schema Migration Contract
+Goal: Make service startup apply only unapplied PostgreSQL schema migrations and automatically baseline the exact verified existing production schema once.
+Status: Completed, reviewed, validated, and committed on deployment branch; push pending
+Done:
+- Recorded the user's exact approval and committed approval-only parent `18cf9460` before product edits.
+- Implemented immutable baseline `0001-legacy-baseline-a3b0457f` with semantic checksum `4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2`, durable `public.schema_migration_history`, ordered pending-only execution, checksum/gap/unknown-history rejection, fail-fast advisory locking, transactional success-only history, explicit non-transactional completion checks, and bounded 15-second metadata commands.
+- Existing production auto-baseline is fail-closed on exact verified build `a3b0457fc113fc5ef482aabd5c090c3162045001`, required data marker, final dashboard/copy-performance triggers, and comprehensive `public` object inventory. PostgreSQL error text is suppressed before the exception reaches host Serilog.
+- Isolated PostgreSQL 17 focused suite passed 8/8, including empty bootstrap plus second no-replay start, exact eligible/ineligible baseline, function/type-only rejection, checksum/unknown/gap rejection, transactional rollback/retry, non-transactional completion, sanitized diagnostics, contention, and deterministic separate-session failure/cancellation lock-release probes.
+- Complete Debug solution build passed with 0 errors and 126 pre-existing warnings. Extra `StorageTests` run passed 112/115 after correct repository-root setup; the three remaining assertions concern unchanged baseline source/line-ending/count expectations and do not exercise changed paths.
+- Independent reviewer found and drove correction of object-only empty detection, escaped PostgreSQL error logging, and deterministic lock-release evidence; after the production preview and revised build approval, reviewer returned final PASS with no findings.
+- The unrelated `ix_signals_trader_wallet_id` edits remain byte-for-diff restored and unstaged: `PostgresSchema.cs` SHA-256 `F9B3C5336A269798B3B68001769E84B24B0A18AEFC0A778A538253EC030E8D25`; `StorageTests.cs` SHA-256 `EFD6E40FB486FD71FD6AE44DA59C3A5336E81C9B31922A1C9E39243EB74C8D6E`.
+- Production became reachable and an atomic `2026-08-21T20:28:08.668978Z` UTC `REPEATABLE READ READ ONLY` preview verified exact endpoint/PostgreSQL 18.3 primary, history absence, required marker, all required relations, exact terminal triggers, `797` application objects, and zero ungranted/migration-advisory/waiter locks. The service is `Running/Live`, `last_error=NULL`, but its exact build is now `a3b0457fc113fc5ef482aabd5c090c3162045001`, not the previously approved `b661b473...` identifier.
+- Because the approved contract was fail-closed on `b661b473...`, invalidated that approval and revised only the exact existing-production eligibility build to current verified `a3b0457f`, which is also the immutable baseline parent. The user approved revised digest `sha256:b9a86624444228a2c81b361f2382e4461370c6be49855ff169ff214ac092b719`; separate approval-only checkpoint is `b0d34d5b`.
+- Fresh revised-tree verification passed: complete Debug solution build 0 errors / 126 pre-existing warnings; isolated PostgreSQL focused suite 8/8; WorkingTree gate `5 governed / 1 contract`; Staged gate `5 governed / 1 contract`; Range gate from upstream through HEAD `3 commits / 5 governed / 3 contract revisions`; diff checks clean.
+- Implementation commit is `81ae1c27` on exact deployment branch `codex/reference-average-available-windows`. Approval lifecycle remains unsquashed: `18cf9460` original approval, `b0d34d5b` revised approval, `81ae1c27` implementation.
+Next: Push the deployment branch, then user deploys `81ae1c27`; after first start, verify read-only that baseline history contains exactly one immutable baseline row and a second restart performs no legacy DDL.
+Notes: Production preview was forced read-only with 15-second statement timeout; no production database/service/trading/configuration/deployment state was changed. Temporary isolated PostgreSQL is stopped and its marked D: run is cleaned before final handoff.
+Blockers: None.
+
+## Active Update 2026-08-21 Production Service Startup Block Check
+Goal: Determine read-only whether production PostgreSQL is blocking the service startup.
+Status: Database-side transient blocker candidate found; exact failed-start cause is not yet proven
+Done:
+- Verified exact primary production `192.168.0.101:5432/polycopytrader` in repeated UTC `READ ONLY` sessions. Heartbeat remained fixed at `2026-08-21T12:59:26.155534Z` on old build `b661b473641508ef48ca5b84f0b7baa10a36352c`; no newer build reached heartbeat, and runtime writes stopped at `12:59:31.139710Z`.
+- Across repeated snapshots through `13:08:31.969623Z`, PostgreSQL had zero `PolyCopyTrader.Service` sessions, zero lock waiters/blockers, zero ungranted locks, and no persisted error after the stopped heartbeat.
+- The only production backend was autovacuum PID `7076` on `strategy_market_paper_runs`. It held granted `ShareUpdateExclusiveLock`, progressed from `vacuuming indexes` to `vacuuming heap`, and therefore was active rather than stuck.
+- Verified from current implementation that schema initialization runs before `host.RunAsync()`/heartbeat and executes `ALTER TABLE strategy_market_paper_runs ...` statements. An attempted start while the vacuum lock remains can wait at that phase, but no active or historical failed-start waiter was observable, so this mechanism is not yet proved as the cause of the user's specific attempt.
+Next: Let the bounded autovacuum complete without killing it, then have the user retry one service start while monitoring PostgreSQL. If it still exits without producing a DB session/new heartbeat, obtain the current console/Serilog exception because the failure is before or outside observable DB state.
+Notes: Remote Windows SCM query did not return within 30 seconds, so exact Windows service state/PID is unavailable. No production, service, database, strategy, order, configuration, or repository product-source mutation occurred.
+
 ## Active Update 2026-08-21 Maker Preflight Phase Telemetry Implementation
 Goal: Persist bounded timeout-only telemetry that identifies the exact receipt, queue, handler, publication, or Paper-updater phase holding an accepted exact ETH Maker-GTD update, without changing trading behavior.
 Status: Completed locally, committed, reviewed, validated, and pushed; user deployment and natural-cohort verification pending

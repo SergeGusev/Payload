@@ -60,3 +60,38 @@ Request:
 
 Result:
 Recorded the exact approval in separate parent `ccaf6551`, implemented bounded timeout-only Maker preflight telemetry, completed independent semantic review, and pushed implementation commit `747c5ead91fe4bfac048649d009f3e4943cf0991` through `codex/reference-average-available-windows`. Existing timeout JSON now distinguishes receipt/admission state, exact matching pending/in-flight queue work, global worker state, and one bounded in-flight handler/Paper-updater phase with timestamps and non-negative ages. Review caught and drove correction of overlapping-receipt oldest-age tracking; a fixed 256-slot tracker now reports the true oldest while fully tracked and explicit `NotAvailable` on overflow without losing exact count. Fresh amended-tree tests passed 85/85 and 78/78, full Debug build passed with 0 errors, independent review passed with no findings, and WorkingTree/Staged/Range/diff gates passed. No trading, lifecycle outcome, queue scheduling, database schema, configuration, Live, production, deployment, service, strategy, order, or venue state changed; user deployment and read-only natural-cohort verification are next.
+
+## 2026-08-21T13:08:31.9696230Z
+Request:
+Сервис не стартует. Посмотри, что заблочено на проде
+
+Result:
+Repeated strict read-only UTC snapshots of exact production `192.168.0.101:5432/polycopytrader` proved the service is stopped: heartbeat remained at `12:59:26.155534Z` on old build `b661b473641508ef48ca5b84f0b7baa10a36352c`, runtime writes ended at `12:59:31.139710Z`, and there were zero Service sessions or post-stop persisted errors. PostgreSQL had zero waiting/ungranted locks and zero blockers. The only backend was an actively progressing autovacuum on `strategy_market_paper_runs`, holding granted `ShareUpdateExclusiveLock`; startup schema initialization runs before heartbeat and its `ALTER TABLE` statements can wait behind that lock. However, no service waiter was present in any sample, so the autovacuum is a verified current transient startup risk, not a proved cause of the already-failed attempt. Remote Windows SCM inspection timed out, leaving exact process/SCM failure and pre-database exception unknown. Nothing was restarted, canceled, killed, or mutated.
+
+## 2026-08-21T14:30:04.6351951Z
+Request:
+Ок, сделай
+
+Result:
+Locked the requested change to pending-only service-start schema migrations with an automatic one-time exact existing-production baseline and no direct production/deployment mutation. Inspected the current unconditional pre-heartbeat schema runner and preserved the unrelated dirty signals index work outside scope. Drafted and validated `RC-20260821-versioned-schema-migrations` at semantic digest `sha256:17e174ebd90ee8ca1e9210acf950d7c40cbd41c92c6484a4ebeeb4963939d34b`. The contract specifies an immutable `a3b0457f` legacy baseline, exact `b661b473` production eligibility plus terminal sentinels, empty-database bootstrap, success-only durable history, checksum mismatch rejection, serialized fail-fast execution, no application DDL on an unchanged restart, isolated PostgreSQL tests, and preservation of unrelated dirty files. Product edits are blocked pending the user's exact later approval.
+
+## 2026-08-21T19:39:46.1433600Z
+Request:
+`APPROVE RC-20260821-versioned-schema-migrations sha256:17e174ebd90ee8ca1e9210acf950d7c40cbd41c92c6484a4ebeeb4963939d34b`
+
+Result:
+Recorded approval-only parent `18cf9460` and implemented the approved versioned PostgreSQL migration runner locally: immutable checksum-bound legacy baseline, durable success-only history, pending-only deterministic ordering, strict exact-production baseline eligibility, unknown/partial database rejection, bounded metadata reads, transactional rollback/retry, explicit non-transactional completion checks, fail-fast advisory locking, and sanitized escaped PostgreSQL errors. Isolated PostgreSQL migration tests passed 8/8 and the complete Debug solution built with 0 errors. Independent review has no remaining code finding after corrections for function/type-only database detection, host-log error suppression, and deterministic separate-session failure/cancellation lock-release proof. Production VER-003 remains impossible because repeated TCP attempts to exact `192.168.0.101:5432` timed out before SQL connection through this cutoff; no production mutation occurred, and implementation remains uncommitted until the required read-only eligibility preview and final reviewer PASS can complete.
+
+## 2026-08-21T20:29:46.5605435Z
+Request:
+Пробуй
+
+Result:
+Production became reachable. One atomic UTC `REPEATABLE READ READ ONLY` snapshot at cutoff `2026-08-21T20:28:08.668978Z` verified exact `192.168.0.101:5432/polycopytrader`, PostgreSQL 18.3 primary, absent `schema_migration_history`, present required data marker and four relations, exact final dashboard/copy-performance triggers, `797` public application objects, and zero ungranted, migration-advisory, or waiter locks. The service is `Running/Live` with `last_error=NULL`, but exact build is now `a3b0457fc113fc5ef482aabd5c090c3162045001`, contradicting the approved fail-closed `b661b473...` eligibility identifier. No production mutation occurred. Invalidated the old contract approval, revised only the expected current production build to exact `a3b0457f` (also the immutable baseline parent), and validated the new draft at digest `sha256:b9a86624444228a2c81b361f2382e4461370c6be49855ff169ff214ac092b719`. Product/test constants remain unchanged until exact reapproval.
+
+## 2026-08-21T20:41:43.7944134Z
+Request:
+`APPROVE RC-20260821-versioned-schema-migrations sha256:b9a86624444228a2c81b361f2382e4461370c6be49855ff169ff214ac092b719` &#x20;
+
+Result:
+Recorded revised approval in separate checkpoint `b0d34d5b`, changed only the expected current production build/catalog fixture from `b661b473...` to verified `a3b0457f...`, and completed the full approved versioned-migration implementation as `81ae1c27` on `codex/reference-average-available-windows`. Fresh isolated PostgreSQL tests passed 8/8; complete Debug solution build passed with 0 errors; independent reviewer returned PASS with no findings; WorkingTree, Staged, and three-commit Range requirement gates passed. The exact unrelated index files retained their original hashes and remain unstaged. Production was inspected read-only only and was not mutated; first-deployment and second-start ledger verification remain for after user deployment.
