@@ -23,7 +23,8 @@ public sealed class PaperTradingProcessor(
     IAppRepository repository,
     IPolymarketFeeAccountingService? feeAccountingService = null,
     IMarketDataSideEffectQueue? marketDataSideEffectQueue = null,
-    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) :
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
+    TimeProvider? timeProvider = null) :
     IPaperTradingProcessor,
     IPaperPositionMarkProcessor
 {
@@ -33,8 +34,12 @@ public sealed class PaperTradingProcessor(
     private const string PaperFakExecutableSnapshotFillModel = "fak_taker_executable_snapshot_v2";
     private const string LegacyNonReproducibleEvidenceClass = "legacy_non_reproducible";
     private const string FakImmutableSnapshotMissingReason = "paper_fak_immutable_snapshot_missing";
+    private const string MakerGtdReceiptAdmissionTimeoutDetail = "receipt_admission_timeout";
+    private const string MakerGtdSideEffectDrainTimeoutDetail = "side_effect_drain_timeout";
+    private const string MakerGtdPreflightDeadlineFailureCode = "maker_gtd_expiry_preflight_deadline_exceeded";
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
         makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
@@ -849,170 +854,304 @@ public sealed class PaperTradingProcessor(
             return false;
         }
 
-        await using var expiryAdmission = await makerGtdHandoff.EnterExpiryAdmissionAsync(cancellationToken);
         var hasOrderEvidence = MakerGtdPaperOrderEvidenceParser.TryParse(
             order,
             out var orderEvidence,
             out _);
-        if (marketDataSideEffectQueue is not null &&
-            hasOrderEvidence &&
-            orderEvidence is not null &&
-            marketDataSideEffectQueue.HasOutstandingPaperOrderUpdate(
-                order.Id,
-                order.AssetId,
-                order.ConditionId,
-                orderEvidence.AcceptedAtUtc,
-                order.ExpiresAtUtc))
+        var staleAfterSeconds = marketDataWebSocketOptions.StaleAfterSeconds;
+        var preflightDeadlineUtc = order.ExpiresAtUtc.AddSeconds(
+            staleAfterSeconds);
+        var preflightTimeoutDetail = (string?)null;
+        IAsyncDisposable? expiryAdmission = null;
+        try
         {
-            await marketDataSideEffectQueue.DrainOutstandingPaperOrderUpdatesAsync(
-                order.Id,
-                order.AssetId,
-                order.ConditionId,
-                orderEvidence.AcceptedAtUtc,
-                order.ExpiresAtUtc,
+            var admission = await EnterMakerGtdExpiryAdmissionBeforeDeadlineAsync(
+                preflightDeadlineUtc,
                 cancellationToken);
+            expiryAdmission = admission.Admission;
+            if (admission.DeadlineExceeded)
+            {
+                preflightTimeoutDetail = MakerGtdReceiptAdmissionTimeoutDetail;
+            }
 
-            if (marketDataSideEffectQueue.HasOutstandingPaperOrderUpdate(
+            if (preflightTimeoutDetail is null &&
+                marketDataSideEffectQueue is not null &&
+                hasOrderEvidence &&
+                orderEvidence is not null &&
+                marketDataSideEffectQueue.HasOutstandingPaperOrderUpdate(
                     order.Id,
                     order.AssetId,
                     order.ConditionId,
                     orderEvidence.AcceptedAtUtc,
                     order.ExpiresAtUtc))
             {
-                logger.LogWarning(
-                    "Maker-GTD Paper expiry remains deferred after the priority drain reported completion. PaperOrderId={PaperOrderId} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
-                    order.Id,
-                    order.ExpiresAtUtc);
-                return false;
+                var drainCompleted = await DrainMakerGtdUpdatesBeforeDeadlineAsync(
+                    order,
+                    orderEvidence,
+                    preflightDeadlineUtc,
+                    cancellationToken);
+                if (!drainCompleted)
+                {
+                    preflightTimeoutDetail = MakerGtdSideEffectDrainTimeoutDetail;
+                }
+                else if (marketDataSideEffectQueue.HasOutstandingPaperOrderUpdate(
+                             order.Id,
+                             order.AssetId,
+                             order.ConditionId,
+                             orderEvidence.AcceptedAtUtc,
+                             order.ExpiresAtUtc))
+                {
+                    if (clock.GetUtcNow() >= preflightDeadlineUtc)
+                    {
+                        preflightTimeoutDetail = MakerGtdSideEffectDrainTimeoutDetail;
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "Maker-GTD Paper expiry remains deferred after the priority drain reported completion. PaperOrderId={PaperOrderId} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
+                            order.Id,
+                            order.ExpiresAtUtc);
+                        return false;
+                    }
+                }
+
+                if (preflightTimeoutDetail is null)
+                {
+                    logger.LogDebug(
+                        "Maker-GTD Paper expiry processed all accepted pre-expiry market-data updates before terminal evaluation. PaperOrderId={PaperOrderId} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
+                        order.Id,
+                        order.ExpiresAtUtc);
+
+                    var refreshedOrder = await repository.GetPaperOrderAsync(order.Id, cancellationToken);
+                    if (refreshedOrder is null)
+                    {
+                        logger.LogWarning(
+                            "Maker-GTD Paper expiry stopped after the priority drain because the order could not be reloaded. PaperOrderId={PaperOrderId}",
+                            order.Id);
+                        return false;
+                    }
+
+                    if (refreshedOrder.Status != PaperOrderStatus.Pending)
+                    {
+                        logger.LogDebug(
+                            "Maker-GTD Paper expiry stopped after the priority drain because accepted market data already finalized the order. PaperOrderId={PaperOrderId} Status={Status}",
+                            order.Id,
+                            refreshedOrder.Status);
+                        return false;
+                    }
+
+                    order = refreshedOrder;
+                    var refreshedRuns = await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
+                        [order.Id],
+                        cancellationToken);
+                    restingRun = refreshedRuns.Count == 1 ? refreshedRuns[0] : null;
+                }
             }
 
-            logger.LogDebug(
-                "Maker-GTD Paper expiry processed all accepted pre-expiry market-data updates before terminal evaluation. PaperOrderId={PaperOrderId} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc}",
-                order.Id,
-                order.ExpiresAtUtc);
+            MakerGtdPaperMarketDataFailure? marketDataFailure = null;
+            if (preflightTimeoutDetail is not null)
+            {
+                marketDataFailure = new MakerGtdPaperMarketDataFailure(
+                    order.AssetId,
+                    order.ConditionId,
+                    preflightDeadlineUtc,
+                    MakerGtdPreflightDeadlineFailureCode);
+                logger.LogWarning(
+                    "Maker-GTD Paper expiry preflight reached its absolute deadline. PaperOrderId={PaperOrderId} Phase={Phase} EffectiveExpiresAtUtc={EffectiveExpiresAtUtc} PreflightDeadlineUtc={PreflightDeadlineUtc}",
+                    order.Id,
+                    preflightTimeoutDetail,
+                    order.ExpiresAtUtc,
+                    preflightDeadlineUtc);
+            }
+            else if (hasOrderEvidence && orderEvidence is not null)
+            {
+                makerGtdHandoff.TryGetMarketDataFailure(
+                    order.Id,
+                    order.AssetId,
+                    order.ConditionId,
+                    orderEvidence.AcceptedAtUtc,
+                    order.ExpiresAtUtc,
+                    out marketDataFailure);
+            }
 
-            var refreshedOrder = await repository.GetPaperOrderAsync(order.Id, cancellationToken);
-            if (refreshedOrder is null)
+            if (restingRun is null)
             {
                 logger.LogWarning(
-                    "Maker-GTD Paper expiry stopped after the priority drain because the order could not be reloaded. PaperOrderId={PaperOrderId}",
+                    "Maker-GTD Paper expiry skipped because exactly one linked strategy run was not available. PaperOrderId={PaperOrderId}",
                     order.Id);
                 return false;
             }
 
-            if (refreshedOrder.Status != PaperOrderStatus.Pending)
+            var currentStatus = marketDataCache.Status;
+            var continuity = preflightTimeoutDetail is not null
+                ? new MakerGtdPaperContinuityEvaluation(
+                    Continuous: false,
+                    MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode,
+                    preflightTimeoutDetail)
+                : marketDataFailure is null
+                    ? MakerGtdPaperContinuityEvaluator.Evaluate(
+                        order,
+                        currentStatus,
+                        marketDataCache.SubscribedAssetIds)
+                    : new MakerGtdPaperContinuityEvaluation(
+                        Continuous: false,
+                        MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode,
+                        $"market_data_delivery_failed:{marketDataFailure.FailureCode}");
+            var terminalEvaluatedAtUtc = preflightTimeoutDetail is null
+                ? evaluatedAtUtc
+                : clock.GetUtcNow();
+            var expiredOrder = order with
             {
-                logger.LogDebug(
-                    "Maker-GTD Paper expiry stopped after the priority drain because accepted market data already finalized the order. PaperOrderId={PaperOrderId} Status={Status}",
+                Status = PaperOrderStatus.Expired,
+                FilledAtUtc = null,
+                CancelledAtUtc = null
+            };
+            var skippedRun = restingRun with
+            {
+                Status = StrategyMarketPaperRunStatuses.Skipped,
+                EnteredAtUtc = null,
+                SkipReason = continuity.ReasonCode,
+                SkipDiagnosticsJson = JsonSerializer.Serialize(new
+                {
+                    model = "touch_no_depth",
+                    reason_code = continuity.ReasonCode,
+                    detail = continuity.Detail,
+                    evaluated_at_utc = terminalEvaluatedAtUtc,
+                    effective_expires_at_utc = order.ExpiresAtUtc,
+                    preflight_deadline = preflightTimeoutDetail is null
+                        ? null
+                        : new
+                        {
+                            phase = preflightTimeoutDetail,
+                            deadline_utc = preflightDeadlineUtc,
+                            stale_after_seconds = staleAfterSeconds
+                        },
+                    market_data_failure = marketDataFailure is null
+                        ? null
+                        : new
+                        {
+                            failure_code = marketDataFailure.FailureCode,
+                            asset_id = marketDataFailure.AssetId,
+                            condition_id = marketDataFailure.ConditionId,
+                            received_at_utc = marketDataFailure.ReceivedAtUtc
+                        },
+                    current_market_data_status = new
+                    {
+                        connection_state = currentStatus.ConnectionState.ToString(),
+                        currentStatus.Stale,
+                        currentStatus.ReconnectCount,
+                        currentStatus.LastConnectedUtc,
+                        currentStatus.LastDisconnectedUtc,
+                        asset_subscribed = marketDataCache.SubscribedAssetIds.Contains(
+                            order.AssetId,
+                            StringComparer.Ordinal)
+                    }
+                }),
+                UpdatedAtUtc = terminalEvaluatedAtUtc
+            };
+
+            var mutation = await repository.TryExpireMakerGtdPaperOrderAsync(
+                new MakerGtdPaperExpiryRequest(
+                    MakerGtdPaperExecutionContract.ExecutionSource,
+                    terminalEvaluatedAtUtc,
+                    expiredOrder,
+                    skippedRun),
+                cancellationToken);
+            if (mutation.Outcome == MakerGtdPaperMutationOutcome.NotEligible)
+            {
+                logger.LogWarning(
+                    "Maker-GTD Paper expiry was not eligible for atomic persistence. PaperOrderId={PaperOrderId} ReasonCode={ReasonCode}",
                     order.Id,
-                    refreshedOrder.Status);
+                    mutation.ReasonCode);
                 return false;
             }
 
-            order = refreshedOrder;
-            var refreshedRuns = await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
-                [order.Id],
-                cancellationToken);
-            restingRun = refreshedRuns.Count == 1 ? refreshedRuns[0] : null;
+            makerGtdHandoff.ClearMarketDataFailures(order.Id);
+
+            if (mutation.PaperOrder is { } persistedOrder)
+            {
+                exposureCache.ApplyPaperOrder(persistedOrder);
+            }
+
+            return mutation.Outcome == MakerGtdPaperMutationOutcome.Applied;
+        }
+        finally
+        {
+            if (expiryAdmission is not null)
+            {
+                await expiryAdmission.DisposeAsync();
+            }
+        }
+    }
+
+    private async Task<MakerGtdExpiryAdmissionResult> EnterMakerGtdExpiryAdmissionBeforeDeadlineAsync(
+        DateTimeOffset deadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        var remaining = deadlineUtc - clock.GetUtcNow();
+        if (remaining <= TimeSpan.Zero)
+        {
+            var immediateAdmission = makerGtdHandoff.TryEnterExpiryAdmission();
+            return new MakerGtdExpiryAdmissionResult(
+                immediateAdmission,
+                DeadlineExceeded: immediateAdmission is null);
         }
 
-        MakerGtdPaperMarketDataFailure? marketDataFailure = null;
-        if (hasOrderEvidence && orderEvidence is not null)
+        using var deadlineTimeout = new CancellationTokenSource(remaining, clock);
+        using var deadlineCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            deadlineTimeout.Token);
+        try
         {
-            makerGtdHandoff.TryGetMarketDataFailure(
+            var admission = await makerGtdHandoff.EnterExpiryAdmissionAsync(deadlineCancellation.Token);
+            return new MakerGtdExpiryAdmissionResult(admission, DeadlineExceeded: false);
+        }
+        catch (OperationCanceledException) when (
+            !cancellationToken.IsCancellationRequested &&
+            deadlineTimeout.IsCancellationRequested)
+        {
+            return new MakerGtdExpiryAdmissionResult(null, DeadlineExceeded: true);
+        }
+    }
+
+    private async Task<bool> DrainMakerGtdUpdatesBeforeDeadlineAsync(
+        PaperOrder order,
+        MakerGtdPaperOrderEvidence orderEvidence,
+        DateTimeOffset deadlineUtc,
+        CancellationToken cancellationToken)
+    {
+        var remaining = deadlineUtc - clock.GetUtcNow();
+        if (remaining <= TimeSpan.Zero)
+        {
+            return false;
+        }
+
+        using var deadlineTimeout = new CancellationTokenSource(remaining, clock);
+        using var deadlineCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            deadlineTimeout.Token);
+        try
+        {
+            await marketDataSideEffectQueue!.DrainOutstandingPaperOrderUpdatesAsync(
                 order.Id,
                 order.AssetId,
                 order.ConditionId,
                 orderEvidence.AcceptedAtUtc,
                 order.ExpiresAtUtc,
-                out marketDataFailure);
+                deadlineCancellation.Token);
+            return true;
         }
-
-        if (restingRun is null)
+        catch (OperationCanceledException) when (
+            !cancellationToken.IsCancellationRequested &&
+            deadlineTimeout.IsCancellationRequested)
         {
-            logger.LogWarning(
-                "Maker-GTD Paper expiry skipped because exactly one linked strategy run was not available. PaperOrderId={PaperOrderId}",
-                order.Id);
             return false;
         }
-
-        var currentStatus = marketDataCache.Status;
-        var continuity = marketDataFailure is null
-            ? MakerGtdPaperContinuityEvaluator.Evaluate(
-                order,
-                currentStatus,
-                marketDataCache.SubscribedAssetIds)
-            : new MakerGtdPaperContinuityEvaluation(
-                Continuous: false,
-                MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode,
-                $"market_data_delivery_failed:{marketDataFailure.FailureCode}");
-        var expiredOrder = order with
-        {
-            Status = PaperOrderStatus.Expired,
-            FilledAtUtc = null,
-            CancelledAtUtc = null
-        };
-        var skippedRun = restingRun with
-        {
-            Status = StrategyMarketPaperRunStatuses.Skipped,
-            EnteredAtUtc = null,
-            SkipReason = continuity.ReasonCode,
-            SkipDiagnosticsJson = JsonSerializer.Serialize(new
-            {
-                model = "touch_no_depth",
-                reason_code = continuity.ReasonCode,
-                detail = continuity.Detail,
-                evaluated_at_utc = evaluatedAtUtc,
-                effective_expires_at_utc = order.ExpiresAtUtc,
-                market_data_failure = marketDataFailure is null
-                    ? null
-                    : new
-                    {
-                        failure_code = marketDataFailure.FailureCode,
-                        asset_id = marketDataFailure.AssetId,
-                        condition_id = marketDataFailure.ConditionId,
-                        received_at_utc = marketDataFailure.ReceivedAtUtc
-                    },
-                current_market_data_status = new
-                {
-                    connection_state = currentStatus.ConnectionState.ToString(),
-                    currentStatus.Stale,
-                    currentStatus.ReconnectCount,
-                    currentStatus.LastConnectedUtc,
-                    currentStatus.LastDisconnectedUtc,
-                    asset_subscribed = marketDataCache.SubscribedAssetIds.Contains(
-                        order.AssetId,
-                        StringComparer.Ordinal)
-                }
-            }),
-            UpdatedAtUtc = evaluatedAtUtc
-        };
-
-        var mutation = await repository.TryExpireMakerGtdPaperOrderAsync(
-            new MakerGtdPaperExpiryRequest(
-                MakerGtdPaperExecutionContract.ExecutionSource,
-                evaluatedAtUtc,
-                expiredOrder,
-                skippedRun),
-            cancellationToken);
-        if (mutation.Outcome == MakerGtdPaperMutationOutcome.NotEligible)
-        {
-            logger.LogWarning(
-                "Maker-GTD Paper expiry was not eligible for atomic persistence. PaperOrderId={PaperOrderId} ReasonCode={ReasonCode}",
-                order.Id,
-                mutation.ReasonCode);
-            return false;
-        }
-
-        makerGtdHandoff.ClearMarketDataFailures(order.Id);
-
-        if (mutation.PaperOrder is { } persistedOrder)
-        {
-            exposureCache.ApplyPaperOrder(persistedOrder);
-        }
-
-        return mutation.Outcome == MakerGtdPaperMutationOutcome.Applied;
     }
+
+    private sealed record MakerGtdExpiryAdmissionResult(
+        IAsyncDisposable? Admission,
+        bool DeadlineExceeded);
 
     private static IReadOnlyList<PaperOrder> PrioritizeOpenOrders(
         IReadOnlyList<PaperOrder> openOrders,

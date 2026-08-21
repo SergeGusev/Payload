@@ -123,10 +123,21 @@ exactly once. Only updates received strictly after acceptance and strictly befor
 effective expiry are eligible. When the drain completes, the same lifecycle pass
 rechecks outstanding state and then applies the unchanged evidence parsing,
 continuity, fill, and atomic terminal rules. Handler failures publish the existing
-failure evidence before the drain completes. No timeout, frame drop, guessed
-no-fill, or post-expiry fill evidence is introduced; a genuinely non-completing
-in-flight handler remains fail-closed and can still block the affected lifecycle
-work.
+failure evidence before the drain completes.
+
+Receipt admission and the exact-order priority drain share one absolute preflight
+deadline: `effective_expires_at_utc + MarketDataWebSocket:StaleAfterSeconds`.
+Completing either step does not reset the deadline. When both steps complete in
+time, all existing evidence, fill, continuity, and atomic rules remain unchanged.
+If admission or drain is still incomplete at the deadline, the wait is canceled
+but the underlying receipt/queue work is not dropped or canceled. The still-Pending
+order and its linked Resting run are atomically terminalized as Expired/Skipped
+with `maker_gtd_evidence_unavailable` and phase detail
+`receipt_admission_timeout` or `side_effect_drain_timeout`. A late completion
+cannot fill or reopen that terminal order. Caller/service cancellation continues
+to propagate without a terminal mutation. This finite fail-closed rule can omit a
+real pre-expiry touch that completes after the deadline and can therefore
+understate Paper fills, positions, and PnL; it does not affect Live behavior.
 
 For these exact 28 strategies, ordinary Paper orders, positions, fills, PnL, win
 rate, and performance inclusion is intentional. Every result must carry the label

@@ -92,6 +92,34 @@ public sealed class MakerGtdPaperPlacementHandoffTests
     }
 
     [Fact]
+    public async Task TryExpiryAdmission_ActiveReceiptReturnsNullThenRecovers()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var activeReceipt = await handoff.EnterMarketDataReceiptAsync();
+
+        Assert.Null(handoff.TryEnterExpiryAdmission());
+
+        await activeReceipt.DisposeAsync();
+        await using var recoveredAdmission = handoff.TryEnterExpiryAdmission();
+        Assert.NotNull(recoveredAdmission);
+    }
+
+    [Fact]
+    public async Task TryExpiryAdmission_AvailableAdmissionIsExclusiveAndReleasesReceipts()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var admission = handoff.TryEnterExpiryAdmission();
+
+        Assert.NotNull(admission);
+        Assert.Null(handoff.TryEnterExpiryAdmission());
+        var receiptTask = handoff.EnterMarketDataReceiptAsync().AsTask();
+        Assert.False(receiptTask.IsCompleted);
+
+        await admission!.DisposeAsync();
+        await using var receipt = await receiptTask;
+    }
+
+    [Fact]
     public void FailureLookup_UsesStrictLifetimeExactIdentityAndClear()
     {
         var handoff = new MakerGtdPaperPlacementHandoff();

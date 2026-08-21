@@ -3,7 +3,7 @@
   "contractId": "RC-20260821-maker-expiry-preflight-deadline",
   "title": "Bound Maker-GTD expiry preflight without fabricating fills",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -69,8 +69,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperPlacementHandoffTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Deterministic tests prove the single absolute deadline for receipt admission and side-effect drain, same-expiry cohort behavior, pre-deadline completion, true cancellation, cleanup, and later worker recovery without sleeps that guess scheduler timing.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Fresh post-edit exact approved filter in D:\\CodexTemp\\runs\\manual-90b6de06a97a45e49fef232f11c7116b\\results\\review2-tests\\review2-tests.trx passed 91/91 with 0 failed and 0 skipped. Deterministic manual-clock regressions prove admission and drain completion one second before the shared deadline, receipt and drain timeout, four-order same-expiry behavior without advancing another stale interval, caller cancellation during admission and drain, cleanup, and subsequent-cycle recovery."
         }
       ]
     },
@@ -103,24 +103,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Deadline diagnostics and atomic timeout-versus-fill races pass together with all existing exact-family Maker evidence, precision, atomic persistence, parity, label, PaperOnly, and worker-isolation regressions.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "The same fresh 91/91 TRX covers both atomic race directions: valid pre-expiry touch fills while expiry is concurrently waiting and the later deadline mutation becomes ineligible; deadline expiry wins while queued work remains outstanding and a later valid touch cannot fill or reopen the terminal order. Existing exact-family parity, repository atomicity, strategy, queue, and worker-isolation regressions also pass."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "The complete solution builds with zero errors; warnings are reported exactly.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Fresh complete Debug solution build after the final source and test edits succeeded with 0 errors and 126 warnings, with no warnings in the six modified product/test paths. Artifacts: D:\\CodexTemp\\runs\\manual-90b6de06a97a45e49fef232f11c7116b\\artifacts\\review2-build; log: D:\\CodexTemp\\runs\\manual-90b6de06a97a45e49fef232f11c7116b\\logs\\review2-build.log."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Inspect the complete diff, run git diff --check and WorkingTree/Staged/Range requirement validation, and obtain independent semantic review against both verbatim prompts, the approved digest, the actual diff, and final evidence.",
           "expected": "Only approved paths change; no signal, successful-fill, accounting, Live, schema, queue-capacity, subscription, reconnect, production, or unrelated dirty-worktree behavior changes; reviewer verdict is pass with no findings.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Exactly the six approved product/test/documentation paths changed; their reviewed binary diff hash is ad9995cff1792a69b85f340c21f39f6e677b77f1. git diff --check passed. Independent reviewer agent:/root/reviewer compared the verbatim prompts, approved contract, complete current diff, deterministic tests, and fresh build evidence and returned PASS with findings=[]. WorkingTree, Staged, and approval-parent Range validators are required and recorded by the final commit workflow."
         }
       ]
     }
@@ -147,8 +147,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

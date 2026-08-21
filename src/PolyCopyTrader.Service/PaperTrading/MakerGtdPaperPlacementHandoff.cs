@@ -16,6 +16,8 @@ public interface IMakerGtdPaperPlacementHandoff
     ValueTask<IAsyncDisposable> EnterExpiryAdmissionAsync(
         CancellationToken cancellationToken = default);
 
+    IAsyncDisposable? TryEnterExpiryAdmission();
+
     IReadOnlySet<Guid> GetPendingOrderIds(string assetId);
 
     Task WaitForPublicationAsync(
@@ -184,6 +186,22 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
             var waiter = new ExpiryAdmissionWaiter();
             waiter.Node = pendingExpiryAdmissions.AddLast(waiter);
             return WaitForExpiryAdmissionAsync(waiter, cancellationToken);
+        }
+    }
+
+    public IAsyncDisposable? TryEnterExpiryAdmission()
+    {
+        lock (receiptExpirySync)
+        {
+            if (expiryAdmissionActive ||
+                activeMarketDataReceipts > 0 ||
+                pendingExpiryAdmissions.Count > 0)
+            {
+                return null;
+            }
+
+            expiryAdmissionActive = true;
+            return new ExpiryAdmissionLease(this);
         }
     }
 
@@ -711,6 +729,11 @@ internal sealed class NoOpMakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacemen
         CancellationToken cancellationToken = default)
     {
         return ValueTask.FromResult<IAsyncDisposable>(NoOpLease.Instance);
+    }
+
+    public IAsyncDisposable? TryEnterExpiryAdmission()
+    {
+        return NoOpLease.Instance;
     }
 
     public IReadOnlySet<Guid> GetPendingOrderIds(string assetId)

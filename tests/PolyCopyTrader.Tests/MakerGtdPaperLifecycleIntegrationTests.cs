@@ -517,6 +517,337 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
     }
 
     [Fact]
+    public async Task Processor_ReceiptAdmissionStillBlockedAtDeadline_ExpiresEvidenceUnavailable()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-31));
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        await using var activeReceipt = await handoff.EnterMarketDataReceiptAsync();
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            makerGtdPaperPlacementHandoff: handoff);
+
+        var result = await processor.ProcessOpenOrdersAsync().WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(1, result.OrdersExpired);
+        Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Empty(scenario.Repository.PaperFills);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, skippedRun.SkipReason);
+        using var diagnostics = JsonDocument.Parse(skippedRun.SkipDiagnosticsJson!);
+        Assert.Equal(
+            "receipt_admission_timeout",
+            diagnostics.RootElement.GetProperty("detail").GetString());
+        var preflightDeadline = diagnostics.RootElement.GetProperty("preflight_deadline");
+        Assert.Equal("receipt_admission_timeout", preflightDeadline.GetProperty("phase").GetString());
+        Assert.Equal(30, preflightDeadline.GetProperty("stale_after_seconds").GetInt32());
+        Assert.Equal(
+            scenario.Order.ExpiresAtUtc.AddSeconds(30),
+            preflightDeadline.GetProperty("deadline_utc").GetDateTimeOffset());
+        Assert.Equal(
+            "maker_gtd_expiry_preflight_deadline_exceeded",
+            diagnostics.RootElement
+                .GetProperty("market_data_failure")
+                .GetProperty("failure_code")
+                .GetString());
+    }
+
+    [Fact]
+    public async Task Processor_DeadlinePassedButAdmissionAvailable_PreservesOrdinaryExpiry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-31));
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            makerGtdPaperPlacementHandoff: new MakerGtdPaperPlacementHandoff());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OrdersExpired);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
+        Assert.Contains("continuous_market_websocket_evidence", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("preflight_deadline_exceeded", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_SideEffectDrainStillBlockedAtDeadline_ExpiresWithoutDroppingLateWork()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var clock = new ManualDeadlineTimeProvider(now);
+        var queue = new OutstandingMarketDataSideEffectQueue
+        {
+            HasOutstandingUpdate = true,
+            BlockDrainUntilCancellation = true
+        };
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            queue,
+            handoff,
+            timeProvider: clock);
+
+        var processingTask = processor.ProcessOpenOrdersAsync();
+        await queue.DrainStarted.Task;
+        clock.Advance(TimeSpan.FromSeconds(29));
+
+        var result = await processingTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(1, result.OrdersExpired);
+        Assert.True(queue.DrainCancellationObserved);
+        Assert.True(queue.HasOutstandingUpdate);
+        Assert.Empty(scenario.Repository.PaperFills);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, skippedRun.SkipReason);
+        using var diagnostics = JsonDocument.Parse(skippedRun.SkipDiagnosticsJson!);
+        Assert.Equal(
+            "side_effect_drain_timeout",
+            diagnostics.RootElement.GetProperty("detail").GetString());
+        Assert.Equal(
+            "maker_gtd_expiry_preflight_deadline_exceeded",
+            diagnostics.RootElement
+                .GetProperty("market_data_failure")
+                .GetProperty("failure_code")
+                .GetString());
+
+        var touchReceivedAtUtc = scenario.Order.ExpiresAtUtc.AddMilliseconds(-10);
+        await CreateUpdater(scenario.Repository, handoff).ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                touchReceivedAtUtc.AddMilliseconds(-1),
+                touchReceivedAtUtc),
+            touchReceivedAtUtc);
+
+        Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Empty(scenario.Repository.PaperFills);
+    }
+
+    [Fact]
+    public async Task Processor_SameExpiryCohortBlockedAtDeadline_TerminatesEveryOrderInOnePass()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var clock = new ManualDeadlineTimeProvider(now);
+        for (var index = 1; index < 4; index++)
+        {
+            var strategyId = Guid.NewGuid();
+            var order = scenario.Order with
+            {
+                Id = Guid.NewGuid(),
+                SignalId = Guid.NewGuid(),
+                StrategyId = strategyId
+            };
+            order = order with
+            {
+                RawDecisionJson = BuildRawDecisionJson(order, order.CreatedAtUtc.AddSeconds(1))
+            };
+            scenario.Repository.PaperOrders.Add(order);
+            scenario.Repository.StrategyMarketPaperRuns.Add(scenario.Run with
+            {
+                Id = Guid.NewGuid(),
+                StrategyId = strategyId,
+                SignalId = order.SignalId,
+                PaperOrderId = order.Id
+            });
+        }
+
+        var handoff = new CoordinatedExpiryHandoff();
+        await using var activeReceipt = await handoff.EnterMarketDataReceiptAsync();
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            makerGtdPaperPlacementHandoff: handoff,
+            timeProvider: clock);
+
+        var processingTask = processor.ProcessOpenOrdersAsync();
+        await handoff.ExpiryRequested.Task;
+        clock.Advance(TimeSpan.FromSeconds(29));
+
+        var result = await processingTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(4, result.OrdersExpired);
+        Assert.All(scenario.Repository.PaperOrders, order => Assert.Equal(PaperOrderStatus.Expired, order.Status));
+        Assert.All(
+            scenario.Repository.StrategyMarketPaperRuns,
+            run => Assert.Equal(MakerGtdPaperExecutionContract.EvidenceUnavailableReasonCode, run.SkipReason));
+        Assert.Empty(scenario.Repository.PaperFills);
+    }
+
+    [Fact]
+    public async Task Processor_DrainCompletesJustBeforeDeadline_PreservesOrdinaryExpiry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var clock = new ManualDeadlineTimeProvider(now);
+        var queue = new OutstandingMarketDataSideEffectQueue
+        {
+            HasOutstandingUpdate = true,
+            ClearOutstandingOnDrain = true,
+            BlockDrainUntilReleased = true
+        };
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            queue,
+            new MakerGtdPaperPlacementHandoff(),
+            timeProvider: clock);
+
+        var processingTask = processor.ProcessOpenOrdersAsync();
+        await queue.DrainStarted.Task;
+        clock.Advance(TimeSpan.FromSeconds(28));
+        queue.ReleaseDrain.TrySetResult();
+        var result = await processingTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(1, result.OrdersExpired);
+        Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
+        Assert.DoesNotContain("preflight_deadline_exceeded", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_ReceiptAdmissionCompletesJustBeforeDeadline_PreservesOrdinaryExpiry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var clock = new ManualDeadlineTimeProvider(now);
+        var handoff = new CoordinatedExpiryHandoff();
+        var activeReceipt = await handoff.EnterMarketDataReceiptAsync();
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            makerGtdPaperPlacementHandoff: handoff,
+            timeProvider: clock);
+
+        var processingTask = processor.ProcessOpenOrdersAsync();
+        await handoff.ExpiryRequested.Task;
+        clock.Advance(TimeSpan.FromSeconds(28));
+        await activeReceipt.DisposeAsync();
+        await handoff.ExpiryDisposalStarted.Task;
+        handoff.AllowExpiryRelease.TrySetResult();
+        var result = await processingTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(1, result.OrdersExpired);
+        Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
+        Assert.DoesNotContain("preflight_deadline_exceeded", skippedRun.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Processor_ValidFillWhileAdmissionWaitsThenDeadlineFires_FillWinsAtomically()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var clock = new ManualDeadlineTimeProvider(now);
+        var handoff = new CoordinatedExpiryHandoff();
+        await using var activeReceipt = await handoff.EnterMarketDataReceiptAsync();
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            makerGtdPaperPlacementHandoff: handoff,
+            timeProvider: clock);
+
+        var processingTask = processor.ProcessOpenOrdersAsync();
+        await handoff.ExpiryRequested.Task;
+        var touchReceivedAtUtc = scenario.Order.ExpiresAtUtc.AddMilliseconds(-10);
+        await CreateUpdater(scenario.Repository, handoff).ApplyUpdateAsync(
+            LastTradeUpdate(
+                scenario.Order,
+                scenario.Order.Price,
+                touchReceivedAtUtc.AddMilliseconds(-1),
+                touchReceivedAtUtc),
+            touchReceivedAtUtc);
+        clock.Advance(TimeSpan.FromSeconds(29));
+        var result = await processingTask.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(0, result.OrdersExpired);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Entered,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+    }
+
+    [Fact]
+    public async Task Processor_CallerCancellationDuringDrain_PropagatesAndNextCycleRecovers()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var clock = new ManualDeadlineTimeProvider(now);
+        var queue = new OutstandingMarketDataSideEffectQueue
+        {
+            HasOutstandingUpdate = true,
+            BlockDrainUntilCancellation = true
+        };
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            queue,
+            new MakerGtdPaperPlacementHandoff(),
+            timeProvider: clock);
+        using var cancellation = new CancellationTokenSource();
+
+        var canceledPass = processor.ProcessOpenOrdersAsync(cancellation.Token);
+        await queue.DrainStarted.Task;
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceledPass);
+
+        Assert.True(queue.DrainCancellationObserved);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Resting,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+
+        queue.BlockDrainUntilCancellation = false;
+        queue.ClearOutstandingOnDrain = true;
+        var recoveredResult = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, recoveredResult.OrdersExpired);
+        Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).SkipReason);
+    }
+
+    [Fact]
+    public async Task Processor_CallerCancellationWhileAwaitingReceipt_LeavesOrderPending()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        await using var activeReceipt = await handoff.EnterMarketDataReceiptAsync();
+        var processor = CreateProcessor(
+            scenario.Repository,
+            CreateHealthyCache(scenario.Order, reconnectCount: 2),
+            new CountingClobClient(),
+            makerGtdPaperPlacementHandoff: handoff);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => processor.ProcessOpenOrdersAsync(cancellation.Token));
+
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Resting,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+        Assert.Empty(scenario.Repository.PaperFills);
+    }
+
+    [Fact]
     public async Task Processor_PriorityDrainProcessesAcceptedTouchBeforeExpiryWithoutDuplicateTerminalMutation()
     {
         var now = DateTimeOffset.UtcNow;
@@ -1070,9 +1401,11 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         CountingClobClient clobClient,
         IMarketDataSideEffectQueue? marketDataSideEffectQueue = null,
         IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
-        IExposureSnapshotCache? exposureSnapshotCache = null)
+        IExposureSnapshotCache? exposureSnapshotCache = null,
+        int staleAfterSeconds = 30,
+        TimeProvider? timeProvider = null)
     {
-        var options = new MarketDataWebSocketOptions { StaleAfterSeconds = 30 };
+        var options = new MarketDataWebSocketOptions { StaleAfterSeconds = staleAfterSeconds };
         return new PaperTradingProcessor(
             NullLogger<PaperTradingProcessor>.Instance,
             new DefaultPaperTradingEngine(),
@@ -1085,7 +1418,8 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             repository,
             feeAccountingService: null,
             marketDataSideEffectQueue: marketDataSideEffectQueue,
-            makerGtdPaperPlacementHandoff: makerGtdPaperPlacementHandoff);
+            makerGtdPaperPlacementHandoff: makerGtdPaperPlacementHandoff,
+            timeProvider: timeProvider);
     }
 
     private static MarketDataCache CreateHealthyCache(PaperOrder order, int reconnectCount)
@@ -1178,6 +1512,12 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             ExpiryRequested.TrySetResult();
             var admission = await admissionTask.ConfigureAwait(false);
             return new CoordinatedExpiryLease(this, admission);
+        }
+
+        public IAsyncDisposable? TryEnterExpiryAdmission()
+        {
+            var admission = inner.TryEnterExpiryAdmission();
+            return admission is null ? null : new CoordinatedExpiryLease(this, admission);
         }
 
         public IReadOnlySet<Guid> GetPendingOrderIds(string assetId) => inner.GetPendingOrderIds(assetId);
@@ -1352,6 +1692,18 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
 
         public bool ClearOutstandingOnDrain { get; set; }
 
+        public bool BlockDrainUntilCancellation { get; set; }
+
+        public bool BlockDrainUntilReleased { get; set; }
+
+        public bool DrainCancellationObserved { get; private set; }
+
+        public TaskCompletionSource DrainStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseDrain { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public int OutstandingChecks { get; private set; }
 
         public int DrainCalls { get; private set; }
@@ -1409,7 +1761,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             return HasOutstandingUpdate;
         }
 
-        public Task DrainOutstandingPaperOrderUpdatesAsync(
+        public async Task DrainOutstandingPaperOrderUpdatesAsync(
             Guid paperOrderId,
             string assetId,
             string conditionId,
@@ -1418,12 +1770,147 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
             CancellationToken cancellationToken = default)
         {
             DrainCalls++;
+            DrainStarted.TrySetResult();
+            if (BlockDrainUntilCancellation)
+            {
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    DrainCancellationObserved = true;
+                    throw;
+                }
+            }
+
+            if (BlockDrainUntilReleased)
+            {
+                await ReleaseDrain.Task.WaitAsync(cancellationToken);
+            }
+
             if (ClearOutstandingOnDrain)
             {
                 HasOutstandingUpdate = false;
             }
+        }
+    }
 
-            return Task.CompletedTask;
+    private sealed class ManualDeadlineTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        private readonly object sync = new();
+        private readonly List<ManualTimer> timers = [];
+        private DateTimeOffset currentUtcNow = utcNow;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            lock (sync)
+            {
+                return currentUtcNow;
+            }
+        }
+
+        public override ITimer CreateTimer(
+            TimerCallback callback,
+            object? state,
+            TimeSpan dueTime,
+            TimeSpan period)
+        {
+            ManualTimer timer;
+            lock (sync)
+            {
+                timer = new ManualTimer(callback, state, currentUtcNow, dueTime, period);
+                timers.Add(timer);
+            }
+
+            return timer;
+        }
+
+        public void Advance(TimeSpan elapsed)
+        {
+            List<ManualTimer> dueTimers;
+            DateTimeOffset now;
+            lock (sync)
+            {
+                currentUtcNow = currentUtcNow.Add(elapsed);
+                now = currentUtcNow;
+                dueTimers = timers.Where(timer => timer.TakeDue(now)).ToList();
+            }
+
+            foreach (var timer in dueTimers)
+            {
+                timer.Fire();
+            }
+        }
+
+        private sealed class ManualTimer(
+            TimerCallback callback,
+            object? state,
+            DateTimeOffset createdAtUtc,
+            TimeSpan dueTime,
+            TimeSpan period) : ITimer
+        {
+            private readonly object sync = new();
+            private DateTimeOffset dueAtUtc = GetDueAt(createdAtUtc, dueTime);
+            private TimeSpan currentPeriod = period;
+            private bool disposed;
+
+            public bool Change(TimeSpan dueTime, TimeSpan period)
+            {
+                lock (sync)
+                {
+                    if (disposed)
+                    {
+                        return false;
+                    }
+
+                    dueAtUtc = GetDueAt(createdAtUtc, dueTime);
+                    currentPeriod = period;
+                    return true;
+                }
+            }
+
+            public bool TakeDue(DateTimeOffset nowUtc)
+            {
+                lock (sync)
+                {
+                    if (disposed || dueAtUtc == DateTimeOffset.MaxValue || dueAtUtc > nowUtc)
+                    {
+                        return false;
+                    }
+
+                    dueAtUtc = currentPeriod == Timeout.InfiniteTimeSpan
+                        ? DateTimeOffset.MaxValue
+                        : nowUtc.Add(currentPeriod);
+                    return true;
+                }
+            }
+
+            public void Fire()
+            {
+                callback(state);
+            }
+
+            public void Dispose()
+            {
+                lock (sync)
+                {
+                    disposed = true;
+                }
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                Dispose();
+                return ValueTask.CompletedTask;
+            }
+
+            private static DateTimeOffset GetDueAt(DateTimeOffset createdAtUtc, TimeSpan dueTime)
+            {
+                return dueTime == Timeout.InfiniteTimeSpan
+                    ? DateTimeOffset.MaxValue
+                    : createdAtUtc.Add(dueTime);
+            }
         }
     }
 
