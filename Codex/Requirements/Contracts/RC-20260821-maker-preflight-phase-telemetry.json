@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260821-maker-preflight-phase-telemetry",
+  "title": "Persist bounded Maker expiry preflight phase telemetry",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, сделай следующий шаг"
+    },
+    {
+      "source": "user",
+      "text": "Действуй"
+    }
+  ],
+  "scope": {
+    "goal": "Add bounded, queryable diagnostics that identify which exact receipt/admission, side-effect queue, handler, publication, or Paper-updater phase is holding an accepted exact ETH Reference Average Maker-GTD update when the existing expiry preflight deadline is reached, without changing any trading or lifecycle outcome.",
+    "inScope": [
+      "Instrument only the exact closed-exception ETH neutral Reference Average Maker-GTD Paper expiry-preflight path and the shared market-data side-effect operations needed to describe its current in-memory blocker.",
+      "At an existing receipt_admission_timeout or side_effect_drain_timeout, capture one bounded point-in-time diagnostic snapshot and persist it inside that run's existing skip_diagnostics_json preflight_deadline object.",
+      "Capture handoff state as scalar summaries: active market-data receipt count, oldest active receipt start and age when present, expiry-admission-active state, and pending expiry-admission count.",
+      "Capture side-effect state as scalar summaries: matching outstanding, in-flight, and pending update counts; oldest matching receipt/enqueue timestamps and ages when present; total pending updates and tracked assets; update-worker task state; and at most one current global in-flight item with component, event type, asset/condition identifiers, receipt/enqueue/processing/phase timestamps, queue/processing/phase ages, and current bounded phase name.",
+      "Track bounded current phases across the existing handler and Paper updater, including resolved-event recording, trade-tick recording, optional persistence, publication wait, serialization-lock wait, exposure load, market-resolution settlement, Maker update evaluation/persistence, ordinary Paper update work, and position-mark work.",
+      "Use thread-safe, non-blocking in-memory snapshots, no raw payload capture, no unbounded collections, and no additional database read or write beyond the existing atomic timeout terminalization that already persists skip_diagnostics_json.",
+      "Add focused deterministic tests for receipt-state snapshots, pending and in-flight matching queue snapshots, phase transitions, both timeout JSON shapes, bounded field content, successful-path non-interference, and existing exact Maker lifecycle behavior.",
+      "Build and test locally using marked D:\\CodexTemp artifacts, independently review the verbatim requests, approved contract, complete diff, and verification, then merge/push the verified commits through codex/reference-average-available-windows for user deployment."
+    ],
+    "outOfScope": [
+      "Changing Reference Average signals, windows, thresholds, selected outcome, order price, stake, entry timing, GTD/PostOnly/TouchNoDepth semantics, fill inference, expiry deadline, timeout classification, fee/PnL/settlement accounting, mandatory label, PaperOnly status, or Live behavior.",
+      "Changing market-data queue ordering, concurrency, coalescing, capacity, priority, cancellation, retry, WebSocket subscription/reconnect/stale behavior, lifecycle cadence, or any database repository query/mutation semantics.",
+      "Adding or changing a PostgreSQL table, column, index, migration, retention worker, configuration value, continuous telemetry stream, dashboard surface, external log sink, raw WebSocket payload persistence, or generalized observability framework.",
+      "Repairing the eventual blocker before the new production snapshot proves its exact phase; settlement, database locking, publication, and other currently plausible causes remain unmodified and unclaimed.",
+      "Deploying, restarting, reconfiguring, or mutating production, rewriting existing timeout rows, or placing/canceling any venue or Live order. Production verification begins only after the user deploys the merged revision."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact 28 ETH neutral Reference Average Maker-GTD Paper strategies and their maker_gtd_paper_v1/v2 timeout terminalizations. Read-only production evidence through 2026-08-21T11:32:25.065926Z found three natural cohorts with 18/18 nonfills reaching the existing deadline; one accepted event had a 223.239-223.526 second receipt-to-Maker-processing delay, but current persistence cannot split that interval by queue/handler/updater phase.",
+    "firstVerification": "Trace every timestamp and wait before PaperTradingMarketDataUpdater records processed_at_utc, enumerate the existing queue/handoff locks and test doubles, and prove the snapshot can be obtained under existing locks without waiting, changing scheduling, or adding database work."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Every exact Maker expiry-preflight timeout must persist a bounded handoff and side-effect snapshot that distinguishes an active receipt/admission obstruction from a matching pending or in-flight accepted update.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "For receipt_admission_timeout and side_effect_drain_timeout, skip_diagnostics_json.preflight_deadline retains its existing phase, deadline_utc, and stale_after_seconds fields and adds one versioned diagnostic snapshot captured at terminal evaluation.",
+        "The handoff portion contains only scalar state: active receipt count, optional oldest receipt start/age, expiry admission active, and pending expiry-admission count; it never serializes receipt IDs or an unbounded list.",
+        "The exact-order queue portion reports matching outstanding, matching in-flight, and matching pending counts plus optional oldest matching receipt/enqueue timestamps and ages, using the same paper order, asset, condition, accepted-after, and expires-before predicates as the expiry drain.",
+        "The global queue portion reports total pending updates, tracked assets, update-worker state, and at most one in-flight item; it contains no raw payload, order book, token list, eligible-order list, or other unbounded content.",
+        "Snapshot methods are synchronous/non-blocking apart from their existing short in-memory locks, perform no database/network operation, do not wait for work completion, and cannot change queue/admission state.",
+        "If a dependency is the existing no-op implementation or no current item exists, diagnostics persist explicit zero/null/NotAvailable values without changing the timeout result."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperPlacementHandoff.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectDiagnostics.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperPlacementHandoffTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperPlacementHandoffTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Deterministic tests prove bounded handoff/queue snapshots and exact persisted JSON for both timeout phases without changing terminal outcomes or successful pre-deadline behavior.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "The diagnostic snapshot must identify the currently executing handler or Paper-updater phase and its age well enough to select a later narrow correction from production evidence rather than inference.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "сделай следующий шаг",
+      "acceptanceCriteria": [
+        "Each queued update owns a thread-safe bounded execution trace initialized on enqueue and updated at existing phase boundaries without changing their order or exception/cancellation behavior.",
+        "The trace distinguishes queue wait from RecordResolvedEvent, RecordTradeTick, optional order-book/event persistence, ApplyPaperTradingUpdate, WaitForPublication, WaitForSerializationLock, LoadExposureSnapshot, SettleMarketResolution, ApplyMakerGtdPaperUpdate, ordinary fill processing, and UpdatePositionMarks whenever the corresponding phase is active.",
+        "The in-flight snapshot includes enqueued, received, processing-started, phase-entered, and captured-at timestamps when available, with non-negative queue, processing, and phase ages computed from the same capture time.",
+        "Phase names and snapshot schema are stable constants covered by exact assertions; unknown/no-op state is explicit rather than inferred from a missing JSON object.",
+        "Phase reporting is observational only: it cannot acquire the Paper updater serialization semaphore, alter cancellation tokens, catch/suppress an exception, change eligible order IDs, or affect persistence and atomic mutation paths.",
+        "A successful accepted pre-expiry fill and an ordinary non-timeout expiry keep their existing evidence and do not gain a timeout diagnostic snapshot."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectDiagnostics.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectHandler.cs",
+        "src/PolyCopyTrader.Service/MarketData/IPaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Focused phase, timeout, worker-isolation, and exact-family regressions pass and prove phase reporting is observational only.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "The complete solution builds with zero errors; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the complete diff, run git diff --check and WorkingTree/Staged/approval-parent Range requirement validation, and obtain independent semantic review against both verbatim prompts, the approved contract, the actual diff, and final evidence.",
+          "expected": "Only approved paths change; no execution, expiry, queue scheduling, schema, configuration, production, Live, or unrelated dirty-worktree behavior changes; reviewer verdict is pass with no findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260821-maker-preflight-phase-telemetry sha256:e6249e944a561ed9622b0e5b50454c66e853e4cf127bec11a5ef7089552090cf",
+    "semanticDigest": "sha256:e6249e944a561ed9622b0e5b50454c66e853e4cf127bec11a5ef7089552090cf"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
