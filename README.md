@@ -184,6 +184,8 @@ Strategy performance is served from the flat `dashboard_strategy_performance_sna
 
 The service uses PostgreSQL through Npgsql. Do not store credentials in repository files. Configure the connection string through the `POLYCOPYTRADER_POSTGRES_CONNECTION` environment variable.
 
+Service startup uses the durable `public.schema_migration_history` ledger and runs only ordered migrations that are not already recorded with the same semantic SHA-256 checksum. A genuinely empty database receives the immutable legacy baseline once. The first deployment of this migration runner to the existing production database can register that baseline without replaying its DDL only when the exact prior service build, required historical data-migration marker, and terminal projection triggers prove that the old initializer previously completed. An unknown or partial non-empty database fails closed and requires a separately approved baseline decision. A failed transactional migration is rolled back and remains pending; an applied-ID checksum mismatch stops startup. When no migration is pending, startup reads migration metadata only and does not execute the legacy `CREATE`, `ALTER`, seed, cleanup, function, or trigger statements again. Future schema changes must be added as new immutable ordered migrations rather than editing the legacy baseline.
+
 ```powershell
 $env:POLYCOPYTRADER_POSTGRES_CONNECTION="Host=...;Port=5432;Database=...;Username=...;Password=...;SSL Mode=Require"
 dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj

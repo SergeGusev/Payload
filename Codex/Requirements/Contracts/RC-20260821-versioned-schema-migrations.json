@@ -3,7 +3,7 @@
   "contractId": "RC-20260821-versioned-schema-migrations",
   "title": "Apply only pending PostgreSQL schema migrations at service startup",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -184,8 +184,8 @@
           "kind": "inspection",
           "command": "Compare pre-task and post-task hashes/diffs for unrelated dirty files, inspect governed diffs, run requirement validation in WorkingTree and Staged modes, and obtain independent semantic review.",
           "expected": "Unrelated dirty edits are unchanged and outside commits; every governed path maps to this contract; validators pass; reviewer returns PASS with no findings.",
-          "result": "pending",
-          "evidence": "Unrelated dirty files remain unstaged and byte-for-diff restored: PostgresSchema.cs F9B3C5336A269798B3B68001769E84B24B0A18AEFC0A778A538253EC030E8D25; StorageTests.cs EFD6E40FB486FD71FD6AE44DA59C3A5336E81C9B31922A1C9E39243EB74C8D6E. Reviewer reports no remaining code finding but cannot issue final PASS until VER-003 production evidence exists; validators/staged commit therefore remain pending."
+          "result": "passed",
+          "evidence": "Unrelated dirty files remain unstaged and byte-for-diff restored: PostgresSchema.cs F9B3C5336A269798B3B68001769E84B24B0A18AEFC0A778A538253EC030E8D25; StorageTests.cs EFD6E40FB486FD71FD6AE44DA59C3A5336E81C9B31922A1C9E39243EB74C8D6E. Independent reviewer agent:/root/reviewer compared the revised approved contract, full governed diff, production preview, and amended test/build evidence and returned PASS with no findings. WorkingTree requirement validation passed for 5 governed files and 1 contract; Staged validation is executed immediately before commit."
         }
       ]
     }
@@ -200,8 +200,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }
