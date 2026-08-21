@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260821-maker-expiry-preflight-deadline",
+  "title": "Bound Maker-GTD expiry preflight without fabricating fills",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Выложил, проверяй"
+    },
+    {
+      "source": "user",
+      "text": "Давай доработаем"
+    }
+  ],
+  "scope": {
+    "goal": "Ensure an expired exact ETH Reference Average Maker-GTD Paper order reaches one atomic terminal outcome within a finite preflight window even when a WebSocket receipt or its accepted side-effect work does not complete, while preserving every successfully processed pre-expiry fill and all existing signal, execution, accounting, Paper-only, and Live boundaries.",
+    "inScope": [
+      "Apply one absolute Maker expiry-preflight deadline at effective expiry plus the existing MarketDataWebSocket:StaleAfterSeconds value; the current production/default value is 30 seconds and the existing five-second Paper lifecycle cadence remains unchanged.",
+      "Use the same absolute deadline across fair receipt admission and the exact-order accepted pre-expiry side-effect drain, so multiple same-expiry orders do not each add another full wait and no one in-memory preflight await can block the open-order worker indefinitely.",
+      "If receipt admission and every matching accepted pre-expiry update complete before the deadline, preserve the current evidence parser, priority drain, authoritative TouchNoDepth fill, continuity classification, linked-run checks, and atomic fill-or-expiry behavior unchanged.",
+      "If the absolute deadline is reached before receipt admission or matching side-effect drain completes, stop waiting but do not cancel or discard the underlying receipt/queue work; atomically terminalize the still-Pending exact-family order as maker_gtd_evidence_unavailable with a persisted phase-specific preflight-deadline detail and timestamps.",
+      "Preserve atomic race safety: if valid market data fills first, expiry becomes not eligible; if deadline expiry wins first, later receipt/side-effect completion cannot fill, reopen, or otherwise mutate the terminal order/run.",
+      "Distinguish service shutdown/caller cancellation from the internal deadline: shutdown propagates cancellation and must not be converted into a financial or terminal mutation.",
+      "Add deterministic lifecycle and worker regressions for never-completing receipt admission, never-completing side-effect drain, same-expiry cohorts, completion just before the deadline, deadline-versus-fill races, cancellation, exact diagnostics, and subsequent worker recovery.",
+      "Document the finite fail-closed preflight rule and its explicit Paper availability tradeoff, build and focused-test it, independently review it, preserve the approval-parent history, and merge/push the verified result through codex/reference-average-available-windows."
+    ],
+    "outOfScope": [
+      "Changing Reference Average signals, windows, thresholds, direction, selected outcome, order price, stake, entry timing, GTD/PostOnly intent, TouchNoDepth inference for work completed before the deadline, mandatory label, fee/PnL/settlement formulas, or Live behavior.",
+      "Fabricating a fill or an ordinary expired-unfilled result when receipt/side-effect completion is unknown; replaying, reopening, rewriting, or directly expiring existing production rows.",
+      "Canceling, dropping, coalescing, interrupting, or reordering an accepted market-data update; changing queue capacity, general queue scheduling, WebSocket subscriptions, reconnect logic, stale detection, frame parsing, database schema, repository query shape, or runtime configuration values.",
+      "Claiming this correction fixes the underlying Polymarket WebSocket disconnection or the unidentified internal operation that held the observed receipt/preflight open; this task bounds its impact on exact Maker expiry only.",
+      "Changing lifecycle behavior for non-Maker Paper orders, generic copied-trader Paper, Live orders, shadows, Child strategy selection, Dashboard projections, position marks, or settlements.",
+      "Deploying, restarting, reconfiguring, or mutating production or an external venue; production verification occurs only after the user deploys the merged revision."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact closed-exception ETH neutral Reference Average Maker-GTD Paper family: 28 group-8223 strategies and their existing persisted maker_gtd_paper_v1/v2 orders. Read-only production cutoff 2026-08-21T06:29:37.867094Z found four same-asset/same-condition Pending/Resting orders with effective expiry 06:04:00Z still nonterminal more than 25 minutes later while aggregate WebSocket was Disconnected and critical/shard rows were Stale; ordinary Paper activity and PostgreSQL remained active.",
+    "firstVerification": "Trace the deployed 26d62874 path through PaperTradingProcessor.EnterExpiryAdmissionAsync and DrainOutstandingPaperOrderUpdatesAsync, prove both awaits are currently unbounded and precede stale/continuity evaluation, and bind the correction to the already validated atomic Maker mutation path rather than guessing which in-memory await held the specific production pass."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Exact Maker-GTD expiry preflight must have one absolute, expiry-based deadline that prevents an incomplete receipt or side-effect operation from blocking the lifecycle worker indefinitely.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Давай доработаем",
+      "acceptanceCriteria": [
+        "The deadline is effective_expires_at_utc plus the positive existing MarketDataWebSocket.StaleAfterSeconds interval; it is not reset per poll, per order, between admission and drain, or after a partial preflight step.",
+        "A receipt admission or exact-order side-effect drain that completes before the deadline follows the unchanged current path and never receives a timeout classification.",
+        "A receipt admission that is still pending at the deadline stops blocking the pass; a side-effect drain that is still pending at the same deadline does likewise.",
+        "Four or more orders sharing one expiry and one stuck preflight operation all reach terminal attempts from that same absolute deadline without serially accumulating one stale interval per order.",
+        "Caller/service cancellation remains cancellation; only expiration of the internally computed deadline authorizes the new fail-closed path.",
+        "The worker remains usable on later cycles after a deadline path, and handoff/queue cancellation cleanup leaves later admissions and drains operational."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperPlacementHandoff.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperPlacementHandoffTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingWorkerIsolationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperPlacementHandoffTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Deterministic tests prove the single absolute deadline for receipt admission and side-effect drain, same-expiry cohort behavior, pre-deadline completion, true cancellation, cleanup, and later worker recovery without sleeps that guess scheduler timing.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "A Maker-GTD preflight deadline must resolve uncertainty as explicit evidence-unavailable and preserve atomic exactly-one terminal behavior without changing successful pre-deadline fills.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "доработаем",
+      "acceptanceCriteria": [
+        "When the deadline wins and the order is still Pending, the existing atomic repository mutation persists PaperOrder=Expired and linked run=Skipped with reason maker_gtd_evidence_unavailable; diagnostics identify receipt_admission_timeout or side_effect_drain_timeout, the absolute deadline, effective expiry, and evaluation timestamp.",
+        "The deadline path never persists maker_gtd_expired_unfilled, a Paper fill, shares, position, PnL, fee, settlement, or Live/shadow record from incomplete evidence.",
+        "Underlying receipt and side-effect work is not canceled or discarded by the deadline. If it later finishes, existing atomic eligibility prevents it from filling/reopening a terminal order; a deterministic race test proves exactly one of fill or expiry wins.",
+        "If accepted pre-expiry touch evidence is processed before the deadline, the current TouchNoDepth full-fill path still fills exactly once with unchanged v1/v2 contract, label, price, size, order/run/fill linkage, and Paper-only/Live-disabled predicates.",
+        "Malformed order evidence, missing linked run, recorded handler failure, connection continuity changes, timestamp precision, and repository NotEligible behavior retain their existing fail-closed meanings unless the new deadline itself is the first unresolved blocker.",
+        "No existing terminal production record is replayed or rewritten; the four preview rows can change only through ordinary runtime processing after a future user deployment."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperAtomicRepositoryTests.cs",
+        "tests/PolyCopyTrader.Tests/ReferenceAverageMakerGtdPremarketStrategyTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Deadline diagnostics and atomic timeout-versus-fill races pass together with all existing exact-family Maker evidence, precision, atomic persistence, parity, label, PaperOnly, and worker-isolation regressions.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "The complete solution builds with zero errors; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the complete diff, run git diff --check and WorkingTree/Staged/Range requirement validation, and obtain independent semantic review against both verbatim prompts, the approved digest, the actual diff, and final evidence.",
+          "expected": "Only approved paths change; no signal, successful-fill, accounting, Live, schema, queue-capacity, subscription, reconnect, production, or unrelated dirty-worktree behavior changes; reviewer verdict is pass with no findings.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "After effective expiry plus the existing WebSocket stale interval, allow an unresolved accepted pre-expiry receipt or side-effect operation to lose authority to create a Paper fill for that order; terminalize it as evidence-unavailable while allowing the underlying work itself to finish normally.",
+      "impact": "This guarantees finite Maker lifecycle progress and prevents one incomplete in-memory operation from blocking all open-order processing, but a real pre-expiry touch contained in work that completes only after the deadline will not become a Paper fill. The result can understate Paper fills, positions, and PnL relative to waiting forever. It never fabricates a win/loss, changes Live trading, or cancels/drops the underlying market-data work.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260821-maker-expiry-preflight-deadline sha256:c85076fdc37dcf055902ce433a51e31d859ae3a4892dad8157cb18ec659556af",
+        "semanticDigest": "sha256:c85076fdc37dcf055902ce433a51e31d859ae3a4892dad8157cb18ec659556af"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260821-maker-expiry-preflight-deadline sha256:c85076fdc37dcf055902ce433a51e31d859ae3a4892dad8157cb18ec659556af",
+    "semanticDigest": "sha256:c85076fdc37dcf055902ce433a51e31d859ae3a4892dad8157cb18ec659556af"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
