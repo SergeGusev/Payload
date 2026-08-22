@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260822-migration-startup-wiring",
+  "title": "Restore service startup after versioned migration wiring defect",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "На бою теперь вообще не стартует, сразу вылетает. Локально запустил - там вот такая картина"
+    },
+    {
+      "source": "user",
+      "text": "Исправляй"
+    }
+  ],
+  "scope": {
+    "goal": "Correct the confirmed versioned-migration dependency-injection startup defect so the ordinary PolyCopyTrader service resolves the non-empty default migration catalog, reaches schema initialization, and does not report a fatal startup failure as a successful process exit.",
+    "inScope": [
+      "Ensure production dependency-injection construction of PostgresSchemaInitializer uses PostgresSchemaMigrationCatalog.CreateDefault() and cannot select the test-only custom-catalog constructor with an empty unregistered IEnumerable<PostgresSchemaMigration>.",
+      "Add a focused regression test that resolves IStorageSchemaInitializer through the same implementation-type DI registration shape used by the service and proves construction succeeds without registering individual PostgresSchemaMigration services.",
+      "Make the existing top-level fatal startup exception path set a nonzero process exit code after logging the exception.",
+      "Run focused tests, a complete solution build, an isolated local fatal-start process smoke test, requirement validation, and independent semantic review.",
+      "Preserve all pre-existing unrelated working-tree changes outside this contract's commits."
+    ],
+    "outOfScope": [
+      "Changing the immutable migration baseline, migration identifiers, checksums, SQL, schema eligibility predicates, schema_migration_history contents, or pending-only migration behavior.",
+      "Connecting a local service run to production, changing production PostgreSQL, deploying or starting/stopping/restarting the production service, or changing server files or configuration.",
+      "Changing strategies, signals, bets, orders, Paper/Live execution, stakes, PnL, Dashboard behavior, runtime workers, or external API behavior.",
+      "Adding a migration framework, redesigning dependency injection generally, refactoring unrelated startup code, or absorbing the unrelated PostgresSchema.cs and StorageTests.cs working-tree edits."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Ordinary PolyCopyTrader.Service startup for the current versioned-migration implementation only; no production data period applies.",
+    "firstVerification": "Resolve IStorageSchemaInitializer from an isolated ServiceCollection using the current production implementation-type registration and a dummy non-production PostgresConnectionFactory, without calling InitializeAsync or opening any database connection."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Ordinary service dependency injection must construct PostgresSchemaInitializer with the non-empty default migration catalog.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "вообще не стартует, сразу вылетает",
+      "acceptanceCriteria": [
+        "The custom-catalog constructor remains available to the existing friend test assembly but is not a public constructor candidate for the production DI container.",
+        "The public production constructor continues to call PostgresSchemaMigrationCatalog.CreateDefault().",
+        "Resolving IStorageSchemaInitializer from a ServiceCollection with the production implementation-type registration succeeds when no PostgresSchemaMigration service is registered.",
+        "The DI regression test performs no database connection, schema operation, or external call."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run the focused PostgresSchemaMigrationTests under the marked D:\\CodexTemp run.",
+          "expected": "The new production-DI construction regression passes together with the existing migration catalog and isolated PostgreSQL migration tests.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "A fatal exception during ordinary service startup must result in a nonzero process exit code.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Локально запустил - там вот такая картина",
+      "acceptanceCriteria": [
+        "The existing top-level catch continues to write the Fatal Serilog event and additionally sets Environment.ExitCode to 1.",
+        "A bounded local process smoke test against an intentionally unreachable loopback PostgreSQL endpoint exits with code 1 and does not contact production.",
+        "Successful ordinary host shutdown semantics are otherwise unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Program.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "runtime",
+          "command": "Launch the freshly built service executable from a marked D:\\CodexTemp output with POLYCOPYTRADER_POSTGRES_CONNECTION overridden to an unreachable 127.0.0.1 endpoint and a bounded connection timeout; capture only its exit code and sanitized startup log.",
+          "expected": "The process exits within the bound with code 1 after a fatal startup log and makes no production connection.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "The repair must remain limited to the confirmed startup wiring and fatal-exit defects and must not alter migration, database, or trading behavior.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Исправляй",
+      "acceptanceCriteria": [
+        "No migration SQL, baseline identifier/checksum, production eligibility predicate, migration execution order, or history behavior changes.",
+        "No production database, service, deployment, configuration, strategy, signal, bet, order, Paper/Live, PnL, Dashboard, or API state changes during implementation or verification.",
+        "The complete solution builds with zero errors and focused tests pass.",
+        "Pre-existing unrelated working-tree changes remain outside this contract's commits and are byte-for-diff preserved.",
+        "Independent review compares both verbatim user requests, the approved contract, the actual diff, and verification evidence and returns PASS with no open findings."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln with all disposable outputs under the marked D:\\CodexTemp run.",
+          "expected": "The complete solution builds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the exact governed diff, compare hashes of unrelated dirty files, run requirement validation, and obtain independent semantic review.",
+          "expected": "Only approved paths and context/contract records changed; unrelated files are preserved; validators pass; reviewer returns PASS with no findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260822-migration-startup-wiring sha256:f1231d773ea41646fa211644ba6efd4807374d51c7fd46733ae2e186c69276e8",
+    "semanticDigest": "sha256:f1231d773ea41646fa211644ba6efd4807374d51c7fd46733ae2e186c69276e8"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
