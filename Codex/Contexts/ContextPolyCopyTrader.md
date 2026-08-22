@@ -1,6 +1,24 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-22 Versioned Migration Startup Failure Diagnosis
+Goal: Restore ordinary service startup after the versioned-migration dependency-injection wiring defect.
+Status: Emergency repair completed, reviewed, validated, committed, and pushed on deployment branch
+Done:
+- The supplied `2026-08-22 09:31:57 +03:00` startup log proves termination before `host.RunAsync()`: DI constructs `PostgresSchemaInitializer` with an empty `IEnumerable<PostgresSchemaMigration>`, and `PostgresSchemaMigrationCatalog.ValidateAndOrder` throws `The PostgreSQL migration catalog is empty.`
+- Current `Program.cs` registers only `IStorageSchemaInitializer -> PostgresSchemaInitializer`. Because the implementation has public one- and two-argument constructors and the built-in DI container can resolve an unregistered `IEnumerable<T>` as an empty sequence, it selects the longer constructor and bypasses the one-argument constructor that calls `PostgresSchemaMigrationCatalog.CreateDefault()`.
+- The top-level catch logs the fatal exception but neither rethrows nor sets a nonzero exit code, explaining the misleading Visual Studio `exited with code 0` message.
+- Existing tests instantiate `PostgresSchemaInitializer` directly; no test resolves the production registration through the service DI container, which is why the startup wiring defect was not covered.
+- A bounded exact-production `REPEATABLE READ READ ONLY` UTC snapshot at `2026-08-22T06:36:37.981626Z` verified `schema_migration_history` absent, zero `PolyCopyTrader.Service` database sessions, zero ungranted locks, zero migration advisory locks, and a stale heartbeat fixed at `2026-08-21T21:38:37.311826Z` (age `32280.670s`) on old build `a3b0457fc113fc5ef482aabd5c090c3162045001`.
+- After the user made service recovery the only priority, final approved contract digest is `sha256:26e37d7011ed832b5a993aaa7a8ef2e09744681532ca1096b330d559e6f8ea05`; approval checkpoints are `31ea72a2`, `64fa7fc2`, and final emergency-scope approval `f2ec5933`.
+- Final product repair makes only the custom-catalog constructor internal and adds one production-shape DI regression. `Program.cs`, migration catalog, baseline/schema SQL, index behavior, and fatal exit-code behavior are unchanged.
+- The incompatible unfinished `ix_signals_trader_wallet_id` edits are preserved outside the deployment tree in exact `stash@{0}` commit `94b5b3c21613947d490d5874d89bb9c0d1df6d62`, named `codex-preserve-signals-index-before-emergency-startup-repair`. Pre-stash and stashed binary patch hashes both equal `c1b1dbd235292198bfe85d81fac80245d8216d29`; the stash contains only the exact 3-line `PostgresSchema.cs` and 14-line `StorageTests.cs` edits.
+- Production-shape DI test passed `1/1`; complete `PostgresSchemaMigrationTests` on isolated PostgreSQL 17 passed `9/9`; full Debug solution build passed with `0` errors and `126` pre-existing warnings.
+- WorkingTree and Staged requirement gates passed for `2` governed files and `1` contract; independent reviewer returned `PASS` with no findings. Implementation commit is `f17318d6`.
+Next: User publishes/deploys `f17318d6`, then verify production startup and the first baseline history row read-only.
+Notes: No production/service/deployment/database mutation occurred. Isolated PostgreSQL is stopped. The index stash is intentionally not applied or dropped.
+Blockers: None.
+
 ## Active Update 2026-08-21 Versioned Schema Migration Contract
 Goal: Make service startup apply only unapplied PostgreSQL schema migrations and automatically baseline the exact verified existing production schema once.
 Status: Completed, reviewed, validated, and committed on deployment branch; push pending
