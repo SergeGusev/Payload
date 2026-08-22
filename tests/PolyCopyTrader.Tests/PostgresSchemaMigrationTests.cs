@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
@@ -79,6 +80,20 @@ public sealed class PostgresSchemaMigrationTests
             baseline.SemanticChecksum);
         Assert.True(baseline.IsLegacyBaseline);
         Assert.False(baseline.Transactional);
+    }
+
+    [Fact]
+    public void ProductionDiRegistration_ResolvesDefaultCatalogWithoutMigrationServices()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(CreateFactory(
+            "Host=127.0.0.1;Port=1;Database=not_used;Username=not_used;Password=not_used;Timeout=1"));
+        services.AddSingleton<IStorageSchemaInitializer, PostgresSchemaInitializer>();
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.IsType<PostgresSchemaInitializer>(
+            provider.GetRequiredService<IStorageSchemaInitializer>());
     }
 
     [Fact]

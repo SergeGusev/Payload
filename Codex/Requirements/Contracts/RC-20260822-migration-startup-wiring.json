@@ -3,7 +3,7 @@
   "contractId": "RC-20260822-migration-startup-wiring",
   "title": "Emergency restoration of PolyCopyTrader service startup",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -65,8 +65,8 @@
           "kind": "test",
           "command": "Run the focused production-DI regression and PostgresSchemaMigrationTests with disposable outputs under a marked D:\\CodexTemp run.",
           "expected": "Production-shape DI resolution succeeds and existing migration tests pass without changing production.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "2026-08-22: production-shape DI-only run passed 1/1 without opening a database; full PostgresSchemaMigrationTests run against isolated PostgreSQL 17 at 127.0.0.1:55442 passed 9/9, including baseline checksum, empty bootstrap, no replay, eligibility, rollback, contention, and the new DI regression."
         }
       ]
     },
@@ -91,8 +91,8 @@
           "kind": "inspection",
           "command": "Compare pre-stash hashes/diff, exact stash show output, post-stash HEAD equality, and final Git status.",
           "expected": "The two index edits are recoverable from one exact stash and absent from the service repair build and commit.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Pre-stash hashes matched the approved values. Path-limited stash commit 94b5b3c21613947d490d5874d89bb9c0d1df6d62 is stash@{0} named codex-preserve-signals-index-before-emergency-startup-repair; pre-stash and stashed binary patch hashes both equal c1b1dbd235292198bfe85d81fac80245d8216d29. It contains exactly 3 PostgresSchema.cs lines and 14 StorageTests.cs lines; both paths are now clean."
         }
       ]
     },
@@ -118,16 +118,16 @@
           "kind": "build",
           "command": "Build PolyCopyTrader.sln with all disposable outputs under the marked D:\\CodexTemp run.",
           "expected": "The complete solution builds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Complete Debug PolyCopyTrader.sln build under marked D:\\CodexTemp run manual-56dcea45d8ff46e3bb97edd3734648dc completed with 0 errors and 126 pre-existing warnings."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Inspect the exact governed diff, run requirement validation, and obtain independent semantic review.",
           "expected": "Only approved product paths changed; validators pass; reviewer returns PASS with no findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "WorkingTree gate passed for 2 governed files and 1 contract; diff-check was clean. Independent reviewer agent:/root/reviewer compared all verbatim requests, latest approved contract, complete diff, stash identity, tests, and build and returned PASS with no findings."
         }
       ]
     }
@@ -142,8 +142,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

@@ -33,7 +33,7 @@ CREATE TABLE public.schema_migration_history (
     {
     }
 
-    public PostgresSchemaInitializer(
+    internal PostgresSchemaInitializer(
         PostgresConnectionFactory connectionFactory,
         IEnumerable<PostgresSchemaMigration> migrations)
     {
