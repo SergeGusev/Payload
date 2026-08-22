@@ -43,3 +43,10 @@ Request:
 
 Result:
 Read-only production diagnosis proved that the fixed 270-row overdue `Observed` inventory is retired lifecycle history, not a current betting delay. All rows were observed immediately before the approved 2026-08-13 strategy stop and became due only afterward; disabled variants are excluded before due-run selection. Exact compiled-allowlist comparison found 264 rows for 132 Progress-217 deletion targets and six rows for three deliberately preserved referenced BTC source strategies. Active enabled/unpaused overdue count is zero, betting remains current, and no production or product mutation was performed.
+
+## 2026-08-22T19:57:06.693402Z
+Request:
+Проверь сервер и ставки
+
+Result:
+Read-only production verification found the service and core betting healthy: build `a28aff1d...` remained Running/Live with fresh heartbeat/reference/WebSocket data, 2,605 Filled Paper orders across BTC/ETH/SOL in the checked hour, fresh five-minute orders/fills, no expired open Paper orders, no active overdue runs, and no PostgreSQL lock waits. Two material background degradations were proved: copied-trader performance projection stopped advancing at `15:09:25.840640Z` and accumulated 723 queued/25 inflight rows plus 567 repeated stream-read errors; all 18 Maker expirations in the hour hit receipt/drain preflight timeouts with large persisted market-data side-effect queues. Maker expiry remained finite and no order stayed overdue. No production or product mutation was performed.
