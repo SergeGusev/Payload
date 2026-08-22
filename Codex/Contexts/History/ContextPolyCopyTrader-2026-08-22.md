@@ -36,3 +36,10 @@ Request:
 
 Result:
 Read-only production verification confirmed build `a28aff1d769299a6c6b40191c3a637b79f40a417` running with advancing heartbeat, fresh BTC/ETH/SOL reference data, successful one-row baseline registration, zero waiting locks, and active five-minute processing. Since start the service created and filled 168 Paper orders (BTC 25, ETH 63, SOL 80) and settled 525 runs. No new Live order occurred; no qualifying Live signal was proved. Nine startup warm-up/transient stream errors stopped after `07:25:34.656105Z`. A residual fixed inventory of 270 old `Observed` rows due on 2026-08-13 remains but is not blocking current betting.
+
+## 2026-08-22T08:00:09.350182Z
+Request:
+Ок, разберись
+
+Result:
+Read-only production diagnosis proved that the fixed 270-row overdue `Observed` inventory is retired lifecycle history, not a current betting delay. All rows were observed immediately before the approved 2026-08-13 strategy stop and became due only afterward; disabled variants are excluded before due-run selection. Exact compiled-allowlist comparison found 264 rows for 132 Progress-217 deletion targets and six rows for three deliberately preserved referenced BTC source strategies. Active enabled/unpaused overdue count is zero, betting remains current, and no production or product mutation was performed.

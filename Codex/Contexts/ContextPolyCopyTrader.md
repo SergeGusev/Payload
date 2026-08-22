@@ -1,6 +1,20 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-22 Retired Observed Backlog Diagnosis
+Goal: Determine the exact origin, composition, and operational impact of the fixed 270-row overdue `Observed` inventory in production.
+Status: Completed read-only
+Done:
+- Verified exact production `192.168.0.101:5432/polycopytrader` in UTC transaction `READ ONLY` sessions with statement timeouts at most 12 seconds. The inventory is exactly `270` rows, all created at `2026-08-13T21:20:02.105818Z` or `21:25:02.494971Z`, due at `21:29:30Z..21:35:00Z`, and never updated after creation.
+- The rows cover `135` strategies and six BTC/ETH/SOL markets; every strategy has exactly two rows. All rows have no signal, Paper order, selected asset/outcome, skip reason, entry, or settlement. All 135 strategies are currently disabled, permanently paused, and Live-off; enabled/unpaused overdue count is zero.
+- Compared exact UUID and code against the compiled `StrategyIds.NegativeProgressPurgeTargets` allowlist: `264` rows belong to `132` of the exact 217 retirement targets; `6` rows belong to three intentionally preserved BTC Progress source strategies referenced by retained LowerEnter strategies. There were zero UUID/code mismatches.
+- Proved the lifecycle mechanism from timestamps plus current dispatch code and the persisted Stage-1 stop witness: the rows were observed before the approved product stop at `2026-08-13T21:25:10.499570Z`, became due only after that stop, and disabled variants are filtered out before the due-run query. Therefore they cannot terminalize through the normal worker and remain historical `Observed` rows; this is not a current worker delay.
+- Verified why they remain: the approved retirement sequence intentionally preserved all database history for a separate later cleanup. The exact Progress-217 cleanup may remove the `264` target rows but must preserve the `6` source-history rows under the existing requirement.
+- At final cutoff `2026-08-22T08:00:09.350182Z`, service heartbeat age was `43.036s`, `last_error=NULL`; latest Paper order and fill were both `08:00:01.996261Z`; enabled/unpaused overdue count and expired open Paper count were zero. The prerequisite index `public.ix_signals_trader_wallet_id` exists, while cleanup marker `20260819_remove_217_unreferenced_negative_progress_strategies` is absent.
+Next: If requested, first run a fresh fail-closed read-only preview for the separately approved Progress-217 cleanup; independently correct operational monitoring to count enabled and unpaused overdue rows while reporting retired history separately.
+Notes: One attempted temporary-table optimization was rejected by PostgreSQL because the session was forced read-only, before any object was created; it was replaced with bounded CTE queries. No database, service, strategy, order, configuration, deployment, or product-source mutation occurred.
+Blockers: Removing the 264 exact target rows requires a fresh preview and explicit mutation instruction. Making the raw count zero would conflict with the current requirement to preserve the three referenced source strategies and their six history rows.
+
 ## Active Update 2026-08-22 Production Restart And Betting Verification
 Goal: Verify read-only that the restarted production service is healthy and processing bets.
 Status: Completed
