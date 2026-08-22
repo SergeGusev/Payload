@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractId": "RC-20260822-migration-startup-wiring",
-  "title": "Restore service startup after versioned migration wiring defect",
+  "title": "Emergency restoration of PolyCopyTrader service startup",
   "author": "agent:/root",
   "status": "approved",
   "originalRequests": [
@@ -16,60 +16,55 @@
     {
       "source": "user",
       "text": "Ок, делаем по варианту 1"
+    },
+    {
+      "source": "user",
+      "text": "Расставь правильно приоритеты. Сервис сейчас не может стартовать, это недопустимо. Поэтому сейчас мы делаем ТОЛЬКО восстановление работы сервиса."
     }
   ],
   "scope": {
-    "goal": "Correct the confirmed versioned-migration dependency-injection startup defect, keep immutable baseline 0001 unchanged, move the exact pending signals trader-wallet index out of baseline SQL into ordered migration 0002, and ensure fatal startup failures return a nonzero process exit.",
+    "goal": "Restore ordinary PolyCopyTrader.Service startup as the only current outcome by correcting the confirmed dependency-injection constructor selection and excluding the incompatible unfinished index edits from the deployment workspace without losing them.",
     "inScope": [
-      "Ensure production dependency-injection construction of PostgresSchemaInitializer uses PostgresSchemaMigrationCatalog.CreateDefault() and cannot select the test-only custom-catalog constructor with an empty unregistered IEnumerable<PostgresSchemaMigration>.",
-      "Add a focused regression test that resolves IStorageSchemaInitializer through the same implementation-type DI registration shape used by the service and proves construction succeeds without registering individual PostgresSchemaMigration services.",
-      "Restore the exact uncommitted ix_signals_trader_wallet_id definition out of immutable PostgresSchema.SchemaSql baseline 0001 while preserving its approved non-unique unfiltered B-tree shape on signals(trader_wallet, id).",
-      "Add ordered non-transactional migration 0002 for CREATE INDEX CONCURRENTLY IF NOT EXISTS public.ix_signals_trader_wallet_id on public.signals(trader_wallet, id), with an exact PostgreSQL catalog completion check that accepts only the requested valid, ready, live index shape before recording success.",
-      "On the first deployment start, after exact existing-production baseline eligibility succeeds, create or verify migration 0002 outside an explicit transaction, record it only after its completion check succeeds, and then continue to the ordinary service host.",
-      "Adapt the existing uncommitted focused index assertion so it verifies migration 0002 rather than modifying immutable baseline SQL, and extend migration tests for first application, second-start skip, and conflicting same-name shape rejection.",
-      "Make the existing top-level fatal startup exception path set a nonzero process exit code after logging the exception.",
-      "Run focused tests, a complete solution build, an isolated local fatal-start process smoke test, requirement validation, and independent semantic review.",
-      "Bring the exact two previously uncommitted ix_signals_trader_wallet_id source/test edits into this revised contract only through the migration-0002 representation; preserve every other pre-existing unrelated working-tree change outside this contract's commits."
+      "Make the custom-catalog PostgresSchemaInitializer constructor non-public so production dependency injection can select only the public constructor that loads PostgresSchemaMigrationCatalog.CreateDefault().",
+      "Add one focused regression test that resolves IStorageSchemaInitializer through the production implementation-type registration without registering PostgresSchemaMigration services and without opening a database connection.",
+      "Preserve the exact current ix_signals_trader_wallet_id changes from PostgresSchema.cs and StorageTests.cs in a named Git stash, verify their pre-stash hashes and patch identity, and leave those two files clean so Visual Studio build/publish cannot include the incompatible unfinished index work.",
+      "Remove the uncommitted Environment.ExitCode change because it does not restore startup and the user's latest instruction limits work to service restoration only.",
+      "Run the focused DI regression, existing focused versioned-migration tests against an isolated local PostgreSQL instance, and a complete solution build with all disposable outputs under a marked D:\\CodexTemp run.",
+      "Commit the minimal repair separately after the existing approval and reapproval checkpoints, validate it mechanically, obtain independent semantic review, and push the existing deployment branch for user deployment."
     ],
     "outOfScope": [
-      "Changing immutable baseline 0001 identifier, checksum, SQL, existing-production eligibility predicates, or successful pending-only migration semantics.",
-      "Connecting a local service run to production, changing production PostgreSQL, deploying or starting/stopping/restarting the production service, or changing server files or configuration.",
-      "Changing strategies, signals, bets, orders, Paper/Live execution, stakes, PnL, Dashboard behavior, runtime workers, or external API behavior.",
-      "Directly creating, dropping, rebuilding, reindexing, or mutating ix_signals_trader_wallet_id in production during this local implementation task; production creation occurs only later when the user deploys and starts the approved build.",
-      "Adding a migration framework, redesigning dependency injection generally, refactoring unrelated startup code, or absorbing any working-tree edit other than the exact ix_signals_trader_wallet_id definition and its paired focused assertion."
+      "Adding migration 0002, changing or creating ix_signals_trader_wallet_id, modifying immutable baseline 0001, changing any migration SQL/checksum/history behavior, or completing RC-20260820-add-signals-trader-wallet-index.",
+      "Changing fatal-process exit-code behavior, logging behavior, general dependency-injection design, startup configuration, workers, or unrelated code.",
+      "Changing production PostgreSQL, creating migration history or an index directly, deploying, publishing, or starting/stopping/restarting the production service.",
+      "Changing strategies, signals, bets, orders, Paper/Live execution, stakes, PnL, Dashboard behavior, external APIs, or server configuration.",
+      "Dropping or discarding the unfinished index changes; they remain preserved in the exact named Git stash for a later separately approved task."
     ],
     "mode": "local-edit",
-    "periodOrFilter": "Ordinary PolyCopyTrader.Service startup for immutable baseline 0001 and exact pending migration 0002 only; index scope is all rows of public.signals with keys (trader_wallet, id), without predicate, uniqueness, or included columns.",
-    "firstVerification": "Run a fresh bounded read-only production preview for exact endpoint, baseline-history absence, public.signals identity and size, exact same-name index state, service heartbeat/sessions, and locks; separately resolve IStorageSchemaInitializer from an isolated ServiceCollection with a dummy non-production factory without opening any database connection."
+    "periodOrFilter": "Ordinary PolyCopyTrader.Service startup only; exact excluded working-tree files are src/PolyCopyTrader.Storage/PostgresSchema.cs and tests/PolyCopyTrader.Tests/StorageTests.cs.",
+    "firstVerification": "Capture exact hashes and diff of the two unfinished index files, create and verify a path-limited named Git stash containing only those files, then resolve IStorageSchemaInitializer from an isolated ServiceCollection with a dummy 127.0.0.1:1 factory without calling InitializeAsync."
   },
   "requirements": [
     {
       "id": "REQ-001",
-      "text": "Ordinary service dependency injection must construct PostgresSchemaInitializer with the non-empty default migration catalog.",
-      "sourceRequestIndexes": [
-        0,
-        1
-      ],
-      "sourceQuote": "вообще не стартует, сразу вылетает",
+      "text": "Production dependency injection must construct PostgresSchemaInitializer through its non-empty default migration catalog path.",
+      "sourceRequestIndexes": [0, 1, 3],
+      "sourceQuote": "ТОЛЬКО восстановление работы сервиса",
       "acceptanceCriteria": [
-        "The custom-catalog constructor remains available to the existing friend test assembly but is not a public constructor candidate for the production DI container.",
-        "The public production constructor continues to call PostgresSchemaMigrationCatalog.CreateDefault().",
-        "Resolving IStorageSchemaInitializer from a ServiceCollection with the production implementation-type registration succeeds when no PostgresSchemaMigration service is registered.",
-        "The DI regression test performs no database connection, schema operation, or external call."
+        "PostgresSchemaInitializer exposes exactly one public constructor to production DI, and that constructor calls PostgresSchemaMigrationCatalog.CreateDefault().",
+        "The custom-catalog constructor remains internal and callable by the existing friend test assembly.",
+        "Resolving IStorageSchemaInitializer using the same implementation-type registration as Program.cs succeeds without any PostgresSchemaMigration service registration.",
+        "The DI regression uses a dummy 127.0.0.1:1 connection string and performs no database or external connection."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
-        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
-        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
-        "tests/PolyCopyTrader.Tests/StorageTests.cs",
         "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs"
       ],
       "verification": [
         {
           "id": "VER-001",
           "kind": "test",
-          "command": "Run the focused PostgresSchemaMigrationTests under the marked D:\\CodexTemp run.",
-          "expected": "The new production-DI construction regression passes together with baseline-0001 checksum, migration-0002 shape/application/no-replay/conflict, and existing isolated PostgreSQL migration tests.",
+          "command": "Run the focused production-DI regression and PostgresSchemaMigrationTests with disposable outputs under a marked D:\\CodexTemp run.",
+          "expected": "Production-shape DI resolution succeeds and existing migration tests pass without changing production.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -77,39 +72,25 @@
     },
     {
       "id": "REQ-002",
-      "text": "The exact permanent signals trader-wallet index must be represented and applied as ordered migration 0002 rather than as a mutation of immutable baseline 0001.",
-      "sourceRequestIndexes": [
-        2
-      ],
-      "sourceQuote": "делаем по варианту 1",
+      "text": "The emergency deployment workspace must exclude the incompatible unfinished index edits without losing or committing them.",
+      "sourceRequestIndexes": [3],
+      "sourceQuote": "сейчас мы делаем ТОЛЬКО восстановление работы сервиса",
       "acceptanceCriteria": [
-        "PostgresSchema.SchemaSql again has the exact approved baseline-0001 semantic checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2 and contains no ix_signals_trader_wallet_id definition.",
-        "PostgresSchemaMigrationCatalog.CreateDefault() returns baseline 0001 first and exactly one later migration 0002 with a stable identifier, deterministic order, non-transactional mode, and CREATE INDEX CONCURRENTLY IF NOT EXISTS for public.signals(trader_wallet, id).",
-        "Migration 0002 completion SQL requires one exact public B-tree index named ix_signals_trader_wallet_id that is valid, ready, live, non-unique, has exactly trader_wallet then id as key attributes, and has no predicate, expressions, or included columns.",
-        "On an empty isolated database, baseline 0001 completes before migration 0002, both history rows are recorded only after success, and a second initialization executes neither baseline nor index DDL again.",
-        "An existing exact index is accepted and recorded without recreation; a conflicting same-name definition does not satisfy completion and initialization fails without recording migration 0002 or dropping/replacing the object.",
-        "The paired StorageTests assertion verifies migration 0002 and immutable-baseline exclusion instead of requiring the index inside PostgresSchema.SchemaSql."
+        "Before stashing, PostgresSchema.cs has SHA-256 F9B3C5336A269798B3B68001769E84B24B0A18AEFC0A778A538253EC030E8D25 and StorageTests.cs has SHA-256 EFD6E40FB486FD71FD6AE44DA59C3A5336E81C9B31922A1C9E39243EB74C8D6E.",
+        "One named path-limited Git stash preserves only the exact diffs of PostgresSchema.cs and StorageTests.cs.",
+        "After stashing, both files equal HEAD and PostgresSchemaMigrationCatalog.CreateDefault() validates immutable baseline checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2.",
+        "The stash is not applied, dropped, committed, or included in the deployment build during this task; its exact name is reported to the user."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Storage/PostgresSchema.cs",
-        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
-        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
         "tests/PolyCopyTrader.Tests/StorageTests.cs"
       ],
       "verification": [
         {
           "id": "VER-002",
-          "kind": "test",
-          "command": "Run focused migration-catalog/index-shape tests and isolated PostgreSQL migration integration tests under the marked D:\\CodexTemp run.",
-          "expected": "Tests prove unchanged baseline checksum, exact migration-0002 definition/completion predicate, empty-bootstrap application, existing-index adoption, conflict rejection, success-only history, and second-start no replay.",
-          "result": "pending",
-          "evidence": "pending"
-        },
-        {
-          "id": "VER-003",
-          "kind": "runtime",
-          "command": "Run bounded UTC REPEATABLE READ READ ONLY queries against exact 192.168.0.101:5432/polycopytrader before implementation for migration history, public.signals identity/size, exact same-name index state, heartbeat/sessions, and locks.",
-          "expected": "The preview reports exact cutoff, endpoint, counts and risk state without changing production; any unexpected existing/conflicting index or database state stops implementation for a new decision.",
+          "kind": "inspection",
+          "command": "Compare pre-stash hashes/diff, exact stash show output, post-stash HEAD equality, and final Git status.",
+          "expected": "The two index edits are recoverable from one exact stash and absent from the service repair build and commit.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -117,57 +98,23 @@
     },
     {
       "id": "REQ-003",
-      "text": "A fatal exception during ordinary service startup must result in a nonzero process exit code.",
-      "sourceRequestIndexes": [
-        0,
-        1
-      ],
-      "sourceQuote": "Локально запустил - там вот такая картина",
+      "text": "No work other than restoring service startup may be delivered in this emergency repair.",
+      "sourceRequestIndexes": [3],
+      "sourceQuote": "ТОЛЬКО восстановление работы сервиса",
       "acceptanceCriteria": [
-        "The existing top-level catch continues to write the Fatal Serilog event and additionally sets Environment.ExitCode to 1.",
-        "A bounded local process smoke test against an intentionally unreachable loopback PostgreSQL endpoint exits with code 1 and does not contact production.",
-        "Successful ordinary host shutdown semantics are otherwise unchanged."
-      ],
-      "implementationPaths": [
-        "src/PolyCopyTrader.Service/Program.cs"
-      ],
-      "verification": [
-        {
-          "id": "VER-004",
-          "kind": "runtime",
-          "command": "Launch the freshly built service executable from a marked D:\\CodexTemp output with POLYCOPYTRADER_POSTGRES_CONNECTION overridden to an unreachable 127.0.0.1 endpoint and a bounded connection timeout; capture only its exit code and sanitized startup log.",
-          "expected": "The process exits within the bound with code 1 after a fatal startup log and makes no production connection.",
-          "result": "pending",
-          "evidence": "pending"
-        }
-      ]
-    },
-    {
-      "id": "REQ-004",
-      "text": "The repair must remain limited to the confirmed startup defects and the exact approved migration-0002 index move and must not alter trading behavior or directly mutate production.",
-      "sourceRequestIndexes": [
-        1,
-        2
-      ],
-      "sourceQuote": "Исправляй",
-      "acceptanceCriteria": [
-        "Baseline 0001 identifier/checksum/SQL, production eligibility predicates, and existing migration-history safety behavior remain unchanged; only exact migration 0002 is added.",
-        "No production database, service, deployment, configuration, strategy, signal, bet, order, Paper/Live, PnL, Dashboard, or API state changes during implementation or verification.",
-        "The complete solution builds with zero errors and focused tests pass.",
-        "Pre-existing unrelated working-tree changes remain outside this contract's commits and are byte-for-diff preserved.",
-        "Independent review compares both verbatim user requests, the approved contract, the actual diff, and verification evidence and returns PASS with no open findings."
+        "The final governed product diff contains only the initializer constructor accessibility change and its focused DI regression test.",
+        "Program.cs has no task diff and fatal exit-code behavior remains unchanged.",
+        "No migration catalog, baseline/schema SQL, index, production database, service state, configuration, strategy, order, Paper/Live, Dashboard, or API behavior changes.",
+        "Focused tests and the complete solution build pass with zero errors.",
+        "Independent review compares all verbatim requests, the latest approved contract, exact diff, stash evidence, and verification and returns PASS with no open findings."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
-        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
-        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
-        "src/PolyCopyTrader.Service/Program.cs",
-        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
-        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs"
       ],
       "verification": [
         {
-          "id": "VER-005",
+          "id": "VER-003",
           "kind": "build",
           "command": "Build PolyCopyTrader.sln with all disposable outputs under the marked D:\\CodexTemp run.",
           "expected": "The complete solution builds with zero errors.",
@@ -175,10 +122,10 @@
           "evidence": "pending"
         },
         {
-          "id": "VER-006",
+          "id": "VER-004",
           "kind": "inspection",
-          "command": "Inspect the exact governed diff, compare hashes of unrelated dirty files, run requirement validation, and obtain independent semantic review.",
-          "expected": "Only approved paths and context/contract records changed; unrelated files are preserved; validators pass; reviewer returns PASS with no findings.",
+          "command": "Inspect the exact governed diff, run requirement validation, and obtain independent semantic review.",
+          "expected": "Only approved product paths changed; validators pass; reviewer returns PASS with no findings.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -190,8 +137,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260822-migration-startup-wiring sha256:04c670479858aab29eab3131544c271385be38e4157bf4eb5b94a55e4987acd6",
-    "semanticDigest": "sha256:04c670479858aab29eab3131544c271385be38e4157bf4eb5b94a55e4987acd6"
+    "evidenceText": "APPROVE RC-20260822-migration-startup-wiring sha256:26e37d7011ed832b5a993aaa7a8ef2e09744681532ca1096b330d559e6f8ea05",
+    "semanticDigest": "sha256:26e37d7011ed832b5a993aaa7a8ef2e09744681532ca1096b330d559e6f8ea05"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
