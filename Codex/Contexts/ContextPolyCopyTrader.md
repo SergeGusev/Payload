@@ -1,6 +1,22 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-22 Production Restart And Betting Verification
+Goal: Verify read-only that the restarted production service is healthy and processing bets.
+Status: Completed
+Done:
+- Verified exact production `192.168.0.101:5432/polycopytrader` under UTC `READ ONLY` sessions. At final cutoff `2026-08-22T07:31:31.833575Z`, build `a28aff1d769299a6c6b40191c3a637b79f40a417` was `Running / Live`, started `07:24:25.384740Z`, heartbeat age `5.989s`, `last_error=NULL`, with `21` service sessions and zero waiting locks.
+- Verified first-run versioned migration behavior: exactly one baseline row `0001-legacy-baseline-a3b0457f` was registered at `07:24:25.274679Z` with checksum `4dba8fe...`; old schema SQL was not replayed.
+- Independently observed heartbeat advancement from `07:27:25.820361Z` through `07:31:25.863142Z`; BTC/ETH/SOL reference ticks were all about `1.7s` old at final cutoff, and the current market WebSocket plus critical shard were connected with fresh messages.
+- Since service start, `168` Paper orders were created and all `168` filled: BTC `25` / `$138`, ETH `63` / `$345`, SOL `80` / `$893`; the latest cohort was at `07:30:01Z`. Runtime accounting also recorded `168` entered runs and `525` settled runs.
+- The exact 28 ETH neutral Reference Average Maker-GTD Paper strategies were enabled/unpaused and had current `Observed` runs due `07:39:30Z`; no entry was expected yet and no post-start Maker order existed at cutoff. Mandatory label remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+- One Live strategy remained enabled and unpaused, but no new Live order existed since restart; the latest Live order remained the pre-restart matched order from `2026-08-21T19:05:00.680544Z`. No current evidence proves a Live incident because no qualifying post-restart signal was established.
+- Nine bounded startup `api_errors` occurred through `07:25:34.656105Z`: three initial missing-price warm-up rows and six transient `Exception while reading from stream` rows. No later error was present by final cutoff; reference feeds and betting recovered. There were zero expired open Paper orders.
+- Residual inventory contains `270` unchanged old `Observed` rows due `2026-08-13T21:29:30Z..21:35:00Z` (BTC 68, ETH 100, SOL 102). They are not new restart delays and did not block current cycles, but remain a cleanup/diagnostic risk if they persist or grow.
+Next: Continue normal monitoring; investigate the fixed 270-row legacy `Observed` inventory separately only if requested or if the count grows. Verify the natural Maker cohort after its `07:39:30Z` due time when requested.
+Notes: Two broad runtime-run aggregates hit the enforced 12-15 second statement timeout and were replaced with bounded/indexed samples; both failed transactions were read-only and affected no data. No service, database, strategy, order, configuration, deployment, or product-source mutation occurred.
+Blockers: None.
+
 ## Active Update 2026-08-22 Versioned Migration Startup Failure Diagnosis
 Goal: Restore ordinary service startup after the versioned-migration dependency-injection wiring defect.
 Status: Emergency repair completed, reviewed, validated, committed, and pushed on deployment branch

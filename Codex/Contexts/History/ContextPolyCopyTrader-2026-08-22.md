@@ -29,3 +29,10 @@ Next: On explicit repair request, create and approve a RequirementGate contract 
 - Preserved unfinished exact index edits in `stash@{0}` commit `94b5b3c21613947d490d5874d89bb9c0d1df6d62`, message `codex-preserve-signals-index-before-emergency-startup-repair`; pre/stash patch hash `c1b1dbd235292198bfe85d81fac80245d8216d29` matched exactly.
 - Verification: DI-only `1/1`; complete migration suite `9/9` on isolated PostgreSQL 17; complete Debug solution build `0` errors / `126` pre-existing warnings; WorkingTree and Staged gates passed; independent reviewer PASS with no findings.
 - Implementation committed and pushed as `f17318d6`; isolated PostgreSQL stopped; production unchanged.
+
+## 2026-08-22T07:31:31.833575Z
+Request:
+Сервис на проде запустился. Проверь, как он работает и делает ли ставки
+
+Result:
+Read-only production verification confirmed build `a28aff1d769299a6c6b40191c3a637b79f40a417` running with advancing heartbeat, fresh BTC/ETH/SOL reference data, successful one-row baseline registration, zero waiting locks, and active five-minute processing. Since start the service created and filled 168 Paper orders (BTC 25, ETH 63, SOL 80) and settled 525 runs. No new Live order occurred; no qualifying Live signal was proved. Nine startup warm-up/transient stream errors stopped after `07:25:34.656105Z`. A residual fixed inventory of 270 old `Observed` rows due on 2026-08-13 remains but is not blocking current betting.
