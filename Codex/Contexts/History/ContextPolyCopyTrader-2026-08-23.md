@@ -20,3 +20,10 @@ APPROVE RC-20260823-maker-evidence-fast-lane sha256:dd8e0fb72f6ea8619229439d6820
 
 Result:
 Implemented the approved exact ETH Maker-GTD evidence fast lane without changing strategy, pricing, stake, TouchNoDepth, accounting, mandatory label, PaperOnly, or Live behavior. The dedicated lane retains every eligible event FIFO with original timestamps, fingerprint, source id, and raw payload, remains independent of blocked general position-mark work, participates in expiry drain, and exposes separate pending/in-flight telemetry. General quotes coalesce only after Maker IDs are separated and no ordinary Paper order needs the event. Final tests passed 81/81 focused and 115/115 contract/WebSocket; the 160,000-event stress preserved exact FIFO/fingerprint/RawJson evidence. Full Debug solution build passed with 0 errors and 126 pre-existing warnings, none in changed files. Independent semantic review passed with no open findings. No production, database, service, configuration, schema, migration, subscription, or deployment state was changed.
+
+## 2026-08-23T07:06:33.2505632Z
+Request:
+APPROVE RC-20260823-maker-evidence-fast-lane sha256:dd8e0fb72f6ea8619229439d6820d6347cf6d0d218a6821fa62074cb0ff0fee1
+
+Result:
+The completed implementation commit `fee67dcb9e90742f9d1bccf415a80f026fc61504` and its separate approval parent `644854b5` passed requirement-gate Range validation as two commits and were pushed to `origin/codex/reference-average-available-windows`; local and upstream heads matched with divergence `0/0`. The unrelated pre-existing August 20 history edit remained unstaged and untouched.

@@ -3,7 +3,7 @@ Feature branches may be used for isolated work, but before reporting a change re
 
 ## Active Update 2026-08-23 Maker-GTD Evidence Fast-Lane Contract
 Goal: Correct the proven exact ETH Maker-GTD market-data backlog without changing trading decisions or losing accepted evidence.
-Status: Implementation completed, independently reviewed, locally verified, and ready to push on the deployment branch
+Status: Completed, independently reviewed, committed as `fee67dcb`, and pushed to the deployment branch
 Done:
 - Rechecked production telemetry at exact UTC cutoff `2026-08-23T06:11:02.191920Z` with bounded PostgreSQL `READ ONLY` queries. The last 100 exact-family timeout expirations in six hours had matching received-event queue ages `82,156.7825..261,849.3178 ms` and total pending snapshots `1,686..157,760`; current in-flight phases generally processed in milliseconds, proving queue wait rather than one long-running handler call.
 - Traced the current code path. `MarketDataSideEffectQueue` has one global update worker; its configured per-asset maximum is a soft diagnostic threshold, and updates carrying any open Paper/Maker order ID remain nonreplaceable and continue accumulating. `PaperTradingMarketDataUpdater` also performs position-mark work on the same serial path.
@@ -12,7 +12,7 @@ Done:
 - General quotes may coalesce only after exact Maker IDs are split away and no ordinary Paper order requires the event. Expiry drain and diagnostics now observe dedicated pending and in-flight Maker work separately from general work; the existing absolute deadline and fail-closed fallback remain unchanged.
 - Final current-tree tests passed: exact focused `81/81`; contract regression including WebSocket `115/115`; deterministic blocked-general burst retained all `160,000` events with exact FIFO/fingerprint/RawJson evidence. Full Debug solution build passed with `0` errors and `126` pre-existing warnings, none in changed files.
 - Independent reviewer `agent:/root/reviewer_fastlane` compared the original request, approved contract, complete diff, and final evidence; final verdict `PASS` with no open findings.
-Next: Commit the completed implementation after staged/range gate validation and push `codex/reference-average-available-windows`; user controls deployment and later production verification.
+Next: User controls deployment; after deployment, perform a read-only production verification of service health, Maker pending/in-flight metrics, expiry outcomes, and Paper fills when requested.
 Notes: No production database, service, strategy/catalog configuration, order, schema, startup, migration, subscription, or Live state was changed. Signal, pricing, stake, TouchNoDepth, accounting, PaperOnly/Live-disabled boundaries, and mandatory label `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills` remain unchanged.
 Blockers: None.
 
