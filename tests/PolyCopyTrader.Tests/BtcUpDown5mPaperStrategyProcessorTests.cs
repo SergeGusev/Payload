@@ -205,6 +205,51 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public void StrategyIds_LossDiffCatalogContainsExactlyTwoFixedEthChildren()
+    {
+        var children = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.Behavior is
+                BtcUpDown5mStrategyBehavior.LossDiffResetMirror or
+                BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror)
+            .OrderBy(variant => variant.DecisionDepth)
+            .ToArray();
+
+        Assert.Collection(
+            children,
+            reset =>
+            {
+                Assert.Equal(StrategyIds.EthLossDiff4Plus, reset.Id);
+                Assert.Equal(StrategyIds.EthLossDiff4PlusCode, reset.Code);
+                Assert.Equal("ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+", reset.Name);
+                Assert.Equal(BtcUpDown5mStrategyBehavior.LossDiffResetMirror, reset.Behavior);
+                Assert.Equal(4, reset.DecisionDepth);
+                Assert.Equal(StrategyIds.EthDiffConfirmedAveragePremarketParent, reset.ParentStrategyId);
+                Assert.Equal(-30, reset.EntryDelaySeconds);
+                Assert.False(reset.PaperOnly);
+            },
+            positive =>
+            {
+                Assert.Equal(StrategyIds.EthLossDiff13PlusPositive, positive.Id);
+                Assert.Equal(StrategyIds.EthLossDiff13PlusPositiveCode, positive.Code);
+                Assert.Equal("ETH 5m 1 Diff Confirmed Average Premarket LossDiff 13+ Positive", positive.Name);
+                Assert.Equal(BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror, positive.Behavior);
+                Assert.Equal(13, positive.DecisionDepth);
+                Assert.Equal(StrategyIds.EthDiffConfirmedAveragePremarketParent, positive.ParentStrategyId);
+                Assert.Equal(-30, positive.EntryDelaySeconds);
+                Assert.False(positive.PaperOnly);
+            });
+        Assert.Equal(
+            StrategyIds.UpDown5mStrategyVariants.Count,
+            StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
+        Assert.Equal(
+            StrategyIds.UpDown5mStrategyVariants.Count,
+            StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(
+            StrategyIds.UpDown5mStrategyVariants.Count,
+            StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Name).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
     public void StrategyIds_IncludeStandardMartinAndGammaBtcVariants()
     {
         Assert.Equal(1029, StrategyIds.BtcUpDown5mVariants.Count);
@@ -527,8 +572,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_ExcludeCryptoBinanceBpsVariants()
     {
-        Assert.Equal(1654, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(3004, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(1656, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(3006, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(321, StrategyIds.BtcLowerEnterPremarketVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
@@ -634,6 +679,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildRoiMirror));
         Assert.Equal(3, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror));
+        Assert.Single(StrategyIds.CryptoUpDown5mVariants, variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffResetMirror);
+        Assert.Single(StrategyIds.CryptoUpDown5mVariants, variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror);
         AssertDiffCounterTrendFakPremarketGrid(StrategyIds.CryptoUpDown5mVariants, "ETH");
         AssertDiffCounterTrendFakPremarketGrid(StrategyIds.CryptoUpDown5mVariants, "SOL");
         AssertDiffProgressGrid(StrategyIds.CryptoUpDown5mVariants, "ETH");
@@ -6636,6 +6685,318 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal("reference_price_average_envelope_bps_premarket_v5", confirmationSignal.GetProperty("decision_source").GetString());
         Assert.True(confirmationSignal.GetProperty("reference_average_boundary_uses_available_data").GetBoolean());
         Assert.False(confirmationSignal.GetProperty("reference_average_incomplete_data_blocks_decision").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_LossDiffResetParentMirrorEntersAtFourPlusAndCopiesFrozenIntent()
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff4Plus);
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 2020m,
+            [parent.Code, child.Code],
+            configureRepository: (repository, now) => ConfigureLossDiffChild(
+                repository,
+                child,
+                StrategyChildParentAssignmentModes.LossDiffReset,
+                threshold: 4,
+                now,
+                wonOutcomes: [false, false, false, false, false]));
+
+        var result = await context.Processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(2, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        var parentOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == parent.Id);
+        var childOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
+        Assert.Equal(parentOrder.AssetId, childOrder.AssetId);
+        Assert.Equal(parentOrder.Outcome, childOrder.Outcome);
+        Assert.Equal(parentOrder.Price, childOrder.Price);
+        Assert.Equal(parentOrder.NotionalUsd, childOrder.NotionalUsd);
+        Assert.Equal(parentOrder.SizeShares, childOrder.SizeShares);
+        using var decision = JsonDocument.Parse(Assert.IsType<string>(childOrder.RawDecisionJson));
+        var lossDiff = decision.RootElement.GetProperty("loss_diff");
+        Assert.Equal(5, lossDiff.GetProperty("pre_entry_value").GetInt32());
+        Assert.Equal(4, lossDiff.GetProperty("threshold").GetInt32());
+        Assert.True(lossDiff.GetProperty("gate_passed").GetBoolean());
+        var intent = decision.RootElement.GetProperty("parent_execution_intent");
+        Assert.Equal("FAK", intent.GetProperty("order_type").GetString());
+        Assert.Equal("FAK", intent.GetProperty("time_in_force").GetString());
+        Assert.Equal(parentOrder.AssetId, intent.GetProperty("asset_id").GetString());
+        Assert.Equal(parentOrder.NotionalUsd, intent.GetProperty("target_notional_usd").GetDecimal());
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_LossDiffResetParentMirrorWinResetsAndPersistsAuditableSkip()
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff4Plus);
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 2020m,
+            [parent.Code, child.Code],
+            configureRepository: (repository, now) => ConfigureLossDiffChild(
+                repository,
+                child,
+                StrategyChildParentAssignmentModes.LossDiffReset,
+                threshold: 4,
+                now,
+                wonOutcomes: [false, false, false, false, true]));
+
+        var result = await context.Processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        Assert.DoesNotContain(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
+        var skipped = Assert.Single(context.Repository.StrategyMarketPaperRuns, run =>
+            run.StrategyId == child.Id && run.Status == StrategyMarketPaperRunStatuses.Skipped);
+        Assert.Equal("parent_lossdiff_below_threshold", skipped.SkipReason);
+        Assert.Contains("\"pre_entry_value\":0", skipped.SkipDiagnosticsJson, StringComparison.Ordinal);
+        Assert.Contains("\"gate_passed\":false", skipped.SkipDiagnosticsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReconcileStrategyLossDiffStatesAsync_LossDiffResetProgressesOneThroughFourAndContinuesAboveThreshold()
+    {
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff4Plus);
+        var now = new DateTimeOffset(2026, 6, 8, 12, 34, 30, TimeSpan.Zero);
+        for (var lossCount = 1; lossCount <= 5; lossCount++)
+        {
+            var repository = new TestAppRepository();
+            ConfigureLossDiffChild(
+                repository,
+                child,
+                StrategyChildParentAssignmentModes.LossDiffReset,
+                threshold: 4,
+                now,
+                Enumerable.Repeat(false, lossCount).ToArray());
+
+            var first = await ((IAppRepository)repository).ReconcileStrategyLossDiffStatesAsync(
+                StrategyIds.EthDiffConfirmedAveragePremarketParent,
+                now);
+            var retry = await ((IAppRepository)repository).ReconcileStrategyLossDiffStatesAsync(
+                StrategyIds.EthDiffConfirmedAveragePremarketParent,
+                now);
+
+            Assert.Equal(lossCount, first[child.Id].CurrentValue);
+            Assert.Equal(lossCount, retry[child.Id].CurrentValue);
+        }
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_LossDiffPositiveParentMirrorUsesZeroFloorAndThirteenPlusGate()
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff13PlusPositive);
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 2020m,
+            [parent.Code, child.Code],
+            configureRepository: (repository, now) => ConfigureLossDiffChild(
+                repository,
+                child,
+                StrategyChildParentAssignmentModes.LossDiffPositive,
+                threshold: 13,
+                now,
+                wonOutcomes: [true, true, false, false, false, false, false, false, false, false, false, false, false, false, false]));
+
+        var firstResult = await context.Processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(2, firstResult.EntriesPlaced);
+        var childOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
+        Assert.Contains("\"pre_entry_value\":13", childOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"gate_passed\":true", childOrder.RawDecisionJson, StringComparison.Ordinal);
+
+        var lastParentOutcome = context.Repository.StrategyMarketPaperRuns
+            .Where(run => run.StrategyId == parent.Id && run.Status == StrategyMarketPaperRunStatuses.Settled)
+            .OrderBy(run => run.EnteredAtUtc)
+            .Last();
+        var winEnteredAtUtc = lastParentOutcome.EnteredAtUtc!.Value.AddMinutes(5);
+        context.Repository.StrategyMarketPaperRuns.Add(lastParentOutcome with
+        {
+            Id = Guid.NewGuid(),
+            MarketId = "lossdiff-positive-win-after-thirteen",
+            EnteredAtUtc = winEnteredAtUtc,
+            SettledAtUtc = winEnteredAtUtc.AddMinutes(5),
+            RealizedPnlUsd = 1m
+        });
+        var reconciled = await ((IAppRepository)context.Repository).ReconcileStrategyLossDiffStatesAsync(
+            parent.Id,
+            winEnteredAtUtc.AddMinutes(6));
+        Assert.Equal(12, reconciled[child.Id].CurrentValue);
+    }
+
+    [Fact]
+    public async Task ReconcileStrategyLossDiffStatesAsync_LossDiffIgnoresChildOutcomes()
+    {
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff4Plus);
+        var now = new DateTimeOffset(2026, 6, 8, 12, 34, 30, TimeSpan.Zero);
+        var repository = new TestAppRepository();
+        ConfigureLossDiffChild(
+            repository,
+            child,
+            StrategyChildParentAssignmentModes.LossDiffReset,
+            threshold: 4,
+            now,
+            wonOutcomes: [false, false, false]);
+        var parentHistory = repository.StrategyMarketPaperRuns.ToArray();
+        for (var index = 0; index < 10; index++)
+        {
+            var source = parentHistory[index % parentHistory.Length];
+            repository.StrategyMarketPaperRuns.Add(source with
+            {
+                Id = Guid.NewGuid(),
+                StrategyId = child.Id,
+                MarketId = $"lossdiff-child-outcome-{index.ToString(CultureInfo.InvariantCulture)}",
+                EnteredAtUtc = source.EnteredAtUtc!.Value.AddSeconds(index + 1),
+                SettledAtUtc = source.SettledAtUtc!.Value.AddSeconds(index + 1),
+                RealizedPnlUsd = -1m
+            });
+        }
+
+        var states = await ((IAppRepository)repository).ReconcileStrategyLossDiffStatesAsync(
+            StrategyIds.EthDiffConfirmedAveragePremarketParent,
+            now);
+
+        Assert.Equal(3, states[child.Id].CurrentValue);
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_LossDiffParentMirrorLiveShadowCopiesParentFakRequestWithoutNewBookLookup()
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff4Plus);
+        var tradingClient = new CapturingTradingClient
+        {
+            PlacementResult = new LiveOrderPlacementResult(
+                true,
+                "0xlossdiff",
+                "matched",
+                null,
+                "0.80",
+                "1.25",
+                "{\"status\":\"matched\",\"makingAmount\":\"0.80\",\"takingAmount\":\"1.25\"}",
+                "{}")
+        };
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 2020m,
+            [parent.Code, child.Code],
+            tradingClient,
+            configureRepository: (repository, now) => ConfigureLossDiffChild(
+                repository,
+                child,
+                StrategyChildParentAssignmentModes.LossDiffReset,
+                threshold: 4,
+                now,
+                wonOutcomes: [false, false, false, false]));
+
+        var result = await context.Processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(2, result.EntriesPlaced);
+        Assert.Equal(2, tradingClient.PlaceCalls);
+        Assert.Equal(2, tradingClient.Requests.Count);
+        var parentRequest = tradingClient.Requests[0];
+        var childRequest = tradingClient.Requests[1];
+        Assert.Equal(parentRequest.TokenId, childRequest.TokenId);
+        Assert.Equal(parentRequest.Side, childRequest.Side);
+        Assert.Equal(parentRequest.Price, childRequest.Price);
+        Assert.Equal(parentRequest.SizeShares, childRequest.SizeShares);
+        Assert.Equal(parentRequest.MarketBuyAmountUsd, childRequest.MarketBuyAmountUsd);
+        Assert.Equal(ClobV2OrderType.FAK, childRequest.OrderType);
+        Assert.False(childRequest.PostOnly);
+        Assert.Null(childRequest.GtdExpirationUtc);
+
+        var parentLiveOrder = Assert.Single(context.Repository.LiveOrders, order => order.StrategyId == parent.Id);
+        var childLiveOrder = Assert.Single(context.Repository.LiveOrders, order => order.StrategyId == child.Id);
+        Assert.Equal(parentLiveOrder.AssetId, childLiveOrder.AssetId);
+        Assert.Equal(parentLiveOrder.Outcome, childLiveOrder.Outcome);
+        Assert.Equal(parentLiveOrder.Price, childLiveOrder.Price);
+        Assert.Equal(parentLiveOrder.NotionalUsd, childLiveOrder.NotionalUsd);
+        Assert.Equal(parentLiveOrder.SizeShares, childLiveOrder.SizeShares);
+
+        var childPaperOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
+        Assert.Equal("paper_live_shadow_actual_fill", childPaperOrder.ExecutionSource);
+        Assert.Contains("\"pre_entry_value\":4", childPaperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"gate_passed\":true", childPaperOrder.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Contains("\"order_type\":\"FAK\"", childPaperOrder.RawDecisionJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_LossDiffParentMirrorDoesNotCreateChildWhenParentSignalSkips()
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff4Plus);
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 1980m,
+            [parent.Code, child.Code],
+            configureRepository: (repository, now) => ConfigureLossDiffChild(
+                repository,
+                child,
+                StrategyChildParentAssignmentModes.LossDiffReset,
+                threshold: 4,
+                now,
+                wonOutcomes: [false, false, false, false]));
+
+        var result = await context.Processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.DoesNotContain(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
+        Assert.DoesNotContain(context.Repository.StrategyMarketPaperRuns, run => run.StrategyId == child.Id);
+        var parentRun = Assert.Single(context.Repository.StrategyMarketPaperRuns, run =>
+            run.StrategyId == parent.Id &&
+            run.MarketId == "eth-confirmed-current-market");
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, parentRun.Status);
+        Assert.Equal("confirmed_average_signal_mismatch", parentRun.SkipReason);
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_LossDiffParentMirrorDoesNotCreateChildWhenParentLiveSubmissionIsRejected()
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff4Plus);
+        var tradingClient = new CapturingTradingClient
+        {
+            PlacementResult = new LiveOrderPlacementResult(
+                false,
+                null,
+                "rejected",
+                "controlled test rejection",
+                null,
+                null,
+                "{\"status\":\"rejected\"}",
+                "{}",
+                400)
+        };
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 2020m,
+            [parent.Code, child.Code],
+            tradingClient,
+            configureRepository: (repository, now) => ConfigureLossDiffChild(
+                repository,
+                child,
+                StrategyChildParentAssignmentModes.LossDiffReset,
+                threshold: 4,
+                now,
+                wonOutcomes: [false, false, false, false]));
+
+        await context.Processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.DoesNotContain(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
+        Assert.DoesNotContain(context.Repository.LiveOrders, order => order.StrategyId == child.Id);
+        Assert.DoesNotContain(context.Repository.StrategyMarketPaperRuns, run => run.StrategyId == child.Id);
     }
 
     [Fact]
@@ -14646,13 +15007,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         decimal currentReferencePriceUsd,
         IReadOnlyCollection<string> enabledStrategyCodes,
         CapturingTradingClient? tradingClient = null,
-        bool useIncompleteReferenceAverages = false)
+        bool useIncompleteReferenceAverages = false,
+        Action<TestAppRepository, DateTimeOffset>? configureRepository = null)
     {
         var marketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 35, 0, TimeSpan.Zero);
         var previousMarketStartUtc = marketStartUtc.AddMinutes(-5);
         var historicalTargetMarketStartUtc = previousMarketStartUtc.AddMinutes(-5);
         var now = marketStartUtc.AddSeconds(-30);
         var repository = new TestAppRepository();
+        configureRepository?.Invoke(repository, now);
         if (tradingClient is not null)
         {
             foreach (var strategyCode in enabledStrategyCodes)
@@ -14763,6 +15126,63 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             cryptoReferencePriceAverageProvider: averageProvider);
 
         return (processor, repository);
+    }
+
+    private static void ConfigureLossDiffChild(
+        TestAppRepository repository,
+        BtcUpDown5mStrategyVariant child,
+        string mode,
+        int threshold,
+        DateTimeOffset now,
+        IReadOnlyList<bool> wonOutcomes)
+    {
+        var parentStrategyId = StrategyIds.EthDiffConfirmedAveragePremarketParent;
+        var startedAtUtc = now.AddHours(-3);
+        repository.StrategyChildParentAssignments.Add(new StrategyChildParentAssignment(
+            Guid.NewGuid(),
+            child.Id,
+            parentStrategyId,
+            "ETH",
+            0,
+            mode,
+            0m,
+            0m,
+            startedAtUtc,
+            null,
+            startedAtUtc));
+        for (var index = 0; index < wonOutcomes.Count; index++)
+        {
+            var enteredAtUtc = startedAtUtc.AddMinutes(index * 5 + 1);
+            var settledAtUtc = enteredAtUtc.AddMinutes(5);
+            repository.StrategyMarketPaperRuns.Add(new StrategyMarketPaperRun(
+                Guid.NewGuid(),
+                parentStrategyId,
+                $"lossdiff-parent-history-{index.ToString(CultureInfo.InvariantCulture)}",
+                $"lossdiff-parent-condition-{index.ToString(CultureInfo.InvariantCulture)}",
+                $"eth-updown-5m-lossdiff-history-{index.ToString(CultureInfo.InvariantCulture)}",
+                "ETH Up or Down - LossDiff parent history",
+                "ETH Up/Down 5m Diff Confirmed Average Premarket",
+                enteredAtUtc,
+                enteredAtUtc.AddMinutes(5),
+                enteredAtUtc.AddSeconds(-30),
+                enteredAtUtc,
+                StrategyMarketPaperRunStatuses.Settled,
+                "lossdiff-history-asset",
+                wonOutcomes[index] ? "Up" : "Down",
+                0.50m,
+                1m,
+                2m,
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                enteredAtUtc,
+                wonOutcomes[index] ? 1m : 0m,
+                wonOutcomes[index] ? 2m : 0m,
+                wonOutcomes[index] ? 1m : -1m,
+                settledAtUtc,
+                null,
+                enteredAtUtc,
+                settledAtUtc));
+        }
     }
 
     private static void AddWebSocketDiffResults(
@@ -16420,6 +16840,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     {
         public int PlaceCalls { get; private set; }
 
+        public List<ClobV2OrderRequest> Requests { get; } = [];
+
         public int CancelOrderCalls { get; private set; }
 
         public int CancelAllOrdersCalls { get; private set; }
@@ -16446,6 +16868,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         {
             PlaceCalls++;
             LastRequest = request;
+            Requests.Add(request);
             return Task.FromResult(PlacementResult);
         }
 

@@ -5137,6 +5137,158 @@ ORDER BY parent_strategy_id ASC, child_strategy_id ASC;
 		return results;
 	}
 
+	public async Task<IReadOnlyDictionary<Guid, StrategyLossDiffState>> ReconcileStrategyLossDiffStatesAsync(
+		Guid parentStrategyId,
+		DateTimeOffset settledBeforeUtc,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		var normalizedParentStrategyId = StrategyIds.Normalize(parentStrategyId);
+		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		var states = new List<StrategyLossDiffState>();
+		await using (NpgsqlCommand lockCommand = CreateCommand(connection, """
+SELECT child_strategy_id, parent_strategy_id, mode, threshold, current_value,
+       started_at_utc, last_parent_entered_at_utc, last_parent_run_id,
+       last_reconciled_at_utc, updated_at_utc
+FROM strategy_loss_diff_states
+WHERE parent_strategy_id = @ParentStrategyId
+ORDER BY child_strategy_id ASC
+FOR UPDATE;
+"""))
+		{
+			lockCommand.Transaction = transaction;
+			lockCommand.Parameters.AddWithValue("ParentStrategyId", normalizedParentStrategyId);
+			await using NpgsqlDataReader reader = await lockCommand.ExecuteReaderAsync(cancellationToken);
+			while (await reader.ReadAsync(cancellationToken))
+			{
+				states.Add(ReadStrategyLossDiffState(reader));
+			}
+		}
+
+		if (states.Count == 0)
+		{
+			await transaction.CommitAsync(cancellationToken);
+			return new Dictionary<Guid, StrategyLossDiffState>();
+		}
+
+		await using (NpgsqlCommand insertEventsCommand = CreateCommand(connection, """
+INSERT INTO strategy_loss_diff_parent_events (
+    child_strategy_id,
+    parent_run_id,
+    parent_entered_at_utc,
+    parent_settled_at_utc,
+    won,
+    created_at_utc
+)
+SELECT
+    state.child_strategy_id,
+    run.id,
+    run.entered_at_utc,
+    run.settled_at_utc,
+    run.realized_pnl_usd > 0,
+    clock_timestamp()
+FROM strategy_loss_diff_states state
+INNER JOIN strategy_market_paper_runs run
+    ON run.strategy_id = state.parent_strategy_id
+WHERE state.parent_strategy_id = @ParentStrategyId
+  AND run.status = @SettledStatus
+  AND run.entered_at_utc IS NOT NULL
+  AND run.entered_at_utc >= state.started_at_utc
+  AND run.settled_at_utc IS NOT NULL
+  AND run.settled_at_utc < @SettledBeforeUtc
+  AND run.realized_pnl_usd IS NOT NULL
+  AND run.realized_pnl_usd <> 0
+ON CONFLICT (child_strategy_id, parent_run_id) DO NOTHING;
+"""))
+		{
+			insertEventsCommand.Transaction = transaction;
+			insertEventsCommand.Parameters.AddWithValue("ParentStrategyId", normalizedParentStrategyId);
+			insertEventsCommand.Parameters.AddWithValue("SettledStatus", StrategyMarketPaperRunStatuses.Settled);
+			insertEventsCommand.Parameters.AddWithValue("SettledBeforeUtc", UtcDateTime(settledBeforeUtc));
+			await insertEventsCommand.ExecuteNonQueryAsync(cancellationToken);
+		}
+
+		var eventsByChild = states.ToDictionary(
+			state => state.ChildStrategyId,
+			_ => new List<(Guid ParentRunId, DateTimeOffset ParentEnteredAtUtc, bool Won)>());
+		await using (NpgsqlCommand readEventsCommand = CreateCommand(connection, """
+SELECT child_strategy_id, parent_run_id, parent_entered_at_utc, won
+FROM strategy_loss_diff_parent_events
+WHERE child_strategy_id = ANY(@ChildStrategyIds)
+ORDER BY child_strategy_id ASC, parent_entered_at_utc ASC, parent_run_id ASC;
+"""))
+		{
+			readEventsCommand.Transaction = transaction;
+			readEventsCommand.Parameters.Add("ChildStrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value =
+				states.Select(state => state.ChildStrategyId).ToArray();
+			await using NpgsqlDataReader reader = await readEventsCommand.ExecuteReaderAsync(cancellationToken);
+			while (await reader.ReadAsync(cancellationToken))
+			{
+				eventsByChild[reader.GetGuid(0)].Add((
+					reader.GetGuid(1),
+					DateTimeOffsetFromUtc(reader.GetDateTime(2)),
+					reader.GetBoolean(3)));
+			}
+		}
+
+		var reconciledStates = new Dictionary<Guid, StrategyLossDiffState>(states.Count);
+		foreach (var state in states)
+		{
+			var currentValue = 0;
+			foreach (var parentEvent in eventsByChild[state.ChildStrategyId])
+			{
+				currentValue = state.Mode switch
+				{
+					StrategyChildParentAssignmentModes.LossDiffReset => parentEvent.Won
+						? 0
+						: checked(currentValue + 1),
+					StrategyChildParentAssignmentModes.LossDiffPositive => parentEvent.Won
+						? Math.Max(0, currentValue - 1)
+						: checked(currentValue + 1),
+					_ => throw new InvalidOperationException(
+						$"Unsupported LossDiff state mode '{state.Mode}' for child {state.ChildStrategyId:D}.")
+				};
+			}
+
+			var lastEvent = eventsByChild[state.ChildStrategyId].LastOrDefault();
+			var hasEvents = eventsByChild[state.ChildStrategyId].Count > 0;
+			await using NpgsqlCommand updateCommand = CreateCommand(connection, """
+UPDATE strategy_loss_diff_states
+SET current_value = @CurrentValue,
+    last_parent_entered_at_utc = @LastParentEnteredAtUtc,
+    last_parent_run_id = @LastParentRunId,
+    last_reconciled_at_utc = @LastReconciledAtUtc,
+    updated_at_utc = clock_timestamp()
+WHERE child_strategy_id = @ChildStrategyId
+RETURNING child_strategy_id, parent_strategy_id, mode, threshold, current_value,
+          started_at_utc, last_parent_entered_at_utc, last_parent_run_id,
+          last_reconciled_at_utc, updated_at_utc;
+""");
+			updateCommand.Transaction = transaction;
+			updateCommand.Parameters.AddWithValue("CurrentValue", currentValue);
+			updateCommand.Parameters.AddWithValue(
+				"LastParentEnteredAtUtc",
+				hasEvents ? UtcDateTime(lastEvent.ParentEnteredAtUtc) : DBNull.Value);
+			updateCommand.Parameters.AddWithValue(
+				"LastParentRunId",
+				hasEvents ? lastEvent.ParentRunId : DBNull.Value);
+			updateCommand.Parameters.AddWithValue("LastReconciledAtUtc", UtcDateTime(settledBeforeUtc));
+			updateCommand.Parameters.AddWithValue("ChildStrategyId", state.ChildStrategyId);
+			await using NpgsqlDataReader reader = await updateCommand.ExecuteReaderAsync(cancellationToken);
+			if (!await reader.ReadAsync(cancellationToken))
+			{
+				throw new InvalidOperationException(
+					$"LossDiff state disappeared while reconciling child {state.ChildStrategyId:D}.");
+			}
+
+			var reconciledState = ReadStrategyLossDiffState(reader);
+			reconciledStates.Add(reconciledState.ChildStrategyId, reconciledState);
+		}
+
+		await transaction.CommitAsync(cancellationToken);
+		return reconciledStates;
+	}
+
 	public async Task UpsertStrategyChildParentSelectionsAsync(
 		IReadOnlyList<StrategyChildParentSelection> selections,
 		DateTimeOffset nowUtc,
@@ -9906,6 +10058,21 @@ FROM claimed;
 			DateTimeOffsetFromUtc(reader.GetDateTime(10)));
 	}
 
+	private static StrategyLossDiffState ReadStrategyLossDiffState(NpgsqlDataReader reader)
+	{
+		return new StrategyLossDiffState(
+			reader.GetGuid(0),
+			reader.GetGuid(1),
+			reader.GetString(2),
+			reader.GetInt32(3),
+			reader.GetInt32(4),
+			DateTimeOffsetFromUtc(reader.GetDateTime(5)),
+			reader.IsDBNull(6) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(6)),
+			reader.IsDBNull(7) ? null : reader.GetGuid(7),
+			reader.IsDBNull(8) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(8)),
+			DateTimeOffsetFromUtc(reader.GetDateTime(9)));
+	}
+
 	private static void AddStrategyMarketPaperRunParameters(NpgsqlCommand command, StrategyMarketPaperRun run)
 	{
 		command.Parameters.AddWithValue("Id", run.Id);
@@ -9955,9 +10122,52 @@ FROM claimed;
 			return run.SkipDiagnosticsJson;
 		}
 
-		return IsMakerGtdPlacementSkipDiagnostics(run)
+		return IsMakerGtdPlacementSkipDiagnostics(run) || IsLossDiffPlacementSkipDiagnostics(run)
 			? run.SkipDiagnosticsJson
 			: null;
+	}
+
+	private static bool IsLossDiffPlacementSkipDiagnostics(StrategyMarketPaperRun run)
+	{
+		var normalizedStrategyId = StrategyIds.Normalize(run.StrategyId);
+		if ((normalizedStrategyId != StrategyIds.EthLossDiff4Plus &&
+			 normalizedStrategyId != StrategyIds.EthLossDiff13PlusPositive) ||
+			!string.Equals(run.SkipReason, "parent_lossdiff_below_threshold", StringComparison.Ordinal) ||
+			string.IsNullOrWhiteSpace(run.SkipDiagnosticsJson))
+		{
+			return false;
+		}
+
+		try
+		{
+			using var document = JsonDocument.Parse(run.SkipDiagnosticsJson);
+			var root = document.RootElement;
+			return root.ValueKind == JsonValueKind.Object &&
+				root.TryGetProperty("pricing_mode", out var pricingMode) &&
+				string.Equals(pricingMode.GetString(), "child_parent_mirror", StringComparison.Ordinal) &&
+				root.TryGetProperty("child_strategy_id", out var childStrategyId) &&
+				Guid.TryParse(childStrategyId.GetString(), out var parsedChildStrategyId) &&
+				StrategyIds.Normalize(parsedChildStrategyId) == normalizedStrategyId &&
+				root.TryGetProperty("parent_strategy_id", out var parentStrategyId) &&
+				Guid.TryParse(parentStrategyId.GetString(), out var parsedParentStrategyId) &&
+				StrategyIds.Normalize(parsedParentStrategyId) == StrategyIds.EthDiffConfirmedAveragePremarketParent &&
+				root.TryGetProperty("parent_run_id", out var parentRunId) &&
+				Guid.TryParse(parentRunId.GetString(), out _) &&
+				root.TryGetProperty("loss_diff", out var lossDiff) &&
+				lossDiff.ValueKind == JsonValueKind.Object &&
+				lossDiff.TryGetProperty("gate_passed", out var gatePassed) &&
+				gatePassed.ValueKind == JsonValueKind.False &&
+				lossDiff.TryGetProperty("pre_entry_value", out var currentValue) &&
+				currentValue.TryGetInt32(out var parsedCurrentValue) &&
+				lossDiff.TryGetProperty("threshold", out var threshold) &&
+				threshold.TryGetInt32(out var parsedThreshold) &&
+				parsedCurrentValue >= 0 &&
+				parsedThreshold > parsedCurrentValue;
+		}
+		catch (JsonException)
+		{
+			return false;
+		}
 	}
 
 	private static bool IsMakerGtdPlacementSkipDiagnostics(StrategyMarketPaperRun run)

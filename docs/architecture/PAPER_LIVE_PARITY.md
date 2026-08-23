@@ -207,6 +207,28 @@ Every decision encoded in the intent must use information available before the
 submission time. Future book changes, eventual fills, resolution results, or any
 other later information are forbidden inputs.
 
+### Fixed LossDiff-gated child intent
+
+The two fixed ETH LossDiff children are descendants only for signal coupling;
+they do not inherit a separate execution model. Their sole parent is
+`ETH Up or Down 5m 1 Diff Confirmed Average Premarket`
+(`b7c50005-0000-4000-8204-000000000001`). A child is considered only after that
+exact parent has actually entered the same market and only when the child's
+durable pre-entry LossDiff value meets its fixed threshold. A skipped, rejected,
+or zero-fill parent creates no child order.
+
+For an eligible child, the parent FAK `ExecutionIntent` is already frozen. The
+child receives its own strategy and decision identifiers but preserves the same
+token/outcome, BUY side, target cash amount and shares, maximum order price,
+tick/minimum-size constraints, `FAK` time-in-force, and `postOnly=false`. Paper
+uses the parent's decision-time snapshot. If Live is separately enabled later,
+the existing Live-shadow path submits that unchanged child intent after the
+parent's accepted fill proves that the parent actually entered; it performs no
+new order-book read and does not resize or reprice from the parent's eventual
+fill. Parent fill data and each child's venue response are outcome data used only
+for their separate accounting and later decisions. Both children are seeded with
+`live_stakes=false`; this parity path does not itself authorize Live trading.
+
 ## Execution and outcome rules
 
 Paper must model the documented behavior of the matching Live order type. The exact

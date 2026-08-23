@@ -30,7 +30,24 @@ public static class PostgresSchemaMigrationCatalog
                 "The immutable legacy schema must not be edited; add a new ordered migration instead.");
         }
 
-        return ValidateAndOrder([baseline]);
+        var lossDiffStrategies = new PostgresSchemaMigration(
+            order: 1,
+            id: PostgresLossDiffStrategySchemaMigration.Id,
+            sql: PostgresLossDiffStrategySchemaMigration.Sql,
+            transactional: true,
+            details: "seed two fixed ETH LossDiff children with zero-cutoff durable parent-outcome state");
+        if (!string.Equals(
+                lossDiffStrategies.SemanticChecksum,
+                PostgresLossDiffStrategySchemaMigration.SemanticChecksum,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"PostgreSQL migration checksum mismatch for '{PostgresLossDiffStrategySchemaMigration.Id}'. " +
+                $"Expected {PostgresLossDiffStrategySchemaMigration.SemanticChecksum}, " +
+                $"actual {lossDiffStrategies.SemanticChecksum}.");
+        }
+
+        return ValidateAndOrder([baseline, lossDiffStrategies]);
     }
 
     public static IReadOnlyList<PostgresSchemaMigration> ValidateAndOrder(

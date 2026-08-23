@@ -1287,6 +1287,9 @@ public static class StrategyIds
     public const string BtcUpDown5mMore270Below65IdValue = "b7c50005-0000-4000-8020-000000270065";
     public const string BtcUpDown5mMore270Below60IdValue = "b7c50005-0000-4000-8020-000000270060";
     public const string BtcUpDown5mStatisticsIdValue = "b7c50005-0000-4000-8050-000000000001";
+    public const string EthDiffConfirmedAveragePremarketParentIdValue = "b7c50005-0000-4000-8204-000000000001";
+    public const string EthLossDiff4PlusIdValue = "b7c50005-0000-4000-8225-000000000004";
+    public const string EthLossDiff13PlusPositiveIdValue = "b7c50005-0000-4000-8225-000000000013";
     public const string BtcUpDown5mUpSimpleCode = "btc_up_down_5m_up_simple";
     public const string BtcUpDown5mDownSimpleCode = "btc_up_down_5m_down_simple";
     public const string BtcUpDown5mMore90Below70Code = "btc_up_down_5m_more_90_below_70";
@@ -1302,6 +1305,9 @@ public static class StrategyIds
     public const string BtcUpDown5mMore270Below60Code = "btc_up_down_5m_more_270_below_60";
     public const string BtcUpDown5mStatisticsCode = "btc_up_down_5m_statistics";
     public const string BtcUpDown5mStatisticsName = "BTC Up or Down 5m Statistics";
+    public const string EthDiffConfirmedAveragePremarketParentCode = "eth_up_down_5m_1_diff_confirmed_average_premarket";
+    public const string EthLossDiff4PlusCode = "eth_up_down_5m_1_diff_confirmed_average_premarket_lossdiff_4_plus";
+    public const string EthLossDiff13PlusPositiveCode = "eth_up_down_5m_1_diff_confirmed_average_premarket_lossdiff_13_plus_positive";
     public const string SolUpDown5mDown8BpsReferenceAveragePremarketCode = "sol_up_down_5m_down_bps_8_fak_premarket";
 
     public static readonly Guid FollowLeader = Guid.Parse(FollowLeaderIdValue);
@@ -1319,6 +1325,9 @@ public static class StrategyIds
     public static readonly Guid BtcUpDown5mMore270Below65 = Guid.Parse(BtcUpDown5mMore270Below65IdValue);
     public static readonly Guid BtcUpDown5mMore270Below60 = Guid.Parse(BtcUpDown5mMore270Below60IdValue);
     public static readonly Guid BtcUpDown5mStatistics = Guid.Parse(BtcUpDown5mStatisticsIdValue);
+    public static readonly Guid EthDiffConfirmedAveragePremarketParent = Guid.Parse(EthDiffConfirmedAveragePremarketParentIdValue);
+    public static readonly Guid EthLossDiff4Plus = Guid.Parse(EthLossDiff4PlusIdValue);
+    public static readonly Guid EthLossDiff13PlusPositive = Guid.Parse(EthLossDiff13PlusPositiveIdValue);
 
     public static readonly IReadOnlyDictionary<Guid, string> NegativeProgressPurgeTargets =
         CreateNegativeProgressPurgeTargets();
@@ -1855,6 +1864,10 @@ public static class StrategyIds
             variants.AddRange(CreateDiffReferenceAveragePremarketVariants(asset.Symbol));
             variants.AddRange(CreateBpsConfirmedAveragePremarketVariants(asset.Symbol, variants));
             variants.AddRange(CreateDiffConfirmedAveragePremarketVariants(asset.Symbol, variants));
+            if (string.Equals(asset.Symbol, "ETH", StringComparison.OrdinalIgnoreCase))
+            {
+                variants.AddRange(CreateEthLossDiffMirrorVariants(variants));
+            }
             variants.AddRange(CreateChildMirrorVariants(asset.Symbol));
             variants.AddRange(terminalLowerEnterVariants);
         }
@@ -2952,6 +2965,42 @@ public static class StrategyIds
             ConfirmationSignalStrategyId: confirmationVariant.Id);
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateEthLossDiffMirrorVariants(
+        IReadOnlyCollection<BtcUpDown5mStrategyVariant> registeredVariants)
+    {
+        var parent = registeredVariants.Single(variant =>
+            variant.Id == EthDiffConfirmedAveragePremarketParent &&
+            string.Equals(variant.Code, EthDiffConfirmedAveragePremarketParentCode, StringComparison.Ordinal));
+
+        return
+        [
+            new BtcUpDown5mStrategyVariant(
+                EthLossDiff4Plus,
+                EthLossDiff4PlusCode,
+                "ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+",
+                "Copy each actual same-market entry of ETH Up or Down 5m 1 Diff Confirmed Average Premarket only while its post-rollout consecutive-loss LossDiff is at least 4. Parent losses add one and a parent win resets the counter to zero. The copied child keeps the exact parent outcome, price constraints, amount, order type, and time-in-force.",
+                BtcUpDown5mStrategyDirection.Dynamic,
+                parent.EntryDelaySeconds,
+                BtcUpDown5mStrategyBehavior.LossDiffResetMirror,
+                DecisionDepth: 4,
+                Category: "ETH Up/Down 5m LossDiff",
+                ReferenceAssetSymbol: "ETH",
+                ParentStrategyId: parent.Id),
+            new BtcUpDown5mStrategyVariant(
+                EthLossDiff13PlusPositive,
+                EthLossDiff13PlusPositiveCode,
+                "ETH 5m 1 Diff Confirmed Average Premarket LossDiff 13+ Positive",
+                "Copy each actual same-market entry of ETH Up or Down 5m 1 Diff Confirmed Average Premarket only while its post-rollout nonnegative LossDiff is at least 13. Parent losses add one and a parent win subtracts one with a zero floor. The copied child keeps the exact parent outcome, price constraints, amount, order type, and time-in-force.",
+                BtcUpDown5mStrategyDirection.Dynamic,
+                parent.EntryDelaySeconds,
+                BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror,
+                DecisionDepth: 13,
+                Category: "ETH Up/Down 5m LossDiff Positive",
+                ReferenceAssetSymbol: "ETH",
+                ParentStrategyId: parent.Id)
+        ];
+    }
+
     private static BtcUpDownFixedOutcome GetOppositeFixedOutcome(BtcUpDownFixedOutcome outcome)
     {
         return outcome == BtcUpDownFixedOutcome.Up
@@ -3763,6 +3812,8 @@ public enum BtcUpDown5mStrategyBehavior
     DiffReferenceAveragePremarket,
     BpsConfirmedAveragePremarket,
     DiffConfirmedAveragePremarket,
+    LossDiffResetMirror,
+    LossDiffPositiveMirror,
     AbsoluteBpsThresholdFakPremarket,
     OptimizedReferenceAverageBpsThresholdFakPremarket,
     LowEnterReferenceAverageBpsThresholdFakPremarket,
@@ -3796,7 +3847,8 @@ public sealed record BtcUpDown5mStrategyVariant(
     bool PaperOnly = false,
     decimal? FakMaximumOrderPrice = null,
     Guid? LowerEnterSourceStrategyId = null,
-    decimal? MakerMaximumOrderPrice = null)
+    decimal? MakerMaximumOrderPrice = null,
+    Guid? ParentStrategyId = null)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }
@@ -4050,7 +4102,21 @@ public static class StrategyChildParentAssignmentModes
     public const string ChildProgress = "ChildProgress";
     public const string ChildRoi = "ChildRoi";
     public const string ChildProgressRoi = "ChildProgressRoi";
+    public const string LossDiffReset = "LossDiffReset";
+    public const string LossDiffPositive = "LossDiffPositive";
 }
+
+public sealed record StrategyLossDiffState(
+    Guid ChildStrategyId,
+    Guid ParentStrategyId,
+    string Mode,
+    int Threshold,
+    int CurrentValue,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset? LastParentEnteredAtUtc,
+    Guid? LastParentRunId,
+    DateTimeOffset? LastReconciledAtUtc,
+    DateTimeOffset UpdatedAtUtc);
 
 public sealed record StrategyLookbackPnl(
     Guid StrategyId,

@@ -737,6 +737,80 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
         return Task.FromResult<IReadOnlyList<StrategyChildParentAssignment>>([]);
     }
 
+    async Task<IReadOnlyDictionary<Guid, StrategyLossDiffState>> ReconcileStrategyLossDiffStatesAsync(
+        Guid parentStrategyId,
+        DateTimeOffset settledBeforeUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedParentStrategyId = StrategyIds.Normalize(parentStrategyId);
+        var assignments = (await GetActiveStrategyChildParentAssignmentsAsync(cancellationToken))
+            .Where(assignment =>
+                StrategyIds.Normalize(assignment.ParentStrategyId) == normalizedParentStrategyId &&
+                assignment.ChildMode is StrategyChildParentAssignmentModes.LossDiffReset or
+                    StrategyChildParentAssignmentModes.LossDiffPositive)
+            .ToArray();
+        if (assignments.Length == 0)
+        {
+            return new Dictionary<Guid, StrategyLossDiffState>();
+        }
+
+        var variantsById = StrategyIds.UpDown5mStrategyVariants.ToDictionary(
+            variant => StrategyIds.Normalize(variant.Id));
+        var runs = await GetRecentStrategyMarketPaperRunsAsync(
+            normalizedParentStrategyId,
+            StrategyMarketPaperRunStatuses.Settled,
+            int.MaxValue,
+            cancellationToken);
+        var results = new Dictionary<Guid, StrategyLossDiffState>(assignments.Length);
+        foreach (var assignment in assignments)
+        {
+            var childStrategyId = StrategyIds.Normalize(assignment.ChildStrategyId);
+            if (!variantsById.TryGetValue(childStrategyId, out var childVariant) ||
+                childVariant.ParentStrategyId != normalizedParentStrategyId)
+            {
+                continue;
+            }
+
+            var currentValue = 0;
+            StrategyMarketPaperRun? lastRun = null;
+            foreach (var run in runs
+                .Where(run => run.EnteredAtUtc is { } enteredAt && enteredAt >= assignment.AssignedAtUtc)
+                .Where(run => run.SettledAtUtc is { } settledAt && settledAt < settledBeforeUtc)
+                .Where(run => run.RealizedPnlUsd is not null and not 0m)
+                .OrderBy(run => run.EnteredAtUtc)
+                .ThenBy(run => run.Id))
+            {
+                var won = run.RealizedPnlUsd > 0m;
+                currentValue = assignment.ChildMode switch
+                {
+                    StrategyChildParentAssignmentModes.LossDiffReset => won
+                        ? 0
+                        : checked(currentValue + 1),
+                    StrategyChildParentAssignmentModes.LossDiffPositive => won
+                        ? Math.Max(0, currentValue - 1)
+                        : checked(currentValue + 1),
+                    _ => throw new InvalidOperationException(
+                        $"Unsupported LossDiff assignment mode '{assignment.ChildMode}'.")
+                };
+                lastRun = run;
+            }
+
+            results[childStrategyId] = new StrategyLossDiffState(
+                childStrategyId,
+                normalizedParentStrategyId,
+                assignment.ChildMode,
+                childVariant.DecisionDepth,
+                currentValue,
+                assignment.AssignedAtUtc,
+                lastRun?.EnteredAtUtc,
+                lastRun?.Id,
+                settledBeforeUtc,
+                settledBeforeUtc);
+        }
+
+        return results;
+    }
+
     Task UpsertStrategyChildParentSelectionsAsync(
         IReadOnlyList<StrategyChildParentSelection> selections,
         DateTimeOffset nowUtc,

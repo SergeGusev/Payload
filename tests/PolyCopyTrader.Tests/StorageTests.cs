@@ -109,6 +109,37 @@ public sealed class StorageTests
             SkipReason = "unrelated_skip",
             SkipDiagnosticsJson = """{"execution_source":"eth_reference_average_maker_gtd_paper"}"""
         }));
+
+        var parentRunId = Guid.NewGuid();
+        var lossDiffDiagnostics = JsonSerializer.Serialize(new
+        {
+            pricing_mode = "child_parent_mirror",
+            child_strategy_id = StrategyIds.EthLossDiff4Plus,
+            parent_strategy_id = StrategyIds.EthDiffConfirmedAveragePremarketParent,
+            parent_run_id = parentRunId,
+            loss_diff = new
+            {
+                pre_entry_value = 3,
+                threshold = 4,
+                gate_passed = false
+            }
+        });
+        var lossDiffSkipped = skipped with
+        {
+            StrategyId = StrategyIds.EthLossDiff4Plus,
+            SkipReason = "parent_lossdiff_below_threshold",
+            SkipDiagnosticsJson = lossDiffDiagnostics
+        };
+        Assert.Equal(
+            lossDiffDiagnostics,
+            PostgresAppRepository.GetPersistedSkipDiagnosticsJson(lossDiffSkipped));
+        Assert.Null(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(lossDiffSkipped with
+        {
+            SkipDiagnosticsJson = lossDiffDiagnostics.Replace(
+                "\"gate_passed\":false",
+                "\"gate_passed\":true",
+                StringComparison.Ordinal)
+        }));
     }
 
     [Fact]
