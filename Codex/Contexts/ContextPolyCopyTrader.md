@@ -3,7 +3,7 @@ Feature branches may be used for isolated work, but before reporting a change re
 
 ## Active Update 2026-08-23 Direct-Skip Compaction Linear Validation
 Goal: Make the current local service start and process its normal Paper workload without the recurring 30-second direct-skip retention timeout chain.
-Status: Implementation, bounded local runtime acceptance, and independent review complete; requirement-gate finalization, commit, and push pending
+Status: Completed, independently reviewed, committed as `f4ede380`, and pushed to the deployment branch
 Done:
 - User approved exact contract `RC-20260823-direct-skip-compaction-linear-validation` at digest `sha256:64c66d662c534ca297dd09aa0756d094c00d64d3c40a26447c77c043df5448fc`; approval-only checkpoint is `d76cfc3a`.
 - Removed only the redundant 12-line correlated `input_rows other_input` duplicate scan from production-v1 `DirectNewPaperSkipArchiveSql`. The mandatory C# ambiguity gate remains before the database path, and the dormant v2 SQL segment is byte-for-byte unchanged after newline normalization.
@@ -15,8 +15,8 @@ Done:
 - Ordinary local deltas were signals +80, Paper orders +80, settlements +3, fills/positions/Live orders +0; raw runs fell by 1,890 as direct skip compaction processed backlog while normal Paper cycles continued. The service also emitted 873 slow market-data side-effect warnings and three skipped crypto-reference warnings; they did not block startup and are outside this SQL correction.
 - Updated the exact non-secret audit in `Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md`. No Production access, schema migration/DDL, strategy/configuration change, deployment, or venue action occurred.
 - Independent reviewer `agent:/root/reviewer_direct_skip_compaction_linear_validation` compared the verbatim requests, approved contract, exact diff, tests, baseline comparison, build, and runtime evidence. After it correctly required removal of the still-running exact disposable PostgreSQL container, the bounded recheck returned PASS with no open findings.
-Next: Complete requirement gates, commit only this correction, and push the existing deployment branch.
-Notes: The exact disposable PostgreSQL container and runtime worktree were removed. Remaining marked build/test artifacts must be removed after final evidence extraction.
+Next: User can build/deploy the current tip when desired; this task changed only local startup/runtime persistence performance and did not deploy anything.
+Notes: Isolated WorkingTree, Staged, Contract, and one-commit Range gates passed for four governed files under the exact approved contract. The exact disposable PostgreSQL container and runtime worktrees were removed. Remaining marked build/test artifacts must be removed after final evidence extraction.
 Blockers: None inside the approved scope.
 
 ## Active Update 2026-08-23 Two ETH LossDiff Strategies
