@@ -12,6 +12,10 @@
     {
       "source": "user",
       "text": "1 - обновляем базу"
+    },
+    {
+      "source": "user",
+      "text": "Опять ошибка"
     }
   ],
   "scope": {
@@ -20,7 +24,8 @@
       "Run a fresh UTC read-only preflight against only 127.0.0.1:5432/polycopytrader and require the exact known legacy identity and inventory before any write: PostgreSQL 17.5, no public.schema_migration_history, 576 public application objects, 89 public tables, 307 indexes, one sequence, latest PolyCopyTrader.Service heartbeat build e58c6dd64a94b289f70464ce3f12fdf35fc435b3, and the exact current embedded data-migration marker shape.",
       "Use a one-time disposable C#/.NET runner under the marked D:\\CodexTemp session to acquire PostgresSchemaInitializer.AdvisoryLockKey and execute the current immutable PostgresSchema.SchemaSql baseline with semantic checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2 against that exact local database.",
       "Apply the baseline's five currently absent embedded data migrations. Their freshly rechecked target set must remain exactly 27 retired strategies: one Follow Leader, ten ETH Down Filtered Average Premarket, sixteen hopeless Progress, zero SOL Binance, and zero paired Maker-GTD.",
-      "Delete only dependencies reached from those exact 27 baseline cleanup targets. The currently verified preview is 334 strategy_market_paper_runs and 11 each of paper_orders, paper_fills, linked signals, and paper_positions, with zero Live orders; any changed target or dependency count stops execution for renewed user approval.",
+      "Delete only dependencies reached from those exact 27 baseline cleanup targets. The complete successful fresh preview at cutoff 2026-08-23T10:42:27.745474Z is: 334 strategy_market_paper_runs; 11 each of paper_orders, paper_fills, linked signals, and paper_positions; one paper_position_settlement; ten crypto_up_down_5m_diff_shift_progress_states; 27 dashboard_strategy_performance_snapshots; 81 dashboard_strategy_recent_performance_snapshots; and zero Live orders.",
+      "Require zero additional target rows in signal_rejections, Paper/Live shadow decisions and discrepancies, dry_run_orders, date-dependent hourly PnL, on-chain Paper signal results, copied-leader activity/positions, copied-trader performance, and child assignments. Also require the zero-strategy SOL Binance and paired Maker-GTD cleanup families to have zero direct dependencies, zero active Live orders, and zero paired Maker worker api_errors before mutation; any changed target or dependency count stops execution for renewed user approval.",
       "Create and register exactly one public.schema_migration_history baseline row only after all baseline statements complete successfully, then invoke the production initializer path again to prove that the applied baseline is skipped and no legacy SQL is replayed.",
       "Write a compact, non-secret repository audit record containing UTC cutoffs, endpoint identity without credentials, exact pre/post counts, migration identifiers, baseline checksum, and verification results."
     ],
@@ -75,7 +80,8 @@
       "sourceQuote": "обновляем базу",
       "acceptanceCriteria": [
         "Fresh preflight target membership remains exactly 27: Follow Leader=1, ETH Down Filtered Average Premarket=10, hopeless Progress=16, SOL Binance=0, paired Maker-GTD=0.",
-        "Fresh dependency counts remain exactly 334 strategy runs and 11 each of Paper orders, Paper fills, linked signals, and Paper positions, with zero Live orders and zero active Live orders.",
+        "Fresh dependency counts remain exactly 334 strategy runs; 11 each of Paper orders, Paper fills, linked signals, and Paper positions; one Paper position settlement; ten diff-state rows; 27 lifetime Dashboard snapshots; and 81 recent Dashboard snapshots.",
+        "Fresh preview remains zero for Live orders, active Live orders, signal rejections, Paper/Live shadow rows, dry runs, hourly PnL, on-chain Paper signal results, copied-leader activity/positions, copied-trader performance, child assignments, paired-family direct dependencies, and paired Maker worker api_errors.",
         "The baseline cleanup removes all and only rows reached from those exact targets according to the existing immutable PostgresSchema.SchemaSql logic.",
         "Post-verification proves zero residual target strategies and dependencies, zero unintended Live-order deletion, and unchanged aggregate identity counts outside the mathematically expected target/dependency deltas.",
         "No backup is created and no full rollback claim is made; any baseline execution failure records no baseline row and stops further mutation."
@@ -157,8 +163,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260823-local-legacy-database-upgrade sha256:21c2054c07118fcc889de070ba987acc8bdb21f84a4f01bfa4e1c43348e03d36",
-    "semanticDigest": "sha256:21c2054c07118fcc889de070ba987acc8bdb21f84a4f01bfa4e1c43348e03d36"
+    "evidenceText": "APPROVE RC-20260823-local-legacy-database-upgrade sha256:c3588c790af3e8216c805a04cccbadbf330a8f76952a2f49f31e98483387668b",
+    "semanticDigest": "sha256:c3588c790af3e8216c805a04cccbadbf330a8f76952a2f49f31e98483387668b"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_local_legacy_upgrade",
