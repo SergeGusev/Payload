@@ -29,7 +29,16 @@ public sealed record MarketDataSideEffectQueueMetrics(
     long DiagnosticSoftLimitOverflows,
     long RejectedDiagnostics,
     long ProcessedDiagnostics,
-    long FailedDiagnostics);
+    long FailedDiagnostics,
+    int PendingMakerUpdates = 0,
+    int MakerTrackedAssets = 0,
+    long EnqueuedMakerUpdates = 0,
+    long RejectedMakerUpdates = 0,
+    long ProcessedMakerUpdates = 0,
+    long FailedMakerUpdates = 0,
+    int PendingGeneralUpdates = 0,
+    int InFlightGeneralUpdates = 0,
+    int InFlightMakerUpdates = 0);
 
 public interface IMarketDataSideEffectQueue
 {
@@ -39,6 +48,38 @@ public interface IMarketDataSideEffectQueue
         ActiveMarketAssetSnapshot? activeMarketSnapshot,
         DateTimeOffset receivedAtUtc,
         IReadOnlySet<Guid>? eligiblePaperOrderIds);
+
+    MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
+        string component,
+        MarketDataUpdate update,
+        ActiveMarketAssetSnapshot? activeMarketSnapshot,
+        DateTimeOffset receivedAtUtc,
+        IReadOnlySet<Guid>? eligiblePaperOrderIds,
+        IReadOnlySet<Guid>? eligibleMakerGtdPaperOrderIds)
+    {
+        IReadOnlySet<Guid>? combinedEligiblePaperOrderIds;
+        if (eligibleMakerGtdPaperOrderIds is not { Count: > 0 })
+        {
+            combinedEligiblePaperOrderIds = eligiblePaperOrderIds;
+        }
+        else if (eligiblePaperOrderIds is not { Count: > 0 })
+        {
+            combinedEligiblePaperOrderIds = eligibleMakerGtdPaperOrderIds;
+        }
+        else
+        {
+            combinedEligiblePaperOrderIds = eligiblePaperOrderIds
+                .Concat(eligibleMakerGtdPaperOrderIds)
+                .ToHashSet();
+        }
+
+        return EnqueueUpdate(
+            component,
+            update,
+            activeMarketSnapshot,
+            receivedAtUtc,
+            combinedEligiblePaperOrderIds);
+    }
 
     MarketDataSideEffectEnqueueOutcome EnqueueFrameDiagnostic(
         MarketWebSocketFrameDiagnostic diagnostic,
@@ -88,7 +129,8 @@ public sealed class MarketDataSideEffectQueue(
     MarketDataWebSocketOptions options,
     IMarketDataSideEffectHandler handler,
     IAppRepository repository,
-    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IHostedService, IMarketDataSideEffectQueue
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
+    IPaperTradingMarketDataUpdater? paperTradingMarketDataUpdater = null) : IHostedService, IMarketDataSideEffectQueue
 {
     private const string ComponentName = "MarketDataSideEffectQueue";
     private static readonly IReadOnlySet<Guid> EmptyPaperOrderIds = new HashSet<Guid>();
@@ -97,6 +139,12 @@ public sealed class MarketDataSideEffectQueue(
     private readonly object frameDiagnosticSync = new();
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
         makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
+    private readonly MakerGtdPaperMarketDataQueue makerGtdQueue = new(
+        logger,
+        options,
+        paperTradingMarketDataUpdater,
+        repository,
+        makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance);
     private readonly Dictionary<string, PendingAssetUpdates> pendingUpdatesByAsset = new(StringComparer.OrdinalIgnoreCase);
     private readonly LinkedList<string> readyAssetKeys = [];
     private readonly List<PaperOrderDrainRequest> paperOrderDrainRequests = [];
@@ -135,6 +183,7 @@ public sealed class MarketDataSideEffectQueue(
             }
 
             accepting = true;
+            _ = makerGtdQueue.StartAsync();
             metricsCancellation = new CancellationTokenSource();
             updateWorkerTask = Task.Run(RunUpdateWorkerAsync, CancellationToken.None);
             frameDiagnosticWorkerTask = Task.Run(RunFrameDiagnosticWorkerAsync, CancellationToken.None);
@@ -183,13 +232,17 @@ public sealed class MarketDataSideEffectQueue(
     {
         var metrics = GetMetrics();
         logger.LogInformation(
-            "Market-data side-effect queue is stopping and will drain. PendingUpdates={PendingUpdates} PendingDiagnostics={PendingDiagnostics}",
+            "Market-data side-effect queue is stopping and will drain. PendingUpdates={PendingUpdates} PendingMakerUpdates={PendingMakerUpdates} PendingDiagnostics={PendingDiagnostics}",
             metrics.PendingUpdates,
+            metrics.PendingMakerUpdates,
             metrics.PendingDiagnostics);
 
         updateSignal.Release();
         frameDiagnosticSignal.Release();
-        await Task.WhenAll(updateCompletion, diagnosticCompletion).ConfigureAwait(false);
+        await Task.WhenAll(
+            updateCompletion,
+            diagnosticCompletion,
+            makerGtdQueue.StopAndDrainAsync()).ConfigureAwait(false);
 
         if (metricsCts is not null)
         {
@@ -218,6 +271,56 @@ public sealed class MarketDataSideEffectQueue(
         DateTimeOffset receivedAtUtc,
         IReadOnlySet<Guid>? eligiblePaperOrderIds)
     {
+        return EnqueueUpdate(
+            component,
+            update,
+            activeMarketSnapshot,
+            receivedAtUtc,
+            eligiblePaperOrderIds,
+            eligibleMakerGtdPaperOrderIds: null);
+    }
+
+    public MarketDataSideEffectEnqueueOutcome EnqueueUpdate(
+        string component,
+        MarketDataUpdate update,
+        ActiveMarketAssetSnapshot? activeMarketSnapshot,
+        DateTimeOffset receivedAtUtc,
+        IReadOnlySet<Guid>? eligiblePaperOrderIds,
+        IReadOnlySet<Guid>? eligibleMakerGtdPaperOrderIds)
+    {
+        if (!accepting)
+        {
+            Interlocked.Increment(ref rejectedUpdates);
+            return MarketDataSideEffectEnqueueOutcome.Rejected;
+        }
+
+        MarketDataSideEffectEnqueueOutcome? makerOutcome = null;
+        if (eligibleMakerGtdPaperOrderIds is { Count: > 0 } &&
+            update.EventType is (
+                MarketDataEventType.Book or
+                MarketDataEventType.PriceChange or
+                MarketDataEventType.LastTradePrice or
+                MarketDataEventType.BestBidAsk))
+        {
+            var makerEnqueuedAtUtc = DateTimeOffset.UtcNow;
+            var makerTrace = new MarketDataSideEffectExecutionTrace(
+                component + "/MakerGtdEvidence",
+                update.EventType,
+                update.AssetId,
+                update.ConditionId,
+                receivedAtUtc,
+                makerEnqueuedAtUtc);
+            makerOutcome = makerGtdQueue.Enqueue(new MarketDataSideEffectWorkItem(
+                component,
+                update,
+                activeMarketSnapshot,
+                receivedAtUtc,
+                makerEnqueuedAtUtc,
+                eligibleMakerGtdPaperOrderIds,
+                Replaceable: false,
+                makerTrace));
+        }
+
         var replaceable = IsReplaceable(update, eligiblePaperOrderIds);
         var enqueuedAtUtc = DateTimeOffset.UtcNow;
         var executionTrace = new MarketDataSideEffectExecutionTrace(
@@ -290,7 +393,15 @@ public sealed class MarketDataSideEffectQueue(
             updateSignal.Release();
         }
 
-        return outcome;
+        if (makerOutcome == MarketDataSideEffectEnqueueOutcome.Rejected)
+        {
+            return MarketDataSideEffectEnqueueOutcome.Rejected;
+        }
+
+        return makerOutcome == MarketDataSideEffectEnqueueOutcome.Enqueued &&
+            outcome == MarketDataSideEffectEnqueueOutcome.Coalesced
+                ? MarketDataSideEffectEnqueueOutcome.Enqueued
+                : outcome;
     }
 
     public MarketDataSideEffectEnqueueOutcome EnqueueFrameDiagnostic(
@@ -353,11 +464,14 @@ public sealed class MarketDataSideEffectQueue(
 
     public MarketDataSideEffectQueueMetrics GetMetrics()
     {
+        var makerMetrics = makerGtdQueue.GetMetrics();
         int pendingUpdates;
+        int inFlightUpdates;
         int trackedAssets;
         lock (updateSync)
         {
             pendingUpdates = pendingUpdateCount;
+            inFlightUpdates = inFlightUpdate is null ? 0 : 1;
             trackedAssets = pendingUpdatesByAsset.Count;
         }
 
@@ -368,7 +482,7 @@ public sealed class MarketDataSideEffectQueue(
         }
 
         return new MarketDataSideEffectQueueMetrics(
-            pendingUpdates,
+            pendingUpdates + makerMetrics.PendingUpdates,
             pendingDiagnostics,
             trackedAssets,
             Interlocked.Read(ref enqueuedUpdates),
@@ -382,7 +496,16 @@ public sealed class MarketDataSideEffectQueue(
             Interlocked.Read(ref frameDiagnosticSoftLimitOverflows),
             Interlocked.Read(ref rejectedFrameDiagnostics),
             Interlocked.Read(ref processedFrameDiagnostics),
-            Interlocked.Read(ref failedFrameDiagnostics));
+            Interlocked.Read(ref failedFrameDiagnostics),
+            makerMetrics.PendingUpdates,
+            makerMetrics.TrackedAssets,
+            makerMetrics.EnqueuedUpdates,
+            makerMetrics.RejectedUpdates,
+            makerMetrics.ProcessedUpdates,
+            makerMetrics.FailedUpdates,
+            pendingUpdates,
+            inFlightUpdates,
+            makerMetrics.InFlightUpdates);
     }
 
     public bool HasOutstandingPaperOrderUpdate(
@@ -398,6 +521,16 @@ public sealed class MarketDataSideEffectQueue(
             acceptedAfterUtc >= expiresBeforeUtc)
         {
             return false;
+        }
+
+        if (makerGtdQueue.HasOutstanding(
+                paperOrderId,
+                assetId,
+                conditionId,
+                acceptedAfterUtc,
+                expiresBeforeUtc))
+        {
+            return true;
         }
 
         lock (updateSync)
@@ -427,6 +560,18 @@ public sealed class MarketDataSideEffectQueue(
             return MarketDataSideEffectPreflightSnapshot.NotAvailable(
                 capturedAtUtc,
                 "invalid_order_evidence");
+        }
+
+        var makerSnapshot = makerGtdQueue.GetPreflightSnapshot(
+            paperOrderId,
+            assetId,
+            conditionId,
+            acceptedAfterUtc,
+            expiresBeforeUtc,
+            capturedAtUtc);
+        if (makerSnapshot.MatchingOutstandingCount > 0)
+        {
+            return makerSnapshot;
         }
 
         string updateWorkerState;
@@ -480,7 +625,7 @@ public sealed class MarketDataSideEffectQueue(
                 }
             }
 
-            return new MarketDataSideEffectPreflightSnapshot(
+            var generalSnapshot = new MarketDataSideEffectPreflightSnapshot(
                 MarketDataSideEffectDiagnosticSchema.Available,
                 null,
                 capturedAtUtc,
@@ -499,6 +644,9 @@ public sealed class MarketDataSideEffectQueue(
                 pendingUpdatesByAsset.Count,
                 updateWorkerState,
                 inFlightUpdate?.ExecutionTrace?.Capture(capturedAtUtc));
+            return generalSnapshot.MatchingOutstandingCount > 0
+                ? generalSnapshot
+                : makerSnapshot;
         }
     }
 
@@ -523,6 +671,31 @@ public sealed class MarketDataSideEffectQueue(
             return;
         }
 
+        await Task.WhenAll(
+            makerGtdQueue.DrainAsync(
+                paperOrderId,
+                assetId,
+                conditionId,
+                acceptedAfterUtc,
+                expiresBeforeUtc,
+                cancellationToken),
+            DrainOutstandingGeneralPaperOrderUpdatesAsync(
+                paperOrderId,
+                assetId,
+                conditionId,
+                acceptedAfterUtc,
+                expiresBeforeUtc,
+                cancellationToken)).ConfigureAwait(false);
+    }
+
+    private async Task DrainOutstandingGeneralPaperOrderUpdatesAsync(
+        Guid paperOrderId,
+        string assetId,
+        string conditionId,
+        DateTimeOffset acceptedAfterUtc,
+        DateTimeOffset expiresBeforeUtc,
+        CancellationToken cancellationToken)
+    {
         PaperOrderDrainRequest request;
         lock (updateSync)
         {
@@ -646,16 +819,25 @@ public sealed class MarketDataSideEffectQueue(
         {
             var metrics = GetMetrics();
             logger.LogInformation(
-                "Market-data side-effect queue metrics. PendingUpdates={PendingUpdates} PendingDiagnostics={PendingDiagnostics} TrackedAssets={TrackedAssets} EnqueuedUpdates={EnqueuedUpdates} CoalescedUpdates={CoalescedUpdates} UpdateSoftLimitOverflows={UpdateSoftLimitOverflows} RejectedUpdates={RejectedUpdates} ProcessedUpdates={ProcessedUpdates} FailedUpdates={FailedUpdates} EnqueuedDiagnostics={EnqueuedDiagnostics} DroppedDiagnostics={DroppedDiagnostics} DiagnosticSoftLimitOverflows={DiagnosticSoftLimitOverflows} RejectedDiagnostics={RejectedDiagnostics} ProcessedDiagnostics={ProcessedDiagnostics} FailedDiagnostics={FailedDiagnostics}",
+                "Market-data side-effect queue metrics. PendingUpdates={PendingUpdates} PendingGeneralUpdates={PendingGeneralUpdates} InFlightGeneralUpdates={InFlightGeneralUpdates} PendingMakerUpdates={PendingMakerUpdates} InFlightMakerUpdates={InFlightMakerUpdates} PendingDiagnostics={PendingDiagnostics} TrackedAssets={TrackedAssets} MakerTrackedAssets={MakerTrackedAssets} EnqueuedUpdates={EnqueuedUpdates} CoalescedUpdates={CoalescedUpdates} UpdateSoftLimitOverflows={UpdateSoftLimitOverflows} RejectedUpdates={RejectedUpdates} ProcessedUpdates={ProcessedUpdates} FailedUpdates={FailedUpdates} EnqueuedMakerUpdates={EnqueuedMakerUpdates} RejectedMakerUpdates={RejectedMakerUpdates} ProcessedMakerUpdates={ProcessedMakerUpdates} FailedMakerUpdates={FailedMakerUpdates} EnqueuedDiagnostics={EnqueuedDiagnostics} DroppedDiagnostics={DroppedDiagnostics} DiagnosticSoftLimitOverflows={DiagnosticSoftLimitOverflows} RejectedDiagnostics={RejectedDiagnostics} ProcessedDiagnostics={ProcessedDiagnostics} FailedDiagnostics={FailedDiagnostics}",
                 metrics.PendingUpdates,
+                metrics.PendingGeneralUpdates,
+                metrics.InFlightGeneralUpdates,
+                metrics.PendingMakerUpdates,
+                metrics.InFlightMakerUpdates,
                 metrics.PendingDiagnostics,
                 metrics.TrackedAssets,
+                metrics.MakerTrackedAssets,
                 metrics.EnqueuedUpdates,
                 metrics.CoalescedUpdates,
                 metrics.UpdateSoftLimitOverflows,
                 metrics.RejectedUpdates,
                 metrics.ProcessedUpdates,
                 metrics.FailedUpdates,
+                metrics.EnqueuedMakerUpdates,
+                metrics.RejectedMakerUpdates,
+                metrics.ProcessedMakerUpdates,
+                metrics.FailedMakerUpdates,
                 metrics.EnqueuedDiagnostics,
                 metrics.DroppedDiagnostics,
                 metrics.DiagnosticSoftLimitOverflows,

@@ -13,6 +13,38 @@ namespace PolyCopyTrader.Tests;
 public sealed class MakerGtdPaperLifecycleIntegrationTests
 {
     [Fact]
+    public async Task DedicatedMarketDataUpdater_AuthoritativeLastTradeAtLimit_FillsExactlyOnce()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var scenario = CreateScenario(now, expiresAtUtc: now.AddMinutes(1));
+        var updater = CreateUpdater(scenario.Repository);
+        var sourceTimestampUtc = now.AddMilliseconds(-20);
+        var receivedAtUtc = now.AddMilliseconds(-10);
+        var update = LastTradeUpdate(
+            scenario.Order,
+            scenario.Order.Price,
+            sourceTimestampUtc,
+            receivedAtUtc);
+        var eligibleOrderIds = new HashSet<Guid> { scenario.Order.Id };
+
+        await updater.ApplyMakerGtdUpdateAsync(update, receivedAtUtc, eligibleOrderIds);
+        await updater.ApplyMakerGtdUpdateAsync(update, receivedAtUtc, eligibleOrderIds);
+
+        var fill = Assert.Single(scenario.Repository.PaperFills);
+        Assert.Equal(scenario.Order.Price, fill.Price);
+        Assert.Equal(scenario.Order.SizeShares, fill.SizeShares);
+        Assert.Equal(sourceTimestampUtc, fill.FilledAtUtc);
+        Assert.Contains("\"source_timestamp_utc\"", fill.Evidence, StringComparison.Ordinal);
+        Assert.Contains("\"received_at_utc\"", fill.Evidence, StringComparison.Ordinal);
+        Assert.Contains("\"source_event_id\":\"trade-event-1\"", fill.Evidence, StringComparison.Ordinal);
+        Assert.Contains("\"event_fingerprint\":\"trade-event-fingerprint-1\"", fill.Evidence, StringComparison.Ordinal);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(
+            StrategyMarketPaperRunStatuses.Entered,
+            Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+    }
+
+    [Fact]
     public async Task MarketDataUpdater_AuthoritativeLastTradeAtLimit_AppliesAtomicFullMakerFill()
     {
         var now = DateTimeOffset.UtcNow;

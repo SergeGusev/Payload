@@ -10,6 +10,261 @@ namespace PolyCopyTrader.Tests;
 public sealed class MarketDataSideEffectQueueTests
 {
     [Fact]
+    public void WebSocketClassification_SeparatesExactMakerFromOrdinaryPaperOrderIds()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var makerOrder = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "0xmaker",
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-1",
+            "condition-1",
+            "Up",
+            0.50m,
+            10m,
+            5m,
+            now,
+            now.AddMinutes(1),
+            ExecutionSource: MakerGtdPaperExecutionContract.ExecutionSource);
+        var ordinaryOrder = makerOrder with
+        {
+            Id = Guid.NewGuid(),
+            ExecutionSource = "ordinary_paper"
+        };
+        var capturedOrderIds = new HashSet<Guid> { makerOrder.Id, ordinaryOrder.Id };
+
+        var classification = MarketDataWebSocketService.ClassifyCapturedPaperOrderIds(
+            "asset-1",
+            capturedOrderIds,
+            [makerOrder, ordinaryOrder]);
+
+        Assert.Equal(capturedOrderIds, classification.AllPaperOrderIds);
+        Assert.Equal(new HashSet<Guid> { ordinaryOrder.Id }, classification.OrdinaryPaperOrderIds);
+        Assert.Equal(new HashSet<Guid> { makerOrder.Id }, classification.MakerGtdPaperOrderIds);
+    }
+
+    [Fact]
+    public async Task EnqueueUpdate_DedicatedMakerLaneRunsWhileGeneralLaneIsBlocked()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var makerUpdater = new ControlledMakerUpdater(expectedMakerUpdates: 3);
+        var queue = CreateQueue(handler, paperTradingMarketDataUpdater: makerUpdater);
+        await queue.StartAsync(CancellationToken.None);
+        var makerOrderId = Guid.NewGuid();
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+
+            for (var index = 0; index < 3; index++)
+            {
+                var update = Quote("asset-1", 0.50m + index * 0.01m) with
+                {
+                    SourceEventId = index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    EventFingerprint = $"maker-{index}"
+                };
+                Assert.Equal(
+                    MarketDataSideEffectEnqueueOutcome.Enqueued,
+                    queue.EnqueueUpdate(
+                        "test-component",
+                        update,
+                        null,
+                        DateTimeOffset.UtcNow,
+                        new HashSet<Guid>(),
+                        new HashSet<Guid> { makerOrderId }));
+            }
+
+            await makerUpdater.WaitForExpectedUpdatesAsync();
+
+            Assert.DoesNotContain(handler.ProcessedUpdates, item => item.Update.AssetId == "asset-1");
+            var metrics = queue.GetMetrics();
+            Assert.Equal(3, metrics.EnqueuedMakerUpdates);
+            Assert.Equal(3, metrics.ProcessedMakerUpdates);
+            Assert.Equal(0, metrics.FailedMakerUpdates);
+            Assert.Equal(2, metrics.CoalescedUpdates);
+            Assert.Null(makerUpdater.SequenceFailure);
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task EnqueueUpdate_DedicatedMakerLaneRetainsProductionScaleBurstInFifoOrder()
+    {
+        const int eventCount = 160_000;
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var makerUpdater = new ControlledMakerUpdater(
+            eventCount,
+            expectedEvidencePrefix: "maker-burst");
+        var queue = CreateQueue(handler, paperTradingMarketDataUpdater: makerUpdater);
+        await queue.StartAsync(CancellationToken.None);
+        var makerOrderId = Guid.NewGuid();
+        var makerOrderIds = new HashSet<Guid> { makerOrderId };
+        var emptyOrdinaryOrderIds = new HashSet<Guid>();
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        var baseUpdate = Quote("asset-1", 0.50m);
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+
+            for (var index = 0; index < eventCount; index++)
+            {
+                var update = baseUpdate with
+                {
+                    SourceEventId = index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    EventFingerprint = $"maker-burst-{index}",
+                    RawJson = $"{{\"sequence\":{index}}}"
+                };
+                var outcome = queue.EnqueueUpdate(
+                    "test-component",
+                    update,
+                    null,
+                    receivedAtUtc.AddTicks(index),
+                    emptyOrdinaryOrderIds,
+                    makerOrderIds);
+                Assert.Equal(MarketDataSideEffectEnqueueOutcome.Enqueued, outcome);
+            }
+
+            Assert.Equal(eventCount, queue.GetMetrics().EnqueuedMakerUpdates);
+            await queue.DrainOutstandingPaperOrderUpdatesAsync(
+                makerOrderId,
+                "asset-1",
+                "condition-1",
+                receivedAtUtc.AddTicks(-1),
+                receivedAtUtc.AddTicks(eventCount + 1),
+                CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30));
+            await makerUpdater.WaitForExpectedUpdatesAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+            var metrics = queue.GetMetrics();
+            Assert.Equal(eventCount, metrics.EnqueuedMakerUpdates);
+            Assert.Equal(eventCount, metrics.ProcessedMakerUpdates);
+            Assert.Equal(0, metrics.PendingMakerUpdates);
+            Assert.Equal(0, metrics.FailedMakerUpdates);
+            Assert.True(metrics.CoalescedUpdates >= eventCount - 1);
+            Assert.Null(makerUpdater.SequenceFailure);
+            Assert.Null(makerUpdater.EvidenceFailure);
+            Assert.DoesNotContain(handler.ProcessedUpdates, item => item.Update.AssetId == "asset-1");
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task EnqueueUpdate_DedicatedMakerFailureIsRecordedAndLaterEvidenceContinues()
+    {
+        var handler = new ControlledHandler();
+        var makerUpdater = new ControlledMakerUpdater(expectedMakerUpdates: 2, failSequence: 0);
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var makerOrderId = Guid.NewGuid();
+        handoff.TrackMakerGtdPaperOrder(
+            makerOrderId,
+            MakerGtdPaperExecutionContract.ExecutionSource);
+        var queue = CreateQueue(
+            handler,
+            makerGtdPaperPlacementHandoff: handoff,
+            paperTradingMarketDataUpdater: makerUpdater);
+        await queue.StartAsync(CancellationToken.None);
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+
+        try
+        {
+            for (var index = 0; index < 2; index++)
+            {
+                var update = Quote("asset-1", 0.50m + index * 0.01m) with
+                {
+                    SourceEventId = index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    EventFingerprint = $"maker-failure-{index}"
+                };
+                Assert.Equal(
+                    MarketDataSideEffectEnqueueOutcome.Enqueued,
+                    queue.EnqueueUpdate(
+                        "test-component",
+                        update,
+                        null,
+                        receivedAtUtc.AddTicks(index),
+                        new HashSet<Guid>(),
+                        new HashSet<Guid> { makerOrderId }));
+            }
+
+            await queue.DrainOutstandingPaperOrderUpdatesAsync(
+                makerOrderId,
+                "asset-1",
+                "condition-1",
+                receivedAtUtc.AddTicks(-1),
+                receivedAtUtc.AddTicks(3),
+                CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+            await makerUpdater.WaitForExpectedUpdatesAsync();
+
+            var metrics = queue.GetMetrics();
+            Assert.Equal(1, metrics.FailedMakerUpdates);
+            Assert.Equal(1, metrics.ProcessedMakerUpdates);
+            Assert.Equal(0, metrics.PendingMakerUpdates);
+            Assert.Null(makerUpdater.SequenceFailure);
+            Assert.True(handoff.TryGetMarketDataFailure(
+                makerOrderId,
+                "asset-1",
+                "condition-1",
+                receivedAtUtc.AddTicks(-1),
+                receivedAtUtc.AddTicks(3),
+                out var failure));
+            Assert.Equal(
+                MakerGtdPaperExecutionContract.MarketDataHandlerFailureCode,
+                Assert.IsType<MakerGtdPaperMarketDataFailure>(failure).FailureCode);
+        }
+        finally
+        {
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task GetMetrics_DistinguishesBlockedMakerInFlightFromGeneralWork()
+    {
+        var handler = new ControlledHandler();
+        var makerUpdater = new ControlledMakerUpdater(
+            expectedMakerUpdates: 1,
+            blockFirstUpdate: true);
+        var queue = CreateQueue(handler, paperTradingMarketDataUpdater: makerUpdater);
+        await queue.StartAsync(CancellationToken.None);
+
+        try
+        {
+            Assert.Equal(
+                MarketDataSideEffectEnqueueOutcome.Enqueued,
+                queue.EnqueueUpdate(
+                    "test-component",
+                    Quote("asset-1", 0.50m) with { SourceEventId = "0" },
+                    null,
+                    DateTimeOffset.UtcNow,
+                    new HashSet<Guid>(),
+                    new HashSet<Guid> { Guid.NewGuid() }));
+            await makerUpdater.WaitForFirstUpdateAsync();
+
+            var metrics = queue.GetMetrics();
+            Assert.Equal(0, metrics.PendingMakerUpdates);
+            Assert.Equal(1, metrics.InFlightMakerUpdates);
+            Assert.Equal(0, metrics.PendingGeneralUpdates);
+            Assert.Equal(0, metrics.InFlightGeneralUpdates);
+        }
+        finally
+        {
+            makerUpdater.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task EnqueueUpdate_CoalescesReplaceableQuotesToLatestValue()
     {
         var handler = new ControlledHandler(blockFirstUpdate: true);
@@ -774,7 +1029,8 @@ public sealed class MarketDataSideEffectQueueTests
         int maxPendingUpdatesPerAsset = 32,
         int diagnosticCapacity = 256,
         bool persistMarketDataEvents = false,
-        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null)
+        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
+        IPaperTradingMarketDataUpdater? paperTradingMarketDataUpdater = null)
     {
         return new MarketDataSideEffectQueue(
             NullLogger<MarketDataSideEffectQueue>.Instance,
@@ -787,7 +1043,8 @@ public sealed class MarketDataSideEffectQueueTests
             },
             handler,
             new TestAppRepository(),
-            makerGtdPaperPlacementHandoff);
+            makerGtdPaperPlacementHandoff,
+            paperTradingMarketDataUpdater);
     }
 
     private static MarketDataSideEffectEnqueueOutcome Enqueue(
@@ -980,6 +1237,102 @@ public sealed class MarketDataSideEffectQueueTests
         private static TaskCompletionSource<bool> NewCompletionSource()
         {
             return new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
+
+    private sealed class ControlledMakerUpdater(
+        int expectedMakerUpdates,
+        int? failSequence = null,
+        bool blockFirstUpdate = false,
+        string? expectedEvidencePrefix = null) : IPaperTradingMarketDataUpdater
+    {
+        private readonly TaskCompletionSource<bool> expectedUpdatesProcessed = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> firstUpdateStarted = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> releaseFirstUpdate = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private int nextExpectedSequence;
+        private int processedMakerUpdates;
+
+        public string? SequenceFailure { get; private set; }
+
+        public string? EvidenceFailure { get; private set; }
+
+        public async Task ApplyMakerGtdUpdateAsync(
+            MarketDataUpdate update,
+            DateTimeOffset receivedAtUtc,
+            IReadOnlySet<Guid> eligibleMakerGtdPaperOrderIds,
+            CancellationToken cancellationToken = default,
+            MarketDataSideEffectExecutionTrace? executionTrace = null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var expected = nextExpectedSequence++;
+            if (expected == 0 && blockFirstUpdate)
+            {
+                firstUpdateStarted.TrySetResult(true);
+                await releaseFirstUpdate.Task;
+            }
+
+            if (!int.TryParse(
+                    update.SourceEventId,
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var actual) ||
+                actual != expected)
+            {
+                SequenceFailure ??= $"Expected sequence {expected}, received '{update.SourceEventId ?? "<null>"}'.";
+            }
+
+            if (expectedEvidencePrefix is not null &&
+                (!string.Equals(
+                    update.EventFingerprint,
+                    $"{expectedEvidencePrefix}-{expected}",
+                    StringComparison.Ordinal) ||
+                 !string.Equals(
+                    update.RawJson,
+                    $"{{\"sequence\":{expected}}}",
+                    StringComparison.Ordinal)))
+            {
+                EvidenceFailure ??=
+                    $"Expected fingerprint/payload for sequence {expected}, received '{update.EventFingerprint ?? "<null>"}'/'{update.RawJson}'.";
+            }
+
+            if (Interlocked.Increment(ref processedMakerUpdates) == expectedMakerUpdates)
+            {
+                expectedUpdatesProcessed.TrySetResult(true);
+            }
+
+            if (actual == failSequence)
+            {
+                throw new InvalidOperationException("simulated dedicated Maker-GTD update failure");
+            }
+
+        }
+
+        public Task ApplyUpdateAsync(
+            MarketDataUpdate update,
+            DateTimeOffset? receivedAtUtc = null,
+            IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
+            CancellationToken cancellationToken = default,
+            MarketDataSideEffectExecutionTrace? executionTrace = null)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task WaitForExpectedUpdatesAsync()
+        {
+            return expectedUpdatesProcessed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+
+        public Task WaitForFirstUpdateAsync()
+        {
+            return firstUpdateStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        public void ReleaseFirstUpdate()
+        {
+            releaseFirstUpdate.TrySetResult(true);
         }
     }
 }

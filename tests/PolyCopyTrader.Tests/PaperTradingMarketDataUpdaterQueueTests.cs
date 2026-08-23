@@ -186,6 +186,44 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
     }
 
     [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_WaitsForPublicationBeforeDedicatedProcessing()
+    {
+        var repository = new TestAppRepository();
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var orderId = Guid.NewGuid();
+        await using (var admission = await handoff.EnterPlacementAdmissionAsync("asset-1"))
+        {
+            admission.ActivatePendingOrder(
+                orderId,
+                MakerGtdPaperExecutionContract.ExecutionSource);
+        }
+
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository,
+            makerGtdPaperPlacementHandoff: handoff);
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        var trace = CreateTrace(receivedAtUtc);
+
+        var applyTask = updater.ApplyMakerGtdUpdateAsync(
+            BookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid> { orderId },
+            CancellationToken.None,
+            trace);
+        await WaitForPhaseAsync(trace, MarketDataSideEffectPhases.WaitForPublication);
+
+        Assert.False(applyTask.IsCompleted);
+        handoff.MarkPublished(orderId);
+        await applyTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(applyTask.IsCompletedSuccessfully);
+    }
+
+    [Fact]
     public async Task ApplyUpdateAsync_ReportsSerializationLockWaitWithoutChangingSerialization()
     {
         var repository = new TestAppRepository();
@@ -243,6 +281,61 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         Assert.Equal(
             MarketDataSideEffectPhases.UpdatePositionMarks,
             secondTrace.Capture(DateTimeOffset.UtcNow).Phase);
+    }
+
+    [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_DoesNotWaitForBlockedGeneralPositionMarkWork()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            receivedAtUtc.AddMinutes(-1),
+            "0xleader"));
+        var generalMarkStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseGeneralMark = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.BeforeTryUpdatePaperPositionMarksAsync = async () =>
+        {
+            generalMarkStarted.TrySetResult(true);
+            await releaseGeneralMark.Task;
+        };
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        var generalApply = updater.ApplyUpdateAsync(
+            BookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid>(),
+            CancellationToken.None);
+        await generalMarkStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            await updater.ApplyMakerGtdUpdateAsync(
+                BookUpdate(receivedAtUtc.AddMilliseconds(1)),
+                receivedAtUtc.AddMilliseconds(1),
+                new HashSet<Guid> { Guid.NewGuid() },
+                CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.False(generalApply.IsCompleted);
+            Assert.Empty(repository.PaperFills);
+        }
+        finally
+        {
+            releaseGeneralMark.TrySetResult(true);
+            await generalApply.WaitAsync(TimeSpan.FromSeconds(5));
+        }
     }
 
     [Fact]

@@ -114,16 +114,28 @@ Expiry evaluation for this exact family uses a starvation-free market-data
 receipt handoff. Receipts already active when expiry requests admission finish
 first; receipts arriving later wait until the exclusive expiry lease is released
 and therefore cannot continually overtake it. Receipt processing remains
-concurrent while no expiry request is pending. After admission, the existing
-queued/in-flight eligible pre-expiry update check becomes an awaited priority
-drain. The affected asset is selected ahead of unrelated asset backlog while its
+concurrent while no expiry request is pending. At receipt time, exact-family v1/v2
+order ids are separated from ordinary open Paper order ids. Every eligible
+`book`, `price_change`, `last_trade_price`, and `best_bid_ask` event is copied to a
+dedicated unbounded Maker evidence lane without dropping or coalescing, retaining
+the original source/receipt timestamps, source event id, fingerprint, prices, and
+book snapshot. Its handler performs only the existing exact-family Maker fill
+evaluation; general position marks, settlement, raw persistence, diagnostics, and
+unrelated Paper processing remain on the general lane. The corresponding general
+quote may be coalesced after this split when no ordinary open Paper order requires
+it.
+
+After expiry admission, the dedicated queued/in-flight eligible pre-expiry check
+is an awaited priority drain; the legacy general-queue check remains a compatibility
+fallback. The affected asset is selected ahead of unrelated backlog while its
 matching work remains, but FIFO within that asset is preserved, the current
 in-flight work item is never interrupted, and each accepted update is processed
 exactly once. Only updates received strictly after acceptance and strictly before
-effective expiry are eligible. When the drain completes, the same lifecycle pass
-rechecks outstanding state and then applies the unchanged evidence parsing,
-continuity, fill, and atomic terminal rules. Handler failures publish the existing
-failure evidence before the drain completes.
+effective expiry are eligible. Dedicated pending, in-flight, enqueued, processed,
+and failed state is exposed separately in queue diagnostics. When the drain
+completes, the same lifecycle pass rechecks outstanding state and then applies the
+unchanged evidence parsing, continuity, fill, and atomic terminal rules. Handler
+failures publish the existing failure evidence before the drain completes.
 
 Receipt admission and the exact-order priority drain share one absolute preflight
 deadline: `effective_expires_at_utc + MarketDataWebSocket:StaleAfterSeconds`.

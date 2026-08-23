@@ -4,6 +4,13 @@ namespace PolyCopyTrader.Service.MarketData;
 
 public interface IPaperTradingMarketDataUpdater
 {
+    Task ApplyMakerGtdUpdateAsync(
+        MarketDataUpdate update,
+        DateTimeOffset receivedAtUtc,
+        IReadOnlySet<Guid> eligibleMakerGtdPaperOrderIds,
+        CancellationToken cancellationToken = default,
+        MarketDataSideEffectExecutionTrace? executionTrace = null);
+
     Task ApplyUpdateAsync(
         MarketDataUpdate update,
         DateTimeOffset? receivedAtUtc = null,

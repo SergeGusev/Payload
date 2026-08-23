@@ -25,7 +25,111 @@ public sealed class PaperTradingMarketDataUpdater(
         Math.Max(1, (marketDataWebSocketOptions ?? new MarketDataWebSocketOptions()).StaleAfterSeconds));
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
         makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
+    private readonly SemaphoreSlim makerSync = new(1, 1);
     private readonly SemaphoreSlim sync = new(1, 1);
+
+    public async Task ApplyMakerGtdUpdateAsync(
+        MarketDataUpdate update,
+        DateTimeOffset receivedAtUtc,
+        IReadOnlySet<Guid> eligibleMakerGtdPaperOrderIds,
+        CancellationToken cancellationToken = default,
+        MarketDataSideEffectExecutionTrace? executionTrace = null)
+    {
+        if (string.IsNullOrWhiteSpace(update.AssetId) ||
+            eligibleMakerGtdPaperOrderIds.Count == 0 ||
+            update.EventType is not (
+                MarketDataEventType.Book or
+                MarketDataEventType.PriceChange or
+                MarketDataEventType.LastTradePrice or
+                MarketDataEventType.BestBidAsk))
+        {
+            return;
+        }
+
+        executionTrace?.EnterPhase(MarketDataSideEffectPhases.WaitForPublication, DateTimeOffset.UtcNow);
+        await makerGtdHandoff.WaitForPublicationAsync(
+            eligibleMakerGtdPaperOrderIds,
+            cancellationToken);
+
+        var operationStarted = Stopwatch.GetTimestamp();
+        var lockWaitStarted = Stopwatch.GetTimestamp();
+        executionTrace?.EnterPhase(MarketDataSideEffectPhases.WaitForSerializationLock, DateTimeOffset.UtcNow);
+        await makerSync.WaitAsync(cancellationToken);
+        var lockWaitDuration = Stopwatch.GetElapsedTime(lockWaitStarted);
+        if (lockWaitDuration >= TimeSpan.FromSeconds(1))
+        {
+            logger.LogWarning(
+                "Maker-GTD Paper market-data updater waited for its dedicated serialization lock. AssetId={AssetId} EventType={EventType} WaitDurationMs={WaitDurationMs}",
+                update.AssetId,
+                update.EventType,
+                lockWaitDuration.TotalMilliseconds);
+        }
+
+        var phase = "LoadExposureSnapshot";
+        var operation = "ExposureSnapshotCache.GetSnapshot";
+        Guid? paperOrderId = null;
+        var pendingMakerOrderIds = eligibleMakerGtdPaperOrderIds.ToHashSet();
+        try
+        {
+            executionTrace?.EnterPhase(MarketDataSideEffectPhases.LoadExposureSnapshot, DateTimeOffset.UtcNow);
+            var exposure = await exposureCache.GetSnapshotAsync(cancellationToken);
+            var matchingOrders = exposure.OpenPaperOrders
+                .Where(order =>
+                    string.Equals(order.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                    eligibleMakerGtdPaperOrderIds.Contains(order.Id) &&
+                    MakerGtdPaperExecutionContract.IsMakerGtdOrder(order))
+                .ToArray();
+            var positions = exposure.PaperPositions
+                .Where(position => string.Equals(position.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var order in matchingOrders)
+            {
+                paperOrderId = order.Id;
+                executionTrace?.EnterPhase(MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate, DateTimeOffset.UtcNow);
+                phase = "ApplyMakerGtdPaperUpdate";
+                operation = "IAppRepository.TryApplyMakerGtdPaperFullFill";
+                await TryApplyMakerGtdPaperUpdateAsync(
+                    order,
+                    update,
+                    receivedAtUtc,
+                    positions,
+                    cancellationToken);
+                pendingMakerOrderIds.Remove(order.Id);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RecordMakerGtdMarketDataFailure(
+                pendingMakerOrderIds,
+                update,
+                receivedAtUtc,
+                MakerGtdPaperExecutionContract.MarketDataApplyFailureCode);
+
+            var duration = Stopwatch.GetElapsedTime(operationStarted);
+            logger.LogError(
+                ex,
+                "Failed to apply dedicated Maker-GTD WebSocket evidence. AssetId={AssetId} EventType={EventType} Phase={Phase} Operation={Operation} PaperOrderId={PaperOrderId} DurationMs={DurationMs}",
+                update.AssetId,
+                update.EventType,
+                phase,
+                operation,
+                paperOrderId,
+                duration.TotalMilliseconds);
+            await TryRecordApiErrorAsync(
+                $"ApplyMakerGtdUpdate/{phase}",
+                $"AssetId={update.AssetId}; EventType={update.EventType}; Operation={operation}; PaperOrderId={paperOrderId?.ToString() ?? "<null>"}; DurationMs={duration.TotalMilliseconds:F0}; Error={ex.Message}",
+                cancellationToken);
+        }
+        finally
+        {
+            makerSync.Release();
+        }
+    }
 
     public async Task ApplyUpdateAsync(
         MarketDataUpdate update,

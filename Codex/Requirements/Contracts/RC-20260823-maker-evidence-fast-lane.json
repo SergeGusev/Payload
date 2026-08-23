@@ -3,7 +3,7 @@
   "contractId": "RC-20260823-maker-evidence-fast-lane",
   "title": "Isolate exact Maker-GTD evidence from general market-data side effects",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -63,8 +63,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "Deterministic tests prove exact Maker event retention and FIFO ordering, independence from a blocked general lane, correct publication and expiry boundaries, exact once-only fill behavior, exception isolation, and later worker recovery.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-08-23 final local Debug focused run on the current tree: 81 passed, 0 failed, 0 skipped. TRX: D:\\CodexTemp\\runs\\manual-dfa519afbdb242ed8ac7380f3679f307\\results\\focused-final2\\focused-final2.trx."
         }
       ]
     },
@@ -100,32 +100,32 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
           "expected": "The queue split passes focused overload and regression tests together with all exact-family signal, evidence, atomic persistence, Paper-only, mandatory-label, lifecycle, and worker-isolation tests.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-08-23 final local Debug contract regression run on the current tree including WebSocket frame processing: 115 passed, 0 failed, 0 skipped. It includes direct exact-Maker/ordinary-ID split and blocked Maker in-flight telemetry assertions. TRX: D:\\CodexTemp\\runs\\manual-dfa519afbdb242ed8ac7380f3679f307\\results\\contract-final\\contract-final.trx."
         },
         {
           "id": "VER-003",
           "kind": "test",
           "command": "Run a deterministic in-process burst of at least 160,000 accepted market-data events while the general handler is blocked, then drain exact Maker work with a manual expiry clock and inspect recorded sequence/fingerprints.",
           "expected": "The Maker lane evaluates every assigned event in per-asset FIFO order, records the earliest qualifying touch exactly once, reaches zero matching pending work before the existing deadline, and does not wait for the blocked general lane; memory/pending metrics remain observable and no event is silently lost.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "EnqueueUpdate_DedicatedMakerLaneRetainsProductionScaleBurstInFifoOrder passed with 160,000 accepted BestBidAsk events in 0.4633029s: every event reached the dedicated updater in source-id FIFO order with its exact per-event fingerprint and RawJson payload, drain reached zero Maker pending, and the deliberately blocked general handler received none of the Maker-asset work during the assertion window. Dedicated exact-Maker/ordinary-ID split, blocked in-flight telemetry, exception-isolation/recovery, publication-fence, and exactly-once fill/evidence tests also passed."
         },
         {
           "id": "VER-004",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
           "expected": "The complete solution builds with zero errors; warnings are reported exactly.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-08-23 final dotnet build PolyCopyTrader.sln -c Debug on the current tree completed in 12.20s with 0 errors and 126 warnings; diagnostics in the changed product/test files: 0. Existing warnings remain in PostgresAppRepository, PaperFakFeeBackfillProcessor, BtcUpDown5mPaperStrategyProcessorTests, and HistoricalGrossNetDonorMatcherTests. Log: D:\\CodexTemp\\runs\\manual-dfa519afbdb242ed8ac7380f3679f307\\temp\\solution-build-final2.log."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "Inspect the complete diff, run git diff --check and WorkingTree/Staged/Range requirement validation, and obtain independent semantic review against the verbatim request, approved digest, actual diff, and final evidence.",
           "expected": "Only approved paths change; no trading decision, Maker evidence loss, atomic accounting, Live, schema, production, startup, subscription, or unrelated dirty-worktree behavior changes; independent reviewer verdict is pass with no findings.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-08-23 final inspection passed: git diff --check; requirement-gate WorkingTree validation over 10 governed files; unchanged approved semantic digest sha256:dd8e0fb72f6ea8619229439d6820d6347cf6d0d218a6821fa62074cb0ff0fee1. Independent reviewer agent:/root/reviewer_fastlane compared the verbatim request, approved contract, complete diff including the untracked dedicated queue, and final evidence; verdict PASS with no open findings."
         }
       ]
     }
@@ -151,9 +151,9 @@
     "semanticDigest": "sha256:dd8e0fb72f6ea8619229439d6820d6347cf6d0d218a6821fa62074cb0ff0fee1"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/reviewer_fastlane",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

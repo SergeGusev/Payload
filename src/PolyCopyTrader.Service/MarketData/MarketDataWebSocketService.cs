@@ -26,8 +26,10 @@ public sealed class MarketDataWebSocketService(
     IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : BackgroundService
 {
     private const string ComponentName = "PolymarketMarketWebSocket";
+    private const int MaximumPaperOrderClassifications = 4096;
     private readonly MarketWebSocketFrameDiagnosticSampler frameDiagnosticSampler = new(options);
     private readonly ConcurrentDictionary<string, MarketDataWebSocketShardRunner> shardRunners = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, PaperOrderIdClassification> paperOrderClassifications = new(StringComparer.OrdinalIgnoreCase);
     private readonly MarketDataWebSocketShardAllocator shardAllocator = new(new MarketDataWebSocketOptionsAdapter(
         options.ShardMaxAssets,
         options.MaxShardConnections));
@@ -309,6 +311,7 @@ public sealed class MarketDataWebSocketService(
             cancellationToken.ThrowIfCancellationRequested();
             IAsyncDisposable? marketDataAdmission = null;
             IReadOnlySet<Guid>? eligiblePaperOrderIds = null;
+            IReadOnlySet<Guid>? eligibleMakerGtdPaperOrderIds = null;
             try
             {
                 if (!string.IsNullOrWhiteSpace(update.AssetId))
@@ -329,28 +332,19 @@ public sealed class MarketDataWebSocketService(
                 activeMarketAssetSubscriptionRegistry.ApplyMarketDataUpdate(update);
                 marketDataCache.ApplyUpdate(update);
                 btcOrderBookLagDiagnosticService.RecordPolymarketTopOfBook(update, receivedAtUtc);
-                if (exposureSnapshotCache.TryGetOpenPaperOrderIds(
+                var orderClassification = await ClassifyEligiblePaperOrderIdsAsync(
                     update.AssetId ?? string.Empty,
-                    out var capturedPaperOrderIds))
-                {
-                    eligiblePaperOrderIds = capturedPaperOrderIds;
-                }
-
-                var pendingMakerOrderIds = makerGtdHandoff.GetPendingOrderIds(
-                    update.AssetId ?? string.Empty);
-                if (pendingMakerOrderIds.Count > 0)
-                {
-                    eligiblePaperOrderIds = eligiblePaperOrderIds is { Count: > 0 }
-                        ? eligiblePaperOrderIds.Concat(pendingMakerOrderIds).ToHashSet()
-                        : pendingMakerOrderIds;
-                }
+                    cancellationToken);
+                eligiblePaperOrderIds = orderClassification.OrdinaryPaperOrderIds;
+                eligibleMakerGtdPaperOrderIds = orderClassification.MakerGtdPaperOrderIds;
 
                 var outcome = sideEffectQueue.EnqueueUpdate(
                     component,
                     update,
                     activeMarketSnapshot,
                     receivedAtUtc,
-                    eligiblePaperOrderIds);
+                    eligiblePaperOrderIds,
+                    eligibleMakerGtdPaperOrderIds);
                 switch (outcome)
                 {
                     case MarketDataSideEffectEnqueueOutcome.Enqueued:
@@ -364,7 +358,7 @@ public sealed class MarketDataWebSocketService(
                         RecordMakerGtdMarketDataFailure(
                             update,
                             receivedAtUtc,
-                            eligiblePaperOrderIds,
+                            eligibleMakerGtdPaperOrderIds,
                             MakerGtdPaperExecutionContract.MarketDataEnqueueFailureCode);
                         logger.LogWarning(
                             "Market-data side effect was not accepted. Component={Component} EventType={EventType} AssetId={AssetId} Outcome={Outcome}",
@@ -385,7 +379,7 @@ public sealed class MarketDataWebSocketService(
                 RecordMakerGtdMarketDataFailure(
                     update,
                     receivedAtUtc,
-                    eligiblePaperOrderIds,
+                    eligibleMakerGtdPaperOrderIds,
                     MakerGtdPaperExecutionContract.MarketDataDispatchFailureCode);
                 logger.LogError(ex, "Failed to dispatch market data update {EventType} from {Component}.", update.EventType, component);
                 TryQueueApiError(component, "DispatchMarketDataUpdate", ex.Message);
@@ -426,6 +420,81 @@ public sealed class MarketDataWebSocketService(
         }
 
         return queuedUpdates + coalescedUpdates > 0;
+    }
+
+    private async Task<PaperOrderIdClassification> ClassifyEligiblePaperOrderIdsAsync(
+        string assetId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(assetId))
+        {
+            return PaperOrderIdClassification.Unknown;
+        }
+
+        var normalizedAssetId = assetId.Trim();
+        if (!exposureSnapshotCache.TryGetOpenPaperOrderIds(normalizedAssetId, out var capturedOrderIds))
+        {
+            await exposureSnapshotCache.GetSnapshotAsync(cancellationToken);
+            if (!exposureSnapshotCache.TryGetOpenPaperOrderIds(normalizedAssetId, out capturedOrderIds))
+            {
+                return PaperOrderIdClassification.Unknown;
+            }
+        }
+
+        var pendingMakerOrderIds = makerGtdHandoff.GetPendingOrderIds(normalizedAssetId);
+        if (capturedOrderIds.Count == 0)
+        {
+            paperOrderClassifications.TryRemove(normalizedAssetId, out _);
+            return new PaperOrderIdClassification(
+                new HashSet<Guid>(),
+                new HashSet<Guid>(),
+                pendingMakerOrderIds.Count == 0 ? new HashSet<Guid>() : pendingMakerOrderIds);
+        }
+
+        if (!paperOrderClassifications.TryGetValue(normalizedAssetId, out var cached) ||
+            !cached.AllPaperOrderIds.SetEquals(capturedOrderIds))
+        {
+            var exposure = await exposureSnapshotCache.GetSnapshotAsync(cancellationToken);
+            cached = ClassifyCapturedPaperOrderIds(
+                normalizedAssetId,
+                capturedOrderIds,
+                exposure.OpenPaperOrders);
+            paperOrderClassifications[normalizedAssetId] = cached;
+            if (paperOrderClassifications.Count > MaximumPaperOrderClassifications)
+            {
+                paperOrderClassifications.Clear();
+                paperOrderClassifications[normalizedAssetId] = cached;
+            }
+        }
+
+        IReadOnlySet<Guid> makerIds = pendingMakerOrderIds.Count == 0
+            ? cached.MakerGtdPaperOrderIds!
+            : cached.MakerGtdPaperOrderIds!.Concat(pendingMakerOrderIds).ToHashSet();
+        return new PaperOrderIdClassification(
+            cached.AllPaperOrderIds,
+            cached.OrdinaryPaperOrderIds,
+            makerIds);
+    }
+
+    internal static PaperOrderIdClassification ClassifyCapturedPaperOrderIds(
+        string assetId,
+        IReadOnlySet<Guid> capturedPaperOrderIds,
+        IReadOnlyList<PaperOrder> openPaperOrders)
+    {
+        var makerOrderIds = openPaperOrders
+            .Where(order =>
+                string.Equals(order.AssetId, assetId, StringComparison.OrdinalIgnoreCase) &&
+                capturedPaperOrderIds.Contains(order.Id) &&
+                MakerGtdPaperExecutionContract.IsMakerGtdOrder(order))
+            .Select(order => order.Id)
+            .ToHashSet();
+        var ordinaryOrderIds = capturedPaperOrderIds
+            .Where(orderId => !makerOrderIds.Contains(orderId))
+            .ToHashSet();
+        return new PaperOrderIdClassification(
+            capturedPaperOrderIds.ToHashSet(),
+            ordinaryOrderIds,
+            makerOrderIds);
     }
 
     private void RecordMakerGtdMarketDataFailure(
@@ -762,5 +831,18 @@ public sealed class MarketDataWebSocketService(
             .Max() is { } max && max != default
             ? max
             : null;
+    }
+
+    internal sealed record PaperOrderIdClassification(
+        IReadOnlySet<Guid> AllPaperOrderIds,
+        IReadOnlySet<Guid>? OrdinaryPaperOrderIds,
+        IReadOnlySet<Guid>? MakerGtdPaperOrderIds)
+    {
+        private static readonly IReadOnlySet<Guid> EmptyIds = new HashSet<Guid>();
+
+        public static PaperOrderIdClassification Unknown { get; } = new(
+            EmptyIds,
+            null,
+            null);
     }
 }
