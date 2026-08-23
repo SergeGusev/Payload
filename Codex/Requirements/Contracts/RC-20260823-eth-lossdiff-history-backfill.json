@@ -3,7 +3,7 @@
   "contractId": "RC-20260823-eth-lossdiff-history-backfill",
   "title": "Backfill full pre-rollout Paper trade history for two ETH LossDiff children",
   "author": "agent:/root",
-  "status": "draft",
+  "status": "approved",
   "originalRequests": [
     {
       "source": "user",
@@ -243,18 +243,18 @@
       "text": "Permit all 22 Reset 4+ historical trades to contribute to ordinary Paper history even though 12 older selected parent orders lack the modern embedded full order-book snapshot; those 12 must use only their complete persisted parent FAK order/fill/run/position-settlement chain and be explicitly marked `parent_persisted_fak_chain_only`, `embedded_order_book_snapshot_available=false`, and `exact_snapshot_replay=false`.",
       "impact": "The 12 rows retain exact causal selection, direction, order, fill, stake, Calculated Fee, Gross, Net, and settlement facts from actual parent Paper executions, but the historical market snapshot cannot be independently replayed from the modern embedded payload. They contribute within the approved Reset 4+ aggregate and may overstate the fill that a separate simultaneous child intent would have received. They never authorize or alter Live trading. Positive 13+ has modern embedded snapshots for all 30 selected trades.",
       "approval": {
-        "status": "pending",
+        "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:<pending>",
-        "semanticDigest": "pending"
+        "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14",
+        "semanticDigest": "sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14"
       }
     }
   ],
   "approval": {
-    "status": "pending",
+    "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:<pending>",
-    "semanticDigest": "pending"
+    "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14",
+    "semanticDigest": "sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_lossdiff_history_backfill",
