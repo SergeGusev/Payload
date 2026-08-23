@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260823-historical-parity-gross-ordered-strategy-completion",
+  "title": "Complete historical Gross/Net parity one strategy at a time",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Нет, давай переделывать так, чтобы сначала полностью закончивались полностью стратегии в порядке Gross. Там где нет возможности точно посчитать комиссию, просто считай её 3.3% и всё"
+    },
+    {
+      "source": "user",
+      "text": "1. Считаем, что Net Roi = Gross ROI - 3.3.&#x20;\n2. Доноров оставляем.\n3. Да\n4. Да"
+    }
+  ],
+  "scope": {
+    "goal": "Change the existing historical Gross/Net parity worker so it fully resolves one selected strategy before selecting the next strategy by current Gross, while retaining exact accounting and donor precedence and using a 3.3-percentage-point Net ROI fallback when neither is available.",
+    "inScope": [
+      "The existing HistoricalGrossNetParity background workflow and its exact pre-2026-08-10 canonical Paper and Live contribution set.",
+      "Strategy-at-a-time scheduling: select the unfinished strategy with the greatest current Dashboard lifetime Gross, keep that strategy active until every financially valid historical target is terminally accounted, then select the next unfinished strategy from a fresh current-Gross ranking.",
+      "Existing exact, authoritative, local Polymarket fee calculation, deterministic donor selection, accounting audit, reconciliation, Live initial-balance ordering, and late VenueReported revision paths.",
+      "A terminal fixed fallback satisfying Net ROI = Gross ROI - 3.3 percentage points when exact/local calculation and every approved donor tier are unavailable.",
+      "Versioned configuration, decision/source markers, documentation, and focused automated verification required by the changed scheduling and fallback contract."
+    ],
+    "outOfScope": [
+      "Changing the originating-entry cutoff 2026-08-10T00:00:00Z, the canonical Gross contribution set, Gross PnL, Gross ROI, stake/cost basis, execution, settlement, strategy signals, order placement, or ordinary accounting for new/post-cutoff bets.",
+      "Removing or changing the approved donor hierarchy, donor exactness predicates, semantic-distance matching, component deduplication, or membership evidence.",
+      "Rewriting a contribution that is already formula-complete and durably accounted, including an existing exact, donor, or fixed-fallback result.",
+      "Treating an unproved identity, Gross amount, Gross ROI basis, lineage, component graph, or structural invariant as merely an unknown Fee; such evidence failures remain explicit and cannot receive an invented financial write.",
+      "Production database mutation, service deployment, restart, configuration mutation, or trading action during this local implementation task."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Only canonical historical contributions whose proved originating entry is strictly earlier than 2026-08-10T00:00:00Z, in UTC, using the source-specific selection already approved for HistoricalGrossNetParity. Donor observations retain their approved exact lifetime scope.",
+    "firstVerification": "Trace the deployed candidate ordering/cursor, exact-to-fallback phase transition, donor decision factory, fixed fallback formula, permanent audit exclusion, reconciliation, and late VenueReported revision path; compare them with current read-only production progress before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Process historical parity to terminal completion one strategy at a time in descending current Gross order.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "сначала полностью закончивались полностью стратегии в порядке Gross",
+      "acceptanceCriteria": [
+        "When no strategy is active, the worker selects the unfinished strategy with the greatest current Dashboard lifetime Paper Gross realized PnL, using the existing canonical strategy UUID tie-break for equal Gross.",
+        "The selected strategy identity remains active across all of its bounded exact/local and fallback pages; a changing Gross rank during that work does not make the worker interleave another strategy.",
+        "Only after no financially valid unresolved historical target remains for the active strategy does the worker select the next unfinished strategy from a newly evaluated current-Gross ranking.",
+        "A service restart reconstructs work from canonical accounting plus permanent audit and again selects the greatest-current-Gross unfinished strategy; completed targets and completed strategies are not repeated or reverted.",
+        "Transient lookup, lock, cancellation, serialization, or CAS failures retry the active strategy and never cause a lower-Gross strategy to overtake it. An unproved core identity/Gross/basis/lineage/component invariant is reported explicitly and prevents a false completion claim rather than receiving a fabricated 3.3-point result."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillWorker.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillWorkerTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity\"",
+          "expected": "Focused processor/storage tests prove that one higher-Gross strategy completes exact and fallback work before any lower-Gross strategy is selected, including bounded pages, Gross changes, retries, restart reconstruction, and equal-Gross UUID ordering.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "For each target of the active strategy, preserve the precedence exact or authoritative Fee, exact local calculation, approved donor matching, then fixed 3.3-percentage-point fallback.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Доноров оставляем.",
+      "acceptanceCriteria": [
+        "An already formula-complete accounted target remains terminal and is not financially rewritten.",
+        "VenueReported Fee, an already authoritative exact Fee needing only Net repair, and a successful approved local historical Polymarket calculation retain precedence over estimates.",
+        "When exact/local accounting is unavailable, the worker runs the complete existing deterministic donor hierarchy and retains its current exact-donor, semantic-distance, component-floor, deduplication, membership-hash, and audit rules.",
+        "The fixed fallback is used only when every approved donor tier returns no valid exact donor aggregate; it does not replace an available donor and donor work remains service-side and target-scoped.",
+        "Exact/local and fallback handling are bounded phases of the same active strategy, not global all-strategy passes."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetParityDecisionFactory.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperNetFallbackPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|HistoricalPaperNetFallback\"",
+          "expected": "Tests prove exact/local precedence, unchanged donor matching, donor-before-fixed ordering, and no cross-strategy phase barrier.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Implement the terminal no-donor fallback as Net ROI equal to Gross ROI minus exactly 3.3 percentage points.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Считаем, что Net Roi = Gross ROI - 3.3.",
+      "acceptanceCriteria": [
+        "For the unchanged positive Gross ROI basis B, persist Fee = ROUND_AWAY_FROM_ZERO(B * 0.033, 8) and Net contribution = Gross contribution - Fee; this algebraically makes Net ROI exactly Gross ROI - 3.3 percentage points before ordinary displayed precision rounding.",
+        "For a nonpositive B, retain the existing nonpositive-basis terminal decision rather than inventing a percentage Fee.",
+        "The new fixed result has an unambiguous versioned decision kind/calculation source/evidence payload and is stored as terminal Calculated accounting, while Gross and B remain byte-for-byte financially unchanged.",
+        "A basis of 100.00 produces Fee 3.30000000; a basis of 12.34 produces Fee 0.40722000; Net always equals Gross minus the persisted Fee."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/HistoricalGrossNetParityDecisionFactory.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperNetFallbackPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|HistoricalPaperNetFallback\"",
+          "expected": "Known-answer tests prove 0.033 basis multiplication, away-from-zero eight-decimal rounding, Gross preservation, exact Net identity, and terminal persisted provenance.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Preserve completed accounting and allow a strictly newer valid VenueReported Live Fee to supersede a historical estimate through the existing revision path.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "4. Да",
+      "acceptanceCriteria": [
+        "Existing formula-complete exact, donor, and fixed results are not proactively recalculated by this scheduling/formula change.",
+        "For Live, a strictly newer valid VenueReported revision retains its existing authority ordering, evidence linkage, ownership, cumulative balance-delta, clamp, idempotency, and stale/unlinked rejection rules and may replace an earlier donor or fixed estimate.",
+        "The task adds no new on-chain matcher or VenueReported ingress."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|VenueReportedRevision|HistoricalGrossNetParity\"",
+          "expected": "Tests prove completed-row preservation and unchanged strictly-newer VenueReported supersession, idempotency, ordering, and balance behavior.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Keep the changed workflow bounded, restart-safe, auditable, and isolated from new-bet accounting and execution behavior.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "давай переделывать",
+      "acceptanceCriteria": [
+        "Candidate, donor, and mutation operations retain configured finite page sizes, statement/lock/lookup timeouts, compare-and-set protection, and foreground-work yielding.",
+        "Permanent AccountingDecision evidence records active strategy identity, Gross rank/value observed at selection or processing, exact/donor/fixed decision details, and the changed contract/calculation version without storing secrets.",
+        "The ordinary post-cutoff Fee/Net path, Gross formulas, signals, Paper/Live execution intents, orders, fills, settlement outcomes, and risk decisions are unchanged.",
+        "README/configuration and Paper/Live parity documentation describe strategy-at-a-time Gross scheduling, exact-to-donor-to-3.3-point precedence, the historical cutoff, and the visibility/runtime trade-off.",
+        "Relevant focused tests, a solution or affected-project build, requirement validators, diff checks, and an independent semantic review all pass before completion."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "README.md",
+        "docs/configuration_reference.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "Run the focused tests from VER-001..VER-004, build PolyCopyTrader.sln with disposable outputs under the marked D:\\CodexTemp run, run git diff --check and requirement validation, and obtain an independent semantic review of prompts, approved contract, diff, and evidence.",
+          "expected": "All checks pass with no unapproved product behavior, no production mutation, and no open independent-review findings.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260823-historical-parity-gross-ordered-strategy-completion sha256:ddae8fef59aed07fc98c719396f699370f6d385c377637a9d908a9342134bddf",
+    "semanticDigest": "sha256:ddae8fef59aed07fc98c719396f699370f6d385c377637a9d908a9342134bddf"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
