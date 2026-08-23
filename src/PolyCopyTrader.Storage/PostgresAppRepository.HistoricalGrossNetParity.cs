@@ -729,6 +729,22 @@ public sealed partial class PostgresAppRepository
         {
             throw new ArgumentOutOfRangeException(nameof(request));
         }
+
+        if (request.StrategyId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "A strategy-scoped historical parity request requires a non-empty strategy ID.",
+                nameof(request));
+        }
+
+        if (request.StrategyId is { } strategyId &&
+            request.After is { } after &&
+            after.StrategyId != strategyId)
+        {
+            throw new ArgumentException(
+                "A strategy-scoped cursor must belong to the selected strategy.",
+                nameof(request));
+        }
     }
 
     private static void ValidateHistoricalGrossNetParityDonorPreviewRequest(
@@ -877,7 +893,8 @@ public sealed partial class PostgresAppRepository
             decision.StoredFeeUsd < 0m || decision.ContributionEffectiveFeeUsd < 0m ||
             decision.ComponentFloorUsd < 0m ||
             decision.ComponentFloorUsd != target.ProvedComponentFloorUsd ||
-            decision.ContributionEffectiveFeeUsd < decision.ComponentFloorUsd ||
+            (decision.DecisionKind != HistoricalGrossNetParityDecisionKind.Fixed0p033 &&
+             decision.ContributionEffectiveFeeUsd < decision.ComponentFloorUsd) ||
             decision.NetPnlUsd != target.GrossPnlUsd - decision.ContributionEffectiveFeeUsd ||
             string.IsNullOrWhiteSpace(decision.EvidenceVersion) ||
             !Enum.TryParse<FeeAccountingStatus>(decision.FeeAccountingStatus, false, out var status) ||
@@ -910,7 +927,8 @@ public sealed partial class PostgresAppRepository
 
         var donorRequired = decision.DecisionKind is
             HistoricalGrossNetParityDecisionKind.DonorRatio or
-            HistoricalGrossNetParityDecisionKind.Fixed0p0333;
+            HistoricalGrossNetParityDecisionKind.Fixed0p0333 or
+            HistoricalGrossNetParityDecisionKind.Fixed0p033;
         if (donorRequired != (decision.DonorDecision is not null))
         {
             throw new ArgumentException("Donor/fixed decisions require exactly one complete selection proof.");
@@ -1322,7 +1340,8 @@ ORDER BY lower(fill.id::text);
         {
             return decision.DecisionKind is not (
                 HistoricalGrossNetParityDecisionKind.DonorRatio or
-                HistoricalGrossNetParityDecisionKind.Fixed0p0333);
+                HistoricalGrossNetParityDecisionKind.Fixed0p0333 or
+                HistoricalGrossNetParityDecisionKind.Fixed0p033);
         }
 
         var actual = await RecomputeHistoricalGrossNetParitySelectionAsync(
@@ -1335,8 +1354,10 @@ ORDER BY lower(fill.id::text);
 
         if (actual.SelectedStrategyId is null)
         {
-            return decision.DecisionKind == HistoricalGrossNetParityDecisionKind.Fixed0p0333 &&
-                   decision.DonorDecision.Ratio == 0.0333m;
+            return (decision.DecisionKind == HistoricalGrossNetParityDecisionKind.Fixed0p0333 &&
+                    decision.DonorDecision.Ratio == 0.0333m) ||
+                   (decision.DecisionKind == HistoricalGrossNetParityDecisionKind.Fixed0p033 &&
+                    decision.DonorDecision.Ratio == 0.033m);
         }
 
         var descriptor = orderedCandidates.Single(value =>
@@ -2198,9 +2219,12 @@ WITH strategy_gross AS (
 ), ordered_strategies AS MATERIALIZED (
     SELECT id, code, gross_pnl, strategy_rank
     FROM ranked
-    WHERE NOT @HasAfter
-       OR strategy_rank > @AfterRank
-       OR (strategy_rank = @AfterRank AND lower(id::text) >= @AfterStrategyId)
+    WHERE (NOT @HasStrategy OR id = @StrategyId)
+      AND (
+          @HasStrategy
+          OR NOT @HasAfter
+          OR strategy_rank > @AfterRank
+          OR (strategy_rank = @AfterRank AND lower(id::text) >= @AfterStrategyId))
     ORDER BY strategy_rank, lower(id::text)
 ), ordered AS (
     SELECT candidate.source_kind, candidate.source_id, ranked.id AS strategy_id,
@@ -2358,14 +2382,24 @@ WITH strategy_gross AS (
                     AND audit.operation_kind = 'AccountingDecision'))
       ) bounded_candidate
       WHERE NOT @HasAfter
-         OR ranked.strategy_rank > @AfterRank
-         OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) > @AfterStrategyId)
-         OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+         OR (@HasStrategy AND bounded_candidate.source_order > @AfterSourceOrder)
+         OR (@HasStrategy AND bounded_candidate.source_order = @AfterSourceOrder
+             AND bounded_candidate.originated_at > @AfterOriginatedAt)
+         OR (@HasStrategy AND bounded_candidate.source_order = @AfterSourceOrder
+             AND bounded_candidate.originated_at = @AfterOriginatedAt
+             AND lower(bounded_candidate.source_id::text) > @AfterSourceId)
+         OR (NOT @HasStrategy AND ranked.strategy_rank > @AfterRank)
+         OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
+             AND lower(ranked.id::text) > @AfterStrategyId)
+         OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
+             AND lower(ranked.id::text) = @AfterStrategyId
              AND bounded_candidate.source_order > @AfterSourceOrder)
-         OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+         OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
+             AND lower(ranked.id::text) = @AfterStrategyId
              AND bounded_candidate.source_order = @AfterSourceOrder
              AND bounded_candidate.originated_at > @AfterOriginatedAt)
-         OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+         OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
+             AND lower(ranked.id::text) = @AfterStrategyId
              AND bounded_candidate.source_order = @AfterSourceOrder
              AND bounded_candidate.originated_at = @AfterOriginatedAt
              AND lower(bounded_candidate.source_id::text) > @AfterSourceId)
@@ -2374,13 +2408,23 @@ WITH strategy_gross AS (
       LIMIT @PageSize
     ) candidate
     WHERE NOT @HasAfter
-       OR ranked.strategy_rank > @AfterRank
-       OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) > @AfterStrategyId)
-       OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+       OR (@HasStrategy AND candidate.source_order > @AfterSourceOrder)
+       OR (@HasStrategy AND candidate.source_order = @AfterSourceOrder
+           AND candidate.originated_at > @AfterOriginatedAt)
+       OR (@HasStrategy AND candidate.source_order = @AfterSourceOrder
+           AND candidate.originated_at = @AfterOriginatedAt
+           AND lower(candidate.source_id::text) > @AfterSourceId)
+       OR (NOT @HasStrategy AND ranked.strategy_rank > @AfterRank)
+       OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
+           AND lower(ranked.id::text) > @AfterStrategyId)
+       OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
+           AND lower(ranked.id::text) = @AfterStrategyId
            AND candidate.source_order > @AfterSourceOrder)
-       OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+       OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
+           AND lower(ranked.id::text) = @AfterStrategyId
            AND candidate.source_order = @AfterSourceOrder AND candidate.originated_at > @AfterOriginatedAt)
-       OR (ranked.strategy_rank = @AfterRank AND lower(ranked.id::text) = @AfterStrategyId
+       OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
+           AND lower(ranked.id::text) = @AfterStrategyId
            AND candidate.source_order = @AfterSourceOrder AND candidate.originated_at = @AfterOriginatedAt
            AND lower(candidate.source_id::text) > @AfterSourceId)
 )
@@ -2401,6 +2445,10 @@ LIMIT @PageSize;
         command.Parameters.AddWithValue("CalculationVersion", request.CalculationVersion);
         command.Parameters.AddWithValue("PageSize", request.PageSize);
         command.Parameters.AddWithValue("HasAfter", request.After is not null);
+        command.Parameters.AddWithValue("HasStrategy", request.StrategyId is not null);
+        command.Parameters.AddWithValue(
+            "StrategyId",
+            request.StrategyId ?? Guid.Empty);
         command.Parameters.AddWithValue("AfterRank", request.After?.StrategyRank ?? 0);
         command.Parameters.AddWithValue(
             "AfterStrategyId",
@@ -3054,7 +3102,8 @@ ORDER BY live_order.strategy_id, live_order.settled_at_utc, lower(live_order.id:
                 : Enum.Parse<HistoricalGrossNetParityBaselineEffectKind>(reader.GetString(33), false);
             targets.Add(new HistoricalGrossNetParityTargetSnapshot(
                 HistoricalGrossNetParitySourceKind.LiveOrder, id, strategyId,
-                candidate.StrategyRank, rowVersion, candidate.OriginatedAtUtc, settledAt,
+                candidate.StrategyRank, candidate.StrategyGrossPnlUsd, rowVersion,
+                candidate.OriginatedAtUtc, settledAt,
                 gross, basis, fee, feeStatus, feeRole, feeSource, feeRate, feeExponent,
                 feeTakerOnly, feeCalculatedAt, net, balanceApplied, ownership,
                 targetHash, lineageHash, componentHash, eligibility,

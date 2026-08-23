@@ -891,7 +891,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
             Guid.Parse("71000000-0000-0000-0000-000000000002"),
             HistoricalGrossNetParityExactEligibility.FallbackRequired,
             gross: 10m,
-            basis: 100m,
+            basis: 12.34m,
             fee: 0m,
             net: null);
         var store = new RecordingParityStore
@@ -916,12 +916,24 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
         var fallback = await processor.RunCycleAsync(fallbackCycle);
 
-        Assert.Equal(HistoricalGrossNetParityCycleState.SweepCompleted, fallback.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, fallback.State);
         Assert.Equal(HistoricalGrossNetParityProcessingPhase.Fallback, fallback.Phase);
         Assert.Single(store.DonorPreviewRequests);
         var request = Assert.Single(store.LiveAccountingRequests);
-        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p0333, request.Decision.DecisionKind);
-        Assert.Equal(3.33m, request.Decision.ContributionEffectiveFeeUsd);
+        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p033, request.Decision.DecisionKind);
+        Assert.Equal(0.40722000m, request.Decision.ContributionEffectiveFeeUsd);
+        Assert.Equal(9.59278000m, request.Decision.NetPnlUsd);
+        Assert.Equal(
+            "historical-gross-net-parity-fixed-net-roi-minus-3p3-v1",
+            request.Decision.FeeCalculationSource);
+        Assert.Contains(
+            "tier:fixed-net-roi-minus-3.3-points",
+            request.Decision.EvidenceJson,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "fixed-0.0333",
+            request.Decision.EvidenceJson,
+            StringComparison.Ordinal);
         Assert.Null(request.Decision.DonorDecision?.SelectedTier);
         Assert.Equal(FeeLiquidityRole.Unknown.ToString(), request.Decision.FeeLiquidityRole);
         Assert.Empty(feeService.Requests);
@@ -930,6 +942,272 @@ public sealed class PaperFakFeeBackfillProcessorTests
              PaperFakFeeBackfillEventTypes.ParityPageCompleted],
             events.Events.Select(entry => entry.EventType).ToArray());
         Assert.All(events.Events, entry => Assert.Equal(fallbackCycle, entry.CycleId));
+    }
+
+    [Fact]
+    public async Task HistoricalParityProcessor_CompletesSelectedStrategyBeforeCurrentGrossReselection()
+    {
+        var highStrategyId = Guid.Parse("71100000-0000-0000-0000-000000000001");
+        var lowStrategyId = Guid.Parse("71100000-0000-0000-0000-000000000002");
+        var high = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71100000-0000-0000-0000-000000000011"),
+            highStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 20m,
+            basis: 100m,
+            fee: 0m,
+            net: null);
+        var low = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71100000-0000-0000-0000-000000000012"),
+            lowStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 10m,
+            basis: 100m,
+            fee: 0m,
+            net: null) with { StrategyRank = 2 };
+        var completed = new HashSet<Guid>();
+        var ranksFlipped = false;
+        var store = new RecordingParityStore
+        {
+            CandidatePageFactory = request =>
+            {
+                var candidates = new[]
+                    {
+                        ranksFlipped ? high with { StrategyRank = 2 } : high,
+                        ranksFlipped ? low with { StrategyRank = 1 } : low
+                    }
+                    .Where(target => !completed.Contains(target.SourceId))
+                    .Where(target => request.StrategyId is null || target.StrategyId == request.StrategyId)
+                    .OrderBy(target => target.StrategyRank)
+                    .ToArray();
+                return CreateParityPage(request.Phase, candidates, []);
+            },
+            LiveApplyFactory = request =>
+            {
+                completed.Add(request.Target.SourceId);
+                return new HistoricalGrossNetParityApplyResult(
+                    HistoricalGrossNetParityApplyStatus.Applied,
+                    true,
+                    request.Target.TargetTupleHash,
+                    HistoricalGrossNetParityOwnership.Completed);
+            }
+        };
+        var processor = CreateHistoricalParityProcessor(
+            store,
+            new RecordingHistoricalFeeService((_, _) =>
+                throw new InvalidOperationException("Fallback must not dispatch a historical lookup.")));
+
+        var highExact = await processor.RunCycleAsync(Guid.NewGuid());
+        ranksFlipped = true;
+        var highFallback = await processor.RunCycleAsync(Guid.NewGuid());
+        var lowExact = await processor.RunCycleAsync(Guid.NewGuid());
+        var lowFallback = await processor.RunCycleAsync(Guid.NewGuid());
+
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached, highExact.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, highFallback.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached, lowExact.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, lowFallback.State);
+        Assert.Equal([highStrategyId, lowStrategyId],
+            store.LiveAccountingRequests.Select(request => request.Target.StrategyId).ToArray());
+        Assert.Equal(
+            [null, highStrategyId, highStrategyId, null, lowStrategyId],
+            store.CandidatePageRequests.Select(request => request.StrategyId).ToArray());
+    }
+
+    [Fact]
+    public async Task HistoricalParityProcessor_DeferredTargetKeepsLowerGrossStrategyBlocked()
+    {
+        var highStrategyId = Guid.Parse("71200000-0000-0000-0000-000000000001");
+        var lowStrategyId = Guid.Parse("71200000-0000-0000-0000-000000000002");
+        var high = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71200000-0000-0000-0000-000000000011"),
+            highStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 20m,
+            basis: 100m,
+            fee: 0m,
+            net: null);
+        var low = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71200000-0000-0000-0000-000000000012"),
+            lowStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 10m,
+            basis: 100m,
+            fee: 0m,
+            net: null) with { StrategyRank = 2 };
+        var completed = new HashSet<Guid>();
+        var applyAttempts = 0;
+        var store = new RecordingParityStore
+        {
+            CandidatePageFactory = request => CreateParityPage(
+                request.Phase,
+                new[] { high, low }
+                    .Where(target => !completed.Contains(target.SourceId))
+                    .Where(target => request.StrategyId is null || target.StrategyId == request.StrategyId)
+                    .OrderBy(target => target.StrategyRank)
+                    .ToArray(),
+                []),
+            LiveApplyFactory = request =>
+            {
+                applyAttempts++;
+                if (applyAttempts == 1)
+                {
+                    return new HistoricalGrossNetParityApplyResult(
+                        HistoricalGrossNetParityApplyStatus.DeferredCas,
+                        false,
+                        request.Target.TargetTupleHash,
+                        HistoricalGrossNetParityOwnership.None);
+                }
+
+                completed.Add(request.Target.SourceId);
+                return new HistoricalGrossNetParityApplyResult(
+                    HistoricalGrossNetParityApplyStatus.Applied,
+                    true,
+                    request.Target.TargetTupleHash,
+                    HistoricalGrossNetParityOwnership.Completed);
+            }
+        };
+        var processor = CreateHistoricalParityProcessor(
+            store,
+            new RecordingHistoricalFeeService((_, _) =>
+                throw new InvalidOperationException("Fallback must not dispatch a historical lookup.")));
+
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.Deferred,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+
+        Assert.Equal(2, store.LiveAccountingRequests.Count);
+        Assert.All(store.LiveAccountingRequests,
+            request => Assert.Equal(highStrategyId, request.Target.StrategyId));
+        Assert.DoesNotContain(store.CandidatePageRequests,
+            request => request.StrategyId == lowStrategyId);
+
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(lowStrategyId, store.LiveAccountingRequests[^1].Target.StrategyId);
+    }
+
+    [Fact]
+    public async Task HistoricalParityProcessor_DeferredLiveBalanceKeepsLowerGrossStrategyBlocked()
+    {
+        var highStrategyId = Guid.Parse("71300000-0000-0000-0000-000000000001");
+        var lowStrategyId = Guid.Parse("71300000-0000-0000-0000-000000000002");
+        var high = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71300000-0000-0000-0000-000000000011"),
+            highStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 20m,
+            basis: 100m,
+            fee: 0m,
+            net: null) with { StrategyGrossPnlUsd = 20m };
+        var low = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71300000-0000-0000-0000-000000000012"),
+            lowStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 10m,
+            basis: 100m,
+            fee: 0m,
+            net: null) with { StrategyRank = 2, StrategyGrossPnlUsd = 10m };
+        var completed = new HashSet<Guid>();
+        var highAccountingApplied = false;
+        var balanceAttempts = 0;
+        var store = new RecordingParityStore
+        {
+            CandidatePageFactory = request => CreateParityPage(
+                request.Phase,
+                new[] { high, low }
+                    .Where(target => !completed.Contains(target.SourceId))
+                    .Where(target => request.StrategyId is null || target.StrategyId == request.StrategyId)
+                    .OrderBy(target => target.StrategyRank)
+                    .ToArray(),
+                []),
+            LiveApplyFactory = request =>
+            {
+                if (request.Target.SourceId == low.SourceId)
+                {
+                    completed.Add(low.SourceId);
+                    return new HistoricalGrossNetParityApplyResult(
+                        HistoricalGrossNetParityApplyStatus.Applied,
+                        true,
+                        request.Target.TargetTupleHash,
+                        HistoricalGrossNetParityOwnership.Completed);
+                }
+
+                var status = highAccountingApplied
+                    ? HistoricalGrossNetParityApplyStatus.TerminalNoOp
+                    : HistoricalGrossNetParityApplyStatus.Applied;
+                highAccountingApplied = true;
+                return new HistoricalGrossNetParityApplyResult(
+                    status,
+                    status == HistoricalGrossNetParityApplyStatus.Applied,
+                    request.Target.TargetTupleHash,
+                    HistoricalGrossNetParityOwnership.Pending);
+            },
+            LiveBalanceFactory = request =>
+            {
+                balanceAttempts++;
+                if (balanceAttempts == 1)
+                {
+                    return new HistoricalGrossNetParityLiveBalanceResult(
+                        HistoricalGrossNetParityApplyStatus.DeferredCas,
+                        request.LiveOrderId,
+                        HistoricalGrossNetParityOwnership.Pending,
+                        null,
+                        null,
+                        null,
+                        false,
+                        "retry");
+                }
+
+                completed.Add(high.SourceId);
+                return new HistoricalGrossNetParityLiveBalanceResult(
+                    HistoricalGrossNetParityApplyStatus.Applied,
+                    request.LiveOrderId,
+                    HistoricalGrossNetParityOwnership.Completed,
+                    0m,
+                    0m,
+                    0m,
+                    true);
+            }
+        };
+        var processor = CreateHistoricalParityProcessor(
+            store,
+            new RecordingHistoricalFeeService((_, _) =>
+                throw new InvalidOperationException("Fallback must not dispatch a historical lookup.")));
+
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.Deferred,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+
+        Assert.Equal(2, store.LiveBalanceRequests.Count);
+        Assert.All(store.LiveBalanceRequests,
+            request => Assert.Equal(highStrategyId, request.StrategyId));
+        Assert.DoesNotContain(store.LiveAccountingRequests,
+            request => request.Target.StrategyId == lowStrategyId);
+
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(lowStrategyId, store.LiveAccountingRequests[^1].Target.StrategyId);
     }
 
     [Fact]
@@ -974,14 +1252,14 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
         var fallback = await processor.RunCycleAsync(Guid.NewGuid());
 
-        Assert.Equal(HistoricalGrossNetParityCycleState.SweepCompleted, fallback.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, fallback.State);
         Assert.Equal(3, feeService.Requests.Count);
         Assert.Single(store.DonorPreviewRequests);
         Assert.Single(store.LiveAccountingRequests);
     }
 
     [Fact]
-    public async Task HistoricalParityProcessor_PartialLookupFallbackKeepsSuccessfulComponentAsFeeFloor()
+    public async Task HistoricalParityProcessor_PartialLookupFallbackRecordsComponentButUsesExact3p3Points()
     {
         var target = CreateParityTarget(
             HistoricalGrossNetParitySourceKind.LiveOrder,
@@ -1038,11 +1316,12 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var fallback = await processor.RunCycleAsync(Guid.NewGuid());
 
         Assert.Equal(1, exact.FallbackEligible);
-        Assert.Equal(HistoricalGrossNetParityCycleState.SweepCompleted, fallback.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, fallback.State);
         var request = Assert.Single(store.LiveAccountingRequests);
-        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p0333, request.Decision.DecisionKind);
+        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p033, request.Decision.DecisionKind);
         Assert.Equal(0.75m, request.Decision.ComponentFloorUsd);
-        Assert.Equal(0.75m, request.Decision.ContributionEffectiveFeeUsd);
+        Assert.Equal(0.33m, request.Decision.ContributionEffectiveFeeUsd);
+        Assert.Equal(1.67m, request.Decision.NetPnlUsd);
         Assert.Single(request.Target.ProvedComponents);
         Assert.Equal(2, feeService.Requests.Count);
     }
@@ -1119,7 +1398,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached, exact.State);
         Assert.Equal(1, exact.FallbackEligible);
         Assert.Equal(0, exact.LookupAttemptsThisCycle);
-        Assert.Equal(HistoricalGrossNetParityCycleState.SweepCompleted, fallback.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, fallback.State);
         Assert.Single(feeService.Requests);
         Assert.Single(store.LiveAccountingRequests);
     }
@@ -1142,7 +1421,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var exact = await processor.RunCycleAsync(Guid.NewGuid());
         var fallback = await processor.RunCycleAsync(Guid.NewGuid());
 
-        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached, exact.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.Idle, exact.State);
         Assert.Equal(HistoricalGrossNetParityCycleState.Idle, fallback.State);
         Assert.Empty(store.PaperDecisionRequests);
         Assert.Empty(store.LiveAccountingRequests);
@@ -1309,6 +1588,21 @@ public sealed class PaperFakFeeBackfillProcessorTests
             "historical-gross-net-parity-v1");
         Assert.NotNull(decision);
         Assert.DoesNotContain("rawAllocatedUsd", decision!.EvidenceJson, StringComparison.Ordinal);
+        Assert.Contains(target.StrategyId.ToString("D"), decision.EvidenceJson, StringComparison.Ordinal);
+        Assert.Contains("\"StrategyRank\":1", decision.EvidenceJson, StringComparison.Ordinal);
+        Assert.Contains("\"StrategyGrossPnlUsd\":", decision.EvidenceJson, StringComparison.Ordinal);
+        Assert.Contains(
+            HistoricalGrossNetParityConstants.StrategyCompletionContractId,
+            decision.EvidenceJson,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            HistoricalGrossNetParityConstants.StrategyCompletionSemanticDigest,
+            decision.EvidenceJson,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            HistoricalGrossNetParityConstants.CalculationVersion,
+            decision.EvidenceJson,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1481,7 +1775,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
                 strategyId,
                 $"strategy-{strategyId:N}",
                 1,
-                sell.RealizedPnlUsd,
+                100m,
                 CutoffUtc.AddMinutes(-3),
                 4,
                 sell.FillRowVersion,
@@ -1758,6 +2052,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
             SourceId: sourceId,
             StrategyId: strategyId,
             StrategyRank: 1,
+            StrategyGrossPnlUsd: 100m,
             RowVersion: 10,
             OriginatedAtUtc: HistoricalGrossNetParityConstants.CutoffUtc.AddDays(-1),
             SettledAtUtc: HistoricalGrossNetParityConstants.CutoffUtc.AddHours(1),
@@ -1834,7 +2129,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
             target.StrategyId,
             $"strategy-{target.StrategyId:N}",
             target.StrategyRank,
-            target.GrossPnlUsd,
+            target.StrategyGrossPnlUsd,
             target.OriginatedAtUtc,
             (int)target.SourceKind,
             target.RowVersion,
@@ -2193,6 +2488,9 @@ public sealed class PaperFakFeeBackfillProcessorTests
         public Func<HistoricalGrossNetParityLiveAccountingRequest, HistoricalGrossNetParityApplyResult>?
             LiveApplyFactory { get; init; }
 
+        public Func<HistoricalGrossNetParityLiveBalanceRequest, HistoricalGrossNetParityLiveBalanceResult>?
+            LiveBalanceFactory { get; init; }
+
         public List<HistoricalGrossNetParityCandidatePageRequest> CandidatePageRequests { get; } = [];
         public List<HistoricalGrossNetParityDonorPreviewRequest> DonorPreviewRequests { get; } = [];
         public List<HistoricalGrossNetParityPaperDecisionRequest> PaperDecisionRequests { get; } = [];
@@ -2255,7 +2553,8 @@ public sealed class PaperFakFeeBackfillProcessorTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             LiveBalanceRequests.Add(request);
-            return Task.FromResult(new HistoricalGrossNetParityLiveBalanceResult(
+            return Task.FromResult(LiveBalanceFactory?.Invoke(request) ??
+                new HistoricalGrossNetParityLiveBalanceResult(
                 HistoricalGrossNetParityApplyStatus.Applied,
                 request.LiveOrderId,
                 HistoricalGrossNetParityOwnership.Completed,

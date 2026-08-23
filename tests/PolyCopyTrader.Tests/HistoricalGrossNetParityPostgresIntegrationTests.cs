@@ -124,6 +124,46 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task CandidatePage_StrategyScopeFinishesSelectedStrategyWithoutCrossingToNext()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var firstStrategyRunIds = Enumerable.Range(1, 120)
+            .Select(value => Guid.Parse($"b3000000-0000-4000-8101-{value:000000000000}"))
+            .ToArray();
+        var secondStrategyRunIds = Enumerable.Range(1, 3)
+            .Select(value => Guid.Parse($"b3000000-0000-4000-8102-{value:000000000000}"))
+            .ToArray();
+        await SeedCandidatePaginationAsync(factory, firstStrategyRunIds, secondStrategyRunIds);
+
+        HistoricalGrossNetParityCandidateCursor? cursor = null;
+        var scoped = new List<HistoricalGrossNetParityCandidateKey>();
+        for (var pageNumber = 0; pageNumber < 3; pageNumber++)
+        {
+            var page = await repository.LoadHistoricalGrossNetParityCandidatePageAsync(
+                new HistoricalGrossNetParityCandidatePageRequest(
+                    HistoricalGrossNetParityProcessingPhase.Exact,
+                    HistoricalGrossNetParityConstants.CutoffUtc,
+                    50,
+                    cursor,
+                    30,
+                    1_000,
+                    HistoricalGrossNetParityConstants.CalculationVersion,
+                    PaginationStrategyOneId));
+            Assert.Equal(HistoricalGrossNetParityReadStatus.Complete, page.Status);
+            Assert.All(page.Candidates,
+                candidate => Assert.Equal(PaginationStrategyOneId, candidate.StrategyId));
+            scoped.AddRange(page.Candidates);
+            cursor = page.NextCursor;
+            Assert.Equal(pageNumber == 2, page.ReachedBoundary);
+        }
+
+        Assert.Equal(firstStrategyRunIds, scoped.Select(candidate => candidate.SourceId));
+        Assert.DoesNotContain(scoped, candidate => candidate.StrategyId == PaginationStrategyTwoId);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task MixedRunDonor_IsReplayedAtTargetTime_AndStrategyPathUsesSettledIndex()
     {
         var factory = await CreateFactoryAsync();

@@ -229,6 +229,28 @@ fill. Parent fill data and each child's venue response are outcome data used onl
 for their separate accounting and later decisions. Both children are seeded with
 `live_stakes=false`; this parity path does not itself authorize Live trading.
 
+The one-time pre-rollout history backfill does not create a new decision-time
+execution rule and is not consulted by future LossDiff gating. It clones only a
+causally selected, already persisted parent `FAK` signal/order/fill/run/position/
+settlement chain before `2026-08-23T19:44:26.488143Z`, preserves the parent's
+exact intent and accounting fields, and writes no LossDiff state/event or Live
+row. Every cloned row carries exact parent IDs, cutoff, source digest, threshold,
+pre-entry LossDiff, and evidence version `eth_lossdiff_parent_mirror_history_v1`.
+The child fill preserves the parent's canonical `Calculated` entry fee, zero
+fill-level realized PnL, and SQL `NULL` fill-level Net; fee-inclusive Net remains
+the matching run/settlement value.
+
+The approved historical set contains 12 older Reset 4+ parent chains without the
+modern embedded full order-book snapshot. Those rows are explicitly marked
+`parent_persisted_fak_chain_only`,
+`embedded_order_book_snapshot_available=false`, and
+`exact_snapshot_replay=false`. Their persisted parent FAK execution and
+accounting are facts, but a separate simultaneous child fill cannot be replayed
+from a full snapshot and may be overstated. This is a closed one-time historical
+accounting decision for the exact selected membership only: it cannot authorize
+future Paper placement, Live submission, another strategy, another cutoff, or a
+general snapshot-free replay path.
+
 ## Execution and outcome rules
 
 Paper must model the documented behavior of the matching Live order type. The exact
@@ -478,13 +500,16 @@ no Live open-MtM metric is added.
 
 Accounting precedence is proved `VenueReported`, complete exact local evidence,
 authoritative-Fee Net repair, exact historical CLOB calculation, deterministic
-exact-donor Fee-to-basis ratio, and finally fixed `0.0333`. The donor matcher
+exact-donor Fee-to-basis ratio, and finally fixed `0.033`. The fixed fallback is
+equivalent to `Net ROI = Gross ROI - 3.3` percentage points. The donor matcher
 uses typed catalog semantics rather than names, resolves same-strategy and
 nearest-family tiers deterministically, then falls through to any proved crypto
 strategy before the fixed coefficient. It deduplicates linked Paper/Live
 evidence and never lets estimated rows donate. Final Fee is rounded once to eight
-decimal places away from zero, cannot fall below proved non-overlapping Fee
-components, and Net remains exactly `Gross - Fee`. A fallback is stored as
+decimal places away from zero. Exact/local and donor results cannot fall below
+proved non-overlapping Fee components; the final fixed fallback remains exactly
+`B * 0.033` and records partial component evidence without raising that result.
+Net remains exactly `Gross - Fee`. A fallback is stored as
 ordinary terminal `Calculated` with versioned provenance; Gross is never
 rewritten.
 
@@ -504,10 +529,12 @@ not toggle Live, alter loss counters, pause trading, or emit ordinary settlement
 notifications.
 
 The deployed service performs this historical repair incrementally. It first
-reaches the current exact/authoritative/local-calculation boundary, then handles
-each unresolved fallback target in Gross order. Donor candidates are generated
-from typed strategy descriptors and queried only for finite strategy-ID pages;
-there is no full donor-universe scan, frozen universe, or durable global plan.
+selects the unfinished strategy with the greatest current Dashboard Gross. That
+strategy remains active until both its exact/authoritative/local-calculation and
+donor/fixed-fallback work are complete; current Gross is reranked only before
+selecting the next unfinished strategy. Donor candidates are generated from
+typed strategy descriptors and queried only for finite strategy-ID pages; there
+is no full donor-universe scan, frozen universe, or durable global plan.
 The target-time aggregate and the complete winning/absence proof are revalidated
 inside the target's serializable accounting transaction. A conflict retries only
 that target, while independent committed targets remain complete. Restarts rescan
@@ -519,9 +546,9 @@ membership/selection hashes, ratio, and provenance preserve each decision. A
 terminal Paper estimate is not recalculated when later exact donors appear. Live
 initial balance effects remain ordered by settlement time and UUID per strategy:
 an earlier unfinished row gates later initial balance transactions for that
-strategy, while accounting and other strategies continue. The background cadence
-and projection reconciliation can leave Net temporarily blank until the relevant
-target and snapshot refresh complete.
+strategy, and the active strategy is retained until that balance work is
+terminal. The background cadence and projection reconciliation can leave Net
+temporarily blank until the relevant target and snapshot refresh complete.
 
 Linked Live/Paper donor deduplication is replay-based, not inferred from a
 shared wallet/asset name. If an exact Live order is still represented inside a
@@ -529,7 +556,7 @@ composite Paper position or settlement and the aggregate rounding residual
 cannot be split between linked and unlinked BUY charges without inventing
 per-BUY economics, the exact Live row is retained and the entire indivisible
 Paper composite is excluded from that target-time donor aggregate. Matching
-continues through the remaining tiers and fixed `0.0333`. This prevents double
+continues through the remaining tiers and fixed `0.033`. This prevents double
 counting and preserves Live precedence, but can omit otherwise exact unlinked
 Paper economics from `N/D` compared with a hypothetical exactly partitioned
 aggregate. No synthetic residual Paper row is created. A fully consumed older

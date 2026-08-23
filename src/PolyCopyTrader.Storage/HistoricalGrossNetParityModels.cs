@@ -56,6 +56,10 @@ public static class HistoricalGrossNetParityConstants
         "RC-20260814-historical-gross-net-parity-incremental-service";
     public const string SupplementalSemanticDigest =
         "sha256:cdd2a4cde278932099a46c8bf4429b4141cdd43f2e01848e04e036f2cd995b40";
+    public const string StrategyCompletionContractId =
+        "RC-20260823-historical-parity-gross-ordered-strategy-completion";
+    public const string StrategyCompletionSemanticDigest =
+        "sha256:ddae8fef59aed07fc98c719396f699370f6d385c377637a9d908a9342134bddf";
     public const string CalculationVersion = "historical-gross-net-parity-v1";
     public const string DonorMembershipEncodingDomain = "HGNM1";
     public const string DonorSelectionEncodingDomain = "HGNS1";
@@ -88,6 +92,7 @@ public enum HistoricalGrossNetParityDecisionKind
     LocalExactCalculated,
     DonorRatio,
     Fixed0p0333,
+    Fixed0p033,
     NonpositiveBasis
 }
 
@@ -176,7 +181,8 @@ public sealed record HistoricalGrossNetParityCandidatePageRequest(
     HistoricalGrossNetParityCandidateCursor? After,
     int CommandTimeoutSeconds,
     int LockTimeoutMilliseconds,
-    string CalculationVersion);
+    string CalculationVersion,
+    Guid? StrategyId = null);
 
 public sealed record HistoricalGrossNetParityCandidateKey(
     HistoricalGrossNetParitySourceKind SourceKind,
@@ -622,6 +628,7 @@ public sealed record HistoricalGrossNetParityTargetSnapshot(
     Guid SourceId,
     Guid StrategyId,
     int StrategyRank,
+    decimal StrategyGrossPnlUsd,
     long RowVersion,
     DateTimeOffset OriginatedAtUtc,
     DateTimeOffset? SettledAtUtc,

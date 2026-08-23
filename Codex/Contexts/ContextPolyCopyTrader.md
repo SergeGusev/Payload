@@ -1,6 +1,19 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-23 Historical Gross/Net Strategy Completion
+Goal: Complete pre-2026-08-10 historical Gross/Net parity one strategy at a time in descending current Gross order, with exact/local then donor then strict 3.3-point fallback precedence.
+Status: Implemented and independently reviewed locally; commit/push pending final requirement gates
+Done:
+- The parity worker selects the greatest-current-Gross unfinished strategy, keeps it active through bounded exact and fallback pages, and reranks only after every accounting and ordered Live balance target is terminal. Accounting/CAS/balance deferrals retain the active strategy.
+- Strategy-scoped PostgreSQL pagination ignores changing rank after selection and continues by source key without crossing into another strategy. Restart reconstructs the highest-Gross unfinished strategy from canonical/audit state.
+- Donors remain unchanged. The no-donor decision is versioned as `Fixed0p033` and persists exactly `Fee=ROUND_AWAY_8(B*0.033)`, so `Net ROI=Gross ROI-3.3` percentage points; legacy `Fixed0p0333` remains readable only for completed historical compatibility.
+- Every new AccountingDecision records StrategyId, observed StrategyRank/Gross, contract ID/digest, calculation version, and component evidence. Existing completed rows remain excluded; the existing strictly newer valid VenueReported revision path is unchanged.
+- Isolated verification excluding unrelated concurrent LossDiff files passed focused tests 97/97, broader tests 26 passed/8 PostgreSQL skipped for absent test connection, solution build 0 errors/126 warnings, diff check, and independent semantic review with no findings.
+Next: Run requirement validators, create the task-only implementation commit, push the deployment branch, and ask the user to redeploy the service.
+Notes: No deployment, service restart, database/configuration mutation, production operation, or trading action was performed. The main worktree also contains unrelated concurrent LossDiff and prior contract/context changes which must remain outside this task commit.
+Blockers: None for local implementation. Dynamic PostgreSQL integration remains unexecuted because `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` was not configured.
+
 ## Active Update 2026-08-23 Current Production Betting Check
 Goal: Determine whether bets are being created now on exact production `192.168.0.101:5432/polycopytrader`.
 Status: Completed read-only; Paper betting is active

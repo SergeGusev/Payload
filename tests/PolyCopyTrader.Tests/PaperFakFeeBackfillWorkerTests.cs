@@ -131,7 +131,7 @@ public sealed class PaperFakFeeBackfillWorkerTests
         };
         var parity = new RecordingParityProcessor(
             new HistoricalGrossNetParityCycleResult(
-                HistoricalGrossNetParityCycleState.SweepCompleted,
+                HistoricalGrossNetParityCycleState.StrategyCompleted,
                 false,
                 HistoricalGrossNetParityProcessingPhase.Fallback,
                 1,

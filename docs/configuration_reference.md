@@ -180,12 +180,14 @@ or the ordinary accounting path for new bets.
   attempt count. Donor fallback itself performs no external lookup.
 - `CalculationVersion`: fixed `historical-gross-net-parity-v1`.
 
-The service first completes the current exact/authoritative/local-calculation
-pass in bounded pages. A financially unresolved row is absent from the current
-exact donor pool but does not globally block fallback; an exact row remains a
-donor even if only its audit, ownership, reconciliation, or Live balance work is
-Pending. The old `PaperFakFeeBackfill` switch, cutoff, and apply gate remain
-independent.
+The service selects the unfinished strategy with the greatest current Dashboard
+Gross and keeps it active while completing both its exact/authoritative/local-
+calculation pass and its donor/fixed-fallback pass in bounded pages. Only after
+that strategy is complete does the service rerank the unfinished strategies by
+current Gross and select the next one. A financially unresolved row is absent
+from the current exact donor pool; an exact row remains a donor even if only its
+audit, ownership, reconciliation, or Live balance work is Pending. The old
+`PaperFakFeeBackfill` switch, cutoff, and apply gate remain independent.
 
 The fallback pass applies `Fee = ROUND_AWAY_8(B * R)` and
 `Net = Gross - Fee`, where `B` is the unchanged source-specific Gross ROI basis
@@ -193,8 +195,10 @@ and `R` comes from exact lifetime observations. Estimated observations never
 donate. Donor selection is deterministic: same strategy, nearest typed
 same-asset family, another same-asset strategy, then the same typed family across
 crypto assets, then any proved crypto strategy; only after all tiers are empty
-does the fixed `R=0.0333` apply. The terminal sources are versioned and stored as
-ordinary `Calculated`; no visible Estimated status is introduced.
+does the fixed `R=0.033` apply. This fixed fallback is equivalent to
+`Net ROI = Gross ROI - 3.3` percentage points. The terminal sources are
+versioned and stored as ordinary `Calculated`; no visible Estimated status is
+introduced.
 
 For each target, the worker enumerates candidate strategy IDs in deterministic
 pages no larger than `BatchSize`. PostgreSQL reads only those explicit IDs using

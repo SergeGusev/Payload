@@ -243,6 +243,39 @@ confirmed during the May 14 API scan. Gamma API batching can be tuned with
 `--btc-5m-history-gamma-delay-ms <n>`. This command does not place or cancel
 orders and exits before the normal service host starts.
 
+### ETH LossDiff History Backfill
+
+The service contains one bounded, one-time history command for exact parent
+`b7c50005-0000-4000-8204-000000000001` and the exact Reset 4+ / Positive 13+
+children. Preview is the default and uses a repeatable-read, server-enforced
+read-only transaction:
+
+```powershell
+dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -- --backfill-eth-lossdiff-history
+```
+
+Apply additionally requires `--apply --approved-contract-digest
+sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14`.
+It is fail-closed to production `192.168.0.101/polycopytrader`, immutable UTC
+cutoff `2026-08-23T19:44:26.488143Z`, the exact 1,060-row source digest and
+complete chain, 22/30 selected memberships, empty unmarked target history,
+healthy service, and zero waiting locks. Apply uses one serializable insert-only
+transaction, deterministic IDs, an advisory lock, exact post-insert verification,
+and marker `20260823_eth_lossdiff_history_backfill_v1`. It never imports or
+rewinds `strategy_loss_diff_states` / `strategy_loss_diff_parent_events`, changes
+strategy flags, or performs a Live or venue action. A matching retry verifies the
+marker and complete child chains and exits with zero writes.
+
+Historical child runs and settlements preserve the parent's fee-inclusive Net
+PnL. Parent and child fills preserve their canonical accounting shape:
+`Calculated` entry fee, zero fill-level realized PnL, and SQL `NULL` fill-level
+Net. For 12 older Reset rows without a modern embedded book snapshot, audit JSON
+uses `parent_persisted_fak_chain_only`,
+`embedded_order_book_snapshot_available=false`, and
+`exact_snapshot_replay=false`; this approved one-time historical accounting may
+overstate a separate simultaneous child fill and grants no future or Live
+execution permission.
+
 ### BTC 5m Statistics Worker
 
 `BtcUpDown5mStatistics` is a disabled read-only research worker. When explicitly
@@ -1104,10 +1137,11 @@ Live orders. Gross-excluded rows are also excluded from Net coverage and never
 block the strategy. Gross values, bases, execution, fills, and settlement facts
 are not changed.
 
-The workflow preserves exact accounting first, then tries the existing exact
-CLOB model, then uses a deterministic exact-donor Fee-to-Gross-basis ratio from
-the same or nearest typed strategy, falling through to any proved crypto donor.
-If every donor tier is empty it uses `R=0.0333`. It stores
+For one strategy at a time, the workflow preserves exact accounting first, then
+tries the existing exact CLOB model, then uses a deterministic exact-donor
+Fee-to-Gross-basis ratio from the same or nearest typed strategy, falling
+through to any proved crypto donor. If every donor tier is empty it uses
+`R=0.033`, which makes `Net ROI = Gross ROI - 3.3` percentage points. It stores
 `Fee = ROUND_AWAY_8(B * R)` and `Net = Gross - Fee` as
 ordinary terminal `Calculated`, excluding all estimated rows from future donor
 pools. Live prefers already-associated `VenueReported` evidence and does not add
@@ -1115,11 +1149,14 @@ an on-chain fee matcher. Its historical balance correction is audited and does
 not toggle Live or modify loss counters.
 
 With `HistoricalGrossNetParity:Enabled=true`, the service does the work itself
-in bounded background cycles. It first exhausts the current exact/authoritative/
-local-calculation pass. It then selects unresolved old targets in Gross order,
-queries only the finite strategy candidates required by the deterministic donor
-tiers, calculates the target-time exact aggregate, and immediately applies that
-one decision through compare-and-set/serializable storage. There is no global
+in bounded background cycles. It selects the unfinished strategy with the
+greatest current Dashboard Gross and keeps that strategy active through its
+exact/authoritative/local-calculation and donor/fixed-fallback passes. Only when
+that strategy is complete does it rerank the remaining strategies by current
+Gross and select the next one. Donor lookup queries only the finite strategy
+candidates required by the deterministic tiers, calculates the target-time
+exact aggregate, and immediately applies that one decision through
+compare-and-set/serializable storage. There is no global
 donor scan or frozen donor universe, complete database plan, file artifact,
 `ApplyEnabled` switch, digest command, or second approval after deployment.
 
@@ -1131,9 +1168,10 @@ targets may legitimately see different exact donor membership as the service
 progresses; a terminal Paper estimate is not recalculated for that reason.
 Restart simply rescans unresolved or Pending canonical rows and durable audit.
 For historical Live balance application, the earliest unfinished order gates
-only later initial balance effects of the same strategy; accounting and other
-strategies continue. Dashboard visibility still waits for the applicable cycle
-and projection reconciliation.
+later initial balance effects of the same strategy. The active strategy remains
+selected until that ordered balance work is terminal; lower-Gross strategies do
+not overtake it. Dashboard visibility still waits for the applicable cycle and
+projection reconciliation.
 
 Historical donor deduplication proves linked overlap from replayed active
 `paper_order_id` source charges; wallet/asset equality alone is insufficient.
@@ -1141,7 +1179,7 @@ When an exact linked Live row remains inside an indivisible composite Paper
 position/settlement and the exact nonlinked residual cannot be partitioned
 without inventing a per-BUY share of aggregate rounding residual, the service
 keeps the Live row and excludes the whole Paper composite for that target-time
-donor snapshot. It then continues the remaining donor tiers and fixed `0.0333`.
+donor snapshot. It then continues the remaining donor tiers and fixed `0.033`.
 This avoids double counting but may omit exact unlinked Paper economics from
 `N/D`; no synthetic residual Paper row is created. A fully consumed linked order
 proved absent from the remaining composite does not trigger the exclusion.

@@ -3,7 +3,7 @@
   "contractId": "RC-20260823-historical-parity-gross-ordered-strategy-completion",
   "title": "Complete historical Gross/Net parity one strategy at a time",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -65,8 +65,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity\"",
           "expected": "Focused processor/storage tests prove that one higher-Gross strategy completes exact and fallback work before any lower-Gross strategy is selected, including bounded pages, Gross changes, retries, restart reconstruction, and equal-Gross UUID ordering.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Isolated HEAD-plus-task verification passed 97/97 focused donor/processor/worker/source-contract tests. Dedicated tests prove active strategy retention across Gross-rank changes, accounting CAS deferral, and Live initial-balance deferral; a PostgreSQL integration test covers StrategyId scope and scoped keyset continuation but was skipped because POLYCOPYTRADER_TEST_POSTGRES_CONNECTION was not configured."
         }
       ]
     },
@@ -98,8 +98,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|HistoricalPaperNetFallback\"",
           "expected": "Tests prove exact/local precedence, unchanged donor matching, donor-before-fixed ordering, and no cross-strategy phase barrier.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "The isolated broader HistoricalParity/HistoricalGrossNetParity/HistoricalPaperNetFallback/VenueReportedRevision filter passed 27 tests with 0 failures; 8 PostgreSQL integration tests were skipped only because the test connection was not configured. Focused unit tests prove exact/local precedence, unchanged donor hierarchy, fixed-only-after-empty-donors behavior, and strategy-local exact-to-fallback phases."
         }
       ]
     },
@@ -129,8 +129,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|HistoricalPaperNetFallback\"",
           "expected": "Known-answer tests prove 0.033 basis multiplication, away-from-zero eight-decimal rounding, Gross preservation, exact Net identity, and terminal persisted provenance.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Known-answer tests pass for B=100 -> Fee=3.30000000, B=12.34 -> Fee=0.40722000, Net=Gross-Fee, and a partial proved component above B*0.033 that remains recorded but does not raise the strict fixed result. Storage validation and source-contract coverage accept this exception only for the new Fixed0p033 decision kind."
         }
       ]
     },
@@ -158,8 +158,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|VenueReportedRevision|HistoricalGrossNetParity\"",
           "expected": "Tests prove completed-row preservation and unchanged strictly-newer VenueReported supersession, idempotency, ordering, and balance behavior.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "The broader isolated filter passed all 27 runnable completed-row/revision tests with no failures. Source inspection and independent review confirmed that candidate exclusion preserves completed v1 accounting and that no VenueReported ingress or authority-ordering path was changed; 8 database-backed cases remained skipped because no test PostgreSQL connection was configured."
         }
       ]
     },
@@ -193,8 +193,8 @@
           "kind": "build",
           "command": "Run the focused tests from VER-001..VER-004, build PolyCopyTrader.sln with disposable outputs under the marked D:\\CodexTemp run, run git diff --check and requirement validation, and obtain an independent semantic review of prompts, approved contract, diff, and evidence.",
           "expected": "All checks pass with no unapproved product behavior, no production mutation, and no open independent-review findings.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Task-only isolated solution build passed with 0 errors and 126 existing warnings. Focused tests passed 97/97; broader tests passed 26 with 8 PostgreSQL skips; task diff check passed. Independent reviewer agent:/root/semantic_reviewer compared verbatim requests, approved contract, current task-only diff, and evidence, then returned passed with no open findings. Production, deployment, service, database, configuration, and trading state were not mutated."
         }
       ]
     }
@@ -208,9 +208,9 @@
     "semanticDigest": "sha256:ddae8fef59aed07fc98c719396f699370f6d385c377637a9d908a9342134bddf"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/semantic_reviewer",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

@@ -800,7 +800,7 @@ public enum HistoricalGrossNetParityCycleState
     ExactPageProcessed,
     ExactBoundaryReached,
     FallbackPageProcessed,
-    SweepCompleted,
+    StrategyCompleted,
     Deferred
 }
 
@@ -830,7 +830,8 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
     private readonly Dictionary<TargetLookupIdentity, TargetLookupLedger> lookupLedgers = [];
     private HistoricalGrossNetParityProcessingPhase phase = HistoricalGrossNetParityProcessingPhase.Exact;
     private HistoricalGrossNetParityCandidateCursor? cursor;
-    private bool sweepObservedCandidates;
+    private Guid? activeStrategyId;
+    private bool fallbackPassDeferred;
 
     private HistoricalGrossNetParityProcessor(
         ILogger<HistoricalGrossNetParityProcessor> logger,
@@ -898,7 +899,8 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                         cursor,
                         options.CommandTimeoutSeconds,
                         options.LockTimeoutMilliseconds,
-                        options.CalculationVersion),
+                        options.CalculationVersion,
+                        activeStrategyId),
                     cancellationToken)
                 .ConfigureAwait(false);
             ValidateCandidatePage(page);
@@ -917,6 +919,68 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                     details: page.Details);
             }
 
+            if (activeStrategyId is null && page.Candidates.Count != 0)
+            {
+                activeStrategyId = page.Candidates[0].StrategyId;
+                logger.LogInformation(
+                    "Historical Gross/Net parity selected the greatest-current-Gross unfinished strategy. " +
+                    "StrategyId={StrategyId} StrategyCode={StrategyCode} StrategyRank={StrategyRank} Gross={Gross}",
+                    activeStrategyId,
+                    page.Candidates[0].StrategyCode,
+                    page.Candidates[0].StrategyRank,
+                    page.Candidates[0].StrategyGrossPnlUsd);
+
+                if (page.Candidates.Any(candidate => candidate.StrategyId != activeStrategyId.Value))
+                {
+                    page = await store.LoadHistoricalGrossNetParityCandidatePageAsync(
+                            new HistoricalGrossNetParityCandidatePageRequest(
+                                requestedPhase,
+                                options.HistoricalCutoffUtc,
+                                options.BatchSize,
+                                null,
+                                options.CommandTimeoutSeconds,
+                                options.LockTimeoutMilliseconds,
+                                options.CalculationVersion,
+                                activeStrategyId),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    ValidateCandidatePage(page);
+                    if (page.Status != HistoricalGrossNetParityReadStatus.Complete)
+                    {
+                        logger.LogWarning(
+                            "Historical Gross/Net parity selected-strategy page deferred. " +
+                            "Phase={Phase} StrategyId={StrategyId} Status={Status} Details={Details}",
+                            requestedPhase,
+                            activeStrategyId,
+                            page.Status,
+                            page.Details);
+                        return Result(
+                            HistoricalGrossNetParityCycleState.Deferred,
+                            reachedEnd: false,
+                            details: page.Details);
+                    }
+                }
+            }
+
+            if (activeStrategyId is not null &&
+                page.Candidates.Any(candidate => candidate.StrategyId != activeStrategyId.Value))
+            {
+                throw new InvalidOperationException(
+                    $"A strategy-scoped parity page for {activeStrategyId:D} contains another strategy.");
+            }
+
+            if (activeStrategyId is null)
+            {
+                phase = HistoricalGrossNetParityProcessingPhase.Exact;
+                cursor = null;
+                fallbackPassDeferred = false;
+                PruneTerminalLookupLedgers();
+                return Result(
+                    HistoricalGrossNetParityCycleState.Idle,
+                    reachedEnd: true,
+                    details: page.Details);
+            }
+
             var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(page, options.HistoricalCutoffUtc);
             var counters = await ProcessPageAsync(
                     workerCycleId,
@@ -925,8 +989,13 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                     prepared,
                     cancellationToken)
                 .ConfigureAwait(false);
-            sweepObservedCandidates |= page.Candidates.Count != 0;
             cursor = page.NextCursor;
+
+            if (requestedPhase == HistoricalGrossNetParityProcessingPhase.Fallback &&
+                counters.Deferred != 0)
+            {
+                fallbackPassDeferred = true;
+            }
 
             if (!page.ReachedBoundary)
             {
@@ -943,10 +1012,13 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
             {
                 phase = HistoricalGrossNetParityProcessingPhase.Fallback;
                 cursor = null;
+                fallbackPassDeferred = false;
                 logger.LogInformation(
-                    "Historical Gross/Net parity exact/authoritative/local pass reached its current-sweep boundary. " +
-                    "Fallback donor work begins on the next bounded cycle. Candidates={Candidates} Applied={Applied} " +
+                    "Historical Gross/Net parity exact/authoritative/local pass reached the active-strategy boundary. " +
+                    "Fallback donor work for the same strategy begins on the next bounded cycle. " +
+                    "StrategyId={StrategyId} Candidates={Candidates} Applied={Applied} " +
                     "FallbackEligible={FallbackEligible} Deferred={Deferred}",
+                    activeStrategyId,
                     counters.Candidates,
                     counters.Applied,
                     counters.FallbackEligible,
@@ -959,16 +1031,36 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                     requestedPhase);
             }
 
-            var observedCandidates = sweepObservedCandidates;
+            if (fallbackPassDeferred)
+            {
+                phase = HistoricalGrossNetParityProcessingPhase.Exact;
+                cursor = null;
+                fallbackPassDeferred = false;
+                logger.LogWarning(
+                    "Historical Gross/Net parity keeps the active strategy selected because at least one " +
+                    "target was deferred. StrategyId={StrategyId}",
+                    activeStrategyId);
+                return Result(
+                    HistoricalGrossNetParityCycleState.Deferred,
+                    reachedEnd: false,
+                    counters,
+                    "The active strategy has deferred targets and will be retried before another strategy.",
+                    requestedPhase);
+            }
+
+            var completedStrategyId = activeStrategyId.Value;
             phase = HistoricalGrossNetParityProcessingPhase.Exact;
             cursor = null;
-            sweepObservedCandidates = false;
+            activeStrategyId = null;
+            fallbackPassDeferred = false;
             PruneTerminalLookupLedgers();
+            logger.LogInformation(
+                "Historical Gross/Net parity completed the active strategy before selecting another. " +
+                "StrategyId={StrategyId}",
+                completedStrategyId);
             return Result(
-                observedCandidates
-                    ? HistoricalGrossNetParityCycleState.SweepCompleted
-                    : HistoricalGrossNetParityCycleState.Idle,
-                reachedEnd: !observedCandidates,
+                HistoricalGrossNetParityCycleState.StrategyCompleted,
+                reachedEnd: false,
                 counters,
                 page.Details,
                 requestedPhase);
@@ -1431,11 +1523,11 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
             {
                 counters.LiveBalancesApplied++;
             }
-            else if (balance.Status is not HistoricalGrossNetParityApplyStatus.TerminalNoOp and
-                     not HistoricalGrossNetParityApplyStatus.NotEarliest)
+            else if (balance.Status != HistoricalGrossNetParityApplyStatus.TerminalNoOp)
             {
+                counters.Deferred++;
                 logger.LogWarning(
-                    "Historical Gross/Net parity Live balance transaction deferred. " +
+                    "Historical Gross/Net parity Live balance remains unfinished. " +
                     "StrategyId={StrategyId} LiveOrderId={LiveOrderId} Status={Status} Details={Details}",
                     target.StrategyId,
                     target.SourceId,
@@ -1846,6 +1938,11 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
 
 internal static class HistoricalGrossNetParityDecisionFactory
 {
+    private const string Fixed3p3PointsCalculationSource =
+        "historical-gross-net-parity-fixed-net-roi-minus-3p3-v1";
+    private static readonly HistoricalGrossNetExactDecimal Fixed3p3PointsCoefficient =
+        HistoricalGrossNetExactDecimal.Parse("0.033");
+
     private const string CalculatedStatus = "Calculated";
 
     public static HistoricalGrossNetParityTargetSnapshot WithLookupEvidence(
@@ -1930,13 +2027,15 @@ internal static class HistoricalGrossNetParityDecisionFactory
                 component.CoverageHash,
                 HistoricalGrossNetExactDecimal.FromDecimal(component.AmountUsd)))
             .ToArray();
-        var estimate = HistoricalGrossNetFeeEstimator.Calculate(basis, match, components);
+        var estimate = target.GrossRoiBasisUsd > 0m && match is { Donor: null }
+            ? CreateFixed3p3PointsEstimate(basis, components)
+            : HistoricalGrossNetFeeEstimator.Calculate(basis, match, components);
         var fee = ParseExactDecimal(estimate.TotalFee);
         var kind = target.GrossRoiBasisUsd <= 0m
             ? HistoricalGrossNetParityDecisionKind.NonpositiveBasis
             : match?.HasDonor == true
                 ? HistoricalGrossNetParityDecisionKind.DonorRatio
-                : HistoricalGrossNetParityDecisionKind.Fixed0p0333;
+                : HistoricalGrossNetParityDecisionKind.Fixed0p033;
         HistoricalGrossNetParityDonorDecisionV1? donorDecision = null;
         if (match is not null)
         {
@@ -1954,7 +2053,7 @@ internal static class HistoricalGrossNetParityDecisionFactory
                     HistoricalGrossNetDonorHashV1.ComputeMembershipHash([]),
                 match.SelectionHashV1 ?? throw new InvalidOperationException(
                     "A complete donor match has no selection hash."),
-                fixedFallback ? 0.0333m : selectedAggregate!.N / selectedAggregate.D);
+                fixedFallback ? 0.033m : selectedAggregate!.N / selectedAggregate.D);
         }
 
         return Create(
@@ -1977,11 +2076,26 @@ internal static class HistoricalGrossNetParityDecisionFactory
                 decision = kind.ToString(),
                 donorTier = match?.Tier.ToString(),
                 donorStrategyId = match?.Donor?.StrategyId,
-                match?.ComparisonKey,
+                comparisonKey = match is { Donor: null }
+                    ? (IReadOnlyList<string>)["tier:fixed-net-roi-minus-3.3-points"]
+                    : match?.ComparisonKey,
                 match?.SelectionHashV1,
                 target.ProvedComponentFloorUsd,
                 target.ProvedComponents
             });
+    }
+
+    private static HistoricalGrossNetFeeEstimate CreateFixed3p3PointsEstimate(
+        HistoricalGrossNetExactDecimal basis,
+        IReadOnlyList<HistoricalGrossNetProvedFeeComponent> components)
+    {
+        var componentFloor = HistoricalGrossNetFeeEstimator.CalculateComponentFloor(components);
+        var fee = basis.Multiply(Fixed3p3PointsCoefficient).RoundAwayFromZero(8);
+        return new HistoricalGrossNetFeeEstimate(
+            fee,
+            componentFloor,
+            fee,
+            Fixed3p3PointsCalculationSource);
     }
 
     private static HistoricalGrossNetParityAccountingDecisionV1 CreateExistingExact(
@@ -2200,6 +2314,12 @@ internal static class HistoricalGrossNetParityDecisionFactory
             calculationVersion,
             JsonSerializer.Serialize(new
             {
+                target.StrategyId,
+                target.StrategyRank,
+                target.StrategyGrossPnlUsd,
+                contractId = HistoricalGrossNetParityConstants.StrategyCompletionContractId,
+                contractDigest = HistoricalGrossNetParityConstants.StrategyCompletionSemanticDigest,
+                calculationVersion,
                 componentAllocationHashV1 = ComputeComponentAllocationHash(target),
                 evidence
             }));
@@ -2253,6 +2373,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             var first = group.First();
             if (group.Any(candidate =>
                     candidate.StrategyRank != first.StrategyRank ||
+                    candidate.StrategyGrossPnlUsd != first.StrategyGrossPnlUsd ||
                     !string.Equals(candidate.StrategyCode, first.StrategyCode, StringComparison.Ordinal)))
             {
                 AddConflict(
@@ -2353,6 +2474,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
                 if (!liveTargets.TryGetValue(candidate.SourceId, out var liveTarget) ||
                     liveTarget.StrategyId != candidate.StrategyId ||
                     liveTarget.StrategyRank != candidate.StrategyRank ||
+                    liveTarget.StrategyGrossPnlUsd != candidate.StrategyGrossPnlUsd ||
                     liveTarget.RowVersion != candidate.RowVersion ||
                     liveTarget.Ownership != candidate.Ownership)
                 {
@@ -2941,6 +3063,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             run.RunId,
             run.StrategyId,
             rank.Rank,
+            rank.GrossPnlUsd,
             run.RowVersion,
             originatedAtUtc,
             run.SettledAtUtc,
@@ -3068,6 +3191,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             position.PositionId,
             position.StrategyId,
             rank.Rank,
+            rank.GrossPnlUsd,
             position.RowVersion,
             originatedAtUtc,
             null,
@@ -3229,6 +3353,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             settlement.SettlementId,
             settlement.StrategyId,
             rank.Rank,
+            rank.GrossPnlUsd,
             settlement.RowVersion,
             originatedAtUtc,
             settlement.SettledAtUtc,
@@ -3335,6 +3460,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             fill.FillId,
             fill.StrategyId,
             rank.Rank,
+            rank.GrossPnlUsd,
             fill.FillRowVersion,
             originatedAtUtc,
             fill.FilledAtUtc,
@@ -3361,6 +3487,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
         Guid sourceId,
         Guid strategyId,
         int strategyRank,
+        decimal strategyGrossPnlUsd,
         long rowVersion,
         DateTimeOffset originatedAtUtc,
         DateTimeOffset? settledAtUtc,
@@ -3423,6 +3550,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             sourceId,
             strategyId,
             strategyRank,
+            strategyGrossPnlUsd,
             rowVersion,
             originatedAtUtc,
             settledAtUtc,

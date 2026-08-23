@@ -84,3 +84,10 @@ Request:
 
 Result:
 Production read-only verification confirmed active betting: exact current five-minute interval contained 28 new Paper orders from 28 strategies, all Filled, with latest order and linked entered run at `2026-08-23T19:20:18.813396Z`. Exact service build `a28aff1d` remained `Running / Live`, heartbeat advanced by one minute through `19:21:37.943992Z`, and `last_error` was null. PostgreSQL had zero waiting locks and zero active queries older than 30 seconds. Separately, one strategy has `live_stakes=true`; it produced seven Matched Live orders totaling `$42` during the last 24 hours, latest at `13:30:00.879624Z`, but none in the current five-minute cycle. No production state was changed.
+
+## 2026-08-23T20:50:22.8429271Z
+Request:
+`APPROVE RC-20260823-historical-parity-gross-ordered-strategy-completion sha256:ddae8fef59aed07fc98c719396f699370f6d385c377637a9d908a9342134bddf`
+
+Result:
+Implemented the approved pre-2026-08-10 historical Gross/Net workflow so one greatest-current-Gross unfinished strategy remains active through exact/local, donor/fixed, retry, and ordered Live initial-balance work before the remaining strategies are reranked. Donors remain unchanged; the terminal no-donor result is a new backward-compatible `Fixed0p033` decision with exact `Fee=ROUND_AWAY_8(B*0.033)` and `Net=Gross-Fee`, including when partial component evidence is recorded. All AccountingDecision evidence now includes strategy ID, observed rank/Gross, contract ID/digest, and calculation version. Existing completed results and the strictly newer valid VenueReported revision path remain unchanged. Isolated task-only verification passed 97/97 focused tests, 26 broader tests with 8 PostgreSQL skips due no configured test connection, solution build with 0 errors/126 warnings, and independent semantic review with no open findings. No deployment, database/service/configuration mutation, production operation, or trading action occurred.
