@@ -23,7 +23,7 @@
     }
   ],
   "scope": {
-    "goal": "Make the current local PolyCopyTrader.Service start correctly against only 127.0.0.1:5432/polycopytrader by accepting the already completed immutable baseline in its migration ledger and then performing a bounded normal local-host startup verification.",
+    "goal": "Complete proof that the current local PolyCopyTrader.Service starts correctly against only 127.0.0.1:5432/polycopytrader after the completed immutable baseline was accepted in its migration ledger, using one second bounded normal local-host startup verification that distinguishes the one-time catch-up load from a recurring startup defect.",
     "inScope": [
       "Run a fresh UTC repeatable-read preflight against only 127.0.0.1:5432/polycopytrader and require PostgreSQL 17.5 primary, explicit transaction_read_only=on, zero current migration-history rows, exactly 15 data-migration markers, 110 public tables, 376 public indexes, every current PostgresSchema.RequiredTables relation, zero holders of the service migration advisory lock, and no running local PolyCopyTrader process or Windows service.",
       "Require the current source migration catalog to contain exactly one migration: 0001-legacy-baseline-a3b0457f with semantic checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2, and require the previously completed baseline post-state to remain 3,341 strategies including exactly 1,440 baseline-created strategies from 2026-08-23T10:52:52.212760Z through 2026-08-23T10:52:58.488877Z and 938 pre-existing strategies touched during that baseline run.",
@@ -33,6 +33,7 @@
       "Start the exact existing local Release executable with ProductVersion 1.0.0+7b255d6986e3b94fe77c3e1181109bc87c7b0b22 using its existing local configuration and local database connection, keep it running only until process stability and advancing healthy heartbeats are proven or for at most 90 seconds, then stop only that exact process started by Codex.",
       "Allow only ordinary bounded local runtime writes produced by that verification start. The exact preflight boundary is Bot.Mode=Live, Bot.EnableLiveTrading=false, PaperTrading.RunInLiveMode=true, 3,195 enabled/unpaused strategies, and zero enabled/unpaused live_stakes strategies. Paper runs/orders or non-trading telemetry may be created locally and must be counted before and after; no Live order may be created.",
       "Write a compact non-secret audit record with exact UTC cutoffs, endpoint identity, ledger row, initializer results, bounded host process/heartbeat evidence, and before/after local betting-row counts."
+      ,"Run one second normal local verification start after the first start completed its initial catch-up. Measure the absolute process lifetime separately from the healthy-host interval, allow at most 120 seconds of absolute process lifetime and at most 90 seconds from the first healthy heartbeat, require two advancing healthy heartbeats, inspect all service and PostgreSQL errors during the exact interval, then stop only the exact process started by Codex."
     ],
     "outOfScope": [
       "Any connection, read, or mutation to production 192.168.0.101:5432/polycopytrader, any remote database, or any database other than exact local 127.0.0.1:5432/polycopytrader.",
@@ -104,7 +105,8 @@
       "acceptanceCriteria": [
         "Two direct invocations of the exact current initializer succeed and report that baseline 0001 is skipped; migration history remains one row and schema inventory is unchanged.",
         "The exact local Release executable ProductVersion remains 1.0.0+7b255d6986e3b94fe77c3e1181109bc87c7b0b22 and starts with its existing configuration against the verified local database.",
-        "The process remains alive long enough for at least two advancing current-build service heartbeats with status Running, mode Live, and last_error NULL, but no longer than 90 seconds, and is then stopped by Codex.",
+      "The second verification process remains alive long enough for at least two advancing current-build service heartbeats with status Running, mode Live, and last_error NULL, for no more than 120 seconds of absolute process lifetime and no more than 90 seconds from the first healthy heartbeat, and is then stopped by Codex.",
+      "The second verification interval contains no service Error/Fatal event, no PostgreSQL statement cancellation or advisory-lock wait that reaches 30 seconds, and no persistence retry. If any of those conditions recurs, stop without changing product code, configuration, or schema and report that a separate performance-repair contract is required.",
         "Bot.EnableLiveTrading remains false, enabled/unpaused live_stakes strategy count remains zero, Live-order count remains exactly zero, and no external Live order or cancellation is sent.",
         "Any ordinary local Paper/runtime rows created during the bounded normal start are measured exactly before and after and reported rather than hidden."
       ],
@@ -115,8 +117,8 @@
         {
           "id": "VER-003",
           "kind": "runtime",
-          "command": "Invoke PostgresSchemaInitializer twice, then run the exact existing local Release host normally for at most 90 seconds while polling its exact process and local heartbeat; stop that process and reconcile local runtime deltas.",
-          "expected": "Initializer skips the baseline, the host stays running with two advancing healthy local heartbeats, no Live order appears, and only measured ordinary local runtime writes occur.",
+          "command": "Use the already verified initializer evidence, then run the exact existing local Release host a second time for at most 120 seconds of absolute process lifetime and at most 90 seconds after its first healthy heartbeat while polling its exact process and local heartbeat; stop that process, inspect the exact service/PostgreSQL log interval, and reconcile local runtime deltas.",
+          "expected": "The host stays running with two advancing healthy local heartbeats, the initial catch-up timeout burst does not recur, no Live order appears, and only measured ordinary local runtime writes occur.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -149,12 +151,35 @@
     }
   ],
   "assumptions": [],
-  "deviations": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The first verification process lived for approximately 98.539 seconds, exceeding the approved absolute 90-second limit by approximately 8.539 seconds while waiting to capture the second advancing heartbeat and post-heartbeat evidence.",
+      "impact": "The prior approval was invalidated. The process was stopped by Codex, no Live order was created, and no further local service start or database mutation is permitted until this revised contract is approved.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303",
+        "semanticDigest": "sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "The first verification produced five Npgsql read-timeout Error events while one 2,000-run direct Paper skip-compaction query held the shared strategy-run retention advisory gate; the queue retried once and recovered after the holder timed out.",
+      "impact": "The baseline registration and host startup are verified, but correct steady-state local operation is not yet verified. One second bounded normal start is required before completion; recurrence blocks completion and requires a separately approved product-performance repair.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303",
+        "semanticDigest": "sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303"
+      }
+    }
+  ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:f809e12010a1635a2d6c66d4d3d0372c081121803cf2d4ff4ba7c43e98c2bd2a",
-    "semanticDigest": "sha256:f809e12010a1635a2d6c66d4d3d0372c081121803cf2d4ff4ba7c43e98c2bd2a"
+    "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303",
+    "semanticDigest": "sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_local_startup_baseline_acceptance",
