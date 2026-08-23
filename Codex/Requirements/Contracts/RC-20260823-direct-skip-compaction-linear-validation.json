@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260823-direct-skip-compaction-linear-validation",
+  "title": "Remove the recurring local direct-skip compaction startup timeout",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "При старте сервиса локально вот такая ошибка. Логи лежат здесь - D:\\My\\Business\\PolyMarket\\src\\PolyCopyTrader.Service\\bin\\Release\\net10.0\\logs\n\nПочини, пожалуйста"
+    },
+    {
+      "source": "user",
+      "text": "Ок, тогда делай что нужно, чтобы сервис корректно запускался локально"
+    }
+  ],
+  "scope": {
+    "goal": "Make the current local PolyCopyTrader.Service start and process its normal 3,195-strategy Paper workload without the reproduced 30-second strategy-run-retention advisory-lock timeout chain, while preserving existing direct Paper skip-compaction results and all Live-disabled boundaries.",
+    "inScope": [
+      "Change only the production v1 DirectNewPaperSkipArchiveSql candidate filter in PostgresAppRepository.DirectSkipCompaction.cs: remove its redundant correlated input_rows self-join that compares every candidate with every other JSON row for duplicate run IDs and duplicate normalized strategy/market keys.",
+      "Keep EnsureUnambiguousDirectPaperSkipInput as the mandatory pre-database ambiguity gate for every production call to DirectNewPaperSkipArchiveSql, including identical InvalidOperationException behavior before persistence for duplicate run IDs or normalized strategy/market keys.",
+      "Preserve all existing eligibility predicates, business dependency blockers, tombstones, rollups, projection events, reconciliation queue behavior, transaction boundaries, advisory-lock ordering, command timeouts, batch size, direct-compaction invariants, Paper accounting, and strategy behavior.",
+      "Add a focused source-shape regression proving the production v1 SQL no longer contains the correlated other_input self-join while the C# uniqueness gate and its call precede the database path, and retain the existing ambiguous-input integration coverage.",
+      "Add or extend a PostgreSQL integration regression with one 2,000-run unique production-v1 batch to prove all logical IDs are returned, pure skipped runs are compacted exactly once, retry remains idempotent, and the operation completes below the existing 30-second command timeout on the isolated local test database.",
+      "Run focused tests, the complete relevant StrategyRunRetention PostgreSQL integration class, and a Release solution build with all disposable outputs under the marked D:\\CodexTemp run.",
+      "Run one bounded verification using the newly built local Release binary against only 127.0.0.1:5432/polycopytrader, with Bot.EnableLiveTrading=false and zero active live_stakes strategies. Limit absolute process lifetime to 120 seconds and the interval after first healthy heartbeat to 90 seconds; require two advancing healthy heartbeats, zero service Error/Fatal events caused by strategy-run retention, zero 30-second advisory-lock cancellation, zero persistence retry, and zero Live orders, then stop only the exact process started by Codex.",
+      "Update the existing compact non-secret local startup audit report with exact UTC cutoffs, test evidence, runtime counts, lock/error evidence, and any failed acceptance check."
+    ],
+    "outOfScope": [
+      "Any connection or change to Production 192.168.0.101, any remote database, deployment, publish, Production service action, or venue action.",
+      "Any schema migration, DDL, manual data repair, backup, restore, ANALYZE/VACUUM command, strategy/catalog/configuration change, batch-size change, timeout increase, worker disablement, or advisory-lock removal/reordering.",
+      "Changing the dormant compact-skip archive v2 SQL, enabling v2 product writes, generalizing the optimization to unrelated SQL, or refactoring the persistence architecture.",
+      "Changing strategy decisions, prices, stakes, Paper/live parity, Maker behavior, settlement/accounting rules, or creating/cancelling a Live order.",
+      "Leaving any verification service process or isolated test database running after verification."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact current branch and exact local database on 2026-08-23 Europe/Sofia; runtime and database evidence recorded in UTC; production v1 direct-skip archive path only.",
+    "firstVerification": "Before editing, recheck the exact production dispatch and every call to DirectNewPaperSkipArchiveSql, prove each call is preceded by EnsureUnambiguousDirectPaperSkipInput, capture the reproduced 2,000-row plans and quadratic join-pair counts, and verify no local service process remains."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Eliminate the verified quadratic duplicate scan from the production v1 direct Paper skip archive without changing accepted or rejected inputs.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "делай что нужно, чтобы сервис корректно запускался локально",
+      "acceptanceCriteria": [
+        "DirectNewPaperSkipArchiveSql no longer scans input_rows as other_input or performs candidate-count-squared JSON key comparisons.",
+        "Every production caller still invokes EnsureUnambiguousDirectPaperSkipInput before entering the database path, and duplicate run IDs or normalized strategy/market keys still fail before persistence with the existing exception contract.",
+        "No other v1 archive predicate, write CTE, invariant, timeout, batch size, transaction, or advisory-lock behavior changes; dormant v2 SQL remains byte-for-byte unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run the focused source-shape and existing DirectCompaction_AmbiguousInputFailsBeforeAnyPersistence tests.",
+          "expected": "The quadratic production-v1 SQL fragment is absent, the C# gate remains in the exact call path, and all ambiguity cases still fail before persistence.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Prove the optimized production v1 archive preserves exact results and completes a 2,000-run batch below its existing timeout.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "сервис корректно запускался локально",
+      "acceptanceCriteria": [
+        "An isolated PostgreSQL integration test submits exactly 2,000 unique pure skipped runs through the production v1 repository dispatch and completes before the unchanged 30-second command timeout.",
+        "The test verifies 2,000 logical inserted IDs, zero retained raw runs for those pure skips, 2,000 tombstones, exact rollup total 2,000, exact projection-event coverage, and idempotent empty retry without duplicate accounting.",
+        "The complete relevant PostgreSQL integration class and Release solution build pass with zero new errors."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run the new 2,000-run integration regression, then the complete StrategyRunRetentionPostgresIntegrationTests class and Release solution build using marked D:\\CodexTemp outputs.",
+          "expected": "Exact archive/accounting invariants pass and the 2,000-run production v1 call finishes below 30 seconds without changing the timeout.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Verify the newly built service handles the exact local Paper workload without the recurring retention-lock timeout chain or any Live activity.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "сервис корректно запускался локально",
+      "acceptanceCriteria": [
+        "Fresh read-only preflight proves exact local endpoint/build/configuration, one valid baseline row, zero running local service, zero active live_stakes strategies, zero Live orders, and zero ungranted locks.",
+        "The newly built Release process produces two advancing healthy Running/Live heartbeats with NULL last_error within both time limits and is then stopped by exact PID.",
+        "The exact service/PostgreSQL interval contains no strategy-run-retention Error/Fatal event, no 30-second advisory-lock cancellation, no persistence retry, and Live orders remain zero; ordinary local Paper/runtime deltas are counted and reported.",
+        "Any new failing mechanism stops verification and requires a revised contract instead of an unapproved adjacent fix."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "runtime",
+          "command": "Run the newly built Release binary once against exact local PostgreSQL within the two approved timers, poll exact heartbeat and Live-order state, stop exact PID, inspect the bounded service/PostgreSQL log interval, and reconcile runtime counts.",
+          "expected": "Healthy advancing heartbeat, no recurring retention timeout/retry chain, zero Live orders, exact process stopped, and only measured ordinary local Paper/runtime writes.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260823-direct-skip-compaction-linear-validation sha256:64c66d662c534ca297dd09aa0756d094c00d64d3c40a26447c77c043df5448fc",
+    "semanticDigest": "sha256:64c66d662c534ca297dd09aa0756d094c00d64d3c40a26447c77c043df5448fc"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_direct_skip_compaction_linear_validation",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
