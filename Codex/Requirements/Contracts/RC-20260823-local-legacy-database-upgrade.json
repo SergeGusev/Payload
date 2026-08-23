@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260823-local-legacy-database-upgrade",
+  "title": "Upgrade the exact local legacy PostgreSQL database in place",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "При старте сервиса локально вот такая ошибка. Логи лежат здесь - D:\\My\\Business\\PolyMarket\\src\\PolyCopyTrader.Service\\bin\\Release\\net10.0\\logs\n\nПочини, пожалуйста"
+    },
+    {
+      "source": "user",
+      "text": "1 - обновляем базу"
+    }
+  ],
+  "scope": {
+    "goal": "Restore local PolyCopyTrader.Service schema initialization by upgrading only the exact verified legacy database at 127.0.0.1:5432/polycopytrader in place and registering the current immutable baseline after it completes.",
+    "inScope": [
+      "Run a fresh UTC read-only preflight against only 127.0.0.1:5432/polycopytrader and require the exact known legacy identity and inventory before any write: PostgreSQL 17.5, no public.schema_migration_history, 576 public application objects, 89 public tables, 307 indexes, one sequence, latest PolyCopyTrader.Service heartbeat build e58c6dd64a94b289f70464ce3f12fdf35fc435b3, and the exact current embedded data-migration marker shape.",
+      "Use a one-time disposable C#/.NET runner under the marked D:\\CodexTemp session to acquire PostgresSchemaInitializer.AdvisoryLockKey and execute the current immutable PostgresSchema.SchemaSql baseline with semantic checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2 against that exact local database.",
+      "Apply the baseline's five currently absent embedded data migrations. Their freshly rechecked target set must remain exactly 27 retired strategies: one Follow Leader, ten ETH Down Filtered Average Premarket, sixteen hopeless Progress, zero SOL Binance, and zero paired Maker-GTD.",
+      "Delete only dependencies reached from those exact 27 baseline cleanup targets. The currently verified preview is 334 strategy_market_paper_runs and 11 each of paper_orders, paper_fills, linked signals, and paper_positions, with zero Live orders; any changed target or dependency count stops execution for renewed user approval.",
+      "Create and register exactly one public.schema_migration_history baseline row only after all baseline statements complete successfully, then invoke the production initializer path again to prove that the applied baseline is skipped and no legacy SQL is replayed.",
+      "Write a compact, non-secret repository audit record containing UTC cutoffs, endpoint identity without credentials, exact pre/post counts, migration identifiers, baseline checksum, and verification results."
+    ],
+    "outOfScope": [
+      "Any access or mutation to production 192.168.0.101:5432/polycopytrader, any remote database, or any database other than the exact local 127.0.0.1:5432/polycopytrader target.",
+      "Changing product source code, immutable PostgresSchema.SchemaSql, migration catalog/checksum, service configuration, trading logic, Dashboard behavior, strategies outside the exact cleanup targets, Live orders, or venue state.",
+      "Starting the full local service host, deploying, publishing, restarting production, or creating Paper/Live trading activity as part of verification.",
+      "Creating a database backup or claiming full rollback. The baseline contains non-transactional statements, so an interrupted or failed run can leave a partially upgraded local schema; no baseline history row may be recorded in that case, and further mutation must stop for a new exact recovery decision.",
+      "Generalizing this one-time local recovery into a reusable migration framework, command-line product feature, or automatic eligibility rule for other databases."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "One exact local legacy database state verified on 2026-08-23 Europe/Sofia; all recorded database timestamps and cutoffs are UTC.",
+    "firstVerification": "Repeat the bounded read-only identity, schema, migration-marker, exact cleanup-target, dependency, and Live-order preview against 127.0.0.1:5432/polycopytrader with statement_timeout no greater than 15 seconds; stop if any count or identity differs from the approved contract."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Upgrade only the exact verified local legacy database in place so the current versioned initializer recognizes its immutable baseline.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "1 - обновляем базу",
+      "acceptanceCriteria": [
+        "Every SQL connection is independently verified as server loopback 127.0.0.1, port 5432, current_database()=polycopytrader, PostgreSQL 17.5, and non-recovery primary before mutation.",
+        "The preflight matches the complete approved legacy fingerprint and cleanup counts exactly; otherwise no write is attempted.",
+        "The runner acquires the same database-scoped advisory migration lock as the service and stops if the lock is unavailable.",
+        "The executed baseline is byte-derived from the current PostgresSchema.SchemaSql and matches semantic checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2; it is not copied, edited, or substituted.",
+        "After success, public.schema_migration_history contains exactly one row with migration_id 0001-legacy-baseline-a3b0457f and the expected checksum."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "runtime",
+          "command": "Run the approved one-time C#/.NET local upgrade runner under a marked D:\\CodexTemp session after an exact UTC read-only preflight.",
+          "expected": "Only 127.0.0.1:5432/polycopytrader is upgraded from the approved fingerprint and exactly one immutable baseline history row is recorded after success.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preserve all local database data outside the exact cleanup effects already embedded in the approved immutable baseline.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "обновляем базу",
+      "acceptanceCriteria": [
+        "Fresh preflight target membership remains exactly 27: Follow Leader=1, ETH Down Filtered Average Premarket=10, hopeless Progress=16, SOL Binance=0, paired Maker-GTD=0.",
+        "Fresh dependency counts remain exactly 334 strategy runs and 11 each of Paper orders, Paper fills, linked signals, and Paper positions, with zero Live orders and zero active Live orders.",
+        "The baseline cleanup removes all and only rows reached from those exact targets according to the existing immutable PostgresSchema.SchemaSql logic.",
+        "Post-verification proves zero residual target strategies and dependencies, zero unintended Live-order deletion, and unchanged aggregate identity counts outside the mathematically expected target/dependency deltas.",
+        "No backup is created and no full rollback claim is made; any baseline execution failure records no baseline row and stops further mutation."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Compare exact read-only preflight and post-upgrade target/dependency/aggregate counts in UTC and independently reconcile every expected deletion delta.",
+          "expected": "Only the approved 27 targets and their exact existing dependencies are absent; all independently checked out-of-scope and Live counts remain unchanged.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Prove the repaired database passes the current service schema-initialization path without replaying the baseline on later starts.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Почини, пожалуйста",
+      "acceptanceCriteria": [
+        "The current production-shape PostgresSchemaInitializer.InitializeAsync completes against the upgraded local database.",
+        "A second initializer invocation reads the same one-row history, validates its checksum, skips 0001-legacy-baseline-a3b0457f, and executes no legacy schema statement.",
+        "Required projection relations, functions, triggers, and all fourteen embedded schema_data_migrations markers exist after upgrade.",
+        "The full local service host is not started by Codex, so verification creates no ordinary Paper/Live runtime activity.",
+        "The complete solution build and focused migration tests pass under the marked D:\\CodexTemp session before completion."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Invoke the current production initializer twice against the upgraded local database, capture safe statement/outcome evidence, run focused PostgresSchemaMigrationTests, and build PolyCopyTrader.sln with disposable outputs under D:\\CodexTemp.",
+          "expected": "Both initializer invocations succeed, the second is metadata-only with an applied-baseline skip, focused tests pass, and the solution builds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Keep the recovery auditable, bounded, and isolated from production and unrelated repository work.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "При старте сервиса локально",
+      "acceptanceCriteria": [
+        "All disposable runner, build, test, and log artifacts stay under one marked D:\\CodexTemp run and are removed by protected cleanup after compact evidence is recorded.",
+        "The durable report contains no credentials or connection string and records exact UTC cutoffs, row counts, checksum, migration IDs, and failed checks if any.",
+        "The pre-existing unrelated Codex/Contexts/History/ContextPolyCopyTrader-2026-08-20.md modification remains unstaged, uncommitted, and byte-for-diff preserved.",
+        "No product code is changed under this contract; only the requirement lifecycle, bounded audit report, and required context/history records are committed.",
+        "Independent semantic review compares the verbatim requests, approved contract, database evidence, exact repository diff, build/tests, and report and returns PASS with no open findings."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect exact Git diff/status, validate the requirement contract in WorkingTree and Staged modes, verify protected D:\\CodexTemp cleanup, and obtain independent semantic review.",
+          "expected": "Only approved durable records are committed, unrelated work is unchanged, validators pass, temporary artifacts are removed, and reviewer returns PASS with no findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260823-local-legacy-database-upgrade sha256:21c2054c07118fcc889de070ba987acc8bdb21f84a4f01bfa4e1c43348e03d36",
+    "semanticDigest": "sha256:21c2054c07118fcc889de070ba987acc8bdb21f84a4f01bfa4e1c43348e03d36"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_local_legacy_upgrade",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
