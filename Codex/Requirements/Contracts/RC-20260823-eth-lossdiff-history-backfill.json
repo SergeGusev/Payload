@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260823-eth-lossdiff-history-backfill",
+  "title": "Backfill full pre-rollout Paper trade history for two ETH LossDiff children",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Сделай две стратегии:\n\n1. ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+\n\nС той же логикой (подсчёт LossDiff c обрыванием после успеха), что и LossDiff 4+ выше\n\n2. ETH 5m 1 Diff Confirmed Average Premarket LossDiff 13+ Positive\n\nС той же логикой (подсчёт LossDiff без обрывания после успеха, но без ухода в минус), что и LossDiff 13+ Positive выше"
+    },
+    {
+      "source": "user",
+      "text": "Re: при первом запуске LossDiff восстанавливается по всей доступной истории завершённых сделок родителя, а не начинается с нуля; &#x20;\n\nДавай не будем вешать это на первый запуск. Запустим с нулём, а потом я попрошу тебя сгенерировать историю для обоих стратегий.\n\nRe: дочерняя стратегия входит только если родитель фактически входит в тот же рынок; &#x20;\n\nДа, в этом и есть её смысл.\n\nRe: направление, цена и сумма ставки полностью копируются у родителя; &#x20;\n\nДа, правильно.\n\nRe: обе стратегии создаются включёнными для Paper, но с `live_stakes=false`. &#x20;\n\nДа, правильно"
+    },
+    {
+      "source": "user",
+      "text": "А ты действительно считал Net Pnl, то есть с учётом комиссии Polymarket&"
+    },
+    {
+      "source": "user",
+      "text": "Проверь состояние этих стратегий и, если всё в порядке, сгенерируй их историю"
+    },
+    {
+      "source": "user",
+      "text": "Сначала разбираемся, почему не применилась миграция"
+    },
+    {
+      "source": "user",
+      "text": "Проверь сейчас"
+    },
+    {
+      "source": "user",
+      "text": "Переходи"
+    }
+  ],
+  "scope": {
+    "goal": "Generate the complete pre-rollout causal Paper trade and accounting history of exactly the two deployed ETH LossDiff children from the exact parent's persisted filled FAK chains, while preserving the post-rollout live LossDiff state that deliberately began at zero.",
+    "inScope": [
+      "Exact parent `b7c50005-0000-4000-8204-000000000001` and exact children `b7c50005-0000-4000-8225-000000000004` / `b7c50005-0000-4000-8225-000000000013` only.",
+      "Frozen pre-rollout source entries whose parent `entered_at_utc` is strictly before the shared deployed state cutoff `2026-08-23T19:44:26.488143Z`, are Settled, and have nonzero realized PnL with a complete persisted parent signal/order/fill/run/position-settlement accounting chain.",
+      "Causal historical gating using only exact-parent outcomes settled strictly before each candidate parent entry, replayed in parent entry-time and parent-run-ID order under LossDiffReset threshold 4 or LossDiffPositive threshold 13.",
+      "Insert-only historical child signal, filled Paper order, Paper fill, Settled strategy run, zero-size Paper position, and Paper position-settlement rows for eligible entries, with exact copied parent economics and versioned parent/backfill audit references.",
+      "A bounded C#/.NET preview/apply command, focused tests, documentation, transactional production execution after approval, and post-operation verification."
+    ],
+    "outOfScope": [
+      "Any parent entry at or after `2026-08-23T19:44:26.488143Z`, any parent non-entry, zero-PnL or non-Settled run, any third strategy, and every non-ETH or non-five-minute strategy.",
+      "Synthetic below-threshold child Skipped runs; this task generates complete eligible trading/accounting history rather than a historical no-bet observation ledger.",
+      "Changing, rewinding, resetting, or importing pre-rollout rows into `strategy_loss_diff_states` or `strategy_loss_diff_parent_events`; changing assignments, thresholds, strategy flags, stake settings, lost counters, balances, or the exact parent.",
+      "Any Live or live-shadow order/event/balance action, enabling `live_stakes`, venue request, service deployment/restart/stop, schema migration, generalized history framework, backup, deletion, cleanup, or unrelated Dashboard/accounting rewrite."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "UTC parent entered_at_utc < 2026-08-23T19:44:26.488143Z; exact preview source has 1,060 Settled nonzero-PnL parent runs and canonical narrow source digest sha256:c5f2baabe698c05eb0d8e4f6c98571390a07e858c1ac3c6a373bc7ead509bf01.",
+    "firstVerification": "Before product editing and again immediately before apply, run a server-enforced repeatable-read/read-only production snapshot proving exact endpoint/build/migration/strategy/state identities, source count/digest and chain completeness, zero pre-cutoff child trade rows, healthy heartbeat, live_stakes=false, no blocked sessions, and exact causal/financial preview totals."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Freeze and fail-closed validate the exact pre-rollout parent source and calculate both historical gates causally without using a future parent outcome.",
+      "sourceRequestIndexes": [0, 1, 3, 6],
+      "sourceQuote": "потом я попрошу тебя сгенерировать историю для обоих стратегий",
+      "acceptanceCriteria": [
+        "The source is exactly parent `b7c50005-0000-4000-8204-000000000001`, `entered_at_utc < 2026-08-23T19:44:26.488143Z`, status Settled, non-null/nonzero realized PnL, and complete one-to-one signal/order/fill/run/zero-position/position-settlement evidence; it is exactly 1,060 rows, 615 wins and 445 losses.",
+        "The canonical ordered run/order/fill source digest is exactly `sha256:c5f2baabe698c05eb0d8e4f6c98571390a07e858c1ac3c6a373bc7ead509bf01`; any identity, count, cutoff, chain, accounting, source, or digest drift blocks apply without writes.",
+        "For each candidate, pre-entry state admits only parent outcomes with `settled_at_utc < candidate.entered_at_utc`, then orders admitted outcomes by `entered_at_utc, parent_run_id`; LossDiffReset uses loss +1 / win reset zero, and LossDiffPositive uses loss +1 / win minus one with floor zero.",
+        "Two independent calculations agree on exactly 22 eligible Reset 4+ entries and 30 eligible Positive 13+ entries; no equality-only gate or post-entry outcome is used."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~EthLossDiffHistoryBackfill",
+          "expected": "Focused tests independently prove strict causal ordering, both counter formulas, 22/30 eligibility, cutoff and digest guards, and rejection of any source drift.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Run the bounded command in preview mode against exact production with server-enforced read-only transaction and compare a separate raw-row replay.",
+          "expected": "Both calculations report the exact frozen source identity, digest, 22/30 eligibility, and financial totals without writes.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Create a complete settled Paper execution/accounting chain for every and only causally eligible historical child trade, copying the exact parent's persisted direction, price, amount, fill, outcome, and timestamps.",
+      "sourceRequestIndexes": [0, 1, 3, 6],
+      "sourceQuote": "направление, цена и сумма ставки полностью копируются у родителя",
+      "acceptanceCriteria": [
+        "Reset 4+ receives exactly 22 child signals, Filled BUY Paper orders, single Paper fills, Settled strategy runs, zero-size Paper positions, and Paper position settlements; Positive 13+ receives exactly 30 of each. All deterministic child IDs and strategy/market uniqueness keys are collision-free.",
+        "Each child row uses its child's strategy ID/code/wallet but copies only its selected parent row's condition, market, asset, outcome, BUY side, order limit, stake, size, fill price, settlement outcome/value, entry/settlement times, and accounting amounts; no value is recalculated from current market data.",
+        "Every child execution source is the existing `btc_updown5m_child_mirror_fak_paper`; raw decision/fill evidence additionally records version `eth_lossdiff_parent_mirror_history_v1`, child mode/threshold/pre-entry value, exact parent run/signal/order/fill/settlement IDs, cutoff, and source digest.",
+        "No below-threshold Skipped row is synthesized, no post-cutoff market is inserted, no existing target row is overwritten, and the exact parent chain is byte/column unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run focused insert-plan and disposable PostgreSQL integration tests under the marked D:\\CodexTemp run.",
+          "expected": "Exactly 22/30 complete child chains are inserted once, exact parent economics/timestamps are copied, ineligible/post-cutoff rows are absent, and retry is a no-op.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Preserve exact Polymarket fee-inclusive Net PnL from the fully accounted parent chains and expose the backfilled child history through ordinary Paper performance without relabeling Gross as Net.",
+      "sourceRequestIndexes": [2, 3, 6],
+      "sourceQuote": "Net Pnl, то есть с учётом комиссии Polymarket",
+      "acceptanceCriteria": [
+        "Every selected parent run/fill/settlement has fee status Calculated and exact `Net = Gross - Fee`; the child copies the exact fee status, role, source, schedule metadata, Fee, Gross, and Net without invoking current external APIs or a new estimate.",
+        "Reset 4+ post-backfill totals are exactly 22 trades, 16 wins, 6 losses, stake `132.11160001`, Gross `45.64509784`, Fee `4.20526000`, Net `41.43983784`.",
+        "Positive 13+ post-backfill totals are exactly 30 trades, 21 wins, 9 losses, stake `179.99999996`, Gross `51.39379117`, Fee `5.78854000`, Net `45.60525117`.",
+        "Dashboard/reconciliation projections ultimately match the canonical child runs and display fee-inclusive Net independently from Gross; incomplete or conflicting accounting blocks apply."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run focused fee/accounting clone tests and independent SQL aggregate verification.",
+          "expected": "Every row and both aggregate groups match exact parent Calculated Fee/Gross/Net values and the approved totals.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Keep historical performance generation separate from the deployed post-rollout LossDiff control state that started at zero.",
+      "sourceRequestIndexes": [1, 3, 6],
+      "sourceQuote": "Запустим с нулём, а потом я попрошу тебя сгенерировать историю",
+      "acceptanceCriteria": [
+        "Backfill SQL never inserts, updates, or deletes `strategy_loss_diff_states` or `strategy_loss_diff_parent_events`; it never changes child-parent assignments, thresholds, strategy flags, stake amounts, lost counters, balances, or parent rows.",
+        "Pre-apply and post-apply evidence prove the same common rollout cutoff and preserve every already-existing post-cutoff LossDiff event/state transition; ordinary concurrent post-cutoff reconciliation remains authoritative for future gating.",
+        "Both children remain enabled/unpaused Paper with `live_stakes=false`; no Live/live-shadow order, event, balance, setting, or venue request is created or changed."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "Run focused state-isolation and Live-noninterference tests plus production before/after allowlist snapshots.",
+          "expected": "Historical rows change only the exact Paper history tables and one exact migration marker; state/events/settings/Live and parent data remain unchanged by the backfill.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Make preview and apply bounded, atomic, idempotent, fail-closed, and auditable without creating a database backup or stopping the running service.",
+      "sourceRequestIndexes": [3, 4, 5, 6],
+      "sourceQuote": "если всё в порядке, сгенерируй их историю",
+      "acceptanceCriteria": [
+        "Preview is server-enforced repeatable-read/read-only. Apply uses one serializable transaction, an exact dedicated advisory lock, short lock/statement safety bounds, exact allowlists, deterministic IDs, insert-only compare guards, and a rollback-on-any-conflict strategy.",
+        "Apply is forbidden unless endpoint/database/primary/build/migration/strategy IDs/codes/names/flags/assignments/cutoff, source digest/counts/chains/accounting, zero pre-cutoff target trade rows, healthy heartbeat, and lock-risk checks all match the approved preview.",
+        "One exact `schema_data_migrations` marker `20260823_eth_lossdiff_history_backfill_v1` records cutoff, source digest, selected parent-run membership digest, expected counts/totals, contract digest, command build, and completion time in the same transaction. A matching retry verifies and exits with zero writes; any mismatch blocks.",
+        "No backup, service stop/restart, deployment, schema DDL, deletion, UPDATE of existing betting/accounting rows, or external request occurs."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-006",
+          "kind": "test",
+          "command": "Run focused fail-closed/idempotency tests, an exact isolated PostgreSQL apply+retry test, and the production read-only preview before apply.",
+          "expected": "Every mismatch rolls back or blocks before writes; exact apply commits all rows plus marker once; retry performs zero writes; no process or lock remains.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-007",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln --no-restore",
+          "expected": "Solution build succeeds with zero errors and focused tests pass before any production apply.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "text": "Independently verify the exact production mutation and leave the production service healthy after the backfill.",
+      "sourceRequestIndexes": [3, 5, 6],
+      "sourceQuote": "Проверь сейчас",
+      "acceptanceCriteria": [
+        "Post-apply raw-table verification independently proves exact 22/30 complete child chain counts, strategy/market uniqueness, parent references, financial totals, marker contents, and zero unmatched/extra target rows.",
+        "A separately calculated aggregate reproduces both trade/win/loss/stake/Gross/Fee/Net totals; source parent row count/digest/economics and sampled non-target counts are unchanged.",
+        "Final production heartbeat advances on the same deployed build with `last_error=NULL`; both `live_stakes` remain false, Live-order/event deltas attributable to the children are zero, and waiting/blocked locks are zero."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs",
+        "README.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-23.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-008",
+          "kind": "inspection",
+          "command": "Run two independent post-apply production read-only snapshots and a raw-row aggregate replay.",
+          "expected": "Exact target history and totals match, every non-target/source/state/Live invariant holds, heartbeat advances, and no blocking lock remains.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Permit all 22 Reset 4+ historical trades to contribute to ordinary Paper history even though 12 older selected parent orders lack the modern embedded full order-book snapshot; those 12 must use only their complete persisted parent FAK order/fill/run/position-settlement chain and be explicitly marked `parent_persisted_fak_chain_only`, `embedded_order_book_snapshot_available=false`, and `exact_snapshot_replay=false`.",
+      "impact": "The 12 rows retain exact causal selection, direction, order, fill, stake, Calculated Fee, Gross, Net, and settlement facts from actual parent Paper executions, but the historical market snapshot cannot be independently replayed from the modern embedded payload. They contribute within the approved Reset 4+ aggregate and may overstate the fill that a separate simultaneous child intent would have received. They never authorize or alter Live trading. Positive 13+ has modern embedded snapshots for all 30 selected trades.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d",
+        "semanticDigest": "sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d",
+    "semanticDigest": "sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_eth_lossdiff_history_backfill",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
