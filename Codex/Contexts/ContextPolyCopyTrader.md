@@ -1,6 +1,22 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-23 Production Server And Betting Check
+Goal: Verify current production service, Paper/Live betting, delays, locks, and the two previously observed background degradations.
+Status: Completed read-only; core service and ordinary betting are healthy, copied-performance recovered, Maker-GTD remains materially degraded
+Done:
+- Verified exact production `192.168.0.101:5432/polycopytrader` in bounded UTC `READ ONLY` transactions. At final cutoff `2026-08-23T05:57:03.613908Z`, build `a28aff1d769299a6c6b40191c3a637b79f40a417` remained `Running / Live` without restart, heartbeat age `26.163s`, and `last_error=NULL`.
+- Final fixed 60-minute window `04:57:03.613908Z..05:57:03.613908Z` contained `3,105` Filled Paper orders: BTC `1,125`, ETH `1,286`, SOL `694`. Latest order/fill was `05:55:02.581231Z`. Enabled/unpaused overdue `Observed` count and expired-open Paper count were zero; the retired raw inventory remained exactly `270`.
+- BTC/ETH/SOL reference ticks were fresh, and the current aggregate, critical, and shard-001 WebSockets were Connected/non-stale. One BTC reference stale warning at `05:42:55.350058Z` recovered; no later API error existed by the final checks.
+- Copied-trader performance projection recovered without service restart: control advanced through `05:54:25.991379Z`, inflight fell to zero, queue was `257`, and the last `Exception while reading from stream` was `05:41:26.114543Z`. The previous stuck control/25 inflight state is no longer active, although the lower-level cause of the transient outage remains unknown.
+- Exact ETH Maker-GTD remained degraded in the fixed hour: `28` Filled and `27` Expired orders; all expirations were preflight timeouts (`15` receipt-admission, `12` side-effect-drain). Persisted timeout snapshots reported global pending updates `31,336..157,760` and exact matching outstanding updates `23,880..66,044`. Latest Maker fill was `05:49:31.193244Z`; current Maker open and overdue counts were zero. Mandatory label: `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+- One Live-enabled/unpaused strategy remained. The last 24 hours contained exactly `16` Live rows totaling `$96`, all `Matched/matched`; latest was `2026-08-23T05:15:01.101477Z`, with no rejection observed.
+- A single BTC FAK order appeared transiently as `PartiallyFilledExpired` at `05:54:54Z`, then finalized as `Filled` when its linked run settled at `05:55:08.997593Z`; its one persisted fill exactly matched the stored 201-share order size. It did not remain open or inconsistent at final verification.
+- PostgreSQL briefly showed 20 lock waiters at `05:54:54.209495Z`; exact repeat snapshots at `05:55:23.900349Z`, `05:55:56.283632Z`, and `05:57:03.613908Z` all showed zero waiters and zero ungranted locks, proving a transient rather than persistent lock incident.
+Next: Prioritize a separate diagnosis/correction of the market-data side-effect backlog that degrades Maker-GTD evidence; no service restart is indicated for the current healthy core loop.
+Notes: All SQL used explicit transaction `READ ONLY`, UTC, bounded/indexed filters, and statement timeouts no greater than 12 seconds. One inspection query referenced a nonexistent `paper_orders.updated_at_utc` column and failed before returning data; the corrected query succeeded. No database, service, strategy, order, configuration, deployment, or product-source mutation occurred.
+Blockers: A Maker backlog repair requires an explicitly approved implementation task; current persisted telemetry proves scale and impact but not yet the exact queue-growth producer/mechanism.
+
 ## Active Update 2026-08-22 Production Server And Betting Check
 Goal: Verify current production service health, Paper/Live betting, runtime delays, and active incidents without changing production.
 Status: Completed read-only; core betting is healthy, but copied-trader projection and Maker-GTD market-data processing are materially degraded
