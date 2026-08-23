@@ -210,6 +210,46 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void DirectPaperSkipCompaction_ProductionV1UsesCSharpUniquenessGateWithoutQuadraticSqlScan()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.DirectSkipCompaction.cs").Replace(
+                "\r\n",
+                "\n",
+                StringComparison.Ordinal);
+        var v1Start = source.IndexOf(
+            "private const string DirectNewPaperSkipArchiveSql",
+            StringComparison.Ordinal);
+        var v2Start = source.IndexOf(
+            "private const string DirectNewPaperSkipArchiveV2Sql",
+            StringComparison.Ordinal);
+        Assert.True(v1Start >= 0);
+        Assert.True(v2Start > v1Start);
+
+        var v1Sql = source[v1Start..v2Start];
+        Assert.DoesNotContain("FROM input_rows other_input", v1Sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("other_input.ordinality <> candidate.ordinality", v1Sql, StringComparison.Ordinal);
+
+        var productionMethodStart = source.IndexOf(
+            "private async Task<IReadOnlySet<Guid>> TryAddStrategyMarketPaperRunsWithDirectCompactionAsync",
+            v2Start,
+            StringComparison.Ordinal);
+        Assert.True(productionMethodStart > v2Start);
+        var uniquenessGate = source.IndexOf(
+            "EnsureUnambiguousDirectPaperSkipInput(runs);",
+            productionMethodStart,
+            StringComparison.Ordinal);
+        var archiveCall = source.IndexOf(
+            "var archivedIds = await ArchiveNewDirectPaperSkippedRunsAsync(",
+            productionMethodStart,
+            StringComparison.Ordinal);
+        Assert.True(uniquenessGate > productionMethodStart);
+        Assert.True(archiveCall > uniquenessGate);
+    }
+
+    [Fact]
     public void PostgresSchema_ContainsRequiredTables()
     {
         foreach (var table in PostgresSchema.RequiredTables)

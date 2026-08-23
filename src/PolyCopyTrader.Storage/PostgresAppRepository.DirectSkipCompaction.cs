@@ -489,18 +489,6 @@ candidates AS MATERIALIZED (
              OR (existing_run.strategy_id = candidate.strategy_id
                  AND existing_run.market_id = candidate.market_id)
       )
-      AND NOT EXISTS (
-          SELECT 1
-          FROM input_rows other_input
-          WHERE other_input.ordinality <> candidate.ordinality
-            AND (
-                (other_input.run_json ->> 'id')::uuid = candidate.id
-                OR (
-                    (other_input.run_json ->> 'strategy_id')::uuid = candidate.strategy_id
-                    AND other_input.run_json ->> 'market_id' = candidate.market_id
-                )
-            )
-      )
     ORDER BY candidate.strategy_id, candidate.market_id, candidate.ordinality
 ),
 tombstones AS (

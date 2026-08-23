@@ -3,7 +3,7 @@
   "contractId": "RC-20260823-direct-skip-compaction-linear-validation",
   "title": "Remove the recurring local direct-skip compaction startup timeout",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -58,8 +58,8 @@
           "kind": "test",
           "command": "Run the focused source-shape and existing DirectCompaction_AmbiguousInputFailsBeforeAnyPersistence tests.",
           "expected": "The quadratic production-v1 SQL fragment is absent, the C# gate remains in the exact call path, and all ambiguity cases still fail before persistence.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused current-tree run passed 3/3, including the source-shape guard and existing ambiguous-input pre-persistence integration test. Exact normalized SHA-256 comparison of the complete dormant-v2-and-following source segment matched HEAD on both sides at 95dc0c46d83250391210bec97a5f6755bb379933bc6a3e2d07dc155bef206c5b."
         }
       ]
     },
@@ -82,8 +82,8 @@
           "kind": "test",
           "command": "Run the new 2,000-run integration regression, then the complete StrategyRunRetentionPostgresIntegrationTests class and Release solution build using marked D:\\CodexTemp outputs.",
           "expected": "Exact archive/accounting invariants pass and the 2,000-run production v1 call finishes below 30 seconds without changing the timeout.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The exact 2,000-row PostgreSQL 18.6 regression passed and verified 2,000 returned IDs, 0 raw rows, 2,000 rollups, 2,000 tombstones, 2,000 projection events, one reconciliation queue row, and empty idempotent retry below the unchanged 30-second repository timeout. The complete class ran 46 cases: 37 passed and 9 failed; all 9 failures reproduced by exact name against unmodified approved baseline d76cfc3a in a fresh database, so this change introduced zero failures. Release solution build completed with 0 errors and 126 warnings."
         }
       ]
     },
@@ -107,8 +107,8 @@
           "kind": "runtime",
           "command": "Run the newly built Release binary once against exact local PostgreSQL within the two approved timers, poll exact heartbeat and Live-order state, stop exact PID, inspect the bounded service/PostgreSQL log interval, and reconcile runtime counts.",
           "expected": "Healthy advancing heartbeat, no recurring retention timeout/retry chain, zero Live orders, exact process stopped, and only measured ordinary local Paper/runtime writes.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Bounded exact-local runtime used binary SHA-256 9a258b8c180397c17a2a4dec97f9dc99760767fb225a9ee774e87cd7a9e760cb. PID 81548 produced advancing healthy heartbeats at 2026-08-23T18:52:54.778174Z and 2026-08-23T18:53:54.869309Z, then stopped after 98.938 seconds absolute and 86.476 seconds after first healthy observation. Service/PostgreSQL interval had zero Error/Fatal, zero SQL timeout/cancellation, zero persistence retry, and zero Live orders. Eleven advisory-lock waits all acquired, longest 4.512 seconds; postflight had zero ungranted/advisory locks, service connections, or remaining process. Exact cutoffs, counts, warning classification, and local-only boundary are recorded in Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md."
         }
       ]
     }
@@ -123,8 +123,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_direct_skip_compaction_linear_validation",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

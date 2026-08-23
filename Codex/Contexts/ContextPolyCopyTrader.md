@@ -1,6 +1,24 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-23 Direct-Skip Compaction Linear Validation
+Goal: Make the current local service start and process its normal Paper workload without the recurring 30-second direct-skip retention timeout chain.
+Status: Implementation, bounded local runtime acceptance, and independent review complete; requirement-gate finalization, commit, and push pending
+Done:
+- User approved exact contract `RC-20260823-direct-skip-compaction-linear-validation` at digest `sha256:64c66d662c534ca297dd09aa0756d094c00d64d3c40a26447c77c043df5448fc`; approval-only checkpoint is `d76cfc3a`.
+- Removed only the redundant 12-line correlated `input_rows other_input` duplicate scan from production-v1 `DirectNewPaperSkipArchiveSql`. The mandatory C# ambiguity gate remains before the database path, and the dormant v2 SQL segment is byte-for-byte unchanged after newline normalization.
+- Added focused source-shape coverage and an exact 2,000-run isolated PostgreSQL integration regression. Focused verification passed 3/3 and proved 2,000 logical IDs, zero retained pure-skip raw rows, exact rollup/tombstone/projection counts, one reconciliation queue row, and an empty idempotent retry below the unchanged 30-second timeout.
+- The complete retention PostgreSQL class ran 46 cases: 37 passed and 9 failed. All 9 failures reproduced by exact name against unmodified approval baseline `d76cfc3a` on a fresh PostgreSQL 18.6 database, establishing zero new failures from this correction. Release solution build passed with 0 errors and 126 warnings.
+- Built an isolated Release binary from `d76cfc3a` plus only this SQL removal, SHA-256 `9a258b8c180397c17a2a4dec97f9dc99760767fb225a9ee774e87cd7a9e760cb`, and ran it only against local `127.0.0.1:5432/polycopytrader` with `Bot.EnableLiveTrading=false`, zero active `live_stakes`, and zero Live orders.
+- Exact PID 81548 produced healthy advancing `Running/Live` heartbeats at `2026-08-23T18:52:54.778174Z` and `18:53:54.869309Z`, with `last_error=NULL`; it stopped at `18:54:22.0825951Z` after 98.938 seconds absolute and 86.476 seconds after first healthy observation, within both limits.
+- Exact runtime interval had zero service Error/Fatal, zero SQL timeout/cancellation, and zero persistence retry. PostgreSQL recorded 11 advisory-lock waits and 11 acquisitions, longest 4.512 seconds; postflight found zero ungranted locks, advisory locks, service connections, or remaining process. Live orders stayed zero.
+- Ordinary local deltas were signals +80, Paper orders +80, settlements +3, fills/positions/Live orders +0; raw runs fell by 1,890 as direct skip compaction processed backlog while normal Paper cycles continued. The service also emitted 873 slow market-data side-effect warnings and three skipped crypto-reference warnings; they did not block startup and are outside this SQL correction.
+- Updated the exact non-secret audit in `Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md`. No Production access, schema migration/DDL, strategy/configuration change, deployment, or venue action occurred.
+- Independent reviewer `agent:/root/reviewer_direct_skip_compaction_linear_validation` compared the verbatim requests, approved contract, exact diff, tests, baseline comparison, build, and runtime evidence. After it correctly required removal of the still-running exact disposable PostgreSQL container, the bounded recheck returned PASS with no open findings.
+Next: Complete requirement gates, commit only this correction, and push the existing deployment branch.
+Notes: The exact disposable PostgreSQL container and runtime worktree were removed. Remaining marked build/test artifacts must be removed after final evidence extraction.
+Blockers: None inside the approved scope.
+
 ## Active Update 2026-08-23 Two ETH LossDiff Strategies
 Goal: Implement exactly two ETH 5m children of `ETH Up or Down 5m 1 Diff Confirmed Average Premarket`: LossDiff 4+ reset-on-win and LossDiff 13+ Positive reflected-at-zero.
 Status: Approved implementation and independent semantic review complete locally; final staged/range requirement-gate checks, commit, and push pending

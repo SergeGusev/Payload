@@ -1598,6 +1598,55 @@ WHERE id = @StrategyId;
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task DirectCompaction_TwoThousandUniquePureSkipsCompleteBelowCommandTimeout()
+    {
+        const int runCount = 2_000;
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"direct_skip_2000_{Guid.NewGuid():N}";
+        var nowUtc = DateTimeOffset.UtcNow;
+        var skippedRuns = Enumerable.Range(0, runCount)
+            .Select(index => CreateSkippedRun(strategyId, nowUtc.AddMilliseconds(index)))
+            .ToArray();
+
+        await InsertStrategyAsync(factory, strategyId, strategyCode, liveStakes: false);
+        try
+        {
+            await DeleteProjectionBlockersAsync(factory, strategyId);
+            var stopwatch = Stopwatch.StartNew();
+            var inserted = await repository.TryAddStrategyMarketPaperRunsAsync(
+                skippedRuns,
+                directPaperSkipCompactionEnabled: true);
+            stopwatch.Stop();
+
+            Assert.Equal(
+                skippedRuns.Select(run => run.Id).OrderBy(id => id),
+                inserted.OrderBy(id => id));
+            Assert.True(
+                stopwatch.Elapsed < TimeSpan.FromSeconds(30),
+                $"The 2,000-run direct compaction took {stopwatch.Elapsed.TotalSeconds:F3} seconds.");
+            Assert.Equal(
+                new RetentionCounts(0, runCount, runCount, runCount, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+
+            var retry = await repository.TryAddStrategyMarketPaperRunsAsync(
+                skippedRuns,
+                directPaperSkipCompactionEnabled: true);
+
+            Assert.Empty(retry);
+            Assert.Equal(
+                new RetentionCounts(0, runCount, runCount, runCount, 1),
+                await ReadRetentionCountsAsync(factory, strategyId));
+        }
+        finally
+        {
+            await DeleteTestStrategyAsync(factory, strategyId);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task DirectCompaction_FinalizeObservedToPureSkippedCompactsAtomically()
     {
         var factory = await CreateFactoryAsync();
