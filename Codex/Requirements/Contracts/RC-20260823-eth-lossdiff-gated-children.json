@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260823-eth-lossdiff-gated-children",
+  "title": "Add two ETH confirmed-average LossDiff-gated child strategies",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Теперь построй этот график таким образом - после каждой победы пусть он обнуляется начинает считаться заново"
+    },
+    {
+      "source": "user",
+      "text": "Сделай новый график LossDiff для той же стратегии, но без отрицательных значений. То есть когда количество побед превисило количество поражений, мы остаёмся на 0. Потом при первом поражении делаем +1 и т.д."
+    },
+    {
+      "source": "user",
+      "text": "Ты меня не понял. Мы уже посчитали семь стратегий чуть раньше, но, как ты написал: \"В моём моделировании `LossDiff 4` срабатывал только при точном значении:  \"\n\nТеперь нужно пересчитать те же стратегии, с полным обнулением при победе, но `LossDiff `N должен срабатывать при N, N+1 и тд."
+    },
+    {
+      "source": "user",
+      "text": "Смоделируй стратегии LossDiff N, где N - от 1 до 7, равные текущему LossDiff которые работают таким образом:\n\n\n\n1. Если родительская стратегия проиграла N раз, то мы делаем ставку, равную родительской стратегии на ту же сумму и по тому же принципу.\n2. Родительская стратегия - ETH Up or Down 5m 1 Diff Confirmed Average Premarket  &#x20;"
+    },
+    {
+      "source": "user",
+      "text": "Сделай две стратегии:\n\n1. ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+\n\nС той же логикой (подсчёт LossDiff c обрыванием после успеха), что и LossDiff 4+ выше\n\n2. ETH 5m 1 Diff Confirmed Average Premarket LossDiff 13+ Positive\n\nС той же логикой (подсчёт LossDiff без обрывания после успеха, но без ухода в минус), что и LossDiff 13+ Positive выше"
+    },
+    {
+      "source": "user",
+      "text": "Re: при первом запуске LossDiff восстанавливается по всей доступной истории завершённых сделок родителя, а не начинается с нуля; &#x20;\n\nДавай не будем вешать это на первый запуск. Запустим с нулём, а потом я попрошу тебя сгенерировать историю для обоих стратегий.\n\nRe: дочерняя стратегия входит только если родитель фактически входит в тот же рынок; &#x20;\n\nДа, в этом и есть её смысл.\n\nRe: направление, цена и сумма ставки полностью копируются у родителя; &#x20;\n\nДа, правильно.\n\nRe: обе стратегии создаются включёнными для Paper, но с `live_stakes=false`. &#x20;\n\nДа, правильно"
+    }
+  ],
+  "scope": {
+    "goal": "Add exactly two enabled ETH 5m Paper strategies that begin with persistent LossDiff zero, follow only actual same-market entries of the exact confirmed-average parent, copy the parent's frozen entry intent, and gate those copied entries at reset LossDiff 4+ or nonnegative Positive LossDiff 13+.",
+    "inScope": [
+      "Exact parent strategy ID b7c50005-0000-4000-8204-000000000001, code eth_up_down_5m_1_diff_confirmed_average_premarket, and only its actual entered and settled runs after the new state cutoff.",
+      "Exactly two new catalog variants: display names `ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+` and `ETH 5m 1 Diff Confirmed Average Premarket LossDiff 13+ Positive`, with stable unique IDs/codes and ETH 5m premarket scheduling compatible with the parent.",
+      "One-time zero initialization when the new migration creates each strategy's durable LossDiff state; ordinary service restarts preserve state and never replay or restore older parent history.",
+      "Durable, idempotent parent-run outcome accounting, exact parent-entry coupling, copied pre-submit entry intent, Paper execution/accounting, default enabled/unpaused/live_stakes=false catalog state, audit diagnostics, focused tests, migration tests, parity documentation, README, active context, and daily history.",
+      "A new ordered PostgreSQL migration after the immutable 0001 legacy baseline for the two catalog rows and only the minimal durable LossDiff state/event schema required by these strategies."
+    ],
+    "outOfScope": [
+      "Generating, importing, replaying, or backfilling historical child runs, orders, fills, PnL, or LossDiff state; the user explicitly reserved history generation for a later request.",
+      "Resetting either LossDiff state on an ordinary service restart, deriving either state from the child's own wins/losses, or reusing the existing stake-sizing paper_lost_counter/live_lost_counter semantics.",
+      "Any third LossDiff threshold, Progress multiplier, altered parent signal, independently recomputed child signal, changed parent strategy behavior/settings, or changed stake-sizing coefficient behavior.",
+      "Enabling live_stakes, placing or cancelling a real order, deploying/publishing/restarting a service, applying the migration to Local or Production, mutating any database, or changing external venue state.",
+      "A Dashboard/UI feature for manually editing or charting LossDiff, a general LossDiff strategy framework, or unrelated schema, retention, strategy, accounting, performance, and cleanup work."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Runtime accounting begins at each new zero-state row's migration-created UTC cutoff and includes only exact parent trades entered at or after that cutoff whose outcomes were settled before the candidate parent entry; no pre-cutoff history is included. Tests use fixed UTC times.",
+    "firstVerification": "Before product edits, re-resolve the exact parent ID/code/behavior and current dispatch/settlement paths, prove the two proposed IDs/codes are absent from source and the exact local catalog, confirm the immutable 0001 baseline checksum is unchanged, and preview the local parent row/run counts in a forced READ ONLY transaction."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Register exactly the two requested ETH LossDiff children as enabled, unpaused Paper strategies with live_stakes=false and an explicit fixed parent relationship.",
+      "sourceRequestIndexes": [4, 5],
+      "sourceQuote": "Сделай две стратегии:",
+      "acceptanceCriteria": [
+        "The catalog contains exactly one `ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+` variant and exactly one `ETH 5m 1 Diff Confirmed Average Premarket LossDiff 13+ Positive` variant, both bound to parent b7c50005-0000-4000-8204-000000000001 and no other parent.",
+        "Stable identities are b7c50005-0000-4000-8225-000000000004 / eth_up_down_5m_1_diff_confirmed_average_premarket_lossdiff_4_plus and b7c50005-0000-4000-8225-000000000013 / eth_up_down_5m_1_diff_confirmed_average_premarket_lossdiff_13_plus_positive; focused collision checks find no duplicate ID, code, or name.",
+        "Both rows are seeded enabled=true, paused=false, live_stakes=false, with no operation in this task enabling Live or changing the exact parent row.",
+        "Both variants use the parent's ETH 5m premarket timing and enter only through the exact parent-coupled flow; no additional LossDiff variant is created."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresLossDiffStrategySchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~LossDiff",
+          "expected": "Focused catalog tests prove exactly two collision-free variants with the exact names, IDs, codes, parent, timing, enabled Paper defaults, and Live disabled.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Implement LossDiff 4+ from exact parent outcomes as consecutive losses with a complete reset to zero after a parent win, and gate only subsequent actual parent entries while the pre-entry value is at least four.",
+      "sourceRequestIndexes": [0, 2, 3, 4],
+      "sourceQuote": "с полным обнулением при победе, но `LossDiff `N должен срабатывать при N, N+1 и тд.",
+      "acceptanceCriteria": [
+        "The durable value starts at 0; each qualifying settled parent loss adds 1 and each qualifying settled parent win sets the value to exactly 0, regardless of its prior value.",
+        "The gate evaluates the value before the current parent entry. From zero, four settled consecutive parent losses produce values 1,2,3,4 and do not retroactively enter those losing trades; the next actual parent entry is copied because 4 >= 4.",
+        "At values 4,5,6 and above every subsequent actual parent entry is eligible; after a qualifying parent win settles, the next parent entry is ineligible until four new consecutive losses have settled.",
+        "Only outcomes of the exact parent count. Child skips, entries, wins, losses, restarts, and existing paper_lost_counter values do not increment, decrement, or reset this LossDiff.",
+        "Duplicate settlement observation, retry, process interruption, and concurrent reconciliation cannot apply one parent run more than once or lose an eligible post-cutoff parent outcome."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Storage/NoOpAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresLossDiffStrategySchemaMigration.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~LossDiffReset",
+          "expected": "Fixed-time unit and PostgreSQL integration cases pass for zero start, 1/2/3/4 progression, 4+ continuation, win reset, parent-only outcomes, causal cutoff, retry, restart, and duplicate/concurrent observation.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Implement LossDiff 13+ Positive from exact parent outcomes as loss plus one and win minus one with a hard zero floor, and gate only subsequent actual parent entries while the pre-entry value is at least thirteen.",
+      "sourceRequestIndexes": [1, 4],
+      "sourceQuote": "подсчёт LossDiff без обрывания после успеха, но без ухода в минус",
+      "acceptanceCriteria": [
+        "The durable value starts at 0; each qualifying settled parent loss adds 1 and each qualifying settled parent win changes value x to max(0, x-1), never to a negative number and never to a complete reset unless x was 0 or 1.",
+        "The gate evaluates the value before the current parent entry. Once qualifying settled parent outcomes produce value 13, the next actual parent entry is copied; values 13,14,15 and above remain eligible.",
+        "A win at 13 produces 12 after settlement and makes the next parent entry ineligible; a win at 0 leaves 0; child outcomes and existing paper_lost_counter values never affect the Positive value.",
+        "Duplicate settlement observation, retry, process interruption, and concurrent reconciliation cannot apply one parent run more than once or lose an eligible post-cutoff parent outcome."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Storage/NoOpAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresLossDiffStrategySchemaMigration.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~LossDiffPositive",
+          "expected": "Fixed-time unit and PostgreSQL integration cases pass for zero floor, loss increment, one-step win decrement, 13+ gate, 13-to-12 exit, parent-only outcomes, causal cutoff, retry, restart, and duplicate/concurrent observation.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Make each child enter only after the exact parent actually enters the same market, and copy the parent's direction, price constraints, and amount without independently re-evaluating the confirmed-average signal.",
+      "sourceRequestIndexes": [3, 5],
+      "sourceQuote": "Да, в этом и есть её смысл.",
+      "acceptanceCriteria": [
+        "A missing, skipped, rejected, unfilled/not-accepted, or otherwise non-entered parent run produces no child order even when the LossDiff threshold is met.",
+        "For an eligible same-market parent entry, the child freezes one auditable ExecutionIntent whose selected asset/outcome, BUY side, target amount/stake, price limit or worst-price cap, order type, time-in-force, and other pre-submit constraints equal the parent's frozen intent; no newer market read may change those copied fields.",
+        "The child has its own strategy/run/order/fill/accounting identity and consumes the same frozen intent through the ordinary Paper or Live submission path; parent fill outcome data cannot alter the already frozen child intent.",
+        "Parent run/intent ID, pre-entry LossDiff value, mode, threshold, state cutoff, and gate result are persisted in child decision/skip diagnostics so the coupling and counter decision are auditable.",
+        "Default live_stakes remains false. Tests nevertheless prove that enabling Live in a separately controlled future operation would submit the unchanged copied intent through the existing supported Live path rather than use Paper-only execution semantics."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~LossDiffParentMirror",
+          "expected": "Tests prove actual-parent-entry dependency, exact same-market frozen-intent equality, no independent signal evaluation, no entry for every non-entered parent terminal path, separate accounting identity, diagnostics, and unchanged Paper/Live intent parity.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Start both counters once at zero without historical replay, preserve them across restarts, and leave all historical generation and runtime/database rollout for later explicit tasks.",
+      "sourceRequestIndexes": [5],
+      "sourceQuote": "Запустим с нулём, а потом я попрошу тебя сгенерировать историю для обоих стратегий.",
+      "acceptanceCriteria": [
+        "The ordered migration creates each durable state exactly once with value 0 and a database UTC cutoff; it neither reads nor imports pre-cutoff parent runs, and reapplying/skipping the migration cannot reset an existing state.",
+        "Ordinary processor/service restarts load and continue the persisted value; no startup hook scans all parent history or assigns a new cutoff.",
+        "The immutable 0001 baseline SQL and checksum remain byte/semantically unchanged; the new transactional migration is ordered after 0001 and has checksum-bound migration tests for fresh, already-applied, retry, rollback, and mismatch behavior.",
+        "No Local or Production migration is applied, no historical child record is generated, and no service is deployed/restarted by this implementation task."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresLossDiffStrategySchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-23.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~PostgresSchemaMigrationTests|FullyQualifiedName~LossDiffMigration",
+          "expected": "Migration/catalog tests prove immutable baseline preservation, ordered transactional creation, exact zero/cutoff state, no history import, idempotent restart/apply behavior, rollback, and checksum mismatch rejection.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "git diff --check; git status --short; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree",
+          "expected": "Only approved mapped implementation/documentation/context paths change, unrelated dirty work is preserved, formatting is clean, every requirement has passing evidence, and the completed contract validates.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-007",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln --no-restore",
+          "expected": "The complete solution builds with zero errors using the marked D:\\CodexTemp session for all disposable artifacts.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260823-eth-lossdiff-gated-children sha256:872f3ac0cf3005d63f025c4fd63ff2c1b95f6b36fb645f1427aed8bf2795a58c",
+    "semanticDigest": "sha256:872f3ac0cf3005d63f025c4fd63ff2c1b95f6b36fb645f1427aed8bf2795a58c"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_eth_lossdiff_gated_children",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
