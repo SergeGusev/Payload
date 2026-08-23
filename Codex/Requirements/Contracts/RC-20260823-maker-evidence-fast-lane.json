@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260823-maker-evidence-fast-lane",
+  "title": "Isolate exact Maker-GTD evidence from general market-data side effects",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Сможешь исправить ситуацию с Maker‑GTD  ?"
+    }
+  ],
+  "scope": {
+    "goal": "Remove the proven market-data side-effect backlog that causes exact ETH Reference Average Maker-GTD Paper orders to reach the existing evidence-unavailable expiry deadline, while preserving every accepted Maker evidence event and all approved trading, fill, accounting, Paper-only, and Live boundaries.",
+    "inScope": [
+      "Separate exact Maker-GTD market-data evidence processing from the single general Paper side-effect worker so unrelated position-mark and ordinary-Paper work cannot delay Maker evidence.",
+      "Preserve every accepted authoritative pre-expiry Book, PriceChange, LastTrade, and BestBidAsk event required by each exact Maker order, with its original source timestamp, received timestamp, payload, fingerprint, per-asset FIFO ordering, publication fence, and expiry boundary; Maker evidence must not be dropped, coalesced, or reordered.",
+      "Let the general side-effect lane coalesce only replaceable quote updates after exact Maker order IDs have been safely extracted to the Maker lane and only when no remaining non-Maker open order requires that individual update; retain existing nonreplaceable handling for trades, resolutions, persistence-enabled events, unknown exposure, and ordinary Paper evidence.",
+      "Keep exact Maker fill evaluation and atomic persistence on the dedicated path, without per-event position-mark writes or unrelated settlement/ordinary-Paper processing in that path.",
+      "Make exact-order expiry drain and queue telemetry observe and prioritize the dedicated Maker lane while retaining the existing absolute preflight deadline and fail-closed maker_gtd_evidence_unavailable fallback for genuine unresolved work.",
+      "Add deterministic overload, ordering, race, publication, expiry-boundary, exception-isolation, and regression tests; document the queue split and position-mark timing tradeoff; run focused tests, full solution build, and independent semantic review.",
+      "Merge and push only the locally verified approved change through the current codex/reference-average-available-windows branch; production deployment and verification remain user-controlled."
+    ],
+    "outOfScope": [
+      "Changing Reference Average signals, windows, thresholds, direction, selected outcome, entry timing, order price, stake, GTD/PostOnly intent, TouchNoDepth predicate, contract version, mandatory label, fee/PnL/settlement formulas, or dashboard calculations.",
+      "Dropping, sampling, coalescing, or reordering exact Maker evidence; replacing event-by-event evidence with a synthetic high/low, latest-only value, inferred touch, or post-expiry reconstruction.",
+      "Changing Live behavior, enabling Live Maker orders, extending the closed Paper exception to another strategy, asset, alias, clone, or execution semantic.",
+      "Changing database schema, production data, strategy/catalog configuration, WebSocket subscriptions, reconnect/stale policy, service hosting/startup, migrations, or general risk controls.",
+      "Replaying or rewriting existing terminal orders, fabricating fills for prior evidence-unavailable expirations, deploying/restarting production, or claiming recovery before a later read-only production verification."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact closed-exception ETH neutral Reference Average Maker-GTD Paper family: 28 group-8223 strategies and existing maker_gtd_paper_v1/v2 orders. Read-only production evidence at cutoff 2026-08-23T06:11:02.191920Z: the last 100 exact-family timeout expirations in six hours had matching received-event age 82,156.7825..261,849.3178 ms and total pending queue 1,686..157,760; in-flight processing was generally milliseconds, proving queue wait rather than a single long-running handler call.",
+    "firstVerification": "Trace each accepted WebSocket event from MarketDataWebSocketService through MarketDataSideEffectQueue and PaperTradingMarketDataUpdater, verify which events are nonreplaceable when exact Maker IDs are attached, and prove that the configured per-asset maximum is a soft diagnostic threshold rather than a capacity limit before selecting the queue split."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Exact Maker-GTD evidence must use a dedicated processing path that preserves all accepted evidence and is not blocked by the general side-effect backlog.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "исправить ситуацию с Maker‑GTD",
+      "acceptanceCriteria": [
+        "Every accepted authoritative pre-expiry Maker event is assigned to the exact eligible Maker order IDs and retained until evaluated or until an explicitly recorded handler failure; no Maker event is dropped, coalesced, sampled, or reordered within its asset stream.",
+        "The Maker path carries the original event payload, source timestamp, received timestamp, fingerprint, asset/token identity, and publication fence needed by the existing evidence and atomic-fill rules.",
+        "A blocked or slow general Paper/position-mark handler does not prevent the dedicated Maker path from evaluating its accepted events or completing exact-order expiry drain.",
+        "The dedicated Maker handler performs only exact Maker evidence evaluation and the existing atomic fill attempt; it does not update position marks, settle unrelated positions, or process ordinary Paper orders.",
+        "The existing exact Maker signal, v1/v2 pricing, stake, PostOnly/GTD intent, TouchNoDepth predicate, first-valid-touch result, atomic exactly-once persistence, PaperOnly/Live-disabled boundary, and mandatory optimistic label remain byte-for-byte or behaviorally unchanged as applicable."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataWebSocketService.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/MarketData/IPaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "Deterministic tests prove exact Maker event retention and FIFO ordering, independence from a blocked general lane, correct publication and expiry boundaries, exact once-only fill behavior, exception isolation, and later worker recovery.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "General market-data work may be reduced only after Maker evidence is safely separated, without changing ordinary-Paper evidence requirements or financial semantics.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Maker‑GTD",
+      "acceptanceCriteria": [
+        "After exact Maker IDs are routed to the Maker path, Book, PriceChange, and BestBidAsk work with no remaining non-Maker eligible order may follow the existing replaceable-update coalescing rule when event persistence is disabled.",
+        "LastTrade, resolution, persistence-enabled, handler-failure, unknown-exposure, and updates required by any remaining non-Maker open order retain their existing nonreplaceable behavior.",
+        "Position marks continue to receive current market prices through the general lane and the existing independent five-second position-mark worker; only redundant intermediate quote-triggered mark writes that existed solely because Maker IDs made updates nonreplaceable may be coalesced.",
+        "Ordinary Paper orders, copied-trader Paper, settlements, lifecycle outcomes, and dashboard accounting retain their existing functional behavior.",
+        "Queue metrics distinguish dedicated Maker pending/in-flight work from general pending/in-flight work and expiry timeout diagnostics identify the actual Maker phase and pending counts."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataWebSocketService.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperPositionMarkWorker.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Debug --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <marked D:\\CodexTemp session artifacts path> --results-directory <marked D:\\CodexTemp session results path>",
+          "expected": "The queue split passes focused overload and regression tests together with all exact-family signal, evidence, atomic persistence, Paper-only, mandatory-label, lifecycle, and worker-isolation tests.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run a deterministic in-process burst of at least 160,000 accepted market-data events while the general handler is blocked, then drain exact Maker work with a manual expiry clock and inspect recorded sequence/fingerprints.",
+          "expected": "The Maker lane evaluates every assigned event in per-asset FIFO order, records the earliest qualifying touch exactly once, reaches zero matching pending work before the existing deadline, and does not wait for the blocked general lane; memory/pending metrics remain observable and no event is silently lost.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Debug --artifacts-path <marked D:\\CodexTemp session artifacts path>",
+          "expected": "The complete solution builds with zero errors; warnings are reported exactly.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Inspect the complete diff, run git diff --check and WorkingTree/Staged/Range requirement validation, and obtain independent semantic review against the verbatim request, approved digest, actual diff, and final evidence.",
+          "expected": "Only approved paths change; no trading decision, Maker evidence loss, atomic accounting, Live, schema, production, startup, subscription, or unrelated dirty-worktree behavior changes; independent reviewer verdict is pass with no findings.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "After exact Maker evidence has been retained on the dedicated path, allow otherwise replaceable general quote updates to coalesce even when the only open-order IDs originally attached to the event belonged to the exact Maker family.",
+      "impact": "This removes the proven source of unbounded general queue growth without discarding any Maker evidence. It can reduce redundant intermediate per-event position-mark database writes; current marks still flow through the coalesced general update and the existing five-second position-mark worker. It must not alter fills, settlements, realized PnL, ordinary-Paper evidence, or Live behavior.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260823-maker-evidence-fast-lane sha256:dd8e0fb72f6ea8619229439d6820d6347cf6d0d218a6821fa62074cb0ff0fee1",
+        "semanticDigest": "sha256:dd8e0fb72f6ea8619229439d6820d6347cf6d0d218a6821fa62074cb0ff0fee1"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260823-maker-evidence-fast-lane sha256:dd8e0fb72f6ea8619229439d6820d6347cf6d0d218a6821fa62074cb0ff0fee1",
+    "semanticDigest": "sha256:dd8e0fb72f6ea8619229439d6820d6347cf6d0d218a6821fa62074cb0ff0fee1"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
