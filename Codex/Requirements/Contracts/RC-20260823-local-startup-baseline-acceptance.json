@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260823-local-startup-baseline-acceptance",
+  "title": "Accept the completed local baseline and verify local service startup",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "При старте сервиса локально вот такая ошибка. Логи лежат здесь - D:\\My\\Business\\PolyMarket\\src\\PolyCopyTrader.Service\\bin\\Release\\net10.0\\logs\n\nПочини, пожалуйста"
+    },
+    {
+      "source": "user",
+      "text": "1 - обновляем базу"
+    },
+    {
+      "source": "user",
+      "text": "Опять ошибка"
+    },
+    {
+      "source": "user",
+      "text": "Ок, тогда делай что нужно, чтобы сервис корректно запускался локально"
+    }
+  ],
+  "scope": {
+    "goal": "Make the current local PolyCopyTrader.Service start correctly against only 127.0.0.1:5432/polycopytrader by accepting the already completed immutable baseline in its migration ledger and then performing a bounded normal local-host startup verification.",
+    "inScope": [
+      "Run a fresh UTC repeatable-read preflight against only 127.0.0.1:5432/polycopytrader and require PostgreSQL 17.5 primary, explicit transaction_read_only=on, zero current migration-history rows, exactly 15 data-migration markers, 110 public tables, 376 public indexes, every current PostgresSchema.RequiredTables relation, zero holders of the service migration advisory lock, and no running local PolyCopyTrader process or Windows service.",
+      "Require the current source migration catalog to contain exactly one migration: 0001-legacy-baseline-a3b0457f with semantic checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2, and require the previously completed baseline post-state to remain 3,341 strategies including exactly 1,440 baseline-created strategies from 2026-08-23T10:52:52.212760Z through 2026-08-23T10:52:58.488877Z and 938 pre-existing strategies touched during that baseline run.",
+      "Accept and preserve the current catalog state: all 1,440 baseline-created strategies remain enabled and unpaused, their live_stakes values remain false, and no attempt is made to delete, pause, disable, rename, or reconstruct them or the 938 touched pre-existing strategies.",
+      "Acquire PostgresSchemaInitializer.AdvisoryLockKey and, inside one short transaction, insert exactly one row into public.schema_migration_history with migration_id 0001-legacy-baseline-a3b0457f, semantic_checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2, database-generated UTC applied_at_utc, and details local-recovery-after-completed-baseline; baseline-source=7b255d6986e3b94fe77c3e1181109bc87c7b0b22; prior-service=e58c6dd64a94b289f70464ce3f12fdf35fc435b3. No baseline SQL is replayed.",
+      "Invoke the current production-shape PostgresSchemaInitializer twice after registration and prove both invocations validate and skip the one applied baseline without executing legacy schema statements.",
+      "Start the exact existing local Release executable with ProductVersion 1.0.0+7b255d6986e3b94fe77c3e1181109bc87c7b0b22 using its existing local configuration and local database connection, keep it running only until process stability and advancing healthy heartbeats are proven or for at most 90 seconds, then stop only that exact process started by Codex.",
+      "Allow only ordinary bounded local runtime writes produced by that verification start. The exact preflight boundary is Bot.Mode=Live, Bot.EnableLiveTrading=false, PaperTrading.RunInLiveMode=true, 3,195 enabled/unpaused strategies, and zero enabled/unpaused live_stakes strategies. Paper runs/orders or non-trading telemetry may be created locally and must be counted before and after; no Live order may be created.",
+      "Write a compact non-secret audit record with exact UTC cutoffs, endpoint identity, ledger row, initializer results, bounded host process/heartbeat evidence, and before/after local betting-row counts."
+    ],
+    "outOfScope": [
+      "Any connection, read, or mutation to production 192.168.0.101:5432/polycopytrader, any remote database, or any database other than exact local 127.0.0.1:5432/polycopytrader.",
+      "Replaying PostgresSchema.SchemaSql, applying another schema/data migration, changing schema objects or the retired ix_paper_positions_wallet_updated index, creating a backup, restoring a database, or making any product source-code or configuration-file change.",
+      "Deleting, disabling, pausing, repairing, or otherwise modifying the 1,440 baseline-created strategies or the 938 touched pre-existing strategies; reconstructing their unknown pre-baseline values; changing strategy logic, prices, stake rules, or catalog membership.",
+      "Enabling Live trading, changing live_stakes, placing or cancelling a Live order, changing venue state, deploying, publishing, restarting Production, or leaving the bounded local verification process running after this task.",
+      "Generalizing the one-row local recovery into a reusable tool, new migration, automatic eligibility rule, schema framework, cleanup campaign, or unrelated repair."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "One exact local database and one bounded local Release-host verification on 2026-08-23 Europe/Sofia; all database cutoffs and recorded timestamps are UTC.",
+    "firstVerification": "Repeat the exact endpoint, migration ledger/catalog, schema inventory, required-relations, seeded/touched-strategy, active-live-stakes, advisory-lock, process/service, configuration, and core betting-count preview with all SQL in forced READ ONLY transactions and statement_timeout no greater than 15 seconds; stop if any safety-critical identity or count differs."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Register only the already completed immutable baseline in the exact local database so the current initializer skips it on every later start.",
+      "sourceRequestIndexes": [0, 1, 3],
+      "sourceQuote": "делай что нужно, чтобы сервис корректно запускался локально",
+      "acceptanceCriteria": [
+        "Every database connection is independently verified as 127.0.0.1:5432/polycopytrader, PostgreSQL 17.5 primary; Production is never connected.",
+        "Fresh preflight proves the history table exists with zero rows, the current migration catalog contains only the exact expected baseline and checksum, all required relations exist, and no migration advisory lock is held.",
+        "Exactly one parameterized INSERT is committed under the migration advisory lock; its ID, checksum, UTC time, and exact truthful local-recovery details match this contract, and no schema SQL or other manual DML/DDL is executed.",
+        "Postflight proves exactly one valid history row and unchanged schema/data-migration inventories, strategy catalog fields, and pre-runtime core betting counts."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "runtime",
+          "command": "Run the approval-bound disposable C#/.NET ledger-registration runner under the marked D:\\CodexTemp session after the exact forced-read-only preflight.",
+          "expected": "Only the exact local database receives one committed baseline-history row; no schema statement or other manual DML runs.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preserve the current post-baseline strategy catalog exactly rather than silently choosing a cleanup or disabling policy.",
+      "sourceRequestIndexes": [1, 3],
+      "sourceQuote": "обновляем базу",
+      "acceptanceCriteria": [
+        "Fresh preflight still finds exactly 3,341 strategies, including the exact 1,440 baseline-created rows and 938 pre-existing rows touched in the recorded baseline interval.",
+        "All 1,440 baseline-created rows remain enabled and unpaused with live_stakes=false, zero pre-verification runs, zero Paper orders, and zero Live orders.",
+        "The registration transaction changes no strategy row, and field-level before/after digests for all 3,341 strategy rows remain identical.",
+        "No claim is made about reconstructing the unknown pre-baseline values of the 938 touched pre-existing strategies."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Capture and compare a deterministic digest of all strategy identifiers and mutable catalog fields immediately before and after the one-row ledger transaction.",
+          "expected": "Strategy count and field digest are unchanged by registration; the exact seeded/touched populations remain present.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Prove both schema initialization and the bounded normal local service host now start correctly without enabling Live betting.",
+      "sourceRequestIndexes": [0, 2, 3],
+      "sourceQuote": "сервис корректно запускался локально",
+      "acceptanceCriteria": [
+        "Two direct invocations of the exact current initializer succeed and report that baseline 0001 is skipped; migration history remains one row and schema inventory is unchanged.",
+        "The exact local Release executable ProductVersion remains 1.0.0+7b255d6986e3b94fe77c3e1181109bc87c7b0b22 and starts with its existing configuration against the verified local database.",
+        "The process remains alive long enough for at least two advancing current-build service heartbeats with status Running, mode Live, and last_error NULL, but no longer than 90 seconds, and is then stopped by Codex.",
+        "Bot.EnableLiveTrading remains false, enabled/unpaused live_stakes strategy count remains zero, Live-order count remains exactly zero, and no external Live order or cancellation is sent.",
+        "Any ordinary local Paper/runtime rows created during the bounded normal start are measured exactly before and after and reported rather than hidden."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "runtime",
+          "command": "Invoke PostgresSchemaInitializer twice, then run the exact existing local Release host normally for at most 90 seconds while polling its exact process and local heartbeat; stop that process and reconcile local runtime deltas.",
+          "expected": "Initializer skips the baseline, the host stays running with two advancing healthy local heartbeats, no Live order appears, and only measured ordinary local runtime writes occur.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Keep this repair bounded, auditable, isolated from Production, and free of product/configuration changes.",
+      "sourceRequestIndexes": [0, 3],
+      "sourceQuote": "локально",
+      "acceptanceCriteria": [
+        "All disposable runner, build, and diagnostic artifacts stay under the marked D:\\CodexTemp session and are removed by protected cleanup after compact evidence is recorded.",
+        "The durable report contains no credential or connection string and records exact endpoint, UTC cutoffs, counts, checksum, process identity, and failed checks if any.",
+        "No product source, configuration file, Production state, external order state, schema object, or unrelated repository work is changed.",
+        "Independent semantic review compares the verbatim requests, approved contract, database/runtime evidence, exact repository diff, and report and returns PASS with no open findings."
+      ],
+      "implementationPaths": [
+        "Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect exact Git diff/status, validate the requirement contract in WorkingTree and Staged modes, verify protected D:\\CodexTemp cleanup, and obtain independent semantic review.",
+          "expected": "Only approved audit/context/contract records change, unrelated work remains intact, validators pass, temporary artifacts are removed, and reviewer returns PASS.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:f809e12010a1635a2d6c66d4d3d0372c081121803cf2d4ff4ba7c43e98c2bd2a",
+    "semanticDigest": "sha256:f809e12010a1635a2d6c66d4d3d0372c081121803cf2d4ff4ba7c43e98c2bd2a"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_local_startup_baseline_acceptance",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
