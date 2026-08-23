@@ -1,6 +1,19 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-23 Current Production Betting Check
+Goal: Determine whether bets are being created now on exact production `192.168.0.101:5432/polycopytrader`.
+Status: Completed read-only; Paper betting is active
+Done:
+- Ran server-enforced `READ ONLY` UTC snapshots with `statement_timeout=15s` against exact PostgreSQL 18.3 primary `192.168.0.101:5432/polycopytrader`; no production state changed.
+- Service build `a28aff1d769299a6c6b40191c3a637b79f40a417` is `Running / Live`, `last_error=NULL`, with heartbeat advancing from `2026-08-23T19:20:37.942790Z` to `19:21:37.943992Z`; final age was `18.039s` at cutoff `19:21:55.982828Z`.
+- The current five-minute interval contained exactly 28 new Paper orders from 28 distinct strategies; all 28 were `Filled`. The latest Paper order and independently linked entered run were both timestamped `2026-08-23T19:20:18.813396Z`.
+- PostgreSQL had zero waiting locks and zero other active queries older than 30 seconds at cutoff `2026-08-23T19:20:56.098823Z`.
+- Exactly one enabled/unpaused strategy currently has `live_stakes=true`: `eth_up_down_5m_up_bps_50_instant`. It has seven `Matched/matched` Live orders totaling `$42` in the last 24 hours; the latest was created `2026-08-23T13:30:00.879624Z`. No new Live order existed in the current five-minute cycle.
+Next: Continue ordinary monitoring; investigate only if Paper orders stop across multiple expected five-minute cycles or heartbeat age exceeds the operational threshold.
+Notes: The heartbeat mode name `Live` describes service mode; actual Live activity is separately evidenced by the one explicitly enabled strategy and its persisted Live orders.
+Blockers: None.
+
 ## Active Update 2026-08-23 Direct-Skip Compaction Linear Validation
 Goal: Make the current local service start and process its normal Paper workload without the recurring 30-second direct-skip retention timeout chain.
 Status: Completed, independently reviewed, committed as `f4ede380`, and pushed to the deployment branch

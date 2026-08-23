@@ -77,3 +77,10 @@ Request:
 
 Result:
 Recorded approval-only checkpoint `d76cfc3a` before the product edit, then removed only the redundant production-v1 correlated JSON self-scan while preserving the mandatory C# ambiguity gate and all archive/accounting behavior. Focused verification passed 3/3, including an exact 2,000-run isolated PostgreSQL regression below the unchanged 30-second timeout. The complete retention class had 37 passes and 9 old failures; all 9 reproduced by exact name against unmodified `d76cfc3a`, so this correction added zero failures. Release solution build passed with zero errors. An isolated Release binary ran only against local `127.0.0.1:5432/polycopytrader`, produced two advancing healthy heartbeats, zero Error/Fatal, zero timeout/cancellation/retry, and zero Live orders, then exact PID 81548 was stopped within both approved timers. PostgreSQL's 11 short advisory-lock waits all acquired successfully; no locks or service connections remained. Independent semantic review passed after confirming the exact disposable PostgreSQL container was removed; no open findings remain. Implementation commit `f4ede380` passed isolated WorkingTree, Staged, Contract, and one-commit Range gates and was pushed to `origin/codex/reference-average-available-windows`. Production, schema, strategy/configuration, deployment, and venue state were untouched.
+
+## 2026-08-23T19:21:55.982828Z
+Request:
+Идут ли сейчас ставки?
+
+Result:
+Production read-only verification confirmed active betting: exact current five-minute interval contained 28 new Paper orders from 28 strategies, all Filled, with latest order and linked entered run at `2026-08-23T19:20:18.813396Z`. Exact service build `a28aff1d` remained `Running / Live`, heartbeat advanced by one minute through `19:21:37.943992Z`, and `last_error` was null. PostgreSQL had zero waiting locks and zero active queries older than 30 seconds. Separately, one strategy has `live_stakes=true`; it produced seven Matched Live orders totaling `$42` during the last 24 hours, latest at `13:30:00.879624Z`, but none in the current five-minute cycle. No production state was changed.
