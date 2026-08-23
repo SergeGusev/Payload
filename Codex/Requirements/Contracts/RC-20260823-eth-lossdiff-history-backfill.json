@@ -3,7 +3,7 @@
   "contractId": "RC-20260823-eth-lossdiff-history-backfill",
   "title": "Backfill full pre-rollout Paper trade history for two ETH LossDiff children",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "draft",
   "originalRequests": [
     {
       "source": "user",
@@ -122,7 +122,7 @@
       "sourceRequestIndexes": [2, 3, 6],
       "sourceQuote": "Net Pnl, то есть с учётом комиссии Polymarket",
       "acceptanceCriteria": [
-        "Every selected parent run/fill/settlement has fee status Calculated and exact `Net = Gross - Fee`; the child copies the exact fee status, role, source, schedule metadata, Fee, Gross, and Net without invoking current external APIs or a new estimate.",
+        "Every selected parent run and settlement has fee status Calculated and exact `Net = Gross - Fee`. Every selected parent fill has fee status Calculated, zero fill-level realized PnL, its exact entry fee, and a canonical NULL fill-level Net; the child preserves that exact fill representation. The child copies all run/fill/settlement fee status, role, source, schedule metadata, Fee, Gross, and Net/NULL fields without invoking current external APIs or a new estimate, and ordinary history Net is taken from the matching run/settlement rather than relabeling Gross or synthesizing fill Net.",
         "Reset 4+ post-backfill totals are exactly 22 trades, 16 wins, 6 losses, stake `132.11160001`, Gross `45.64509784`, Fee `4.20526000`, Net `41.43983784`.",
         "Positive 13+ post-backfill totals are exactly 30 trades, 21 wins, 9 losses, stake `179.99999996`, Gross `51.39379117`, Fee `5.78854000`, Net `45.60525117`.",
         "Dashboard/reconciliation projections ultimately match the canonical child runs and display fee-inclusive Net independently from Gross; incomplete or conflicting accounting blocks apply."
@@ -243,18 +243,18 @@
       "text": "Permit all 22 Reset 4+ historical trades to contribute to ordinary Paper history even though 12 older selected parent orders lack the modern embedded full order-book snapshot; those 12 must use only their complete persisted parent FAK order/fill/run/position-settlement chain and be explicitly marked `parent_persisted_fak_chain_only`, `embedded_order_book_snapshot_available=false`, and `exact_snapshot_replay=false`.",
       "impact": "The 12 rows retain exact causal selection, direction, order, fill, stake, Calculated Fee, Gross, Net, and settlement facts from actual parent Paper executions, but the historical market snapshot cannot be independently replayed from the modern embedded payload. They contribute within the approved Reset 4+ aggregate and may overstate the fill that a separate simultaneous child intent would have received. They never authorize or alter Live trading. Positive 13+ has modern embedded snapshots for all 30 selected trades.",
       "approval": {
-        "status": "approved",
+        "status": "pending",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d",
-        "semanticDigest": "sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d"
+        "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:<pending>",
+        "semanticDigest": "pending"
       }
     }
   ],
   "approval": {
-    "status": "approved",
+    "status": "pending",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d",
-    "semanticDigest": "sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d"
+    "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:<pending>",
+    "semanticDigest": "pending"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_lossdiff_history_backfill",
