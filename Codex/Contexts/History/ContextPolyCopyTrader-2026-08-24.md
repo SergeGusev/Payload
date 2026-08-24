@@ -13,3 +13,10 @@ Request:
 
 Result:
 Production read-only recheck found new deployed build `56294c1f` healthy: one start at `2026-08-24T06:09:54.793286Z`, advancing `Running / Live` heartbeat, and `last_error=NULL`. Paper betting remained active with 131/592/2,615 orders in the last 5/15/60 minutes; all 592 recent orders were Filled, linked entered-run counts matched, 736 runs settled in 15 minutes, and no Pending/Resting order existed. The one Live-enabled strategy produced three Matched `$6` orders in the last hour. PostgreSQL had zero waiting locks and no stale idle transaction; the only activity over 30 seconds was an unblocked Dashboard-facts autovacuum delayed by its normal `VacuumDelay`. No production state changed.
+
+## 2026-08-24T14:07:36.4704965Z
+Request:
+Давай пока ограничимся PolyMarket
+
+Result:
+Added and independently reviewed a PolyMarket-only standing `Gentle production operations` rule. Future production mutations default to read-only impact previews and short bounded, atomic, idempotent, restartable batches with health/lock/error/count/invariant checks between batches. A single large all-or-nothing transaction now requires a demonstrated correctness need and separate explicit user approval. Approval-only contract commit `537681e9` was pushed before implementation. This instruction task performed no production mutation or service action.

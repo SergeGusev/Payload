@@ -3,7 +3,7 @@
   "contractId": "RC-20260824-polymarket-gentle-production-operations",
   "title": "Standing gentle-operation rule for PolyMarket",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -52,8 +52,8 @@
           "kind": "inspection",
           "command": "Inspect the scoped AGENTS.md diff and search for the complete gentle-operation rule.",
           "expected": "The rule is present once, is explicitly limited to PolyMarket production operations, and does not weaken existing gates.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Scoped AGENTS.md diff contains one PolyMarket-only standing section and preserves every existing operational, evidence, approval, and parity gate."
         }
       ]
     },
@@ -76,8 +76,8 @@
           "kind": "inspection",
           "command": "Compare the AGENTS.md batch requirements against REQ-002 acceptance criteria.",
           "expected": "Batch sizing, per-batch atomicity, idempotency, restartability and between-batch stop checks are explicit.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "AGENTS.md explicitly requires preview-sized bounded batches, per-batch atomicity/idempotency/restartability, durable progress, between-batch verification, and fail-closed stop behavior."
         }
       ]
     },
@@ -100,8 +100,8 @@
           "kind": "inspection",
           "command": "Inspect the AGENTS.md preview, monitoring and prohibited-hidden-default language.",
           "expected": "The standing instruction makes production impact observable before and during batched execution.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "AGENTS.md requires exact candidate and batch counts, transaction boundaries, lock/load profile, resume point, heartbeat/errors/locks/counts/invariant checks, and forbids hidden high-impact aids."
         }
       ]
     },
@@ -124,8 +124,8 @@
           "kind": "inspection",
           "command": "Inspect the AGENTS.md exception gate for a single large transaction.",
           "expected": "A large all-or-nothing mutation is fail-closed behind evidence and explicit approval.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "AGENTS.md makes broad atomicity non-default and requires demonstrated invariant, scale/impact/recovery/alternative evidence plus explicit user approval."
         }
       ]
     },
@@ -147,8 +147,8 @@
           "kind": "inspection",
           "command": "Inspect changed paths for this task.",
           "expected": "The governed implementation path is AGENTS.md only; context/history and this contract may change under workflow rules.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The only governed implementation hunk is the new section in the PolyMarket root AGENTS.md; no global instruction or other repository was changed."
         }
       ]
     }
@@ -162,9 +162,9 @@
     "semanticDigest": "sha256:d310dc1c2519bb4eb8abb8f7d429e9f5d4192c939a68a19405014186fd920e8e"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/reviewer_eth_lossdiff_gated_children",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

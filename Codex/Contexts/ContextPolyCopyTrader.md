@@ -1,6 +1,18 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-24 Gentle Production Operations Rule
+Goal: Persist a PolyMarket-only standing rule that production work uses the least disruptive practical execution mode and bounded batches by default.
+Status: Completed
+Done:
+- Added `Gentle production operations` to root `AGENTS.md`: read-only impact preview, evidence-sized short batches, per-batch atomicity/idempotency/restartability, durable resume points, and health/lock/error/count/invariant checks between batches.
+- Made a single large all-or-nothing production transaction non-default and fail-closed behind a demonstrated correctness need plus separate explicit user approval.
+- Kept service stop/restart, broad locks, trigger bypass, schema changes, backups, other repositories, and the blocked ETH LossDiff backfill outside this instruction task.
+- Requirement contract `RC-20260824-polymarket-gentle-production-operations` was approved at semantic digest `sha256:d310dc1c2519bb4eb8abb8f7d429e9f5d4192c939a68a19405014186fd920e8e`; independent semantic review passed with no findings.
+Next: Redesign the ETH LossDiff history backfill as a separately approved gentle batched operation if the user asks to continue it.
+Notes: Approval-only commit `537681e9` was pushed before the governed `AGENTS.md` edit. No production database write, service action, deployment, schema change, backup, or trading action was performed by this instruction task.
+Blockers: None.
+
 ## Active Update 2026-08-24 Production Server And Betting Recheck
 Goal: Recheck current production service health, database delays, and Paper/Live betting.
 Status: Completed read-only; server healthy and both Paper and Live activity confirmed

@@ -43,6 +43,37 @@ This repository contains **PolyCopyTrader**, a Windows/.NET C# application for m
 - Use the simplest working method that satisfies the locked scope. Optional hardening, broader verification, and reusable tooling are separate work and require explicit approval when they add material time or risk.
 - A communicated time estimate is for transparency, not an automatic stop condition. If the approved task is still running within the same locked scope, method, risk profile, and resource usage, continue and report the updated ETA. Stop and ask only when continuing requires additional resources, new workstreams, materially different methods, broader verification, higher risk, writes/mutations/deployments/backups/external actions, or a user-specified hard time limit would be exceeded.
 
+## Gentle production operations
+
+- This is a standing PolyMarket rule for every task that can affect the running
+  production service or production database. Use the least disruptive practical
+  execution mode, minimizing database load, lock duration, service interference,
+  and latency impact even when a gentler operation takes longer.
+- Before mutation, run a read-only preview and report the exact candidate count,
+  proposed batch size and batch count, transaction boundaries, expected lock/load
+  profile, and the durable progress or resume point. Choose batch size from this
+  evidence and current production state; do not apply a universal fixed batch
+  size blindly.
+- A non-trivial production mutation defaults to short, bounded batches instead of
+  one transaction covering the entire operation. Each batch must be independently
+  atomic, idempotent, and safely restartable from an auditable durable progress
+  point. Do not create generalized batching infrastructure or schema objects
+  unless the user separately approves that scope.
+- Between batches, verify service heartbeat and errors, waiting locks, actual
+  affected counts, and task-specific invariants. Stop before the next batch when
+  any value deviates from the preview or when production health worsens; report
+  the exact completed and remaining scope.
+- A single large all-or-nothing production transaction is not the default. If a
+  verified correctness invariant cannot be preserved by batching, stop and
+  explain that exact invariant, affected scale, expected duration, lock/load
+  impact, failure recovery, and narrower alternatives. Obtain the user's explicit
+  approval for the large transaction before running it; technical preference or
+  generic safety language is not approval.
+- Never introduce a service stop or restart, broad table lock, trigger bypass,
+  schema change, backup, or similarly high-impact mechanism as a hidden batching
+  aid. Each remains a separate operation requiring its own evidence and explicit
+  authorization under the existing scope gates.
+
 ## Core principle
 
 This is **not** a blind copy-trading bot.
