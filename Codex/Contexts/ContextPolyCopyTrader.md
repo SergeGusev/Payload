@@ -1,6 +1,21 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-24 Production Server And Betting Check
+Goal: Verify current production service health, database delays, and ongoing Paper/Live betting.
+Status: Completed read-only; server healthy and Paper betting active
+Done:
+- Queried exact primary PostgreSQL 18.3 `192.168.0.101:5432/polycopytrader` through server-enforced `READ ONLY` UTC snapshots with `statement_timeout=15s`; no production state changed.
+- Service is `Running / Live` on deployed build `99f57d2d4bb04813a83d355f034b68b5ca40de18`, started `2026-08-23T19:44:26.645883Z`, with heartbeat advancing from `2026-08-24T05:23:32.663089Z` to `05:24:32.667002Z` and `last_error=NULL`.
+- Initial cutoff `2026-08-24T05:24:16.467093Z` found 2,367 Paper orders in 60 minutes and 862 in 15 minutes across 542 strategies; 849 of the 15-minute orders were Filled and 13 Expired. Entered-run counts independently matched active order flow, and 747/2,308 runs settled in the 15/60-minute windows.
+- A second cutoff `2026-08-24T05:25:29.814549Z` crossed the next cycle and found 258 additional Paper orders and 258 linked entered runs from 258 strategies after T0, latest at `05:25:02.764064Z`.
+- All 13 recent Expired orders belong to the exact ETH Reference Average Maker-GTD Paper exception; no Pending or Resting Paper order remained. Mandatory label: `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+- Exactly one strategy has `live_stakes=true`. In the preceding 24 hours it had five Matched Live orders and one Cancelled intent totaling six order records; latest Matched was `2026-08-24T01:15:00.191938Z`. No Live order was created in the latest 60 minutes.
+- Both checks found zero waiting locks; the first also found zero queries active over 30 seconds and zero transactions idle over five minutes.
+Next: Continue ordinary monitoring; no corrective action is currently indicated.
+Notes: The current-loop telemetry advanced through `05:24:30Z` with zero reported Seed/Aggregate/Dashboard DB scans in its latest/cumulative samples.
+Blockers: None.
+
 ## Active Update 2026-08-23 Historical Gross/Net Strategy Completion
 Goal: Complete pre-2026-08-10 historical Gross/Net parity one strategy at a time in descending current Gross order, with exact/local then donor then strict 3.3-point fallback precedence.
 Status: Implemented and independently reviewed locally; commit/push pending final requirement gates
