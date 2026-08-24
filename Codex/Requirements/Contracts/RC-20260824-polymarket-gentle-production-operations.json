@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260824-polymarket-gentle-production-operations",
+  "title": "Standing gentle-operation rule for PolyMarket",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Re: Я запустил одну атомарную транзакцию — принцип «либо записать всё, либо ничего». &#x20;\n\nЯ заметил, что ты каждый раз пытаешься сделать именно так. На большой базе, в момент живой работы сервиса. Потом ты несколько часов пытаешься решить эту проблему, потом я прошу тебя делать порциями.\n\nМы можем записать где-то выполнять все задачи в максимально щадящем режиме?"
+    },
+    {
+      "source": "user",
+      "text": "Давай пока ограничимся PolyMarket"
+    }
+  ],
+  "scope": {
+    "goal": "Persist a repository-local standing rule that PolyMarket work affecting its running production service or production database uses the least disruptive practical execution mode, with bounded batches instead of a single large atomic mutation by default.",
+    "inScope": [
+      "Root AGENTS.md instructions governing future PolyMarket tasks that can affect the running production service or production database.",
+      "Default use of short, bounded, restartable and idempotent batches for production mutations.",
+      "Read-only scale/lock/health preview before mutation and health/lock/error checks between batches.",
+      "Explicit user approval before using a single large all-or-nothing production mutation when batching cannot preserve the required correctness."
+    ],
+    "outOfScope": [
+      "Repositories and projects other than PolyMarket.",
+      "Executing or redesigning the currently blocked ETH LossDiff history backfill.",
+      "Any production database write, service action, deployment, backup, schema change, or trading action.",
+      "A universal fixed batch size that ignores the previewed operation and current production state.",
+      "Product source-code behavior beyond the repository-local Codex instruction."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Standing rule for future PolyMarket tasks; no historical or production data period is changed by this task.",
+    "firstVerification": "Inspect the existing root AGENTS.md operational rules and confirm the new instruction can be added without weakening existing evidence, approval, parity, or production safety gates."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Add a persistent PolyMarket-only instruction that tasks affecting the running production service or production database must use the least disruptive practical execution mode.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "выполнять все задачи в максимально щадящем режиме",
+      "acceptanceCriteria": [
+        "Root AGENTS.md contains a clearly titled standing rule scoped to PolyMarket production operations.",
+        "The rule prioritizes minimal production load, lock duration and interference even when a gentler execution takes longer."
+      ],
+      "implementationPaths": [
+        "AGENTS.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Inspect the scoped AGENTS.md diff and search for the complete gentle-operation rule.",
+          "expected": "The rule is present once, is explicitly limited to PolyMarket production operations, and does not weaken existing gates.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Make bounded batch execution the default for non-trivial production mutations instead of one large all-or-nothing transaction.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "потом я прошу тебя делать порциями",
+      "acceptanceCriteria": [
+        "The rule requires short bounded batches whose size is chosen from a read-only preview and stated before mutation.",
+        "Each batch must be independently atomic, idempotent and safely restartable from durable progress.",
+        "The operation must stop before subsequent batches when health, errors, locks, affected counts or invariants deviate from the preview."
+      ],
+      "implementationPaths": [
+        "AGENTS.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Compare the AGENTS.md batch requirements against REQ-002 acceptance criteria.",
+          "expected": "Batch sizing, per-batch atomicity, idempotency, restartability and between-batch stop checks are explicit.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Require a read-only preview and ongoing production-impact checks around every batch.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "На большой базе, в момент живой работы сервиса.",
+      "acceptanceCriteria": [
+        "Before mutation, the agent reports exact candidate counts, proposed batch size/count, transaction boundaries, expected lock/load profile and resume marker.",
+        "Between batches, the agent checks service heartbeat/errors, waiting locks and actual affected counts before continuing.",
+        "Long-running transactions, broad locks, service stop/restart, trigger bypass and similar high-impact methods are not introduced as hidden defaults."
+      ],
+      "implementationPaths": [
+        "AGENTS.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Inspect the AGENTS.md preview, monitoring and prohibited-hidden-default language.",
+          "expected": "The standing instruction makes production impact observable before and during batched execution.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Do not use a single large all-or-nothing production transaction by default; require a demonstrated correctness need and separate explicit user approval before choosing it over batching.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "ты каждый раз пытаешься сделать именно так",
+      "acceptanceCriteria": [
+        "The rule states that broad atomicity is not the default for live production work.",
+        "If batching cannot preserve a verified invariant, the agent must stop, explain the exact invariant, scale, duration, lock/load impact and alternatives, and obtain explicit user approval before the large transaction.",
+        "Technical preference or generic safety language alone cannot justify broad atomicity."
+      ],
+      "implementationPaths": [
+        "AGENTS.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the AGENTS.md exception gate for a single large transaction.",
+          "expected": "A large all-or-nothing mutation is fail-closed behind evidence and explicit approval.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Limit the standing instruction to PolyMarket.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "ограничимся PolyMarket",
+      "acceptanceCriteria": [
+        "Only the PolyMarket repository-local AGENTS.md is changed by the instruction task.",
+        "No global Codex instruction or other repository is modified."
+      ],
+      "implementationPaths": [
+        "AGENTS.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Inspect changed paths for this task.",
+          "expected": "The governed implementation path is AGENTS.md only; context/history and this contract may change under workflow rules.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260824-polymarket-gentle-production-operations sha256:d310dc1c2519bb4eb8abb8f7d429e9f5d4192c939a68a19405014186fd920e8e",
+    "semanticDigest": "sha256:d310dc1c2519bb4eb8abb8f7d429e9f5d4192c939a68a19405014186fd920e8e"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
