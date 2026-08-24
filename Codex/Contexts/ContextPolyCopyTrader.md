@@ -1,6 +1,19 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-24 Production Server And Betting Recheck
+Goal: Recheck current production service health, database delays, and Paper/Live betting.
+Status: Completed read-only; server healthy and both Paper and Live activity confirmed
+Done:
+- Exact PostgreSQL 18.3 primary `192.168.0.101:5432/polycopytrader` was inspected only through UTC `READ ONLY` transactions with `statement_timeout=15s`; no production state changed.
+- Service now runs deployed build `56294c1fe75838dfc83afecb41dcf4b91fbcb73b`, started `2026-08-24T06:09:54.793286Z`. Heartbeat advanced from `13:56:59.788809Z` to `13:57:59.790377Z`, status remained `Running / Live`, and `last_error=NULL`; final age was `22.951s` at cutoff `13:58:22.741653Z`.
+- At cutoff `2026-08-24T13:57:40.578830Z`, Paper orders numbered 131/592/2,615 in the preceding 5/15/60 minutes. All 592 recent orders were Filled across 420 strategies; linked entered runs independently matched 131/592, and 736 runs settled in 15 minutes. No Pending or Resting Paper order existed.
+- The single Live-enabled strategy `eth_up_down_5m_up_bps_50_instant` created three Matched `$6` Live orders in the last hour at `13:35`, `13:40`, and `13:45 UTC`. The 24-hour window contained 12 Matched and two Cancelled-intent rows.
+- PostgreSQL had zero waiting locks and zero idle transactions older than five minutes. The only activity longer than 30 seconds was an unblocked autovacuum on `dashboard_strategy_recent_projection_facts`; it waited only on `VacuumDelay` and had no blocking PIDs.
+Next: Continue ordinary monitoring; no corrective action is currently indicated.
+Notes: Current-loop telemetry remained fresh and reported zero latest/cumulative Seed, Aggregate, and Dashboard DB scans.
+Blockers: None.
+
 ## Active Update 2026-08-24 Production Server And Betting Check
 Goal: Verify current production service health, database delays, and ongoing Paper/Live betting.
 Status: Completed read-only; server healthy and Paper betting active
