@@ -83,6 +83,58 @@ Next: Run requirement validators, create the task-only implementation commit, pu
 Notes: No deployment, service restart, database/configuration mutation, production operation, or trading action was performed. The main worktree also contains unrelated concurrent LossDiff and prior contract/context changes which must remain outside this task commit.
 Blockers: None for local implementation. Dynamic PostgreSQL integration remains unexecuted because `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` was not configured.
 
+## Active Update 2026-08-23 ETH LossDiff History Backfill Contract
+Goal: Generate full pre-rollout causal Paper trade/accounting history for the two deployed ETH LossDiff children while preserving their post-rollout zero-start control state.
+Status: Draft contract validated; product edits and production mutation blocked pending exact approval
+Done:
+- Froze exact source filter to parent `b7c50005-0000-4000-8204-000000000001`, Settled nonzero-PnL entries strictly before common rollout cutoff `2026-08-23T19:44:26.488143Z`: 1,060 rows, 615 wins, 445 losses, canonical run/order/fill digest `sha256:c5f2baabe698c05eb0d8e4f6c98571390a07e858c1ac3c6a373bc7ead509bf01`.
+- Verified all 1,060 source rows have one exact signal/order/fill/run/zero-position/position-settlement chain, FAK execution source, Calculated Fee, and non-null exact Net.
+- Two independent causal calculations agree: Reset 4+ has 22 trades / 16 wins / 6 losses / stake `132.11160001` / Gross `45.64509784` / Fee `4.20526000` / Net `41.43983784`; Positive 13+ has 30 / 21 / 9 / stake `179.99999996` / Gross `51.39379117` / Fee `5.78854000` / Net `45.60525117`.
+- Exact modern embedded order-book snapshots exist for 10/22 Reset entries and 30/30 Positive entries. Draft deviation DEV-001 explicitly marks the other 12 Reset entries as parent-persisted-FAK-chain-only, not exact snapshot replay, while disclosing ordinary Paper metric and duplicate-liquidity impact.
+- Drafted and mechanically validated `RC-20260823-eth-lossdiff-history-backfill` at semantic digest `sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d`. It preserves live LossDiff state/events and all flags, creates only 22/30 complete eligible historical Paper chains, uses one serializable insert-only/idempotent transaction and marker, and excludes Live/deploy/restart/backup/DDL/deletion/skipped-observation history.
+Next: After the exact approval line, commit the approval-only checkpoint, implement and test the bounded C# preview/apply command, obtain independent semantic review, rerun production preview, then apply and verify only if every approved invariant still matches.
+Notes: An extended all-chain canonical query exceeded the retained 15-second read-only timeout and was canceled without writes; the successful method separated the already-proved 1,060/1,060 settlement-chain aggregate from the narrow indexed run/order/fill digest. No product or production state changed.
+Blockers: Exact user approval required: `APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:40ece44da27b7059128ed4a7c6911316675d1acfc3a72268249de45bdc81101d`.
+
+## Active Update 2026-08-23 Production LossDiff Migration Recheck
+Goal: Recheck current production deployment and LossDiff migration state immediately after the user requested another verification.
+Status: Completed read-only; migration applied and initial state healthy
+Done:
+- At production UTC snapshot `2026-08-23T19:45:15.884023Z`, ledger contained exact `0002-eth-lossdiff-gated-children` checksum `ea4acf9b6a444fea242ba86807f2b3580b0d111c7370fa40cda56f0e0cfd3767`, applied at `2026-08-23T19:44:26.538951Z`; both LossDiff relations existed.
+- Both exact strategies existed once, enabled/unpaused for Paper with `live_stakes=false`, `$1` Paper/Live configured stake, and exact active assignments to parent `b7c50005-0000-4000-8204-000000000001` in modes `LossDiffReset` and `LossDiffPositive`.
+- New production build `99f57d2d4bb04813a83d355f034b68b5ca40de18` started at `2026-08-23T19:44:26.645883Z`. Heartbeat advanced from `19:44:27.056171Z` to `19:45:27.134939Z`, status remained `Running`, and `last_error=NULL`.
+- Both durable states have exact thresholds 4 and 13, `current_value=0`, common cutoff `2026-08-23T19:44:26.488143Z`, and successful initial reconciliation. Parent event counts, child run counts, and child order counts are all zero, so no history was implicitly imported.
+- The first immediate post-start snapshot had one waiting lock. The bounded repeat at `19:45:45.730218Z` found zero blocked sessions and zero waiting locks; only PostgreSQL autovacuum work and one unblocked service aggregate remained active.
+Next: Define and approve the separate full-history backfill mutation before generating historical child runs/orders/fills/PnL and LossDiff events/state.
+Notes: Checks were server-enforced repeatable-read/read-only with UTC, 15-second statement timeout, and 3-second lock timeout. No database, service, deployment, strategy, order, or trading state was changed.
+Blockers: None for deployed strategy readiness; history generation remains a separate unapproved mutation.
+
+## Active Update 2026-08-23 Production LossDiff Migration Diagnosis
+Goal: Determine read-only why production did not apply `0002-eth-lossdiff-gated-children`.
+Status: Completed read-only; deployed binary does not contain migration 0002
+Done:
+- Verified exact production heartbeat at `2026-08-23T19:41:36.809313Z`: service is healthy and running build `a28aff1d769299a6c6b40191c3a637b79f40a417`, started `2026-08-23T19:29:43.113504Z`, with `last_error=NULL`, 26 current service database sessions, and zero waiting locks.
+- Git ancestry proves deployed `a28aff1d` is a strict ancestor of implementation commit `dfa82c91`; `a28aff1d` contains only immutable baseline migration `0001`, has no `PostgresLossDiffStrategySchemaMigration.cs`, and does not register migration `0002`.
+- Verified the service always calls `IStorageSchemaInitializer.InitializeAsync()` before `RunAsync()`. Because the deployed catalog contains only already-applied `0001`, that successful startup has no pending `0002` to execute.
+- Production independently confirms the same mechanism: migration ledger contains only `0001`, both LossDiff relations are absent, both child strategies are absent by exact ID/code/name, while the heartbeat advances normally under `a28aff1d`.
+- Searched `.github`, deployment scripts, README, and deployment runbook. The sole GitHub workflow validates requirement contracts and performs no deployment; service publish/install is a manual `deploy/install-service.ps1` operation that embeds the checked-out commit into the heartbeat version.
+Next: If requested, prepare a separately approved deployment preflight for the current deployment branch, including exact artifact/version, Live safety state, migration preview, restart plan, and post-start verification.
+Notes: Derived from verified evidence: migration `0002` did not fail; it was never attempted because committing/pushing `dfa82c91` did not replace the production binary. The production service was later started from the existing older publish artifact. The actor/reason for that old-artifact restart is not established by database/Git evidence and would require host Windows Service/file-log audit.
+Blockers: None for diagnosis; deployment/migration remains a separate mutation requiring explicit approval.
+
+## Active Update 2026-08-23 LossDiff History Generation Preflight
+Goal: Check the two requested ETH LossDiff strategies and generate their full available history only if the deployed state is ready.
+Status: Blocked before mutation; production deployment/migration is absent
+Done:
+- Ran server-enforced read-only UTC previews against exact production `192.168.0.101:5432/polycopytrader` and local `127.0.0.1:5432/polycopytrader`; no database, service, trading, deployment, or product-source mutation occurred.
+- Production has exact parent `b7c50005-0000-4000-8204-000000000001` enabled/unpaused with `live_stakes=false` and 1,060 settled nonzero-PnL entered runs from `2026-07-10T21:29:30.694920Z` through `2026-08-23T13:59:30.164052Z`; wins/losses are 615/445.
+- Production has zero candidates by either requested child ID/code/name, zero matching assignments, no `strategy_loss_diff_states` or `strategy_loss_diff_parent_events` relation, and no `0002-eth-lossdiff-gated-children` ledger row. Running service build is still `a28aff1d769299a6c6b40191c3a637b79f40a417`, with advancing healthy heartbeat and zero waiting locks.
+- Local has exact migration `0002` checksum, both enabled/unpaused Paper children with `live_stakes=false`, exact assignments, and both durable states at zero with zero parent events. Local parent has only two runs and zero settled runs, so it cannot supply the requested history.
+- A read-only raw-row replay over the 1,060 production parent outcomes, with strict `settled_at_utc < candidate entered_at_utc` causal gating and two locally cross-checked formulas, previews 22 eligible LossDiff Reset 4+ parent entries and 30 eligible LossDiff Positive 13+ parent entries. These are candidate counts only; no child rows were generated.
+Next: Obtain explicit authority to deploy the current LossDiff-capable build and apply migration `0002` to production, and confirm whether history means full child runs/orders/fills/PnL rather than only LossDiff state/event rows; then draft/approve the exact mutation contract and rerun a post-deployment preview.
+Notes: Two attempted all-SQL causal aggregations exceeded the retained 15-second read-only statement timeout and were canceled; the successful bounded fallback selected only the 1,060 source rows and calculated locally. The first local independent reset formula was rejected after its own cross-check exposed an implementation mistake; the corrected two-formula replay passed. No rejected result was used.
+Blockers: Production does not yet contain the two strategies or their schema, and the user has not authorized the separate deployment/schema-migration prerequisite or chosen the exact history artifact set.
+
 ## Active Update 2026-08-23 Current Production Betting Check
 Goal: Determine whether bets are being created now on exact production `192.168.0.101:5432/polycopytrader`.
 Status: Completed read-only; Paper betting is active
@@ -133,6 +185,116 @@ Done:
 Next: Complete staged and post-commit Range requirement-gate checks, commit only governed hunks, then push the already checked-out deployment branch.
 Notes: Locked scope remains two new Paper-default strategies, their exact gates/state, tests, and required parity/documentation only; Live enablement, deployment, database application, historical generation, real orders, and unrelated dirty work remain excluded.
 Blockers: None inside the approved scope; 216 pre-existing full-suite failures remain outside this task and are reproduced on clean current HEAD. PostgreSQL runtime integration remains deliberately unexecuted because the approved task forbids mutating any database.
+
+## Active Update 2026-08-23 Local Startup Baseline Acceptance
+Goal: Make the current local service start correctly after the already completed baseline run.
+Status: Baseline registration succeeded; second startup reproduced the runtime timeout defect, and a separate exact product-fix approval is required
+Done:
+- Approval-only checkpoint `c1a7fc37` recorded the user's exact approval of digest `sha256:f809e12010a1635a2d6c66d4d3d0372c081121803cf2d4ff4ba7c43e98c2bd2a` before mutation.
+- Fresh forced-read-only preflight at `2026-08-23T17:29:11.448700Z` reverified exact primary `127.0.0.1:5432/polycopytrader`, PostgreSQL 17.5, all required relations, 110 tables, 376 indexes, 15 data markers, zero migration-history rows, 3,341 strategies, 1,440 accepted baseline-created strategies, 3,195 enabled/unpaused strategies, and zero active `live_stakes` strategies or Live orders.
+- Under the migration advisory lock, committed exactly one history row for `0001-legacy-baseline-a3b0457f` with checksum `4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2` at `2026-08-23T17:29:31.778246Z`. Strategy count and deterministic catalog digest were identical before and after; no baseline SQL or other manual DML/DDL ran.
+- Two exact initializer invocations both skipped the registered migration and succeeded. The exact Release build `7b255d6986e3b94fe77c3e1181109bc87c7b0b22` then started normally, reported two advancing `Running/Live` heartbeats at `17:30:37.291659Z` and `17:31:37.359345Z`, kept `last_error=NULL`, and created zero Live orders.
+- Ordinary first-start catch-up changed only measured local runtime data: signals `84,655 -> 84,736`, runs `61,046 -> 64,829`, Paper orders `32,566 -> 32,647`, fills `5,511 -> 5,512`, positions `4,852 -> 4,853`, and settlements `3,971 -> 4,027`; seeded strategies produced 1,220 runs and zero Paper/Live orders.
+- The first process lived approximately `98.539s`, exceeding the approved absolute limit by `8.539s`. It was stopped by exact PID `80500` and is absent.
+- Service and PostgreSQL logs independently proved five read timeouts at `17:31:35-17:31:36Z`: a 2,000-run direct Paper skip-compaction SQL had already taken `20.649s`; its successor held advisory lock `[1346589778,1]` beyond 30 seconds, blocking four queued writers. The holder and waiters timed out, then the persistence queue recovered after one retry at `17:31:36.803Z`. This was runtime catch-up pressure, not migration replay or host termination; recurrence on a normal second start remains unknown.
+- Revised the contract to draft with both deviations and a minimal second-start verification only. Contract mode validation passed at semantic digest `sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303`; product code, configuration, schema, Production, and Live actions remain forbidden.
+- User reapproved digest `sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303`; approval-only checkpoint `6b8879ba` passed exact parent-to-commit Range validation.
+- Second read-only preflight at `2026-08-23T17:55:09.601290Z` matched exact local endpoint, baseline, build/config, counts, zero processes/services, zero active Live stakes/Live orders, and zero ungranted locks. Exact PID `39400` started at `17:55:22.0688363Z`; heartbeats advanced from `17:55:22.684902Z` to `17:56:22.728956Z` with `Running/Live`, exact build, and `last_error=NULL`.
+- The defect recurred. Exact service interval contained 11 Error events and two persistence retry/recovery sequences; PostgreSQL independently recorded 11 cancelled service statements and repeated advisory-lock waits. Three captured production-v1 archive plans each received 2,000 input rows and performed respectively 2,704,000, 4,000,000, and 1,556,000 rejected correlated JSON join pairs; completed instances took `10.529s`, `21.852s`, and `11.137s`, while gate waiters reached the unchanged 30-second timeout.
+- The exact process was stopped at `17:57:17.8588394Z`; it lived `115.790s` and exceeded the approved 90-second post-first-heartbeat interval by `25.174s` while staying below the absolute 120-second limit. Process and service database connections are absent; ungranted locks and Live orders are zero.
+- Second-run ordinary local runtime deltas were signals `84,736 -> 84,819`, runs `64,829 -> 67,692`, Paper orders `32,647 -> 32,730`, fills `5,512 -> 5,515`, positions `4,853 -> 4,856`, settlements `4,027 -> 4,028`, Live orders `0 -> 0`.
+- Code inspection proved the quadratic SQL duplicate scan is redundant on the production v1 path: both callers run `EnsureUnambiguousDirectPaperSkipInput` before opening the database transaction, and the existing integration test already proves duplicate IDs/normalized strategy-market keys fail before persistence. No product edit was made.
+- Drafted exact bounded fix contract `RC-20260823-direct-skip-compaction-linear-validation`; it removes only the redundant production-v1 correlated self-join, preserves the C# fail-closed uniqueness gate and every other behavior, adds 2,000-run regression coverage, and requires a clean bounded local startup. Validation passed at digest `sha256:64c66d662c534ca297dd09aa0756d094c00d64d3c40a26447c77c043df5448fc`.
+Next: After exact approval of the new fix contract, commit its approval-only checkpoint, make only the mapped source/test change, verify it independently, and run the bounded local host acceptance.
+Notes: Production was never connected. No product source/configuration/schema change occurred in either failed runtime verification. The local service is stopped.
+Blockers: Exact product-fix approval required: `APPROVE RC-20260823-direct-skip-compaction-linear-validation sha256:64c66d662c534ca297dd09aa0756d094c00d64d3c40a26447c77c043df5448fc`.
+
+## Active Update 2026-08-23 Production vs Local Schema Comparison
+Goal: Determine read-only whether the exact production and local `polycopytrader` database structures coincide.
+Status: Completed; physical public schemas do not coincide
+Done:
+- Captured repeatable-read, UTC, forced `READ ONLY` catalog snapshots with `statement_timeout=15s` from exact local `127.0.0.1:5432/polycopytrader` (PostgreSQL 17.5, cutoff `2026-08-23T11:32:30.797805Z`) and production `192.168.0.101:5432/polycopytrader` (PostgreSQL 18.3, cutoff `2026-08-23T11:32:30.856539Z`). Both endpoints are primaries and contain every current `PostgresSchema.RequiredTables` relation.
+- Compared relations, semantic column definitions/defaults/nullability, non-NOT-NULL constraints, indexes, user triggers, functions, views, sequences, standalone types, RLS/policies, and extended statistics. PostgreSQL 18 catalog-only NOT NULL constraints and column ordinal order were normalized separately from semantic definitions.
+- Physical mismatch is exact: production has eight extra maintenance/recovery tables (`codex_preopen_full_delete_*` six-table family plus `maintenance_live_paper_restore_20260704` and `maintenance_paper_shadow_live_sync_20260705`) with 30 columns, 12 constraints, and 18 indexes; local alone has retired legacy index `ix_paper_positions_wallet_updated`.
+- After excluding exactly those maintenance/recovery relations and the retired local index, the remaining 2,755 canonical application objects have zero missing and zero changed semantic definitions. Physical column order nevertheless differs for 38 otherwise-identical columns across five application tables.
+- Independent `information_schema`/`pg_indexes` verification at cutoffs `2026-08-23T11:34:00.470457Z` and `11:34:00.522291Z` confirmed local `110` tables / `376` indexes / `1` view / `46` routines / `90` triggers versus production `118` / `393` / `1` / `46` / `90`, and independently confirmed the retired index exists only locally.
+- Migration state also differs: local migration history has zero rows versus production's one accepted immutable baseline row; data-migration markers are local `15` versus production `18`, with four production-only keys and one local-only manual cleanup key.
+Next: Do not register the local baseline or change either schema under this read-only task. Decide separately whether local must become a physical production clone or only match the current application schema before any approved mutation.
+Notes: No database, service, trading, strategy, configuration, schema, or product-source mutation occurred.
+Blockers: None for the comparison; exact physical equality is disproved.
+
+## Active Update 2026-08-23 LossDiff Positive 1-17 Research Simulation
+Goal: Simulate and visualize 17 fixed-stake LossDiff N Positive threshold strategies.
+Status: Completed
+Done:
+- Revalidated production read-only scope at `2026-08-23T11:03:18.723554Z`: exact parent `b7c50005-0000-4000-8204-000000000001`, 1,053 settled rows from `2026-07-10T21:29:30Z` through `2026-08-23T08:44:30Z`, with zero missing entry/settlement/stake/gross/fee/Net inputs.
+- Modeled N=1..17 with the nonnegative reflected LossDiff counter (loss +1, win -1, floor zero), causal entry at settled LossDiff >= N, and the parent's unchanged factual stake, direction, price, and execution; no Progress multiplier was applied.
+- Independently reproduced every metric through a set-based PostgreSQL event-window calculation and a separate local PowerShell event replay; all trade counts, wins/losses, stake, Net, ROI, and Max DD totals agreed.
+- Created and visually verified `lossdiff-positive-1-17-backtest.html/.png` in the thread visualization directory at 1,024, 736, and 360 pixel widths with all 17 bars/table rows and no browser errors.
+Next: None.
+Notes: Highest absolute Net is N=1 at +$121.11 on 678 trades; among selective thresholds N=4 is +$62.09 on 332 trades and N=9 is +$46.63 on 129 trades. N=13 has +$45.61 and 25.34% ROI but only 30 trades; N=16 has one trade and N=17 none. Results remain ResearchOnly counterfactual execution evidence. No database, service, trading, configuration, or product-source mutation occurred.
+Blockers: None.
+
+## Active Update 2026-08-23 Local Upgrade Option 1 Explanation
+Goal: Explain the first recovery option without changing the database.
+Status: Completed read-only explanation; database decision remains blocked
+Done:
+- Clarified that option 1 means accepting the database's current post-baseline state and inserting only the missing immutable baseline history row; the insert itself neither starts the service nor creates any bet.
+- Clarified the later runtime consequence: after a manual service start, migration replay stops, but the 1,440 newly seeded enabled/unpaused strategies become eligible for ordinary evaluation and Paper activity; all currently have `live_stakes=false` and zero existing runtime rows.
+- Preserved the key unknown: 938 pre-existing strategies were touched after the cutoff, but no pre-upgrade row snapshot exists to prove their exact field-by-field before/after delta.
+- Verified from the current migration catalog that it contains exactly one versioned migration: immutable baseline `0001`; there are no later catalog migrations waiting behind it. All 789 baseline statements already completed without a PostgreSQL exception and all 14 embedded baseline markers plus the pre-existing manual marker are present.
+- Clarified failure semantics: the missing ledger row does not mean an embedded migration is pending; it means the completed non-transactional baseline has not been formally accepted and must pass comprehensive post-state verification before registration.
+Next: User decides whether accepting the current catalog is acceptable; if so, separately decide whether the 1,440 new strategies stay enabled for the later service start or are disabled/paused under a newly approved exact mutation.
+Notes: No database, service, strategy, order, configuration, production, or product-source mutation occurred during this explanation.
+Blockers: Further database mutation requires a new exact user choice and requirement approval.
+
+## Active Update 2026-08-23 LossDiff Progress ROI Explanation
+Goal: Explain why LossDiff N Progress ROI is not monotonic as N increases.
+Status: Completed
+Done:
+- Revalidated the exact production parent scope read-only at `2026-08-23T10:56:30.416213Z`: 1,053 settled rows through `2026-08-23T08:44:30.724079Z`, with zero missing Net/stake inputs.
+- Proved algebraically that the constant N multiplier cancels from ROI: both Net PnL and total stake are multiplied by N, so only the changing `LossDiff >= N` trade subset affects ROI.
+- Decomposed the nested thresholds into exact LossDiff bands 1..16. Band ROI is strongly non-monotonic, including exact 3 at -11.58%, 4 at +15.42%, 8 at -24.01%, 10 at +28.55%, 12 at -36.26%, and 13 at +38.32%; removing each band therefore makes the next threshold ROI jump up or down.
+Next: If requested, simulate a different Progress rule whose multiplier depends on the current per-trade LossDiff rather than the fixed threshold N.
+Notes: This explanation does not change the prior simulation. N=16 remains one trade and N=17 has none, so high-N ROI is especially unstable. No database, service, trading, visualization, configuration, or product-source mutation occurred.
+Blockers: None.
+
+## Active Update 2026-08-23 LossDiff Progress 1-17 Research Simulation
+Goal: Simulate and visualize LossDiff N Progress for N=1..17 against the exact ETH parent strategy.
+Status: Completed
+Done:
+- Ran a fresh production `READ ONLY` snapshot for strategy `b7c50005-0000-4000-8204-000000000001`: 1,053 settled rows from `2026-07-10T21:29:30Z` through `2026-08-23T08:44:30Z`, 611 wins and 442 losses, with complete calculated gross/fee/Net accounting.
+- Modeled the causal nonnegative reflected counter: loss `+1`, win `-1`, floor at zero; each child N enters when the counter already settled by entry time is at least N and scales the parent's stake, gross, fee, and Net by N.
+- Independently reproduced all N=1..17 metrics using a local event replay and a set-based PostgreSQL event-window calculation; every total agreed. Maximum counter at entry was 16, so N=17 had zero trades.
+- Created and visually verified the durable inline visualization and PNG at `C:/Users/serge/.codex/visualizations/2026/08/23/01a02d31-4303-7d70-819a-5d6186653877/lossdiff-progress-1-17-backtest.*` at 1024, 736, and 360 pixel widths with no browser errors.
+Next: None.
+Notes: Highest in-sample modeled Net was N=13 at +$592.87 on 30 trades; N=9 produced +$419.64 on 129 trades. This is ResearchOnly proportional execution without an order-book depth replay, not Live-equivalent evidence. No database, trading, service, configuration, or product source mutation occurred.
+Blockers: None.
+
+## Active Update 2026-08-23 Local Legacy Database Startup Failure
+Goal: Restore local `PolyCopyTrader.Service` startup against `127.0.0.1:5432/polycopytrader` without silently changing or deleting local history.
+Status: Baseline SQL completed but post-gate found unauthorized catalog seeding; stopped before history registration and blocked on a new user decision
+Done:
+- Verified the supplied current Release binary is exact head `7b255d6986e3b94fe77c3e1181109bc87c7b0b22`. Its `2026-08-23 10:16:19 +03:00` log proves startup reaches `PostgresSchemaInitializer` and intentionally fails before `RunAsync` because the nonempty database has no `schema_migration_history` and is not the exact allowed production baseline; no legacy SQL ran.
+- Verified the connection source without exposing credentials: process/user environment resolves to local PostgreSQL 17.5 at `127.0.0.1:5432/polycopytrader`, not production. All inspection SQL ran in explicit UTC `READ ONLY` transactions with `statement_timeout=15s`.
+- The local database has `576` public application objects, `89` tables, and substantial history (`1,928` strategies, `32,577` Paper orders, `5,522` fills, `61,380` strategy runs, `84,666` signals). It has no migration ledger and lacks the new dashboard/copied-performance projection relations and terminal triggers.
+- Latest local service heartbeat is old build `e58c6dd64a94b289f70464ce3f12fdf35fc435b3` at `2026-07-08T16:53:36.892306Z`. Five embedded data migrations are absent. Replaying the full immutable legacy schema would target `27` retired strategies: 1 Follow Leader, 10 ETH Down Filtered Average, and 16 of the 57 hopeless Progress allowlist currently present; current bounded dependency preview finds `334` strategy runs, `11` Paper orders, `11` fills, `11` linked signals, and `11` positions in those present targets, with zero Live orders. SOL Binance and paired Maker target counts are zero.
+- Confirmed there is no existing configuration switch that can safely bypass schema initialization; merely recording the baseline would leave required relations absent and move the failure into runtime.
+- User selected option 1 verbatim: `1 - обновляем базу`. Drafted `RC-20260823-local-legacy-database-upgrade` for a one-time exact-local in-place upgrade; its validated semantic digest is `sha256:21c2054c07118fcc889de070ba987acc8bdb21f84a4f01bfa4e1c43348e03d36`.
+- The draft explicitly excludes production, product-code changes, full service start, backup creation, and all data outside the immutable baseline's exact 27 cleanup targets and dependencies. It discloses that the baseline is non-transactional and has no full-run rollback without a separately approved backup.
+- User approved exact semantic digest `sha256:21c2054c07118fcc889de070ba987acc8bdb21f84a4f01bfa4e1c43348e03d36`.
+- Approval-only checkpoint `c24ea95c` passed Range validation. A fresh exact read-only preflight at cutoff `2026-08-23T10:42:27.745474Z` matched endpoint, PostgreSQL 17.5, 576 objects, 89 tables, 307 indexes, one sequence, ten migration markers, exact old heartbeat build, and the 27 target/core dependency counts.
+- The same complete preflight found previously unenumerated target dependencies: one Paper settlement, ten diff-state rows, 27 lifetime Dashboard snapshots, and 81 recent Dashboard snapshots. All other checked dependency families, Live orders, paired-family dependencies, and paired Maker worker api_errors were zero.
+- This new evidence invalidated the prior approval before any write. The contract now includes the exact expanded blast radius and the later user message `Опять ошибка`; its replacement digest is pending validation.
+- User approved the revised exact semantic digest `sha256:c3588c790af3e8216c805a04cccbadbf330a8f76952a2f49f31e98483387668b`.
+- Reapproval checkpoint `13ff61a2` was committed before mutation. Exact read-only cutoffs `2026-08-23T10:52:49.582574Z` and `10:52:49.783592Z` matched every approved identity/count; the immutable checksum was exact and the migration advisory lock was acquired.
+- All 789 immutable baseline statements completed and the approved 27 targets/dependencies were removed exactly. The post-gate then found an unapproved baseline side effect: current catalog seeding created 1,440 enabled/unpaused, `live_stakes=false` strategies and updated 938 pre-existing strategy rows. Strategy count became 3,341 rather than the contract's expected 1,901.
+- Fail-closed behavior stopped before inserting migration history. Current local state at read-only cutoff `2026-08-23T10:54:16.414531Z`: history relation exists with zero rows; 15 data markers; 110 tables; 376 indexes; required projection relations present; core counts 32,566 orders, 5,511 fills, 61,046 runs, 84,655 signals, 4,852 positions, 3,971 settlements, zero Live orders.
+- The 1,440 new strategies have zero Paper runs/orders and zero Live orders. All 1,440 are enabled/unpaused; 938 pre-existing rows have post-cutoff `updated_at_utc`, but exact prior field values cannot be reconstructed without a pre-upgrade row snapshot. No mutation occurred after the mismatch, no baseline row was falsely recorded, the full service was not started, and production was not accessed.
+- Wrote exact non-secret failure evidence to `Codex/Reports/LocalLegacyDatabaseUpgrade-20260823.md`. Prior approval is invalidated in the working tree pending a new choice.
+Next: User chooses whether to (1) retain the current seeded catalog and authorize baseline history registration, with service still not started until catalog runtime impact is separately accepted; or (2) stop and restore the local database from a user-provided pre-upgrade backup. Any attempt to delete/disable the new strategies or reconstruct the 938 old rows is a separate mutation requiring an exact contract.
+Notes: The service still cannot initialize because `schema_migration_history` exists but is empty. There is no full automatic rollback because no backup was authorized and the baseline is non-transactional.
+Blockers: A new user decision is required; further database mutation is forbidden under the invalidated contract.
 
 ## Active Update 2026-08-23 Maker-GTD Evidence Fast-Lane Contract
 Goal: Correct the proven exact ETH Maker-GTD market-data backlog without changing trading decisions or losing accepted evidence.

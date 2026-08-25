@@ -234,8 +234,10 @@ execution rule and is not consulted by future LossDiff gating. It clones only a
 causally selected, already persisted parent `FAK` signal/order/fill/run/position/
 settlement chain before `2026-08-23T19:44:26.488143Z`, preserves the parent's
 exact intent and accounting fields, and writes no LossDiff state/event or Live
-row. Every cloned row carries exact parent IDs, cutoff, source digest, threshold,
-pre-entry LossDiff, and evidence version `eth_lossdiff_parent_mirror_history_v1`.
+row. Every audit-bearing cloned signal/order/fill/run row carries exact parent
+IDs, cutoff, source digest, threshold, pre-entry LossDiff, and evidence version
+`eth_lossdiff_parent_mirror_history_v1`; position and settlement rows preserve
+the copied accounting fields in schemas that have no matching audit column.
 The child fill preserves the parent's canonical `Calculated` entry fee, zero
 fill-level realized PnL, and SQL `NULL` fill-level Net; fee-inclusive Net remains
 the matching run/settlement value.

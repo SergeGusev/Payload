@@ -3,7 +3,7 @@
   "contractId": "RC-20260823-local-startup-baseline-acceptance",
   "title": "Accept the completed local baseline and verify local service startup",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "draft",
   "originalRequests": [
     {
       "source": "user",
@@ -67,8 +67,8 @@
           "kind": "runtime",
           "command": "Run the approval-bound disposable C#/.NET ledger-registration runner under the marked D:\\CodexTemp session after the exact forced-read-only preflight.",
           "expected": "Only the exact local database receives one committed baseline-history row; no schema statement or other manual DML runs.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "At 2026-08-23T17:29:31.778246Z exactly one local baseline-history row was committed under the migration advisory lock with the approved ID, checksum, and details. No baseline SQL or other manual DML/DDL ran; two initializer invocations then skipped the applied baseline."
         }
       ]
     },
@@ -92,8 +92,8 @@
           "kind": "inspection",
           "command": "Capture and compare a deterministic digest of all strategy identifiers and mutable catalog fields immediately before and after the one-row ledger transaction.",
           "expected": "Strategy count and field digest are unchanged by registration; the exact seeded/touched populations remain present.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The registration transaction preserved all 3,341 strategy rows and their deterministic catalog digest; all 1,440 accepted baseline-created strategies remained enabled/unpaused with live_stakes=false, and active live_stakes remained zero."
         }
       ]
     },
@@ -119,8 +119,8 @@
           "kind": "runtime",
           "command": "Use the already verified initializer evidence, then run the exact existing local Release host a second time for at most 120 seconds of absolute process lifetime and at most 90 seconds after its first healthy heartbeat while polling its exact process and local heartbeat; stop that process, inspect the exact service/PostgreSQL log interval, and reconcile local runtime deltas.",
           "expected": "The host stays running with two advancing healthy local heartbeats, the initial catch-up timeout burst does not recur, no Live order appears, and only measured ordinary local runtime writes occur.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "failed",
+          "evidence": "Second exact Release process PID 39400 started at 2026-08-23T17:55:22.0688363Z and was stopped at 2026-08-23T17:57:17.8588394Z. Heartbeats advanced from 17:55:22.684902Z to 17:56:22.728956Z with Running/Live, exact build, and NULL last_error; Live orders remained zero. The interval contained eleven service Error events, eleven PostgreSQL statement cancellations in service sessions, repeated 30-second advisory-lock waits, and two persistence retry/recovery sequences. The process lived 115.790 seconds and exceeded the approved 90-second post-first-heartbeat interval by 25.174 seconds while remaining under the 120-second absolute limit."
         }
       ]
     },
@@ -157,10 +157,10 @@
       "text": "The first verification process lived for approximately 98.539 seconds, exceeding the approved absolute 90-second limit by approximately 8.539 seconds while waiting to capture the second advancing heartbeat and post-heartbeat evidence.",
       "impact": "The prior approval was invalidated. The process was stopped by Codex, no Live order was created, and no further local service start or database mutation is permitted until this revised contract is approved.",
       "approval": {
-        "status": "approved",
+        "status": "pending",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303",
-        "semanticDigest": "sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303"
+        "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:<pending>",
+        "semanticDigest": "pending"
       }
     },
     {
@@ -168,18 +168,29 @@
       "text": "The first verification produced five Npgsql read-timeout Error events while one 2,000-run direct Paper skip-compaction query held the shared strategy-run retention advisory gate; the queue retried once and recovered after the holder timed out.",
       "impact": "The baseline registration and host startup are verified, but correct steady-state local operation is not yet verified. One second bounded normal start is required before completion; recurrence blocks completion and requires a separately approved product-performance repair.",
       "approval": {
-        "status": "approved",
+        "status": "pending",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303",
-        "semanticDigest": "sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303"
+        "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:<pending>",
+        "semanticDigest": "pending"
+      }
+    },
+    {
+      "id": "DEV-003",
+      "text": "During the second verification the exact process remained alive for 115.790 seconds, within the 120-second absolute limit but 25.174 seconds beyond the approved 90-second interval measured from the first healthy heartbeat because a yielded shell wait lost its resumable session identifier and the next poll was delayed.",
+      "impact": "The exact process was stopped before the absolute limit, no Live order was created, and the verification result is failed independently of this timing deviation because the database timeout defect recurred. No further service start or product/database mutation is permitted under this contract.",
+      "approval": {
+        "status": "pending",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:<pending>",
+        "semanticDigest": "pending"
       }
     }
   ],
   "approval": {
-    "status": "approved",
+    "status": "pending",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303",
-    "semanticDigest": "sha256:e77dcdc7d65bf85287201596f46285212bfc73eeb57dc2f087069f420eaba303"
+    "evidenceText": "APPROVE RC-20260823-local-startup-baseline-acceptance sha256:<pending>",
+    "semanticDigest": "pending"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_local_startup_baseline_acceptance",

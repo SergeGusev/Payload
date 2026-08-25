@@ -123,3 +123,10 @@ Request:
 
 Result:
 Strictly read-only production verification confirmed PostgreSQL 18.3 and a newly started `PolyCopyTrader.Service` running exact merged revision `26d6287454e6b45393d49515b7cca4454f2c77ce`, with advancing heartbeat and empty error. The exact 217 target UUID/code rows remain present but disabled, Live-off and permanently paused; zero target strategy updates, Paper orders, Live orders, or strategy runs appeared after the new service start. Cleanup marker count remains zero, so history has not been deleted. All three referenced source strategies and three retained LowerEnter owners remain exact. One transient service lock wait cleared within the bounded recheck; final idle-transaction, lock-wait and ungranted-lock counts were zero. No production or service state was mutated.
+
+## 2026-08-20T20:39:23.3820967Z
+Request:
+Завтра продолжим
+
+Result:
+Paused the approved permanent `signals(trader_wallet,id)` index task at a fail-closed product-health gate. The exact index is already defined in the source worktree, focused test passed 1/1, Release build passed with zero errors, and the local PostgreSQL index was created and verified valid/ready/live at 7,315,456 bytes. Product DDL and Progress-217 deletion were not run because the product heartbeat was more than 31 minutes stale and PostgreSQL had zero service sessions. Resume after product service health is restored.

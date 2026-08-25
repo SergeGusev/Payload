@@ -3,7 +3,7 @@
   "contractId": "RC-20260823-local-legacy-database-upgrade",
   "title": "Upgrade the exact local legacy PostgreSQL database in place",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "draft",
   "originalRequests": [
     {
       "source": "user",
@@ -161,10 +161,10 @@
   "assumptions": [],
   "deviations": [],
   "approval": {
-    "status": "approved",
+    "status": "pending",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260823-local-legacy-database-upgrade sha256:c3588c790af3e8216c805a04cccbadbf330a8f76952a2f49f31e98483387668b",
-    "semanticDigest": "sha256:c3588c790af3e8216c805a04cccbadbf330a8f76952a2f49f31e98483387668b"
+    "evidenceText": "APPROVE RC-20260823-local-legacy-database-upgrade sha256:<pending>",
+    "semanticDigest": "pending"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_local_legacy_upgrade",
