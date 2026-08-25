@@ -3,7 +3,7 @@
   "contractId": "RC-20260825-copied-performance-aggregate-timeout",
   "title": "Restore copied-trader performance projection progress",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -50,16 +50,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~StorageTests.PostgresRepository_PaperCopiedTraderPerformance_UsesBoundedWalletProjection --artifacts-path <runPath>/artifacts --results-directory <runPath>/results",
           "expected": "The focused source-contract test passes and proves the exact dedicated timeout placement/count.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused Release source-contract test passed 1/1. TRX SHA-256: 5DDC066EF9AB708023CE9D8A16134B3A763B25CDB9F0E11FF979C17A4A28CDFC."
         },
         {
           "id": "VER-002",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PaperCopiedTraderPerformance --artifacts-path <runPath>/artifacts --results-directory <runPath>/results",
           "expected": "Copied-performance unit and available PostgreSQL integration regression tests pass; any database-backed early skip is reported explicitly.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Copied-performance Release filter passed 20/20. Fourteen PostgreSQL integration tests returned early because POLYCOPYTRADER_TEST_POSTGRES_CONNECTION was absent; six unit/source-contract tests executed. TRX SHA-256: 2364482B3FFCC4E515C4BA9EDC80384CC14BA92364BF38545269486B1ECD5C25."
         }
       ]
     },
@@ -84,16 +84,16 @@
           "kind": "inspection",
           "command": "Inspect the scoped diff against the approved parent and compare the complete aggregate SQL and surrounding transaction flow.",
           "expected": "Only one timeout constant, one aggregate-command assignment, focused assertions, and matching documentation are changed; aggregate SQL and all excluded behavior are unchanged.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Scoped diff and independent review confirmed one dedicated constant, one assignment on the existing aggregate command, and no aggregate SQL/formula/transaction-flow change. Normalized aggregate SQL SHA-256 remained 12271620a7abf7e0c6c5dc1c7c717542fa0ab9b07df7c88600db24df00763174."
         },
         {
           "id": "VER-004",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <runPath>/artifacts",
           "expected": "Solution build completes with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release solution build exited 0 with zero errors and 126 pre-existing warnings; all project artifacts were written under the marked D:\\CodexTemp run."
         }
       ]
     },
@@ -118,8 +118,8 @@
           "kind": "inspection",
           "command": "Run requirement WorkingTree/Staged/Range gates, git diff --check, inspect staged paths, and obtain independent semantic review.",
           "expected": "All gates pass for this contract, the reviewer records PASS with no findings, and unrelated working-tree paths are absent from task commits.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "git diff --check passed for the governed diff; only README.md, PostgresAppRepository.cs, and StorageTests.cs were staged. Independent semantic reviewer agent:/root/copied_perf_timeout_review returned PASS with no findings after comparing the request, approved contract, diff, SQL hash, TRX evidence, and build artifacts. The main full-working-tree gate reported only pre-existing unrelated August 23 contract approval changes; the task-scoped staged and range gates are run around the implementation commit."
         }
       ]
     }
@@ -156,9 +156,9 @@
     "semanticDigest": "sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/copied_perf_timeout_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

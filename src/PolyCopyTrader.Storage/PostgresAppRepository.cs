@@ -21,6 +21,8 @@ public sealed partial class PostgresAppRepository(PostgresConnectionFactory conn
 
 	private const int PaperCopiedTraderPerformanceRefreshLockKey2 = 1329812039;
 
+	private const int PaperCopiedTraderPerformanceCommandTimeoutSeconds = 180;
+
 	private const int StrategyPerformanceCommandTimeoutSeconds = 180;
 
 	private const int StrategyMarketPaperRunInsertBatchSize = 2_000;
@@ -3656,6 +3658,7 @@ inserted AS (
 SELECT count(*)::integer FROM inserted;
 """);
 				command.Transaction = transaction;
+				command.CommandTimeout = PaperCopiedTraderPerformanceCommandTimeoutSeconds;
 				performanceRowsWritten = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken) ?? 0);
 
 				await using NpgsqlCommand clearInflightCommand = CreateCommand(connection, """

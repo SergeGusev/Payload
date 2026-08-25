@@ -1,6 +1,20 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-25 Copied-Performance Aggregate Timeout Contract
+Goal: Restore copied-trader performance projection progress without changing its calculations or any betting behavior.
+Status: Completed locally, independently reviewed, and ready for user deployment
+Done:
+- Strict read-only production inspection proved the durable 25-wallet inflight batch covers 176,555 orders, 176,555 fills, 25 open positions, and 176,480 settlements; the current `WITH event_rows` command is cancelled at approximately 30 seconds and retried against the same inflight batch.
+- Source inspection confirmed that exact aggregate command has no explicit timeout while the projection keeps durable inflight work across transaction rollback. A read-only one-wallet `EXPLAIN ANALYZE` completed in 2.473 seconds for the heaviest current wallet and processed 36,528 event rows, supporting a bounded longer timeout for the 25-wallet batch.
+- User approved exact contract `RC-20260825-copied-performance-aggregate-timeout` at semantic digest `sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6`; approval-only commit is `9d5a0964`.
+- Added one dedicated `PaperCopiedTraderPerformanceCommandTimeoutSeconds = 180` and assigned it only to the existing `WITH event_rows` aggregate command. Aggregate SQL/formulas, batches, cadence, transactions, locks, durable inflight recovery, retries, and all betting paths are unchanged.
+- Focused Release test passed `1/1`; copied-performance filter passed `20/20`, with 14 PostgreSQL integration tests returning early because `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` was absent and six unit/source-contract tests executing. Release solution build passed with zero errors and 126 pre-existing warnings.
+- Independent reviewer `agent:/root/copied_perf_timeout_review` returned PASS with no findings and independently confirmed unchanged normalized aggregate SQL SHA-256 `12271620a7abf7e0c6c5dc1c7c717542fa0ab9b07df7c88600db24df00763174`.
+Next: User deploys the pushed deployment branch, then verify exact deployed build identity and read-only production evidence that copied-performance refresh advances and the durable inflight batch drains without new projection errors.
+Notes: All diagnostic production SQL was UTC `READ ONLY` with `statement_timeout=15s`; no production mutation, deployment, restart, configuration, schema, strategy, or order action was performed. The main working-tree gate remains contaminated by unrelated pre-existing August 23 contract edits; the task-scoped staged gate passed.
+Blockers: None for handoff. Production effectiveness remains unverified until deployment.
+
 ## Active Update 2026-08-25 Production Server And Betting Check
 Goal: Verify current production service health, betting flow, database delays, and active runtime faults.
 Status: Betting active; copied-trader performance projection is currently degraded

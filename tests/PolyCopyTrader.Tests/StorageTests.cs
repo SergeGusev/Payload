@@ -1571,6 +1571,14 @@ public sealed class StorageTests
             "DELETE FROM paper_copied_trader_performance performance",
             StringComparison.Ordinal);
         var projectionAggregate = refreshSource.IndexOf("WITH event_rows AS (", StringComparison.Ordinal);
+        var projectionAggregateTimeout = refreshSource.IndexOf(
+            "command.CommandTimeout = PaperCopiedTraderPerformanceCommandTimeoutSeconds;",
+            projectionAggregate,
+            StringComparison.Ordinal);
+        var projectionAggregateExecute = refreshSource.IndexOf(
+            "performanceRowsWritten = Convert.ToInt32(await command.ExecuteScalarAsync",
+            projectionAggregate,
+            StringComparison.Ordinal);
         var positionBranchFrom = refreshSource.IndexOf(
             "    FROM paper_positions pp",
             projectionAggregate,
@@ -1606,6 +1614,19 @@ public sealed class StorageTests
             && projectionDelete > selectionAnalyze
             && projectionAggregate > projectionDelete);
         Assert.True(
+            projectionAggregateTimeout > projectionAggregate
+            && projectionAggregateExecute > projectionAggregateTimeout);
+        Assert.Equal(
+            1,
+            source.Split(
+                "private const int PaperCopiedTraderPerformanceCommandTimeoutSeconds = 180;",
+                StringSplitOptions.None).Length - 1);
+        Assert.Equal(
+            1,
+            refreshSource.Split(
+                "command.CommandTimeout = PaperCopiedTraderPerformanceCommandTimeoutSeconds;",
+                StringSplitOptions.None).Length - 1);
+        Assert.True(
             positionBranchFrom > projectionAggregate
             && positionBranchStart >= projectionAggregate
             && positionBranchEnd > positionBranchFrom);
@@ -1617,14 +1638,14 @@ public sealed class StorageTests
                     0, 0, 0,
                     0, 0, 0, 0,
                     pp.unrealized_pnl_usd,
-            """,
+            """.Replace("\r\n", "\n", StringComparison.Ordinal),
             positionBranch,
             StringComparison.Ordinal);
         Assert.Contains(
             """
                 WHERE pp.copied_trader_wallet <> ''
                   AND pp.size_shares > 0
-            """,
+            """.Replace("\r\n", "\n", StringComparison.Ordinal),
             positionBranch,
             StringComparison.Ordinal);
         Assert.DoesNotContain("CASE WHEN pp.size_shares > 0", positionBranch, StringComparison.Ordinal);
