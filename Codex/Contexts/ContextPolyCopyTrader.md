@@ -1,6 +1,21 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-25 Production Server And Betting Check
+Goal: Verify current production service health, betting flow, database delays, and active runtime faults.
+Status: Betting active; copied-trader performance projection is currently degraded
+Done:
+- Inspected exact PostgreSQL 18.3 primary `192.168.0.101:5432/polycopytrader` only through UTC `READ ONLY` transactions with `statement_timeout=15s`; no production state changed.
+- Service build `56294c1fe75838dfc83afecb41dcf4b91fbcb73b` remains `Running / Live`, started `2026-08-24T06:09:54.793286Z`; heartbeat advanced through `2026-08-25T06:39:12.258514Z`, `last_error=NULL`, and BTC/ETH/SOL reference ticks were under eight seconds old at cutoff `06:39:16.568603Z`.
+- Paper flow was active: initial 5/15/60-minute counts were `107/392/1,919`, runs independently confirmed `107/387` entries plus `508` settlements in 15 minutes, and later snapshots found 146 Paper orders in five minutes followed by a new cycle at `06:39:30.578332Z`. The initially observed FAK `PartiallyFilledExpired` order `ac0701ed-47ae-45d5-a67e-297be0c5d383` reconciled to `Filled` and its run to `Settled` at `06:35:12Z`, matching the implemented fill-summary reconciliation path.
+- Exactly one strategy is Live-enabled: `eth_up_down_5m_up_bps_50_instant`. It made no Live order in the last hour; in 24 hours it had 16 Matched orders (`$95.999983` filled) and two Cancelled zero-fill intents, latest at `02:45:01.725690Z`; zero Live orders were open. Its last-hour runs were ten threshold skips plus two Observed.
+- The first snapshot briefly saw 17 lock waiters, but the exact lock chain had fully cleared within about 23 seconds; every later snapshot had zero waiting locks. The blocker was not captured, so its exact cause is unknown.
+- A current independent fault remains: `PaperCopiedTraderPerformanceWorker` recorded 80 `ProjectionCycle` failures between `05:56:56Z` and `06:37:20Z`, then continued every roughly 30 seconds (`Exception while reading from stream`). Projection data stopped refreshing at `05:55:55.011990Z`; queue/inflight counts were `496/25`, and a live PostgreSQL capture repeatedly found its `WITH event_rows AS (...)` aggregate active for 17-26 seconds without a lock wait before the next recorded failure. Exact terminal cause is unknown because the persisted error omits the inner exception.
+- The critical crypto Polymarket WebSocket recorded 12 aborted receive-loop reconnects through `06:24:34Z`; no later WebSocket error was present by `06:37:35Z`, but exact socket recovery could not be independently proved from persisted frame diagnostics. Betting and fresh reference data continued.
+Next: Repair the copied-trader performance projection separately if authorized; ordinary betting currently requires no intervention.
+Notes: Exact ETH Reference Average Maker-GTD exception label remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. No service restart, order/strategy/configuration change, database write, deployment, or product edit occurred.
+Blockers: None for monitoring; a correction requires a separate user request and requirement contract.
+
 ## Active Update 2026-08-24 Gentle Production Operations Rule
 Goal: Persist a PolyMarket-only standing rule that production work uses the least disruptive practical execution mode and bounded batches by default.
 Status: Completed
