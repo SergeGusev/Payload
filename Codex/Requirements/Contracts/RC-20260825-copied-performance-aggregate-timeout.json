@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260825-copied-performance-aggregate-timeout",
+  "title": "Restore copied-trader performance projection progress",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, доработай"
+    }
+  ],
+  "scope": {
+    "goal": "Make the currently failing PaperCopiedTraderPerformanceWorker projection complete its existing production-sized aggregate instead of being cancelled by the generic approximately 30-second command timeout.",
+    "inScope": [
+      "The Npgsql command that executes the existing WITH event_rows copied-trader performance aggregate inside PostgresAppRepository.RefreshPaperCopiedTraderPerformanceProjectionAsync.",
+      "A dedicated bounded 180-second command timeout for that aggregate command only.",
+      "Focused source-contract and existing copied-performance regression verification.",
+      "Documentation of the dedicated aggregate timeout and unchanged projection semantics."
+    ],
+    "outOfScope": [
+      "Any change to projection SQL, scores, PnL, ROI, categories, OVERALL aggregation, queue ordering, batch sizes, worker cadence, transaction boundaries, advisory locks, durable inflight recovery, or error retry behavior.",
+      "Any change to Paper or Live strategy decisions, order placement, fills, settlements, trading configuration, balances, or execution semantics.",
+      "Any PostgreSQL schema/index change, production DML/DDL, service restart, deployment, configuration mutation, backup, or manual queue/inflight edit.",
+      "The separate Polymarket WebSocket reconnect history and the already-cleared transient lock waiters."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Current production defect observed from 2026-08-25T05:56:56Z onward; implementation applies only to future copied-performance aggregate executions after deployment.",
+    "firstVerification": "Use bounded UTC READ ONLY production snapshots plus source inspection to identify the exact active SQL, selected durable inflight batch, source-row scale, cancellation cadence, and current command-timeout wiring before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Доработать exact copied-trader performance projection so its existing aggregate is not cancelled at the generic approximately 30-second Npgsql command timeout.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "доработай",
+      "acceptanceCriteria": [
+        "The existing aggregate NpgsqlCommand has an explicit CommandTimeout of exactly 180 seconds.",
+        "The timeout is assigned only to the WITH event_rows aggregate command; claim, recovery, seed, selector analysis, derived-row delete, inflight cleanup, remaining-depth read, and advisory-lock commands retain their existing timeout behavior.",
+        "The worker still records and retries an aggregate failure through the existing path if the dedicated bound is exceeded or another exception occurs."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~StorageTests.PostgresRepository_PaperCopiedTraderPerformance_UsesBoundedWalletProjection --artifacts-path <runPath>/artifacts --results-directory <runPath>/results",
+          "expected": "The focused source-contract test passes and proves the exact dedicated timeout placement/count.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PaperCopiedTraderPerformance --artifacts-path <runPath>/artifacts --results-directory <runPath>/results",
+          "expected": "Copied-performance unit and available PostgreSQL integration regression tests pass; any database-backed early skip is reported explicitly.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preserve every existing copied-performance calculation, selection, atomicity, recovery, and scheduling behavior while changing only the aggregate command timeout.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "доработай",
+      "acceptanceCriteria": [
+        "The WITH event_rows SQL text and all formulas are byte-for-byte unchanged by the governed implementation diff.",
+        "No projection option/default, database schema, batch size, cadence, queue/inflight rule, transaction boundary, or advisory-lock rule changes.",
+        "No Paper/Live trading or strategy path changes."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Inspect the scoped diff against the approved parent and compare the complete aggregate SQL and surrounding transaction flow.",
+          "expected": "Only one timeout constant, one aggregate-command assignment, focused assertions, and matching documentation are changed; aggregate SQL and all excluded behavior are unchanged.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <runPath>/artifacts",
+          "expected": "Solution build completes with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Leave production unchanged; deliver only a reviewed local code change for the user to deploy separately.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "доработай",
+      "acceptanceCriteria": [
+        "No production DML, DDL, service action, configuration mutation, order action, or deployment is performed.",
+        "The implementation is independently reviewed against the original request, approved contract, actual diff, and test evidence before completion.",
+        "The completed approval/implementation history is committed and pushed to codex/reference-average-available-windows without including unrelated dirty work."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Run requirement WorkingTree/Staged/Range gates, git diff --check, inspect staged paths, and obtain independent semantic review.",
+          "expected": "All gates pass for this contract, the reviewer records PASS with no findings, and unrelated working-tree paths are absent from task commits.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "The user's short instruction refers only to the copied-trader performance projection defect described immediately before it, not to the separate WebSocket reconnects or transient lock waiters.",
+      "impact": "Only PaperCopiedTraderPerformanceWorker aggregate timeout wiring is changed; the other observations remain outside this implementation.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260825-copied-performance-aggregate-timeout sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6",
+        "semanticDigest": "sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "A dedicated 180-second upper bound is the requested correction for the confirmed approximately 30-second cancellation; it is not an authorization to change query results, batch size, cadence, or production configuration.",
+      "impact": "A single copied-performance aggregate transaction may run longer than 30 seconds but remains bounded at 180 seconds and retains existing rollback/retry behavior.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260825-copied-performance-aggregate-timeout sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6",
+        "semanticDigest": "sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6"
+      }
+    }
+  ],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260825-copied-performance-aggregate-timeout sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6",
+    "semanticDigest": "sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
