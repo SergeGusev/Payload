@@ -1,6 +1,19 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-25 Deployed Copied-Performance Timeout Verification
+Goal: Verify the newly deployed service, copied-performance projection recovery, betting flow, and immediate production health.
+Status: Completed read-only; deployed timeout fix is working and betting is active
+Done:
+- Verified exact PostgreSQL 18.3 primary `192.168.0.101:5432/polycopytrader`, UTC, server-enforced read-only transactions, and deployed service build `3023d6c46d176eef579734a81bac2fd1e5ba4824`. Git ancestry proves approved implementation `62ea04d9` is included. Service remained `Running / Live`, immutable start `2026-08-25T19:14:54.535812Z`, advancing heartbeat through `19:19:54.870786Z`, and `last_error=NULL`.
+- Copied-performance projection advanced successively through `19:16:54.793794Z`, `19:17:24.883434Z`, `19:18:54.778241Z`, and `19:19:54.831048Z`. One observed aggregate started at `19:18:02.531445Z` and completed in the cycle recorded at `19:18:54.778241Z`, proving the deployed command now completes beyond the former approximately 30-second cancellation boundary.
+- High-priority queue/inflight snapshots progressed `149/0 -> 99/25 -> 24/25`; the final `52/25` reflected fresh producer arrivals through `19:20:28.532621Z` while the next aggregate was active. No post-start `PaperCopiedTraderPerformanceWorker` error exists; the latest remains the pre-restart error at `19:13:25.348122Z`.
+- Betting resumed across a new five-minute boundary: 79 post-start Paper orders, all Filled, including 66 new Filled orders from `19:19:30.341616Z` through `19:20:00.895970Z`. Runtime independently recorded 66 Entered, 2,219 Observed, and one Skipped update after the first cutoff. Initial 5/15/60-minute activity was 13/358/1,408 Paper orders, 13/355/1,400 fills, and 104/423/1,511 settlements.
+- The sole post-start API error was an expected first-seconds BTC reference warmup miss at `19:15:00.153387Z`; it recovered, with final BTC/ETH/SOL reference ticks only 8.450/14.309/15.883 seconds old. Every lock snapshot had zero waiting locks.
+Next: No repair or restart is needed. Continue ordinary monitoring; separately push deployed commit `3023d6c4` if it is intended to remain the canonical deployment history.
+Notes: Exact final cutoff `2026-08-25T19:21:01.340117Z`. All SQL used `READ ONLY`, UTC, and `statement_timeout=15s`; one broad non-indexed runtime-run count hit that limit and was cancelled without writes, then replaced by bounded/indexed checks. No production state changed. Local deployment branch is one commit ahead of upstream (`3023d6c4` is not pushed).
+Blockers: None for runtime acceptance; unpushed deployed build history is the only repository-traceability risk.
+
 ## Active Update 2026-08-25 Copied-Performance Aggregate Timeout Contract
 Goal: Restore copied-trader performance projection progress without changing its calculations or any betting behavior.
 Status: Completed locally, independently reviewed, and ready for user deployment

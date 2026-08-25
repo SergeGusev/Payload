@@ -12,3 +12,10 @@ Request:
 
 Result:
 Read-only production evidence found 25 durable inflight wallets covering 176,555 orders, 176,555 fills, 25 open positions, and 176,480 settlements; the aggregate was cancelled at approximately 30 seconds and retried the same work. After exact user approval of `RC-20260825-copied-performance-aggregate-timeout` at `sha256:aa5e4eb1b6b376e35983cdc4145a7996e2c5a8d22478e0b5a62b7972242258d6`, added a dedicated 180-second timeout only to the existing `WITH event_rows` command. SQL, calculations, batching, cadence, transactions, recovery, retries, and betting behavior are unchanged. Focused tests passed 1/1 and 20/20; 14 database integration cases returned early without the absent test connection, Release solution build passed with zero errors and 126 pre-existing warnings, and independent semantic review returned PASS. No production state was changed; deployment and runtime verification remain with the user.
+
+## 2026-08-25T19:21:01.3401170Z
+Request:
+Выложил, проверяй
+
+Result:
+Read-only production verification accepted deployed build `3023d6c46d176eef579734a81bac2fd1e5ba4824`, which contains timeout implementation `62ea04d9`. Service remained `Running / Live` with advancing heartbeat and no heartbeat error. Copied-performance projection advanced through four observed timestamps; an aggregate observed from `19:18:02.531445Z` completed at `19:18:54.778241Z`, beyond the former approximately 30-second failure boundary. Queue/inflight work progressed, no post-start projection error occurred, and zero lock waiters were present. Betting crossed a new five-minute boundary with 66 new Filled Paper orders and matching Entered runs; BTC/ETH/SOL references were fresh. One startup BTC no-price warning recovered. No production state changed. Deployed local commit `3023d6c4` remains one commit ahead of upstream and was not pushed by this read-only check.
