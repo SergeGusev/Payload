@@ -1,6 +1,19 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-26 Historical Parity Indexed Donor Wallet Contract
+Goal: Remove the Production donor-preview sequential-scan blocker without changing approved donor or Net calculations.
+Status: Exact approval received; approval-only checkpoint pending before product edits
+Done:
+- Reproduced the Production plan: the streaming donor SQL retains a sequential `paper_position_settlements` branch because ordinary and FollowLeader wallet predicates share one OR, even when the current donor uses run-backed data and that branch is not executed.
+- Verified the canonical ordinary-strategy predicate `copied_trader_wallet = strategy:{strategy.code}` plans through `ix_paper_position_settlements_wallet_time`, while the deployed lower/OR predicate plans a sequential scan.
+- Production read-only evidence found all 2,613 strategy codes lowercase and zero non-lowercase values among all 2,754 distinct `paper_position_settlements` wallets. The latter proof used an index-only scan and completed in 13.585 seconds.
+- Drafted and validated `RC-20260826-historical-parity-indexed-donor-wallet` at semantic digest `sha256:ecf7329fe6a607ec1f539c714e817f59c0ad3d4b9569ee5bd6ff4738ca631291`, explicitly disclosing that noncanonical mixed-case ordinary-strategy donor wallets will no longer match.
+- User approved the exact contract and disclosed deviation with `APPROVE RC-20260826-historical-parity-indexed-donor-wallet sha256:ecf7329fe6a607ec1f539c714e817f59c0ad3d4b9569ee5bd6ff4738ca631291`.
+Next: Commit the approval-only checkpoint, implement only the canonical indexed streaming donor predicates, add a greater-than-250-row PostgreSQL regression, build/test, and obtain independent semantic review.
+Notes: Production inspection used forced read-only transactions. One attempted full distinct-wallet index proof over the remaining Paper tables exceeded the read timeout and was not repeated; no Production state changed. The `codex-temp-lifecycle` skill is selected for later build/test artifacts, but no temp run has been created yet.
+Blockers: Product edits remain blocked only until the required approval-only checkpoint commit is created.
+
 ## Active Update 2026-08-26 Deployed PaperPosition Hash Fix Verification
 Goal: Verify the deployed historical-parity `PaperPosition` hash fix and whether the blocked Gross-ordered strategy resumes completion.
 Status: Completed read-only; hash fix is deployed and effective, but strategy completion is blocked by a new indexed-plan guard failure

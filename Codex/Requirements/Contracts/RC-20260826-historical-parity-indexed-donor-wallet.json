@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260826-historical-parity-indexed-donor-wallet",
+  "title": "Use indexed canonical wallet lookup for historical parity donors",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Нет, давай переделывать так, чтобы сначала полностью закончивались полностью стратегии в порядке Gross. Там где нет возможности точно посчитать комиссию, просто считай её 3.3% и всё"
+    },
+    {
+      "source": "user",
+      "text": "1. Считаем, что Net Roi = Gross ROI - 3.3.  2. Доноров оставляем. 3. Да 4. Да"
+    },
+    {
+      "source": "user",
+      "text": "Действуй"
+    }
+  ],
+  "scope": {
+    "goal": "Remove the newly verified donor-preview blocker for ordinary historical strategy candidates by replacing the non-indexable defensive case-insensitive strategy-wallet branch with the existing canonical strategy wallet and an indexable equality predicate, so the current greatest-Gross strategy can complete while all approved donor and Net semantics remain unchanged.",
+    "inScope": [
+      "The streaming historical Gross/Net parity donor page used by donor preview and apply-time recomputation for non-FollowLeader strategy candidates.",
+      "Specialization of the ordinary-strategy PaperPosition and PaperSettlement wallet predicates to the canonical persisted wallet `strategy:{strategy.code}` so existing wallet indexes are usable and the plan guard does not see a full-corpus scan.",
+      "The same canonical indexed comparison in donor replay lookups where the pool wallet is already normalized to lowercase.",
+      "Focused unit/source-contract and disposable PostgreSQL regression coverage with more than 250 unrelated rows, including the production-blocking PaperPosition target shape.",
+      "Required contract validation, build/test verification, independent semantic review, context/history bookkeeping, commit, and push."
+    ],
+    "outOfScope": [
+      "Any change to Gross ordering, one-strategy-at-a-time completion, donor hierarchy/order/ratio, fixed 3.3 percentage-point fallback, Fee/Net arithmetic, component evidence, lineage, hashes, cutoff, batch size, or retry scheduling.",
+      "Any change to the FollowLeader broad non-strategy-wallet donor path.",
+      "Any PostgreSQL schema or index creation/change, Production data mutation, manual historical apply, service deployment/restart, configuration change, trading action, or Live execution behavior.",
+      "The separate legacy Paper FAK backfill stream-read timeout."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Only historical Gross/Net parity contributions governed by the existing strict pre-2026-08-10T00:00:00Z UTC cutoff; only non-FollowLeader donor strategy candidates use the new canonical wallet predicate.",
+    "firstVerification": "Reproduce the deployed fallback failure, inspect the actual streaming donor SQL and plan guard, verify Production table scale/indexes and canonical wallet data, and compare EXPLAIN plans for the current lower/OR predicate versus canonical equality before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Unblock donor calculation for the current greatest-Gross historical strategy without removing donors.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        2
+      ],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "For non-FollowLeader donor candidates, PaperPosition and PaperSettlement rows are selected by the canonical persisted wallet `strategy:{strategy.code}` through existing btree wallet indexes rather than a sequential full-corpus scan.",
+        "A disposable PostgreSQL fixture containing more than 250 unrelated paper_position_settlements reproduces the production guard boundary and donor preview returns Complete rather than DeferredOperational for the current ordinary-strategy shape.",
+        "The target strategy's same-strategy and family donor candidates remain present and in their unchanged matcher order; donor aggregates, selection hashes, membership hashes, N/D ratio, and fixed fallback decision rules are not altered.",
+        "Apply-time donor recomputation uses the same indexed query semantics as preview so CAS verification cannot reintroduce the blocker."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParityDonorStreaming.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalGrossNetParityPostgresIntegrationTests\" with TEMP/TMP and all outputs under the active marked D:\\CodexTemp run",
+          "expected": "Focused PostgreSQL regressions pass, including a greater-than-250-row plan-guard case that completes donor preview with unchanged donor aggregate evidence.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preserve Gross-ordered full-strategy completion and the approved donor-or-3.3 Net calculation exactly.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Считаем, что Net Roi = Gross ROI - 3.3.  2. Доноров оставляем.",
+      "acceptanceCriteria": [
+        "Net ROI remains Gross ROI minus 3.3 percentage points only when the unchanged matcher reaches fixed fallback; donor-derived calculations remain preferred under the existing hierarchy.",
+        "The active strategy remains selected until every one of its historical targets is complete; lower-Gross strategy selection remains blocked until then.",
+        "The strict historical cutoff remains 2026-08-10T00:00:00Z UTC and post-cutoff/new accounting is unchanged.",
+        "No financial fields, audit rows, Production rows, service state, configuration, schema, orders, or Live state are changed by this local implementation task."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParityDonorStreaming.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused historical parity tests, inspect the complete diff, run the affected solution build, git diff --check, scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree and staged validation, then obtain independent semantic review.",
+          "expected": "Only indexed donor wallet selection and its regressions change; all historical financial/scheduling contracts remain unchanged and every verification passes.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "For non-FollowLeader donor scans only, the current defensive case-insensitive comparison `lower(copied_trader_wallet)=lower('strategy:'||strategy.code)` is narrowed to exact equality with the canonical persisted wallet `strategy:{strategy.code}` so the existing btree index can be used without a Production schema/index change.",
+      "impact": "A noncanonical mixed-case historical strategy wallet would no longer be included as a donor by this path. Read-only Production evidence found zero such values among all 2,754 distinct settlement wallets and zero mixed-case codes among all 2,613 strategies; normal strategy writers construct `strategy:` plus the catalog code. FollowLeader matching is unchanged.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260826-historical-parity-indexed-donor-wallet sha256:ecf7329fe6a607ec1f539c714e817f59c0ad3d4b9569ee5bd6ff4738ca631291",
+        "semanticDigest": "sha256:ecf7329fe6a607ec1f539c714e817f59c0ad3d4b9569ee5bd6ff4738ca631291"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260826-historical-parity-indexed-donor-wallet sha256:ecf7329fe6a607ec1f539c714e817f59c0ad3d4b9569ee5bd6ff4738ca631291",
+    "semanticDigest": "sha256:ecf7329fe6a607ec1f539c714e817f59c0ad3d4b9569ee5bd6ff4738ca631291"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/semantic_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
