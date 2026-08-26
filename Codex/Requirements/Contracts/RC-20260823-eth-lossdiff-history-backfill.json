@@ -3,7 +3,7 @@
   "contractId": "RC-20260823-eth-lossdiff-history-backfill",
   "title": "Gently batch full pre-rollout Paper trade history for two ETH LossDiff children",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -88,16 +88,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~EthLossDiffHistoryBackfill",
           "expected": "Focused tests independently prove strict causal ordering, both counter formulas, 22/30 eligibility, cutoff and digest guards, and rejection of any source drift.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release focused suite passed 11/11 on 2026-08-26, including strict settlement-before-entry, Reset/Positive formulas, threshold-or-higher behavior, cutoff/digest guards, deterministic IDs, and approved 22/30 totals."
         },
         {
           "id": "VER-002",
           "kind": "inspection",
           "command": "Run the bounded command in preview mode against exact production with server-enforced read-only transaction and compare a separate raw-row replay.",
           "expected": "Both calculations report the exact frozen source identity, digest, 22/30 eligibility, and financial totals without writes.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Production repeatable-read/read-only preview on 2026-08-26 returned exact source 1,060/615/445, narrow digest sha256:c5f2baabe698c05eb0d8e4f6c98571390a07e858c1ac3c6a373bc7ead509bf01, full-chain digest sha256:10420947c2f2bc78475421463da9457304d39c089c093357376f919651f578fc, exact 22/30 membership and approved financial totals, zero initial targets, healthy heartbeat, and zero waiting locks; writes=0."
         }
       ]
     },
@@ -123,8 +123,8 @@
           "kind": "test",
           "command": "Run focused insert-plan and disposable PostgreSQL integration tests under the marked D:\\CodexTemp run.",
           "expected": "Exactly 22/30 complete child chains are inserted once, exact parent economics/timestamps are copied, ineligible/post-cutoff rows are absent, and retry is a no-op.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Disposable PostgreSQL 18 integration with the production schema initializer and five dashboard projection triggers passed: each batch inserted one exact six-row chain; interruption at 10/52 left 60 exact rows and no marker; resume inserted exactly 42 missing chains; full retry wrote zero; partial collision blocked. Production completed exact 52 chains and 312 target rows."
         }
       ]
     },
@@ -151,8 +151,8 @@
           "kind": "test",
           "command": "Run focused fee/accounting clone tests and independent SQL aggregate verification.",
           "expected": "Every row and both aggregate groups match exact parent Calculated Fee/Gross/Net values and the approved totals.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Independent production SQL aggregate reproduced Reset 22/16/6 stake 132.11160001 Gross 45.64509784 Fee 4.20526000 Net 41.43983784 and Positive 30/21/9 stake 179.99999996 Gross 51.39379117 Fee 5.78854000 Net 45.60525117; all 52 parent links and each of the six target row kinds were present."
         }
       ]
     },
@@ -178,8 +178,8 @@
           "kind": "test",
           "command": "Run focused state-isolation and Live-noninterference tests plus production before/after allowlist snapshots.",
           "expected": "Historical rows change only the exact Paper history tables and one exact migration marker; state/events/settings/Live and parent data remain unchanged by the backfill.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Production raw checks after apply found exact child flags=2 with live_stakes=false, states=2, imported pre-cutoff events=0, Live orders=0, Live shadows=0, attributable Live events=0, and waiting locks=0. The command contains no DML path for state/events/settings/Live/parent rows."
         }
       ]
     },
@@ -208,16 +208,16 @@
           "kind": "test",
           "command": "Run focused fail-closed/resume/idempotency tests, exact isolated PostgreSQL one-chain-batch interruption+resume+retry tests against production trigger functions, and the production read-only preview before apply.",
           "expected": "Each transaction commits at most one complete six-row chain; interruption leaves only exact resumable chains; every partial/mismatch blocks; restart completes only missing chains; final marker commits once after 52/52; retry performs zero writes; no process or lock remains.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused PostgreSQL 18 suite passed 11/11 with production triggers, interruption/resume, premature-marker refusal, partial-chain refusal and idempotent retry. Production gate stopped safely at 14/52 on a transient waiting lock with zero failed-batch writes, exact 84-row resume preview passed, restart completed 52/52, marker v2 committed after final verification, and exact retry reported writes=0."
         },
         {
           "id": "VER-007",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln --no-restore",
           "expected": "Solution build succeeds with zero errors and focused tests pass before any production apply.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release solution build completed on 2026-08-26 with 0 errors and 126 pre-existing warnings; focused PostgreSQL suite passed 11/11 with no skips."
         }
       ]
     },
@@ -244,8 +244,8 @@
           "kind": "inspection",
           "command": "Run bounded between-batch checks, then two independent final production read-only snapshots and a raw-row aggregate replay.",
           "expected": "Exact target history and totals match, every non-target/source/state/Live invariant holds, heartbeat advances, and no blocking lock remains.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Two final production read-only snapshots plus the exact command retry proved 22/30 complete chains, 312 exact rows, 22/30 distinct markets, 52 parent links, approved financial totals, exact marker contract/source/full-source/membership digests, batch_size=1, completed_chain_count=52, zero pre-cutoff events/Live activity/waiting locks, and heartbeat advancement 2026-08-26T16:40:08.472924Z -> 2026-08-26T16:41:08.477723Z with Running/Live and last_error NULL."
         }
       ]
     }
@@ -283,8 +283,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_lossdiff_history_backfill",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

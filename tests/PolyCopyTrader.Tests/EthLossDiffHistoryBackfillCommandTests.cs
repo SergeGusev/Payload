@@ -166,7 +166,7 @@ public sealed class EthLossDiffHistoryBackfillCommandTests
         Assert.False(EthLossDiffHistoryBackfillCommand.MarkerMatches(
             exact.Replace("\"Trades\":22", "\"Trades\":23", StringComparison.Ordinal), plan));
         Assert.False(EthLossDiffHistoryBackfillCommand.MarkerMatches(
-            exact.Replace("a7837d3e", "corrupted", StringComparison.Ordinal), plan));
+            exact.Replace("bf75b521", "corrupted", StringComparison.Ordinal), plan));
         Assert.False(EthLossDiffHistoryBackfillCommand.MarkerMatches(exact[..^1] + ",\"extra\":true}", plan));
     }
 
@@ -202,6 +202,13 @@ public sealed class EthLossDiffHistoryBackfillCommandTests
 
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync();
+
+        await using (var trigger = new NpgsqlCommand(
+            "SELECT count(*) FROM pg_trigger WHERE tgname IN ('trg_dashboard_projection_paper_order', 'trg_dashboard_projection_paper_fill', 'trg_dashboard_projection_strategy_run', 'trg_dashboard_projection_paper_position', 'trg_dashboard_projection_paper_settlement') AND NOT tgisinternal;",
+            connection))
+        {
+            Assert.Equal(5L, Assert.IsType<long>(await trigger.ExecuteScalarAsync()));
+        }
         await using var transaction = await connection.BeginTransactionAsync();
         var suffix = Guid.NewGuid().ToString("N");
         var sourceIndex = Random.Shared.Next(100_000, int.MaxValue);
@@ -303,13 +310,18 @@ VALUES (@SettlementId, @ParentWallet, @AssetId, @ConditionId, 'Up', @AssetId, 'U
         var entry = new EthLossDiffHistoryBackfillCommand.PlannedEntry(child, source, 4);
         var plan = new[] { entry };
         var markerKey = EthLossDiffHistoryBackfillCommand.MarkerKey + "_test_" + suffix;
-        var invariantBefore = await EthLossDiffHistoryBackfillCommand.ReadInvariantDigestAsync(
-            connection, transaction, CancellationToken.None);
+        await transaction.CommitAsync();
 
-        await EthLossDiffHistoryBackfillCommand.ApplyPlanAndMarkerAsync(
-            connection, transaction, plan, markerKey, CancellationToken.None);
-        Assert.Equal(invariantBefore, await EthLossDiffHistoryBackfillCommand.ReadInvariantDigestAsync(
-            connection, transaction, CancellationToken.None));
+        string invariantBefore;
+        await using (var before = await connection.BeginTransactionAsync())
+        {
+            invariantBefore = await EthLossDiffHistoryBackfillCommand.ReadInvariantDigestAsync(
+                connection, before, CancellationToken.None);
+            await before.RollbackAsync();
+        }
+
+        Assert.True(await EthLossDiffHistoryBackfillCommand.ApplyOneEntryBatchAsync(
+            connection, entry, CancellationToken.None));
 
         var targetRunId = EthLossDiffHistoryBackfillCommand.DeterministicId(child.Id, source.RunId, "run");
         const string verifySql = """
@@ -328,22 +340,29 @@ INNER JOIN public.paper_positions p ON p.copied_trader_wallet = o.copied_trader_
 INNER JOIN public.paper_position_settlements ps ON ps.copied_trader_wallet = o.copied_trader_wallet AND ps.asset_id = o.asset_id
 WHERE r.id = @RunId;
 """;
-        await using (var verify = new NpgsqlCommand(verifySql, connection, transaction))
+        await using (var verifyTransaction = await connection.BeginTransactionAsync())
         {
-            verify.Parameters.AddWithValue("RunId", targetRunId);
-            await using var reader = await verify.ExecuteReaderAsync();
-            Assert.True(await reader.ReadAsync());
-            for (var column = 0; column < 6; column++)
+            await using (var verify = new NpgsqlCommand(verifySql, connection, verifyTransaction))
             {
-                Assert.Equal(1L, reader.GetInt64(column));
+                verify.Parameters.AddWithValue("RunId", targetRunId);
+                await using var reader = await verify.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                for (var column = 0; column < 6; column++)
+                {
+                    Assert.Equal(1L, reader.GetInt64(column));
+                }
             }
+            Assert.Equal(invariantBefore, await EthLossDiffHistoryBackfillCommand.ReadInvariantDigestAsync(
+                connection, verifyTransaction, CancellationToken.None));
+            Assert.Equal(1L, await EthLossDiffHistoryBackfillCommand.ReadExactTargetChainCountAsync(
+                connection, verifyTransaction, plan, CancellationToken.None));
+            Assert.Equal(6L, await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
+                connection, verifyTransaction, plan, CancellationToken.None));
+            await verifyTransaction.RollbackAsync();
         }
 
-        Assert.Equal(1L, await EthLossDiffHistoryBackfillCommand.ReadExactTargetChainCountAsync(
-            connection, transaction, plan, CancellationToken.None));
-        Assert.Equal(6L, await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
-            connection, transaction, plan, CancellationToken.None));
-        await transaction.CommitAsync();
+        await EthLossDiffHistoryBackfillCommand.InsertFinalMarkerAsync(
+            connection, plan, markerKey, CancellationToken.None);
 
         await using var retry = await connection.BeginTransactionAsync();
         await using var marker = new NpgsqlCommand(
@@ -354,12 +373,15 @@ WHERE r.id = @RunId;
         var beforeRetryIds = await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
             connection, retry, plan, CancellationToken.None);
 
-        // This is the production retry branch: a matching marker and complete chain produce no DML.
         var afterRetryIds = await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
             connection, retry, plan, CancellationToken.None);
         Assert.Equal(6L, beforeRetryIds);
         Assert.Equal(beforeRetryIds, afterRetryIds);
         await retry.RollbackAsync();
+
+        // This is the production retry branch: the exact chain is skipped and the marker is unchanged.
+        Assert.False(await EthLossDiffHistoryBackfillCommand.ApplyOneEntryBatchAsync(
+            connection, entry, CancellationToken.None));
 
         var conflictingChild = EthLossDiffHistoryBackfillCommand.Children[1];
         var conflictingPlan = new[]
@@ -386,18 +408,12 @@ FROM public.paper_position_settlements WHERE id=@ParentId;
             await seedConflict.CommitAsync();
         }
 
-        await using (var conflictApply = await connection.BeginTransactionAsync())
-        {
-            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                EthLossDiffHistoryBackfillCommand.ApplyPlanAndMarkerAsync(
-                    connection,
-                    conflictApply,
-                    conflictingPlan,
-                    markerKey + "_conflict",
-                    CancellationToken.None));
-            Assert.Equal(PostgresErrorCodes.UniqueViolation, exception.SqlState);
-            await conflictApply.RollbackAsync();
-        }
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            EthLossDiffHistoryBackfillCommand.ApplyOneEntryBatchAsync(
+                connection,
+                conflictingPlan[0],
+                CancellationToken.None));
+        Assert.Contains("Partial or conflicting target chain", exception.Message, StringComparison.Ordinal);
 
         await using var conflictVerify = await connection.BeginTransactionAsync();
         Assert.Equal(1L, await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
@@ -413,7 +429,7 @@ FROM public.paper_position_settlements WHERE id=@ParentId;
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
-    public async Task ValidatedApplyBranch_InsertsExact22And30ChainsThenRetryIsNoOp()
+    public async Task BatchedApply_ResumesAfterTenChainsCompletes52AndRetryIsNoOp()
     {
         var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION")
             ?? throw new InvalidOperationException("PostgreSQL integration connection disappeared after discovery.");
@@ -518,9 +534,9 @@ FROM unnest(@SettlementIds::uuid[], @Assets::text[], @Conditions::text[], @Settl
 """;
 
         var markerKey = EthLossDiffHistoryBackfillCommand.MarkerKey + "_exact52_" + batch;
-        await using (var apply = await connection.BeginTransactionAsync())
+        await using (var seedTransaction = await connection.BeginTransactionAsync())
         {
-            await using (var seed = new NpgsqlCommand(seedSql, connection, apply))
+            await using (var seed = new NpgsqlCommand(seedSql, connection, seedTransaction))
             {
                 seed.Parameters.AddWithValue("ParentStrategyId", EthLossDiffHistoryBackfillCommand.ParentStrategyId);
                 seed.Parameters.AddWithValue("Wallet", parentWallet);
@@ -537,56 +553,99 @@ FROM unnest(@SettlementIds::uuid[], @Assets::text[], @Conditions::text[], @Settl
                 seed.Parameters.AddWithValue("Settled", settled);
                 await seed.ExecuteNonQueryAsync();
             }
-
-            var invariantBefore = await EthLossDiffHistoryBackfillCommand.ReadInvariantDigestAsync(
-                connection, apply, CancellationToken.None);
-            Assert.True(await EthLossDiffHistoryBackfillCommand.ExecuteValidatedApplyBranchAsync(
-                connection, apply, plan, markerDetails: null, markerKey, CancellationToken.None));
-            Assert.Equal(invariantBefore, await EthLossDiffHistoryBackfillCommand.ReadInvariantDigestAsync(
-                connection, apply, CancellationToken.None));
-            Assert.Equal(52L, await EthLossDiffHistoryBackfillCommand.ReadExactTargetChainCountAsync(
-                connection, apply, plan, CancellationToken.None));
-            Assert.Equal(312L, await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
-                connection, apply, plan, CancellationToken.None));
-            await apply.CommitAsync();
+            await seedTransaction.CommitAsync();
         }
 
-        await using var retry = await connection.BeginTransactionAsync();
-        await using var marker = new NpgsqlCommand(
-            "SELECT details FROM public.schema_data_migrations WHERE migration_key=@Key;", connection, retry);
-        marker.Parameters.AddWithValue("Key", markerKey);
-        var details = Assert.IsType<string>(await marker.ExecuteScalarAsync());
-        Assert.False(await EthLossDiffHistoryBackfillCommand.ExecuteValidatedApplyBranchAsync(
-            connection, retry, plan, details, markerKey, CancellationToken.None));
-        Assert.Equal(52L, await EthLossDiffHistoryBackfillCommand.ReadExactTargetChainCountAsync(
-            connection, retry, plan, CancellationToken.None));
-        Assert.Equal(312L, await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
-            connection, retry, plan, CancellationToken.None));
-        await retry.RollbackAsync();
+        string invariantBefore;
+        await using (var before = await connection.BeginTransactionAsync())
+        {
+            invariantBefore = await EthLossDiffHistoryBackfillCommand.ReadInvariantDigestAsync(
+                connection, before, CancellationToken.None);
+            await before.RollbackAsync();
+        }
 
-        await using var corruptedRetry = await connection.BeginTransactionAsync();
+        foreach (var entry in plan.Take(10))
+        {
+            Assert.True(await EthLossDiffHistoryBackfillCommand.ApplyOneEntryBatchAsync(
+                connection, entry, CancellationToken.None));
+        }
+
+        await using (var interrupted = await connection.BeginTransactionAsync())
+        {
+            Assert.Equal(10L, await EthLossDiffHistoryBackfillCommand.ReadExactTargetChainCountAsync(
+                connection, interrupted, plan, CancellationToken.None));
+            Assert.Equal(60L, await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
+                connection, interrupted, plan, CancellationToken.None));
+            await using var absentMarker = new NpgsqlCommand(
+                "SELECT count(*) FROM public.schema_data_migrations WHERE migration_key=@Key;",
+                connection,
+                interrupted);
+            absentMarker.Parameters.AddWithValue("Key", markerKey);
+            Assert.Equal(0L, Assert.IsType<long>(await absentMarker.ExecuteScalarAsync()));
+            await interrupted.RollbackAsync();
+        }
+
+        var prematureMarker = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            EthLossDiffHistoryBackfillCommand.InsertFinalMarkerAsync(
+                connection, plan, markerKey, CancellationToken.None));
+        Assert.Contains("exact_chains=10/52", prematureMarker.Message, StringComparison.Ordinal);
+
+        var insertedOnResume = 0;
+        foreach (var entry in plan)
+        {
+            if (await EthLossDiffHistoryBackfillCommand.ApplyOneEntryBatchAsync(
+                    connection, entry, CancellationToken.None))
+            {
+                insertedOnResume++;
+            }
+        }
+        Assert.Equal(42, insertedOnResume);
+        await EthLossDiffHistoryBackfillCommand.InsertFinalMarkerAsync(
+            connection, plan, markerKey, CancellationToken.None);
+
+        foreach (var entry in plan)
+        {
+            Assert.False(await EthLossDiffHistoryBackfillCommand.ApplyOneEntryBatchAsync(
+                connection, entry, CancellationToken.None));
+        }
+
+        string details;
+        await using (var retry = await connection.BeginTransactionAsync())
+        {
+            await using var marker = new NpgsqlCommand(
+                "SELECT details FROM public.schema_data_migrations WHERE migration_key=@Key;", connection, retry);
+            marker.Parameters.AddWithValue("Key", markerKey);
+            details = Assert.IsType<string>(await marker.ExecuteScalarAsync());
+            Assert.True(EthLossDiffHistoryBackfillCommand.MarkerMatches(details, plan));
+            Assert.Equal(invariantBefore, await EthLossDiffHistoryBackfillCommand.ReadInvariantDigestAsync(
+                connection, retry, CancellationToken.None));
+            Assert.Equal(52L, await EthLossDiffHistoryBackfillCommand.ReadExactTargetChainCountAsync(
+                connection, retry, plan, CancellationToken.None));
+            Assert.Equal(312L, await EthLossDiffHistoryBackfillCommand.ReadTargetIdCollisionCountAsync(
+                connection, retry, plan, CancellationToken.None));
+            await retry.RollbackAsync();
+        }
+
         var first = plan[0];
         var second = plan[1];
-        await using (var corrupt = new NpgsqlCommand(
-            "UPDATE public.paper_orders SET signal_id=@OtherSignalId WHERE id=@OrderId;",
-            connection,
-            corruptedRetry))
+        await using (var corrupted = await connection.BeginTransactionAsync())
         {
-            corrupt.Parameters.AddWithValue(
-                "OtherSignalId",
+            await using var corrupt = new NpgsqlCommand(
+                "UPDATE public.paper_orders SET signal_id=@OtherSignalId WHERE id=@OrderId;",
+                connection,
+                corrupted);
+            corrupt.Parameters.AddWithValue("OtherSignalId",
                 EthLossDiffHistoryBackfillCommand.DeterministicId(second.Child.Id, second.Source.RunId, "signal"));
-            corrupt.Parameters.AddWithValue(
-                "OrderId",
+            corrupt.Parameters.AddWithValue("OrderId",
                 EthLossDiffHistoryBackfillCommand.DeterministicId(first.Child.Id, first.Source.RunId, "order"));
             Assert.Equal(1, await corrupt.ExecuteNonQueryAsync());
+            await corrupted.CommitAsync();
         }
 
-        Assert.Equal(51L, await EthLossDiffHistoryBackfillCommand.ReadExactTargetChainCountAsync(
-            connection, corruptedRetry, plan, CancellationToken.None));
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            EthLossDiffHistoryBackfillCommand.ExecuteValidatedApplyBranchAsync(
-                connection, corruptedRetry, plan, details, markerKey, CancellationToken.None));
-        await corruptedRetry.RollbackAsync();
+        var conflict = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            EthLossDiffHistoryBackfillCommand.ApplyOneEntryBatchAsync(
+                connection, first, CancellationToken.None));
+        Assert.Contains("Partial or conflicting target chain", conflict.Message, StringComparison.Ordinal);
     }
 
     private static EthLossDiffHistoryBackfillCommand.SourceRow Row(

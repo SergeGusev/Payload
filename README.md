@@ -255,13 +255,18 @@ dotnet run --project src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --
 ```
 
 Apply additionally requires `--apply --approved-contract-digest
-sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14`.
+sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9`.
 It is fail-closed to production `192.168.0.101/polycopytrader`, immutable UTC
 cutoff `2026-08-23T19:44:26.488143Z`, the exact 1,060-row source digest and
-complete chain, 22/30 selected memberships, empty unmarked target history,
-healthy service, and zero waiting locks. Apply uses one serializable insert-only
-transaction, deterministic IDs, an advisory lock, exact post-insert verification,
-and marker `20260823_eth_lossdiff_history_backfill_v1`. It never imports or
+complete chain, 22/30 selected memberships, exact resumable target progress,
+healthy service, and zero waiting locks. Apply holds one nonblocking session
+advisory lock and commits at most one complete six-row child chain per short
+`READ COMMITTED` transaction, in 52 deterministic batches with at least one
+second between committed batches. Before every batch it rechecks production
+health, locks, identities, and exact progress. A restart skips complete exact
+chains and blocks on any partial or conflicting chain. Only after all 52 chains
+verify does a separate transaction write marker
+`20260826_eth_lossdiff_history_backfill_batched_v2`. It never imports or
 rewinds `strategy_loss_diff_states` / `strategy_loss_diff_parent_events`, changes
 strategy flags, or performs a Live or venue action. A matching retry verifies the
 marker and complete child chains and exits with zero writes.

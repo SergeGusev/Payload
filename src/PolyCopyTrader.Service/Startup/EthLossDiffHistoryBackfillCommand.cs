@@ -12,14 +12,16 @@ public static class EthLossDiffHistoryBackfillCommand
 {
     public const string CommandFlag = "--backfill-eth-lossdiff-history";
     public const string ApplyFlag = "--apply";
-    public const string ApprovalDigest = "sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14";
+    public const string ApprovalDigest = "sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9";
     public const string SourceDigest = "sha256:c5f2baabe698c05eb0d8e4f6c98571390a07e858c1ac3c6a373bc7ead509bf01";
     public const string FullSourceDigest = "sha256:10420947c2f2bc78475421463da9457304d39c089c093357376f919651f578fc";
-    public const string MarkerKey = "20260823_eth_lossdiff_history_backfill_v1";
+    public const string MarkerKey = "20260826_eth_lossdiff_history_backfill_batched_v2";
     public const string EvidenceVersion = "eth_lossdiff_parent_mirror_history_v1";
-    public const string CommandBuild = "eth_lossdiff_history_backfill_v1+a7837d3e";
+    public const string CommandBuild = "eth_lossdiff_history_backfill_batched_v2+bf75b521";
     public const string DeployedServiceVersion =
-        "info=1.0.0+99f57d2d4bb04813a83d355f034b68b5ca40de18; assembly=1.0.0.0; mvid=e50ea26bd2c8";
+        "info=1.0.0+3023d6c46d176eef579734a81bac2fd1e5ba4824; assembly=1.0.0.0; mvid=018d5fb334ad";
+    private const long AdvisoryLockKey = 8225202608230001;
+    private static readonly TimeSpan BatchDelay = TimeSpan.FromSeconds(1);
 
     internal static readonly Guid ParentStrategyId = Guid.Parse("b7c50005-0000-4000-8204-000000000001");
     internal static readonly DateTimeOffset CutoffUtc = DateTimeOffset.Parse(
@@ -97,133 +99,178 @@ public static class EthLossDiffHistoryBackfillCommand
         await connection.OpenAsync(cancellationToken);
 
         var builder = new NpgsqlConnectionStringBuilder(factory.ConnectionString);
-        var isolation = apply
-            ? System.Data.IsolationLevel.Serializable
-            : System.Data.IsolationLevel.RepeatableRead;
-        await using var transaction = await connection.BeginTransactionAsync(isolation, cancellationToken);
         if (!apply)
         {
-            await ExecuteNonQueryAsync(connection, transaction, "SET TRANSACTION READ ONLY;", cancellationToken);
+            var preview = await ReadVerifiedSnapshotAsync(connection, builder, cancellationToken);
+            await WritePreviewAsync(output, preview.Snapshot, preview.Source, preview.Plan, preview.Problems, apply: false);
+            await output.WriteLineAsync(preview.Problems.Count == 0
+                ? "PREVIEW_OK: read-only transaction rolled back; writes=0."
+                : "PREVIEW_BLOCKED: writes=0.");
+            return preview.Problems.Count == 0 ? 0 : 1;
         }
 
-        await ExecuteNonQueryAsync(
-            connection,
-            transaction,
-            "SET LOCAL TIME ZONE 'UTC'; SET LOCAL lock_timeout = '3s'; SET LOCAL statement_timeout = '15s';",
-            cancellationToken);
-
-        if (apply)
+        var locked = await TryAcquireAdvisoryLockAsync(connection, cancellationToken);
+        if (!locked)
         {
-            var locked = await ExecuteScalarAsync<bool>(
-                connection,
-                transaction,
-                "SELECT pg_try_advisory_xact_lock(8225202608230001);",
-                cancellationToken);
-            if (!locked)
-            {
-                await output.WriteLineAsync("Apply refused: dedicated backfill advisory lock is held.");
-                await transaction.RollbackAsync(cancellationToken);
-                return 1;
-            }
-        }
-
-        var source = await ReadSourceAsync(connection, transaction, cancellationToken);
-        var plan = BuildPlan(source);
-        var snapshot = await ReadSnapshotAsync(connection, transaction, builder, plan, cancellationToken);
-        var problems = ValidateSnapshot(snapshot, source, plan, apply);
-
-        await WritePreviewAsync(output, snapshot, source, plan, problems, apply);
-        if (problems.Count != 0)
-        {
-            await transaction.RollbackAsync(cancellationToken);
+            await output.WriteLineAsync("Apply refused: dedicated backfill advisory lock is held.");
             return 1;
         }
 
-        if (!apply)
+        try
         {
-            await transaction.RollbackAsync(cancellationToken);
-            await output.WriteLineAsync("PREVIEW_OK: read-only transaction rolled back; writes=0.");
-            return 0;
+            return await ExecuteBatchedApplyAsync(connection, builder, output, Task.Delay, cancellationToken);
+        }
+        finally
+        {
+            await ReleaseAdvisoryLockAsync(connection, CancellationToken.None);
+        }
+    }
+
+    private static async Task<int> ExecuteBatchedApplyAsync(
+        NpgsqlConnection connection,
+        NpgsqlConnectionStringBuilder builder,
+        TextWriter output,
+        Func<TimeSpan, CancellationToken, Task> delay,
+        CancellationToken cancellationToken)
+    {
+        var initial = await ReadVerifiedSnapshotAsync(connection, builder, cancellationToken);
+        await WritePreviewAsync(output, initial.Snapshot, initial.Source, initial.Plan, initial.Problems, apply: true);
+        if (initial.Problems.Count != 0)
+        {
+            return 1;
         }
 
-        var inserted = await ExecuteValidatedApplyBranchAsync(
-            connection,
-            transaction,
-            plan,
-            snapshot.MarkerDetails,
-            MarkerKey,
-            cancellationToken);
-        if (!inserted)
+        if (initial.Snapshot.MarkerDetails is not null)
         {
-            await transaction.RollbackAsync(cancellationToken);
             await output.WriteLineAsync("IDEMPOTENT_OK: matching complete marker and exact target history verified; writes=0.");
             return 0;
         }
 
-        var postSnapshot = await ReadSnapshotAsync(connection, transaction, builder, plan, cancellationToken);
-        var postProblems = ValidateSnapshot(postSnapshot, source, plan, apply: true);
-        if (!string.Equals(snapshot.InvariantDigest, postSnapshot.InvariantDigest, StringComparison.Ordinal))
+        var committed = checked((int)(initial.Snapshot.ExactTargetChainCount ?? 0));
+        foreach (var entry in initial.Plan)
         {
-            postProblems.Add("state/settings/Live invariant digest changed inside backfill transaction");
-        }
-        if (postProblems.Count != 0 || postSnapshot.MarkerDetails is null)
-        {
-            throw new InvalidOperationException("Post-insert verification failed: " + string.Join("; ", postProblems));
+            var beforeBatch = await ReadOperationalSnapshotAsync(
+                connection, builder, initial.Source, initial.Plan, cancellationToken);
+            if (beforeBatch.Problems.Count != 0)
+            {
+                await WriteBatchStopAsync(output, committed, initial.Plan.Count, beforeBatch.Problems);
+                return 1;
+            }
+
+            var inserted = await ApplyOneEntryBatchAsync(connection, entry, cancellationToken);
+            if (!inserted)
+            {
+                continue;
+            }
+
+            committed++;
+            await output.WriteLineAsync(
+                $"BATCH_COMMITTED: completed={committed}; remaining={initial.Plan.Count - committed}; child={entry.Child.Code}; parent_run={entry.Source.RunId:D}; rows=6.");
+            await delay(BatchDelay, cancellationToken);
         }
 
-        await transaction.CommitAsync(cancellationToken);
-        await output.WriteLineAsync("APPLY_OK: exactly 22 Reset and 30 Positive complete Paper chains plus one marker committed.");
+        var final = await ReadVerifiedSnapshotAsync(connection, builder, cancellationToken);
+        if (!PlansMatch(initial.Plan, final.Plan))
+        {
+            final.Problems.Add("causal selected membership changed before final marker");
+        }
+        if (final.Snapshot.MarkerDetails is null)
+        {
+            RequireCompleteProgress(final.Snapshot, final.Plan, final.Problems);
+        }
+        if (final.Problems.Count != 0)
+        {
+            await WriteBatchStopAsync(output, checked((int)(final.Snapshot.ExactTargetChainCount ?? 0)), final.Plan.Count, final.Problems);
+            return 1;
+        }
+
+        if (final.Snapshot.MarkerDetails is null)
+        {
+            await InsertFinalMarkerAsync(connection, final.Plan, MarkerKey, cancellationToken);
+        }
+
+        var post = await ReadVerifiedSnapshotAsync(connection, builder, cancellationToken);
+        if (!PlansMatch(final.Plan, post.Plan))
+        {
+            post.Problems.Add("causal selected membership changed after final marker");
+        }
+        if (post.Problems.Count != 0 || post.Snapshot.MarkerDetails is null)
+        {
+            throw new InvalidOperationException("Post-marker verification failed: " + string.Join("; ", post.Problems));
+        }
+
+        await output.WriteLineAsync("APPLY_OK: exactly 22 Reset and 30 Positive complete Paper chains plus one marker committed in short batches.");
         return 0;
     }
 
-    internal static async Task<bool> ExecuteValidatedApplyBranchAsync(
+    internal static async Task<bool> ApplyOneEntryBatchAsync(
         NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
-        IReadOnlyList<PlannedEntry> plan,
-        string? markerDetails,
-        string markerKey,
+        PlannedEntry entry,
         CancellationToken cancellationToken)
     {
-        if (markerDetails is not null)
+        await using var transaction = await connection.BeginTransactionAsync(
+            System.Data.IsolationLevel.ReadCommitted,
+            cancellationToken);
+        await SetTransactionSafetyAsync(connection, transaction, readOnly: false, cancellationToken);
+        var one = new[] { entry };
+        var exactBefore = await ReadExactTargetChainCountAsync(connection, transaction, one, cancellationToken);
+        var idsBefore = await ReadTargetIdCollisionCountAsync(connection, transaction, one, cancellationToken);
+        if (exactBefore == 1 && idsBefore == 6)
         {
-            if (!MarkerMatches(markerDetails, plan))
-            {
-                throw new InvalidOperationException("Validated apply branch received mismatched marker details.");
-            }
-
-            var exactChainCount = await ReadExactTargetChainCountAsync(
-                connection,
-                transaction,
-                plan,
-                cancellationToken);
-            var targetIdCount = await ReadTargetIdCollisionCountAsync(
-                connection,
-                transaction,
-                plan,
-                cancellationToken);
-            if (exactChainCount != plan.Count || targetIdCount != plan.Count * 6L)
-            {
-                throw new InvalidOperationException(
-                    $"Validated apply branch received incomplete target history: exact_chains={exactChainCount}/{plan.Count}; target_ids={targetIdCount}/{plan.Count * 6L}.");
-            }
-
+            await transaction.RollbackAsync(cancellationToken);
             return false;
         }
+        if (exactBefore != 0 || idsBefore != 0)
+        {
+            throw new InvalidOperationException(
+                $"Partial or conflicting target chain: exact={exactBefore}/1; target_ids={idsBefore}/6; child={entry.Child.Code}; parent_run={entry.Source.RunId:D}.");
+        }
 
-        await ApplyPlanAndMarkerAsync(connection, transaction, plan, markerKey, cancellationToken);
+        await InsertEntryAsync(connection, transaction, entry, cancellationToken);
+        var exactAfter = await ReadExactTargetChainCountAsync(connection, transaction, one, cancellationToken);
+        var idsAfter = await ReadTargetIdCollisionCountAsync(connection, transaction, one, cancellationToken);
+        if (exactAfter != 1 || idsAfter != 6)
+        {
+            throw new InvalidOperationException(
+                $"One-chain verification failed: exact={exactAfter}/1; target_ids={idsAfter}/6; child={entry.Child.Code}; parent_run={entry.Source.RunId:D}.");
+        }
+
+        await transaction.CommitAsync(cancellationToken);
         return true;
     }
 
-    internal static async Task ApplyPlanAndMarkerAsync(
+    internal static async Task InsertFinalMarkerAsync(
         NpgsqlConnection connection,
-        NpgsqlTransaction transaction,
         IReadOnlyList<PlannedEntry> plan,
         string markerKey,
         CancellationToken cancellationToken)
     {
-        foreach (var entry in plan)
+        await using var transaction = await connection.BeginTransactionAsync(
+            System.Data.IsolationLevel.ReadCommitted,
+            cancellationToken);
+        await SetTransactionSafetyAsync(connection, transaction, readOnly: false, cancellationToken);
+        var exactChains = await ReadExactTargetChainCountAsync(connection, transaction, plan, cancellationToken);
+        var targetIds = await ReadTargetIdCollisionCountAsync(connection, transaction, plan, cancellationToken);
+        if (exactChains != plan.Count || targetIds != plan.Count * 6L)
         {
-            await InsertEntryAsync(connection, transaction, entry, cancellationToken);
+            throw new InvalidOperationException(
+                $"Final marker refused: exact_chains={exactChains}/{plan.Count}; target_ids={targetIds}/{plan.Count * 6L}.");
+        }
+
+        await using var existing = new NpgsqlCommand(
+            "SELECT details FROM public.schema_data_migrations WHERE migration_key=@Key;",
+            connection,
+            transaction);
+        existing.Parameters.AddWithValue("Key", markerKey);
+        var details = await existing.ExecuteScalarAsync(cancellationToken) as string;
+        if (details is not null)
+        {
+            if (!MarkerMatches(details, plan))
+            {
+                throw new InvalidOperationException("Final marker exists with mismatched details.");
+            }
+            await transaction.RollbackAsync(cancellationToken);
+            return;
         }
 
         await using var marker = new NpgsqlCommand(
@@ -235,6 +282,115 @@ public static class EthLossDiffHistoryBackfillCommand
         if (await marker.ExecuteNonQueryAsync(cancellationToken) != 1)
         {
             throw new InvalidOperationException("Backfill marker insert did not affect exactly one row.");
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    private static async Task<VerifiedSnapshot> ReadVerifiedSnapshotAsync(
+        NpgsqlConnection connection,
+        NpgsqlConnectionStringBuilder builder,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await connection.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead,
+            cancellationToken);
+        await SetTransactionSafetyAsync(connection, transaction, readOnly: true, cancellationToken);
+        var source = await ReadSourceAsync(connection, transaction, cancellationToken);
+        var plan = BuildPlan(source);
+        var snapshot = await ReadSnapshotAsync(connection, transaction, builder, plan, cancellationToken);
+        var problems = ValidateSnapshot(snapshot, source, plan);
+        await transaction.RollbackAsync(cancellationToken);
+        return new VerifiedSnapshot(source, plan, snapshot, problems);
+    }
+
+    private static async Task<OperationalSnapshot> ReadOperationalSnapshotAsync(
+        NpgsqlConnection connection,
+        NpgsqlConnectionStringBuilder builder,
+        IReadOnlyList<SourceRow> source,
+        IReadOnlyList<PlannedEntry> plan,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await connection.BeginTransactionAsync(
+            System.Data.IsolationLevel.RepeatableRead,
+            cancellationToken);
+        await SetTransactionSafetyAsync(connection, transaction, readOnly: true, cancellationToken);
+        var snapshot = await ReadSnapshotAsync(connection, transaction, builder, plan, cancellationToken);
+        var problems = ValidateSnapshot(snapshot, source, plan);
+        await transaction.RollbackAsync(cancellationToken);
+        return new OperationalSnapshot(snapshot, problems);
+    }
+
+    private static async Task SetTransactionSafetyAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        bool readOnly,
+        CancellationToken cancellationToken)
+    {
+        if (readOnly)
+        {
+            await ExecuteNonQueryAsync(connection, transaction, "SET TRANSACTION READ ONLY;", cancellationToken);
+        }
+        await ExecuteNonQueryAsync(
+            connection,
+            transaction,
+            "SET LOCAL TIME ZONE 'UTC'; SET LOCAL lock_timeout = '3s'; SET LOCAL statement_timeout = '15s';",
+            cancellationToken);
+    }
+
+    private static async Task<bool> TryAcquireAdvisoryLockAsync(
+        NpgsqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT pg_try_advisory_lock(@Key);", connection);
+        command.Parameters.AddWithValue("Key", AdvisoryLockKey);
+        return await command.ExecuteScalarAsync(cancellationToken) is true;
+    }
+
+    private static async Task ReleaseAdvisoryLockAsync(
+        NpgsqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT pg_advisory_unlock(@Key);", connection);
+        command.Parameters.AddWithValue("Key", AdvisoryLockKey);
+        if (await command.ExecuteScalarAsync(cancellationToken) is not true)
+        {
+            throw new InvalidOperationException("Dedicated backfill advisory lock was not held during release.");
+        }
+    }
+
+    private static bool PlansMatch(IReadOnlyList<PlannedEntry> left, IReadOnlyList<PlannedEntry> right) =>
+        left.Count == right.Count &&
+        string.Equals(BuildMembershipDigest(left), BuildMembershipDigest(right), StringComparison.Ordinal);
+
+    private static void RequireCompleteProgress(
+        DatabaseSnapshot snapshot,
+        IReadOnlyList<PlannedEntry> plan,
+        ICollection<string> problems)
+    {
+        if (snapshot.ExactTargetChainCount != plan.Count)
+        {
+            problems.Add($"exact_target_chain_count={snapshot.ExactTargetChainCount}; expected={plan.Count}");
+        }
+        if (snapshot.TargetIdCollisionCount != plan.Count * 6L)
+        {
+            problems.Add($"target_id_count={snapshot.TargetIdCollisionCount}; expected={plan.Count * 6L}");
+        }
+        if (snapshot.TargetRowCount != plan.Count * 6L)
+        {
+            problems.Add($"target_row_count={snapshot.TargetRowCount}; expected={plan.Count * 6L}");
+        }
+    }
+
+    private static async Task WriteBatchStopAsync(
+        TextWriter output,
+        int completed,
+        int total,
+        IEnumerable<string> problems)
+    {
+        await output.WriteLineAsync($"BATCH_STOPPED: completed={completed}; remaining={total - completed}; writes_in_failed_batch=0.");
+        foreach (var problem in problems)
+        {
+            await output.WriteLineAsync("BLOCKED: " + problem);
         }
     }
 
@@ -270,7 +426,11 @@ public static class EthLossDiffHistoryBackfillCommand
             }
         }
 
-        return result;
+        return result
+            .OrderBy(entry => entry.Child.Id)
+            .ThenBy(entry => entry.Source.EnteredMicros)
+            .ThenBy(entry => entry.Source.RunId)
+            .ToArray();
     }
 
     internal static string ComputeSourceDigest(IEnumerable<string> canonicalLines)
@@ -550,8 +710,7 @@ SELECT
     private static List<string> ValidateSnapshot(
         DatabaseSnapshot snapshot,
         IReadOnlyList<SourceRow> source,
-        IReadOnlyList<PlannedEntry> plan,
-        bool apply)
+        IReadOnlyList<PlannedEntry> plan)
     {
         var problems = new List<string>();
         void Require(bool condition, string message)
@@ -589,10 +748,15 @@ SELECT
 
         if (snapshot.MarkerDetails is null)
         {
-            Require(snapshot.PreCutoffChildRuns == 0, $"unmarked_pre_cutoff_child_runs={snapshot.PreCutoffChildRuns}");
-            Require(snapshot.TargetIdCollisionCount == 0,
-                $"unmarked_target_id_collisions={snapshot.TargetIdCollisionCount}");
-            Require(snapshot.TargetRowCount == 0, $"unmarked_target_rows={snapshot.TargetRowCount}");
+            var exactChains = snapshot.ExactTargetChainCount ?? 0;
+            Require(exactChains >= 0 && exactChains <= plan.Count,
+                $"unmarked_exact_target_chain_count={exactChains}; expected=0..{plan.Count}");
+            Require(snapshot.PreCutoffChildRuns == exactChains,
+                $"unmarked_pre_cutoff_child_runs={snapshot.PreCutoffChildRuns}; exact_chains={exactChains}");
+            Require(snapshot.TargetIdCollisionCount == exactChains * 6L,
+                $"unmarked_target_id_count={snapshot.TargetIdCollisionCount}; expected={exactChains * 6L}");
+            Require(snapshot.TargetRowCount == exactChains * 6L,
+                $"unmarked_target_row_count={snapshot.TargetRowCount}; expected={exactChains * 6L}");
         }
         else
         {
@@ -1000,10 +1164,16 @@ SELECT
         WHERE o.strategy_id = ANY(@ChildIds) AND o.created_at_utc < @CutoffUtc) +
     (SELECT count(*) FROM public.strategy_market_paper_runs
         WHERE strategy_id = ANY(@ChildIds) AND entered_at_utc < @CutoffUtc) +
-    (SELECT count(*) FROM public.paper_positions
-        WHERE copied_trader_wallet = ANY(@ChildWallets) AND updated_at_utc < @CutoffUtc) +
-    (SELECT count(*) FROM public.paper_position_settlements
-        WHERE copied_trader_wallet = ANY(@ChildWallets) AND settled_at_utc < @CutoffUtc);
+    (SELECT count(*) FROM public.paper_positions p
+        WHERE p.copied_trader_wallet = ANY(@ChildWallets)
+          AND EXISTS (SELECT 1 FROM public.strategy_market_paper_runs r
+              WHERE r.strategy_id = ANY(@ChildIds) AND r.entered_at_utc < @CutoffUtc
+                AND r.selected_asset_id = p.asset_id)) +
+    (SELECT count(*) FROM public.paper_position_settlements ps
+        WHERE ps.copied_trader_wallet = ANY(@ChildWallets)
+          AND EXISTS (SELECT 1 FROM public.strategy_market_paper_runs r
+              WHERE r.strategy_id = ANY(@ChildIds) AND r.entered_at_utc < @CutoffUtc
+                AND r.selected_asset_id = ps.asset_id));
 """;
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("ChildIds", Children.Select(child => child.Id).ToArray());
@@ -1092,6 +1262,8 @@ ORDER BY value;
         selected_membership_digest = BuildMembershipDigest(plan),
         contract_digest = ApprovalDigest,
         command_build = CommandBuild,
+        batch_size = 1,
+        completed_chain_count = plan.Count,
         reset = Children[0].ExpectedMetrics,
         positive = Children[1].ExpectedMetrics
     });
@@ -1275,6 +1447,14 @@ ORDER BY value;
         public override string ToString() =>
             $"trades={Trades}; wins={Wins}; losses={Losses}; stake={Stake:F8}; gross={Gross:F8}; fee={Fee:F8}; net={Net:F8}; embedded_snapshots={EmbeddedSnapshots}";
     }
+
+    private sealed record VerifiedSnapshot(
+        IReadOnlyList<SourceRow> Source,
+        IReadOnlyList<PlannedEntry> Plan,
+        DatabaseSnapshot Snapshot,
+        List<string> Problems);
+
+    private sealed record OperationalSnapshot(DatabaseSnapshot Snapshot, List<string> Problems);
 
     private sealed record DatabaseSnapshot(
         string Host,

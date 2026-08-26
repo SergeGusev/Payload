@@ -242,6 +242,13 @@ The child fill preserves the parent's canonical `Calculated` entry fee, zero
 fill-level realized PnL, and SQL `NULL` fill-level Net; fee-inclusive Net remains
 the matching run/settlement value.
 
+This backfill is applied gently and resumably: each `READ COMMITTED` transaction
+adds exactly one complete six-row child accounting chain, or writes nothing when
+that exact chain already exists. Read-only health, lock, identity, and progress
+checks run between batches; the final marker is written separately only after all
+52 chains verify. Progressive visibility therefore exposes only complete chains
+and never changes the future LossDiff control state.
+
 The approved historical set contains 12 older Reset 4+ parent chains without the
 modern embedded full order-book snapshot. Those rows are explicitly marked
 `parent_persisted_fak_chain_only`,

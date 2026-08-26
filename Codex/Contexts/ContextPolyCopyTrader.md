@@ -1,6 +1,32 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-26 ETH LossDiff History Backfill Completed
+Goal: Generate the exact pre-rollout Paper histories for the two deployed ETH LossDiff child strategies in gentle resumable batches.
+Status: Completed in production and independently verified
+Done:
+- Recorded exact approval for `RC-20260823-eth-lossdiff-history-backfill` at `sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9` in checkpoint commit `9db8cbe0`.
+- Replaced the global serializable apply with a nonblocking session advisory lock, 52 deterministic one-chain `READ COMMITTED` transactions, one-second pacing, read-only health/progress gates, exact-chain resume, and a separate marker transaction after 52/52.
+- Release focused tests passed 11/11 on disposable PostgreSQL 18 with production dashboard triggers; interruption 10/52, premature marker refusal, resume 42, retry zero writes, and partial-chain refusal all passed. Release solution build passed with zero errors and 126 existing warnings. Independent semantic reviewer returned PASS with no findings.
+- Production preview proved exact source `1,060/615/445`, both approved source digests, exact plan `22/30`, zero initial targets, healthy heartbeat, and zero waiting locks. Apply stopped safely at 14/52 on a transient waiting lock, preserved 14 complete chains, then resumed from exact 84-row progress and completed 52/52 plus marker `20260826_eth_lossdiff_history_backfill_batched_v2`.
+- Exact apply retry returned `IDEMPOTENT_OK` with writes=0. Independent raw aggregates reproduced Reset `22/16/6`, stake `132.11160001`, Gross `45.64509784`, Fee `4.20526000`, Net `41.43983784`; Positive `30/21/9`, stake `179.99999996`, Gross `51.39379117`, Fee `5.78854000`, Net `45.60525117`; all six row kinds and 52 parent links are complete.
+- Final controls: both children enabled Paper with `live_stakes=false`; pre-cutoff LossDiff events 0; attributable Live orders/shadow/events 0; waiting locks 0; heartbeat advanced `16:40:08.472924Z -> 16:41:08.477723Z`, `Running / Live`, `last_error=NULL`.
+Next: None.
+Notes: No backup, service stop/restart, deployment, schema DDL, deletion, existing-row update, venue action, or Live action occurred. One broad final read-only aggregate hit the 15-second timeout and was replaced by successful narrow indexed checks.
+Blockers: None.
+
+## Active Update 2026-08-26 Gentle Batched ETH LossDiff History Contract
+Goal: Replace the blocked global-transaction ETH LossDiff history method with an explicitly approved gentle one-chain batch design.
+Status: Draft contract validated; code and production mutation blocked pending exact approval
+Done:
+- Fresh production read-only preview at `2026-08-26T16:00Z..16:02Z` reconfirmed exact source `1,060/615/445`, narrow digest `sha256:c5f2baabe698c05eb0d8e4f6c98571390a07e858c1ac3c6a373bc7ead509bf01`, full-chain digest `sha256:10420947c2f2bc78475421463da9457304d39c089c093357376f919651f578fc`, exact Reset/Positive plans `22/30`, zero target rows, absent marker, and zero waiting locks.
+- Independently verified production service `Running / Live` on exact version `info=1.0.0+3023d6c46d176eef579734a81bac2fd1e5ba4824; assembly=1.0.0.0; mvid=018d5fb334ad`; heartbeat advanced `16:01:08Z -> 16:02:08Z` and `last_error=NULL`.
+- Revised `RC-20260823-eth-lossdiff-history-backfill` to one complete six-row child chain per short `READ COMMITTED` transaction, 52 deterministic batches, at least one-second pacing, read-only health/progress checks between batches, resumable exact-chain progress, and a separate final v2 marker after 52/52 verification.
+- Explicitly disclosed progressive visibility of complete partial history and invalidated the old global-transaction approval plus both deviation approvals. Draft validation passed at semantic digest `sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9`.
+Next: After exact approval, create the approval-only checkpoint, then change and test only the approved backfill command/docs before any production mutation.
+Notes: The first isolated build attempt failed before connection with NETSDK1004 because the new artifacts directory lacked a restore; bounded restore/build under the marked D: temp run then passed with zero errors and 121 existing warnings. The old preview command reported only its expected stale deployed-version guard; raw read-only heartbeat checks resolved the current version. No production state changed.
+Blockers: Exact approval required for `sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9`.
+
 ## Active Update 2026-08-26 Production Server And Betting Recheck
 Goal: Recheck current production server and betting state only.
 Status: Completed read-only; server healthy and Paper/Live betting evidence is current
