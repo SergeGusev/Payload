@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "contractId": "RC-20260823-eth-lossdiff-history-backfill",
-  "title": "Backfill full pre-rollout Paper trade history for two ETH LossDiff children",
+  "title": "Gently batch full pre-rollout Paper trade history for two ETH LossDiff children",
   "author": "agent:/root",
   "status": "approved",
   "originalRequests": [
@@ -32,6 +32,18 @@
     {
       "source": "user",
       "text": "Переходи"
+    },
+    {
+      "source": "user",
+      "text": "Re: Я запустил одну атомарную транзакцию — принцип «либо записать всё, либо ничего». &#x20;\n\nЯ заметил, что ты каждый раз пытаешься сделать именно так. На большой базе, в момент живой работы сервиса. Потом ты несколько часов пытаешься решить эту проблему, потом я прошу тебя делать порциями.\n\nМы можем записать где-то выполнять все задачи в максимально щадящем режиме?"
+    },
+    {
+      "source": "user",
+      "text": "Давай пока ограничимся PolyMarket"
+    },
+    {
+      "source": "user",
+      "text": "Ок, действуй"
     }
   ],
   "scope": {
@@ -41,7 +53,7 @@
       "Frozen pre-rollout source entries whose parent `entered_at_utc` is strictly before the shared deployed state cutoff `2026-08-23T19:44:26.488143Z`, are Settled, and have nonzero realized PnL with a complete persisted parent signal/order/fill/run/position-settlement accounting chain.",
       "Causal historical gating using only exact-parent outcomes settled strictly before each candidate parent entry, replayed in parent entry-time and parent-run-ID order under LossDiffReset threshold 4 or LossDiffPositive threshold 13.",
       "Insert-only historical child signal, filled Paper order, Paper fill, Settled strategy run, zero-size Paper position, and Paper position-settlement rows for eligible entries, with exact copied parent economics and versioned parent/backfill audit references.",
-      "A bounded C#/.NET preview/apply command, focused tests, documentation, transactional production execution after approval, and post-operation verification."
+      "A bounded C#/.NET preview/apply command, focused tests, documentation, one eligible child chain per short production batch after approval, resumable progress verification, and post-operation verification."
     ],
     "outOfScope": [
       "Any parent entry at or after `2026-08-23T19:44:26.488143Z`, any parent non-entry, zero-PnL or non-Settled run, any third strategy, and every non-ETH or non-five-minute strategy.",
@@ -51,7 +63,7 @@
     ],
     "mode": "mutation",
     "periodOrFilter": "UTC parent entered_at_utc < 2026-08-23T19:44:26.488143Z; exact preview source has 1,060 Settled nonzero-PnL parent runs and canonical narrow source digest sha256:c5f2baabe698c05eb0d8e4f6c98571390a07e858c1ac3c6a373bc7ead509bf01.",
-    "firstVerification": "Before product editing and again immediately before apply, run a server-enforced repeatable-read/read-only production snapshot proving exact endpoint/build/migration/strategy/state identities, source count/digest and chain completeness, zero pre-cutoff child trade rows, healthy heartbeat, live_stakes=false, no blocked sessions, and exact causal/financial preview totals."
+    "firstVerification": "Before product editing and again immediately before apply, run a server-enforced repeatable-read/read-only production snapshot proving exact endpoint, deployed service version, migration/strategy/state identities, source count/digests and chain completeness, current exact completed-chain progress, healthy advancing heartbeat, live_stakes=false, no blocked sessions, and exact causal/financial preview totals. The 2026-08-26 preview proved source 1,060/615/445, narrow digest sha256:c5f2baabe698c05eb0d8e4f6c98571390a07e858c1ac3c6a373bc7ead509bf01, full-chain digest sha256:10420947c2f2bc78475421463da9457304d39c089c093357376f919651f578fc, 22/30 eligible chains, zero target rows, absent old marker, zero waiting locks, and advancing Running/Live heartbeat on exact version info=1.0.0+3023d6c46d176eef579734a81bac2fd1e5ba4824; assembly=1.0.0.0; mvid=018d5fb334ad."
   },
   "requirements": [
     {
@@ -174,12 +186,14 @@
     {
       "id": "REQ-005",
       "text": "Make preview and apply bounded, atomic, idempotent, fail-closed, and auditable without creating a database backup or stopping the running service.",
-      "sourceRequestIndexes": [3, 4, 5, 6],
-      "sourceQuote": "если всё в порядке, сгенерируй их историю",
+      "sourceRequestIndexes": [3, 4, 5, 6, 7, 8, 9],
+      "sourceQuote": "потом я прошу тебя делать порциями",
       "acceptanceCriteria": [
-        "Preview is server-enforced repeatable-read/read-only. Apply uses one serializable transaction, an exact dedicated advisory lock, short lock/statement safety bounds, exact allowlists, deterministic IDs, insert-only compare guards, and a rollback-on-any-conflict strategy.",
-        "Apply is forbidden unless endpoint/database/primary/build/migration/strategy IDs/codes/names/flags/assignments/cutoff, source digest/counts/chains/accounting, zero pre-cutoff target trade rows, healthy heartbeat, and lock-risk checks all match the approved preview.",
-        "One exact `schema_data_migrations` marker `20260823_eth_lossdiff_history_backfill_v1` records cutoff, source digest, selected parent-run membership digest, expected counts/totals, contract digest, command build, and completion time in the same transaction. A matching retry verifies and exits with zero writes; any mismatch blocks.",
+        "Preview is server-enforced repeatable-read/read-only. Apply holds only a dedicated nonblocking session advisory lock against a concurrent copy of this exact backfill, then processes exactly one selected child chain per READ COMMITTED transaction: six insert-only rows or zero writes when the same six-row chain already matches exactly. Each batch has short lock/statement safety bounds and deterministic-ID/column compare guards; any missing subset, extra collision, or mismatch blocks before the next batch.",
+        "The operation has exactly 52 one-chain batches in deterministic child-ID, parent-entry-time, parent-run-ID order, followed only after exact completion by one final marker transaction. It waits at least one second between committed chain batches. The durable resume point is the set of exact complete deterministic six-row chains already present: a restart skips exact completed chains, inserts only absent chains, and refuses every partial or conflicting chain.",
+        "Before every chain batch and before the final marker, a read-only check requires the exact endpoint/database/primary/deployed version/migration/strategy IDs/codes/names/flags/assignments/cutoff, fresh Running/Live heartbeat with last_error NULL, zero waiting locks, exact completed-chain/ID/row progress, zero imported pre-cutoff LossDiff events, and no target conflict. A failure stops before the next mutation and reports exact completed and remaining counts; previously committed complete batches remain valid and resumable.",
+        "The full source count, both source digests, causal membership, accounting totals, and all parent-chain facts are revalidated immediately before the first batch and again before the final marker. Normal concurrent post-cutoff LossDiff state/event progress may continue and is not frozen or rewritten by the backfill.",
+        "One exact `schema_data_migrations` marker `20260826_eth_lossdiff_history_backfill_batched_v2` is inserted only after all 52 exact chains verify. It records cutoff, both source digests, selected parent-run membership digest, expected counts/totals, contract digest, command build, batch size 1, completed-chain count 52, and completion time. A matching retry revalidates all chains and exits with zero writes; marker without exact completion or exact completion with mismatched marker blocks.",
         "No backup, service stop/restart, deployment, schema DDL, deletion, UPDATE of existing betting/accounting rows, or external request occurs."
       ],
       "implementationPaths": [
@@ -192,8 +206,8 @@
         {
           "id": "VER-006",
           "kind": "test",
-          "command": "Run focused fail-closed/idempotency tests, an exact isolated PostgreSQL apply+retry test, and the production read-only preview before apply.",
-          "expected": "Every mismatch rolls back or blocks before writes; exact apply commits all rows plus marker once; retry performs zero writes; no process or lock remains.",
+          "command": "Run focused fail-closed/resume/idempotency tests, exact isolated PostgreSQL one-chain-batch interruption+resume+retry tests against production trigger functions, and the production read-only preview before apply.",
+          "expected": "Each transaction commits at most one complete six-row chain; interruption leaves only exact resumable chains; every partial/mismatch blocks; restart completes only missing chains; final marker commits once after 52/52; retry performs zero writes; no process or lock remains.",
           "result": "pending",
           "evidence": "pending"
         },
@@ -210,12 +224,12 @@
     {
       "id": "REQ-006",
       "text": "Independently verify the exact production mutation and leave the production service healthy after the backfill.",
-      "sourceRequestIndexes": [3, 5, 6],
+      "sourceRequestIndexes": [3, 5, 6, 7, 9],
       "sourceQuote": "Проверь сейчас",
       "acceptanceCriteria": [
-        "Post-apply raw-table verification independently proves exact 22/30 complete child chain counts, strategy/market uniqueness, parent references, financial totals, marker contents, and zero unmatched/extra target rows.",
+        "After every batch, bounded raw-table verification proves the committed chain is complete and exact while reporting completed/remaining counts. Final post-apply verification independently proves exact 22/30 complete child chain counts, strategy/market uniqueness, parent references, financial totals, marker contents, and zero unmatched/extra target rows.",
         "A separately calculated aggregate reproduces both trade/win/loss/stake/Gross/Fee/Net totals; source parent row count/digest/economics and sampled non-target counts are unchanged.",
-        "Final production heartbeat advances on the same deployed build with `last_error=NULL`; both `live_stakes` remain false, Live-order/event deltas attributable to the children are zero, and waiting/blocked locks are zero."
+        "Final production heartbeat advances on the same deployed build with `last_error=NULL`; both `live_stakes` remain false, Live-order/event deltas attributable to the children are zero, waiting/blocked locks are zero, and no pre-cutoff LossDiff state/event row was imported. Legitimate concurrent post-cutoff state/event progress is preserved rather than required to remain byte-identical."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
@@ -228,7 +242,7 @@
         {
           "id": "VER-008",
           "kind": "inspection",
-          "command": "Run two independent post-apply production read-only snapshots and a raw-row aggregate replay.",
+          "command": "Run bounded between-batch checks, then two independent final production read-only snapshots and a raw-row aggregate replay.",
           "expected": "Exact target history and totals match, every non-target/source/state/Live invariant holds, heartbeat advances, and no blocking lock remains.",
           "result": "pending",
           "evidence": "pending"
@@ -245,16 +259,27 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14",
-        "semanticDigest": "sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14"
+        "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9",
+        "semanticDigest": "sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "Permit complete committed child chains to become visible progressively while the 52 one-chain batches run or while the operation is paused, instead of hiding all history until one global transaction commits.",
+      "impact": "Every visible trade is a complete exact six-row accounting chain, but Dashboard Paper counts and PnL may temporarily show a strict subset of the final 22/30 history. The durable exact-chain set is the resume point; no incomplete chain is allowed, the final marker is withheld until 52/52 verification, and the backfill does not alter LossDiff control state or Live behavior.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9",
+        "semanticDigest": "sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14",
-    "semanticDigest": "sha256:a7837d3ea4858bea6d705b244c3d5863468d28d1d3041126ded5307abc524e14"
+    "evidenceText": "APPROVE RC-20260823-eth-lossdiff-history-backfill sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9",
+    "semanticDigest": "sha256:bf75b521782c6fda3895b6e55627fb2832e0aa0a533fee13619babb36c6556b9"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_lossdiff_history_backfill",
