@@ -1,6 +1,20 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-26 Production Server And Betting Check
+Goal: Verify current production service health, betting flow, data freshness, copied-performance progress, errors, and delays.
+Status: Completed read-only; server and Paper betting healthy, copied-performance active with a moderate backlog
+Done:
+- Verified exact PostgreSQL 18.3 primary `192.168.0.101:5432/polycopytrader`, UTC, and forced read-only transactions. Deployed service build remains `3023d6c46d176eef579734a81bac2fd1e5ba4824`, `Running / Live`, immutable start `2026-08-25T19:14:54.535812Z`, heartbeat advanced from `05:27:01.378862Z` to `05:30:01.414384Z`, and `last_error=NULL`.
+- BTC/ETH/SOL Binance reference ticks were fresh at the first cutoff, respectively 7.316/10.385/11.785 seconds old. Paper activity was 273/674/2,308 orders and exactly matching fills in the prior 5/15/60 minutes; all 674 last-15-minute orders were Filled. A second independent interval added 174 orders and 174 fills from `05:29:30.394431Z` through `05:30:01.378290Z`, all Filled, plus 273 settlements through `05:30:09.858271Z`.
+- Settlement activity was 247/646/2,164 in the first 5/15/60-minute snapshot. No Live order existed in the last hour; this is not classified as a fault because no failed or pending Live order was found and Paper decisions continued normally.
+- Copied-performance advanced from `05:26:54.864670Z` to `05:29:55.111733Z`; 300 projection rows refreshed after the first cutoff. Queue/inflight changed from `312/25` to `408/0`, while the oldest pending request advanced from `05:24:31.575854Z` to `05:25:04.350073Z`. The projector is not stuck, but fresh order/fill/settlement arrivals currently leave an approximately five-minute high-priority backlog.
+- The last hour contained one order-book refresh error, three brief stale-SOL history writes through `05:27:14.928451Z`, and 13 OKX two-second HTTP timeouts (four expiry-ticker and nine USD-index) through `05:27:10.896448Z`. No new API error occurred after `05:28:05.953028Z`; fresh Binance ticks independently prove SOL recovery, and the newest 10,000 runtime rows (`02:00:11.516807Z..05:29:30.576826Z`) contained zero `expiry_futures_reference_fetch_failed` skips.
+- Every successful lock snapshot had zero waiting locks. One broad runtime-status aggregation exceeded the retained 15-second read-only statement timeout and was cancelled without writes; bounded indexed replacement checks succeeded.
+Next: No restart or trading repair is needed. Monitor whether the copied-performance oldest pending time keeps advancing and whether OKX timeout bursts recur; investigate only if projection age stops advancing or OKX failures begin producing runtime skips.
+Notes: Exact final cutoff `2026-08-26T05:30:20.906022Z`. Production was never mutated. Local deployment branch remains ahead of upstream by the unpushed deployed commit plus context-only history commits.
+Blockers: None for current operation; upstream deployment traceability remains unresolved until the local commits are pushed with user authorization.
+
 ## Active Update 2026-08-25 Deployed Copied-Performance Timeout Verification
 Goal: Verify the newly deployed service, copied-performance projection recovery, betting flow, and immediate production health.
 Status: Completed read-only; deployed timeout fix is working and betting is active
