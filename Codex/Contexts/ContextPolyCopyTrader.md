@@ -1,3 +1,17 @@
+## Active Update 2026-08-27 Production Server And Bets Check
+Goal: Verify current Production service health, betting activity, errors, and delays without changing Production.
+Status: Completed read-only; service and betting are active, with recovered transient incidents and a modest copied-performance queue delay.
+Done:
+- Forced connection to PostgreSQL `192.168.0.101:5432/polycopytrader` in repeatable-read read-only transactions with UTC and statement timeouts. Final cutoff was `2026-08-26T21:36:33.199613Z`; no Production data, service, strategy, configuration, schema, order, or Live state changed.
+- Verified `PolyCopyTrader.Service` `Running / Live` on exact deployed build `3bf1d16be65b96d98e3921862a5564e516042ee7`, started `2026-08-26T21:15:13.924379Z`, with heartbeat advancing through `21:35:14.431008Z`, age `6.4s`, and `last_error=NULL`.
+- Verified fresh BTC/ETH/SOL reference ticks: final ages were `2.1s / 4.1s / 6.6s`. At the first cutoff, Paper orders were `220 / 683 / 2,567` for `5m / 15m / 60m`, fills `217 / 678 / 2,555`, and settlements `192 / 1,319 / 2,428`. The next observed cycle added `137` orders, all `137` filled, plus `180` settlements.
+- Five recent Maker-GTD Paper orders expired unfilled: two created around `21:24:30Z` and three around `21:29:31Z`; no Paper order remained Pending in the final snapshot. No Live order was created in the preceding 60 minutes. The sole enabled Live strategy continued processing every five minutes and skipped recent due cycles for verified strategy conditions; its next run was already Observed.
+- Since the current service start, four critical Polymarket WebSocket receive-loop disconnects and two settlement deadlocks were recorded. Both recovered: no new `api_errors` appeared after `21:34:00.866953Z`, the critical socket was `Connected` with a message `10.4s` old at final cutoff, later Paper cycles filled and settled, and PostgreSQL had zero waiting locks.
+- Copied-performance projection remained active: latest refresh age was about `44s`, and `300` rows refreshed between the two snapshots. Its priority queue changed from `214` rows with oldest `21:24:31Z` to `276` rows with oldest `21:29:44Z`; therefore old work advanced, but the oldest pending wallet still lagged about `5m36s` while new betting generated additional work.
+Next: None requested.
+Notes: One initial read-only tick query referenced `price` instead of `price_usd`; two direct diagnostic joins exceeded or approached the bounded timeout and were replaced with indexed/materialized recent-row slices. These diagnostics did not change Production.
+Blockers: None.
+
 ## Active Update 2026-08-27 Historical Parity Indexed Donor Wallet
 Goal: Remove the Production donor-preview sequential-scan blocker without changing approved donor or Net calculations.
 Status: Completed
