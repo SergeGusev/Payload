@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260826-historical-parity-paper-position-hash-fix",
+  "title": "Fix historical parity PaperPosition stable tuple hashing",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Отлично. Тогда продолжай исследование проблем при пересчёте Net Pnl"
+    },
+    {
+      "source": "user",
+      "text": "Ок, действуй"
+    }
+  ],
+  "scope": {
+    "goal": "Apply the focused fix identified by the requested Net PnL investigation: make historical Gross/Net parity use one reproducible canonical stable-tuple hash for PaperPosition from candidate preparation through donor preview and mutation validation, so an unchanged position is not deferred as an invariant conflict.",
+    "inScope": [
+      "HistoricalGrossNetParity preparation and hash binding for PaperPosition targets whose proved originating entry is before the existing 2026-08-10T00:00:00Z UTC cutoff.",
+      "Removal of the redundant PaperPosition-only anonymous-object hash representation so TargetTupleHash is derived from the existing normalized CanonicalPayloadJson used by storage rereads.",
+      "Focused unit and PostgreSQL integration regression coverage for PaperPosition candidate preparation and donor preview hash compatibility.",
+      "Required requirement-contract validation, build/test verification, independent semantic review, and project context/history bookkeeping."
+    ],
+    "outOfScope": [
+      "Any change to Net ROI = Gross ROI - 3.3 percentage points, Fee arithmetic, Gross PnL, Gross ROI, basis, donor hierarchy or donor matching.",
+      "Any change to descending current-Gross strategy ordering, one-strategy-at-a-time completion, cutoff, batch sizes, timeouts, retry policy, reconciliation, or completed-row preservation.",
+      "Any change to Live or post-cutoff accounting, trading signals, execution, order placement, settlement, configuration, schema, or API behavior.",
+      "Production database mutation, service deployment, restart, configuration mutation, or trading action."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Only the existing historical Gross/Net parity PaperPosition path governed by the unchanged originating-entry cutoff strictly before 2026-08-10T00:00:00Z UTC.",
+    "firstVerification": "Compare the deployed PaperPosition candidate CanonicalPayloadJson fields, processor TargetTupleHash construction, storage donor-preview reread payload, production row hashes, runtime conflict logs, and current test coverage before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Carry out the focused PaperPosition hash fix identified by the Net PnL investigation so an unchanged historical position can proceed through donor preview.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "For PaperPosition, the prepared TargetTupleHash equals SHA-256 of its normalized CanonicalPayloadJson and therefore reproduces the hash calculated by the existing storage reread for the same unchanged row.",
+        "A real PostgreSQL flow that loads a PaperPosition candidate, prepares the target, and passes its TargetTupleHash to LoadHistoricalGrossNetParityDonorPreviewAsync returns Complete rather than InvariantConflict when the stable tuple has not changed.",
+        "The stable tuple continues to include position identity, mapped strategy identity, wallet, market/outcome identity, size, average price, and all persisted Fee accounting fields already present in CanonicalPayloadJson.",
+        "Volatile mark-to-market and row-version fields already excluded from CanonicalPayloadJson remain excluded, so ordinary valuation updates do not create a false stable-tuple conflict."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParityPaperPrepare|HistoricalGrossNetParity\" with TEMP/TMP and all outputs under the active marked D:\\CodexTemp run",
+          "expected": "Focused tests pass, including a regression proving PaperPosition TargetTupleHash reproduces CanonicalPayloadJson and a PostgreSQL integration flow proving unchanged-position donor preview does not return InvariantConflict.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep the correction limited to hash representation compatibility without changing historical financial decisions or scheduling.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "проблем при пересчёте Net Pnl",
+      "acceptanceCriteria": [
+        "No Net/Gross/Fee formula, donor candidate, donor ordering, fixed fallback, strategy rank, cutoff, accounting ownership, or reconciliation behavior changes.",
+        "PaperRun, PaperSettlement, PaperSellFill, and LiveOrder hash construction remain unchanged.",
+        "The production database and running service are not mutated or redeployed by this local implementation task.",
+        "The solution or affected projects build successfully; focused tests, git diff --check, requirement validation, and an independent comparison of the verbatim requests, approved contract, actual diff, and evidence all pass."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "Inspect the task diff, run the affected solution build and focused tests with disposable outputs under the active marked D:\\CodexTemp run, run git diff --check and scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree, then obtain the mandated independent semantic review.",
+          "expected": "Only the approved PaperPosition hash compatibility and its regression tests change; all checks pass with no production mutation and no open independent-review findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260826-historical-parity-paper-position-hash-fix sha256:f7bf6707648516c3d17cf862d1c3ac7fe6a9c8e00824d6ab65e05f53e8cd4a96",
+    "semanticDigest": "sha256:f7bf6707648516c3d17cf862d1c3ac7fe6a9c8e00824d6ab65e05f53e8cd4a96"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/semantic_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
