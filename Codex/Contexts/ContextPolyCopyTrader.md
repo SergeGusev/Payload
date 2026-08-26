@@ -1,6 +1,20 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-26 Production Server And Betting Recheck
+Goal: Recheck current production server and betting state only.
+Status: Completed read-only; server healthy and Paper/Live betting evidence is current
+Done:
+- Verified exact PostgreSQL 18.3 primary `192.168.0.101:5432/polycopytrader`, UTC, forced read-only transactions, and deployed build `3023d6c46d176eef579734a81bac2fd1e5ba4824`. Service remained `Running / Live`, immutable start `2026-08-25T19:14:54.535812Z`, heartbeat advanced from `15:58:08.048369Z` to `16:00:08.051862Z`, and `last_error=NULL`.
+- BTC/ETH/SOL reference ticks were 7.847/13.151/14.668 seconds old initially and 0.269/0.524/0.758 seconds old finally.
+- Paper orders were 188/587/3,516 over 5/15/60 minutes; all 587 last-15-minute orders were Filled. Fills were 188/587/3,504 and settlements 207/563/3,715. The independent follow-up interval added 199 Paper orders and 199 fills, all Filled, plus 188 settlements.
+- Exactly two Live orders existed in the prior hour, both `Matched` FAK orders for `eth_up_down_5m_up_bps_50_instant`; both had balance effects applied, were settled from Gamma resolved metadata, one won and one lost, and zero Live order remained open.
+- Copied-performance timestamp advanced from `15:58:24.948947Z` to `15:59:24.970778Z` and 60 rows refreshed after the first cutoff. Queue/inflight changed `184/25 -> 319/25`, while oldest pending advanced `15:56:25.202115Z -> 15:57:36.653762Z`; projection is active with an approximately 161-second oldest pending delay at final cutoff.
+- The prior hour contained four OKX expiry-ticker two-second timeouts through `15:22:29.021544Z` and four critical crypto Polymarket WebSocket premature-close records through `15:51:52.300055Z`. No API error occurred after the first cutoff; exact current WebSocket connection state is not persisted, but subsequent Paper orders, fills, settlements, and fresh reference ticks independently confirm continued runtime activity. Every lock snapshot had zero waiting locks.
+Next: None.
+Notes: Exact final cutoff `2026-08-26T16:00:17.963460Z`; no production state changed. Local branch remains ahead of upstream and was not pushed by this read-only task.
+Blockers: None.
+
 ## Active Update 2026-08-26 Production Server And Betting Check
 Goal: Verify current production service health, betting flow, data freshness, copied-performance progress, errors, and delays.
 Status: Completed read-only; server and Paper betting healthy, copied-performance active with a moderate backlog
