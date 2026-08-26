@@ -3,7 +3,7 @@
   "contractId": "RC-20260826-historical-parity-indexed-donor-wallet",
   "title": "Use indexed canonical wallet lookup for historical parity donors",
   "author": "agent:/root",
-  "status": "draft",
+  "status": "approved",
   "originalRequests": [
     {
       "source": "user",
