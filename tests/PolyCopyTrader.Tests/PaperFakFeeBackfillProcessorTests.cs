@@ -1904,6 +1904,10 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
         Assert.Empty(prepared.Conflicts);
         var target = Assert.Single(prepared.Targets);
+        var expectedTargetHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(position.CanonicalPayloadJson)))
+            .ToLowerInvariant();
+        Assert.Equal(expectedTargetHash, target.TargetTupleHash);
         Assert.Equal(HistoricalGrossNetParityExactEligibility.ExistingExactPreserved, target.ExactEligibility);
         var component = Assert.Single(target.ProvedComponents);
         Assert.Equal(0.15m, component.AmountUsd);

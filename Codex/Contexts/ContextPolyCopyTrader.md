@@ -1,6 +1,19 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-26 Historical Parity PaperPosition Hash Fix
+Goal: Remove the deterministic `PaperPosition` stable-tuple hash mismatch that blocked historical Net PnL strategy completion.
+Status: Completed locally, independently reviewed, and ready for service deployment
+Done:
+- Fresh production logs and a read-only row snapshot proved strategy `b7c50005-0000-4000-8197-000000000004` repeatedly deferred position `5a4ef4c9-dc18-41b5-a3cd-92fb7b3c0795`; the storage reread hash `46a88c8631a2b9d201ee217ab0d3f7d46910fcde90a46f41144384f1980c384c` differed from processor hash `86087a32ad33aa85845f2cd1bcbcff5befa5068be9ba4d61e3e9e191ed50f7f6` without a row change.
+- User approved `RC-20260826-historical-parity-paper-position-hash-fix` at `sha256:f7bf6707648516c3d17cf862d1c3ac7fe6a9c8e00824d6ab65e05f53e8cd4a96`; valid approval-only checkpoint commit is `8c119b27`.
+- Removed the redundant `PaperPosition` anonymous-object `openStableHashPayload`; every prepared target now hashes its existing canonical payload, matching donor-preview and mutation rereads. Financial formulas, donors, Gross ordering, cutoff, other source kinds, Live behavior, and production state are unchanged.
+- Added a unit regression proving `PaperPosition.TargetTupleHash` reproduces `CanonicalPayloadJson` and a PostgreSQL integration regression carrying the prepared position hash through real donor preview.
+- Targeted unit passed `1/1`; real disposable-PostgreSQL integration passed `1/1`; broad parity tests passed `26` with `3` expected PostgreSQL skips; `PolyCopyTrader.sln` build passed with `0` warnings and `0` errors. Independent reviewer `agent:/root/semantic_reviewer` returned PASS with no findings.
+Next: Deploy/restart the service from the pushed `codex/reference-average-available-windows` branch, then verify fresh logs show the active strategy completes instead of repeating the `PaperPosition` donor-preview invariant conflict.
+Notes: The allowlisted localhost integration database `pct_codex_skip_v2_20260826211000_5d91c2a7` was previewed, used only for the focused test, and deleted; configured local `polycopytrader` remained present. No production database, service, configuration, schema, trading, or Live state was mutated.
+Blockers: None.
+
 ## Active Update 2026-08-26 ETH LossDiff History Backfill Completed
 Goal: Generate the exact pre-rollout Paper histories for the two deployed ETH LossDiff child strategies in gentle resumable batches.
 Status: Completed in production and independently verified

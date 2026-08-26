@@ -215,6 +215,25 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
             HistoricalGrossNetDonorHashV1.ComputeMembershipHash([]),
             aggregate.MembershipHashV1);
 
+        var positionTarget = Assert.Single(
+            prepared.Targets,
+            value => value.SourceKind == HistoricalGrossNetParitySourceKind.PaperPosition &&
+                     value.SourceId == PaperPositionId);
+        var positionPreview = await repository.LoadHistoricalGrossNetParityDonorPreviewAsync(
+            new HistoricalGrossNetParityDonorPreviewRequest(
+                positionTarget.SourceKind,
+                positionTarget.SourceId,
+                positionTarget.StrategyId,
+                positionTarget.TargetTupleHash,
+                [descriptor],
+                0,
+                64,
+                30,
+                1_000));
+        Assert.True(
+            positionPreview.Status == HistoricalGrossNetParityReadStatus.Complete,
+            positionPreview.Details);
+
         var runlessTarget = Assert.Single(
             prepared.Targets,
             value => value.SourceKind == HistoricalGrossNetParitySourceKind.PaperSellFill &&

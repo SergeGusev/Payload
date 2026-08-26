@@ -3209,26 +3209,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
             authoritative,
             components,
             replay.LineagePayload,
-            position.CanonicalPayloadJson,
-            openStableHashPayload: JsonSerializer.Serialize(new
-            {
-                position.PositionId,
-                position.StrategyId,
-                position.CopiedTraderWallet,
-                position.AssetId,
-                position.ConditionId,
-                position.Outcome,
-                position.SizeShares,
-                position.AveragePrice,
-                position.FeeUsd,
-                position.FeeAccountingStatus,
-                position.FeeCalculationSource,
-                position.FeeLiquidityRole,
-                position.FeeRate,
-                position.FeeExponent,
-                position.FeeTakerOnly,
-                position.FeeCalculatedAtUtc
-            }));
+            position.CanonicalPayloadJson);
     }
 
     private static HistoricalGrossNetParityTargetSnapshot? PrepareSettlement(
@@ -3506,7 +3487,6 @@ internal static class HistoricalGrossNetParityPaperPreparer
         IReadOnlyList<HistoricalGrossNetParityComponentAllocationV1> components,
         string lineagePayload,
         string canonicalPayload,
-        string? openStableHashPayload = null,
         decimal? authoritativeEffectiveFeeUsd = null)
     {
         var contributionEffectiveFee = sourceKind == HistoricalGrossNetParitySourceKind.PaperSellFill &&
@@ -3528,8 +3508,7 @@ internal static class HistoricalGrossNetParityPaperPreparer
         var canonicalLineagePayload = NormalizeJson(lineagePayload);
         var lineageHash = Hash(canonicalLineagePayload);
         var componentHash = HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(components);
-        var stableTargetPayload = openStableHashPayload ?? canonicalPayload;
-        var targetHash = Hash(stableTargetPayload);
+        var targetHash = Hash(canonicalPayload);
         var bindingHash = HistoricalGrossNetParityBindingV1.Compute(
             targetHash,
             lineageHash,

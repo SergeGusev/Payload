@@ -3,7 +3,7 @@
   "contractId": "RC-20260826-historical-parity-paper-position-hash-fix",
   "title": "Fix historical parity PaperPosition stable tuple hashing",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -58,8 +58,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParityPaperPrepare|HistoricalGrossNetParity\" with TEMP/TMP and all outputs under the active marked D:\\CodexTemp run",
           "expected": "Focused tests pass, including a regression proving PaperPosition TargetTupleHash reproduces CanonicalPayloadJson and a PostgreSQL integration flow proving unchanged-position donor preview does not return InvariantConflict.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The targeted PaperPosition unit regression passed 1/1. The real PostgreSQL integration test MixedRunDonor_IsReplayedAtTargetTime_AndStrategyPathUsesSettledIndex passed 1/1 in 6 seconds on the separately previewed allowlisted localhost database pct_codex_skip_v2_20260826211000_5d91c2a7; that test now carries the prepared PaperPosition TargetTupleHash into LoadHistoricalGrossNetParityDonorPreviewAsync and requires Complete. The disposable database was removed afterward, with zero remaining copies and configured local polycopytrader still present. The broader HistoricalParity/HistoricalGrossNetParity run passed 26 tests with 3 expected PostgreSQL skips after POLYCOPYTRADER_REPOSITORY_ROOT was supplied for D:\\CodexTemp-hosted source-contract tests."
         }
       ]
     },
@@ -88,8 +88,8 @@
           "kind": "build",
           "command": "Inspect the task diff, run the affected solution build and focused tests with disposable outputs under the active marked D:\\CodexTemp run, run git diff --check and scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree, then obtain the mandated independent semantic review.",
           "expected": "Only the approved PaperPosition hash compatibility and its regression tests change; all checks pass with no production mutation and no open independent-review findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln build passed with 0 warnings and 0 errors using restore/build outputs under the marked D:\\CodexTemp run. git diff --check passed with only line-ending notices. The final product/test diff contains exactly PaperFakFeeBackfillProcessor.cs plus the two approved test files; no openStableHashPayload reference remains. The initial broad test invocation had 8 infrastructure-only source-file lookup failures because the isolated test DLL was outside the repository; setting the test-supported POLYCOPYTRADER_REPOSITORY_ROOT and rerunning produced the passing result. Independent reviewer agent:/root/semantic_reviewer returned PASS with no open findings. No production, service, configuration, schema, trading, or Live state was mutated."
         }
       ]
     }
@@ -104,8 +104,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/semantic_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

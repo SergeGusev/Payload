@@ -27,3 +27,14 @@ Request:
 
 Result:
 The approval-only checkpoint was committed as `9db8cbe0`. The command was changed from one global serializable transaction to 52 deterministic, resumable one-chain `READ COMMITTED` batches with read-only health/progress gates and a final v2 marker only after 52/52. Focused PostgreSQL 18 tests passed 11/11 with production dashboard triggers, Release solution build passed with zero errors, and independent semantic review returned PASS. Production preview matched the exact 1,060-row source, both digests, and 22/30 plan. Apply stopped safely at 14/52 on a transient waiting lock, then resumed from the exact 84-row durable progress and completed all 52 chains. Idempotent retry wrote zero rows. Independent aggregates reproduced all approved Gross/Fee/Net totals, 52 exact parent links, six complete target row kinds, zero pre-cutoff LossDiff events, zero attributable Live activity, zero final waiting locks, and heartbeat advancement with `last_error=NULL`. No service stop/restart, deployment, backup, schema DDL, deletion, venue action, or Live action occurred.
+
+## 2026-08-26T19:49:08.6792509Z
+Request:
+Отлично. Тогда продолжай исследование проблем при пересчёте Net Pnl
+
+Ок, действуй
+
+`APPROVE RC-20260826-historical-parity-paper-position-hash-fix sha256:f7bf6707648516c3d17cf862d1c3ac7fe6a9c8e00824d6ab65e05f53e8cd4a96`
+
+Result:
+Diagnosed the historical parity stall as a deterministic `PaperPosition` hash-contract mismatch: preparation hashed a PascalCase anonymous object while donor preview reread and hashed normalized snake_case PostgreSQL JSON. User approved the focused contract; valid approval-only checkpoint commit is `8c119b27`. Removed only the redundant alternate payload, added unit and real PostgreSQL donor-preview regressions, passed targeted `1/1`, real PostgreSQL `1/1`, broad parity `26` with `3` expected DB skips, and solution build with zero warnings/errors. Independent semantic review returned PASS. The disposable test database was deleted, and no production/service/Live state changed.
