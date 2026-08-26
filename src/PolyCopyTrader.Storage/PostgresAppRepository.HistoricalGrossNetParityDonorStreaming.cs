@@ -295,8 +295,14 @@ public sealed partial class PostgresAppRepository
             int commandTimeoutSeconds,
             CancellationToken cancellationToken)
     {
+        var positionWalletPredicate = strategyId == StrategyIds.FollowLeader
+            ? "lower(position.copied_trader_wallet) NOT LIKE 'strategy:%'"
+            : "position.copied_trader_wallet=(SELECT 'strategy:'||code FROM candidate_strategy)";
+        var settlementWalletPredicate = strategyId == StrategyIds.FollowLeader
+            ? "lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%'"
+            : "settlement.copied_trader_wallet=(SELECT 'strategy:'||code FROM candidate_strategy)";
         await using var command = new NpgsqlCommand(
-            """
+            $$"""
 WITH candidate_strategy AS MATERIALIZED (
     SELECT strategy.id, strategy.code FROM strategies strategy WHERE strategy.id=@StrategyId
 ), uses_runs AS MATERIALIZED (
@@ -341,12 +347,10 @@ WITH candidate_strategy AS MATERIALIZED (
            position.fee_calculated_at_utc, NULL, NULL::uuid,
            lower(position.copied_trader_wallet), position.asset_id,
            NULL::timestamptz, NULL::uuid, NULL::uuid, to_jsonb(position)::text
-    FROM paper_positions position CROSS JOIN candidate_strategy strategy
+    FROM paper_positions position
     WHERE position.size_shares>0
-      AND ((strategy.id=@FollowLeaderStrategyId
-            AND lower(position.copied_trader_wallet) NOT LIKE 'strategy:%')
-           OR (strategy.id<>@FollowLeaderStrategyId
-            AND lower(position.copied_trader_wallet)=lower('strategy:'||strategy.code)))
+      AND EXISTS (SELECT 1 FROM candidate_strategy)
+      AND {{positionWalletPredicate}}
 
     UNION ALL
     SELECT 'PaperSettlement', settlement.id, 'paper-settlement:'||lower(settlement.id::text),
@@ -358,12 +362,10 @@ WITH candidate_strategy AS MATERIALIZED (
            settlement.fee_calculated_at_utc, NULL, NULL::uuid,
            lower(settlement.copied_trader_wallet), settlement.asset_id,
            settlement.settled_at_utc, NULL::uuid, NULL::uuid, to_jsonb(settlement)::text
-    FROM paper_position_settlements settlement CROSS JOIN candidate_strategy strategy
+    FROM paper_position_settlements settlement
     WHERE NOT (SELECT value FROM uses_runs)
-      AND ((strategy.id=@FollowLeaderStrategyId
-            AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
-           OR (strategy.id<>@FollowLeaderStrategyId
-            AND lower(settlement.copied_trader_wallet)=lower('strategy:'||strategy.code)))
+      AND EXISTS (SELECT 1 FROM candidate_strategy)
+      AND {{settlementWalletPredicate}}
 
     UNION ALL
     SELECT 'PaperSellFill', sell_fill.id,
@@ -450,7 +452,6 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
             CommandTimeout = commandTimeoutSeconds
         };
         command.Parameters.AddWithValue("StrategyId", strategyId);
-        command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
         command.Parameters.AddWithValue(
             "IncludeLive",
             targetSourceKind == HistoricalGrossNetParitySourceKind.LiveOrder);
@@ -641,6 +642,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         var replay = await ReplayHistoricalGrossNetParityDonorStreamAsync(
             connection,
             transaction,
+            strategyId,
             raw,
             commandTimeoutSeconds,
             cancellationToken);
@@ -691,6 +693,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         var componentHash = await ComputeHistoricalGrossNetParityPoolComponentHashAsync(
             connection,
             transaction,
+            strategyId,
             raw,
             state,
             replay.TargetSell,
@@ -724,6 +727,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         await foreach (var fill in ReadHistoricalGrossNetParityDonorFillsAsync(
                            connection,
                            transaction,
+                           null,
                            raw,
                            orderByFillId: true,
                            commandTimeoutSeconds,
@@ -761,6 +765,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
             await foreach (var fill in ReadHistoricalGrossNetParityDonorFillsAsync(
                                connection,
                                transaction,
+                               null,
                                raw,
                                orderByFillId: true,
                                commandTimeoutSeconds,
@@ -786,6 +791,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         ReplayHistoricalGrossNetParityDonorStreamAsync(
             NpgsqlConnection connection,
             NpgsqlTransaction transaction,
+            Guid strategyId,
             HistoricalGrossNetParityRawDonorRow raw,
             int commandTimeoutSeconds,
             CancellationToken cancellationToken)
@@ -796,6 +802,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         await foreach (var fill in ReadHistoricalGrossNetParityDonorFillsAsync(
                            connection,
                            transaction,
+                           strategyId,
                            raw,
                            orderByFillId: false,
                            commandTimeoutSeconds,
@@ -887,6 +894,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
     private static async Task<string> ComputeHistoricalGrossNetParityPoolComponentHashAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
+        Guid strategyId,
         HistoricalGrossNetParityRawDonorRow raw,
         HistoricalGrossNetParityCompactReplayState state,
         HistoricalGrossNetParitySellProof? sell,
@@ -915,6 +923,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         await foreach (var fill in ReadHistoricalGrossNetParityActiveBuyFillsAsync(
                            connection,
                            transaction,
+                           strategyId,
                            raw,
                            state.ActiveAfter,
                            commandTimeoutSeconds,
@@ -957,6 +966,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         await foreach (var fill in ReadHistoricalGrossNetParityActiveBuyFillsAsync(
                            connection,
                            transaction,
+                           strategyId,
                            raw,
                            state.ActiveAfter,
                            commandTimeoutSeconds,
@@ -1023,6 +1033,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         ReadHistoricalGrossNetParityActiveBuyFillsAsync(
             NpgsqlConnection connection,
             NpgsqlTransaction transaction,
+            Guid strategyId,
             HistoricalGrossNetParityRawDonorRow raw,
             HistoricalGrossNetParityReplayCursor? activeAfter,
             int commandTimeoutSeconds,
@@ -1031,6 +1042,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         await foreach (var fill in ReadHistoricalGrossNetParityDonorFillsAsync(
                            connection,
                            transaction,
+                           strategyId,
                            raw,
                            orderByFillId: true,
                            commandTimeoutSeconds,
@@ -1059,6 +1071,7 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         ReadHistoricalGrossNetParityDonorFillsAsync(
             NpgsqlConnection connection,
             NpgsqlTransaction transaction,
+            Guid? strategyId,
             HistoricalGrossNetParityRawDonorRow raw,
             bool orderByFillId,
             int commandTimeoutSeconds,
@@ -1067,7 +1080,10 @@ ORDER BY octet_length(economic_key), economic_key COLLATE "C",
         var orderBy = orderByFillId
             ? "lower(fill.id::text), fill.filled_at_utc, lower(paper_order.id::text)"
             : "fill.filled_at_utc, lower(paper_order.id::text), lower(fill.id::text)";
-        var sql = $"""
+        var poolWalletPredicate = strategyId == StrategyIds.FollowLeader
+            ? "lower(paper_order.copied_trader_wallet)=@PoolWallet"
+            : "paper_order.copied_trader_wallet=@PoolWallet";
+        var sql = $$"""
 SELECT fill.id, fill.xmin::text::bigint, paper_order.id, paper_order.xmin::text::bigint,
        paper_order.strategy_id, paper_order.copied_trader_wallet, paper_order.status,
        paper_order.side, paper_order.execution_source, paper_order.asset_id,
@@ -1097,7 +1113,7 @@ FROM paper_orders paper_order
 INNER JOIN paper_fills fill ON fill.paper_order_id=paper_order.id
 WHERE ((@DirectOrderId IS NOT NULL AND paper_order.id=@DirectOrderId)
        OR (@DirectOrderId IS NULL
-           AND lower(paper_order.copied_trader_wallet)=@PoolWallet
+           AND {{poolWalletPredicate}}
            AND paper_order.asset_id=@PoolAsset))
   AND (@BoundaryAt IS NULL
        OR fill.filled_at_utc<@BoundaryAt
@@ -1105,7 +1121,7 @@ WHERE ((@DirectOrderId IS NOT NULL AND paper_order.id=@DirectOrderId)
            AND (@BoundaryFillId IS NULL
                 OR ROW(lower(paper_order.id::text),lower(fill.id::text))<=
                    ROW(lower(@BoundaryOrderId::text),lower(@BoundaryFillId::text)))))
-ORDER BY {orderBy};
+ORDER BY {{orderBy}};
 """;
         await using var command = new NpgsqlCommand(sql, connection, transaction)
         {
@@ -1182,6 +1198,7 @@ ORDER BY {orderBy};
             var page = await LoadHistoricalGrossNetParityActiveBuyOrderPageAsync(
                 connection,
                 transaction,
+                strategyId,
                 raw,
                 activeAfter,
                 pageAfter,
@@ -1220,6 +1237,7 @@ ORDER BY {orderBy};
         LoadHistoricalGrossNetParityActiveBuyOrderPageAsync(
             NpgsqlConnection connection,
             NpgsqlTransaction transaction,
+            Guid strategyId,
             HistoricalGrossNetParityRawDonorRow raw,
             HistoricalGrossNetParityReplayCursor? activeAfter,
             HistoricalGrossNetParityReplayCursor? pageAfter,
@@ -1227,12 +1245,15 @@ ORDER BY {orderBy};
             int commandTimeoutSeconds,
             CancellationToken cancellationToken)
     {
+        var poolWalletPredicate = strategyId == StrategyIds.FollowLeader
+            ? "lower(paper_order.copied_trader_wallet)=@PoolWallet"
+            : "paper_order.copied_trader_wallet=@PoolWallet";
         await using var command = new NpgsqlCommand(
-            """
+            $$"""
 SELECT fill.filled_at_utc,paper_order.id,fill.id
 FROM paper_orders paper_order
 INNER JOIN paper_fills fill ON fill.paper_order_id=paper_order.id
-WHERE lower(paper_order.copied_trader_wallet)=@PoolWallet
+WHERE {{poolWalletPredicate}}
   AND paper_order.asset_id=@PoolAsset AND paper_order.side='Buy'
   AND (@BoundaryAt IS NULL OR fill.filled_at_utc<@BoundaryAt
        OR (fill.filled_at_utc=@BoundaryAt

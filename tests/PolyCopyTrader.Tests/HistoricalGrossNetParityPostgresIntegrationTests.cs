@@ -169,6 +169,16 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
         var factory = await CreateFactoryAsync();
         var repository = new PostgresAppRepository(factory);
         await SeedAsync(factory);
+        Assert.True(await CountPaperPositionSettlementsAsync(factory) > 250);
+        var settlementPlan = await ReadCanonicalSettlementPlanAsync(factory);
+        Assert.Contains(
+            "ix_paper_position_settlements_wallet_time",
+            settlementPlan,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "Seq Scan on paper_position_settlements",
+            settlementPlan,
+            StringComparison.Ordinal);
 
         var page = await repository.LoadHistoricalGrossNetParityCandidatePageAsync(
             new HistoricalGrossNetParityCandidatePageRequest(
@@ -551,6 +561,23 @@ VALUES (
      'Calculated', 'Taker', @ExactSource, 0.01, 2, true,
      @SettledAtUtc, 0.05, @SettledAtUtc);
 
+INSERT INTO paper_position_settlements (
+    id, copied_trader_wallet, asset_id, condition_id, outcome,
+    winning_asset_id, winning_outcome, settled_size_shares, average_price,
+    cost_basis_usd, settlement_value_usd, realized_pnl_usd, fee_usd,
+    fee_accounting_status, fee_liquidity_role, fee_calculation_source,
+    fee_rate, fee_exponent, fee_taker_only, fee_calculated_at_utc,
+    net_realized_pnl_usd, won, settlement_source, settled_at_utc, created_at_utc)
+SELECT gen_random_uuid(), 'strategy:historical_parity-unrelated-' || value::text,
+       'unrelated-settlement-asset-' || value::text,
+       'unrelated-settlement-condition-' || value::text,
+       'Yes', 'unrelated-settlement-asset-' || value::text, 'Yes',
+       1, 0.50, 0.50, 0.60, 0.10, 0.01,
+       'Calculated', 'Taker', @ExactSource, 0.01, 2, true,
+       @SettledAtUtc, 0.09, true, 'integration', @SettledAtUtc, @SettledAtUtc
+FROM generate_series(1, 300) value
+ON CONFLICT (copied_trader_wallet, asset_id) DO NOTHING;
+
 INSERT INTO strategy_market_paper_runs (
     id, strategy_id, market_id, condition_id, market_slug, market_title,
     detected_at_utc, entry_due_at_utc, status, selected_asset_id, selected_outcome,
@@ -661,6 +688,7 @@ FROM generate_series(1, 300) value;
 ANALYZE strategy_market_paper_runs;
 ANALYZE strategy_paper_skip_rollups;
 ANALYZE historical_gross_net_parity_audit;
+ANALYZE paper_position_settlements;
 """,
             connection);
         command.Parameters.AddWithValue("StrategyId", StrategyId);
@@ -697,6 +725,40 @@ ANALYZE historical_gross_net_parity_audit;
             "CalculationVersion",
             HistoricalGrossNetParityConstants.CalculationVersion);
         await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<long> CountPaperPositionSettlementsAsync(
+        PostgresConnectionFactory factory)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*) FROM paper_position_settlements;",
+            connection);
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    private static async Task<string> ReadCanonicalSettlementPlanAsync(
+        PostgresConnectionFactory factory)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+EXPLAIN (FORMAT JSON, COSTS true)
+WITH candidate_strategy AS MATERIALIZED (
+    SELECT code FROM strategies WHERE id=@StrategyId
+)
+SELECT id
+FROM paper_position_settlements
+WHERE copied_trader_wallet=(SELECT 'strategy:'||code FROM candidate_strategy);
+""",
+            connection);
+        command.Parameters.AddWithValue("StrategyId", RunlessStrategyId);
+        var json = (string?)await command.ExecuteScalarAsync();
+        Assert.False(string.IsNullOrWhiteSpace(json));
+        using var document = JsonDocument.Parse(json!);
+        return document.RootElement.GetRawText();
     }
 
     private static async Task<string> ReadSettledRunPlanAsync(

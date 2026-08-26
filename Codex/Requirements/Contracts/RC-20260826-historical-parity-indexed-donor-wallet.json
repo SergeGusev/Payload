@@ -3,7 +3,7 @@
   "contractId": "RC-20260826-historical-parity-indexed-donor-wallet",
   "title": "Use indexed canonical wallet lookup for historical parity donors",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -63,8 +63,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalGrossNetParityPostgresIntegrationTests\" with TEMP/TMP and all outputs under the active marked D:\\CodexTemp run",
           "expected": "Focused PostgreSQL regressions pass, including a greater-than-250-row plan-guard case that completes donor preview with unchanged donor aggregate evidence.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "On allowlisted loopback disposable PostgreSQL database pct_codex_skip_v2_20260827090000_a17c4e2b, the target MixedRunDonor_IsReplayedAtTargetTime_AndStrategyPathUsesSettledIndex test passed 1/1. Its fixture proved 300 rows and 300 distinct unrelated wallets, EXPLAIN selected ix_paper_position_settlements_wallet_time with no settlement Seq Scan, donor preview returned Complete, and unchanged aggregate assertions passed. A class-wide attempt also exposed two pre-existing pagination-fixture ON CONFLICT failures outside the target path; they did not reach the changed donor code. The disposable database was then deleted and local polycopytrader was independently verified still present."
         }
       ]
     },
@@ -92,8 +92,8 @@
           "kind": "test",
           "command": "Run focused historical parity tests, inspect the complete diff, run the affected solution build, git diff --check, scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree and staged validation, then obtain independent semantic review.",
           "expected": "Only indexed donor wallet selection and its regressions change; all historical financial/scheduling contracts remain unchanged and every verification passes.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Current-diff verification passed: donor/strategy/fallback behavior 42/42; HistoricalGrossNetParityLiveFlowTests 8/8 with POLYCOPYTRADER_REPOSITORY_ROOT set for isolated artifacts; full PolyCopyTrader.sln Debug build 0 errors with 126 existing nullable/analyzer warnings outside the changed implementation; git diff --check had no whitespace errors. Independent reviewer agent:/root/semantic_reviewer compared original requests, contract, deviation, complete diff, and evidence and returned PASS with no P0-P3 findings."
         }
       ]
     }
@@ -120,8 +120,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/semantic_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

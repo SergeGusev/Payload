@@ -1,3 +1,15 @@
+## Active Update 2026-08-27 Historical Parity Indexed Donor Wallet
+Goal: Remove the Production donor-preview sequential-scan blocker without changing approved donor or Net calculations.
+Status: Completed
+Done:
+- Implemented separate streaming SQL predicates: ordinary non-FollowLeader strategies now match canonical `strategy:{strategy.code}` wallets by exact equality, while FollowLeader retains its existing case-normalized broad path.
+- Propagated the same ordinary exact-wallet comparison through donor replay and active-buy lookup; Gross ordering, one-strategy completion, donor hierarchy/ratio, fixed 3.3-point fallback, formulas, hashes, cutoff, retries, and Live behavior are unchanged.
+- Added a disposable PostgreSQL regression with 300 distinct unrelated settlement wallets; the target preview completed, the plan used `ix_paper_position_settlements_wallet_time`, no settlement sequential scan occurred, and existing donor aggregate assertions remained unchanged.
+- Independent reviewer `agent:/root/semantic_reviewer` compared the verbatim requests, approved contract/deviation, complete diff, and evidence and returned PASS with no findings.
+Next: Deploy/restart the service from the pushed `codex/reference-average-available-windows` branch, then verify fresh logs show the active Gross-ranked strategy progresses beyond donor preview.
+Notes: Approval checkpoints are `1e596304` and lifecycle correction `a4e85bc0`. Verification passed: target disposable PostgreSQL `1/1`, donor/strategy/fallback behavior `42/42`, source-contract parity `8/8`, and full Debug solution build with 0 errors and 126 existing nullable/analyzer warnings outside the changed implementation. A class-wide PostgreSQL attempt exposed two pre-existing pagination fixture `ON CONFLICT` failures outside this target; the target regression passed. The allowlisted disposable database was deleted and local `polycopytrader` remained present. No Production data, schema, service, configuration, deployment, trading, or Live state changed.
+Blockers: None.
+
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
