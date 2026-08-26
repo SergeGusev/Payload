@@ -1,6 +1,20 @@
 ## Standing Deployment Branch Rule
 Feature branches may be used for isolated work, but before reporting a change ready for the user to deploy, merge the complete approved history into `codex/reference-average-available-windows`, verify that merged deployment branch, and push it to its existing upstream. Do not hand off a feature-branch build as the deployment build.
 
+## Active Update 2026-08-26 Deployed PaperPosition Hash Fix Verification
+Goal: Verify the deployed historical-parity `PaperPosition` hash fix and whether the blocked Gross-ordered strategy resumes completion.
+Status: Completed read-only; hash fix is deployed and effective, but strategy completion is blocked by a new indexed-plan guard failure
+Done:
+- Production heartbeat proves the service is `Running / Live` on exact build `516859d3238629a06e9aafa694f0f74ff0c35542`, started `2026-08-26T20:02:39.164384Z`, advanced through `20:16:39.552819Z`, and has `last_error=NULL`.
+- Fresh logs prove the new build selected rank-4 strategy `b7c50005-0000-4000-8197-000000000004`, completed its exact phase, and entered fallback. The former `PaperPosition` `InvariantConflict` did not recur after restart.
+- Fallback attempts at `20:12:23.532Z` and `20:15:30.595Z` were safely deferred as `DeferredOperational`: PostgreSQL planned a forbidden sequential scan of `paper_position_settlements`, and the service's greater-than-250-row plan guard prevented execution and mutation.
+- Independent production catalog evidence shows `paper_position_settlements` has approximately 3.40 million live rows and 3.32 million planner-estimated rows. Existing indexes cover raw `copied_trader_wallet`, but the donor candidate query filters `lower(copied_trader_wallet)`, which is not covered by those index definitions.
+- Target position `5a4ef4c9-dc18-41b5-a3cd-92fb7b3c0795` remains unchanged (`LegacyUnknown`, fee zero, Net null, xmin `412662719`), has zero parity audit rows, and the final lock snapshot had zero waiting locks.
+- The shared legacy Paper FAK lane also repeatedly fails its bounded query after approximately ten seconds with `NpgsqlException: Exception while reading from stream`; the coordinator remains healthy and alternates back to parity, so this delays but does not explain the parity fallback deferral.
+Next: A separately approved product change is required to make the donor candidate lookup use a verified indexed predicate while preserving exact strategy-wallet matching and donor semantics.
+Notes: All database work used forced read-only transactions, UTC, ten-second statement timeout, and 250 ms lock timeout where applicable. No database, service, configuration, schema, trading, or Live state was changed. Two diagnostic queries referenced nonexistent timestamp column names and failed read-only before returning their later result sets; corrected schema-driven checks succeeded.
+Blockers: The active rank-4 strategy cannot complete while donor fallback is rejected for a sequential plan over `paper_position_settlements`.
+
 ## Active Update 2026-08-26 Historical Parity PaperPosition Hash Fix
 Goal: Remove the deterministic `PaperPosition` stable-tuple hash mismatch that blocked historical Net PnL strategy completion.
 Status: Completed locally, independently reviewed, and ready for service deployment

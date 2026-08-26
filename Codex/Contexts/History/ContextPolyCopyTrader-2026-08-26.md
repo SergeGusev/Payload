@@ -38,3 +38,10 @@ Request:
 
 Result:
 Diagnosed the historical parity stall as a deterministic `PaperPosition` hash-contract mismatch: preparation hashed a PascalCase anonymous object while donor preview reread and hashed normalized snake_case PostgreSQL JSON. User approved the focused contract; valid approval-only checkpoint commit is `8c119b27`. Removed only the redundant alternate payload, added unit and real PostgreSQL donor-preview regressions, passed targeted `1/1`, real PostgreSQL `1/1`, broad parity `26` with `3` expected DB skips, and solution build with zero warnings/errors. Independent semantic review returned PASS. The disposable test database was deleted, and no production/service/Live state changed.
+
+## 2026-08-26T20:17:57.7283989Z
+Request:
+Выложил, проверяй
+
+Result:
+Read-only production verification proved exact build `516859d3238629a06e9aafa694f0f74ff0c35542` is `Running / Live`, heartbeat advances, and `last_error=NULL`. The new build selected the blocked rank-4 strategy, completed its exact phase, entered fallback, and no longer produced the former `PaperPosition` hash `InvariantConflict`, so the deployed hash fix is effective. Fallback was nevertheless deferred twice without mutation because PostgreSQL planned a sequential scan of the approximately 3.40-million-row `paper_position_settlements` table and the service's greater-than-250-row plan guard rejected it. Existing indexes cover raw `copied_trader_wallet`, while the donor candidate query filters `lower(copied_trader_wallet)`. The target position remains `LegacyUnknown` with zero fee, null Net, unchanged xmin, and zero audit rows; waiting locks were zero. The legacy Paper FAK lane separately continues ten-second stream-read failures but does not stop heartbeat or parity alternation. No production state changed.
