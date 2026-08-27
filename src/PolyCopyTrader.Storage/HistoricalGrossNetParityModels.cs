@@ -60,6 +60,10 @@ public static class HistoricalGrossNetParityConstants
         "RC-20260823-historical-parity-gross-ordered-strategy-completion";
     public const string StrategyCompletionSemanticDigest =
         "sha256:ddae8fef59aed07fc98c719396f699370f6d385c377637a9d908a9342134bddf";
+    public const string DirectFixedFallbackContractId =
+        "RC-20260827-historical-parity-direct-fixed-3p33";
+    public const string DirectFixedFallbackSemanticDigest =
+        "sha256:36999b41e5a89d88c23ae7f2febf3e605d7bbed18e8838bb3954956ea2e1f0f5";
     public const string CalculationVersion = "historical-gross-net-parity-v1";
     public const string DonorMembershipEncodingDomain = "HGNM1";
     public const string DonorSelectionEncodingDomain = "HGNS1";

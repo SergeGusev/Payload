@@ -893,7 +893,9 @@ public sealed partial class PostgresAppRepository
             decision.StoredFeeUsd < 0m || decision.ContributionEffectiveFeeUsd < 0m ||
             decision.ComponentFloorUsd < 0m ||
             decision.ComponentFloorUsd != target.ProvedComponentFloorUsd ||
-            (decision.DecisionKind != HistoricalGrossNetParityDecisionKind.Fixed0p033 &&
+            (decision.DecisionKind is not (
+                 HistoricalGrossNetParityDecisionKind.Fixed0p033 or
+                 HistoricalGrossNetParityDecisionKind.Fixed0p0333) &&
              decision.ContributionEffectiveFeeUsd < decision.ComponentFloorUsd) ||
             decision.NetPnlUsd != target.GrossPnlUsd - decision.ContributionEffectiveFeeUsd ||
             string.IsNullOrWhiteSpace(decision.EvidenceVersion) ||
@@ -925,13 +927,16 @@ public sealed partial class PostgresAppRepository
             throw new ArgumentException("Live derived cost basis must equal frozen Gross basis plus Fee.");
         }
 
-        var donorRequired = decision.DecisionKind is
+        var requiresDonorSelection = decision.DecisionKind is
             HistoricalGrossNetParityDecisionKind.DonorRatio or
-            HistoricalGrossNetParityDecisionKind.Fixed0p0333 or
             HistoricalGrossNetParityDecisionKind.Fixed0p033;
-        if (donorRequired != (decision.DonorDecision is not null))
+        var permitsLegacyDonorSelection =
+            decision.DecisionKind == HistoricalGrossNetParityDecisionKind.Fixed0p0333;
+        if ((requiresDonorSelection && decision.DonorDecision is null) ||
+            (!requiresDonorSelection && !permitsLegacyDonorSelection && decision.DonorDecision is not null))
         {
-            throw new ArgumentException("Donor/fixed decisions require exactly one complete selection proof.");
+            throw new ArgumentException(
+                "Donor decisions require selection proof; direct fixed decisions do not.");
         }
         _ = NormalizeHistoricalGrossNetParityJson(decision.EvidenceJson);
     }
@@ -1338,10 +1343,10 @@ ORDER BY lower(fill.id::text);
     {
         if (decision.DonorDecision is null)
         {
-            return decision.DecisionKind is not (
-                HistoricalGrossNetParityDecisionKind.DonorRatio or
-                HistoricalGrossNetParityDecisionKind.Fixed0p0333 or
-                HistoricalGrossNetParityDecisionKind.Fixed0p033);
+            return decision.DecisionKind == HistoricalGrossNetParityDecisionKind.Fixed0p0333 ||
+                   decision.DecisionKind is not (
+                       HistoricalGrossNetParityDecisionKind.DonorRatio or
+                       HistoricalGrossNetParityDecisionKind.Fixed0p033);
         }
 
         var actual = await RecomputeHistoricalGrossNetParitySelectionAsync(

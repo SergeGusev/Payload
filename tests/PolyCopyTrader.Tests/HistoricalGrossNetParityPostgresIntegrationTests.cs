@@ -331,6 +331,126 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
         Assert.Contains("more than 250 rows", rejectedPreview.Details, StringComparison.Ordinal);
     }
 
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task DirectFixedPaperDecision_AppliesAtomicallyWithoutDonorCandidates()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = Guid.NewGuid();
+        var runId = Guid.NewGuid();
+        var enteredAtUtc = HistoricalGrossNetParityConstants.CutoffUtc.AddDays(-2);
+        var settledAtUtc = HistoricalGrossNetParityConstants.CutoffUtc.AddDays(-1);
+
+        await using (var connection = factory.CreateConnection())
+        {
+            await connection.OpenAsync();
+            await using var seed = new NpgsqlCommand(
+                """
+INSERT INTO strategies (
+    id, code, name, description, enabled, live_stakes, created_at_utc, updated_at_utc)
+VALUES (
+    @StrategyId, @Code, @Name, 'integration fixture',
+    true, false, @EnteredAtUtc, @EnteredAtUtc);
+
+INSERT INTO strategy_market_paper_runs (
+    id, strategy_id, market_id, condition_id, market_slug, market_title,
+    detected_at_utc, entry_due_at_utc, status, selected_asset_id, selected_outcome,
+    entry_price, stake_usd, size_shares, entered_at_utc, settlement_price,
+    settlement_value_usd, realized_pnl_usd, fee_usd, fee_accounting_status,
+    fee_liquidity_role, fee_calculation_source, net_realized_pnl_usd,
+    settled_at_utc, retention_scope, created_at_utc, updated_at_utc)
+VALUES (
+    @RunId, @StrategyId, @MarketId, @ConditionId, @MarketId, 'direct fixed target',
+    @EnteredAtUtc, @EnteredAtUtc, 'Settled', 'asset-direct-fixed', 'Yes',
+    0.50, 12.34, 24.68, @EnteredAtUtc, 0.90,
+    22.34, 10.00, 0, 'LegacyUnknown', 'Unknown', '', NULL,
+    @SettledAtUtc, 'PaperOnly', @EnteredAtUtc, @SettledAtUtc);
+""",
+                connection);
+            seed.Parameters.AddWithValue("StrategyId", strategyId);
+            seed.Parameters.AddWithValue("RunId", runId);
+            seed.Parameters.AddWithValue("Code", "historical_parity_direct_fixed_" + strategyId.ToString("N"));
+            seed.Parameters.AddWithValue("Name", "direct fixed integration " + strategyId.ToString("N"));
+            seed.Parameters.AddWithValue("MarketId", "direct-fixed-" + runId.ToString("N"));
+            seed.Parameters.AddWithValue("ConditionId", "direct-fixed-condition-" + runId.ToString("N"));
+            seed.Parameters.AddWithValue("EnteredAtUtc", enteredAtUtc.UtcDateTime);
+            seed.Parameters.AddWithValue("SettledAtUtc", settledAtUtc.UtcDateTime);
+            await seed.ExecuteNonQueryAsync();
+        }
+
+        var page = await repository.LoadHistoricalGrossNetParityCandidatePageAsync(
+            new HistoricalGrossNetParityCandidatePageRequest(
+                HistoricalGrossNetParityProcessingPhase.Fallback,
+                HistoricalGrossNetParityConstants.CutoffUtc,
+                50,
+                null,
+                30,
+                1_000,
+                HistoricalGrossNetParityConstants.CalculationVersion,
+                strategyId));
+        Assert.Equal(HistoricalGrossNetParityReadStatus.Complete, page.Status);
+        var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(
+            page,
+            HistoricalGrossNetParityConstants.CutoffUtc);
+        var target = Assert.Single(prepared.Targets, value => value.SourceId == runId);
+        var decision = HistoricalGrossNetParityDecisionFactory.CreateFallback(
+            target,
+            DateTimeOffset.UtcNow,
+            HistoricalGrossNetParityConstants.CalculationVersion);
+
+        var result = await repository.TryApplyHistoricalGrossNetParityPaperDecisionAsync(
+            new HistoricalGrossNetParityPaperDecisionRequest(
+                target,
+                decision,
+                [],
+                HistoricalGrossNetParityConstants.CutoffUtc,
+                50,
+                30,
+                1_000,
+                HistoricalGrossNetParityConstants.CalculationVersion));
+
+        Assert.Equal(HistoricalGrossNetParityApplyStatus.Applied, result.Status);
+        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p0333, decision.DecisionKind);
+        Assert.Equal(0.41092200m, decision.ContributionEffectiveFeeUsd);
+        Assert.Equal(9.58907800m, decision.NetPnlUsd);
+        Assert.Null(decision.DonorDecision);
+
+        await using (var connection = factory.CreateConnection())
+        {
+            await connection.OpenAsync();
+            await using var verify = new NpgsqlCommand(
+                """
+SELECT r.fee_usd,
+       r.net_realized_pnl_usd,
+       r.fee_calculation_source,
+       count(a.audit_id)
+FROM strategy_market_paper_runs r
+LEFT JOIN historical_gross_net_parity_audit a
+  ON a.source_kind = 'PaperRun'
+ AND a.source_id = r.id
+ AND a.calculation_version = @CalculationVersion
+ AND a.operation_kind = 'AccountingDecision'
+WHERE r.id = @RunId
+GROUP BY r.fee_usd, r.net_realized_pnl_usd, r.fee_calculation_source;
+""",
+                connection);
+            verify.Parameters.AddWithValue("RunId", runId);
+            verify.Parameters.AddWithValue(
+                "CalculationVersion",
+                HistoricalGrossNetParityConstants.CalculationVersion);
+            await using var reader = await verify.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(0.41092200m, reader.GetDecimal(0));
+            Assert.Equal(9.58907800m, reader.GetDecimal(1));
+            Assert.Equal(
+                "historical-gross-net-parity-fixed-net-roi-minus-3p33-v1",
+                reader.GetString(2));
+            Assert.Equal(1, reader.GetInt64(3));
+            Assert.False(await reader.ReadAsync());
+        }
+    }
+
     private static async Task<PostgresConnectionFactory> CreateFactoryAsync()
     {
         var connectionString = Environment.GetEnvironmentVariable(

@@ -513,19 +513,14 @@ fallback accounting remains lifetime/MtM. Live remains settled-realized only;
 no Live open-MtM metric is added.
 
 Accounting precedence is proved `VenueReported`, complete exact local evidence,
-authoritative-Fee Net repair, exact historical CLOB calculation, deterministic
-exact-donor Fee-to-basis ratio, and finally fixed `0.033`. The fixed fallback is
-equivalent to `Net ROI = Gross ROI - 3.3` percentage points. The donor matcher
-uses typed catalog semantics rather than names, resolves same-strategy and
-nearest-family tiers deterministically, then falls through to any proved crypto
-strategy before the fixed coefficient. It deduplicates linked Paper/Live
-evidence and never lets estimated rows donate. Final Fee is rounded once to eight
-decimal places away from zero. Exact/local and donor results cannot fall below
-proved non-overlapping Fee components; the final fixed fallback remains exactly
-`B * 0.033` and records partial component evidence without raising that result.
-Net remains exactly `Gross - Fee`. A fallback is stored as
-ordinary terminal `Calculated` with versioned provenance; Gross is never
-rewritten.
+authoritative-Fee Net repair, exact historical CLOB calculation, and then direct
+fixed `0.0333`. The fallback is equivalent to
+`Net ROI = Gross ROI - 3.33` percentage points. Final Fee is rounded once to
+eight decimal places away from zero, so the stored formula is exactly
+`Fee = ROUND_AWAY_8(B * 0.0333)` and `Net = Gross - Fee`. New fallback decisions
+do not discover, preview, match, or revalidate donors. A fallback is stored as
+ordinary terminal `Calculated` with distinct versioned provenance; Gross is
+never rewritten.
 
 Paper pooled lineage is replayed with the persisted engine rounding and
 proportional entry-Fee allocation. Every contributing originating BUY must be
@@ -545,39 +540,20 @@ notifications.
 The deployed service performs this historical repair incrementally. It first
 selects the unfinished strategy with the greatest current Dashboard Gross. That
 strategy remains active until both its exact/authoritative/local-calculation and
-donor/fixed-fallback work are complete; current Gross is reranked only before
-selecting the next unfinished strategy. Donor candidates are generated from
-typed strategy descriptors and queried only for finite strategy-ID pages; there
-is no full donor-universe scan, frozen universe, or durable global plan.
-The target-time aggregate and the complete winning/absence proof are revalidated
-inside the target's serializable accounting transaction. A conflict retries only
-that target, while independent committed targets remain complete. Restarts rescan
-unresolved/Pending canonical state and permanent audit.
-
-Different targets can therefore observe different exact donor membership while
-the service progresses; the stored numerator, denominator, counts, deterministic
-membership/selection hashes, ratio, and provenance preserve each decision. A
-terminal Paper estimate is not recalculated when later exact donors appear. Live
+direct-fixed-fallback work are complete; current Gross is reranked only before
+selecting the next unfinished strategy. The target's stable tuple and accounting
+guards are revalidated inside its serializable transaction. A conflict retries
+only that target, while independent committed targets remain complete. Restarts
+rescan unresolved/Pending canonical state and permanent audit. Existing
+completed exact, donor, and fixed decisions are not replayed; their legacy donor
+selection evidence remains readable. Live
 initial balance effects remain ordered by settlement time and UUID per strategy:
 an earlier unfinished row gates later initial balance transactions for that
 strategy, and the active strategy is retained until that balance work is
 terminal. The background cadence and projection reconciliation can leave Net
 temporarily blank until the relevant target and snapshot refresh complete.
 
-Linked Live/Paper donor deduplication is replay-based, not inferred from a
-shared wallet/asset name. If an exact Live order is still represented inside a
-composite Paper position or settlement and the aggregate rounding residual
-cannot be split between linked and unlinked BUY charges without inventing
-per-BUY economics, the exact Live row is retained and the entire indivisible
-Paper composite is excluded from that target-time donor aggregate. Matching
-continues through the remaining tiers and fixed `0.033`. This prevents double
-counting and preserves Live precedence, but can omit otherwise exact unlinked
-Paper economics from `N/D` compared with a hypothetical exactly partitioned
-aggregate. No synthetic residual Paper row is created. A fully consumed older
-linked order that replay proves is absent from the remaining composite does not
-cause that exclusion.
-
-The current model has five material limits:
+The current model has four material limits:
 
 - a Paper depth sweep can be stored as one aggregate VWAP fill, while the
   nonlinear curve and per-result rounding can differ from a sum over individual
@@ -588,10 +564,6 @@ The current model has five material limits:
 - maker rebates and builder-attribution fees are excluded. Rebates need a
   separate authoritative payout ledger, and builder fees need their own evidence
   and calculation rather than being folded into the CLOB platform-fee field.
-- an indivisible Paper composite overlapping an exact linked Live row is
-  excluded in full when its nonlinked residual cannot be proved exactly; the
-  retained Live row prevents duplicate accounting, but donor `N/D` may omit
-  exact nonlinked Paper economics contained in that same aggregate;
 - legacy Paper/Live-shadow replacement inside an aggregate with additional
   non-shadow size cannot reconstruct the removed component's provenance because
   no versioned pre-shadow fee snapshot exists. The aggregate must therefore stay

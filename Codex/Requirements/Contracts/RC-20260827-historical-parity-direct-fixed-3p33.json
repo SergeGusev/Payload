@@ -3,7 +3,7 @@
   "contractId": "RC-20260827-historical-parity-direct-fixed-3p33",
   "title": "Replace historical parity donors with direct 3.33-point fallback",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -79,8 +79,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|PolymarketFeeAccountingServiceTests\"",
           "expected": "Focused tests prove the unchanged strict historical cutoff and ordinary Paper/Live fee-accounting behavior while the historical fallback changes independently.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "At the approved final diff, the focused Debug invocation passed 101 tests, failed 0, and environment-gated 4 PostgreSQL integration tests; it covered HistoricalParity, HistoricalGrossNetParity, PolymarketFeeAccountingServiceTests, and VenueReportedRevision. Source inspection and the pre-edit Production read-only snapshot independently confirmed the strict pre-cutoff workflow boundary and the separate ordinary Paper/Live accounting path."
         }
       ]
     },
@@ -113,8 +113,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity\"",
           "expected": "Tests prove exact-before-fixed precedence, exact 0.0333 coefficient and rounding, no donor calls or revalidation for new fallback decisions, preserved financial guards, and Paper/Live atomic application.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused unit/source-contract tests passed within the 101-test matrix. The dedicated disposable PostgreSQL 17 test DirectFixedPaperDecision_AppliesAtomicallyWithoutDonorCandidates passed 1/1 with skipped 0 on an allowlisted loopback database, proving an empty donor candidate list, Fee 0.41092200 for basis 12.34, Net 9.58907800, the versioned direct-fixed source, and exactly one AccountingDecision audit row."
         }
       ]
     },
@@ -144,8 +144,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|VenueReportedRevision\"",
           "expected": "Tests prove completed-row exclusion, legacy donor/fixed compatibility, unchanged calculation version, and unchanged late VenueReported supersession.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The 101-test focused matrix passed with calculation version v1, completed-row/legacy decision compatibility, and VenueReportedRevision coverage. Independent reviewer agent:/root/semantic_reviewer verified that legacy donor kinds, selection revalidation for legacy decisions, permanent audit exclusion, and late VenueReported supersession remain intact."
         }
       ]
     },
@@ -179,8 +179,8 @@
           "kind": "build",
           "command": "Run VER-001 through VER-003, build PolyCopyTrader.sln with disposable outputs under the marked D:\\CodexTemp run, run git diff --check and requirement validation, and obtain independent semantic review of verbatim requests, approved contract, diff, and evidence.",
           "expected": "All checks pass with no donor runtime for new historical fallback decisions, no change to ordinary new-bet accounting, no Production mutation, and no open review findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln built successfully from disposable artifacts with 0 warnings and 0 errors. git diff --check passed with line-ending notices only. WorkingTree and staged requirement validation passed. Independent reviewer agent:/root/semantic_reviewer compared all five verbatim requests, approved contract/digest, complete diff, call paths, documentation, and test evidence and returned PASS with no P0-P3 findings. No Production mutation, deployment, restart, configuration change, or trading action occurred."
         }
       ]
     }
@@ -195,8 +195,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/semantic_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

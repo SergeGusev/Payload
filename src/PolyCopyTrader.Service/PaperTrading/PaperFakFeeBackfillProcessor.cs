@@ -825,7 +825,6 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
     private readonly IHistoricalGrossNetParityStore store;
     private readonly IPolymarketFeeAccountingService feeAccountingService;
     private readonly IPaperFakFeeBackfillEventRecorder? eventRecorder;
-    private readonly HistoricalGrossNetDonorMatcher donorMatcher = new();
     private readonly SemaphoreSlim cycleGate = new(1, 1);
     private readonly Dictionary<TargetLookupIdentity, TargetLookupLedger> lookupLedgers = [];
     private HistoricalGrossNetParityProcessingPhase phase = HistoricalGrossNetParityProcessingPhase.Exact;
@@ -1299,52 +1298,8 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                     .ToArray());
         }
 
-        IReadOnlyList<HistoricalGrossNetDonorCandidateDescriptorV1> orderedCandidates = [];
-        HistoricalGrossNetDonorMatch? match = null;
-        HistoricalGrossNetParityDonorCandidateAggregate? selectedAggregate = null;
-        if (target.GrossRoiBasisUsd > 0m)
-        {
-            var donorTarget = new HistoricalGrossNetDonorTarget(
-                target.StrategyId,
-                target.ProvedCryptoAssetSymbol);
-            orderedCandidates = donorMatcher.GetOrderedCandidates(donorTarget);
-            var preview = await LoadCompleteDonorPreviewAsync(
-                    target,
-                    orderedCandidates,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (preview is null)
-            {
-                counters.Deferred++;
-                return;
-            }
-
-            var donorAggregates = preview
-                .Where(aggregate => aggregate.DeduplicatedDonorCount > 0)
-                .Select(aggregate => new HistoricalGrossNetDonorAggregate(
-                    aggregate.CandidateStrategyId,
-                    HistoricalGrossNetExactDecimal.FromDecimal(aggregate.N),
-                    HistoricalGrossNetExactDecimal.FromDecimal(aggregate.D),
-                    checked((int)aggregate.ExactDonorCount),
-                    IsExact: true,
-                    ProvedCryptoAssetSymbol: aggregate.CandidateStrategyId == target.StrategyId
-                        ? target.ProvedCryptoAssetSymbol
-                        : null,
-                    RawDonorCount: checked((int)aggregate.RawDonorCount),
-                    DeduplicatedDonorCount: checked((int)aggregate.DeduplicatedDonorCount),
-                    MembershipHashV1: aggregate.MembershipHashV1))
-                .ToArray();
-            match = donorMatcher.Match(donorTarget, orderedCandidates, donorAggregates);
-            selectedAggregate = match.Donor is null
-                ? null
-                : preview.Single(aggregate => aggregate.CandidateStrategyId == match.Donor.StrategyId);
-            counters.DonorTargets++;
-        }
-
         var decision = HistoricalGrossNetParityDecisionFactory.CreateFallback(
             target,
-            match,
-            selectedAggregate,
             DateTimeOffset.UtcNow,
             options.CalculationVersion);
         var apply = await ApplyDecisionAsync(
@@ -1352,7 +1307,7 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                 candidate,
                 target,
                 decision,
-                orderedCandidates,
+                [],
                 counters,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -1361,73 +1316,6 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
         {
             RemoveLookupLedgers(target.SourceKind, target.SourceId);
         }
-    }
-
-    private async Task<IReadOnlyList<HistoricalGrossNetParityDonorCandidateAggregate>?>
-        LoadCompleteDonorPreviewAsync(
-            HistoricalGrossNetParityTargetSnapshot target,
-            IReadOnlyList<HistoricalGrossNetDonorCandidateDescriptorV1> orderedCandidates,
-            CancellationToken cancellationToken)
-    {
-        var aggregates = new List<HistoricalGrossNetParityDonorCandidateAggregate>();
-        var offset = 0;
-        while (offset < orderedCandidates.Count)
-        {
-            var page = await store.LoadHistoricalGrossNetParityDonorPreviewAsync(
-                    new HistoricalGrossNetParityDonorPreviewRequest(
-                        target.SourceKind,
-                        target.SourceId,
-                        target.StrategyId,
-                        target.TargetTupleHash,
-                        orderedCandidates,
-                        offset,
-                        options.BatchSize,
-                        options.CommandTimeoutSeconds,
-                        options.LockTimeoutMilliseconds),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (page.Status != HistoricalGrossNetParityReadStatus.Complete)
-            {
-                logger.LogWarning(
-                    "Historical Gross/Net parity donor preview deferred without mutation. " +
-                    "SourceKind={SourceKind} SourceId={SourceId} Offset={Offset} Status={Status} Details={Details}",
-                    target.SourceKind,
-                    target.SourceId,
-                    offset,
-                    page.Status,
-                    page.Details);
-                return null;
-            }
-
-            if (page.NextCandidateOffset <= offset || page.NextCandidateOffset > orderedCandidates.Count)
-            {
-                throw new InvalidOperationException("A donor preview returned an invalid candidate offset.");
-            }
-
-            aggregates.AddRange(page.Aggregates);
-            offset = page.NextCandidateOffset;
-            if (page.ReachedEnd != (offset == orderedCandidates.Count))
-            {
-                throw new InvalidOperationException("A donor preview returned an inconsistent end marker.");
-            }
-        }
-
-        var duplicate = aggregates
-            .GroupBy(aggregate => aggregate.CandidateStrategyId)
-            .FirstOrDefault(group => group.Count() != 1);
-        if (duplicate is not null)
-        {
-            throw new InvalidOperationException(
-                $"Donor preview contains duplicate strategy {duplicate.Key:D}.");
-        }
-
-        var allowed = orderedCandidates.Select(candidate => candidate.StrategyId).ToHashSet();
-        if (aggregates.Any(aggregate => !allowed.Contains(aggregate.CandidateStrategyId)))
-        {
-            throw new InvalidOperationException("Donor preview contains a strategy outside the finite allowlist.");
-        }
-
-        return aggregates;
     }
 
     private async Task<HistoricalGrossNetParityApplyResult> ApplyDecisionAsync(
@@ -1938,10 +1826,10 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
 
 internal static class HistoricalGrossNetParityDecisionFactory
 {
-    private const string Fixed3p3PointsCalculationSource =
-        "historical-gross-net-parity-fixed-net-roi-minus-3p3-v1";
-    private static readonly HistoricalGrossNetExactDecimal Fixed3p3PointsCoefficient =
-        HistoricalGrossNetExactDecimal.Parse("0.033");
+    private const string Fixed3p33PointsCalculationSource =
+        "historical-gross-net-parity-fixed-net-roi-minus-3p33-v1";
+    private static readonly HistoricalGrossNetExactDecimal Fixed3p33PointsCoefficient =
+        HistoricalGrossNetExactDecimal.Parse("0.0333");
 
     private const string CalculatedStatus = "Calculated";
 
@@ -2015,8 +1903,6 @@ internal static class HistoricalGrossNetParityDecisionFactory
 
     public static HistoricalGrossNetParityAccountingDecisionV1 CreateFallback(
         HistoricalGrossNetParityTargetSnapshot target,
-        HistoricalGrossNetDonorMatch? match,
-        HistoricalGrossNetParityDonorCandidateAggregate? selectedAggregate,
         DateTimeOffset calculatedAtUtc,
         string calculationVersion)
     {
@@ -2027,34 +1913,13 @@ internal static class HistoricalGrossNetParityDecisionFactory
                 component.CoverageHash,
                 HistoricalGrossNetExactDecimal.FromDecimal(component.AmountUsd)))
             .ToArray();
-        var estimate = target.GrossRoiBasisUsd > 0m && match is { Donor: null }
-            ? CreateFixed3p3PointsEstimate(basis, components)
-            : HistoricalGrossNetFeeEstimator.Calculate(basis, match, components);
+        var estimate = target.GrossRoiBasisUsd > 0m
+            ? CreateFixed3p33PointsEstimate(basis, components)
+            : HistoricalGrossNetFeeEstimator.Calculate(basis, null, components);
         var fee = ParseExactDecimal(estimate.TotalFee);
         var kind = target.GrossRoiBasisUsd <= 0m
             ? HistoricalGrossNetParityDecisionKind.NonpositiveBasis
-            : match?.HasDonor == true
-                ? HistoricalGrossNetParityDecisionKind.DonorRatio
-                : HistoricalGrossNetParityDecisionKind.Fixed0p033;
-        HistoricalGrossNetParityDonorDecisionV1? donorDecision = null;
-        if (match is not null)
-        {
-            var fixedFallback = match.Donor is null;
-            donorDecision = new HistoricalGrossNetParityDonorDecisionV1(
-                match.Donor?.StrategyId,
-                match.Donor is null ? null : new BigInteger((int)match.Tier),
-                selectedAggregate?.RawDonorCount ?? 0,
-                selectedAggregate?.ExactDonorCount ?? 0,
-                selectedAggregate?.DeduplicatedDonorCount ?? 0,
-                selectedAggregate?.AggregateStakeUsd ?? 0m,
-                selectedAggregate?.N ?? 0m,
-                selectedAggregate?.D ?? 0m,
-                selectedAggregate?.MembershipHashV1 ??
-                    HistoricalGrossNetDonorHashV1.ComputeMembershipHash([]),
-                match.SelectionHashV1 ?? throw new InvalidOperationException(
-                    "A complete donor match has no selection hash."),
-                fixedFallback ? 0.033m : selectedAggregate!.N / selectedAggregate.D);
-        }
+            : HistoricalGrossNetParityDecisionKind.Fixed0p0333;
 
         return Create(
             target,
@@ -2069,33 +1934,34 @@ internal static class HistoricalGrossNetParityDecisionFactory
             null,
             null,
             calculatedAtUtc,
-            donorDecision,
+            donor: null,
             calculationVersion,
             new
             {
                 decision = kind.ToString(),
-                donorTier = match?.Tier.ToString(),
-                donorStrategyId = match?.Donor?.StrategyId,
-                comparisonKey = match is { Donor: null }
-                    ? (IReadOnlyList<string>)["tier:fixed-net-roi-minus-3.3-points"]
-                    : match?.ComparisonKey,
-                match?.SelectionHashV1,
+                donorPolicy = "disabled",
+                directFixedContractId = HistoricalGrossNetParityConstants.DirectFixedFallbackContractId,
+                directFixedContractDigest =
+                    HistoricalGrossNetParityConstants.DirectFixedFallbackSemanticDigest,
+                comparisonKey = target.GrossRoiBasisUsd > 0m
+                    ? (IReadOnlyList<string>)["tier:direct-fixed-net-roi-minus-3.33-points"]
+                    : [],
                 target.ProvedComponentFloorUsd,
                 target.ProvedComponents
             });
     }
 
-    private static HistoricalGrossNetFeeEstimate CreateFixed3p3PointsEstimate(
+    private static HistoricalGrossNetFeeEstimate CreateFixed3p33PointsEstimate(
         HistoricalGrossNetExactDecimal basis,
         IReadOnlyList<HistoricalGrossNetProvedFeeComponent> components)
     {
         var componentFloor = HistoricalGrossNetFeeEstimator.CalculateComponentFloor(components);
-        var fee = basis.Multiply(Fixed3p3PointsCoefficient).RoundAwayFromZero(8);
+        var fee = basis.Multiply(Fixed3p33PointsCoefficient).RoundAwayFromZero(8);
         return new HistoricalGrossNetFeeEstimate(
             fee,
             componentFloor,
             fee,
-            Fixed3p3PointsCalculationSource);
+            Fixed3p33PointsCalculationSource);
     }
 
     private static HistoricalGrossNetParityAccountingDecisionV1 CreateExistingExact(

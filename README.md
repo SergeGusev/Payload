@@ -1145,51 +1145,35 @@ block the strategy. Gross values, bases, execution, fills, and settlement facts
 are not changed.
 
 For one strategy at a time, the workflow preserves exact accounting first, then
-tries the existing exact CLOB model, then uses a deterministic exact-donor
-Fee-to-Gross-basis ratio from the same or nearest typed strategy, falling
-through to any proved crypto donor. If every donor tier is empty it uses
-`R=0.033`, which makes `Net ROI = Gross ROI - 3.3` percentage points. It stores
-`Fee = ROUND_AWAY_8(B * R)` and `Net = Gross - Fee` as
-ordinary terminal `Calculated`, excluding all estimated rows from future donor
-pools. Live prefers already-associated `VenueReported` evidence and does not add
-an on-chain fee matcher. Its historical balance correction is audited and does
-not toggle Live or modify loss counters.
+tries the existing exact CLOB model, and then applies the direct fixed fallback
+`Fee = ROUND_AWAY_8(B * 0.0333)` and `Net = Gross - Fee`. Before display
+rounding, this makes `Net ROI = Gross ROI - 3.33` percentage points. New
+fallback decisions do not construct donor candidates, query donor previews, or
+revalidate donor selection. Live prefers already-associated `VenueReported`
+evidence and does not add an on-chain fee matcher. Its historical balance
+correction is audited and does not toggle Live or modify loss counters.
 
 With `HistoricalGrossNetParity:Enabled=true`, the service does the work itself
 in bounded background cycles. It selects the unfinished strategy with the
 greatest current Dashboard Gross and keeps that strategy active through its
-exact/authoritative/local-calculation and donor/fixed-fallback passes. Only when
+exact/authoritative/local-calculation and direct-fixed-fallback passes. Only when
 that strategy is complete does it rerank the remaining strategies by current
-Gross and select the next one. Donor lookup queries only the finite strategy
-candidates required by the deterministic tiers, calculates the target-time
-exact aggregate, and immediately applies that one decision through
-compare-and-set/serializable storage. There is no global
-donor scan or frozen donor universe, complete database plan, file artifact,
-`ApplyEnabled` switch, digest command, or second approval after deployment.
+Gross and select the next one. Each direct fallback is immediately applied
+through compare-and-set/serializable storage. There is no donor scan or donor
+offset, complete database plan, file artifact, `ApplyEnabled` switch, digest
+command, or second approval after deployment.
 
-Each target stores the selected donor strategy and tier, exact numerator and
-denominator, counts, deterministic membership/selection hashes, ratio, basis,
-Fee, Net, and provenance. A concurrent target or donor change rolls back that
-target for a later cycle without undoing independent completed targets. Different
-targets may legitimately see different exact donor membership as the service
-progresses; a terminal Paper estimate is not recalculated for that reason.
-Restart simply rescans unresolved or Pending canonical rows and durable audit.
+Each new direct fallback stores its fixed-policy contract, coefficient, basis,
+Fee, Net, and versioned provenance. A concurrent target change rolls back that
+target for a later cycle without undoing independent completed targets. Restart
+simply rescans unresolved or Pending canonical rows and durable audit. Existing
+completed exact, donor, and fixed results remain unchanged, and their legacy
+donor evidence remains readable.
 For historical Live balance application, the earliest unfinished order gates
 later initial balance effects of the same strategy. The active strategy remains
 selected until that ordered balance work is terminal; lower-Gross strategies do
 not overtake it. Dashboard visibility still waits for the applicable cycle and
 projection reconciliation.
-
-Historical donor deduplication proves linked overlap from replayed active
-`paper_order_id` source charges; wallet/asset equality alone is insufficient.
-When an exact linked Live row remains inside an indivisible composite Paper
-position/settlement and the exact nonlinked residual cannot be partitioned
-without inventing a per-BUY share of aggregate rounding residual, the service
-keeps the Live row and excludes the whole Paper composite for that target-time
-donor snapshot. It then continues the remaining donor tiers and fixed `0.033`.
-This avoids double counting but may omit exact unlinked Paper economics from
-`N/D`; no synthetic residual Paper row is created. A fully consumed linked order
-proved absent from the remaining composite does not trigger the exclusion.
 
 Each strategy-bound candidate page first materializes that strategy's exact
 allowlisted BUY order IDs, probes their fills through the existing per-order

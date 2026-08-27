@@ -161,13 +161,13 @@ or the ordinary accounting path for new bets.
 
 - `Enabled`: starts the workflow; checked-in default `true`. There is no
   `ApplyEnabled`, approval digest, runtime artifact gate, or complete database
-  plan. The deployed service calculates donors lazily while processing old
-  targets and applies each conflict-free decision immediately.
+  plan. The deployed service processes old targets and applies each
+  conflict-free decision immediately.
 - `HistoricalCutoffUtc`: fixed at `2026-08-10T00:00:00Z`. Eligibility follows
   the proved originating entry, not a later SELL, settlement, or mark. Mixed or
   unproved Paper lineage defers that target without blocking independent work.
-- `BatchSize`: maximum targets or donor-candidate strategy IDs in one bounded
-  page; default `50`, maximum `250`.
+- `BatchSize`: maximum historical targets in one bounded page; default `50`,
+  maximum `250`.
 - `CycleIntervalSeconds`, `InitialDelaySeconds`, and `IdleDelaySeconds`: normal
   turn, startup, and completed-sweep delays; defaults `15`, `300`, and `900`.
 - `ErrorDelaySeconds` / `MaxErrorDelaySeconds`: initial and capped operational
@@ -177,45 +177,34 @@ or the ordinary accounting path for new bets.
   `250`, and `10`.
 - `LookupMaxAttempts`: fixed at three distinct uninterrupted worker cycles for
   retryable historical market lookup. A service restart resets the in-memory
-  attempt count. Donor fallback itself performs no external lookup.
+  attempt count. Direct fixed fallback performs no external lookup.
 - `CalculationVersion`: fixed `historical-gross-net-parity-v1`.
 
 The service selects the unfinished strategy with the greatest current Dashboard
 Gross and keeps it active while completing both its exact/authoritative/local-
-calculation pass and its donor/fixed-fallback pass in bounded pages. Only after
+calculation pass and its direct-fixed-fallback pass in bounded pages. Only after
 that strategy is complete does the service rerank the unfinished strategies by
-current Gross and select the next one. A financially unresolved row is absent
-from the current exact donor pool; an exact row remains a donor even if only its
-audit, ownership, reconciliation, or Live balance work is Pending. The old
+current Gross and select the next one. The old
 `PaperFakFeeBackfill` switch, cutoff, and apply gate remain independent.
 
 The fallback pass applies `Fee = ROUND_AWAY_8(B * R)` and
 `Net = Gross - Fee`, where `B` is the unchanged source-specific Gross ROI basis
-and `R` comes from exact lifetime observations. Estimated observations never
-donate. Donor selection is deterministic: same strategy, nearest typed
-same-asset family, another same-asset strategy, then the same typed family across
-crypto assets, then any proved crypto strategy; only after all tiers are empty
-does the fixed `R=0.033` apply. This fixed fallback is equivalent to
-`Net ROI = Gross ROI - 3.3` percentage points. The terminal sources are
-versioned and stored as ordinary `Calculated`; no visible Estimated status is
-introduced.
-
-For each target, the worker enumerates candidate strategy IDs in deterministic
-pages no larger than `BatchSize`. PostgreSQL reads only those explicit IDs using
-the existing strategy-scoped indexes; an incomplete page, timeout, cancellation,
-or sequential full-corpus plan produces no estimate. The serializable target
-transaction repeats the complete relevant candidate selection and stores exact
-`N/D`, counts, aggregate stake, membership/selection hashes, ratio, target basis,
-Fee, Net, and provenance. A competing target/donor change retries only that
-target. Consequently, targets processed at different times may use different
-exact donor membership; a terminal Paper estimate is not revisited.
+and `R` is fixed at `0.0333`. This is equivalent to
+`Net ROI = Gross ROI - 3.33` percentage points. The terminal source and policy
+contract are versioned and stored as ordinary `Calculated`; no visible
+Estimated status is introduced. New fallback decisions do not construct donor
+candidates, load donor previews, or revalidate donor selection. The serializable
+target transaction still revalidates cutoff, stable tuple, lineage, component,
+Gross, basis, CAS, audit, reconciliation, and Live balance ordering. Existing
+completed exact, donor, and fixed decisions are not rewritten, and legacy donor
+evidence remains readable.
 
 The selected canonical sources mirror the current projection branches:
 Settled runs when runs are authoritative, positive open Paper positions,
 runless settlement/SELL fallback, and counted settled Live orders. Excluded
 Gross rows are excluded from Net requirements and cannot block a strategy. Live
 uses already-associated `VenueReported` evidence first, then exact local CLOB
-calculation, then donor/fixed fallback; this workflow does not add an on-chain
+calculation, then direct fixed fallback; this workflow does not add an on-chain
 fee matcher. Live accounting first persists immutable baseline, Pending
 ownership, canonical accounting, audit, and reconciliation without changing
 balance. A separate transaction applies the earliest unfinished initial balance

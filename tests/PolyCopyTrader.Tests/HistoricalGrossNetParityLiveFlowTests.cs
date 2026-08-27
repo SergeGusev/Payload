@@ -188,6 +188,59 @@ public sealed class HistoricalGrossNetParityLiveFlowTests
     }
 
     [Fact]
+    public void DirectFixedFallback_DoesNotDispatchOrRevalidateDonors()
+    {
+        var processorSource = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Service",
+            "PaperTrading",
+            "PaperFakFeeBackfillProcessor.cs")
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+        var storageSource = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Storage",
+            "PostgresAppRepository.HistoricalGrossNetParity.cs")
+            .Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        var fallbackStart = processorSource.IndexOf(
+            "private async Task ProcessFallbackTargetAsync(",
+            StringComparison.Ordinal);
+        var fallbackEnd = processorSource.IndexOf(
+            "private async Task<HistoricalGrossNetParityApplyResult> ApplyDecisionAsync(",
+            fallbackStart,
+            StringComparison.Ordinal);
+        Assert.True(fallbackStart >= 0);
+        Assert.True(fallbackEnd > fallbackStart);
+        var fallback = processorSource[fallbackStart..fallbackEnd];
+
+        Assert.Contains(
+            "HistoricalGrossNetParityDecisionFactory.CreateFallback(",
+            fallback,
+            StringComparison.Ordinal);
+        Assert.Contains("decision,\n                [],", fallback, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetOrderedCandidates", fallback, StringComparison.Ordinal);
+        Assert.DoesNotContain("LoadHistoricalGrossNetParityDonorPreviewAsync", fallback, StringComparison.Ordinal);
+        Assert.DoesNotContain("HistoricalGrossNetDonorMatcher", fallback, StringComparison.Ordinal);
+
+        Assert.Contains("HistoricalGrossNetExactDecimal.Parse(\"0.0333\")", processorSource,
+            StringComparison.Ordinal);
+        Assert.Contains("HistoricalGrossNetParityDecisionKind.Fixed0p0333", processorSource,
+            StringComparison.Ordinal);
+        Assert.Contains("historical-gross-net-parity-fixed-net-roi-minus-3p33-v1", processorSource,
+            StringComparison.Ordinal);
+        Assert.Contains("donorPolicy = \"disabled\"", processorSource, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "decision.DecisionKind == HistoricalGrossNetParityDecisionKind.Fixed0p0333 ||",
+            storageSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Donor decisions require selection proof; direct fixed decisions do not.",
+            storageSource,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CandidateDiscovery_BoundsEachRankedStrategyAndAppliesCursorBeforeInnerLimit()
     {
         var source = ReadRepositorySource(

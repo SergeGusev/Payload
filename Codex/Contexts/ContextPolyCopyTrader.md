@@ -1,3 +1,17 @@
+## Active Update 2026-08-27 Historical Parity Direct 3.33-Point Fallback
+Goal: Replace new HistoricalGrossNetParity donor decisions with a direct 3.33-percentage-point fallback while preserving exact accounting, completed history, and ordinary new-bet accounting.
+Status: Completed locally; deployment and Production execution were not performed
+Done:
+- Recorded and separately committed the user's exact approval of `RC-20260827-historical-parity-direct-fixed-3p33` at semantic digest `sha256:36999b41e5a89d88c23ae7f2febf3e605d7bbed18e8838bb3954956ea2e1f0f5` in approval checkpoint `6df69dbc`.
+- Removed donor candidate construction, donor preview reads, donor matching, and donor-selection revalidation from every new HistoricalGrossNetParity fallback decision; the transaction now receives an empty candidate list.
+- Preserved VenueReported, authoritative-Fee repair, complete local evidence, and exact historical CLOB calculation precedence. A positive unresolved Gross ROI basis now stores `Fee = ROUND_AWAY_8(B * 0.0333)`, `Net = Gross - Fee`, kind `Fixed0p0333`, and distinct versioned source/contract evidence.
+- Kept the strict originating-entry cutoff before `2026-08-10T00:00:00Z`, calculation version `historical-gross-net-parity-v1`, completed exact/donor/fixed audit exclusion, legacy donor readers and revalidation, Gross ordering, strategy-local completion, CAS/audit/reconciliation, Live balance ordering, and late VenueReported revision behavior.
+- Left ordinary post-cutoff/new Paper and Live fee accounting unchanged. No Production database, service, deployment, restart, configuration, strategy, order, or trading action occurred.
+- Focused tests passed `101`, failed `0`; the dedicated disposable PostgreSQL 17 direct-fixed atomic test passed `1/1`, skipped `0`; the complete solution build passed with `0` warnings and `0` errors. Independent reviewer `agent:/root/semantic_reviewer` compared all five verbatim requests, approved contract, full diff, call paths, docs, and evidence and returned `PASS` with no findings.
+Next: User deploys the service; after deployment, verify the historical worker and Net coverage from fresh read-only logs/database evidence.
+Notes: Two unrelated pre-existing pagination integration fixtures failed on their own PostgreSQL `42P10` ON CONFLICT setup when the whole four-test class was exercised; the isolated changed transaction passed cleanly and repeatably. All disposable database/build/test outputs used marked run `D:\CodexTemp\runs\manual-3b8440256c694d01b3edf5e5504cbdaa`, which is stopped and cleaned during finalization.
+Blockers: None for local implementation.
+
 ## Active Update 2026-08-27 ETH LossDiff Paper-Parent Live-Child Correction Contract
 Goal: Correct the two fixed ETH LossDiff strategies so a Paper parent can independently trigger a Live child from the same frozen intent.
 Status: Completed

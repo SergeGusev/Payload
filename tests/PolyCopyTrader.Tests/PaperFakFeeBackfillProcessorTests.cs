@@ -883,7 +883,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
     }
 
     [Fact]
-    public async Task HistoricalParityProcessor_ReachesExactBoundaryBeforeLazyFixedFallback()
+    public async Task HistoricalParityProcessor_ReachesExactBoundaryBeforeDirectFixedFallback()
     {
         var target = CreateParityTarget(
             HistoricalGrossNetParitySourceKind.LiveOrder,
@@ -918,23 +918,32 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
         Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, fallback.State);
         Assert.Equal(HistoricalGrossNetParityProcessingPhase.Fallback, fallback.Phase);
-        Assert.Single(store.DonorPreviewRequests);
+        Assert.Empty(store.DonorPreviewRequests);
         var request = Assert.Single(store.LiveAccountingRequests);
-        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p033, request.Decision.DecisionKind);
-        Assert.Equal(0.40722000m, request.Decision.ContributionEffectiveFeeUsd);
-        Assert.Equal(9.59278000m, request.Decision.NetPnlUsd);
+        Assert.Empty(request.OrderedCandidates);
+        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p0333, request.Decision.DecisionKind);
+        Assert.Equal(0.41092200m, request.Decision.ContributionEffectiveFeeUsd);
+        Assert.Equal(9.58907800m, request.Decision.NetPnlUsd);
         Assert.Equal(
-            "historical-gross-net-parity-fixed-net-roi-minus-3p3-v1",
+            "historical-gross-net-parity-fixed-net-roi-minus-3p33-v1",
             request.Decision.FeeCalculationSource);
         Assert.Contains(
-            "tier:fixed-net-roi-minus-3.3-points",
+            "tier:direct-fixed-net-roi-minus-3.33-points",
             request.Decision.EvidenceJson,
             StringComparison.Ordinal);
-        Assert.DoesNotContain(
-            "fixed-0.0333",
+        Assert.Contains(
+            "\"donorPolicy\":\"disabled\"",
             request.Decision.EvidenceJson,
             StringComparison.Ordinal);
-        Assert.Null(request.Decision.DonorDecision?.SelectedTier);
+        Assert.Contains(
+            HistoricalGrossNetParityConstants.DirectFixedFallbackContractId,
+            request.Decision.EvidenceJson,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            HistoricalGrossNetParityConstants.DirectFixedFallbackSemanticDigest,
+            request.Decision.EvidenceJson,
+            StringComparison.Ordinal);
+        Assert.Null(request.Decision.DonorDecision);
         Assert.Equal(FeeLiquidityRole.Unknown.ToString(), request.Decision.FeeLiquidityRole);
         Assert.Empty(feeService.Requests);
         Assert.Equal(
@@ -1254,12 +1263,12 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
         Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, fallback.State);
         Assert.Equal(3, feeService.Requests.Count);
-        Assert.Single(store.DonorPreviewRequests);
+        Assert.Empty(store.DonorPreviewRequests);
         Assert.Single(store.LiveAccountingRequests);
     }
 
     [Fact]
-    public async Task HistoricalParityProcessor_PartialLookupFallbackRecordsComponentButUsesExact3p3Points()
+    public async Task HistoricalParityProcessor_PartialLookupFallbackRecordsComponentButUsesExact3p33Points()
     {
         var target = CreateParityTarget(
             HistoricalGrossNetParitySourceKind.LiveOrder,
@@ -1318,10 +1327,13 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.Equal(1, exact.FallbackEligible);
         Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted, fallback.State);
         var request = Assert.Single(store.LiveAccountingRequests);
-        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p033, request.Decision.DecisionKind);
+        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p0333, request.Decision.DecisionKind);
         Assert.Equal(0.75m, request.Decision.ComponentFloorUsd);
-        Assert.Equal(0.33m, request.Decision.ContributionEffectiveFeeUsd);
-        Assert.Equal(1.67m, request.Decision.NetPnlUsd);
+        Assert.Equal(0.333m, request.Decision.ContributionEffectiveFeeUsd);
+        Assert.Equal(1.667m, request.Decision.NetPnlUsd);
+        Assert.Null(request.Decision.DonorDecision);
+        Assert.Empty(request.OrderedCandidates);
+        Assert.Empty(store.DonorPreviewRequests);
         Assert.Single(request.Target.ProvedComponents);
         Assert.Equal(2, feeService.Requests.Count);
     }
@@ -1478,7 +1490,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
     }
 
     [Fact]
-    public async Task HistoricalParityProcessor_UsesDeduplicatedCountForMatcherAndKeepsAllCountsInAudit()
+    public async Task HistoricalParityProcessor_DirectFixedFallbackSkipsAvailableDonorPreview()
     {
         var target = CreateParityTarget(
             HistoricalGrossNetParitySourceKind.LiveOrder,
@@ -1492,22 +1504,8 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var store = new RecordingParityStore
         {
             CandidatePageFactory = _ => CreateParityPage(target),
-            DonorPreviewFactory = request => CreateDonorPreview(
-                request,
-                candidate => candidate.StrategyId == target.StrategyId
-                    ? new HistoricalGrossNetParityDonorCandidateAggregate(
-                        candidate.StrategyId,
-                        candidate.MatcherOrder,
-                        candidate.Tier,
-                        candidate.DistanceComponents,
-                        3,
-                        2,
-                        1,
-                        100m,
-                        2m,
-                        100m,
-                        new string('a', 64))
-                    : null)
+            DonorPreviewFactory = _ => throw new InvalidOperationException(
+                "Direct fixed fallback must not load donor preview.")
         };
         var processor = CreateHistoricalParityProcessor(
             store,
@@ -1517,12 +1515,11 @@ public sealed class PaperFakFeeBackfillProcessorTests
         await processor.RunCycleAsync(Guid.NewGuid());
 
         var decision = Assert.Single(store.LiveAccountingRequests).Decision;
-        Assert.Equal(HistoricalGrossNetParityDecisionKind.DonorRatio, decision.DecisionKind);
-        Assert.Equal(2m, decision.ContributionEffectiveFeeUsd);
-        Assert.Equal(3, decision.DonorDecision?.RawDonorCount);
-        Assert.Equal(2, decision.DonorDecision?.ExactDonorCount);
-        Assert.Equal(1, decision.DonorDecision?.DeduplicatedDonorCount);
-        Assert.Equal(new System.Numerics.BigInteger(0), decision.DonorDecision?.SelectedTier);
+        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p0333, decision.DecisionKind);
+        Assert.Equal(3.33m, decision.ContributionEffectiveFeeUsd);
+        Assert.Equal(1.67m, decision.NetPnlUsd);
+        Assert.Null(decision.DonorDecision);
+        Assert.Empty(store.DonorPreviewRequests);
     }
 
     [Fact]
