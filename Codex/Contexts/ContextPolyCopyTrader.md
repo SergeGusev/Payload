@@ -4,7 +4,7 @@ Status: Completed read-only; deployment and ordinary betting are healthy, but th
 Done:
 - Confirmed the new process started at `2026-08-27T11:03:12.588Z`; the production heartbeat independently reports `started_at_utc=2026-08-27T11:03:12.840486Z`, `Running`, `Live`, `last_error=NULL`, and deployed version `1.0.0+eee3cc6684740658155571ccbcf91bcfd62a5cb2`.
 - At the final SQL cutoff `2026-08-27T11:20:21.966807Z`, heartbeat age was `8.664s`. Production SQL ran only inside `BEGIN READ ONLY` with `statement_timeout=15s` against `192.168.0.101:5432/polycopytrader`.
-- Verified ordinary Paper activity after process start: `669` orders/fills by the final cutoff, with the latest fill at `2026-08-27T11:20:01.213773Z`; all observed post-start orders in the earlier closed aggregate were Filled and none remained Pending/Expired.
+- Verified ordinary Paper activity after process start: `669` fills by the final cutoff, with the latest fill at `2026-08-27T11:20:01.213773Z`; all `478` post-start orders in the earlier closed `11:18:38Z` aggregate were Filled and none remained Pending/Expired.
 - Verified the exact Maker-GTD scope contains `28/28` matched and enabled strategies, `0` paused, and `0` Live-stakes strategies.
 - Observed two complete post-deploy Maker decision cycles at `2026-08-27T11:14:30Z` and `11:19:30Z`. Each produced exactly `28` logs with `reference_average_move_below_bps_threshold`, so no Maker resting order was eligible for placement.
 - Consequently Maker-GTD post-start counts remained `0` orders, `0` fills, and `0` `maker_gtd_paper_filled_order_shape_mismatch` warnings. The deployed diagnostic code is proven by the exact build hash, but its runtime payload has not yet been exercised by an accepted Maker order and attempted fill.
