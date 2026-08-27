@@ -1,3 +1,16 @@
+## Active Update 2026-08-27 ETH LossDiff Paper-Parent Live-Child Correction Contract
+Goal: Correct the two fixed ETH LossDiff strategies so a Paper parent can independently trigger a Live child from the same frozen intent.
+Status: Approved; approval checkpoint commit pending before product edits
+Done:
+- Verified the approved 2026-08-23 contract did not require the parent to be Live and required the child to consume the frozen intent through its own Paper or Live path.
+- Traced the mixed-mode defect to implementation commit `dfa82c91`, which introduced `AddLossDiffChildrenAfterLiveParentEntryAsync` and calls it only after an accepted parent Live fill.
+- Locked scope to the exact parent and two exact LossDiff children, future mixed-mode dispatch, focused parity/regression tests, and directly affected documentation; counters, thresholds, history, schema, Production, deployment, and Live flags remain excluded.
+- Created and mechanically validated draft `RC-20260827-eth-lossdiff-paper-parent-live-child` at semantic digest `sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd`.
+- Recorded the exact user approval `APPROVE RC-20260827-eth-lossdiff-paper-parent-live-child sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd`.
+Next: Create the approval-only checkpoint commit, then implement and verify the correction.
+Notes: The `codex-temp-lifecycle` skill is selected for later build/test outputs under a marked `D:\CodexTemp` run. No product code, Production state, strategy flag, database row, service, deployment, or venue order changed.
+Blockers: Product edits remain blocked until the approval record is committed as a parent revision.
+
 ## Active Update 2026-08-27 Recovered Paper Settlement Deadlock Alert
 Goal: Record the first material alert found by the post-deploy Maker-GTD monitor without changing Production.
 Status: Completed read-only; isolated settlement deadlock recovered automatically

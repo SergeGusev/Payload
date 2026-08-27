@@ -95,3 +95,17 @@ Request:
 
 Result:
 The exact Maker-GTD cycle at `12:44:30Z` again produced 28 valid threshold skips and no order. The log then exposed PostgreSQL `40P01` while persisting one Paper settlement batch at `12:47:01.922Z`; the companion WebSocket apply ERR at `12:47:01.943Z` was the same operation. Independent read-only DB verification found 54 settlement rows and zero open positions for the affected condition, plus 32 settlement rows after the error through `12:47:04.144663Z`. At `12:49:05.928310Z` the service remained `Running / Live` on the expected build with unchanged start, `last_error=NULL`, and heartbeat age `51.648s`. The incident recovered automatically; monitoring continues and no Production state changed.
+
+## 2026-08-27T13:40:18.1938895Z
+Request:
+`Ок, измени логику LossDiff стратегий в связи с этой корректировкой`
+
+Result:
+Locked the correction to the exact ETH LossDiff parent and two children: a durably persisted parent Paper FAK entry may trigger an independently Live child with the unchanged frozen intent, while counters, thresholds, history, schema, Production, deployment, and Live flags remain unchanged. Created and validated draft requirement contract `RC-20260827-eth-lossdiff-paper-parent-live-child` at `sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd`. Product edits are blocked pending exact user approval. No product code or runtime state changed.
+
+## 2026-08-27T13:41:35.2052033Z
+Request:
+`APPROVE RC-20260827-eth-lossdiff-paper-parent-live-child sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd`
+
+Result:
+Recorded the exact approval in `RC-20260827-eth-lossdiff-paper-parent-live-child` without changing its semantic digest. Product edits remain blocked until this approval record is committed as a separate parent revision.

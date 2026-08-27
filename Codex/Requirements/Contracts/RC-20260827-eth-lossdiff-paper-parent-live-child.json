@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260827-eth-lossdiff-paper-parent-live-child",
+  "title": "Allow ETH LossDiff Live children to follow a Paper parent",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Re: дочерняя стратегия входит только если родитель фактически входит в тот же рынок; &#x20;\n\nДа, в этом и есть её смысл.\n\nRe: направление, цена и сумма ставки полностью копируются у родителя; &#x20;\n\nДа, правильно.\n\nRe: обе стратегии создаются включёнными для Paper, но с `live_stakes=false`. &#x20;\n\nДа, правильно"
+    },
+    {
+      "source": "user",
+      "text": "Re: Live-ордер дочерней LossDiff-стратегии создаётся только после успешного Live-входа родителя.  &#x20;\n\nЯ этого не заказывал. Откуда это появилось? Наоборот, мне важно иметь возможность держать родителя постоянно на Paper, а именно дитя с высоким Roi пусть ставит живые ставки."
+    },
+    {
+      "source": "user",
+      "text": "Ок, измени логику LossDiff стратегий в связи с этой корректировкой"
+    }
+  ],
+  "scope": {
+    "goal": "Correct exactly the two fixed ETH LossDiff children so an eligible child independently uses its own Paper/Live setting after the exact parent has durably entered in Paper, without requiring or enabling a Live parent entry.",
+    "inScope": [
+      "Exact parent b7c50005-0000-4000-8204-000000000001 / eth_up_down_5m_1_diff_confirmed_average_premarket while it remains Paper with live_stakes=false.",
+      "Exact children b7c50005-0000-4000-8225-000000000004 / eth_up_down_5m_1_diff_confirmed_average_premarket_lossdiff_4_plus and b7c50005-0000-4000-8225-000000000013 / eth_up_down_5m_1_diff_confirmed_average_premarket_lossdiff_13_plus_positive.",
+      "Mixed-mode dispatch in which a successfully persisted parent Paper FAK entry supplies the already frozen same-market ExecutionIntent and an above-threshold child with effective Live stakes submits that unchanged intent through the existing Live path.",
+      "Focused Paper/Live parity, below-threshold, parent-non-entry, persistence-ordering, exact-intent-copy, and no-parent-Live regression tests plus correction of the directly affected README and parity documentation.",
+      "Repository context, daily history, requirement evidence, independent semantic review, task-only commit, and push to the configured upstream after verification."
+    ],
+    "outOfScope": [
+      "Enabling Live for either child or parent, changing any strategy setting, placing/canceling any real order, deploying/restarting the service, or mutating Local/Production databases or external venue state.",
+      "Changing LossDiff modes, thresholds, zero-floor/reset rules, causal state/event reconciliation, rollout cutoff, generated history, PnL, fees, paper_lost_counter/live_lost_counter, or child-parent assignments.",
+      "Changing the parent signal, direction, timing, FAK sizing, price cap, minimum-size calculation, Paper fill model, or independently recomputing/refetching/repricing/resizing the child intent.",
+      "Changing other Child/Progress/ROI strategy families, other strategy variants, catalog identities, schema, migrations, Dashboard, global Live controls, risk limits, or existing parent-Live behavior.",
+      "Diagnosing or correcting unrelated current production Live settlement/persistence events."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Runtime behavior only for future entries of the two exact children after deployment; existing Paper history and current Production state remain unchanged.",
+    "firstVerification": "Inspect the deployed-source-equivalent parent Paper FAK and Live-shadow dispatch, the two exact catalog variants, the approved prior contract, and focused tests to prove the current mixed-mode gap and identify the smallest path that preserves one frozen ExecutionIntent."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Let each exact LossDiff child choose Paper or Live independently of the exact parent's Paper mode after that parent actually enters the same market.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Наоборот, мне важно иметь возможность держать родителя постоянно на Paper, а именно дитя с высоким Roi пусть ставит живые ставки.",
+      "acceptanceCriteria": [
+        "With the exact parent enabled for Paper and live_stakes=false, a qualifying parent Paper FAK entry is treated as the required actual same-market parent entry only after its signal/order/fill/run entry chain is successfully persisted.",
+        "When the exact child's pre-entry LossDiff is at or above its fixed threshold and that child has effective Live stakes, exactly one child Live submission is attempted even though the parent remains Paper and creates zero parent Live submissions/orders.",
+        "When the same child has effective Live stakes disabled, the existing child Paper entry behavior remains unchanged.",
+        "Below-threshold, skipped, rejected, zero-fill, unpersisted, or otherwise non-entered parent Paper decisions create no child Live submission; their existing auditable skip behavior remains intact.",
+        "The existing both-Paper behavior and existing parent-Live behavior are regression-protected and otherwise unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiffParentMirror",
+          "expected": "Focused tests prove Paper-parent/Live-child submission for both exact LossDiff modes, zero parent Live submission, unchanged Paper child behavior, unchanged parent-Live behavior, and no child for every non-entered/below-threshold parent path.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Submit the Live child with the exact frozen parent ExecutionIntent and preserve Paper/Live parity without a new market read or post-fill authorization.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "направление, цена и сумма ставки полностью копируются у родителя",
+      "acceptanceCriteria": [
+        "The child changes only strategy/decision identity; token/outcome, BUY side, target cash amount, target shares, maximum order price, FAK order type/time-in-force, postOnly=false, and all other pre-submit constraints equal the frozen parent intent.",
+        "The mixed-mode path performs no newer order-book lookup and does not resize, reprice, authorize, reject, or roll back the child using the parent's Paper fill price, the parent's later settlement, or the child's eventual venue fill.",
+        "Parent Paper persistence completes before external child submission; if it fails, no child Live call occurs. Child decision/order/fill/outcome evidence remains separately attributable and auditable through the existing Live-shadow accounting path.",
+        "Venue rejection, zero/partial/full fill, global Live controls, risk checks, fee handling, and Paper-shadow outcome accounting retain the existing Live-path semantics; this correction introduces no new order type or fallback policy."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiff",
+          "expected": "LossDiff tests prove exact frozen-intent equality, no additional book lookup, durable parent-before-submit ordering, separate identities/accounting, and unchanged reset/positive gating semantics.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
+          "expected": "The complete solution builds with zero errors using the marked D:\\CodexTemp run for every disposable output.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Keep all existing LossDiff state, history, financial accounting, configuration, and Production state unchanged while correcting only future mixed-mode dispatch.",
+      "sourceRequestIndexes": [1, 2],
+      "sourceQuote": "измени логику LossDiff стратегий в связи с этой корректировкой",
+      "acceptanceCriteria": [
+        "No schema/catalog/migration/configuration change is needed; strategy IDs, codes, names, parent assignments, thresholds 4 and 13, reset/positive state transitions, rollout cutoff, and all existing rows remain unchanged.",
+        "No Local or Production database write, service action, deployment, Live flag change, wallet action, or venue order occurs in this task.",
+        "The previous incorrect documentation claim that Live child submission requires an accepted Live parent fill is replaced with the approved Paper-parent/Live-child behavior, without unrelated documentation edits.",
+        "Working-tree/range validation maps every governed changed path to this contract, formatting checks pass, and an independent reviewer compares all verbatim prompts, the approved contract, the exact diff, and verification evidence with no open findings."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-27.md",
+        "Codex/Requirements/Contracts/RC-20260827-eth-lossdiff-paper-parent-live-child.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "git diff --check; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode Staged",
+          "expected": "Only approved paths and behavior change, formatting and requirement gates pass, and Production/Live state remains untouched.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260827-eth-lossdiff-paper-parent-live-child sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd",
+    "semanticDigest": "sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_eth_lossdiff_paper_parent_live_child",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
