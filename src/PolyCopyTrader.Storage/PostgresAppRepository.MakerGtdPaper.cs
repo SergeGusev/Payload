@@ -52,7 +52,9 @@ public sealed partial class PostgresAppRepository
             return NotEligible(
                 MakerGtdPaperMutationReasonCodes.FilledOrderShapeMismatch,
                 currentOrder,
-                paperPosition: currentPosition);
+                paperPosition: currentPosition,
+                mismatchDiagnostic: MakerGtdPaperPersistenceTransitions
+                    .CreateLockedOrderIdentityMismatchDiagnostic(currentOrder, initialOrder));
         }
 
         var currentRun = await ReadMakerGtdStrategyRunAsync(
@@ -99,7 +101,22 @@ public sealed partial class PostgresAppRepository
         if (ineligibilityReason is not null)
         {
             await transaction.RollbackAsync(cancellationToken);
-            return NotEligible(ineligibilityReason, currentOrder, currentRun, paperPosition: currentPosition);
+            var mismatchDiagnostic = string.Equals(
+                ineligibilityReason,
+                MakerGtdPaperMutationReasonCodes.FilledOrderShapeMismatch,
+                StringComparison.Ordinal)
+                ? MakerGtdPaperPersistenceTransitions.CreateFilledOrderTransitionMismatchDiagnostic(
+                    currentOrder,
+                    request.FilledOrder,
+                    request.Fill,
+                    request.ExpectedExecutionSource)
+                : null;
+            return NotEligible(
+                ineligibilityReason,
+                currentOrder,
+                currentRun,
+                paperPosition: currentPosition,
+                mismatchDiagnostic: mismatchDiagnostic);
         }
 
         await InsertMakerGtdPaperFillAsync(connection, transaction, request.Fill, cancellationToken);
@@ -318,7 +335,8 @@ WHERE id = @Id;
         PaperOrder? paperOrder = null,
         StrategyMarketPaperRun? strategyRun = null,
         PaperFill? paperFill = null,
-        PaperPosition? paperPosition = null)
+        PaperPosition? paperPosition = null,
+        MakerGtdPaperMismatchDiagnostic? mismatchDiagnostic = null)
     {
         return new MakerGtdPaperMutationResult(
             MakerGtdPaperMutationOutcome.NotEligible,
@@ -326,6 +344,7 @@ WHERE id = @Id;
             paperOrder,
             strategyRun,
             paperFill,
-            paperPosition);
+            paperPosition,
+            mismatchDiagnostic);
     }
 }

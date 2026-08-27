@@ -3,7 +3,7 @@
   "contractId": "RC-20260827-maker-gtd-shape-mismatch-telemetry",
   "title": "Expose the exact Maker-GTD filled-order shape mismatch",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -58,16 +58,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"MakerGtdPaperAtomicRepositoryTests|MakerGtdPaperLifecycleIntegrationTests\" with TEMP/TMP and all outputs under the active marked D:\\CodexTemp run",
           "expected": "Focused tests prove exact field/stage diagnostics, timestamp and JSON redaction behavior, unchanged eligibility results, PostgreSQL retry idempotency, and all existing Maker-GTD atomic/lifecycle behavior.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused MakerGtdPaperAtomicRepositoryTests plus MakerGtdPaperLifecycleIntegrationTests passed 69/69 with zero skips against local allowlisted disposable PostgreSQL database pct_codex_skip_v2_20260827102000_b2c3d4e5. A dedicated real-PostgreSQL diagnostic/atomic/idempotency regression also passed 1/1 against pct_codex_skip_v2_20260827101500_a1b2c3d4. Both disposable databases were removed; bounded post-drop checks returned disposable count 0 and local polycopytrader count 1."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "Build PolyCopyTrader.sln Release, run git diff --check, validate the requirement contract in WorkingTree and staged modes, and obtain independent semantic review.",
           "expected": "Only bounded diagnostic propagation and tests change; no execution, validation, persistence, strategy, or Production behavior changes.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release build passed with 0 errors and 126 pre-existing warnings from unchanged neighboring files, using artifacts only under the marked D:\\CodexTemp run. git diff --check passed. Independent reviewer agent:/root/maker_gtd_shape_mismatch_telemetry_review compared the original request, approved contract, approval-only commit ba9efb16, complete diff, predicate implementation, changed-path allowlist, and verification evidence and returned PASS with no findings."
         }
       ]
     }
@@ -82,8 +82,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/maker_gtd_shape_mismatch_telemetry_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

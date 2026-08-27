@@ -67,3 +67,10 @@ Request:
 
 Result:
 Recorded the exact approval for `RC-20260827-maker-gtd-shape-mismatch-telemetry` at semantic digest `sha256:19007043db4615914ab70bbde82520aa24b647bf90b2aca0c9317be63166730d` with no scope, assumption, or deviation change. The mandatory approval-only commit is the next checkpoint before any product edit.
+
+## 2026-08-27T10:24:23.2984329Z
+Request:
+`APPROVE RC-20260827-maker-gtd-shape-mismatch-telemetry sha256:19007043db4615914ab70bbde82520aa24b647bf90b2aca0c9317be63166730d`
+
+Result:
+Implemented only the approved Maker-GTD shape-mismatch telemetry after approval-only commit `ba9efb16`. The existing reason code and all validation/persistence decisions remain unchanged; diagnostics now identify the locked-row identity or requested Filled-transition stage, every failed predicate, exact timestamp/numeric comparisons, and SHA-256-only RawDecisionJson fingerprints, and the existing warning receives the serialized diagnostic. Focused tests passed 69/69, a dedicated real-PostgreSQL regression passed 1/1, full Release build passed with 0 errors, `git diff --check` passed, both disposable databases were removed, and the local main database remained. Independent semantic review returned PASS with no findings. Production was not changed.

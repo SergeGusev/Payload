@@ -604,10 +604,13 @@ public sealed class PaperTradingMarketDataUpdater(
                 receiptTimestampUtc,
                 MakerGtdPaperExecutionContract.MarketDataApplyFailureCode);
             logger.LogWarning(
-                "Maker-GTD Paper full fill was not eligible for atomic persistence. PaperOrderId={PaperOrderId} ReasonCode={ReasonCode} MutationAttempts={MutationAttempts}",
+                "Maker-GTD Paper full fill was not eligible for atomic persistence. PaperOrderId={PaperOrderId} ReasonCode={ReasonCode} MutationAttempts={MutationAttempts} MismatchDiagnostic={MismatchDiagnostic}",
                 order.Id,
                 mutation.ReasonCode,
-                mutationAttempt);
+                mutationAttempt,
+                mutation.MismatchDiagnostic is null
+                    ? null
+                    : JsonSerializer.Serialize(mutation.MismatchDiagnostic));
             return;
         }
 

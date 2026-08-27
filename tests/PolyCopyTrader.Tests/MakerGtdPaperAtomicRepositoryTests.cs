@@ -1,5 +1,8 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Npgsql;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -102,6 +105,31 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
         };
         var request = fixture.FullFillRequest with { EnteredRun = requestedEnteredRun };
 
+        const string requestedRawDecisionJson = "{\"mode\":\"maker_gtd\",\"diagnostic_test\":true}";
+        var mismatchedRequest = request with
+        {
+            FilledOrder = request.FilledOrder with
+            {
+                Price = request.FilledOrder.Price + 0.01m,
+                RawDecisionJson = requestedRawDecisionJson
+            }
+        };
+        var mismatch = await repository.TryApplyMakerGtdPaperFullFillAsync(mismatchedRequest);
+
+        Assert.Equal(MakerGtdPaperMutationOutcome.NotEligible, mismatch.Outcome);
+        Assert.Equal(MakerGtdPaperMutationReasonCodes.FilledOrderShapeMismatch, mismatch.ReasonCode);
+        Assert.NotNull(mismatch.MismatchDiagnostic);
+        Assert.Equal(
+            MakerGtdPaperMismatchStages.RequestedFilledOrderTransition,
+            mismatch.MismatchDiagnostic.Stage);
+        Assert.Equal(
+            ["price", "raw_decision_json"],
+            mismatch.MismatchDiagnostic.Mismatches.Select(item => item.Predicate));
+        Assert.DoesNotContain(
+            requestedRawDecisionJson,
+            JsonSerializer.Serialize(mismatch.MismatchDiagnostic),
+            StringComparison.Ordinal);
+
         var first = await repository.TryApplyMakerGtdPaperFullFillAsync(request);
         var second = await repository.TryApplyMakerGtdPaperFullFillAsync(request);
 
@@ -112,6 +140,116 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
         Assert.Equal(MakerGtdPaperMutationOutcome.AlreadyApplied, second.Outcome);
         Assert.Equal(MakerGtdPaperMutationReasonCodes.FillAlreadyApplied, second.ReasonCode);
         Assert.Single(await repository.GetPaperFillsForOrdersAsync([fixture.PendingOrder.Id]));
+    }
+
+    [Fact]
+    public void FilledOrderShapeMismatchDiagnostic_ReportsEveryFailedPredicateAndSafeValues()
+    {
+        var fixture = CreateFixture();
+        const string currentRawDecisionJson = "{\"mode\":\"maker_gtd\",\"secret_marker\":\"current\"}";
+        const string requestedRawDecisionJson = "{\"mode\":\"maker_gtd\",\"secret_marker\":\"requested\"}";
+        var current = fixture.PendingOrder with { RawDecisionJson = currentRawDecisionJson };
+        var requested = fixture.FullFillRequest.FilledOrder with
+        {
+            Id = Guid.NewGuid(),
+            SignalId = Guid.NewGuid(),
+            StrategyId = Guid.NewGuid(),
+            CopiedTraderWallet = "different-wallet",
+            Status = PaperOrderStatus.Pending,
+            Side = TradeSide.Sell,
+            AssetId = "different-asset",
+            ConditionId = "different-condition",
+            Outcome = "Down",
+            Price = 0.49m,
+            SizeShares = 11m,
+            NotionalUsd = 5.39m,
+            CreatedAtUtc = current.CreatedAtUtc.AddTicks(20),
+            ExpiresAtUtc = current.ExpiresAtUtc.AddTicks(30),
+            FilledAtUtc = fixture.FullFillRequest.Fill.FilledAtUtc.AddTicks(10),
+            CancelledAtUtc = fixture.FullFillRequest.Fill.FilledAtUtc,
+            RawDecisionJson = requestedRawDecisionJson,
+            CorrelationId = Guid.NewGuid(),
+            ExecutionSource = "different-source"
+        };
+
+        var diagnostic = MakerGtdPaperPersistenceTransitions
+            .CreateFilledOrderTransitionMismatchDiagnostic(
+                current,
+                requested,
+                fixture.FullFillRequest.Fill,
+                ExecutionSource);
+
+        Assert.Equal(MakerGtdPaperMismatchStages.RequestedFilledOrderTransition, diagnostic.Stage);
+        Assert.Equal(
+            [
+                "requested_status_filled",
+                "requested_filled_at_matches_fill",
+                "requested_cancelled_at_null",
+                "requested_execution_source",
+                "id",
+                "signal_id",
+                "strategy_id",
+                "copied_trader_wallet",
+                "side",
+                "asset_id",
+                "condition_id",
+                "outcome",
+                "price",
+                "size_shares",
+                "notional_usd",
+                "created_at_utc",
+                "expires_at_utc",
+                "raw_decision_json",
+                "correlation_id"
+            ],
+            diagnostic.Mismatches.Select(item => item.Predicate));
+
+        var price = Assert.Single(diagnostic.Mismatches, item => item.Predicate == "price");
+        Assert.Equal("0.48", price.CurrentValue);
+        Assert.Equal("0.49", price.RequestedValue);
+
+        var createdAt = Assert.Single(
+            diagnostic.Mismatches,
+            item => item.Predicate == "created_at_utc");
+        Assert.Equal(current.CreatedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture), createdAt.CurrentUtc);
+        Assert.Equal(requested.CreatedAtUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture), createdAt.RequestedUtc);
+        Assert.Equal(current.CreatedAtUtc.UtcDateTime.Ticks, createdAt.CurrentUtcTicks);
+        Assert.Equal(requested.CreatedAtUtc.UtcDateTime.Ticks, createdAt.RequestedUtcTicks);
+        Assert.Equal(ToPostgresMicroseconds(current.CreatedAtUtc), createdAt.CurrentPostgresMicroseconds);
+        Assert.Equal(ToPostgresMicroseconds(requested.CreatedAtUtc), createdAt.RequestedPostgresMicroseconds);
+
+        var rawDecision = Assert.Single(
+            diagnostic.Mismatches,
+            item => item.Predicate == "raw_decision_json");
+        Assert.Equal(Sha256(currentRawDecisionJson), rawDecision.CurrentSha256);
+        Assert.Equal(Sha256(requestedRawDecisionJson), rawDecision.RequestedSha256);
+        var serialized = JsonSerializer.Serialize(diagnostic);
+        Assert.DoesNotContain(currentRawDecisionJson, serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain(requestedRawDecisionJson, serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FilledOrderShapeMismatchDiagnostic_DistinguishesMissingFillTimestampAndLockedIdentityStage()
+    {
+        var fixture = CreateFixture();
+        var requested = fixture.FullFillRequest.FilledOrder with { FilledAtUtc = null };
+
+        var transitionDiagnostic = MakerGtdPaperPersistenceTransitions
+            .CreateFilledOrderTransitionMismatchDiagnostic(
+                fixture.PendingOrder,
+                requested,
+                fixture.FullFillRequest.Fill,
+                ExecutionSource);
+        var identityDiagnostic = MakerGtdPaperPersistenceTransitions
+            .CreateLockedOrderIdentityMismatchDiagnostic(
+                fixture.PendingOrder with { AssetId = "changed-asset" },
+                fixture.PendingOrder);
+
+        Assert.Equal(
+            ["requested_filled_at_present"],
+            transitionDiagnostic.Mismatches.Select(item => item.Predicate));
+        Assert.Equal(MakerGtdPaperMismatchStages.LockedOrderIdentity, identityDiagnostic.Stage);
+        Assert.Equal(["asset_id"], identityDiagnostic.Mismatches.Select(item => item.Predicate));
     }
 
     [Theory]
@@ -417,6 +555,15 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
         Assert.Contains("CommitAsync", expirySection, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ServiceWarning_PropagatesSerializedMismatchDiagnostic()
+    {
+        var source = ReadUpdaterSource();
+
+        Assert.Contains("MismatchDiagnostic={MismatchDiagnostic}", source, StringComparison.Ordinal);
+        Assert.Contains("JsonSerializer.Serialize(mutation.MismatchDiagnostic)", source, StringComparison.Ordinal);
+    }
+
     private static MakerGtdFixture CreateFixture(
         DateTimeOffset? fillAtUtc = null,
         DateTimeOffset? createdAtUtc = null)
@@ -634,6 +781,34 @@ VALUES (@Id, @Code, @Name, @CreatedAtUtc, @CreatedAtUtc);
             "src",
             "PolyCopyTrader.Storage",
             "PostgresAppRepository.MakerGtdPaper.cs"));
+    }
+
+    private static string ReadUpdaterSource([CallerFilePath] string testFilePath = "")
+    {
+        var testsDirectory = Path.GetDirectoryName(testFilePath)
+            ?? throw new InvalidOperationException("The test source directory was not resolved.");
+        var repositoryRoot = Path.GetFullPath(Path.Combine(testsDirectory, "..", ".."));
+        return File.ReadAllText(Path.Combine(
+            repositoryRoot,
+            "src",
+            "PolyCopyTrader.Service",
+            "MarketData",
+            "PaperTradingMarketDataUpdater.cs"));
+    }
+
+    private static long ToPostgresMicroseconds(DateTimeOffset value)
+    {
+        const long ticksPerMicrosecond = 10;
+        var utcTicks = value.UtcDateTime.Ticks;
+        var wholeMicroseconds = utcTicks / ticksPerMicrosecond;
+        return utcTicks % ticksPerMicrosecond >= ticksPerMicrosecond / 2
+            ? wholeMicroseconds + 1
+            : wholeMicroseconds;
+    }
+
+    private static string Sha256(string value)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
     }
 
     private sealed record MakerGtdFixture(

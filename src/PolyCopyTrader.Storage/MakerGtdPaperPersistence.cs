@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PolyCopyTrader.Domain;
@@ -31,7 +34,31 @@ public sealed record MakerGtdPaperMutationResult(
     PaperOrder? PaperOrder = null,
     StrategyMarketPaperRun? StrategyRun = null,
     PaperFill? PaperFill = null,
-    PaperPosition? PaperPosition = null);
+    PaperPosition? PaperPosition = null,
+    MakerGtdPaperMismatchDiagnostic? MismatchDiagnostic = null);
+
+public sealed record MakerGtdPaperMismatchDiagnostic(
+    string Stage,
+    IReadOnlyList<MakerGtdPaperMismatchDetail> Mismatches);
+
+public sealed record MakerGtdPaperMismatchDetail(
+    string Predicate,
+    string? CurrentValue = null,
+    string? RequestedValue = null,
+    string? CurrentUtc = null,
+    string? RequestedUtc = null,
+    long? CurrentUtcTicks = null,
+    long? RequestedUtcTicks = null,
+    long? CurrentPostgresMicroseconds = null,
+    long? RequestedPostgresMicroseconds = null,
+    string? CurrentSha256 = null,
+    string? RequestedSha256 = null);
+
+public static class MakerGtdPaperMismatchStages
+{
+    public const string LockedOrderIdentity = "locked_order_identity";
+    public const string RequestedFilledOrderTransition = "requested_filled_order_transition";
+}
 
 public static class MakerGtdPaperMutationReasonCodes
 {
@@ -229,6 +256,91 @@ internal static class MakerGtdPaperPersistenceTransitions
         }
 
         return null;
+    }
+
+    internal static MakerGtdPaperMismatchDiagnostic CreateLockedOrderIdentityMismatchDiagnostic(
+        PaperOrder current,
+        PaperOrder initial)
+    {
+        var mismatches = new List<MakerGtdPaperMismatchDetail>();
+        AddMismatch(
+            mismatches,
+            "copied_trader_wallet",
+            !string.Equals(current.CopiedTraderWallet, initial.CopiedTraderWallet, StringComparison.Ordinal));
+        AddMismatch(
+            mismatches,
+            "asset_id",
+            !string.Equals(current.AssetId, initial.AssetId, StringComparison.Ordinal));
+        return new MakerGtdPaperMismatchDiagnostic(
+            MakerGtdPaperMismatchStages.LockedOrderIdentity,
+            mismatches);
+    }
+
+    internal static MakerGtdPaperMismatchDiagnostic CreateFilledOrderTransitionMismatchDiagnostic(
+        PaperOrder current,
+        PaperOrder requested,
+        PaperFill fill,
+        string expectedExecutionSource)
+    {
+        var mismatches = new List<MakerGtdPaperMismatchDetail>();
+        AddMismatch(mismatches, "requested_status_filled", requested.Status != PaperOrderStatus.Filled);
+        AddMismatch(mismatches, "requested_filled_at_present", requested.FilledAtUtc is null);
+        AddMismatch(
+            mismatches,
+            "requested_filled_at_matches_fill",
+            requested.FilledAtUtc is { } filledAtUtc && !SameTimestamp(filledAtUtc, fill.FilledAtUtc));
+        AddMismatch(mismatches, "requested_cancelled_at_null", requested.CancelledAtUtc is not null);
+        AddMismatch(
+            mismatches,
+            "requested_execution_source",
+            !string.Equals(requested.ExecutionSource, expectedExecutionSource, StringComparison.Ordinal));
+        AddMismatch(mismatches, "id", current.Id != requested.Id);
+        AddMismatch(mismatches, "signal_id", current.SignalId != requested.SignalId);
+        AddMismatch(
+            mismatches,
+            "strategy_id",
+            StrategyIds.Normalize(current.StrategyId) != StrategyIds.Normalize(requested.StrategyId));
+        AddMismatch(
+            mismatches,
+            "copied_trader_wallet",
+            !string.Equals(current.CopiedTraderWallet, requested.CopiedTraderWallet, StringComparison.Ordinal));
+        AddMismatch(mismatches, "side", current.Side != requested.Side);
+        AddMismatch(
+            mismatches,
+            "asset_id",
+            !string.Equals(current.AssetId, requested.AssetId, StringComparison.Ordinal));
+        AddMismatch(
+            mismatches,
+            "condition_id",
+            !string.Equals(current.ConditionId, requested.ConditionId, StringComparison.Ordinal));
+        AddMismatch(
+            mismatches,
+            "outcome",
+            !string.Equals(current.Outcome, requested.Outcome, StringComparison.Ordinal));
+        AddNumericMismatch(mismatches, "price", current.Price, requested.Price);
+        AddNumericMismatch(mismatches, "size_shares", current.SizeShares, requested.SizeShares);
+        AddNumericMismatch(mismatches, "notional_usd", current.NotionalUsd, requested.NotionalUsd);
+        AddInitialTimestampMismatch(
+            mismatches,
+            "created_at_utc",
+            current.CreatedAtUtc,
+            requested.CreatedAtUtc);
+        AddInitialTimestampMismatch(
+            mismatches,
+            "expires_at_utc",
+            current.ExpiresAtUtc,
+            requested.ExpiresAtUtc);
+        if (!JsonEquivalent(current.RawDecisionJson, requested.RawDecisionJson))
+        {
+            mismatches.Add(new MakerGtdPaperMismatchDetail(
+                "raw_decision_json",
+                CurrentSha256: Sha256Fingerprint(current.RawDecisionJson),
+                RequestedSha256: Sha256Fingerprint(requested.RawDecisionJson)));
+        }
+        AddMismatch(mismatches, "correlation_id", current.CorrelationId != requested.CorrelationId);
+        return new MakerGtdPaperMismatchDiagnostic(
+            MakerGtdPaperMismatchStages.RequestedFilledOrderTransition,
+            mismatches);
     }
 
     internal static bool IsAlreadyApplied(
@@ -573,6 +685,57 @@ internal static class MakerGtdPaperPersistenceTransitions
         return utcTicks % ticksPerMicrosecond >= ticksPerMicrosecond / 2
             ? wholeMicroseconds + 1
             : wholeMicroseconds;
+    }
+
+    private static void AddMismatch(
+        ICollection<MakerGtdPaperMismatchDetail> mismatches,
+        string predicate,
+        bool failed)
+    {
+        if (failed)
+        {
+            mismatches.Add(new MakerGtdPaperMismatchDetail(predicate));
+        }
+    }
+
+    private static void AddNumericMismatch(
+        ICollection<MakerGtdPaperMismatchDetail> mismatches,
+        string predicate,
+        decimal current,
+        decimal requested)
+    {
+        if (current != requested)
+        {
+            mismatches.Add(new MakerGtdPaperMismatchDetail(
+                predicate,
+                CurrentValue: current.ToString(CultureInfo.InvariantCulture),
+                RequestedValue: requested.ToString(CultureInfo.InvariantCulture)));
+        }
+    }
+
+    private static void AddInitialTimestampMismatch(
+        ICollection<MakerGtdPaperMismatchDetail> mismatches,
+        string predicate,
+        DateTimeOffset current,
+        DateTimeOffset requested)
+    {
+        if (!SameInitialOrderTimestamp(current, requested))
+        {
+            mismatches.Add(new MakerGtdPaperMismatchDetail(
+                predicate,
+                CurrentUtc: current.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
+                RequestedUtc: requested.UtcDateTime.ToString("O", CultureInfo.InvariantCulture),
+                CurrentUtcTicks: current.UtcDateTime.Ticks,
+                RequestedUtcTicks: requested.UtcDateTime.Ticks,
+                CurrentPostgresMicroseconds: ToJsonbRecordsetMicroseconds(current),
+                RequestedPostgresMicroseconds: ToJsonbRecordsetMicroseconds(requested)));
+        }
+    }
+
+    private static string Sha256Fingerprint(string? value)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value ?? "null");
+        return Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     }
 
     private static bool PositionMarkIsInvalid(this MakerGtdPaperFullFillRequest request)
