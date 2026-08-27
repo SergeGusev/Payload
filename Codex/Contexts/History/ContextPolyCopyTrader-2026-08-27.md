@@ -39,3 +39,10 @@ Request:
 
 Result:
 Recorded exact approval for the Maker-GTD PostgreSQL timestamp-equivalence contract. The required approval-only checkpoint is the next action before any product edit.
+
+## 2026-08-27 Maker-GTD Timestamp Equivalence Completion
+Request:
+`APPROVE RC-20260827-maker-gtd-postgres-timestamp-equivalence sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c`
+
+Result:
+Implemented the approved path-specific PostgreSQL timestamp equivalence for Maker-GTD initial JSONB-recordset order timestamps. The original direct-Npgsql truncating comparator remains unchanged; only initial `CreatedAtUtc` and `ExpiresAtUtc` immutable-shape checks round as PostgreSQL does. A real disposable PostgreSQL regression proved upward rounding, atomic fill, idempotent exact retry, and one resulting fill; focused Maker-GTD tests passed 66/66, the full Release solution build passed with zero warnings/errors, `git diff --check` passed, and an independent semantic reviewer returned PASS with no findings. The disposable database was removed, local `polycopytrader` remained present, and Production was not changed.

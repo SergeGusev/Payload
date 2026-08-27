@@ -433,8 +433,8 @@ internal static class MakerGtdPaperPersistenceTransitions
             left.Price == right.Price &&
             left.SizeShares == right.SizeShares &&
             left.NotionalUsd == right.NotionalUsd &&
-            SameTimestamp(left.CreatedAtUtc, right.CreatedAtUtc) &&
-            SameTimestamp(left.ExpiresAtUtc, right.ExpiresAtUtc) &&
+            SameInitialOrderTimestamp(left.CreatedAtUtc, right.CreatedAtUtc) &&
+            SameInitialOrderTimestamp(left.ExpiresAtUtc, right.ExpiresAtUtc) &&
             JsonEquivalent(left.RawDecisionJson, right.RawDecisionJson) &&
             left.CorrelationId == right.CorrelationId;
     }
@@ -558,6 +558,21 @@ internal static class MakerGtdPaperPersistenceTransitions
     private static bool SameTimestamp(DateTimeOffset left, DateTimeOffset right)
     {
         return left.UtcDateTime.Ticks / 10 == right.UtcDateTime.Ticks / 10;
+    }
+
+    private static bool SameInitialOrderTimestamp(DateTimeOffset left, DateTimeOffset right)
+    {
+        return ToJsonbRecordsetMicroseconds(left) == ToJsonbRecordsetMicroseconds(right);
+    }
+
+    private static long ToJsonbRecordsetMicroseconds(DateTimeOffset value)
+    {
+        const long ticksPerMicrosecond = 10;
+        var utcTicks = value.UtcDateTime.Ticks;
+        var wholeMicroseconds = utcTicks / ticksPerMicrosecond;
+        return utcTicks % ticksPerMicrosecond >= ticksPerMicrosecond / 2
+            ? wholeMicroseconds + 1
+            : wholeMicroseconds;
     }
 
     private static bool PositionMarkIsInvalid(this MakerGtdPaperFullFillRequest request)

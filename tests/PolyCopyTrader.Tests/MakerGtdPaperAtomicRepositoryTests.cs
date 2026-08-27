@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
+using Npgsql;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Tests;
@@ -44,6 +47,116 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
         Assert.Single(repository.PaperFills);
         Assert.Single(repository.PaperPositions);
         Assert.Single(repository.StrategyMarketPaperRuns);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task PostgresFullFill_JsonbRoundedInitialTimestampAndDirectTruncatedOutcome_RetryIsIdempotent()
+    {
+        var callerCreatedAtUtc = DateTimeOffset.Parse(
+            "2026-08-27T05:59:33.1706318+00:00",
+            CultureInfo.InvariantCulture);
+        var fixture = CreateFixture(
+            fillAtUtc: callerCreatedAtUtc.AddSeconds(30),
+            createdAtUtc: callerCreatedAtUtc);
+        var connectionString = Environment.GetEnvironmentVariable(
+            "POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        Assert.False(string.IsNullOrWhiteSpace(connectionString));
+        var factory = new PostgresConnectionFactory(
+            new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        await AddStrategyFixtureAsync(factory, fixture.PendingOrder);
+        var repository = new PostgresAppRepository(factory);
+        var signal = CreateSignal(fixture.PendingOrder);
+        await repository.AddPaperEntryPersistenceBatchAsync(new PaperEntryPersistenceBatch(
+            [signal],
+            [fixture.PendingOrder],
+            [],
+            [],
+            [],
+            [fixture.RestingRun]));
+
+        var persistedPendingOrder = await repository.GetPaperOrderAsync(fixture.PendingOrder.Id);
+        Assert.NotNull(persistedPendingOrder);
+        Assert.Equal(
+            DateTimeOffset.Parse("2026-08-27T05:59:33.1706320+00:00", CultureInfo.InvariantCulture),
+            persistedPendingOrder.CreatedAtUtc);
+        var persistedRestingRun = Assert.Single(
+            await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync([fixture.PendingOrder.Id]));
+        var requestedEnteredRun = persistedRestingRun with
+        {
+            Status = fixture.FullFillRequest.EnteredRun.Status,
+            EntryPrice = fixture.FullFillRequest.EnteredRun.EntryPrice,
+            StakeUsd = fixture.FullFillRequest.EnteredRun.StakeUsd,
+            SizeShares = fixture.FullFillRequest.EnteredRun.SizeShares,
+            EnteredAtUtc = fixture.FullFillRequest.EnteredRun.EnteredAtUtc,
+            UpdatedAtUtc = fixture.FullFillRequest.EnteredRun.UpdatedAtUtc,
+            FeeUsd = fixture.FullFillRequest.EnteredRun.FeeUsd,
+            FeeAccountingStatus = fixture.FullFillRequest.EnteredRun.FeeAccountingStatus,
+            FeeLiquidityRole = fixture.FullFillRequest.EnteredRun.FeeLiquidityRole,
+            FeeCalculationSource = fixture.FullFillRequest.EnteredRun.FeeCalculationSource,
+            FeeRate = fixture.FullFillRequest.EnteredRun.FeeRate,
+            FeeExponent = fixture.FullFillRequest.EnteredRun.FeeExponent,
+            FeeTakerOnly = fixture.FullFillRequest.EnteredRun.FeeTakerOnly,
+            FeeCalculatedAtUtc = fixture.FullFillRequest.EnteredRun.FeeCalculatedAtUtc
+        };
+        var request = fixture.FullFillRequest with { EnteredRun = requestedEnteredRun };
+
+        var first = await repository.TryApplyMakerGtdPaperFullFillAsync(request);
+        var second = await repository.TryApplyMakerGtdPaperFullFillAsync(request);
+
+        Assert.True(
+            first.Outcome == MakerGtdPaperMutationOutcome.Applied,
+            $"Expected Applied but received {first.Outcome}: {first.ReasonCode}");
+        Assert.Equal(MakerGtdPaperMutationReasonCodes.FillApplied, first.ReasonCode);
+        Assert.Equal(MakerGtdPaperMutationOutcome.AlreadyApplied, second.Outcome);
+        Assert.Equal(MakerGtdPaperMutationReasonCodes.FillAlreadyApplied, second.ReasonCode);
+        Assert.Single(await repository.GetPaperFillsForOrdersAsync([fixture.PendingOrder.Id]));
+    }
+
+    [Theory]
+    [InlineData("2026-08-27T05:59:33.1706315+00:00", "2026-08-27T05:59:33.1706320+00:00")]
+    [InlineData("2026-08-27T05:59:33.1706318+00:00", "2026-08-27T05:59:33.1706320+00:00")]
+    [InlineData("2026-08-27T05:59:33.3761549+00:00", "2026-08-27T05:59:33.3761550+00:00")]
+    public async Task FullFill_PostgresRoundedCreatedAtTimestamp_IsEligible(
+        string callerCreatedAtText,
+        string persistedCreatedAtText)
+    {
+        var callerCreatedAtUtc = DateTimeOffset.Parse(callerCreatedAtText, CultureInfo.InvariantCulture);
+        var persistedCreatedAtUtc = DateTimeOffset.Parse(persistedCreatedAtText, CultureInfo.InvariantCulture);
+        var fixture = CreateFixture(
+            fillAtUtc: callerCreatedAtUtc.AddSeconds(30),
+            createdAtUtc: callerCreatedAtUtc);
+        var repository = Seed(fixture);
+        repository.PaperOrders[0] = fixture.PendingOrder with { CreatedAtUtc = persistedCreatedAtUtc };
+
+        var result = await repository.TryApplyMakerGtdPaperFullFillAsync(fixture.FullFillRequest);
+
+        Assert.Equal(MakerGtdPaperMutationOutcome.Applied, result.Outcome);
+        Assert.Equal(MakerGtdPaperMutationReasonCodes.FillApplied, result.ReasonCode);
+        Assert.Single(repository.PaperFills);
+    }
+
+    [Fact]
+    public async Task FullFill_CreatedAtTimestampsThatRoundToDifferentPostgresMicroseconds_AreNotEligible()
+    {
+        var persistedCreatedAtUtc = DateTimeOffset.Parse(
+            "2026-08-27T05:59:33.1706320+00:00",
+            CultureInfo.InvariantCulture);
+        var callerCreatedAtUtc = DateTimeOffset.Parse(
+            "2026-08-27T05:59:33.1706326+00:00",
+            CultureInfo.InvariantCulture);
+        var fixture = CreateFixture(
+            fillAtUtc: callerCreatedAtUtc.AddSeconds(30),
+            createdAtUtc: callerCreatedAtUtc);
+        var repository = Seed(fixture);
+        repository.PaperOrders[0] = fixture.PendingOrder with { CreatedAtUtc = persistedCreatedAtUtc };
+
+        var result = await repository.TryApplyMakerGtdPaperFullFillAsync(fixture.FullFillRequest);
+
+        Assert.Equal(MakerGtdPaperMutationOutcome.NotEligible, result.Outcome);
+        Assert.Equal(MakerGtdPaperMutationReasonCodes.FilledOrderShapeMismatch, result.ReasonCode);
+        AssertRepositoryStillResting(repository, fixture, persistedCreatedAtUtc);
     }
 
     [Theory]
@@ -215,6 +328,26 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
     }
 
     [Fact]
+    public async Task Expiry_PostgresRoundedCreatedAtTimestamp_IsEligible()
+    {
+        var callerCreatedAtUtc = DateTimeOffset.Parse(
+            "2026-08-27T05:59:33.1706318+00:00",
+            CultureInfo.InvariantCulture);
+        var persistedCreatedAtUtc = DateTimeOffset.Parse(
+            "2026-08-27T05:59:33.1706320+00:00",
+            CultureInfo.InvariantCulture);
+        var fixture = CreateFixture(createdAtUtc: callerCreatedAtUtc);
+        var repository = Seed(fixture);
+        repository.PaperOrders[0] = fixture.PendingOrder with { CreatedAtUtc = persistedCreatedAtUtc };
+
+        var result = await repository.TryExpireMakerGtdPaperOrderAsync(fixture.ExpiryRequest);
+
+        Assert.Equal(MakerGtdPaperMutationOutcome.Applied, result.Outcome);
+        Assert.Equal(MakerGtdPaperMutationReasonCodes.ExpiryApplied, result.ReasonCode);
+        Assert.Equal(PaperOrderStatus.Expired, repository.PaperOrders.Single().Status);
+    }
+
+    [Fact]
     public async Task Expiry_BeforeExpiryTime_IsNotEligible()
     {
         var fixture = CreateFixture();
@@ -284,11 +417,13 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
         Assert.Contains("CommitAsync", expirySection, StringComparison.Ordinal);
     }
 
-    private static MakerGtdFixture CreateFixture(DateTimeOffset? fillAtUtc = null)
+    private static MakerGtdFixture CreateFixture(
+        DateTimeOffset? fillAtUtc = null,
+        DateTimeOffset? createdAtUtc = null)
     {
-        var createdAtUtc = new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
-        var expiresAtUtc = createdAtUtc.AddMinutes(4);
-        var actualFillAtUtc = fillAtUtc ?? createdAtUtc.AddSeconds(30);
+        var actualCreatedAtUtc = createdAtUtc ?? new DateTimeOffset(2026, 8, 9, 12, 0, 0, TimeSpan.Zero);
+        var expiresAtUtc = actualCreatedAtUtc.AddMinutes(4);
+        var actualFillAtUtc = fillAtUtc ?? actualCreatedAtUtc.AddSeconds(30);
         var strategyId = Guid.Parse("87c50005-0000-4000-8223-000000000105");
         var signalId = Guid.Parse("10000000-0000-0000-0000-000000000001");
         var orderId = Guid.Parse("20000000-0000-0000-0000-000000000001");
@@ -306,7 +441,7 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
             0.48m,
             10m,
             4.80m,
-            createdAtUtc,
+            actualCreatedAtUtc,
             expiresAtUtc,
             StrategyId: strategyId,
             RawDecisionJson: "{\"mode\":\"maker_gtd\"}",
@@ -320,10 +455,10 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
             "eth-updown-5m-1",
             "ETH Up or Down",
             "Crypto",
-            createdAtUtc.AddMinutes(1),
+            actualCreatedAtUtc.AddMinutes(1),
             expiresAtUtc.AddMinutes(1),
-            createdAtUtc.AddSeconds(-5),
-            createdAtUtc,
+            actualCreatedAtUtc.AddSeconds(-5),
+            actualCreatedAtUtc,
             StrategyMarketPaperRunStatuses.Resting,
             pendingOrder.AssetId,
             pendingOrder.Outcome,
@@ -338,8 +473,8 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
             null,
             null,
             null,
-            createdAtUtc.AddSeconds(-5),
-            createdAtUtc);
+            actualCreatedAtUtc.AddSeconds(-5),
+            actualCreatedAtUtc);
         var fill = new PaperFill(
             Guid.Parse("50000000-0000-0000-0000-000000000001"),
             orderId,
@@ -420,6 +555,53 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
         return new MakerGtdFixture(pendingOrder, restingRun, fullFillRequest, expiryRequest);
     }
 
+    private static Signal CreateSignal(PaperOrder order)
+    {
+        var leaderTrade = new LeaderTrade(
+            order.CopiedTraderWallet,
+            "Maker-GTD PostgreSQL timestamp regression",
+            order.ConditionId,
+            order.AssetId,
+            "maker-gtd-postgres-timestamp-regression",
+            "Maker-GTD PostgreSQL timestamp regression",
+            order.Outcome,
+            order.Side,
+            order.Price,
+            order.SizeShares,
+            order.NotionalUsd,
+            order.CreatedAtUtc);
+        return new Signal(
+            order.SignalId,
+            leaderTrade,
+            100,
+            true,
+            "maker_gtd_postgres_timestamp_regression",
+            [],
+            order.Price,
+            order.SizeShares,
+            order.NotionalUsd,
+            order.CreatedAtUtc);
+    }
+
+    private static async Task AddStrategyFixtureAsync(
+        PostgresConnectionFactory factory,
+        PaperOrder order)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO strategies (id, code, name, created_at_utc, updated_at_utc)
+VALUES (@Id, @Code, @Name, @CreatedAtUtc, @CreatedAtUtc);
+""",
+            connection);
+        command.Parameters.AddWithValue("Id", order.StrategyId);
+        command.Parameters.AddWithValue("Code", $"maker_gtd_timestamp_{order.StrategyId:N}");
+        command.Parameters.AddWithValue("Name", $"Maker-GTD timestamp {order.StrategyId:N}");
+        command.Parameters.AddWithValue("CreatedAtUtc", order.CreatedAtUtc);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
     private static TestAppRepository Seed(MakerGtdFixture fixture)
     {
         var repository = new TestAppRepository();
@@ -428,9 +610,15 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
         return repository;
     }
 
-    private static void AssertRepositoryStillResting(TestAppRepository repository, MakerGtdFixture fixture)
+    private static void AssertRepositoryStillResting(
+        TestAppRepository repository,
+        MakerGtdFixture fixture,
+        DateTimeOffset? expectedCreatedAtUtc = null)
     {
-        Assert.Equal(fixture.PendingOrder, repository.PaperOrders.Single());
+        var expectedPendingOrder = expectedCreatedAtUtc is { } createdAtUtc
+            ? fixture.PendingOrder with { CreatedAtUtc = createdAtUtc }
+            : fixture.PendingOrder;
+        Assert.Equal(expectedPendingOrder, repository.PaperOrders.Single());
         Assert.Equal(fixture.RestingRun, repository.StrategyMarketPaperRuns.Single());
         Assert.Empty(repository.PaperFills);
         Assert.Empty(repository.PaperPositions);

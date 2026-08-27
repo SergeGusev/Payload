@@ -1,15 +1,21 @@
 ## Active Update 2026-08-27 Maker-GTD PostgreSQL Timestamp Equivalence Contract
 Goal: Resolve the first and highest-priority verified Production-log problem: valid Maker-GTD Paper fills rejected by the atomic order-shape guard.
-Status: Exact approval received; approval-only checkpoint pending before product edits
+Status: Completed locally, independently reviewed, and ready for deployment from the pushed deployment branch
 Done:
 - Prioritized the verified findings: P0 lost Maker-GTD fills; P1 market-data/Maker queue latency; P2 recurring WebSocket reconnects; P3 transient OKX/reference/order-book timeouts; P4 short file-log retention/high volume.
 - Compared `MakerGtdPaperPersistenceTransitions.SameTimestamp` with exact read-only Production rows for orders `9152ef50-bdee-4144-a198-c68432f524d8` and `dd4b98c6-31a3-42ce-82dd-8a4527e0d73c`.
 - Proved the deterministic mismatch: caller timestamps `2026-08-27T05:59:33.1706318Z` and `2026-08-27T05:59:33.3761549Z` were rounded by PostgreSQL to `...170632Z` and `...376155Z`, while the validator truncates both values to microseconds. This makes the same stored instant fail `SameImmutableOrderShape` and produces `maker_gtd_paper_filled_order_shape_mismatch`.
 - Drafted and validated `RC-20260827-maker-gtd-postgres-timestamp-equivalence` at semantic digest `sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c`.
 - User approved the exact contract with `APPROVE RC-20260827-maker-gtd-postgres-timestamp-equivalence sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c`.
-Next: Create the approval-only checkpoint, implement only PostgreSQL-microsecond timestamp equivalence plus focused regressions, build/test, and obtain independent semantic review.
-Notes: Production inspection used `BEGIN READ ONLY`, forced host/database, and `statement_timeout=15s`; no Production state changed. No product source was edited before approval.
-Blockers: Product edits remain blocked only until the required approval-only checkpoint commit is created.
+- Created approval-only checkpoint commit `9dd31b08` before product edits.
+- Kept the original truncating timestamp comparison unchanged for direct Npgsql outcome, lifecycle, concurrency, and retry/idempotency paths. Only initial JSONB-recordset `PaperOrder.CreatedAtUtc` and `ExpiresAtUtc` immutable-shape comparisons now use PostgreSQL-equivalent nearest-microsecond rounding.
+- Added a real PostgreSQL regression through the actual initial batch JSONB persistence path. It proves upward rounding, successful atomic fill, exact retry as `AlreadyApplied`, and exactly one fill. Added focused coverage for both Production timestamp forms, the `.5` boundary, different-microsecond rejection, and expiry timestamps.
+- Focused Maker-GTD atomic/lifecycle tests passed `66/66` with PostgreSQL enabled. Full Release solution build passed with `0` warnings and `0` errors; `git diff --check` passed.
+- Independent reviewer `agent:/root/maker_gtd_postgres_timestamp_equivalence_review` compared the verbatim request, approved contract, diff, and evidence and returned PASS with no findings. The first review had identified an over-broad shared-comparator change; that approach was withdrawn and replaced with the path-specific implementation before the passing re-review.
+- Removed the exact disposable PostgreSQL database after testing and independently verified that local `polycopytrader` remained present.
+Next: Deploy/restart the service from the pushed `codex/reference-average-available-windows` branch, then verify fresh Maker-GTD logs and fills before starting the next prioritized problem.
+Notes: Production inspection used `BEGIN READ ONLY`, forced host/database, and `statement_timeout=15s`; no Production state changed. No product source was edited before approval. The implementation does not repair the two historical expired orders.
+Blockers: None for deployment; Production behavior remains unchanged until the user deploys this build.
 
 ## Active Update 2026-08-27 Production File Logs Correction
 Goal: Correct the prior logs conclusion by using the newly discoverable read-only Production file-log share.

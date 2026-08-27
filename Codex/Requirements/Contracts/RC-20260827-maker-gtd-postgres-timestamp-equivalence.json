@@ -3,7 +3,7 @@
   "contractId": "RC-20260827-maker-gtd-postgres-timestamp-equivalence",
   "title": "Accept PostgreSQL-equivalent timestamps in Maker-GTD atomic transitions",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -53,16 +53,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"MakerGtdPaperAtomicRepositoryTests|MakerGtdPaperLifecycleIntegrationTests\" with TEMP/TMP and all outputs under the active marked D:\\CodexTemp run",
           "expected": "The upward-rounding regressions pass, distinct stored microseconds remain rejected, and existing Maker-GTD atomic/lifecycle tests pass.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "The focused Maker-GTD atomic/lifecycle suite passed 66/66 with POLYCOPYTRADER_TEST_POSTGRES_CONNECTION configured. The new real PostgreSQL regression passed through the actual initial JSONB-recordset persistence path, proved 2026-08-27T05:59:33.1706318Z persisted as 2026-08-27T05:59:33.170632Z, then proved the direct atomic fill returned Applied, its exact retry returned AlreadyApplied, and exactly one fill remained. Focused theories also cover 2026-08-27T05:59:33.3761549Z -> 2026-08-27T05:59:33.376155Z, the .5 rounding boundary, different-microsecond rejection, and expiry timestamps. The exact disposable database pct_codex_skip_v2_20260827070011_72535ec4 was removed after the run, while local polycopytrader remained present."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "Build the affected solution/project, run git diff --check, validate the requirement contract in WorkingTree and staged modes, and obtain independent semantic review.",
           "expected": "Only PostgreSQL-precision timestamp equivalence and its focused tests change; no other Maker-GTD semantics are altered.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release build passed with 0 warnings and 0 errors; git diff --check passed. Independent reviewer agent:/root/maker_gtd_postgres_timestamp_equivalence_review compared the verbatim request, approved contract, actual diff, and verification, and returned PASS with no findings. The reviewer verified that the original truncating SameTimestamp remains unchanged for direct Npgsql outcome/idempotency paths and that only initial JSONB-recordset CreatedAtUtc/ExpiresAtUtc immutable-shape comparisons use PostgreSQL-equivalent rounding."
         }
       ]
     }
@@ -77,8 +77,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/maker_gtd_postgres_timestamp_equivalence_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }
