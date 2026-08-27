@@ -1,3 +1,16 @@
+## Active Update 2026-08-27 Deployed Maker-GTD Timestamp Fix Verification
+Goal: Verify the newly deployed service, betting activity, and Maker-GTD timestamp fix without changing Production.
+Status: Completed read-only; service and ordinary Paper betting are active, but the Maker-GTD timestamp fix failed its Production runtime check
+Done:
+- Read-only Serilog evidence proves a new service process started at `2026-08-27T08:29:43.571Z` (`11:29:43 +03`) in `Live` mode. Heartbeats advanced through `2026-08-27T08:45:44.8113055Z`, and logs continued through the final cutoff `2026-08-27T08:46:36.532Z`.
+- The closed post-start log segment through `08:34:30.357Z` contained zero ERR/FTL records but `9,301` `maker_gtd_paper_filled_order_shape_mismatch` warnings for exactly one new order, `0e05106d-e5b9-492d-a1b1-b19c634d2c03`, from `08:30:04.839Z` through `08:33:59.973Z`. Therefore the deployed runtime still rejected valid-looking Maker-GTD full-fill attempts; the fix is not verified as effective.
+- The next log segment `08:34:30.357Z..08:44:26.444Z` showed `244` ordinary FAK Paper fills and `13` new ETH Reference Average Maker-GTD resting-order acceptances. A final bounded `2 MiB` slice through `08:46:36.532Z` contained `75` FAK fill log entries and no shape mismatch or ERR record. Betting and the main strategy loop are active.
+- The same `08:34:30Z..08:44:49Z` segment had `862` recurring slow market-data side-effect warnings, with maximum observed queue delay `19,620.6445 ms`, processing duration `19,561.1254 ms`, and `171` pending updates. It also had eight isolated-worker ERR records: four Historical Parity and four Legacy Paper FAK fee backfill cycles timed out while reading PostgreSQL and entered bounded retry; the main service continued.
+- Production PostgreSQL preview did not reach SQL because `pg_hba.conf` rejected the currently configured local user `serge` for this client. No database state changed. Consequently exact deployed version, database order/fill state, and aggregate counts could not be independently confirmed in this pass; startup and runtime conclusions use the read-only `CodexLogs` share.
+Next: Diagnose the remaining immutable-shape mismatch for new order `0e05106d-e5b9-492d-a1b1-b19c634d2c03` only after a separately approved change contract; do not proceed to the lower-priority queue issue first.
+Notes: Maker-GTD results use the required label `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. No Production database, service, strategy, order, configuration, deployment, or Live state was changed.
+Blockers: The timestamp fix did not eliminate Production shape mismatches. Exact build identity and persisted order outcome remain unknown because direct PostgreSQL read-only access is currently rejected by `pg_hba.conf` and the startup log does not include a build/version identifier.
+
 ## Active Update 2026-08-27 Maker-GTD PostgreSQL Timestamp Equivalence Contract
 Goal: Resolve the first and highest-priority verified Production-log problem: valid Maker-GTD Paper fills rejected by the atomic order-shape guard.
 Status: Completed locally, independently reviewed, and ready for deployment from the pushed deployment branch

@@ -46,3 +46,10 @@ Request:
 
 Result:
 Implemented the approved path-specific PostgreSQL timestamp equivalence for Maker-GTD initial JSONB-recordset order timestamps. The original direct-Npgsql truncating comparator remains unchanged; only initial `CreatedAtUtc` and `ExpiresAtUtc` immutable-shape checks round as PostgreSQL does. A real disposable PostgreSQL regression proved upward rounding, atomic fill, idempotent exact retry, and one resulting fill; focused Maker-GTD tests passed 66/66, the full Release solution build passed with zero warnings/errors, `git diff --check` passed, and an independent semantic reviewer returned PASS with no findings. The disposable database was removed, local `polycopytrader` remained present, and Production was not changed.
+
+## 2026-08-27T08:46:37.5312875Z
+Request:
+`Выложил, проверяй`
+
+Result:
+Verified the restarted Production service through the read-only `CodexLogs` share. The process started at `2026-08-27T08:29:43.571Z`, heartbeats advanced through `08:45:44.8113055Z`, and logs continued through `08:46:36.532Z`. Ordinary betting remained active: the bounded `08:34:30.357Z..08:44:26.444Z` segment contained 244 FAK Paper fills, while the final bounded slice through `08:46:36.532Z` contained 75 fill entries. The Maker-GTD fix failed runtime verification: one new order, `0e05106d-e5b9-492d-a1b1-b19c634d2c03`, produced 9,301 `maker_gtd_paper_filled_order_shape_mismatch` warnings from `08:30:04.839Z` through `08:33:59.973Z`; 13 new Maker-GTD resting orders were accepted later. These are `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. Market-data side-effect delay remained material, reaching 19.62 seconds and 171 pending updates, and Historical Parity/Legacy backfill workers had eight PostgreSQL read timeouts while the main service continued. Direct PostgreSQL verification was blocked before SQL by `pg_hba.conf` for the currently configured local user, so exact deployed version and persisted order/fill state remain unknown. No Production state changed.
