@@ -1,3 +1,19 @@
+## Active Update 2026-08-27 Production File Logs Correction
+Goal: Correct the prior logs conclusion by using the newly discoverable read-only Production file-log share.
+Status: Completed read-only; file logs expose an active market-data side-effect latency problem and two lost Maker-GTD Paper fill attempts that were not visible in persisted `api_errors`.
+Done:
+- Explicitly withdraw the previous statement that Production service-file logs were unavailable. `net view \\192.168.0.101` exposed the read-only `CodexLogs` share, and current Serilog files were read directly from `\\192.168.0.101\CodexLogs` without modifying the server.
+- The share retained `30` roll files totaling `1.397 GiB`; the oldest retained file ended at `2026-08-26T22:49:30Z` and the newest was actively written through at least `2026-08-27T06:22:21Z`. Files roll at roughly `50 MB`, so current retention covers only about 7.5 hours.
+- Scanned roll files `_034`, `_035`, and the active `_036`, covering `08:30:08` through at least `09:21:25 +03`. No `[ERR]` or `[FTL]` entries were found in these files, but there were at least `5,249` `[WRN]` entries through the first `_036` summary, including `4,581` `Queued market-data side effect was slow` warnings. Warnings continued through `09:21:25 +03`.
+- Queue degradation was material and recurring: `_034` reached `21,626.6779 ms` queue delay, `17,193.1061 ms` processing duration, and `564` pending updates; `_035` reached `16,259.7141 ms`, `12,686.8299 ms`, and `151`; `_036` reached at least `14,636.7515 ms`, `11,675.9868 ms`, and `149`. The latest observed warnings still showed roughly `1.0-1.7s` delays, so the condition was reduced but ongoing.
+- `_035` contained `184` dedicated Maker-GTD slow-evidence warnings from `08:59:35.650` through `08:59:49.228 +03`, with maximum queue delay `13,030.4394 ms`, processing `10,625.0955 ms`, and `150` pending Maker updates.
+- The same file contained `478` repeated `maker_gtd_paper_filled_order_shape_mismatch` warnings for exactly two orders: `9152ef50-bdee-4144-a198-c68432f524d8` (`292`) and `dd4b98c6-31a3-42ce-82dd-8a4527e0d73c` (`186`). Direct database verification at `2026-08-27T06:18:05.597740Z` found both orders `Expired`, zero fills, and linked runs `Skipped`. They were the ETH Reference Average 3 bps and 5 bps Maker-GTD strategies for the `05:59:33Z` order window.
+- Current source confirms this reason is returned when the requested Filled order fails `IsValidFilledOrderTransition`; the caller records a market-data apply failure, logs the warning, and returns without persisting the fill. Thus the two exact full-fill attempts were rejected by the atomic transition guard and later expired rather than becoming Paper fills.
+- Current runtime remained alive despite the defect: at `2026-08-27T06:20:15.984727Z`, service was `Running / Live` on build `3bf1d16b`, heartbeat age `56.0s`, and `last_error=NULL`; Paper orders/fills were `179/179` over 5 minutes and `448/448` over 15 minutes, with `130/435` settlements. The critical socket was Connected after another `1013` close/reconnect at `09:16:47 +03`; logs continued successful order-book and result-polling cycles, and PostgreSQL had zero waiting locks.
+Next: None requested.
+Notes: The earlier database-only conclusion that recent dependency incidents had recovered remains valid for persisted errors and aggregate betting, but the broader conclusion that logs were clean is withdrawn. File logs independently prove ongoing queue latency and the two Maker-GTD fill-persistence failures.
+Blockers: None for diagnosis; no repair was requested or performed.
+
 ## Active Update 2026-08-27 Production Server Bets And Logs Check
 Goal: Verify current Production service, betting, and persisted logs without changing Production.
 Status: Completed read-only; service and Paper betting are healthy, recent dependency incidents recovered, and copied-performance has a modest queue delay.
@@ -9,10 +25,10 @@ Done:
 - Persisted `api_errors` in the preceding hour contained `15` OKX expiry-ticker two-second timeouts, one OKX index timeout, `8` ETH and `10` SOL stale-feed writes, eight ETH stale-price strategy reads during one brief `04:59:30Z` episode, two order-book timeouts, and one settlement deadlock. No new `api_errors` appeared after first log cutoff `05:41:23.163014Z` through the final runtime snapshot.
 - Verified impact: all `64` enabled Futures Basis strategies had current runs updated at `05:40:21.212132Z`; their recent states included `14` Entered and `52` Settled, with zero `expiry_futures_reference_fetch_failed` or `crypto_reference_fetch_failed` skips in the bounded recent-run slice. Later Paper activity and zero waiting locks independently confirm recovery from the feed timeouts and settlement deadlock.
 - Copied-performance remained active: latest refresh age improved to about `33.9s`, `420` rows refreshed between snapshots, and the priority queue changed from `309` rows / oldest `05:39:32.760609Z` to `330` rows / oldest `05:40:09.021982Z`. Old work advanced, but the oldest pending row still lagged about `5m17s` while new work arrived.
-- No persisted `polymarket_http_logs` rows existed in the checked 60-minute window. Service file logs are written below the deployed executable's `logs` directory, but neither prior local `D:\1\logs` nor tested production administrative-share paths were accessible from this workstation; log conclusions therefore use persisted Production `api_errors`, runtime status, and database activity.
+- No persisted `polymarket_http_logs` rows existed in the checked 60-minute window. At this earlier point the new `CodexLogs` share had not yet been discovered, so this entry's log conclusions used persisted Production `api_errors`, runtime status, and database activity only; the later file-log correction above supersedes that limitation.
 Next: None requested.
 Notes: An initial combined diagnostic exceeded the bounded query time and was replaced with smaller indexed queries. One broader tick form also timed out and was replaced with three per-asset lateral index lookups. Production was not changed.
-Blockers: Direct service-file log access was unavailable; persisted application diagnostics and runtime evidence were available and checked.
+Blockers: Resolved by the later discovery of the read-only `\\192.168.0.101\CodexLogs` share; see the file-log correction above.
 
 ## Active Update 2026-08-27 Production Server And Bets Check
 Goal: Verify current Production service health, betting activity, errors, and delays without changing Production.

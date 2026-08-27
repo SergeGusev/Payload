@@ -18,3 +18,10 @@ Request:
 
 Result:
 Checked Production read-only. The service was `Running / Live` on build `3bf1d16be65b96d98e3921862a5564e516042ee7`, heartbeat age `6.4s`, `last_error=NULL`, BTC/ETH/SOL ticks each `9.9s` old, and the critical socket Connected/non-stale. At the first trading cutoff, Paper orders/fills were `245/245`, `651/651`, and `1,983/1,983` over `5m/15m/60m`; the next cycle added `234/234` Filled and `230` settlements. No Live order existed in 60 minutes; the sole Live strategy continued five-minute evaluations but did not pass its threshold. Recent logs contained transient OKX timeouts, short ETH/SOL stale-feed episodes, two order-book timeouts, and one recovered settlement deadlock; no new error appeared after `05:41:23.163014Z`. All 64 Futures Basis strategies remained current and recent runs included 14 Entered and 52 Settled, with no futures/reference-fetch-failed skips. Copied-performance refreshed actively but its oldest queued row lagged about `5m17s`. No Production state changed; direct service-file logs were inaccessible, so persisted `api_errors` and runtime/database evidence were used.
+
+## 2026-08-27T06:22:21Z
+Request:
+`А логи проверил? У нас ведь теперь есть к ним доступ`
+
+Result:
+Corrected the prior answer: only database-persisted diagnostics had previously been checked. Discovered and read the new read-only `\\192.168.0.101\CodexLogs` share. Three current roll files contained no ERR/FTL entries but at least 5,249 warnings, dominated by recurring market-data side-effect delays reaching 21.63 seconds and 564 queued updates. Found 478 repeated `maker_gtd_paper_filled_order_shape_mismatch` warnings for exactly two ETH Reference Average Maker-GTD orders; direct database verification showed both ultimately Expired with zero fills and Skipped runs. Source inspection confirmed that this guard result returns without persisting the candidate fill. Current service and aggregate Paper betting remained active, but the previous broad logs-clean conclusion was withdrawn because file logs prove an ongoing queue-latency issue and two lost Maker-GTD fill attempts. No Production state changed.
