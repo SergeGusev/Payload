@@ -1,3 +1,18 @@
+## Active Update 2026-08-27 Maker-GTD Shape Mismatch Telemetry Contract
+Goal: Continue diagnosis of the post-deploy Maker-GTD filled-order shape mismatch without guessing or changing trading behavior.
+Status: Approved; approval-only checkpoint pending before product edits
+Done:
+- Inspected both storage paths that emit `maker_gtd_paper_filled_order_shape_mismatch`: the locked-row wallet/asset identity check and `IsValidFilledOrderTransition`, which combines status/fill/cancellation/source predicates with 15 immutable order fields.
+- Exhaustively scanned the read-only Production log trail for order `0e05106d-e5b9-492d-a1b1-b19c634d2c03`. It contains exactly one distinct message shape repeated `9,301` times and exposes no failing stage, field, or compared value.
+- Verified the order belonged to the new process: 13 Maker-GTD resting orders for the same `08:30Z` ETH market were accepted after startup from `08:29:53.150Z` through `08:30:01.261Z`; the first mismatch followed at `08:30:04.839Z`.
+- Verified the prior PostgreSQL regression used a minimal `{"mode":"maker_gtd"}` decision document rather than the real complex Maker decision document. This is a test-coverage difference, not proof that RawDecisionJson caused the Production mismatch.
+- Confirmed `JsonNode.DeepEquals` treats property order, decimal scale, and equivalent numeric spellings as equal in focused read-only checks; no new causal claim was made.
+- Drafted `RC-20260827-maker-gtd-shape-mismatch-telemetry`, limited to safe field/stage diagnostics with timestamp/numeric values and SHA-256 fingerprints instead of full RawDecisionJson.
+- Recorded the user's exact approval of semantic digest `sha256:19007043db4615914ab70bbde82520aa24b647bf90b2aca0c9317be63166730d` without changing scope, assumptions, or deviations.
+Next: Validate and commit the approval-only checkpoint, then implement only the approved diagnostic telemetry.
+Notes: No code, Production database, service, strategy, order, configuration, deployment, or Live state changed. Maker-GTD results remain `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: Existing logs cannot distinguish the failing predicate; implementation starts only after the approval-only commit.
+
 ## Active Update 2026-08-27 Deployed Maker-GTD Timestamp Fix Verification
 Goal: Verify the newly deployed service, betting activity, and Maker-GTD timestamp fix without changing Production.
 Status: Completed read-only; service and ordinary Paper betting are active, but the Maker-GTD timestamp fix failed its Production runtime check

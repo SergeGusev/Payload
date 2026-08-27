@@ -53,3 +53,17 @@ Request:
 
 Result:
 Verified the restarted Production service through the read-only `CodexLogs` share. The process started at `2026-08-27T08:29:43.571Z`, heartbeats advanced through `08:45:44.8113055Z`, and logs continued through `08:46:36.532Z`. Ordinary betting remained active: the bounded `08:34:30.357Z..08:44:26.444Z` segment contained 244 FAK Paper fills, while the final bounded slice through `08:46:36.532Z` contained 75 fill entries. The Maker-GTD fix failed runtime verification: one new order, `0e05106d-e5b9-492d-a1b1-b19c634d2c03`, produced 9,301 `maker_gtd_paper_filled_order_shape_mismatch` warnings from `08:30:04.839Z` through `08:33:59.973Z`; 13 new Maker-GTD resting orders were accepted later. These are `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. Market-data side-effect delay remained material, reaching 19.62 seconds and 171 pending updates, and Historical Parity/Legacy backfill workers had eight PostgreSQL read timeouts while the main service continued. Direct PostgreSQL verification was blocked before SQL by `pg_hba.conf` for the currently configured local user, so exact deployed version and persisted order/fill state remain unknown. No Production state changed.
+
+## 2026-08-27T10:05:10.4213440Z
+Request:
+`Ок, продолжай`
+
+Result:
+Continued read-only diagnosis of the unresolved Maker-GTD mismatch. Source inspection found two stages and all predicates currently collapsed into the same reason code; exhaustive log inspection found only one message form repeated 9,301 times for order `0e05106d-e5b9-492d-a1b1-b19c634d2c03`, with no stage or field detail. Thirteen new Maker-GTD orders for the same market were accepted by the restarted process before the mismatch. The prior real-PostgreSQL test used minimal RawDecisionJson, but focused `JsonNode.DeepEquals` checks disproved simple property-order/decimal-format explanations; the cause remains unknown. Drafted `RC-20260827-maker-gtd-shape-mismatch-telemetry` for bounded field-level diagnostics only. No product or Production state changed; edits are blocked pending exact approval.
+
+## 2026-08-27T10:09:24.8381510Z
+Request:
+`APPROVE RC-20260827-maker-gtd-shape-mismatch-telemetry sha256:19007043db4615914ab70bbde82520aa24b647bf90b2aca0c9317be63166730d`
+
+Result:
+Recorded the exact approval for `RC-20260827-maker-gtd-shape-mismatch-telemetry` at semantic digest `sha256:19007043db4615914ab70bbde82520aa24b647bf90b2aca0c9317be63166730d` with no scope, assumption, or deviation change. The mandatory approval-only commit is the next checkpoint before any product edit.

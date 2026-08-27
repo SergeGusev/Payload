@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260827-maker-gtd-shape-mismatch-telemetry",
+  "title": "Expose the exact Maker-GTD filled-order shape mismatch",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, продолжай"
+    }
+  ],
+  "scope": {
+    "goal": "Continue the failed Maker-GTD repair by adding bounded, field-level diagnostics that identify the exact predicate causing maker_gtd_paper_filled_order_shape_mismatch without changing any order, fill, strategy, accounting, or persistence decision.",
+    "inScope": [
+      "Distinguish the locked-row identity check from the requested Filled-order transition check when both currently return maker_gtd_paper_filled_order_shape_mismatch.",
+      "For the requested Filled-order transition, report the exact names of every failed predicate covering requested status, fill timestamp, cancellation timestamp, execution source, and each immutable order field.",
+      "For mismatched CreatedAtUtc and ExpiresAtUtc fields, report current/requested round-trip UTC values, ticks, and PostgreSQL-equivalent microseconds; for mismatched price, size, or notional fields, report current/requested invariant numeric values.",
+      "For mismatched RawDecisionJson, report SHA-256 fingerprints only; never log the full JSON through this diagnostic.",
+      "Propagate the diagnostic through MakerGtdPaperMutationResult and the existing Maker-GTD not-eligible warning while preserving the existing reason code.",
+      "Focused unit and PostgreSQL regression coverage, affected build, independent semantic review, context/history bookkeeping, approval checkpoint, implementation commit, and push to the deployment branch."
+    ],
+    "outOfScope": [
+      "Any relaxation or change of Maker-GTD atomic validation, timestamp equivalence, execution semantics, strategy decisions, pricing, stake sizing, expiration, TouchNoDepth evidence, Paper/Live classification, or retry behavior.",
+      "Production deployment, restart, database mutation, schema migration, historical order repair, strategy/configuration mutation, or Live order action.",
+      "Market-data queue optimization, Historical Parity or Legacy backfill timeouts, WebSocket behavior, and log retention.",
+      "Logging full RawDecisionJson, secrets, credentials, or private keys."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Maker-GTD Paper full-fill atomic transitions; Production evidence is the post-deploy order 0e05106d-e5b9-492d-a1b1-b19c634d2c03 observed from 2026-08-27T08:30:04.839Z through 2026-08-27T08:33:59.973Z.",
+    "firstVerification": "Inspect the existing FilledOrderShapeMismatch dispatch paths and all predicates in IsValidFilledOrderTransition and SameImmutableOrderShape, then prove current logs contain no field-level detail for the exact Production order."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Continue diagnosis of the unresolved Maker-GTD filled-order shape mismatch without changing trading or persistence behavior.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "продолжай",
+      "acceptanceCriteria": [
+        "A FilledOrderShapeMismatch result identifies whether it came from locked-row identity drift or from the requested Filled-order transition.",
+        "Requested-transition diagnostics name every failed predicate using deterministic stable field names.",
+        "Timestamp diagnostics expose both exact values, ticks, and PostgreSQL-equivalent microseconds; numeric diagnostics expose both invariant values; RawDecisionJson exposes hashes only.",
+        "The existing maker_gtd_paper_filled_order_shape_mismatch reason code and every eligibility/atomicity decision remain unchanged.",
+        "No full RawDecisionJson, secret, credential, or private key is added to diagnostics.",
+        "No Production state is changed by this task."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/MakerGtdPaperPersistence.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.MakerGtdPaper.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperAtomicRepositoryTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"MakerGtdPaperAtomicRepositoryTests|MakerGtdPaperLifecycleIntegrationTests\" with TEMP/TMP and all outputs under the active marked D:\\CodexTemp run",
+          "expected": "Focused tests prove exact field/stage diagnostics, timestamp and JSON redaction behavior, unchanged eligibility results, PostgreSQL retry idempotency, and all existing Maker-GTD atomic/lifecycle behavior.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln Release, run git diff --check, validate the requirement contract in WorkingTree and staged modes, and obtain independent semantic review.",
+          "expected": "Only bounded diagnostic propagation and tests change; no execution, validation, persistence, strategy, or Production behavior changes.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260827-maker-gtd-shape-mismatch-telemetry sha256:19007043db4615914ab70bbde82520aa24b647bf90b2aca0c9317be63166730d",
+    "semanticDigest": "sha256:19007043db4615914ab70bbde82520aa24b647bf90b2aca0c9317be63166730d"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/maker_gtd_shape_mismatch_telemetry_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
