@@ -38,19 +38,21 @@ public sealed partial class PostgresAppRepository
             readOnly: true,
             cancellationToken);
 
-        var candidates = await LoadHistoricalGrossNetParityCandidateKeysAsync(
+        var selection = await LoadHistoricalGrossNetParityCandidateKeysAsync(
             connection,
             transaction,
             request,
             cancellationToken);
+        var candidates = selection.Candidates;
         if (candidates.Count == 0)
         {
             await transaction.CommitAsync(cancellationToken);
             return new HistoricalGrossNetParityCandidatePage(
                 HistoricalGrossNetParityReadStatus.Complete,
                 [], [], [], [], [], [], [], [], [],
-                request.After,
-                true);
+                selection.NextCursor,
+                selection.ReachedBoundary,
+                selection.Details);
         }
 
         var paperFills = await LoadHistoricalGrossNetParityPagePaperFillsAsync(
@@ -87,7 +89,39 @@ public sealed partial class PostgresAppRepository
                 last.SourceOrder,
                 last.OriginatedAtUtc,
                 last.SourceId),
-            candidates.Count < request.PageSize);
+            selection.ReachedBoundary,
+            selection.Details);
+    }
+
+    public async Task<IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>
+        LoadHistoricalGrossNetParityStrategyRankingAsync(
+            HistoricalGrossNetParityStrategyRankingRequest request,
+            CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.CommandTimeoutSeconds <= 0 || request.LockTimeoutMilliseconds <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(request));
+        }
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(
+            IsolationLevel.RepeatableRead,
+            cancellationToken);
+        await ConfigureHistoricalGrossNetParityTransactionAsync(
+            connection,
+            transaction,
+            request.CommandTimeoutSeconds,
+            request.LockTimeoutMilliseconds,
+            readOnly: true,
+            cancellationToken);
+        var ranking = await LoadHistoricalGrossNetParityStrategyRankingAsync(
+            connection,
+            transaction,
+            request.CommandTimeoutSeconds,
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return ranking;
     }
 
     public async Task<HistoricalGrossNetParityDonorPreviewResult>
@@ -730,19 +764,33 @@ public sealed partial class PostgresAppRepository
             throw new ArgumentOutOfRangeException(nameof(request));
         }
 
-        if (request.StrategyId == Guid.Empty)
+        if (request.Strategy is null)
         {
             throw new ArgumentException(
-                "A strategy-scoped historical parity request requires a non-empty strategy ID.",
+                "Historical parity candidate discovery must be scoped to one strategy.",
                 nameof(request));
         }
 
-        if (request.StrategyId is { } strategyId &&
-            request.After is { } after &&
-            after.StrategyId != strategyId)
+        if (request.StrategyId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(request.Strategy.StrategyCode) ||
+            request.Strategy.StrategyRank <= 0)
+        {
+            throw new ArgumentException(
+                "A strategy-scoped historical parity request requires a valid ranked strategy.",
+                nameof(request));
+        }
+
+        if (request.After is { } after && after.StrategyId != request.StrategyId)
         {
             throw new ArgumentException(
                 "A strategy-scoped cursor must belong to the selected strategy.",
+                nameof(request));
+        }
+
+        if (request.After is { SourceOrder: < 1 or > 5 })
+        {
+            throw new ArgumentException(
+                "A strategy-scoped historical parity cursor must identify a canonical source order.",
                 nameof(request));
         }
     }
@@ -2176,268 +2224,231 @@ RETURNING row_version;
         return value is null or DBNull ? -1L : Convert.ToInt64(value, CultureInfo.InvariantCulture);
     }
 
-    private static async Task<IReadOnlyList<HistoricalGrossNetParityCandidateKey>>
+    private static async Task<HistoricalGrossNetParityCandidateSelection>
         LoadHistoricalGrossNetParityCandidateKeysAsync(
             NpgsqlConnection connection,
             NpgsqlTransaction transaction,
             HistoricalGrossNetParityCandidatePageRequest request,
             CancellationToken cancellationToken)
     {
+        return await LoadHistoricalGrossNetParityStrategyCandidateKeysAsync(
+            connection,
+            transaction,
+            request,
+            request.Strategy,
+            cancellationToken);
+    }
+
+    private static async Task<IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>
+        LoadHistoricalGrossNetParityStrategyRankingAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            int commandTimeoutSeconds,
+            CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT strategy.id, strategy.code, performance.realized_pnl_usd
+FROM strategies strategy
+LEFT JOIN dashboard_strategy_performance_snapshots performance
+  ON performance.strategy_id = strategy.id;
+""",
+            connection,
+            transaction)
+        {
+            CommandTimeout = commandTimeoutSeconds
+        };
+
+        var rows = new List<(Guid StrategyId, string StrategyCode, decimal? GrossPnl)>();
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                rows.Add((
+                    reader.GetGuid(0),
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetDecimal(2)));
+            }
+        }
+
+        var missingIds = rows
+            .Where(value => value.GrossPnl is null)
+            .Select(value => value.StrategyId)
+            .ToArray();
+        var fallbackGross = missingIds.Length == 0
+            ? new Dictionary<Guid, decimal>()
+            : await LoadHistoricalGrossNetParityMissingStrategyGrossAsync(
+                connection,
+                transaction,
+                missingIds,
+                commandTimeoutSeconds,
+                cancellationToken);
+
+        return rows
+            .Select(value => new
+            {
+                value.StrategyId,
+                value.StrategyCode,
+                GrossPnl = value.GrossPnl ?? fallbackGross.GetValueOrDefault(value.StrategyId)
+            })
+            .OrderByDescending(value => value.GrossPnl)
+            .ThenBy(value => value.StrategyId.ToString("D"), StringComparer.Ordinal)
+            .Select((value, index) => new HistoricalGrossNetParityRankedStrategy(
+                value.StrategyId,
+                value.StrategyCode,
+                index + 1,
+                value.GrossPnl))
+            .ToArray();
+    }
+
+    private static async Task<Dictionary<Guid, decimal>>
+        LoadHistoricalGrossNetParityMissingStrategyGrossAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            Guid[] strategyIds,
+            int commandTimeoutSeconds,
+            CancellationToken cancellationToken)
+    {
         await using var command = new NpgsqlCommand(
             $$"""
-WITH strategy_gross AS (
-    SELECT strategy.id,
-           strategy.code,
-           CASE
-               WHEN performance.strategy_id IS NOT NULL THEN performance.realized_pnl_usd
-               WHEN EXISTS (
-                   SELECT 1 FROM strategy_market_paper_runs run_presence
-                   WHERE run_presence.strategy_id = strategy.id)
-                 OR EXISTS (
-                   SELECT 1 FROM strategy_paper_skip_rollups rollup_presence
-                   WHERE rollup_presence.strategy_id = strategy.id)
-               THEN COALESCE((
-                   SELECT SUM(COALESCE(run.realized_pnl_usd, 0))
-                   FROM strategy_market_paper_runs run
-                   WHERE run.strategy_id = strategy.id
-                     AND run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'), 0)
-               ELSE COALESCE((
-                   SELECT SUM(fill.realized_pnl_usd)
-                   FROM paper_orders paper_order
-                   INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
-                   WHERE paper_order.strategy_id = strategy.id), 0)
-                 + COALESCE((
-                   SELECT SUM(settlement.realized_pnl_usd)
-                   FROM paper_position_settlements settlement
-                   WHERE (strategy.id = @FollowLeaderStrategyId
-                          AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
-                      OR (strategy.id <> @FollowLeaderStrategyId
-                          AND lower(settlement.copied_trader_wallet) = lower('strategy:' || strategy.code))), 0)
-           END AS gross_pnl
-    FROM strategies strategy
-    LEFT JOIN dashboard_strategy_performance_snapshots performance
-      ON performance.strategy_id = strategy.id
-), ranked AS MATERIALIZED (
-    SELECT id, code, gross_pnl,
-           row_number() OVER (ORDER BY gross_pnl DESC, lower(id::text))::integer AS strategy_rank
-    FROM strategy_gross
-), ordered_strategies AS MATERIALIZED (
-    SELECT id, code, gross_pnl, strategy_rank
-    FROM ranked
-    WHERE (NOT @HasStrategy OR id = @StrategyId)
-      AND (
-          @HasStrategy
-          OR NOT @HasAfter
-          OR strategy_rank > @AfterRank
-          OR (strategy_rank = @AfterRank AND lower(id::text) >= @AfterStrategyId))
-    ORDER BY strategy_rank, lower(id::text)
-), ordered AS (
-    SELECT candidate.source_kind, candidate.source_id, ranked.id AS strategy_id,
-           ranked.code, ranked.strategy_rank, ranked.gross_pnl,
-           candidate.originated_at, candidate.source_order,
-           candidate.row_version, candidate.ownership
-    FROM ordered_strategies ranked
-    CROSS JOIN LATERAL (
-      SELECT bounded_candidate.*
-      FROM (
-        SELECT 'PaperRun'::text AS source_kind, run.id AS source_id,
-            1 AS source_order,
-            CASE
-                WHEN linked_run_fill.originated_at IS NULL
-                    THEN COALESCE(run.entered_at_utc, run.created_at_utc)
-                ELSE linked_run_fill.originated_at
-            END AS originated_at,
-            run.xmin::text::bigint AS row_version,
-            'None'::text AS ownership
-        FROM strategy_market_paper_runs run
-        LEFT JOIN LATERAL (
-            SELECT MIN(fill.filled_at_utc) AS originated_at
-            FROM paper_fills fill
-            WHERE fill.paper_order_id = run.paper_order_id
-        ) linked_run_fill ON true
-        WHERE run.strategy_id = ranked.id
-          AND run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'
-          AND CASE
-                  WHEN linked_run_fill.originated_at IS NULL
-                      THEN COALESCE(run.entered_at_utc, run.created_at_utc) < @CutoffUtc
-                  ELSE linked_run_fill.originated_at < @CutoffUtc
-              END
-          AND NOT EXISTS (
-              SELECT 1 FROM historical_gross_net_parity_audit audit
-              WHERE audit.source_kind = 'PaperRun' AND audit.source_id = run.id
-                AND audit.calculation_version = @CalculationVersion
-                AND audit.operation_kind = 'AccountingDecision')
+SELECT strategy.id,
+       CASE
+           WHEN EXISTS (
+               SELECT 1 FROM strategy_market_paper_runs run_presence
+               WHERE run_presence.strategy_id = strategy.id)
+             OR EXISTS (
+               SELECT 1 FROM strategy_paper_skip_rollups rollup_presence
+               WHERE rollup_presence.strategy_id = strategy.id)
+           THEN COALESCE((
+               SELECT SUM(COALESCE(run.realized_pnl_usd, 0))
+               FROM strategy_market_paper_runs run
+               WHERE run.strategy_id = strategy.id
+                 AND run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'), 0)
+           ELSE COALESCE((
+               SELECT SUM(fill.realized_pnl_usd)
+               FROM paper_orders paper_order
+               INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
+               WHERE paper_order.strategy_id = strategy.id), 0)
+             + COALESCE((
+               SELECT SUM(settlement.realized_pnl_usd)
+               FROM paper_position_settlements settlement
+               WHERE (strategy.id = @FollowLeaderStrategyId
+                      AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
+                  OR (strategy.id <> @FollowLeaderStrategyId
+                      AND lower(settlement.copied_trader_wallet) = lower('strategy:' || strategy.code))), 0)
+       END AS gross_pnl
+FROM strategies strategy
+WHERE strategy.id = ANY(@StrategyIds);
+""",
+            connection,
+            transaction)
+        {
+            CommandTimeout = commandTimeoutSeconds
+        };
+        command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+        command.Parameters.Add("StrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = strategyIds;
 
-        UNION ALL
+        var result = new Dictionary<Guid, decimal>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(reader.GetGuid(0), reader.GetDecimal(1));
+        }
 
-        SELECT 'PaperPosition', position.id, 2,
-               origin.originated_at, position.xmin::text::bigint, 'None'
-        FROM paper_positions position
-        INNER JOIN LATERAL (
-            SELECT MIN(fill.filled_at_utc) AS originated_at
-            FROM paper_orders paper_order
-            INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
-            WHERE paper_order.copied_trader_wallet = position.copied_trader_wallet
-              AND paper_order.asset_id = position.asset_id
-              AND paper_order.side = '{{TradeSide.Buy}}'
-        ) origin ON origin.originated_at IS NOT NULL
-        WHERE position.size_shares > 0
-          AND (
-              (ranked.id = @FollowLeaderStrategyId
-               AND lower(position.copied_trader_wallet) NOT LIKE 'strategy:%')
-              OR
-              (ranked.id <> @FollowLeaderStrategyId
-               AND lower(position.copied_trader_wallet) = lower('strategy:' || ranked.code)))
-          AND origin.originated_at < @CutoffUtc
-          AND NOT EXISTS (
-              SELECT 1 FROM historical_gross_net_parity_audit audit
-              WHERE audit.source_kind = 'PaperPosition' AND audit.source_id = position.id
-                AND audit.calculation_version = @CalculationVersion
-                AND audit.operation_kind = 'AccountingDecision')
+        return result;
+    }
 
-        UNION ALL
+    private static async Task<HistoricalGrossNetParityCandidateSelection>
+        LoadHistoricalGrossNetParityStrategyCandidateKeysAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            HistoricalGrossNetParityCandidatePageRequest request,
+            HistoricalGrossNetParityRankedStrategy strategy,
+            CancellationToken cancellationToken)
+    {
+        var candidates = new List<HistoricalGrossNetParityCandidateKey>(request.PageSize);
+        var sourceKinds = new[]
+        {
+            HistoricalGrossNetParitySourceKind.PaperRun,
+            HistoricalGrossNetParitySourceKind.PaperPosition,
+            HistoricalGrossNetParitySourceKind.PaperSettlement,
+            HistoricalGrossNetParitySourceKind.PaperSellFill,
+            HistoricalGrossNetParitySourceKind.LiveOrder
+        };
 
-        SELECT 'PaperSettlement', settlement.id, 3,
-               origin.originated_at, settlement.xmin::text::bigint, 'None'
-        FROM paper_position_settlements settlement
-        INNER JOIN LATERAL (
-            SELECT MIN(fill.filled_at_utc) AS originated_at
-            FROM paper_orders paper_order
-            INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
-            WHERE paper_order.copied_trader_wallet = settlement.copied_trader_wallet
-              AND paper_order.asset_id = settlement.asset_id
-              AND paper_order.side = '{{TradeSide.Buy}}'
-              AND fill.filled_at_utc <= settlement.settled_at_utc
-        ) origin ON origin.originated_at IS NOT NULL
-        WHERE (
-              (ranked.id = @FollowLeaderStrategyId
-               AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
-              OR
-              (ranked.id <> @FollowLeaderStrategyId
-               AND lower(settlement.copied_trader_wallet) = lower('strategy:' || ranked.code)))
-          AND origin.originated_at < @CutoffUtc
-          AND NOT EXISTS (
-              SELECT 1 FROM strategy_market_paper_runs run_presence
-              WHERE run_presence.strategy_id = ranked.id)
-          AND NOT EXISTS (
-              SELECT 1 FROM strategy_paper_skip_rollups rollup_presence
-              WHERE rollup_presence.strategy_id = ranked.id)
-          AND NOT EXISTS (
-              SELECT 1 FROM historical_gross_net_parity_audit audit
-              WHERE audit.source_kind = 'PaperSettlement' AND audit.source_id = settlement.id
-                AND audit.calculation_version = @CalculationVersion
-                AND audit.operation_kind = 'AccountingDecision')
+        foreach (var sourceKind in sourceKinds)
+        {
+            var sourceOrder = GetHistoricalGrossNetParitySourceOrder(sourceKind);
+            if (request.After is { } after && sourceOrder < after.SourceOrder)
+            {
+                continue;
+            }
 
-        UNION ALL
+            var sourceCandidates = await LoadHistoricalGrossNetParitySourceCandidateKeysAsync(
+                connection,
+                transaction,
+                request,
+                strategy,
+                sourceKind,
+                request.PageSize - candidates.Count,
+                cancellationToken);
+            candidates.AddRange(sourceCandidates);
+            if (candidates.Count == request.PageSize)
+            {
+                var last = candidates[^1];
+                return new HistoricalGrossNetParityCandidateSelection(
+                    candidates,
+                    new HistoricalGrossNetParityCandidateCursor(
+                        last.StrategyRank,
+                        last.StrategyId,
+                        last.SourceOrder,
+                        last.OriginatedAtUtc,
+                        last.SourceId),
+                    false,
+                    $"Loaded a full {sourceKind} page for strategy {strategy.StrategyId:D}.");
+            }
+        }
 
-        SELECT 'PaperSellFill', sell_fill.id, 4,
-               origin.originated_at, sell_fill.xmin::text::bigint, 'None'
-        FROM paper_orders sell_order
-        INNER JOIN paper_fills sell_fill ON sell_fill.paper_order_id = sell_order.id
-        INNER JOIN LATERAL (
-            SELECT MIN(buy_fill.filled_at_utc) AS originated_at
-            FROM paper_orders buy_order
-            INNER JOIN paper_fills buy_fill ON buy_fill.paper_order_id = buy_order.id
-            WHERE buy_order.copied_trader_wallet = sell_order.copied_trader_wallet
-              AND buy_order.asset_id = sell_order.asset_id
-              AND buy_order.side = '{{TradeSide.Buy}}'
-              AND (
-                  buy_fill.filled_at_utc < sell_fill.filled_at_utc
-                  OR (
-                      buy_fill.filled_at_utc = sell_fill.filled_at_utc
-                      AND ROW(lower(buy_order.id::text), lower(buy_fill.id::text)) <=
-                          ROW(lower(sell_order.id::text), lower(sell_fill.id::text))))
-        ) origin ON origin.originated_at IS NOT NULL
-        WHERE sell_order.strategy_id = ranked.id
-          AND sell_order.side = '{{TradeSide.Sell}}'
-          AND origin.originated_at < @CutoffUtc
-          AND NOT EXISTS (
-              SELECT 1 FROM strategy_market_paper_runs run_presence
-              WHERE run_presence.strategy_id = ranked.id)
-          AND NOT EXISTS (
-              SELECT 1 FROM strategy_paper_skip_rollups rollup_presence
-              WHERE rollup_presence.strategy_id = ranked.id)
-          AND NOT EXISTS (
-              SELECT 1 FROM historical_gross_net_parity_audit audit
-              WHERE audit.source_kind = 'PaperSellFill' AND audit.source_id = sell_fill.id
-                AND audit.calculation_version = @CalculationVersion
-                AND audit.operation_kind = 'AccountingDecision')
+        var nextCursor = candidates.Count == 0
+            ? request.After
+            : new HistoricalGrossNetParityCandidateCursor(
+                candidates[^1].StrategyRank,
+                candidates[^1].StrategyId,
+                candidates[^1].SourceOrder,
+                candidates[^1].OriginatedAtUtc,
+                candidates[^1].SourceId);
+        return new HistoricalGrossNetParityCandidateSelection(
+            candidates,
+            nextCursor,
+            true,
+            $"Reached the source boundary for strategy {strategy.StrategyId:D}.");
+    }
 
-        UNION ALL
-
-        SELECT 'LiveOrder', live_order.id, 5,
-               COALESCE(live_order.submitted_at_utc, linked_fill.originated_at, live_order.created_at_utc),
-               live_order.row_version, live_order.historical_gross_net_parity_ownership
-        FROM live_orders live_order
-        LEFT JOIN LATERAL (
-            SELECT MIN(fill.filled_at_utc) AS originated_at
-            FROM paper_fills fill WHERE fill.paper_order_id = live_order.paper_order_id
-        ) linked_fill ON true
-        WHERE live_order.strategy_id = ranked.id
-          AND live_order.settled_at_utc IS NOT NULL
-          AND live_order.realized_pnl_usd IS NOT NULL
-          AND COALESCE(live_order.submitted_at_utc, linked_fill.originated_at, live_order.created_at_utc) < @CutoffUtc
-          AND live_order.historical_gross_net_parity_ownership IN ('None', 'Pending')
-          AND (
-              live_order.historical_gross_net_parity_ownership = 'Pending'
-              OR NOT EXISTS (
-                  SELECT 1 FROM historical_gross_net_parity_audit audit
-                  WHERE audit.source_kind = 'LiveOrder' AND audit.source_id = live_order.id
-                    AND audit.calculation_version = @CalculationVersion
-                    AND audit.operation_kind = 'AccountingDecision'))
-      ) bounded_candidate
-      WHERE NOT @HasAfter
-         OR (@HasStrategy AND bounded_candidate.source_order > @AfterSourceOrder)
-         OR (@HasStrategy AND bounded_candidate.source_order = @AfterSourceOrder
-             AND bounded_candidate.originated_at > @AfterOriginatedAt)
-         OR (@HasStrategy AND bounded_candidate.source_order = @AfterSourceOrder
-             AND bounded_candidate.originated_at = @AfterOriginatedAt
-             AND lower(bounded_candidate.source_id::text) > @AfterSourceId)
-         OR (NOT @HasStrategy AND ranked.strategy_rank > @AfterRank)
-         OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
-             AND lower(ranked.id::text) > @AfterStrategyId)
-         OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
-             AND lower(ranked.id::text) = @AfterStrategyId
-             AND bounded_candidate.source_order > @AfterSourceOrder)
-         OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
-             AND lower(ranked.id::text) = @AfterStrategyId
-             AND bounded_candidate.source_order = @AfterSourceOrder
-             AND bounded_candidate.originated_at > @AfterOriginatedAt)
-         OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
-             AND lower(ranked.id::text) = @AfterStrategyId
-             AND bounded_candidate.source_order = @AfterSourceOrder
-             AND bounded_candidate.originated_at = @AfterOriginatedAt
-             AND lower(bounded_candidate.source_id::text) > @AfterSourceId)
-      ORDER BY bounded_candidate.source_order, bounded_candidate.originated_at,
-               lower(bounded_candidate.source_id::text)
-      LIMIT @PageSize
-    ) candidate
-    WHERE NOT @HasAfter
-       OR (@HasStrategy AND candidate.source_order > @AfterSourceOrder)
-       OR (@HasStrategy AND candidate.source_order = @AfterSourceOrder
-           AND candidate.originated_at > @AfterOriginatedAt)
-       OR (@HasStrategy AND candidate.source_order = @AfterSourceOrder
-           AND candidate.originated_at = @AfterOriginatedAt
-           AND lower(candidate.source_id::text) > @AfterSourceId)
-       OR (NOT @HasStrategy AND ranked.strategy_rank > @AfterRank)
-       OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
-           AND lower(ranked.id::text) > @AfterStrategyId)
-       OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
-           AND lower(ranked.id::text) = @AfterStrategyId
-           AND candidate.source_order > @AfterSourceOrder)
-       OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
-           AND lower(ranked.id::text) = @AfterStrategyId
-           AND candidate.source_order = @AfterSourceOrder AND candidate.originated_at > @AfterOriginatedAt)
-       OR (NOT @HasStrategy AND ranked.strategy_rank = @AfterRank
-           AND lower(ranked.id::text) = @AfterStrategyId
-           AND candidate.source_order = @AfterSourceOrder AND candidate.originated_at = @AfterOriginatedAt
-           AND lower(candidate.source_id::text) > @AfterSourceId)
-)
-SELECT source_kind, source_id, strategy_id, code, strategy_rank, gross_pnl,
-       originated_at, source_order, row_version, ownership
-FROM ordered
-ORDER BY strategy_rank, lower(strategy_id::text), source_order, originated_at,
-         lower(source_id::text)
+    private static async Task<IReadOnlyList<HistoricalGrossNetParityCandidateKey>>
+        LoadHistoricalGrossNetParitySourceCandidateKeysAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            HistoricalGrossNetParityCandidatePageRequest request,
+            HistoricalGrossNetParityRankedStrategy strategy,
+            HistoricalGrossNetParitySourceKind sourceKind,
+            int pageSize,
+            CancellationToken cancellationToken)
+    {
+        var sourceOrder = GetHistoricalGrossNetParitySourceOrder(sourceKind);
+        var sourceSql = GetHistoricalGrossNetParitySourceCandidateSql(sourceKind);
+        await using var command = new NpgsqlCommand(
+            $$"""
+SELECT candidate.source_id, candidate.originated_at,
+       candidate.row_version, candidate.ownership
+FROM (
+{{sourceSql}}
+) candidate
+WHERE candidate.originated_at < @CutoffUtc
+  AND (NOT @HasAfter
+       OR candidate.originated_at > @AfterOriginatedAt
+       OR (candidate.originated_at = @AfterOriginatedAt
+           AND lower(candidate.source_id::text) > @AfterSourceId))
+ORDER BY candidate.originated_at, lower(candidate.source_id::text)
 LIMIT @PageSize;
 """,
             connection,
@@ -2445,45 +2456,204 @@ LIMIT @PageSize;
         {
             CommandTimeout = request.CommandTimeoutSeconds
         };
+        var hasAfter = request.After is { SourceOrder: var afterSourceOrder } &&
+            afterSourceOrder == sourceOrder;
         command.Parameters.AddWithValue("FollowLeaderStrategyId", StrategyIds.FollowLeader);
+        command.Parameters.AddWithValue("StrategyId", strategy.StrategyId);
+        command.Parameters.AddWithValue("StrategyCode", strategy.StrategyCode);
         command.Parameters.AddWithValue("CutoffUtc", UtcDateTime(request.CutoffUtc));
         command.Parameters.AddWithValue("CalculationVersion", request.CalculationVersion);
-        command.Parameters.AddWithValue("PageSize", request.PageSize);
-        command.Parameters.AddWithValue("HasAfter", request.After is not null);
-        command.Parameters.AddWithValue("HasStrategy", request.StrategyId is not null);
-        command.Parameters.AddWithValue(
-            "StrategyId",
-            request.StrategyId ?? Guid.Empty);
-        command.Parameters.AddWithValue("AfterRank", request.After?.StrategyRank ?? 0);
-        command.Parameters.AddWithValue(
-            "AfterStrategyId",
-            request.After?.StrategyId.ToString("D").ToLowerInvariant() ?? string.Empty);
-        command.Parameters.AddWithValue("AfterSourceOrder", request.After?.SourceOrder ?? 0);
+        command.Parameters.AddWithValue("PageSize", pageSize);
+        command.Parameters.AddWithValue("HasAfter", hasAfter);
         command.Parameters.AddWithValue(
             "AfterOriginatedAt",
-            request.After is null ? DateTime.UnixEpoch : UtcDateTime(request.After.OriginatedAtUtc));
+            hasAfter ? UtcDateTime(request.After!.OriginatedAtUtc) : DateTime.UnixEpoch);
         command.Parameters.AddWithValue(
             "AfterSourceId",
-            request.After?.SourceId.ToString("D").ToLowerInvariant() ?? string.Empty);
+            hasAfter ? request.After!.SourceId.ToString("D").ToLowerInvariant() : string.Empty);
 
-        var result = new List<HistoricalGrossNetParityCandidateKey>();
+        var result = new List<HistoricalGrossNetParityCandidateKey>(pageSize);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
             result.Add(new HistoricalGrossNetParityCandidateKey(
-                Enum.Parse<HistoricalGrossNetParitySourceKind>(reader.GetString(0), false),
-                reader.GetGuid(1),
-                reader.GetGuid(2),
-                reader.GetString(3),
-                reader.GetInt32(4),
-                reader.GetDecimal(5),
-                DateTimeOffsetFromUtc(reader.GetDateTime(6)),
-                reader.GetInt32(7),
-                reader.GetInt64(8),
-                Enum.Parse<HistoricalGrossNetParityOwnership>(reader.GetString(9), false)));
+                sourceKind,
+                reader.GetGuid(0),
+                strategy.StrategyId,
+                strategy.StrategyCode,
+                strategy.StrategyRank,
+                strategy.GrossPnlUsd,
+                DateTimeOffsetFromUtc(reader.GetDateTime(1)),
+                sourceOrder,
+                reader.GetInt64(2),
+                Enum.Parse<HistoricalGrossNetParityOwnership>(reader.GetString(3), false)));
         }
 
         return result;
+    }
+
+    private static int GetHistoricalGrossNetParitySourceOrder(
+        HistoricalGrossNetParitySourceKind sourceKind) => sourceKind switch
+        {
+            HistoricalGrossNetParitySourceKind.PaperRun => 1,
+            HistoricalGrossNetParitySourceKind.PaperPosition => 2,
+            HistoricalGrossNetParitySourceKind.PaperSettlement => 3,
+            HistoricalGrossNetParitySourceKind.PaperSellFill => 4,
+            HistoricalGrossNetParitySourceKind.LiveOrder => 5,
+            _ => throw new ArgumentOutOfRangeException(nameof(sourceKind), sourceKind, null)
+        };
+
+    private static string GetHistoricalGrossNetParitySourceCandidateSql(
+        HistoricalGrossNetParitySourceKind sourceKind) => sourceKind switch
+        {
+            HistoricalGrossNetParitySourceKind.PaperRun =>
+                $$"""
+SELECT run.id AS source_id,
+       CASE WHEN linked_run_fill.originated_at IS NULL
+            THEN COALESCE(run.entered_at_utc, run.created_at_utc)
+            ELSE linked_run_fill.originated_at END AS originated_at,
+       run.xmin::text::bigint AS row_version,
+       'None'::text AS ownership
+FROM strategy_market_paper_runs run
+LEFT JOIN LATERAL (
+    SELECT MIN(fill.filled_at_utc) AS originated_at
+    FROM paper_fills fill
+    WHERE fill.paper_order_id = run.paper_order_id
+) linked_run_fill ON true
+WHERE run.strategy_id = @StrategyId
+  AND run.status = '{{StrategyMarketPaperRunStatuses.Settled}}'
+  AND NOT EXISTS (
+      SELECT 1 FROM historical_gross_net_parity_audit audit
+      WHERE audit.source_kind = 'PaperRun' AND audit.source_id = run.id
+        AND audit.calculation_version = @CalculationVersion
+        AND audit.operation_kind = 'AccountingDecision')
+""",
+            HistoricalGrossNetParitySourceKind.PaperPosition =>
+                $$"""
+SELECT position.id AS source_id, origin.originated_at,
+       position.xmin::text::bigint AS row_version,
+       'None'::text AS ownership
+FROM paper_positions position
+INNER JOIN LATERAL (
+    SELECT MIN(fill.filled_at_utc) AS originated_at
+    FROM paper_orders paper_order
+    INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
+    WHERE paper_order.copied_trader_wallet = position.copied_trader_wallet
+      AND paper_order.asset_id = position.asset_id
+      AND paper_order.side = '{{TradeSide.Buy}}'
+) origin ON origin.originated_at IS NOT NULL
+WHERE position.size_shares > 0
+  AND ((@StrategyId = @FollowLeaderStrategyId
+        AND lower(position.copied_trader_wallet) NOT LIKE 'strategy:%')
+       OR (@StrategyId <> @FollowLeaderStrategyId
+           AND lower(position.copied_trader_wallet) = lower('strategy:' || @StrategyCode)))
+  AND NOT EXISTS (
+      SELECT 1 FROM historical_gross_net_parity_audit audit
+      WHERE audit.source_kind = 'PaperPosition' AND audit.source_id = position.id
+        AND audit.calculation_version = @CalculationVersion
+        AND audit.operation_kind = 'AccountingDecision')
+""",
+            HistoricalGrossNetParitySourceKind.PaperSettlement =>
+                $$"""
+SELECT settlement.id AS source_id, origin.originated_at,
+       settlement.xmin::text::bigint AS row_version,
+       'None'::text AS ownership
+FROM paper_position_settlements settlement
+INNER JOIN LATERAL (
+    SELECT MIN(fill.filled_at_utc) AS originated_at
+    FROM paper_orders paper_order
+    INNER JOIN paper_fills fill ON fill.paper_order_id = paper_order.id
+    WHERE paper_order.copied_trader_wallet = settlement.copied_trader_wallet
+      AND paper_order.asset_id = settlement.asset_id
+      AND paper_order.side = '{{TradeSide.Buy}}'
+      AND fill.filled_at_utc <= settlement.settled_at_utc
+) origin ON origin.originated_at IS NOT NULL
+WHERE ((@StrategyId = @FollowLeaderStrategyId
+        AND lower(settlement.copied_trader_wallet) NOT LIKE 'strategy:%')
+       OR (@StrategyId <> @FollowLeaderStrategyId
+           AND lower(settlement.copied_trader_wallet) = lower('strategy:' || @StrategyCode)))
+  AND NOT EXISTS (
+      SELECT 1 FROM strategy_market_paper_runs run_presence
+      WHERE run_presence.strategy_id = @StrategyId)
+  AND NOT EXISTS (
+      SELECT 1 FROM strategy_paper_skip_rollups rollup_presence
+      WHERE rollup_presence.strategy_id = @StrategyId)
+  AND NOT EXISTS (
+      SELECT 1 FROM historical_gross_net_parity_audit audit
+      WHERE audit.source_kind = 'PaperSettlement' AND audit.source_id = settlement.id
+        AND audit.calculation_version = @CalculationVersion
+        AND audit.operation_kind = 'AccountingDecision')
+""",
+            HistoricalGrossNetParitySourceKind.PaperSellFill =>
+                $$"""
+SELECT sell_fill.id AS source_id, origin.originated_at,
+       sell_fill.xmin::text::bigint AS row_version,
+       'None'::text AS ownership
+FROM paper_orders sell_order
+INNER JOIN paper_fills sell_fill ON sell_fill.paper_order_id = sell_order.id
+INNER JOIN LATERAL (
+    SELECT MIN(buy_fill.filled_at_utc) AS originated_at
+    FROM paper_orders buy_order
+    INNER JOIN paper_fills buy_fill ON buy_fill.paper_order_id = buy_order.id
+    WHERE buy_order.copied_trader_wallet = sell_order.copied_trader_wallet
+      AND buy_order.asset_id = sell_order.asset_id
+      AND buy_order.side = '{{TradeSide.Buy}}'
+      AND (buy_fill.filled_at_utc < sell_fill.filled_at_utc
+           OR (buy_fill.filled_at_utc = sell_fill.filled_at_utc
+               AND ROW(lower(buy_order.id::text), lower(buy_fill.id::text)) <=
+                   ROW(lower(sell_order.id::text), lower(sell_fill.id::text))))
+) origin ON origin.originated_at IS NOT NULL
+WHERE sell_order.strategy_id = @StrategyId
+  AND sell_order.side = '{{TradeSide.Sell}}'
+  AND NOT EXISTS (
+      SELECT 1 FROM strategy_market_paper_runs run_presence
+      WHERE run_presence.strategy_id = @StrategyId)
+  AND NOT EXISTS (
+      SELECT 1 FROM strategy_paper_skip_rollups rollup_presence
+      WHERE rollup_presence.strategy_id = @StrategyId)
+  AND NOT EXISTS (
+      SELECT 1 FROM historical_gross_net_parity_audit audit
+      WHERE audit.source_kind = 'PaperSellFill' AND audit.source_id = sell_fill.id
+        AND audit.calculation_version = @CalculationVersion
+        AND audit.operation_kind = 'AccountingDecision')
+""",
+            HistoricalGrossNetParitySourceKind.LiveOrder =>
+                """
+SELECT live_order.id AS source_id,
+       COALESCE(live_order.submitted_at_utc, linked_fill.originated_at, live_order.created_at_utc)
+           AS originated_at,
+       live_order.row_version,
+       live_order.historical_gross_net_parity_ownership AS ownership
+FROM live_orders live_order
+LEFT JOIN LATERAL (
+    SELECT MIN(fill.filled_at_utc) AS originated_at
+    FROM paper_fills fill
+    WHERE fill.paper_order_id = live_order.paper_order_id
+) linked_fill ON true
+WHERE live_order.strategy_id = @StrategyId
+  AND live_order.settled_at_utc IS NOT NULL
+  AND live_order.realized_pnl_usd IS NOT NULL
+  AND live_order.historical_gross_net_parity_ownership IN ('None', 'Pending')
+  AND (live_order.historical_gross_net_parity_ownership = 'Pending'
+       OR NOT EXISTS (
+          SELECT 1 FROM historical_gross_net_parity_audit audit
+          WHERE audit.source_kind = 'LiveOrder' AND audit.source_id = live_order.id
+            AND audit.calculation_version = @CalculationVersion
+            AND audit.operation_kind = 'AccountingDecision'))
+""",
+            _ => throw new ArgumentOutOfRangeException(nameof(sourceKind), sourceKind, null)
+        };
+
+    private sealed record HistoricalGrossNetParityCandidateSelection(
+        IReadOnlyList<HistoricalGrossNetParityCandidateKey> Candidates,
+        HistoricalGrossNetParityCandidateCursor? NextCursor,
+        bool ReachedBoundary,
+        string Details)
+    {
+        public static HistoricalGrossNetParityCandidateSelection Empty(
+            HistoricalGrossNetParityCandidateCursor? nextCursor,
+            bool reachedBoundary,
+            string details) => new([], nextCursor, reachedBoundary, details);
     }
 
     private static Guid[] GetHistoricalGrossNetParityIds(

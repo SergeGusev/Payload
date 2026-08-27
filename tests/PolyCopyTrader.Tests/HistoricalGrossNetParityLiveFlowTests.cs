@@ -62,7 +62,11 @@ public sealed class HistoricalGrossNetParityLiveFlowTests
             "PostgresAppRepository.HistoricalGrossNetParity.cs");
 
         Assert.Contains(
-            "ELSE linked_run_fill.originated_at < @CutoffUtc",
+            "ELSE linked_run_fill.originated_at END AS originated_at",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "WHERE candidate.originated_at < @CutoffUtc",
             source,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
@@ -241,7 +245,7 @@ public sealed class HistoricalGrossNetParityLiveFlowTests
     }
 
     [Fact]
-    public void CandidateDiscovery_BoundsEachRankedStrategyAndAppliesCursorBeforeInnerLimit()
+    public void CandidateDiscovery_SeparatesGrossRankingFromStrategyScopedSourceQueries()
     {
         var source = ReadRepositorySource(
             "src",
@@ -249,29 +253,60 @@ public sealed class HistoricalGrossNetParityLiveFlowTests
             "PostgresAppRepository.HistoricalGrossNetParity.cs")
             .Replace("\r\n", "\n", StringComparison.Ordinal);
         var candidateMethodStart = source.IndexOf(
-            "private static async Task<IReadOnlyList<HistoricalGrossNetParityCandidateKey>>\n" +
+            "private static async Task<HistoricalGrossNetParityCandidateSelection>\n" +
             "        LoadHistoricalGrossNetParityCandidateKeysAsync(",
             StringComparison.Ordinal);
         var candidateMethodEnd = source.IndexOf(
-            "private static Guid[] GetHistoricalGrossNetParityIds(",
+            "private static async Task<IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>\n" +
+            "        LoadHistoricalGrossNetParityStrategyRankingAsync(",
             candidateMethodStart,
             StringComparison.Ordinal);
 
         Assert.True(candidateMethodStart >= 0);
         Assert.True(candidateMethodEnd > candidateMethodStart);
         var method = source[candidateMethodStart..candidateMethodEnd];
-        var lateralStart = method.IndexOf("CROSS JOIN LATERAL (", StringComparison.Ordinal);
-        var innerCursor = method.IndexOf("WHERE NOT @HasAfter", lateralStart, StringComparison.Ordinal);
-        var innerLimit = method.IndexOf("LIMIT @PageSize", lateralStart, StringComparison.Ordinal);
 
-        Assert.True(lateralStart >= 0);
-        Assert.True(innerCursor > lateralStart);
-        Assert.True(innerLimit > innerCursor);
-        Assert.Contains("run.strategy_id = ranked.id", method, StringComparison.Ordinal);
-        Assert.Contains("sell_order.strategy_id = ranked.id", method, StringComparison.Ordinal);
-        Assert.Contains("live_order.strategy_id = ranked.id", method, StringComparison.Ordinal);
-        Assert.DoesNotContain("raw_candidates AS", method, StringComparison.Ordinal);
-        Assert.DoesNotContain("uses_runs AS", method, StringComparison.Ordinal);
+        Assert.Contains("LoadHistoricalGrossNetParityStrategyCandidateKeysAsync", method,
+            StringComparison.Ordinal);
+        Assert.Contains("request.Strategy", method,
+            StringComparison.Ordinal);
+        Assert.Contains("LoadHistoricalGrossNetParitySourceCandidateKeysAsync", source,
+            StringComparison.Ordinal);
+        Assert.Contains("HistoricalGrossNetParitySourceKind.PaperRun", source,
+            StringComparison.Ordinal);
+        Assert.Contains("HistoricalGrossNetParitySourceKind.PaperPosition", source,
+            StringComparison.Ordinal);
+        Assert.Contains("HistoricalGrossNetParitySourceKind.PaperSettlement", source,
+            StringComparison.Ordinal);
+        Assert.Contains("HistoricalGrossNetParitySourceKind.PaperSellFill", source,
+            StringComparison.Ordinal);
+        Assert.Contains("HistoricalGrossNetParitySourceKind.LiveOrder", source,
+            StringComparison.Ordinal);
+        Assert.Contains("run.strategy_id = @StrategyId", source, StringComparison.Ordinal);
+        Assert.Contains("sell_order.strategy_id = @StrategyId", source, StringComparison.Ordinal);
+        Assert.Contains("live_order.strategy_id = @StrategyId", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("WITH strategy_gross AS", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("ordered_strategies AS", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("UNION ALL", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("LoadHistoricalGrossNetParityStrategyRankingAsync(", method,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "public async Task<IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>\n" +
+            "        LoadHistoricalGrossNetParityStrategyRankingAsync(",
+            source,
+            StringComparison.Ordinal);
+
+        var processorSource = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Service",
+            "PaperTrading",
+            "PaperFakFeeBackfillProcessor.cs");
+        Assert.Contains("selectionRanking = await store.LoadHistoricalGrossNetParityStrategyRankingAsync(",
+            processorSource, StringComparison.Ordinal);
+        Assert.Contains("completedStrategies.Add(completedStrategyId)",
+            processorSource, StringComparison.Ordinal);
+        Assert.Contains("strategy.StrategyId)", processorSource, StringComparison.Ordinal);
     }
 
     [Fact]

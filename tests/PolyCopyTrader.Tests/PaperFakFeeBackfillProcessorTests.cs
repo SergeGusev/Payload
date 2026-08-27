@@ -980,6 +980,15 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var ranksFlipped = false;
         var store = new RecordingParityStore
         {
+            StrategyRankingFactory = _ => (ranksFlipped
+                ? new[] { low with { StrategyRank = 1 }, high with { StrategyRank = 2 } }
+                : new[] { high, low })
+                .Select(target => new HistoricalGrossNetParityRankedStrategy(
+                    target.StrategyId,
+                    $"strategy-{target.StrategyId:N}",
+                    target.StrategyRank,
+                    target.StrategyGrossPnlUsd))
+                .ToArray(),
             CandidatePageFactory = request =>
             {
                 var candidates = new[]
@@ -988,7 +997,7 @@ public sealed class PaperFakFeeBackfillProcessorTests
                         ranksFlipped ? low with { StrategyRank = 1 } : low
                     }
                     .Where(target => !completed.Contains(target.SourceId))
-                    .Where(target => request.StrategyId is null || target.StrategyId == request.StrategyId)
+                    .Where(target => target.StrategyId == request.StrategyId)
                     .OrderBy(target => target.StrategyRank)
                     .ToArray();
                 return CreateParityPage(request.Phase, candidates, []);
@@ -1021,8 +1030,61 @@ public sealed class PaperFakFeeBackfillProcessorTests
         Assert.Equal([highStrategyId, lowStrategyId],
             store.LiveAccountingRequests.Select(request => request.Target.StrategyId).ToArray());
         Assert.Equal(
-            [null, highStrategyId, highStrategyId, null, lowStrategyId],
+            [highStrategyId, highStrategyId, lowStrategyId, lowStrategyId],
             store.CandidatePageRequests.Select(request => request.StrategyId).ToArray());
+        Assert.Equal(2, store.StrategyRankingRequests.Count);
+    }
+
+    [Fact]
+    public async Task HistoricalParityProcessor_ContinuesBoundedFrozenStrategyRanking()
+    {
+        var completedStrategyIds = Enumerable.Range(1, 50)
+            .Select(value => Guid.Parse($"71150000-0000-0000-0000-{value:000000000000}"))
+            .ToArray();
+        var targetStrategyId = Guid.Parse("71150000-0000-0000-0001-000000000001");
+        var target = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71150000-0000-0000-0000-000000000011"),
+            targetStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 10m,
+            basis: 100m,
+            fee: 0m,
+            net: null) with { StrategyRank = 51 };
+        var ranking = completedStrategyIds
+            .Select((strategyId, index) => new HistoricalGrossNetParityRankedStrategy(
+                strategyId,
+                $"completed-{index + 1}",
+                index + 1,
+                100m - index))
+            .Append(new HistoricalGrossNetParityRankedStrategy(
+                targetStrategyId,
+                "target",
+                51,
+                10m))
+            .ToArray();
+        var store = new RecordingParityStore
+        {
+            StrategyRankingFactory = _ => ranking,
+            CandidatePageFactory = request => request.StrategyId == targetStrategyId
+                ? CreateParityPage(target)
+                : CreateParityPage(request.Phase, [], [])
+        };
+        var processor = CreateHistoricalParityProcessor(
+            store,
+            new RecordingHistoricalFeeService((_, _) =>
+                throw new InvalidOperationException("Fallback must not dispatch a historical lookup.")));
+
+        var selection = await processor.RunCycleAsync(Guid.NewGuid());
+        var exact = await processor.RunCycleAsync(Guid.NewGuid());
+
+        Assert.Equal(HistoricalGrossNetParityCycleState.Deferred, selection.State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached, exact.State);
+        Assert.Single(store.StrategyRankingRequests);
+        Assert.Equal(51, store.CandidatePageRequests.Count);
+        Assert.All(store.CandidatePageRequests, request => Assert.NotEqual(Guid.Empty, request.StrategyId));
+        Assert.All(store.CandidatePageRequests, request => Assert.Null(request.After));
+        Assert.Equal(targetStrategyId, store.CandidatePageRequests[^1].StrategyId);
     }
 
     [Fact]
@@ -1052,11 +1114,18 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var applyAttempts = 0;
         var store = new RecordingParityStore
         {
+            StrategyRankingFactory = _ => new[] { high, low }
+                .Select(target => new HistoricalGrossNetParityRankedStrategy(
+                    target.StrategyId,
+                    $"strategy-{target.StrategyId:N}",
+                    target.StrategyRank,
+                    target.StrategyGrossPnlUsd))
+                .ToArray(),
             CandidatePageFactory = request => CreateParityPage(
                 request.Phase,
                 new[] { high, low }
                     .Where(target => !completed.Contains(target.SourceId))
-                    .Where(target => request.StrategyId is null || target.StrategyId == request.StrategyId)
+                    .Where(target => target.StrategyId == request.StrategyId)
                     .OrderBy(target => target.StrategyRank)
                     .ToArray(),
                 []),
@@ -1135,11 +1204,18 @@ public sealed class PaperFakFeeBackfillProcessorTests
         var balanceAttempts = 0;
         var store = new RecordingParityStore
         {
+            StrategyRankingFactory = _ => new[] { high, low }
+                .Select(target => new HistoricalGrossNetParityRankedStrategy(
+                    target.StrategyId,
+                    $"strategy-{target.StrategyId:N}",
+                    target.StrategyRank,
+                    target.StrategyGrossPnlUsd))
+                .ToArray(),
             CandidatePageFactory = request => CreateParityPage(
                 request.Phase,
                 new[] { high, low }
                     .Where(target => !completed.Contains(target.SourceId))
-                    .Where(target => request.StrategyId is null || target.StrategyId == request.StrategyId)
+                    .Where(target => target.StrategyId == request.StrategyId)
                     .OrderBy(target => target.StrategyRank)
                     .ToArray(),
                 []),
@@ -2477,6 +2553,9 @@ public sealed class PaperFakFeeBackfillProcessorTests
 
     private sealed class RecordingParityStore : IHistoricalGrossNetParityStore
     {
+        public Func<HistoricalGrossNetParityStrategyRankingRequest,
+            IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>? StrategyRankingFactory { get; init; }
+
         public Func<HistoricalGrossNetParityCandidatePageRequest, HistoricalGrossNetParityCandidatePage>?
             CandidatePageFactory { get; init; }
 
@@ -2492,11 +2571,51 @@ public sealed class PaperFakFeeBackfillProcessorTests
         public Func<HistoricalGrossNetParityLiveBalanceRequest, HistoricalGrossNetParityLiveBalanceResult>?
             LiveBalanceFactory { get; init; }
 
+        public List<HistoricalGrossNetParityStrategyRankingRequest> StrategyRankingRequests { get; } = [];
         public List<HistoricalGrossNetParityCandidatePageRequest> CandidatePageRequests { get; } = [];
         public List<HistoricalGrossNetParityDonorPreviewRequest> DonorPreviewRequests { get; } = [];
         public List<HistoricalGrossNetParityPaperDecisionRequest> PaperDecisionRequests { get; } = [];
         public List<HistoricalGrossNetParityLiveAccountingRequest> LiveAccountingRequests { get; } = [];
         public List<HistoricalGrossNetParityLiveBalanceRequest> LiveBalanceRequests { get; } = [];
+
+        public Task<IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>
+            LoadHistoricalGrossNetParityStrategyRankingAsync(
+                HistoricalGrossNetParityStrategyRankingRequest request,
+                CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            StrategyRankingRequests.Add(request);
+            if (StrategyRankingFactory is not null)
+            {
+                return Task.FromResult(StrategyRankingFactory(request));
+            }
+
+            var candidatePage = CandidatePageFactory?.Invoke(
+                new HistoricalGrossNetParityCandidatePageRequest(
+                    HistoricalGrossNetParityProcessingPhase.Exact,
+                    HistoricalGrossNetParityConstants.CutoffUtc,
+                    50,
+                    null,
+                    request.CommandTimeoutSeconds,
+                    request.LockTimeoutMilliseconds,
+                    HistoricalGrossNetParityConstants.CalculationVersion,
+                    new HistoricalGrossNetParityRankedStrategy(
+                        Guid.Empty,
+                        "test-ranking-probe",
+                        1,
+                        0m)));
+            var ranking = candidatePage?.Candidates
+                .GroupBy(candidate => candidate.StrategyId)
+                .Select(group => group.OrderBy(candidate => candidate.StrategyRank).First())
+                .OrderBy(candidate => candidate.StrategyRank)
+                .Select(candidate => new HistoricalGrossNetParityRankedStrategy(
+                    candidate.StrategyId,
+                    candidate.StrategyCode,
+                    candidate.StrategyRank,
+                    candidate.StrategyGrossPnlUsd))
+                .ToArray() ?? [];
+            return Task.FromResult<IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>(ranking);
+        }
 
         public Task<HistoricalGrossNetParityCandidatePage>
             LoadHistoricalGrossNetParityCandidatePageAsync(

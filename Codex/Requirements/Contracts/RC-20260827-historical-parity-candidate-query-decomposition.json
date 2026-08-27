@@ -3,7 +3,7 @@
   "contractId": "RC-20260827-historical-parity-candidate-query-decomposition",
   "title": "Decompose historical parity candidate selection",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -65,8 +65,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity\" with TEMP/TMP/TMPDIR and results under the marked D:\\CodexTemp run",
           "expected": "Focused tests pass and prove split strategy/source selection, bounded pages, timeout preservation, and removal of the global candidate-query shape.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The final focused HistoricalParity/HistoricalGrossNetParity run passed 28 tests, failed 0, and skipped only the four environment-gated PostgreSQL cases. Source-contract coverage proves a distinct ranking read, a strategy selection record passed into candidate pages, five source-specific queries, bounded page size, unchanged command timeout, and absence of the former global candidate-query shape."
         }
       ]
     },
@@ -98,8 +98,8 @@
           "kind": "test",
           "command": "Run focused processor and PostgreSQL pagination tests for Gross ordering, one-strategy completion, source ordering, empty/completed strategy advancement, and restart-safe audit exclusion.",
           "expected": "All ordering and completion tests pass without a cross-strategy candidate page or skipped eligible source.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Processor tests prove frozen bounded ranking probes across 50 completed strategies, selection of the 51st without a rank cursor, one-strategy Exact/Fallback completion, current-Gross reload only after completion, and retention of an active strategy through target or Live-balance deferral. A fresh allowlisted loopback PostgreSQL 17 database passed all 4 HistoricalGrossNetParityPostgresIntegrationTests with no skips, including ranking order, three-page strategy-local traversal, source-path preparation, and atomic fixed fallback."
         }
       ]
     },
@@ -132,8 +132,8 @@
           "kind": "test",
           "command": "Run the existing direct Fixed0p0333, exact-precedence, cutoff, completed-row, legacy compatibility, VenueReported revision, and ordinary PolymarketFeeAccountingService tests.",
           "expected": "All existing financial and historical-boundary tests pass without expectation changes unrelated to candidate-query decomposition.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The final financial regression matrix passed 102 tests, failed 0, and skipped only the same four environment-gated PostgreSQL cases; the dedicated PostgreSQL run then passed those 4/4 with no skips. Coverage includes strict cutoff, completed-row exclusion, exact-before-fixed precedence, direct Fixed0p0333 rounding, no new donor dispatch, PolymarketFeeAccountingService, and VenueReportedRevision behavior."
         }
       ]
     },
@@ -167,8 +167,8 @@
           "kind": "build",
           "command": "Run VER-001 through VER-003; build PolyCopyTrader.sln with disposable outputs under the marked D:\\CodexTemp run; run git diff --check and requirement validation; obtain independent semantic review of verbatim requests, approved contract, diff, and evidence.",
           "expected": "All checks pass with no schema/configuration/Production mutation and no open semantic-review findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "After a solution-wide restore into the marked D:\\CodexTemp run resolved a missing Dashboard project.assets.json artifact, PolyCopyTrader.sln Release build passed with 0 errors and 126 existing warnings. git diff --check passed with line-ending notices only. No schema, migration, configuration timeout, deployment, service restart, Production mutation, or trading action occurred. Independent reviewer agent:/root/semantic_reviewer compared both verbatim requests, approved contract, complete diff, call paths, tests, docs, and evidence and returned PASS with no P0-P3 findings."
         }
       ]
     }
@@ -183,8 +183,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/semantic_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

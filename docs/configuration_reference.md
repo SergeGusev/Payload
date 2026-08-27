@@ -187,6 +187,14 @@ that strategy is complete does the service rerank the unfinished strategies by
 current Gross and select the next one. The old
 `PaperFakFeeBackfill` switch, cutoff, and apply gate remain independent.
 
+Selection is decomposed into a current-Gross ranking read followed by
+strategy-scoped, source-specific candidate reads. A ranking snapshot is retained
+only across the bounded probes needed to find the next unfinished strategy; it
+is discarded and reread after a strategy completes. Candidate sources are
+queried in canonical order (`PaperRun`, `PaperPosition`, `PaperSettlement`,
+`PaperSellFill`, `LiveOrder`), never combined into one global candidate union.
+Each query retains `BatchSize` and `CommandTimeoutSeconds` bounds.
+
 The fallback pass applies `Fee = ROUND_AWAY_8(B * R)` and
 `Net = Gross - Fee`, where `B` is the unchanged source-specific Gross ROI basis
 and `R` is fixed at `0.0333`. This is equivalent to

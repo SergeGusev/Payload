@@ -66,7 +66,7 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
-    public async Task CandidatePage_KeysetContinuesWithinStrategyThenTransitionsWithoutGaps()
+    public async Task StrategyRankingAndScopedCandidatePage_SelectGreatestGrossStrategyOnly()
     {
         var factory = await CreateFactoryAsync();
         var repository = new PostgresAppRepository(factory);
@@ -78,48 +78,31 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
             .ToArray();
         await SeedCandidatePaginationAsync(factory, firstStrategyRunIds, secondStrategyRunIds);
 
-        HistoricalGrossNetParityCandidateCursor? cursor = null;
-        var pages = new List<HistoricalGrossNetParityCandidatePage>();
-        for (var pageNumber = 0; pageNumber < 3; pageNumber++)
-        {
-            var page = await repository.LoadHistoricalGrossNetParityCandidatePageAsync(
-                new HistoricalGrossNetParityCandidatePageRequest(
-                    HistoricalGrossNetParityProcessingPhase.Exact,
-                    HistoricalGrossNetParityConstants.CutoffUtc,
-                    50,
-                    cursor,
-                    30,
-                    1_000,
-                    HistoricalGrossNetParityConstants.CalculationVersion));
-            Assert.Equal(HistoricalGrossNetParityReadStatus.Complete, page.Status);
-            Assert.InRange(page.Candidates.Count, 1, 50);
-            Assert.NotNull(page.NextCursor);
-            pages.Add(page);
-            cursor = page.NextCursor;
-        }
+        var ranking = await repository.LoadHistoricalGrossNetParityStrategyRankingAsync(
+            new HistoricalGrossNetParityStrategyRankingRequest(30, 1_000));
+        var firstStrategy = ranking.Single(value => value.StrategyId == PaginationStrategyOneId);
+        var secondStrategy = ranking.Single(value => value.StrategyId == PaginationStrategyTwoId);
+        Assert.True(
+            firstStrategy.StrategyRank < secondStrategy.StrategyRank);
 
-        Assert.All(
-            pages[0].Candidates.Concat(pages[1].Candidates),
+        var first = await repository.LoadHistoricalGrossNetParityCandidatePageAsync(
+            new HistoricalGrossNetParityCandidatePageRequest(
+                HistoricalGrossNetParityProcessingPhase.Exact,
+                HistoricalGrossNetParityConstants.CutoffUtc,
+                50,
+                null,
+                30,
+                1_000,
+                HistoricalGrossNetParityConstants.CalculationVersion,
+                firstStrategy));
+
+        Assert.Equal(HistoricalGrossNetParityReadStatus.Complete, first.Status);
+        Assert.Equal(50, first.Candidates.Count);
+        Assert.False(first.ReachedBoundary);
+        Assert.All(first.Candidates,
             candidate => Assert.Equal(PaginationStrategyOneId, candidate.StrategyId));
-
-        var relevant = pages
-            .SelectMany(page => page.Candidates)
-            .Where(candidate =>
-                candidate.StrategyId == PaginationStrategyOneId ||
-                candidate.StrategyId == PaginationStrategyTwoId)
-            .ToArray();
-        Assert.Equal(123, relevant.Length);
-        Assert.Equal(123, relevant.Select(candidate => candidate.SourceId).Distinct().Count());
-        Assert.Equal(
-            firstStrategyRunIds,
-            relevant.Take(firstStrategyRunIds.Length).Select(candidate => candidate.SourceId));
-        Assert.Equal(
-            secondStrategyRunIds,
-            relevant.Skip(firstStrategyRunIds.Length).Select(candidate => candidate.SourceId));
-        Assert.DoesNotContain(relevant, candidate => candidate.SourceId == PaginationAuditedRunId);
-        Assert.DoesNotContain(relevant, candidate => candidate.SourceId == PaginationPostCutoffRunId);
-        Assert.Equal(PaginationStrategyOneId, pages[2].Candidates[0].StrategyId);
-        Assert.Equal(PaginationStrategyTwoId, pages[2].Candidates[20].StrategyId);
+        Assert.DoesNotContain(first.Candidates,
+            candidate => candidate.StrategyId == PaginationStrategyTwoId);
     }
 
     [PostgresIntegrationFact]
@@ -135,6 +118,7 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
             .Select(value => Guid.Parse($"b3000000-0000-4000-8102-{value:000000000000}"))
             .ToArray();
         await SeedCandidatePaginationAsync(factory, firstStrategyRunIds, secondStrategyRunIds);
+        var selectedStrategy = await LoadRankedStrategyAsync(repository, PaginationStrategyOneId);
 
         HistoricalGrossNetParityCandidateCursor? cursor = null;
         var scoped = new List<HistoricalGrossNetParityCandidateKey>();
@@ -149,7 +133,7 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
                     30,
                     1_000,
                     HistoricalGrossNetParityConstants.CalculationVersion,
-                    PaginationStrategyOneId));
+                    selectedStrategy));
             Assert.Equal(HistoricalGrossNetParityReadStatus.Complete, page.Status);
             Assert.All(page.Candidates,
                 candidate => Assert.Equal(PaginationStrategyOneId, candidate.StrategyId));
@@ -169,6 +153,7 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
         var factory = await CreateFactoryAsync();
         var repository = new PostgresAppRepository(factory);
         await SeedAsync(factory);
+        var selectedStrategy = await LoadRankedStrategyAsync(repository, StrategyId);
         Assert.True(await CountPaperPositionSettlementsAsync(factory) > 250);
         var settlementPlan = await ReadCanonicalSettlementPlanAsync(factory);
         Assert.Contains(
@@ -188,7 +173,8 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
                 null,
                 30,
                 1_000,
-                HistoricalGrossNetParityConstants.CalculationVersion));
+                HistoricalGrossNetParityConstants.CalculationVersion,
+                selectedStrategy));
         Assert.Equal(HistoricalGrossNetParityReadStatus.Complete, page.Status);
         var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(
             page,
@@ -244,8 +230,23 @@ public sealed class HistoricalGrossNetParityPostgresIntegrationTests
             positionPreview.Status == HistoricalGrossNetParityReadStatus.Complete,
             positionPreview.Details);
 
+        var runlessStrategy = await LoadRankedStrategyAsync(repository, RunlessStrategyId);
+        var runlessPage = await repository.LoadHistoricalGrossNetParityCandidatePageAsync(
+            new HistoricalGrossNetParityCandidatePageRequest(
+                HistoricalGrossNetParityProcessingPhase.Exact,
+                HistoricalGrossNetParityConstants.CutoffUtc,
+                50,
+                null,
+                30,
+                1_000,
+                HistoricalGrossNetParityConstants.CalculationVersion,
+                runlessStrategy));
+        Assert.Equal(HistoricalGrossNetParityReadStatus.Complete, runlessPage.Status);
+        var runlessPrepared = HistoricalGrossNetParityPaperPreparer.Prepare(
+            runlessPage,
+            HistoricalGrossNetParityConstants.CutoffUtc);
         var runlessTarget = Assert.Single(
-            prepared.Targets,
+            runlessPrepared.Targets,
             value => value.SourceKind == HistoricalGrossNetParitySourceKind.PaperSellFill &&
                      value.SourceId == RunlessSellFillId);
         var runlessDescriptor = Assert.Single(
@@ -379,6 +380,7 @@ VALUES (
             await seed.ExecuteNonQueryAsync();
         }
 
+        var selectedStrategy = await LoadRankedStrategyAsync(repository, strategyId);
         var page = await repository.LoadHistoricalGrossNetParityCandidatePageAsync(
             new HistoricalGrossNetParityCandidatePageRequest(
                 HistoricalGrossNetParityProcessingPhase.Fallback,
@@ -388,7 +390,7 @@ VALUES (
                 30,
                 1_000,
                 HistoricalGrossNetParityConstants.CalculationVersion,
-                strategyId));
+                selectedStrategy));
         Assert.Equal(HistoricalGrossNetParityReadStatus.Complete, page.Status);
         var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(
             page,
@@ -467,6 +469,15 @@ GROUP BY r.fee_usd, r.net_realized_pnl_usd, r.fee_calculation_source;
         return factory;
     }
 
+    private static async Task<HistoricalGrossNetParityRankedStrategy> LoadRankedStrategyAsync(
+        PostgresAppRepository repository,
+        Guid strategyId)
+    {
+        var ranking = await repository.LoadHistoricalGrossNetParityStrategyRankingAsync(
+            new HistoricalGrossNetParityStrategyRankingRequest(30, 1_000));
+        return Assert.Single(ranking, value => value.StrategyId == strategyId);
+    }
+
     private static async Task SeedCandidatePaginationAsync(
         PostgresConnectionFactory factory,
         Guid[] firstStrategyRunIds,
@@ -543,7 +554,7 @@ VALUES (
     gen_random_uuid(), 'PaperRun', @AuditedRunId, @FirstStrategyId,
     @CalculationVersion, 'AccountingDecision', 'pagination-audited', @SettledAtUtc,
     '{}'::jsonb, '{}'::jsonb, '{}'::jsonb)
-ON CONFLICT (source_kind, source_id, calculation_version, operation_kind) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 ANALYZE strategy_market_paper_runs;
 ANALYZE historical_gross_net_parity_audit;

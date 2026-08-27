@@ -1163,6 +1163,15 @@ through compare-and-set/serializable storage. There is no donor scan or donor
 offset, complete database plan, file artifact, `ApplyEnabled` switch, digest
 command, or second approval after deployment.
 
+Candidate discovery uses two bounded read stages instead of one global
+five-source SQL plan. The worker first reads the current Dashboard Gross ranking
+and freezes that ranking only while it probes for the next unfinished strategy.
+Every probe is scoped to one strategy, and its candidates are read separately in
+the canonical `PaperRun`, `PaperPosition`, `PaperSettlement`, `PaperSellFill`,
+then `LiveOrder` order. After the selected strategy is fully complete, the worker
+reloads current Gross before choosing the next strategy. The existing 10-second
+command timeout and configured page-size bound remain unchanged.
+
 Each new direct fallback stores its fixed-policy contract, coefficient, basis,
 Fee, Net, and versioned provenance. A concurrent target change rolls back that
 target for a later cycle without undoing independent completed targets. Restart

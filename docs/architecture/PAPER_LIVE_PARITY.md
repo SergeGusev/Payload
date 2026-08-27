@@ -512,6 +512,15 @@ meaning. Paper recent windows still use Settled-run facts only; open and runless
 fallback accounting remains lifetime/MtM. Live remains settled-realized only;
 no Live open-MtM metric is added.
 
+Candidate discovery is split into a current Dashboard Gross ranking read and
+separate strategy-scoped reads for `PaperRun`, `PaperPosition`,
+`PaperSettlement`, `PaperSellFill`, and `LiveOrder` in that order. The worker
+freezes one ranking snapshot only while bounded probes locate the next
+unfinished strategy. It then keeps the selected strategy active through both
+phases and reloads current Gross only after that strategy is complete. This
+avoids the former global five-source candidate plan without changing source
+eligibility, ordering, page size, or the 10-second command timeout.
+
 Accounting precedence is proved `VenueReported`, complete exact local evidence,
 authoritative-Fee Net repair, exact historical CLOB calculation, and then direct
 fixed `0.0333`. The fallback is equivalent to

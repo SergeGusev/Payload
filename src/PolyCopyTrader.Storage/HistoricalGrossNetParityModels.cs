@@ -10,6 +10,12 @@ namespace PolyCopyTrader.Storage;
 
 public interface IHistoricalGrossNetParityStore
 {
+    Task<IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>
+        LoadHistoricalGrossNetParityStrategyRankingAsync(
+            HistoricalGrossNetParityStrategyRankingRequest request,
+            CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<HistoricalGrossNetParityRankedStrategy>>([]);
+
     Task<HistoricalGrossNetParityCandidatePage> LoadHistoricalGrossNetParityCandidatePageAsync(
         HistoricalGrossNetParityCandidatePageRequest request,
         CancellationToken cancellationToken = default) =>
@@ -178,6 +184,16 @@ public sealed record HistoricalGrossNetParityCandidateCursor(
     DateTimeOffset OriginatedAtUtc,
     Guid SourceId);
 
+public sealed record HistoricalGrossNetParityStrategyRankingRequest(
+    int CommandTimeoutSeconds,
+    int LockTimeoutMilliseconds);
+
+public sealed record HistoricalGrossNetParityRankedStrategy(
+    Guid StrategyId,
+    string StrategyCode,
+    int StrategyRank,
+    decimal GrossPnlUsd);
+
 public sealed record HistoricalGrossNetParityCandidatePageRequest(
     HistoricalGrossNetParityProcessingPhase Phase,
     DateTimeOffset CutoffUtc,
@@ -186,7 +202,10 @@ public sealed record HistoricalGrossNetParityCandidatePageRequest(
     int CommandTimeoutSeconds,
     int LockTimeoutMilliseconds,
     string CalculationVersion,
-    Guid? StrategyId = null);
+    HistoricalGrossNetParityRankedStrategy Strategy)
+{
+    public Guid StrategyId => Strategy.StrategyId;
+}
 
 public sealed record HistoricalGrossNetParityCandidateKey(
     HistoricalGrossNetParitySourceKind SourceKind,

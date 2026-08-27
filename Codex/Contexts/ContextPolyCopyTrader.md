@@ -1,3 +1,16 @@
+## Active Update 2026-08-27 Historical Parity Candidate Query Decomposition
+Goal: Remove the HistoricalGrossNetParity candidate-selection timeout while preserving current-Gross order, full one-strategy completion, and all approved accounting behavior.
+Status: Completed locally; deployment and Production runtime verification were not performed
+Done:
+- Recorded the user's exact approval of `RC-20260827-historical-parity-candidate-query-decomposition` at semantic digest `sha256:87c56bfbb0a4bb2d58e38fbf883d85e4fa543267a096bcc2a9c21a86082e0e42` in the separate approval checkpoint `a177c7de`.
+- Replaced the former global ranked five-source candidate SQL with a distinct current-Dashboard-Gross ranking read and one-strategy/one-source reads in canonical `PaperRun`, `PaperPosition`, `PaperSettlement`, `PaperSellFill`, `LiveOrder` order. Candidate pages retain the configured page size and 10-second command timeout.
+- The processor freezes a ranking snapshot only across bounded probes for the next unfinished strategy, carries the selected ranking record into every scoped page, completes that strategy's Exact and direct Fixed0p0333 Fallback phases, then reloads current Gross. Completed IDs are only an in-process probe optimization; restart and financial completion still derive from canonical rows and permanent audit.
+- Preserved the strict originating-entry cutoff before `2026-08-10T00:00:00Z`, calculation version v1, exact/VenueReported precedence, direct 3.33-percentage-point fallback, completed legacy records, Live ordered balance behavior, and ordinary new-bet accounting. No donor runtime, schema, migration, configuration, deployment, restart, Production mutation, or trading action was added or performed.
+- Updated focused tests and directly affected README, configuration, and Paper/Live parity documentation. Independent reviewer `agent:/root/semantic_reviewer` compared both verbatim requests, the approved contract, complete diff, call paths, tests, docs, and evidence and returned PASS with no P0-P3 findings.
+Next: User deploys the resulting service; then verify fresh Production logs and progress read-only.
+Notes: Final focused tests passed 28/28 with four environment-gated PostgreSQL skips; the broader financial matrix passed 102/102 with the same four skips; a fresh allowlisted loopback PostgreSQL 17 database passed those 4/4 with no skips. Release solution build passed with 0 errors and 126 existing warnings after restoring the Dashboard assets into the marked D:\CodexTemp run. `git diff --check` passed with line-ending notices only.
+Blockers: None.
+
 ## Active Update 2026-08-27 Historical Parity Direct 3.33-Point Fallback
 Goal: Replace new HistoricalGrossNetParity donor decisions with a direct 3.33-percentage-point fallback while preserving exact accounting, completed history, and ordinary new-bet accounting.
 Status: Completed locally; deployment and Production execution were not performed

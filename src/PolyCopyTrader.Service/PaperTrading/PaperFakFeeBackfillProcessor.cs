@@ -829,8 +829,11 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
     private readonly Dictionary<TargetLookupIdentity, TargetLookupLedger> lookupLedgers = [];
     private HistoricalGrossNetParityProcessingPhase phase = HistoricalGrossNetParityProcessingPhase.Exact;
     private HistoricalGrossNetParityCandidateCursor? cursor;
-    private Guid? activeStrategyId;
+    private HistoricalGrossNetParityRankedStrategy? activeStrategy;
     private bool fallbackPassDeferred;
+    private IReadOnlyList<HistoricalGrossNetParityRankedStrategy>? selectionRanking;
+    private int selectionRankingIndex;
+    private readonly HashSet<Guid> completedStrategies = [];
 
     private HistoricalGrossNetParityProcessor(
         ILogger<HistoricalGrossNetParityProcessor> logger,
@@ -890,7 +893,138 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
         try
         {
             var requestedPhase = phase;
-            var page = await store.LoadHistoricalGrossNetParityCandidatePageAsync(
+            HistoricalGrossNetParityCandidatePage? page = null;
+            if (activeStrategy is null)
+            {
+                if (selectionRanking is null)
+                {
+                    selectionRanking = await store.LoadHistoricalGrossNetParityStrategyRankingAsync(
+                            new HistoricalGrossNetParityStrategyRankingRequest(
+                                options.CommandTimeoutSeconds,
+                                options.LockTimeoutMilliseconds),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    selectionRankingIndex = 0;
+                }
+
+                var probedStrategies = 0;
+                while (selectionRankingIndex < selectionRanking.Count &&
+                       probedStrategies < options.BatchSize)
+                {
+                    var strategy = selectionRanking[selectionRankingIndex];
+                    if (completedStrategies.Contains(strategy.StrategyId))
+                    {
+                        selectionRankingIndex++;
+                        continue;
+                    }
+
+                    var candidatePage = await store.LoadHistoricalGrossNetParityCandidatePageAsync(
+                            new HistoricalGrossNetParityCandidatePageRequest(
+                                requestedPhase,
+                                options.HistoricalCutoffUtc,
+                                options.BatchSize,
+                                null,
+                                options.CommandTimeoutSeconds,
+                                options.LockTimeoutMilliseconds,
+                                options.CalculationVersion,
+                                strategy),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    ValidateCandidatePage(candidatePage);
+                    if (candidatePage.Status != HistoricalGrossNetParityReadStatus.Complete)
+                    {
+                        logger.LogWarning(
+                            "Historical Gross/Net parity candidate probe deferred. " +
+                            "StrategyId={StrategyId} StrategyRank={StrategyRank} Status={Status} Details={Details}",
+                            strategy.StrategyId,
+                            strategy.StrategyRank,
+                            candidatePage.Status,
+                            candidatePage.Details);
+                        return Result(
+                            HistoricalGrossNetParityCycleState.Deferred,
+                            reachedEnd: false,
+                            details: candidatePage.Details);
+                    }
+
+                    if (candidatePage.Candidates.Count == 0)
+                    {
+                        if (!candidatePage.ReachedBoundary)
+                        {
+                            logger.LogWarning(
+                                "Historical Gross/Net parity received an incomplete empty strategy probe. " +
+                                "StrategyId={StrategyId} StrategyRank={StrategyRank} Details={Details}",
+                                strategy.StrategyId,
+                                strategy.StrategyRank,
+                                candidatePage.Details);
+                            return Result(
+                                HistoricalGrossNetParityCycleState.Deferred,
+                                reachedEnd: false,
+                                details: candidatePage.Details);
+                        }
+
+                        probedStrategies++;
+                        selectionRankingIndex++;
+                        completedStrategies.Add(strategy.StrategyId);
+                        continue;
+                    }
+
+                    if (candidatePage.Candidates.Any(candidate => candidate.StrategyId != strategy.StrategyId))
+                    {
+                        throw new InvalidOperationException(
+                            $"A strategy probe for {strategy.StrategyId:D} contains another strategy.");
+                    }
+
+                    probedStrategies++;
+                    selectionRankingIndex++;
+                    activeStrategy = strategy;
+                    page = candidatePage;
+                    logger.LogInformation(
+                        "Historical Gross/Net parity selected the greatest-current-Gross unfinished strategy. " +
+                        "StrategyId={StrategyId} StrategyCode={StrategyCode} StrategyRank={StrategyRank} Gross={Gross} " +
+                        "ProbedStrategies={ProbedStrategies}",
+                        strategy.StrategyId,
+                        strategy.StrategyCode,
+                        strategy.StrategyRank,
+                        strategy.GrossPnlUsd,
+                        probedStrategies);
+                    break;
+                }
+
+                if (activeStrategy is null)
+                {
+                    if (selectionRankingIndex < selectionRanking.Count)
+                    {
+                        var details =
+                            $"Probed {probedStrategies} completed strategies; bounded selection continues next cycle.";
+                        logger.LogInformation(
+                            "Historical Gross/Net parity strategy selection remains bounded. " +
+                            "NextRankingIndex={NextRankingIndex} RankingCount={RankingCount} Details={Details}",
+                            selectionRankingIndex,
+                            selectionRanking.Count,
+                            details);
+                        return Result(
+                            HistoricalGrossNetParityCycleState.Deferred,
+                            reachedEnd: false,
+                            details: details);
+                    }
+
+                    selectionRanking = null;
+                    selectionRankingIndex = 0;
+                    completedStrategies.Clear();
+                    phase = HistoricalGrossNetParityProcessingPhase.Exact;
+                    cursor = null;
+                    fallbackPassDeferred = false;
+                    PruneTerminalLookupLedgers();
+                    return Result(
+                        HistoricalGrossNetParityCycleState.Idle,
+                        reachedEnd: true,
+                        details: "No unfinished historical parity strategy remains.");
+                }
+            }
+
+            var selectedStrategy = activeStrategy ?? throw new InvalidOperationException(
+                "Historical parity cannot continue without an active strategy.");
+            page ??= await store.LoadHistoricalGrossNetParityCandidatePageAsync(
                     new HistoricalGrossNetParityCandidatePageRequest(
                         requestedPhase,
                         options.HistoricalCutoffUtc,
@@ -899,7 +1033,7 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                         options.CommandTimeoutSeconds,
                         options.LockTimeoutMilliseconds,
                         options.CalculationVersion,
-                        activeStrategyId),
+                        selectedStrategy),
                     cancellationToken)
                 .ConfigureAwait(false);
             ValidateCandidatePage(page);
@@ -918,66 +1052,10 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                     details: page.Details);
             }
 
-            if (activeStrategyId is null && page.Candidates.Count != 0)
-            {
-                activeStrategyId = page.Candidates[0].StrategyId;
-                logger.LogInformation(
-                    "Historical Gross/Net parity selected the greatest-current-Gross unfinished strategy. " +
-                    "StrategyId={StrategyId} StrategyCode={StrategyCode} StrategyRank={StrategyRank} Gross={Gross}",
-                    activeStrategyId,
-                    page.Candidates[0].StrategyCode,
-                    page.Candidates[0].StrategyRank,
-                    page.Candidates[0].StrategyGrossPnlUsd);
-
-                if (page.Candidates.Any(candidate => candidate.StrategyId != activeStrategyId.Value))
-                {
-                    page = await store.LoadHistoricalGrossNetParityCandidatePageAsync(
-                            new HistoricalGrossNetParityCandidatePageRequest(
-                                requestedPhase,
-                                options.HistoricalCutoffUtc,
-                                options.BatchSize,
-                                null,
-                                options.CommandTimeoutSeconds,
-                                options.LockTimeoutMilliseconds,
-                                options.CalculationVersion,
-                                activeStrategyId),
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                    ValidateCandidatePage(page);
-                    if (page.Status != HistoricalGrossNetParityReadStatus.Complete)
-                    {
-                        logger.LogWarning(
-                            "Historical Gross/Net parity selected-strategy page deferred. " +
-                            "Phase={Phase} StrategyId={StrategyId} Status={Status} Details={Details}",
-                            requestedPhase,
-                            activeStrategyId,
-                            page.Status,
-                            page.Details);
-                        return Result(
-                            HistoricalGrossNetParityCycleState.Deferred,
-                            reachedEnd: false,
-                            details: page.Details);
-                    }
-                }
-            }
-
-            if (activeStrategyId is not null &&
-                page.Candidates.Any(candidate => candidate.StrategyId != activeStrategyId.Value))
+            if (page.Candidates.Any(candidate => candidate.StrategyId != selectedStrategy.StrategyId))
             {
                 throw new InvalidOperationException(
-                    $"A strategy-scoped parity page for {activeStrategyId:D} contains another strategy.");
-            }
-
-            if (activeStrategyId is null)
-            {
-                phase = HistoricalGrossNetParityProcessingPhase.Exact;
-                cursor = null;
-                fallbackPassDeferred = false;
-                PruneTerminalLookupLedgers();
-                return Result(
-                    HistoricalGrossNetParityCycleState.Idle,
-                    reachedEnd: true,
-                    details: page.Details);
+                    $"A strategy-scoped parity page for {selectedStrategy.StrategyId:D} contains another strategy.");
             }
 
             var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(page, options.HistoricalCutoffUtc);
@@ -1014,10 +1092,10 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                 fallbackPassDeferred = false;
                 logger.LogInformation(
                     "Historical Gross/Net parity exact/authoritative/local pass reached the active-strategy boundary. " +
-                    "Fallback donor work for the same strategy begins on the next bounded cycle. " +
+                    "Direct fixed fallback work for the same strategy begins on the next bounded cycle. " +
                     "StrategyId={StrategyId} Candidates={Candidates} Applied={Applied} " +
                     "FallbackEligible={FallbackEligible} Deferred={Deferred}",
-                    activeStrategyId,
+                    selectedStrategy.StrategyId,
                     counters.Candidates,
                     counters.Applied,
                     counters.FallbackEligible,
@@ -1038,7 +1116,7 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                 logger.LogWarning(
                     "Historical Gross/Net parity keeps the active strategy selected because at least one " +
                     "target was deferred. StrategyId={StrategyId}",
-                    activeStrategyId);
+                    selectedStrategy.StrategyId);
                 return Result(
                     HistoricalGrossNetParityCycleState.Deferred,
                     reachedEnd: false,
@@ -1047,10 +1125,13 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                     requestedPhase);
             }
 
-            var completedStrategyId = activeStrategyId.Value;
+            var completedStrategyId = selectedStrategy.StrategyId;
+            completedStrategies.Add(completedStrategyId);
+            selectionRanking = null;
+            selectionRankingIndex = 0;
             phase = HistoricalGrossNetParityProcessingPhase.Exact;
             cursor = null;
-            activeStrategyId = null;
+            activeStrategy = null;
             fallbackPassDeferred = false;
             PruneTerminalLookupLedgers();
             logger.LogInformation(
