@@ -1,3 +1,19 @@
+## Active Update 2026-08-27 Deployed Maker-GTD Shape Telemetry Verification
+Goal: Verify the production deployment, service health, betting activity, and the new Maker-GTD mismatch telemetry without changing Production.
+Status: Completed read-only; deployment and ordinary betting are healthy, but the mismatch branch has not yet been exercised
+Done:
+- Confirmed the new process started at `2026-08-27T11:03:12.588Z`; the production heartbeat independently reports `started_at_utc=2026-08-27T11:03:12.840486Z`, `Running`, `Live`, `last_error=NULL`, and deployed version `1.0.0+eee3cc6684740658155571ccbcf91bcfd62a5cb2`.
+- At the final SQL cutoff `2026-08-27T11:20:21.966807Z`, heartbeat age was `8.664s`. Production SQL ran only inside `BEGIN READ ONLY` with `statement_timeout=15s` against `192.168.0.101:5432/polycopytrader`.
+- Verified ordinary Paper activity after process start: `669` orders/fills by the final cutoff, with the latest fill at `2026-08-27T11:20:01.213773Z`; all observed post-start orders in the earlier closed aggregate were Filled and none remained Pending/Expired.
+- Verified the exact Maker-GTD scope contains `28/28` matched and enabled strategies, `0` paused, and `0` Live-stakes strategies.
+- Observed two complete post-deploy Maker decision cycles at `2026-08-27T11:14:30Z` and `11:19:30Z`. Each produced exactly `28` logs with `reference_average_move_below_bps_threshold`, so no Maker resting order was eligible for placement.
+- Consequently Maker-GTD post-start counts remained `0` orders, `0` fills, and `0` `maker_gtd_paper_filled_order_shape_mismatch` warnings. The deployed diagnostic code is proven by the exact build hash, but its runtime payload has not yet been exercised by an accepted Maker order and attempted fill.
+- The post-start log slice contained two isolated ERR headers from Historical Parity and Legacy accounting backfill cycles, both explicitly entering 60-second retry; later heartbeat and fills continued. No FTL record was found.
+- The existing market-data side-effect latency remains: the bounded `14:15:01..14:18:14 +03` tail had `86` slow warnings, maximum queue delay `3767.8455ms`, processing `3055.9954ms`, and `104` pending updates; the next roll through `14:21:38 +03` had `90` more slow warnings and zero ERR/FTL.
+Next: Recheck after the first post-deploy Maker-GTD resting order is accepted and receives fill evidence; only then can the new mismatch payload identify the exact failed predicate or prove that the shape rejection no longer occurs.
+Notes: Maker-GTD results remain `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. No Production database, service, strategy, order, configuration, deployment, or Live state was changed during verification.
+Blockers: The target transition did not occur because both observed Maker cycles were valid threshold skips.
+
 ## Active Update 2026-08-27 Maker-GTD Shape Mismatch Telemetry Contract
 Goal: Continue diagnosis of the post-deploy Maker-GTD filled-order shape mismatch without guessing or changing trading behavior.
 Status: Completed locally and independently reviewed; implementation commit/push pending

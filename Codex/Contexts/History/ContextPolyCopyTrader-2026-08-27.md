@@ -74,3 +74,10 @@ Request:
 
 Result:
 Implemented only the approved Maker-GTD shape-mismatch telemetry after approval-only commit `ba9efb16`. The existing reason code and all validation/persistence decisions remain unchanged; diagnostics now identify the locked-row identity or requested Filled-transition stage, every failed predicate, exact timestamp/numeric comparisons, and SHA-256-only RawDecisionJson fingerprints, and the existing warning receives the serialized diagnostic. Focused tests passed 69/69, a dedicated real-PostgreSQL regression passed 1/1, full Release build passed with 0 errors, `git diff --check` passed, both disposable databases were removed, and the local main database remained. Independent semantic review returned PASS with no findings. Production was not changed.
+
+## 2026-08-27T11:21:45.9221624Z
+Request:
+`Выложил, проверяй`
+
+Result:
+Verified the new production process read-only. Logs show startup at `2026-08-27T11:03:12.588Z`; the production heartbeat independently reported `Running`, `Live`, `last_error=NULL`, and exact deployed version `1.0.0+eee3cc6684740658155571ccbcf91bcfd62a5cb2`. At SQL cutoff `2026-08-27T11:20:21.966807Z`, heartbeat age was `8.664s`. Ordinary Paper betting was active with `669` post-start fills through `11:20:01.213773Z`. The exact 28 Maker-GTD strategies were all enabled, unpaused, and Live-disabled. Their first two complete post-deploy decision cycles each produced 28 `reference_average_move_below_bps_threshold` skips, so there were no Maker orders, fills, or shape-mismatch warnings; the new diagnostic runtime branch has not yet been exercised. Two isolated Historical Parity/Legacy backfill ERR headers entered 60-second retry while later heartbeats and fills continued. Existing market-data side-effect latency persisted, reaching `3767.8455ms` queue delay, `3055.9954ms` processing time, and `104` pending updates in a bounded tail. No Production state changed.
