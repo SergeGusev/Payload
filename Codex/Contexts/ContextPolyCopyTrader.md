@@ -1,3 +1,15 @@
+## Active Update 2026-08-27 Recovered Paper Settlement Deadlock Alert
+Goal: Record the first material alert found by the post-deploy Maker-GTD monitor without changing Production.
+Status: Completed read-only; isolated settlement deadlock recovered automatically
+Done:
+- The exact Maker-GTD cycle at `2026-08-27T12:44:30Z` still produced `28/28` valid `reference_average_move_below_bps_threshold` skips, with zero post-start Maker orders/fills/mismatch diagnostics.
+- Server logs recorded one PostgreSQL `40P01: deadlock detected` at `2026-08-27T12:47:01.922Z` while persisting the settlement batch for condition `0x8126f8249ef92b6c0bb5c2358400134a096acff19004b6d6cfc130e5408b9708`; the companion WebSocket apply ERR at `12:47:01.943Z` is the same failed operation, not an independent cause.
+- Read-only DB verification at `2026-08-27T12:48:40.309250Z` found `54` settlement rows for that condition, zero remaining open positions, and `32` settlement rows across the service after the error through `12:47:04.144663Z`, proving automatic recovery.
+- A second health snapshot at `2026-08-27T12:49:05.928310Z` found the service `Running / Live`, unchanged start and exact version `eee3cc6684740658155571ccbcf91bcfd62a5cb2`, `last_error=NULL`, and heartbeat age `51.648s`.
+Next: Keep the read-only Maker-GTD monitor active and alert if settlement deadlocks recur or the first accepted Maker order reaches a terminal state.
+Notes: Safe operational recommendation is observation only because the failed settlement recovered and no open position remained. No Production state changed.
+Blockers: The Maker-GTD diagnostic lifecycle still has no accepted order to exercise it.
+
 ## Active Update 2026-08-27 Deployed Maker-GTD Shape Telemetry Verification
 Goal: Verify the production deployment, service health, betting activity, and the new Maker-GTD mismatch telemetry without changing Production.
 Status: Background read-only monitoring active; deployment and ordinary betting are healthy, but the mismatch branch has not yet been exercised

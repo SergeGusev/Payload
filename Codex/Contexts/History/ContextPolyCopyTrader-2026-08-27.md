@@ -88,3 +88,10 @@ Request:
 
 Result:
 Continued the deployed Maker-GTD telemetry check read-only. At SQL cutoff `2026-08-27T11:50:49.341126Z`, the service remained `Running / Live` on exact build `eee3cc6684740658155571ccbcf91bcfd62a5cb2`, with unchanged start time, `last_error=NULL`, and heartbeat age `35.675s`. Ordinary Paper activity advanced to `1,412` post-start fills through `11:50:01.155305Z`. Three additional exact-family cycles at `11:39:30Z`, `11:44:30Z`, and `11:49:30Z` each produced exactly 28 valid `reference_average_move_below_bps_threshold` skips; Maker-GTD still had zero post-start orders/fills/mismatch diagnostics. No ERR/FTL or slow side-effect warning occurred in the checked `11:39:30Z..11:49:30Z` log window. Created active current-task heartbeat automation `maker-gtd` / `Контроль Maker-GTD после деплоя` at five-minute cadence; it is restricted to read-only Production DB/log checks and must delete itself after the first DB-plus-log-verified accepted-order terminal lifecycle. Maker-GTD label remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. No Production state changed.
+
+## 2026-08-27T12:49:13.9069689Z
+Request:
+`maker-gtd heartbeat at 2026-08-27T12:46:35.444Z`
+
+Result:
+The exact Maker-GTD cycle at `12:44:30Z` again produced 28 valid threshold skips and no order. The log then exposed PostgreSQL `40P01` while persisting one Paper settlement batch at `12:47:01.922Z`; the companion WebSocket apply ERR at `12:47:01.943Z` was the same operation. Independent read-only DB verification found 54 settlement rows and zero open positions for the affected condition, plus 32 settlement rows after the error through `12:47:04.144663Z`. At `12:49:05.928310Z` the service remained `Running / Live` on the expected build with unchanged start, `last_error=NULL`, and heartbeat age `51.648s`. The incident recovered automatically; monitoring continues and no Production state changed.
