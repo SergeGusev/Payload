@@ -129,3 +129,10 @@ Request:
 
 Result:
 Implemented the approved local C#/.NET query decomposition. HistoricalGrossNetParity now reads current Dashboard Gross ranking separately, freezes it only across bounded probes for the next unfinished strategy, passes the selected ranking record into strategy-scoped candidate pages, and reads PaperRun, PaperPosition, PaperSettlement, PaperSellFill, and LiveOrder separately. The selected strategy remains active through Exact and direct Fixed0p0333 Fallback work, after which current Gross is reread. Financial formulas, cutoff, timeout, page size, completed evidence, ordinary new-bet accounting, schema, and configuration remain unchanged. Focused tests passed 28/28, the financial regression matrix passed 102/102, fresh loopback PostgreSQL integration passed 4/4 without skips, and Release solution build passed with zero errors. Independent semantic review passed with no findings. No Production operation or deployment was performed.
+
+## 2026-08-27T19:37:51.0477405Z
+Request:
+`APPROVE RC-20260827-eth-up8-lossdiff-children sha256:221bd379c6611cafd373e5636a627f1886f8b5af3544696d7fd113406588195d`
+
+Result:
+After approval-only checkpoint `06d9b912`, prepared exactly the requested ETH Up 8 bps LossDiff 3+ and LossDiff 16+ Positive catalog children, migration 0003 with zero-start state and no history, exact-parent diagnostic persistence, focused tests, and directly affected documentation. Focused tests passed 4/4, all LossDiff tests passed 26 with 2 gated legacy-history skips, the full migration class passed 11/11 without skips on an isolated disposable PostgreSQL 17.5 cluster, and the Release solution built with zero errors. Clean HEAD already fails 131 full-suite tests; the current diff fails 128 with zero new failed test names. Independent review found no implementation mismatch but blocked completion because approved VER-005 literally requires zero full-suite failures. No commit/push, deployment, Local/Production database mutation, history generation, Live change, or venue action was performed; user choice is required between a baseline-aware contract revision and expanding scope to repair the pre-existing suite.

@@ -1,3 +1,15 @@
+## Active Update 2026-08-27 ETH Up8 LossDiff Children
+Goal: Add deployable LossDiff 3+ and LossDiff 16+ Positive children for the exact ETH Up 8 bps Reference Average Premarket parent, without deployment or history generation.
+Status: Blocked before contract completion, commit, and push
+Done:
+- Recorded the exact user approval for `RC-20260827-eth-up8-lossdiff-children` in approval checkpoint `06d9b912`, then prepared exactly two catalog children, ordered transactional migration 0003, exact-parent diagnostics retention, focused tests, and directly affected documentation.
+- The migration seeds both children enabled and unpaused in Paper with `live_stakes=false`, $1 stakes, $100 Live balance, exact Up8 parent assignments, and durable zero-cutoff Reset 3 / Positive 16 states; it creates no history and leaves the old 0002 migration/backfill command unchanged.
+- Focused tests passed 4/4; all LossDiff tests passed 26 with 2 separately gated legacy history tests skipped; the complete migration class passed 11/11 with no skips on a disposable isolated PostgreSQL 17.5 cluster; Release solution build passed with 0 errors and 126 existing warnings.
+- A clean-HEAD full-suite baseline failed 131/1701 while the current diff failed 128/1704; exact-name comparison found zero new failures and three baseline-only failures. Independent semantic review found no implementation mismatch but correctly refused PASS because approved VER-005 literally requires zero full-suite failures.
+Next: User chooses whether to revise the contract to a baseline-aware `zero new failures` criterion or expand scope to repair the pre-existing full-suite failures; then regenerate/approve the semantic digest before final review, gates, commit, and push.
+Notes: No Local/Production database, service, deployment, strategy flag, history, wallet, or venue state changed. The disposable PostgreSQL server was stopped and loopback port 55493 is closed.
+Blockers: The approved contract requires a green full test project, but clean HEAD already has 131 failures; changing that criterion or expanding the repair scope requires explicit user approval.
+
 ## Active Update 2026-08-27 Historical Parity Candidate Query Decomposition
 Goal: Remove the HistoricalGrossNetParity candidate-selection timeout while preserving current-Gross order, full one-strategy completion, and all approved accounting behavior.
 Status: Completed locally; deployment and Production runtime verification were not performed

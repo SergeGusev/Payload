@@ -209,13 +209,17 @@ other later information are forbidden inputs.
 
 ### Fixed LossDiff-gated child intent
 
-The two fixed ETH LossDiff children are descendants only for signal coupling;
-they do not inherit a separate execution model. Their sole parent is
-`ETH Up or Down 5m 1 Diff Confirmed Average Premarket`
-(`b7c50005-0000-4000-8204-000000000001`). A child is considered only after that
-exact parent has actually entered the same market and only when the child's
-durable pre-entry LossDiff value meets its fixed threshold. A skipped, rejected,
-or zero-fill parent creates no child order.
+The four fixed ETH LossDiff children are descendants only for signal coupling;
+they do not inherit a separate execution model. The Reset `4+` and Positive
+`13+` children have sole parent `ETH Up or Down 5m 1 Diff Confirmed Average
+Premarket` (`b7c50005-0000-4000-8204-000000000001`). The Reset `3+` and
+Positive `16+` children have sole parent `ETH Up or Down 5m Up 8 bps Reference
+Average Premarket` (`b7c50005-0000-4000-8137-000000000108`). A child is
+considered only after its corresponding exact parent has actually entered the
+same market and only when the child's durable pre-entry LossDiff value meets its
+fixed threshold. A skipped, rejected, or zero-fill parent creates no child
+order. Each pair starts at zero at its own migration rollout cutoff and ignores
+older parent outcomes until a separately approved history operation is run.
 
 For an eligible child, the parent FAK `ExecutionIntent` is already frozen. The
 child receives its own strategy and decision identifiers but preserves the same
@@ -230,12 +234,13 @@ the parent itself is Live, the existing accepted-parent-fill path remains in
 effect. In both cases, the Live-shadow path submits the unchanged child intent,
 performs no new order-book read, and does not resize or reprice from the parent's
 eventual fill. Parent fill data and each child's venue response are outcome data
-used only for their separate accounting and later decisions. Both children are
-seeded with `live_stakes=false`; this parity path does not itself authorize Live
-trading.
+used only for their separate accounting and later decisions. All four children
+are seeded with `live_stakes=false`; this parity path does not itself authorize
+Live trading.
 
-The one-time pre-rollout history backfill does not create a new decision-time
-execution rule and is not consulted by future LossDiff gating. It clones only a
+The one-time pre-rollout history backfill for the older Reset `4+` and Positive
+`13+` pair does not create a new decision-time execution rule and is not
+consulted by future LossDiff gating. It clones only a
 causally selected, already persisted parent `FAK` signal/order/fill/run/position/
 settlement chain before `2026-08-23T19:44:26.488143Z`, preserves the parent's
 exact intent and accounting fields, and writes no LossDiff state/event or Live

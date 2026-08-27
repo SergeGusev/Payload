@@ -10133,8 +10133,17 @@ FROM claimed;
 	private static bool IsLossDiffPlacementSkipDiagnostics(StrategyMarketPaperRun run)
 	{
 		var normalizedStrategyId = StrategyIds.Normalize(run.StrategyId);
-		if ((normalizedStrategyId != StrategyIds.EthLossDiff4Plus &&
-			 normalizedStrategyId != StrategyIds.EthLossDiff13PlusPositive) ||
+		var expectedParentStrategyId = normalizedStrategyId switch
+		{
+			var id when id == StrategyIds.EthLossDiff4Plus ||
+				id == StrategyIds.EthLossDiff13PlusPositive =>
+				StrategyIds.EthDiffConfirmedAveragePremarketParent,
+			var id when id == StrategyIds.EthUp8BpsLossDiff3Plus ||
+				id == StrategyIds.EthUp8BpsLossDiff16PlusPositive =>
+				StrategyIds.EthUp8BpsReferenceAveragePremarketParent,
+			_ => Guid.Empty
+		};
+		if (expectedParentStrategyId == Guid.Empty ||
 			!string.Equals(run.SkipReason, "parent_lossdiff_below_threshold", StringComparison.Ordinal) ||
 			string.IsNullOrWhiteSpace(run.SkipDiagnosticsJson))
 		{
@@ -10153,7 +10162,7 @@ FROM claimed;
 				StrategyIds.Normalize(parsedChildStrategyId) == normalizedStrategyId &&
 				root.TryGetProperty("parent_strategy_id", out var parentStrategyId) &&
 				Guid.TryParse(parentStrategyId.GetString(), out var parsedParentStrategyId) &&
-				StrategyIds.Normalize(parsedParentStrategyId) == StrategyIds.EthDiffConfirmedAveragePremarketParent &&
+				StrategyIds.Normalize(parsedParentStrategyId) == expectedParentStrategyId &&
 				root.TryGetProperty("parent_run_id", out var parentRunId) &&
 				Guid.TryParse(parentRunId.GetString(), out _) &&
 				root.TryGetProperty("loss_diff", out var lossDiff) &&

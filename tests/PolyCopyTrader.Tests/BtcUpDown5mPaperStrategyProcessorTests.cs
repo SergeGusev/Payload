@@ -205,39 +205,43 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public void StrategyIds_LossDiffCatalogContainsExactlyTwoFixedEthChildren()
+    public void StrategyIds_LossDiffCatalogContainsExactlyFourFixedEthChildren()
     {
         var children = StrategyIds.UpDown5mStrategyVariants
             .Where(variant => variant.Behavior is
                 BtcUpDown5mStrategyBehavior.LossDiffResetMirror or
                 BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror)
-            .OrderBy(variant => variant.DecisionDepth)
-            .ToArray();
+            .ToDictionary(variant => variant.Id);
 
-        Assert.Collection(
-            children,
-            reset =>
-            {
-                Assert.Equal(StrategyIds.EthLossDiff4Plus, reset.Id);
-                Assert.Equal(StrategyIds.EthLossDiff4PlusCode, reset.Code);
-                Assert.Equal("ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+", reset.Name);
-                Assert.Equal(BtcUpDown5mStrategyBehavior.LossDiffResetMirror, reset.Behavior);
-                Assert.Equal(4, reset.DecisionDepth);
-                Assert.Equal(StrategyIds.EthDiffConfirmedAveragePremarketParent, reset.ParentStrategyId);
-                Assert.Equal(-30, reset.EntryDelaySeconds);
-                Assert.False(reset.PaperOnly);
-            },
-            positive =>
-            {
-                Assert.Equal(StrategyIds.EthLossDiff13PlusPositive, positive.Id);
-                Assert.Equal(StrategyIds.EthLossDiff13PlusPositiveCode, positive.Code);
-                Assert.Equal("ETH 5m 1 Diff Confirmed Average Premarket LossDiff 13+ Positive", positive.Name);
-                Assert.Equal(BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror, positive.Behavior);
-                Assert.Equal(13, positive.DecisionDepth);
-                Assert.Equal(StrategyIds.EthDiffConfirmedAveragePremarketParent, positive.ParentStrategyId);
-                Assert.Equal(-30, positive.EntryDelaySeconds);
-                Assert.False(positive.PaperOnly);
-            });
+        Assert.Equal(4, children.Count);
+        AssertLossDiffCatalogVariant(
+            children[StrategyIds.EthLossDiff4Plus],
+            StrategyIds.EthLossDiff4PlusCode,
+            "ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+",
+            BtcUpDown5mStrategyBehavior.LossDiffResetMirror,
+            4,
+            StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        AssertLossDiffCatalogVariant(
+            children[StrategyIds.EthLossDiff13PlusPositive],
+            StrategyIds.EthLossDiff13PlusPositiveCode,
+            "ETH 5m 1 Diff Confirmed Average Premarket LossDiff 13+ Positive",
+            BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror,
+            13,
+            StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        AssertLossDiffCatalogVariant(
+            children[StrategyIds.EthUp8BpsLossDiff3Plus],
+            StrategyIds.EthUp8BpsLossDiff3PlusCode,
+            "ETH 5m Up 8 bps Reference Average Premarket LossDiff 3+",
+            BtcUpDown5mStrategyBehavior.LossDiffResetMirror,
+            3,
+            StrategyIds.EthUp8BpsReferenceAveragePremarketParent);
+        AssertLossDiffCatalogVariant(
+            children[StrategyIds.EthUp8BpsLossDiff16PlusPositive],
+            StrategyIds.EthUp8BpsLossDiff16PlusPositiveCode,
+            "ETH 5m Up 8 bps Reference Average Premarket LossDiff 16+ Positive",
+            BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror,
+            16,
+            StrategyIds.EthUp8BpsReferenceAveragePremarketParent);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Id).Distinct().Count());
@@ -247,6 +251,23 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Name).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    private static void AssertLossDiffCatalogVariant(
+        BtcUpDown5mStrategyVariant variant,
+        string expectedCode,
+        string expectedName,
+        BtcUpDown5mStrategyBehavior expectedBehavior,
+        int expectedThreshold,
+        Guid expectedParentStrategyId)
+    {
+        Assert.Equal(expectedCode, variant.Code);
+        Assert.Equal(expectedName, variant.Name);
+        Assert.Equal(expectedBehavior, variant.Behavior);
+        Assert.Equal(expectedThreshold, variant.DecisionDepth);
+        Assert.Equal(expectedParentStrategyId, variant.ParentStrategyId);
+        Assert.Equal(-30, variant.EntryDelaySeconds);
+        Assert.False(variant.PaperOnly);
     }
 
     [Fact]
@@ -572,8 +593,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [Fact]
     public void StrategyIds_ExcludeCryptoBinanceBpsVariants()
     {
-        Assert.Equal(1656, StrategyIds.CryptoUpDown5mVariants.Count);
-        Assert.Equal(3006, StrategyIds.UpDown5mStrategyVariants.Count);
+        Assert.Equal(1658, StrategyIds.CryptoUpDown5mVariants.Count);
+        Assert.Equal(3008, StrategyIds.UpDown5mStrategyVariants.Count);
         Assert.Equal(321, StrategyIds.BtcLowerEnterPremarketVariants.Count);
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
@@ -581,7 +602,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(
             StrategyIds.UpDown5mStrategyVariants.Count,
             StrategyIds.UpDown5mStrategyVariants.Select(variant => variant.Code).Distinct().Count());
-        Assert.Equal(949, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+        Assert.Equal(953, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "ETH", StringComparison.OrdinalIgnoreCase)));
         Assert.Equal(705, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase)));
@@ -679,10 +700,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildRoiMirror));
         Assert.Equal(3, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror));
-        Assert.Single(StrategyIds.CryptoUpDown5mVariants, variant =>
-            variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffResetMirror);
-        Assert.Single(StrategyIds.CryptoUpDown5mVariants, variant =>
-            variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror);
+        Assert.Equal(2, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffResetMirror));
+        Assert.Equal(2, StrategyIds.CryptoUpDown5mVariants.Count(variant =>
+            variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror));
         AssertDiffCounterTrendFakPremarketGrid(StrategyIds.CryptoUpDown5mVariants, "ETH");
         AssertDiffCounterTrendFakPremarketGrid(StrategyIds.CryptoUpDown5mVariants, "SOL");
         AssertDiffProgressGrid(StrategyIds.CryptoUpDown5mVariants, "ETH");
@@ -6834,6 +6855,71 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             parent.Id,
             winEnteredAtUtc.AddMinutes(6));
         Assert.Equal(12, reconciled[child.Id].CurrentValue);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProcessAsync_EthUp8LossDiffParentMirrorUsesExactThresholdAndFrozenIntent(
+        bool positiveMode)
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthUp8BpsReferenceAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == (positiveMode
+                ? StrategyIds.EthUp8BpsLossDiff16PlusPositive
+                : StrategyIds.EthUp8BpsLossDiff3Plus));
+        var mode = positiveMode
+            ? StrategyChildParentAssignmentModes.LossDiffPositive
+            : StrategyChildParentAssignmentModes.LossDiffReset;
+        var threshold = positiveMode ? 16 : 3;
+        var tradingClient = new CapturingTradingClient
+        {
+            PlacementResult = new LiveOrderPlacementResult(
+                true,
+                positiveMode ? "0xeth-up8-lossdiff-positive" : "0xeth-up8-lossdiff-reset",
+                "matched",
+                null,
+                "0.80",
+                "1.25",
+                "{\"status\":\"matched\",\"makingAmount\":\"0.80\",\"takingAmount\":\"1.25\"}",
+                "{}")
+        };
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 2020m,
+            [parent.Code, child.Code],
+            tradingClient,
+            configureRepository: (repository, now) => ConfigureLossDiffChild(
+                repository,
+                child,
+                mode,
+                threshold,
+                now,
+                Enumerable.Repeat(false, threshold).ToArray()),
+            liveStrategyCodes: [child.Code]);
+
+        var result = await context.Processor.ProcessAsync();
+
+        Assert.Equal(2, result.EntriesPlaced);
+        Assert.Equal(1, context.ClobClient.GetOrderBookCalls);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.DoesNotContain(context.Repository.LiveOrders, order => order.StrategyId == parent.Id);
+        var childLiveOrder = Assert.Single(context.Repository.LiveOrders, order => order.StrategyId == child.Id);
+        var parentPaperOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == parent.Id);
+        var childPaperOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
+        Assert.Equal(parentPaperOrder.AssetId, childPaperOrder.AssetId);
+        Assert.Equal(parentPaperOrder.Outcome, childPaperOrder.Outcome);
+        using var decision = JsonDocument.Parse(Assert.IsType<string>(childPaperOrder.RawDecisionJson));
+        var lossDiff = decision.RootElement.GetProperty("loss_diff");
+        Assert.Equal(threshold, lossDiff.GetProperty("pre_entry_value").GetInt32());
+        Assert.Equal(threshold, lossDiff.GetProperty("threshold").GetInt32());
+        Assert.True(lossDiff.GetProperty("gate_passed").GetBoolean());
+        var intent = decision.RootElement.GetProperty("parent_execution_intent");
+        Assert.Equal(parentPaperOrder.AssetId, intent.GetProperty("asset_id").GetString());
+        Assert.Equal(parentPaperOrder.NotionalUsd, intent.GetProperty("target_notional_usd").GetDecimal());
+        Assert.Equal("FAK", intent.GetProperty("order_type").GetString());
+        Assert.Equal(childLiveOrder.AssetId, intent.GetProperty("asset_id").GetString());
+        Assert.Equal(childLiveOrder.Price, intent.GetProperty("maximum_order_price").GetDecimal());
     }
 
     [Fact]
@@ -15275,7 +15361,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         DateTimeOffset now,
         IReadOnlyList<bool> wonOutcomes)
     {
-        var parentStrategyId = StrategyIds.EthDiffConfirmedAveragePremarketParent;
+        var parentStrategyId = child.ParentStrategyId ??
+            throw new InvalidOperationException($"LossDiff child {child.Code} must define its parent strategy.");
         var startedAtUtc = now.AddHours(-3);
         repository.StrategyChildParentAssignments.Add(new StrategyChildParentAssignment(
             Guid.NewGuid(),

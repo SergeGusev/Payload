@@ -73,9 +73,10 @@ public sealed class PostgresSchemaMigrationTests
     public void DefaultCatalog_IsBoundToApprovedLegacyChecksum()
     {
         var catalog = PostgresSchemaMigrationCatalog.CreateDefault();
-        Assert.Equal(2, catalog.Count);
+        Assert.Equal(3, catalog.Count);
         var baseline = catalog[0];
         var lossDiff = catalog[1];
+        var ethUp8LossDiff = catalog[2];
 
         Assert.Equal(PostgresSchemaMigrationCatalog.LegacyBaselineId, baseline.Id);
         Assert.Equal(
@@ -94,6 +95,18 @@ public sealed class PostgresSchemaMigrationTests
         Assert.Contains("ON CONFLICT (child_strategy_id) DO NOTHING", lossDiff.Sql, StringComparison.Ordinal);
         Assert.DoesNotContain("SELECT count(*)", lossDiff.Sql, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("INSERT INTO public.strategy_market_paper_runs", lossDiff.Sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(PostgresEthUp8LossDiffStrategySchemaMigration.Id, ethUp8LossDiff.Id);
+        Assert.Equal(2, ethUp8LossDiff.Order);
+        Assert.True(ethUp8LossDiff.Transactional);
+        Assert.False(ethUp8LossDiff.IsLegacyBaseline);
+        Assert.Equal(
+            PostgresEthUp8LossDiffStrategySchemaMigration.SemanticChecksum,
+            ethUp8LossDiff.SemanticChecksum);
+        Assert.Contains(StrategyIds.EthUp8BpsLossDiff3PlusIdValue, ethUp8LossDiff.Sql, StringComparison.Ordinal);
+        Assert.Contains(StrategyIds.EthUp8BpsLossDiff16PlusPositiveIdValue, ethUp8LossDiff.Sql, StringComparison.Ordinal);
+        Assert.Contains(StrategyIds.EthUp8BpsReferenceAveragePremarketParentIdValue, ethUp8LossDiff.Sql, StringComparison.Ordinal);
+        Assert.Contains("ON CONFLICT (child_strategy_id) DO NOTHING", ethUp8LossDiff.Sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("INSERT INTO public.strategy_market_paper_runs", ethUp8LossDiff.Sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -357,7 +370,7 @@ VALUES ('unknown-migration', repeat('a', 64), clock_timestamp(), 'test unknown')
 
     [Fact]
     [Trait("Category", "PostgresMigrationIntegration")]
-    public async Task LossDiffMigration_StartsAtZeroWithoutHistoryAndDoesNotResetOnSecondStart()
+    public async Task EthUp8LossDiffMigration_StartsAtZeroWithoutHistoryAndDoesNotResetOnSecondStart()
     {
         var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -413,29 +426,32 @@ VALUES (
         var initializer = new PostgresSchemaInitializer(factory);
         await initializer.InitializeAsync();
 
-        Assert.Equal(2, await ScalarAsync<int>(
+        Assert.Equal(4, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.strategy_loss_diff_states;"));
         Assert.Equal(0, await ScalarAsync<int>(
             connectionString,
             "SELECT sum(current_value)::integer FROM public.strategy_loss_diff_states;"));
-        Assert.Equal(1, await ScalarAsync<int>(
+        Assert.Equal(2, await ScalarAsync<int>(
             connectionString,
             "SELECT count(DISTINCT started_at_utc)::integer FROM public.strategy_loss_diff_states;"));
         Assert.Equal(0, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.strategy_loss_diff_parent_events;"));
-        Assert.Equal(2, await ScalarAsync<int>(
+        Assert.Equal(4, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.strategy_child_parent_assignments WHERE child_mode IN ('LossDiffReset', 'LossDiffPositive') AND ended_at_utc IS NULL;"));
         Assert.Equal(2, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.strategies WHERE id IN ('b7c50005-0000-4000-8225-000000000004', 'b7c50005-0000-4000-8225-000000000013') AND enabled AND NOT paused AND NOT live_stakes;"));
+        Assert.Equal(2, await ScalarAsync<int>(
+            connectionString,
+            "SELECT count(*)::integer FROM public.strategies WHERE id IN ('b7c50005-0000-4000-8229-000000000003', 'b7c50005-0000-4000-8229-000000000016') AND enabled AND NOT paused AND NOT auto_live_paused AND NOT live_stakes AND paper_stake_amount = 1.00 AND live_stake_amount = 1.00 AND live_available_balance = 100.00;"));
 
         var startedAt = DateTime.SpecifyKind(
             await ScalarAsync<DateTime>(
                 connectionString,
-                "SELECT min(started_at_utc) FROM public.strategy_loss_diff_states;"),
+                "SELECT min(started_at_utc) FROM public.strategy_loss_diff_states WHERE parent_strategy_id = 'b7c50005-0000-4000-8204-000000000001';"),
             DateTimeKind.Utc);
         var firstEntry = new DateTimeOffset(startedAt).AddMinutes(1);
         var cutoff = firstEntry.AddHours(1);
@@ -444,7 +460,7 @@ VALUES (
             Enumerable.Range(1, 4).Select(index =>
             {
                 var enteredAt = firstEntry.AddMinutes((index - 1) * 5);
-                return $"('b7c50005-0000-4000-8227-{index.ToString("000000000000", System.Globalization.CultureInfo.InvariantCulture)}', 'post-lossdiff-parent-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}', '{enteredAt:O}', '{enteredAt.AddMinutes(5):O}', -1.00)";
+                return $"('b7c50005-0000-4000-8231-{index.ToString("000000000000", System.Globalization.CultureInfo.InvariantCulture)}', 'post-lossdiff-parent-{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}', '{enteredAt:O}', '{enteredAt.AddMinutes(5):O}', -1.00)";
             }));
         await ExecuteAsync(
             connectionString,
@@ -614,15 +630,96 @@ VALUES (
 
         await ExecuteAsync(
             connectionString,
-            "UPDATE public.strategy_loss_diff_states SET current_value = 7;");
+            "UPDATE public.strategy_loss_diff_states SET current_value = 7 WHERE parent_strategy_id = 'b7c50005-0000-4000-8204-000000000001';");
         await initializer.InitializeAsync();
 
         Assert.Equal(14, await ScalarAsync<int>(
             connectionString,
             "SELECT sum(current_value)::integer FROM public.strategy_loss_diff_states;"));
-        Assert.Equal(2, await ScalarAsync<int>(
+        Assert.Equal(0, await ScalarAsync<int>(
+            connectionString,
+            "SELECT sum(current_value)::integer FROM public.strategy_loss_diff_states WHERE parent_strategy_id = 'b7c50005-0000-4000-8137-000000000108';"));
+        Assert.Equal(3, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.schema_migration_history;"));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresMigrationIntegration")]
+    public async Task EthUp8LossDiffState_UsesResetThreeAndPositiveSixteenAfterZeroCutoff()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        await ResetPublicSchemaAsync(connectionString);
+        var factory = CreateFactory(connectionString);
+        var baseline = PostgresSchemaMigrationCatalog.CreateDefault()[0];
+        await new PostgresSchemaInitializer(factory, [baseline]).InitializeAsync();
+        await ExecuteAsync(
+            connectionString,
+            CreateSettledLossDiffParentRunsSql(
+                StrategyIds.EthUp8BpsReferenceAveragePremarketParent,
+                new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+                [-1m],
+                "eth-up8-lossdiff-pre-rollout"));
+
+        var initializer = new PostgresSchemaInitializer(factory);
+        await initializer.InitializeAsync();
+
+        Assert.Equal(0, await ScalarAsync<int>(
+            connectionString,
+            $"SELECT sum(current_value)::integer FROM public.strategy_loss_diff_states WHERE child_strategy_id IN ('{StrategyIds.EthUp8BpsLossDiff3Plus:D}', '{StrategyIds.EthUp8BpsLossDiff16PlusPositive:D}');"));
+        Assert.Equal(0, await ScalarAsync<int>(
+            connectionString,
+            $"SELECT count(*)::integer FROM public.strategy_loss_diff_parent_events WHERE child_strategy_id IN ('{StrategyIds.EthUp8BpsLossDiff3Plus:D}', '{StrategyIds.EthUp8BpsLossDiff16PlusPositive:D}');"));
+
+        var startedAt = DateTime.SpecifyKind(
+            await ScalarAsync<DateTime>(
+                connectionString,
+                $"SELECT started_at_utc FROM public.strategy_loss_diff_states WHERE child_strategy_id = '{StrategyIds.EthUp8BpsLossDiff3Plus:D}';"),
+            DateTimeKind.Utc);
+        var firstEntry = new DateTimeOffset(startedAt).AddMinutes(1);
+        await ExecuteAsync(
+            connectionString,
+            CreateSettledLossDiffParentRunsSql(
+                StrategyIds.EthUp8BpsReferenceAveragePremarketParent,
+                firstEntry,
+                Enumerable.Repeat(-1m, 16).ToArray(),
+                "eth-up8-lossdiff-post-rollout"));
+
+        var repository = new PostgresAppRepository(factory);
+        var lossCutoff = firstEntry.AddMinutes(16 * 5 + 1);
+        var afterLosses = await repository.ReconcileStrategyLossDiffStatesAsync(
+            StrategyIds.EthUp8BpsReferenceAveragePremarketParent,
+            lossCutoff);
+        var retryAfterLosses = await repository.ReconcileStrategyLossDiffStatesAsync(
+            StrategyIds.EthUp8BpsReferenceAveragePremarketParent,
+            lossCutoff);
+        Assert.Equal(16, afterLosses[StrategyIds.EthUp8BpsLossDiff3Plus].CurrentValue);
+        Assert.Equal(16, afterLosses[StrategyIds.EthUp8BpsLossDiff16PlusPositive].CurrentValue);
+        Assert.Equal(16, retryAfterLosses[StrategyIds.EthUp8BpsLossDiff3Plus].CurrentValue);
+        Assert.Equal(16, retryAfterLosses[StrategyIds.EthUp8BpsLossDiff16PlusPositive].CurrentValue);
+
+        var winEntry = firstEntry.AddMinutes(16 * 5 + 5);
+        await ExecuteAsync(
+            connectionString,
+            CreateSettledLossDiffParentRunsSql(
+                StrategyIds.EthUp8BpsReferenceAveragePremarketParent,
+                winEntry,
+                [1m],
+                "eth-up8-lossdiff-win"));
+        var afterWin = await repository.ReconcileStrategyLossDiffStatesAsync(
+            StrategyIds.EthUp8BpsReferenceAveragePremarketParent,
+            winEntry.AddMinutes(6));
+
+        Assert.Equal(0, afterWin[StrategyIds.EthUp8BpsLossDiff3Plus].CurrentValue);
+        Assert.Equal(15, afterWin[StrategyIds.EthUp8BpsLossDiff16PlusPositive].CurrentValue);
+        Assert.Equal(34, await ScalarAsync<int>(
+            connectionString,
+            $"SELECT count(*)::integer FROM public.strategy_loss_diff_parent_events WHERE child_strategy_id IN ('{StrategyIds.EthUp8BpsLossDiff3Plus:D}', '{StrategyIds.EthUp8BpsLossDiff16PlusPositive:D}');"));
     }
 
     [Fact]
@@ -651,7 +748,7 @@ JOIN pg_namespace ns ON ns.oid=cls.relnamespace
 WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
 """);
         Assert.True(relationCount > 100);
-        Assert.Equal(2, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(3, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
 
         await Task.Delay(25);
         await initializer.InitializeAsync();
@@ -659,7 +756,64 @@ WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
         Assert.Equal(
             firstUpdatedAt,
             await ScalarAsync<DateTime>(connectionString, "SELECT max(updated_at_utc) FROM public.strategies;"));
-        Assert.Equal(2, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(3, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+    }
+
+    private static string CreateSettledLossDiffParentRunsSql(
+        Guid parentStrategyId,
+        DateTimeOffset firstEntryUtc,
+        IReadOnlyList<decimal> realizedPnlValues,
+        string identityPrefix)
+    {
+        var values = string.Join(
+            ",\n",
+            realizedPnlValues.Select((realizedPnlUsd, index) =>
+            {
+                var enteredAtUtc = firstEntryUtc.AddMinutes(index * 5);
+                var settledAtUtc = enteredAtUtc.AddMinutes(5);
+                return $"('{Guid.NewGuid():D}', '{identityPrefix}-{index}', '{enteredAtUtc:O}', '{settledAtUtc:O}', {realizedPnlUsd.ToString(System.Globalization.CultureInfo.InvariantCulture)})";
+            }));
+
+        return $$"""
+INSERT INTO public.strategy_market_paper_runs (
+    id, strategy_id, market_id, condition_id, market_slug, market_title, category,
+    market_start_utc, market_end_utc, detected_at_utc, entry_due_at_utc, status,
+    selected_asset_id, selected_outcome, entry_price, stake_usd, size_shares,
+    signal_id, paper_order_id, entered_at_utc, settlement_price, settlement_value_usd,
+    realized_pnl_usd, settled_at_utc, skip_reason, created_at_utc, updated_at_utc
+)
+SELECT
+    source.id::uuid,
+    '{{parentStrategyId:D}}'::uuid,
+    source.market_id,
+    source.market_id || '-condition',
+    source.market_id || '-slug',
+    'ETH Up 8 bps LossDiff parent outcome',
+    'ETH Up/Down 5m Up Bps Reference Average Premarket',
+    source.entered_at_utc::timestamptz,
+    source.settled_at_utc::timestamptz,
+    source.entered_at_utc::timestamptz,
+    source.entered_at_utc::timestamptz,
+    'Settled',
+    source.market_id || '-asset',
+    CASE WHEN source.realized_pnl_usd > 0 THEN 'Up' ELSE 'Down' END,
+    0.50,
+    1.00,
+    2.00,
+    NULL,
+    NULL,
+    source.entered_at_utc::timestamptz,
+    CASE WHEN source.realized_pnl_usd > 0 THEN 1 ELSE 0 END,
+    CASE WHEN source.realized_pnl_usd > 0 THEN 2 ELSE 0 END,
+    source.realized_pnl_usd,
+    source.settled_at_utc::timestamptz,
+    NULL,
+    source.entered_at_utc::timestamptz,
+    source.settled_at_utc::timestamptz
+FROM (VALUES
+{{values}}
+) AS source(id, market_id, entered_at_utc, settled_at_utc, realized_pnl_usd);
+""";
     }
 
     private static PostgresSchemaMigration Migration(

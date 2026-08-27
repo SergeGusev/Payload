@@ -47,7 +47,24 @@ public static class PostgresSchemaMigrationCatalog
                 $"actual {lossDiffStrategies.SemanticChecksum}.");
         }
 
-        return ValidateAndOrder([baseline, lossDiffStrategies]);
+        var ethUp8LossDiffStrategies = new PostgresSchemaMigration(
+            order: 2,
+            id: PostgresEthUp8LossDiffStrategySchemaMigration.Id,
+            sql: PostgresEthUp8LossDiffStrategySchemaMigration.Sql,
+            transactional: true,
+            details: "seed two fixed ETH Up 8 bps LossDiff children with zero-cutoff durable parent-outcome state");
+        if (!string.Equals(
+                ethUp8LossDiffStrategies.SemanticChecksum,
+                PostgresEthUp8LossDiffStrategySchemaMigration.SemanticChecksum,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"PostgreSQL migration checksum mismatch for '{PostgresEthUp8LossDiffStrategySchemaMigration.Id}'. " +
+                $"Expected {PostgresEthUp8LossDiffStrategySchemaMigration.SemanticChecksum}, " +
+                $"actual {ethUp8LossDiffStrategies.SemanticChecksum}.");
+        }
+
+        return ValidateAndOrder([baseline, lossDiffStrategies, ethUp8LossDiffStrategies]);
     }
 
     public static IReadOnlyList<PostgresSchemaMigration> ValidateAndOrder(
