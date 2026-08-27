@@ -63,8 +63,8 @@
           "kind": "inspection",
           "command": "git merge-base master codex/reference-average-available-windows; git rev-list --left-right --count master...codex/reference-average-available-windows; git merge --ff-only codex/reference-average-available-windows",
           "expected": "The pre-contract preflight merge-base is the old master tip and divergence is 0/140; after the approval-only checkpoint, local master advances by fast-forward to that checkpoint with no product-file change in the checkpoint.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Pre-contract merge-base was 02b13813aa2157e69c3a313b4bc86712dea9c674 and divergence was 0/140. Approval checkpoint 2635c56031b1463c0134ad42a225f20086906725 has sole parent 922c2b0232450cf3b95d2b64a5d183c94834a029 and changes only this contract. master reflog records 02b13813 -> 2635c560 as Fast-forward."
         }
       ]
     },
@@ -88,8 +88,8 @@
           "kind": "inspection",
           "command": "git push origin master; git status --porcelain=v1 --branch; git rev-parse master origin/master codex/reference-average-available-windows origin/codex/reference-average-available-windows",
           "expected": "The push succeeds without force; immediate checkpoint equality is verified; after final bookkeeping the worktree is on clean master tracking origin/master, both master refs are equal, and they contain the approval checkpoint.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "A normal git push advanced origin/master from 02b13813 to 2635c560. Immediately afterward master, origin/master, codex/reference-average-available-windows, and origin/codex/reference-average-available-windows all resolved to 2635c560. The checked-out branch is master, upstream is origin/master, and divergence is 0/0."
         }
       ]
     },
@@ -112,8 +112,8 @@
           "kind": "inspection",
           "command": "Compare git for-each-ref refs/heads/codex refs/remotes/origin/codex and git stash list snapshots taken before and after the fast-forward.",
           "expected": "Every pre-existing codex/* ref except the explicitly allowed approval-only source-branch advance retains the same object ID, and stash@{0} retains object ID 94b5b3c21613947d490d5874d89bb9c0d1df6d62.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Before/after ref snapshots show every codex/* ref unchanged except the explicitly allowed source branch approval checkpoint. codex/reference-average-partial-24h remains e152b4aa. stash@{0} remains exactly 94b5b3c21613947d490d5874d89bb9c0d1df6d62."
         }
       ]
     }
@@ -128,8 +128,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/semantic_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

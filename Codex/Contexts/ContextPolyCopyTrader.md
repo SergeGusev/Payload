@@ -1,3 +1,17 @@
+## Active Update 2026-08-28 Fast-forward Master
+Goal: Return the repository to `master` without losing the committed work accumulated on the former deployment branch.
+Status: Completed
+Done:
+- Verified the original relationship was a strict `0/140` fast-forward from `master` at `02b13813` through source anchor `922c2b02`.
+- Recorded approved contract `RC-20260828-fast-forward-master` in approval-only checkpoint `2635c560`, whose sole parent is `922c2b02` and whose only changed file is the contract.
+- Fast-forwarded local `master` to `2635c560` and pushed it normally to `origin/master`; no force, rebase, cherry-pick, squash, merge commit, or history rewrite occurred.
+- Left the worktree on `master` tracking `origin/master`; immediately after the push both master refs and both former deployment-branch refs matched at `2635c560`.
+- Preserved every other `codex/*` ref and retained `stash@{0}` unchanged at `94b5b3c2`; `codex/reference-average-partial-24h` remains at `e152b4aa`.
+- Independent reviewer `agent:/root/semantic_reviewer` compared the verbatim requests, approved contract, refs, history, and reflogs and returned PASS with no findings.
+Next: None.
+Notes: This operation changed Git refs and mandatory bookkeeping only. It did not change product contents, deploy, restart services, or access Production.
+Blockers: None.
+
 ## Active Update 2026-08-27 ETH Up8 LossDiff Children
 Goal: Add deployable LossDiff 3+ and LossDiff 16+ Positive children for the exact ETH Up 8 bps Reference Average Premarket parent, without deployment or history generation.
 Status: Blocked before contract completion, commit, and push
