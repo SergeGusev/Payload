@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260827-eth-up8-lossdiff-children",
+  "title": "Add ETH Up 8 bps LossDiff 3+ and Positive 16+ children",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Смоделируй стратегии LostDiff N+ (N от 1 до 8) и LostDiff N+ Positive (N от 1 до 18) для стратегии ETH Up or Down 5m Up 8 bps Reference Average Premarket.    "
+    },
+    {
+      "source": "user",
+      "text": "Сделай стратегии LossDiff 3+  и LossDiff 16+ Positive"
+    },
+    {
+      "source": "user",
+      "text": "Вариант 2 - подготовить код и миграцию Я выложусь, потом сделаем историю"
+    }
+  ],
+  "scope": {
+    "goal": "Add exactly two deployable LossDiff-gated child strategies for the exact ETH Up 8 bps Reference Average Premarket parent, with reset threshold 3+ and nonnegative Positive threshold 16+, while leaving deployment and history generation to later user actions.",
+    "inScope": [
+      "Exact parent b7c50005-0000-4000-8137-000000000108 / eth_up_down_5m_up_bps_8_fak_premarket / ETH Up or Down 5m Up 8 bps Reference Average Premarket.",
+      "Exactly two new catalog variants: ETH 5m Up 8 bps Reference Average Premarket LossDiff 3+ and ETH 5m Up 8 bps Reference Average Premarket LossDiff 16+ Positive.",
+      "A new ordered transactional PostgreSQL migration after immutable migrations 0001 and 0002, seeding the two strategy rows, their exact parent assignments, and durable zero-initialized LossDiff states.",
+      "Existing fixed LossDiff parent-entry coupling and ExecutionIntent copying, including independent child Paper/Live mode selection, used unchanged for the two new children.",
+      "Focused catalog, migration, state-transition, parent-coupling, diagnostics persistence, parity, and regression tests plus directly affected README/parity documentation.",
+      "Repository context, daily history, requirement evidence, independent semantic review, task-only commits, and push to the configured upstream after verification."
+    ],
+    "outOfScope": [
+      "Applying the migration, deploying or restarting any service, changing Local or Production databases, enabling Live, changing strategy runtime flags after creation, or placing/canceling any real order.",
+      "Generating, importing, replaying, or backfilling historical runs, orders, fills, settlements, PnL, LossDiff events, or LossDiff current values for either new child.",
+      "Changing the exact parent signal, timing, direction, price, stake, order type, time-in-force, Paper/Live execution semantics, risk controls, fee accounting, or existing parent rows.",
+      "Changing the existing LossDiff 4+ and LossDiff 13+ Positive identities, assignments, thresholds, migration 0002, history-backfill command, or persisted history.",
+      "Adding any other threshold, Progress sizing, Dashboard feature, generalized history tool, schema framework, cleanup, backup, or unrelated refactor."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future parent entries at or after the new migration rollout cutoff; no pre-cutoff history is read into state or generated in this task.",
+    "firstVerification": "Inspect the exact parent catalog variant, the current generic LossDiff dispatch/reconciliation path, immutable migration catalog, diagnostic persistence allowlist, parity contract, and focused tests before product edits."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Register exactly the requested LossDiff 3+ and LossDiff 16+ Positive children for the exact ETH Up 8 bps parent.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Сделай стратегии LossDiff 3+  и LossDiff 16+ Positive",
+      "acceptanceCriteria": [
+        "The exact parent remains b7c50005-0000-4000-8137-000000000108 / eth_up_down_5m_up_bps_8_fak_premarket and no similar neutral, Down, or different-bps strategy is accepted as parent.",
+        "Reset child identity is b7c50005-0000-4000-8229-000000000003 / eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_3_plus / ETH 5m Up 8 bps Reference Average Premarket LossDiff 3+.",
+        "Positive child identity is b7c50005-0000-4000-8229-000000000016 / eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_16_plus_positive / ETH 5m Up 8 bps Reference Average Premarket LossDiff 16+ Positive.",
+        "Both variants inherit the exact parent's entry timing, reference asset, actual same-market entry coupling, and frozen-intent execution semantics; no third variant is added.",
+        "Catalog-wide IDs, codes, and names remain unique."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiffCatalog",
+          "expected": "Focused catalog tests prove the exact four total fixed LossDiff children, exact two new identities, exact parent/timing/modes/thresholds, and catalog-wide uniqueness.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Implement reset LossDiff 3+ and nonnegative Positive LossDiff 16+ from only causally available exact-parent outcomes, starting at zero after migration.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "потом сделаем историю",
+      "acceptanceCriteria": [
+        "The new migration creates both durable states with current_value=0 and started_at_utc equal to the migration rollout cutoff; it neither reads nor imports older parent outcomes.",
+        "For LossDiff 3+, each qualifying exact-parent loss adds one, each exact-parent win fully resets to zero, and a subsequent actual parent entry passes only when its durable pre-entry value is at least 3.",
+        "For LossDiff 16+ Positive, each qualifying exact-parent loss adds one, each exact-parent win subtracts one with a hard zero floor, and a subsequent actual parent entry passes only when its durable pre-entry value is at least 16.",
+        "Only exact-parent Settled non-flat outcomes entered at or after started_at_utc and settled before the candidate entry cutoff affect state; child outcomes, skips, restarts, paper_lost_counter/live_lost_counter, and older parent history do not.",
+        "Repeated startup or migration execution preserves existing state and events rather than resetting or duplicating them."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresEthUp8LossDiffStrategySchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffMigration|FullyQualifiedName~EthUp8LossDiffState",
+          "expected": "Focused tests prove migration ordering/checksum, exact seeds/assignments, zero initialization without history, restart idempotency, reset 3+ transitions, Positive 16+ zero floor/transitions, and exact-parent-only causal state.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Copy only an actual exact-parent same-market entry and preserve the frozen parent ExecutionIntent while each child retains its own Paper/Live setting.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "для стратегии ETH Up or Down 5m Up 8 bps Reference Average Premarket",
+      "acceptanceCriteria": [
+        "A skipped, rejected, zero-fill, unpersisted, or otherwise non-entered exact parent creates no child order even when state meets the threshold.",
+        "An eligible child changes only strategy/decision identity and copies the parent's outcome/token, BUY side, target amount/shares, maximum price, tick/minimum constraints, FAK time-in-force, postOnly=false, and decision-time market evidence without a second order-book read, resize, or reprice.",
+        "Each new child uses its own effective Paper/Live setting independently of the parent's transport mode through the existing approved path; the migration seeds enabled=true, paused=false, auto_live_paused=false, live_stakes=false, $1 Paper/Live stakes, and $100 Live balance.",
+        "Below-threshold skip diagnostics for both new exact IDs are retained and validate against the exact Up 8 bps parent ID, while unrelated skip diagnostics remain compactable.",
+        "No new execution model or Paper/live parity exception is introduced."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresEthUp8LossDiffStrategySchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffParentMirror|FullyQualifiedName~LossDiffPlacementSkipDiagnostics",
+          "expected": "Focused tests prove actual exact-parent entry coupling, both thresholds, exact frozen-intent equality, independent child mode, no second book read, no child for parent non-entry, and retained valid skip diagnostics for both new children.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
+          "expected": "The complete solution builds with zero errors using only the marked D:\\CodexTemp run for disposable outputs.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Deliver only deployable repository code and migration; do not deploy, apply the migration, or generate history in this task.",
+      "sourceRequestIndexes": [2],
+      "sourceQuote": "подготовить код и миграцию Я выложусь, потом сделаем историю",
+      "acceptanceCriteria": [
+        "Migration 0003 is registered after immutable 0001/0002 and is transactional, checksum-protected, idempotent for repeated startup, and limited to the exact two new strategy rows, two assignments, and two state rows.",
+        "Migration application is left to the user's later deployment; no Local or Production database, service, strategy flag, wallet, or venue state is changed by this task.",
+        "The existing history-backfill command remains restricted to the old 4+/13+ pair and no history artifact or synthetic financial row is generated for the new children.",
+        "Focused tests, the full test suite, solution build, formatting checks, requirement gates, and an independent comparison of verbatim prompts, approved contract, exact diff, and evidence complete with no open findings.",
+        "Only approved task paths plus required context/history/contract bookkeeping change, followed by task-only commit and push to the configured upstream."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresEthUp8LossDiffStrategySchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-27.md",
+        "Codex/Requirements/Contracts/RC-20260827-eth-up8-lossdiff-children.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore",
+          "expected": "The complete test project passes with zero failures using only marked D:\\CodexTemp disposable outputs.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "git diff --check; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode Staged",
+          "expected": "Only approved paths change, formatting and requirement gates pass, independent semantic review passes, and no deployment/database/history action occurs.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260827-eth-up8-lossdiff-children sha256:221bd379c6611cafd373e5636a627f1886f8b5af3544696d7fd113406588195d",
+    "semanticDigest": "sha256:221bd379c6611cafd373e5636a627f1886f8b5af3544696d7fd113406588195d"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_eth_up8_lossdiff_children",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
