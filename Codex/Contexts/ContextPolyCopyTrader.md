@@ -1,3 +1,18 @@
+## Active Update 2026-08-28 Deployment Verification 390c8a25
+Goal: Verify the user-deployed service build, ETH Up8 LossDiff migration, service health, and historical parity continuation without changing Production.
+Status: Completed read-only; deployed feature is healthy, separate Legacy backfill timeouts persist
+Done:
+- Verified from `service_heartbeats` that Production runs exact build `1.0.0+390c8a252e4c3ce937d1d126652e9690423fe179`, started `2026-08-27T21:18:38.527308Z`, in `Running` / `Live` with `last_error=NULL` and a fresh heartbeat.
+- Verified migration `0003-eth-up8-lossdiff-gated-children` applied at `2026-08-27T21:18:38.419801Z` with exact checksum `5e4effb4845ee9896f64f5ebbbed41eef13ecb2d6bc25b61caf0b0e417b6d267`.
+- Verified the exact LossDiff 3+ and LossDiff 16+ Positive children exist enabled, unpaused, Paper-only, assigned to exact parent `b7c50005-0000-4000-8137-000000000108`, and have correct modes/thresholds with zero post-rollout state. The parent produced only two `Observed` runs after rollout, so zero child runs is correct for the checked window.
+- Verified ordinary Paper activity continued with 269 orders from 187 strategies through `2026-08-27T21:25:01.601587Z`.
+- Verified Historical Gross/Net parity started after its configured 300-second delay, selected `btc_up_down_5m_diff_2_down_progress`, and wrote 81 immutable audit rows through `2026-08-27T21:27:15.106748Z`; parity continued after Legacy-lane failures.
+- Verified one critical WebSocket reconnect recovered to `Connected`, 192 subscribed assets, fresh messages, `stale=false`, and `last_error=NULL`.
+- Found three post-start Legacy backfill failures at `21:24:32Z`, `21:25:59Z`, and `21:27:55Z`: `Npgsql.NpgsqlException: Exception while reading from stream`, each scheduled for a 60-second retry. The stack points to `GetHistoricalPaperFakFeeBackfillCandidatesAsync`; identical failures existed before deployment. Current-log counts were `ERR=3`, `FTL=0`.
+Next: None for deployment verification.
+Notes: Evidence used fresh encrypted SMB logs plus independent `BEGIN READ ONLY`, UTC, `statement_timeout=10s` Production SQL against `192.168.0.101:5432/polycopytrader`. No Production/database/service/configuration/trading state changed.
+Blockers: The separate Legacy historical fee-backfill query continues to time out; it does not currently stop the new Gross/Net parity lane.
+
 ## Active Update 2026-08-28 Fast-forward Master
 Goal: Return the repository to `master` without losing the committed work accumulated on the former deployment branch.
 Status: Completed
