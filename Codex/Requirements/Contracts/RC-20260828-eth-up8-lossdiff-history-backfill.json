@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260828-eth-up8-lossdiff-history-backfill",
+  "title": "Backfill ETH Up 8 bps LossDiff child history",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Сделай стратегии LossDiff 3+  и LossDiff 16+ Positive"
+    },
+    {
+      "source": "user",
+      "text": "Вариант 2 - подготовить код и миграцию Я выложусь, потом сделаем историю"
+    },
+    {
+      "source": "user",
+      "text": "Сервис выложен. Проверь наличие стратегий и сделй им историю."
+    }
+  ],
+  "scope": {
+    "goal": "Verify the deployed ETH Up 8 bps LossDiff 3+ and LossDiff 16+ Positive children, then generate their complete eligible pre-rollout Paper history from the exact parent's settled entered chains.",
+    "inScope": [
+      "Exact parent b7c50005-0000-4000-8137-000000000108 / eth_up_down_5m_up_bps_8_fak_premarket / ETH Up or Down 5m Up 8 bps Reference Average Premarket.",
+      "Exact reset child b7c50005-0000-4000-8229-000000000003 / eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_3_plus / ETH 5m Up 8 bps Reference Average Premarket LossDiff 3+.",
+      "Exact positive child b7c50005-0000-4000-8229-000000000016 / eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_16_plus_positive / ETH 5m Up 8 bps Reference Average Premarket LossDiff 16+ Positive.",
+      "A bounded .NET operational backfill profile for only these two children, with a read-only preview and approval-digest-gated Production apply.",
+      "Exactly 67 complete historical Paper chains selected causally from the frozen 1,022-row parent source: 46 Reset 3+ chains and 21 Positive 16+ chains.",
+      "One complete six-row child chain per short independently atomic, idempotent and restartable transaction, at least one second between committed batches, followed by one final completion marker transaction.",
+      "Read-only health, lock, source-membership, collision, progress and financial verification before apply, between batches and after completion.",
+      "Focused tests, solution build, exact Production preview/apply/final verification, repository context/history bookkeeping, independent semantic review, task-only commits and push."
+    ],
+    "outOfScope": [
+      "Any strategy other than the exact parent and two exact children, including the earlier LossDiff 4+ and LossDiff 13+ Positive pair.",
+      "Any parent entry at or after 2026-08-27T21:18:38.378192Z, any skipped/observed/flat/incomplete/non-Calculated-fee parent row, or any non-Paper historical order.",
+      "Changing strategy enabled, paused, auto-pause, Paper/Live, stake, balance or LossDiff state/event values; enabling Live; placing or cancelling venue orders.",
+      "Deploying or restarting the service, schema changes, backup, deletion, rollback of existing history, broad locks, a single all-history transaction, or generalized backfill infrastructure.",
+      "Changing the parent strategy logic, LossDiff formulas, thresholds, copied direction, price, amount, FAK semantics, fee calculations, or existing migration 0003.",
+      "Inventing order-book evidence for historical parent rows that do not contain an embedded execution-intent snapshot."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "Full available exact-parent Settled, non-flat, one-fill, closed-position, Calculated-fee Paper history entered before the immutable child started_at_utc cutoff 2026-08-27T21:18:38.378192Z, UTC. Verified source span: 2026-07-03T07:49:30.243618Z through 2026-08-27T17:19:30.463415Z.",
+    "firstVerification": "Run a Production REPEATABLE READ READ ONLY preview with UTC, statement_timeout 15s and lock_timeout 2s to verify exact deployed build/migration/identities/flags/assignments/states, zero existing target chains, the frozen source membership, expected selected chains and current service health."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Verify that the deployed service contains the exact two requested children and that their migration, parent assignments and zero-start state are correct before generating history.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Сервис выложен. Проверь наличие стратегий",
+      "acceptanceCriteria": [
+        "Production migration 0003-eth-up8-lossdiff-gated-children exists with semantic checksum 5e4effb4845ee9896f64f5ebbbed41eef13ecb2d6bc25b61caf0b0e417b6d267.",
+        "The exact parent and both exact children exist; all three are enabled, unpaused, not auto-paused and Paper-only, while both children retain $1 Paper stake, $1 Live stake and $100 Live balance.",
+        "Each child has exactly one active assignment to the exact parent with its correct mode and exactly one durable state with threshold 3 or 16 and started_at_utc 2026-08-27T21:18:38.378192Z.",
+        "Before apply, both children have zero runs, orders, fills, settlements and LossDiff parent events, and no completion marker exists.",
+        "The Production service is Running with a fresh heartbeat and empty last_error; any unexpected build, unhealthy heartbeat, waiting lock, changed flag, changed source or existing partial target history blocks apply."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Run the exact new backfill command without --apply against Production.",
+          "expected": "The command reports the exact migration, service, identities, flags, assignments, states, zero target history and no marker inside a rolled-back read-only transaction.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Select historical child entries with the same causal LossDiff formulas and N+ thresholds used by the deployed strategies.",
+      "sourceRequestIndexes": [0, 2],
+      "sourceQuote": "сделй им историю",
+      "acceptanceCriteria": [
+        "The immutable source is exactly 1,022 qualifying exact-parent rows: 574 wins and 448 losses, entered before the child rollout cutoff, with total stake $6,137.20800051 and Net PnL $90.66442565.",
+        "For every candidate entry, only exact-parent outcomes settled strictly before that entry affect its pre-entry LossDiff.",
+        "Reset 3+ uses loss +1 and win reset to zero and selects exactly 46 entries: 31 wins, 15 losses, stake $276.24179998, gross PnL $69.99539091, fee $8.86157000 and Net PnL $61.13382091.",
+        "Positive 16+ uses loss +1 and win -1 with a zero floor and selects exactly 21 entries: 15 wins, 6 losses, stake $126.00000010, gross PnL $41.83029883, fee $4.08783000 and Net PnL $37.74246883.",
+        "Two independent calculations reproduce exact source membership, selected parent-run IDs, counts and financial totals before apply; any mismatch blocks writes."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffHistoryBackfill",
+          "expected": "Focused tests prove the exact frozen source facts, both causal formulas, thresholds, selected membership, financial totals and argument/digest gates.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Generate one complete historical Paper chain for each selected parent entry while preserving the parent's recorded execution and financial outcome.",
+      "sourceRequestIndexes": [1, 2],
+      "sourceQuote": "потом сделаем историю",
+      "acceptanceCriteria": [
+        "Each selected entry creates exactly one deterministic child signal, paper order, paper fill, closed paper position, paper position settlement and Settled strategy run with the exact child's strategy identity.",
+        "Copied chains preserve the parent's market, selected outcome/token, side, entry price, size, stake, timestamps, settlement value, gross PnL, fee fields and Net PnL without repricing, resizing or recalculation.",
+        "Exactly 402 financial/history rows are inserted for 67 chains, followed only after complete verification by one exact completion marker; no other row is inserted, updated or deleted.",
+        "The 21 Positive chains and 20 of 46 Reset chains retain their embedded execution-intent order-book snapshots; the remaining 26 Reset chains retain only the complete recorded parent-chain evidence and are explicitly marked as such rather than receiving fabricated snapshots.",
+        "Existing strategy flags, balances, current LossDiff states, LossDiff parent events and all parent rows remain byte-for-byte unchanged by the backfill."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffHistoryBackfill",
+          "expected": "Focused PostgreSQL tests prove complete six-row chains, deterministic IDs, exact field copying, snapshot handling, idempotency, collision refusal, one-chain atomicity and unchanged states/events/flags.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Apply the Production history in the established gentle Polymarket mode and verify exact completion independently.",
+      "sourceRequestIndexes": [2],
+      "sourceQuote": "сделй им историю",
+      "acceptanceCriteria": [
+        "Apply requires the exact approved semantic digest and an exclusive dedicated advisory lock; preview never accepts apply authority and always rolls back with writes=0.",
+        "Each of 67 chains is committed in its own short READ COMMITTED transaction, with statement_timeout 15s, lock_timeout 2s and at least one second between committed batches; a separate final transaction writes the marker only after all chains verify.",
+        "Between batches, read-only checks verify fresh Running service heartbeat, empty last_error, no unexpected waiting locks, unchanged source and plan, expected exact progress and unchanged protected flags/states/events; any deviation stops before the next batch and leaves a durable resumable prefix.",
+        "Final verification confirms exactly 46 complete Reset chains and 21 complete Positive chains, 402 target rows, no partial chains or ID collisions, exact financial totals, one matching marker and zero unintended changes.",
+        "The operation uses the local verified .NET command against Production without deploying or restarting the running service and completes repository tests, build, requirement gates, independent semantic review, task-only commits and push."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffHistoryBackfillCommandTests.cs",
+        "README.md",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-28.md",
+        "Codex/Requirements/Contracts/RC-20260828-eth-up8-lossdiff-history-backfill.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore",
+          "expected": "The complete test project passes with zero failures using only the marked D:\\CodexTemp run for disposable outputs.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
+          "expected": "The complete solution builds with zero errors using only the marked D:\\CodexTemp run for disposable outputs.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Run the approval-gated exact backfill apply, then independently verify Production in a fresh REPEATABLE READ READ ONLY transaction.",
+          "expected": "Exactly 67 complete chains and one matching marker exist with exact financial totals, no partial/conflicting rows, unchanged protected state and healthy service.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Twenty-six selected Reset 3+ parent chains predate embedded execution-intent order-book snapshots. Their child history will copy the complete settled parent signal/order/fill/position/settlement/run evidence but cannot independently prove the historical book from a missing snapshot; no snapshot will be invented.",
+      "impact": "These 26 rows remain valid reproductions of recorded parent Paper outcomes and fees, but their market-depth evidence is limited to the persisted parent chain. The limitation does not affect any Positive 16+ chain or the other 20 Reset 3+ chains.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f",
+        "semanticDigest": "sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f",
+    "semanticDigest": "sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_eth_up8_lossdiff_history",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
