@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260827-historical-parity-candidate-query-decomposition",
+  "title": "Decompose historical parity candidate selection",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Предложи решение этой проблемы."
+    },
+    {
+      "source": "user",
+      "text": "Ок, действуй"
+    }
+  ],
+  "scope": {
+    "goal": "Implement the accepted query-decomposition solution so HistoricalGrossNetParity can select and finish historical strategies in current Gross order without the candidate-loading command exceeding its 10-second timeout, while preserving all approved accounting behavior.",
+    "inScope": [
+      "The HistoricalGrossNetParity candidate-ranking and candidate-page read path that currently times out in LoadHistoricalGrossNetParityCandidateKeysAsync.",
+      "A separate current-Gross strategy ranking read using dashboard_strategy_performance_snapshots, which currently covers every Production strategy.",
+      "Strategy-scoped candidate reads executed in the existing source order PaperRun, PaperPosition, PaperSettlement, PaperSellFill, LiveOrder, filling at most the configured bounded page size.",
+      "Processor/repository state needed to keep one selected strategy active through its Exact and Fallback phases and to advance past strategies proved complete without reintroducing the global candidate UNION query.",
+      "Focused unit, source-contract, and PostgreSQL integration tests plus directly affected historical-parity documentation."
+    ],
+    "outOfScope": [
+      "Any change to Gross PnL, Gross ROI, Net PnL, Net ROI, Fee formulas, exact-Fee precedence, direct Fixed0p0333 fallback, rounding, historical cutoff, canonical contribution identity, lineage, audit, reconciliation, CAS, or balance application.",
+      "Any donor discovery, donor preview, donor matching, or new donor decision.",
+      "Any change to ordinary new/post-cutoff Paper or Live accounting, execution, settlement, signal, order, price, size, risk, or trading behavior.",
+      "Increasing the configured 10-second command timeout as the fix.",
+      "Creating or changing PostgreSQL tables, columns, indexes, migrations, or durable progress records.",
+      "Production database mutation, deployment, service restart, configuration mutation, backup, service stop, or trading action during this local implementation task."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Candidate discovery remains limited to canonical HistoricalGrossNetParity contributions with proved originating entry strictly before 2026-08-10T00:00:00Z UTC and not already terminally completed for calculation version historical-gross-net-parity-v1.",
+    "firstVerification": "Inspect the exact candidate SQL, processor state transitions, model contracts, existing indexes, and focused tests; compare the current global and proposed split query plans using read-only Production EXPLAIN without executing the historical candidate query."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Replace the single global ranked five-source candidate query with a separate current-Gross ranking read and strategy-scoped source-specific candidate reads that remain individually bounded by the existing page size and 10-second command timeout.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "The initial candidate read no longer builds one SQL plan that combines ranking all strategies with all five candidate source branches before applying LIMIT.",
+        "The ranking read uses the same dashboard snapshot Gross value used by the current implementation when a snapshot exists; Production evidence shows snapshot coverage for 2613 of 2613 strategies.",
+        "Candidate reads are scoped to exactly one selected strategy and one source kind at a time, and no individual returned page exceeds HistoricalGrossNetParity.BatchSize.",
+        "The configured CommandTimeoutSeconds remains 10 and query timeout protection remains active.",
+        "Read-only plan evidence or focused integration evidence demonstrates that the current Production-shaped top-strategy PaperRun read uses the existing strategy/status, fill-order-time, and parity-audit indexes rather than the former global plan."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityLiveFlowTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity\" with TEMP/TMP/TMPDIR and results under the marked D:\\CodexTemp run",
+          "expected": "Focused tests pass and prove split strategy/source selection, bounded pages, timeout preservation, and removal of the global candidate-query shape.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preserve greatest-current-Gross strategy ordering and fully complete the selected strategy before selecting another strategy.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "When no strategy is active, the processor selects the greatest-current-Gross unfinished strategy, using strategy ID as the deterministic tie-breaker already used by the current ranking.",
+        "Once selected, a strategy remains active through all Exact pages and all Fallback pages until no candidate remains for that strategy.",
+        "No candidate belonging to another strategy appears in a strategy-scoped page.",
+        "Strategies proved complete can be advanced past without changing completed audit rows; restart safety continues to derive financial completion from immutable audit evidence rather than an in-memory financial result.",
+        "Source traversal remains PaperRun, PaperPosition, PaperSettlement, PaperSellFill, LiveOrder and cursor pagination remains deterministic within each source."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused processor and PostgreSQL pagination tests for Gross ordering, one-strategy completion, source ordering, empty/completed strategy advancement, and restart-safe audit exclusion.",
+          "expected": "All ordering and completion tests pass without a cross-strategy candidate page or skipped eligible source.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Keep the approved historical financial behavior and ordinary new-bet accounting boundary unchanged while optimizing candidate discovery only.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "The strict originating-entry cutoff remains earlier than 2026-08-10T00:00:00Z UTC and calculation version remains historical-gross-net-parity-v1.",
+        "VenueReported, authoritative-Fee repair, complete exact local evidence, and exact historical CLOB calculation retain precedence.",
+        "When exact Fee cannot be determined for a financially valid positive-basis historical target, the existing direct Fixed0p0333 decision remains Fee = ROUND_AWAY_FROM_ZERO(B * 0.0333, 8) and Net = Gross - Fee.",
+        "No new fallback invokes donor candidate construction, donor preview, donor matching, or donor-selection revalidation.",
+        "Existing completed exact, donor, and fixed records remain excluded and unchanged; ordinary new/post-cutoff Paper and Live Fee/Net paths are untouched."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityLiveFlowTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run the existing direct Fixed0p0333, exact-precedence, cutoff, completed-row, legacy compatibility, VenueReported revision, and ordinary PolymarketFeeAccountingService tests.",
+          "expected": "All existing financial and historical-boundary tests pass without expectation changes unrelated to candidate-query decomposition.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Deliver the query decomposition as a local C#/.NET change with bounded verification and no database schema or Production operation.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "No PostgreSQL schema object, migration, configuration timeout, deployment artifact, or Production data is changed by this implementation task.",
+        "Logs or structured evidence identify selected strategy and source-specific candidate-read progress sufficiently to diagnose any remaining timeout.",
+        "Focused tests, affected solution build, git diff checks, requirement validators, and an independent semantic review pass before completion.",
+        "The final handoff explicitly states that the user must deploy the resulting service before runtime Production behavior can be verified."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityLiveFlowTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "README.md",
+        "docs/configuration_reference.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "Run VER-001 through VER-003; build PolyCopyTrader.sln with disposable outputs under the marked D:\\CodexTemp run; run git diff --check and requirement validation; obtain independent semantic review of verbatim requests, approved contract, diff, and evidence.",
+          "expected": "All checks pass with no schema/configuration/Production mutation and no open semantic-review findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260827-historical-parity-candidate-query-decomposition sha256:87c56bfbb0a4bb2d58e38fbf883d85e4fa543267a096bcc2a9c21a86082e0e42",
+    "semanticDigest": "sha256:87c56bfbb0a4bb2d58e38fbf883d85e4fa543267a096bcc2a9c21a86082e0e42"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/semantic_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
