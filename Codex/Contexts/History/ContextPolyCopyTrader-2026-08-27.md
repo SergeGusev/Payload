@@ -25,3 +25,17 @@ Request:
 
 Result:
 Corrected the prior answer: only database-persisted diagnostics had previously been checked. Discovered and read the new read-only `\\192.168.0.101\CodexLogs` share. Three current roll files contained no ERR/FTL entries but at least 5,249 warnings, dominated by recurring market-data side-effect delays reaching 21.63 seconds and 564 queued updates. Found 478 repeated `maker_gtd_paper_filled_order_shape_mismatch` warnings for exactly two ETH Reference Average Maker-GTD orders; direct database verification showed both ultimately Expired with zero fills and Skipped runs. Source inspection confirmed that this guard result returns without persisting the candidate fill. Current service and aggregate Paper betting remained active, but the previous broad logs-clean conclusion was withdrawn because file logs prove an ongoing queue-latency issue and two lost Maker-GTD fill attempts. No Production state changed.
+
+## 2026-08-27T06:42:07.0544328Z
+Request:
+`Ок, расставь проблемы по приоритетам и давай их по очереди решать.`
+
+Result:
+Prioritized the verified findings with lost Maker-GTD fills first. Exact read-only Production timestamps and the current validator independently proved the cause: PostgreSQL rounded the two order creation timestamps upward to microsecond precision, while `SameTimestamp` truncates, causing otherwise identical orders to fail the immutable-shape guard. Drafted and validated `RC-20260827-maker-gtd-postgres-timestamp-equivalence` at `sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c`. Product edits are blocked pending exact user approval; no Production or product state changed.
+
+## 2026-08-27 Maker-GTD Timestamp Approval
+Request:
+`APPROVE RC-20260827-maker-gtd-postgres-timestamp-equivalence sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c`
+
+Result:
+Recorded exact approval for the Maker-GTD PostgreSQL timestamp-equivalence contract. The required approval-only checkpoint is the next action before any product edit.

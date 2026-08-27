@@ -1,3 +1,16 @@
+## Active Update 2026-08-27 Maker-GTD PostgreSQL Timestamp Equivalence Contract
+Goal: Resolve the first and highest-priority verified Production-log problem: valid Maker-GTD Paper fills rejected by the atomic order-shape guard.
+Status: Exact approval received; approval-only checkpoint pending before product edits
+Done:
+- Prioritized the verified findings: P0 lost Maker-GTD fills; P1 market-data/Maker queue latency; P2 recurring WebSocket reconnects; P3 transient OKX/reference/order-book timeouts; P4 short file-log retention/high volume.
+- Compared `MakerGtdPaperPersistenceTransitions.SameTimestamp` with exact read-only Production rows for orders `9152ef50-bdee-4144-a198-c68432f524d8` and `dd4b98c6-31a3-42ce-82dd-8a4527e0d73c`.
+- Proved the deterministic mismatch: caller timestamps `2026-08-27T05:59:33.1706318Z` and `2026-08-27T05:59:33.3761549Z` were rounded by PostgreSQL to `...170632Z` and `...376155Z`, while the validator truncates both values to microseconds. This makes the same stored instant fail `SameImmutableOrderShape` and produces `maker_gtd_paper_filled_order_shape_mismatch`.
+- Drafted and validated `RC-20260827-maker-gtd-postgres-timestamp-equivalence` at semantic digest `sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c`.
+- User approved the exact contract with `APPROVE RC-20260827-maker-gtd-postgres-timestamp-equivalence sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c`.
+Next: Create the approval-only checkpoint, implement only PostgreSQL-microsecond timestamp equivalence plus focused regressions, build/test, and obtain independent semantic review.
+Notes: Production inspection used `BEGIN READ ONLY`, forced host/database, and `statement_timeout=15s`; no Production state changed. No product source was edited before approval.
+Blockers: Product edits remain blocked only until the required approval-only checkpoint commit is created.
+
 ## Active Update 2026-08-27 Production File Logs Correction
 Goal: Correct the prior logs conclusion by using the newly discoverable read-only Production file-log share.
 Status: Completed read-only; file logs expose an active market-data side-effect latency problem and two lost Maker-GTD Paper fill attempts that were not visible in persisted `api_errors`.

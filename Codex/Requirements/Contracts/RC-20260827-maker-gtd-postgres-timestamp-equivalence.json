@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260827-maker-gtd-postgres-timestamp-equivalence",
+  "title": "Accept PostgreSQL-equivalent timestamps in Maker-GTD atomic transitions",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, расставь проблемы по приоритетам и давай их по очереди решать."
+    }
+  ],
+  "scope": {
+    "goal": "Resolve the first and highest-priority verified issue: valid Maker-GTD Paper full fills are rejected after PostgreSQL rounds persisted timestamps to microsecond precision while the atomic transition validator truncates the caller timestamp.",
+    "inScope": [
+      "Maker-GTD Paper atomic full-fill and expiry timestamp equivalence at PostgreSQL microsecond precision.",
+      "Focused regression coverage for the two observed timestamp shapes where PostgreSQL rounds the final sub-microsecond digit upward.",
+      "Preservation of every non-timestamp order, fill, position, strategy-run, execution-source, state, and linkage guard.",
+      "Required contract validation, focused tests, affected build, independent semantic review, context/history bookkeeping, commit, and push."
+    ],
+    "outOfScope": [
+      "Production database mutation, historical backfill or repair of the two already expired orders, deployment, service restart, configuration change, or Live order action.",
+      "Maker-GTD queue-delay optimization, WebSocket reconnects, OKX/reference/order-book transient failures, and log retention/volume; these remain later problems in the ordered queue.",
+      "Any change to Maker-GTD strategy decisions, price calculation, TouchNoDepth evidence rules, stake sizing, expiration, Paper/Live classification, or the closed ordinary-Paper exception.",
+      "Any relaxation of immutable order fields or atomic transition state/concurrency checks other than timestamp equivalence at PostgreSQL storage precision."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "All Maker-GTD Paper atomic transitions using PostgreSQL timestamptz values; production evidence is limited to the two exact rejected orders 9152ef50-bdee-4144-a198-c68432f524d8 and dd4b98c6-31a3-42ce-82dd-8a4527e0d73c observed on 2026-08-27 UTC.",
+    "firstVerification": "Compare the validator implementation with exact read-only production created_at_utc and raw accepted_at_utc values for the two rejected orders, under BEGIN READ ONLY and statement_timeout=15s."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Fix the highest-priority Maker-GTD fill-loss defect before proceeding to the remaining verified problems.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "давай их по очереди решать",
+      "acceptanceCriteria": [
+        "A pending Maker-GTD order whose caller timestamp and persisted PostgreSQL timestamp represent the same stored microsecond passes the immutable-shape transition check and can be filled atomically.",
+        "The exact observed shapes 2026-08-27T05:59:33.1706318Z persisted as 2026-08-27T05:59:33.170632Z and 2026-08-27T05:59:33.3761549Z persisted as 2026-08-27T05:59:33.376155Z are covered by focused tests.",
+        "Timestamps that resolve to different PostgreSQL microseconds remain unequal.",
+        "All non-timestamp immutable order fields and all execution-source, lifecycle-state, fill, run-link, position-concurrency, and atomicity checks remain unchanged.",
+        "No production data or runtime state is changed by this task."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/MakerGtdPaperPersistence.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperAtomicRepositoryTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"MakerGtdPaperAtomicRepositoryTests|MakerGtdPaperLifecycleIntegrationTests\" with TEMP/TMP and all outputs under the active marked D:\\CodexTemp run",
+          "expected": "The upward-rounding regressions pass, distinct stored microseconds remain rejected, and existing Maker-GTD atomic/lifecycle tests pass.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "Build the affected solution/project, run git diff --check, validate the requirement contract in WorkingTree and staged modes, and obtain independent semantic review.",
+          "expected": "Only PostgreSQL-precision timestamp equivalence and its focused tests change; no other Maker-GTD semantics are altered.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260827-maker-gtd-postgres-timestamp-equivalence sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c",
+    "semanticDigest": "sha256:50f7d03e9bf99c246f7ea00da175cc7908407b56713ab83bab6532d19637704c"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/maker_gtd_postgres_timestamp_equivalence_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
