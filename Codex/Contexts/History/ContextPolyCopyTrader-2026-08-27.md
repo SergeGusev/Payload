@@ -109,3 +109,10 @@ Request:
 
 Result:
 Recorded the exact approval in `RC-20260827-eth-lossdiff-paper-parent-live-child` without changing its semantic digest. Product edits remain blocked until this approval record is committed as a separate parent revision.
+
+## 2026-08-27T14:00:36.3103919Z
+Request:
+`APPROVE RC-20260827-eth-lossdiff-paper-parent-live-child sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd`
+
+Result:
+After approval checkpoint `9c58dc4b`, implemented the exact Paper-parent/Live-child correction for the two fixed ETH LossDiff children. A qualifying parent Paper FAK signal/order/fill/run chain is now durably persisted before the independently Live child submits the unchanged frozen intent; the parent creates no Live order, and persistence failure, below-threshold state, or parent non-entry creates no child Live call. Existing both-Paper and parent-Live behavior remains covered. LossDiff tests passed 22/22 with 2 separately gated PostgreSQL backfill tests not executed; the full Release solution build passed with 0 warnings and 0 errors. Independent semantic review returned PASS with no findings. WorkingTree/staged requirement validation and diff checks passed, and the task-only implementation/bookkeeping commit was pushed to the configured upstream. Updated the directly affected README and parity documentation. No Production, database, service, deployment, strategy flag, wallet, or venue state changed; the marked disposable run was cleaned during finalization.

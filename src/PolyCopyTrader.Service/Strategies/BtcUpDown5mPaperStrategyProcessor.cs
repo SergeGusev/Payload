@@ -2372,6 +2372,32 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.LossDiffPositiveMirror;
     }
 
+    private static bool HasEligibleLiveLossDiffChild(
+        IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> childAssignmentsByParent,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
+        BtcUpDown5mStrategyVariant parentVariant)
+    {
+        if (!childAssignmentsByParent.TryGetValue(
+                StrategyIds.Normalize(parentVariant.Id),
+                out var assignments))
+        {
+            return false;
+        }
+
+        return assignments.Any(assignment =>
+        {
+            if (!IsLossDiffMirrorStrategy(assignment.ChildVariant) ||
+                assignment.LossDiffState is not { } state ||
+                state.CurrentValue < state.Threshold)
+            {
+                return false;
+            }
+
+            var settings = GetStrategySettings(strategySettings, assignment.ChildVariant.Id);
+            return HasEffectiveLiveStakes(assignment.ChildVariant, settings);
+        });
+    }
+
     private static bool IsChildProgressMirrorStrategy(BtcUpDown5mStrategyVariant variant)
     {
         return variant.Behavior is BtcUpDown5mStrategyBehavior.ChildProgressMirror or
@@ -4363,6 +4389,47 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
     }
 
+    private async Task PersistFilledPaperEntryBeforeLiveChildAsync(
+        Signal signal,
+        PaperOrder order,
+        PaperFill fill,
+        StrategyMarketPaperRun run,
+        decimal currentBid,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var immediatePersistence = new DeferredPaperEntryPersistence(
+            DirectPaperSkipCompactionActive);
+        immediatePersistence.AddFilledPaperEntry(
+            signal,
+            order,
+            fill,
+            run,
+            currentBid,
+            nowUtc);
+
+        var batch = immediatePersistence.CreateBatch();
+        if (feeAccountingService is not null)
+        {
+            batch = await feeAccountingService.ApplyToEntryBatchAsync(batch, cancellationToken);
+        }
+
+        var materializedBatch = await PaperEntryPositionMaterializer.MaterializeAsync(
+            batch,
+            paperTradingEngine,
+            exposureCache,
+            cancellationToken);
+        await repository.AddPaperEntryPersistenceBatchAsync(materializedBatch, cancellationToken);
+        MarkLocallyFinalizedEntryRuns(materializedBatch.StrategyRuns);
+        exposureCache.ApplyPaperOrders(materializedBatch.PaperOrders);
+        exposureCache.ApplyPaperPositions(materializedBatch.PaperPositions);
+        logger.LogInformation(
+            "BTC Up or Down 5m parent Paper entry persisted before LossDiff Live-child submission. ParentStrategyId={ParentStrategyId} OrderId={OrderId} RunId={RunId}",
+            run.StrategyId,
+            order.Id,
+            run.Id);
+    }
+
     public async Task ProcessChildParentRefreshAsync(CancellationToken cancellationToken = default)
     {
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
@@ -4847,7 +4914,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new ChildMirrorEntryResult(entriesPlaced, runsSkipped);
     }
 
-    private async Task<ChildMirrorEntryResult> AddLossDiffChildrenAfterLiveParentEntryAsync(
+    private async Task<ChildMirrorEntryResult> AddLossDiffChildrenAfterParentEntryAsync(
         IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> childAssignmentsByParent,
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         BtcUpDown5mStrategyVariant parentVariant,
@@ -5794,6 +5861,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             Signal? fakSignal = null;
                             PaperOrder? fakOrder = null;
                             PaperFill? fakFill = null;
+                            StrategyMarketPaperRun? fakEnteredRun = null;
+                            var currentBid = fakOrderBook.BestBid ?? fakEstimate.AverageFillPrice;
+                            var hasEligibleLiveLossDiffChild = HasEligibleLiveLossDiffChild(
+                                childAssignmentsByParent,
+                                strategySettings,
+                                variant);
                             var fakChildEntryResult = ChildMirrorEntryResult.Empty;
                             await WaitForEntryPlacementLockAsync(latencyMetrics, cancellationToken);
                             try
@@ -5835,7 +5908,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     nowUtc,
                                     fillEvidence,
                                     FeeLiquidityRole: "Taker");
-                                var enteredRun = CreateEnteredRun(
+                                fakEnteredRun = CreateEnteredRun(
                                     run,
                                     market,
                                     limitSelectedOutcome,
@@ -5845,40 +5918,110 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     fakSignal.Id,
                                     fakOrder.Id,
                                     nowUtc);
-                                var currentBid = fakOrderBook.BestBid ?? fakEstimate.AverageFillPrice;
-                                deferredPersistence.AddFilledPaperEntry(
-                                    fakSignal,
-                                    fakOrder,
-                                    fakFill,
-                                    enteredRun,
-                                    currentBid,
-                                    nowUtc);
-                                fakChildEntryResult = AddChildFilledPaperEntries(
-                                    childAssignmentsByParent,
-                                    variant,
-                                    market,
-                                    limitSelectedOutcome,
-                                    enteredRun,
-                                    fakSignal.Id,
-                                    fakOrder.Id,
-                                    fakExecutionIntent,
-                                    fakEstimate.AverageFillPrice,
-                                    fakEstimate.SizeShares,
-                                    fakEstimate.NotionalUsd,
-                                    currentBid,
-                                    nowUtc,
-                                    BtcChildMirrorFakPaperExecutionSource,
-                                    fakFill.FeeLiquidityRole,
-                                    deferredPersistence);
+                                if (!hasEligibleLiveLossDiffChild)
+                                {
+                                    deferredPersistence.AddFilledPaperEntry(
+                                        fakSignal,
+                                        fakOrder,
+                                        fakFill,
+                                        fakEnteredRun,
+                                        currentBid,
+                                        nowUtc);
+                                    fakChildEntryResult = AddChildFilledPaperEntries(
+                                        childAssignmentsByParent,
+                                        variant,
+                                        market,
+                                        limitSelectedOutcome,
+                                        fakEnteredRun,
+                                        fakSignal.Id,
+                                        fakOrder.Id,
+                                        fakExecutionIntent,
+                                        fakEstimate.AverageFillPrice,
+                                        fakEstimate.SizeShares,
+                                        fakEstimate.NotionalUsd,
+                                        currentBid,
+                                        nowUtc,
+                                        BtcChildMirrorFakPaperExecutionSource,
+                                        fakFill.FeeLiquidityRole,
+                                        deferredPersistence);
+                                }
                             }
                             finally
                             {
                                 entryPlacementLock.Release();
                             }
 
-                            if (fakSignal is null || fakOrder is null || fakFill is null)
+                            if (fakSignal is null || fakOrder is null || fakFill is null || fakEnteredRun is null)
                             {
                                 continue;
+                            }
+
+                            if (hasEligibleLiveLossDiffChild)
+                            {
+                                await PersistFilledPaperEntryBeforeLiveChildAsync(
+                                    fakSignal,
+                                    fakOrder,
+                                    fakFill,
+                                    fakEnteredRun,
+                                    currentBid,
+                                    nowUtc,
+                                    cancellationToken);
+
+                                var normalizedParentId = StrategyIds.Normalize(variant.Id);
+                                var nonLossDiffAssignments = childAssignmentsByParent.TryGetValue(
+                                        normalizedParentId,
+                                        out var allChildAssignments)
+                                    ? allChildAssignments
+                                        .Where(assignment => !IsLossDiffMirrorStrategy(assignment.ChildVariant))
+                                        .ToArray()
+                                    : [];
+                                var nonLossDiffResult = nonLossDiffAssignments.Length == 0
+                                    ? ChildMirrorEntryResult.Empty
+                                    : AddChildFilledPaperEntries(
+                                        new Dictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>>
+                                        {
+                                            [normalizedParentId] = nonLossDiffAssignments
+                                        },
+                                        variant,
+                                        market,
+                                        limitSelectedOutcome,
+                                        fakEnteredRun,
+                                        fakSignal.Id,
+                                        fakOrder.Id,
+                                        fakExecutionIntent,
+                                        fakEstimate.AverageFillPrice,
+                                        fakEstimate.SizeShares,
+                                        fakEstimate.NotionalUsd,
+                                        currentBid,
+                                        nowUtc,
+                                        BtcChildMirrorFakPaperExecutionSource,
+                                        fakFill.FeeLiquidityRole,
+                                        deferredPersistence);
+                                var lossDiffResult = await AddLossDiffChildrenAfterParentEntryAsync(
+                                    childAssignmentsByParent,
+                                    strategySettings,
+                                    variant,
+                                    market,
+                                    limitSelectedOutcome,
+                                    fakEnteredRun,
+                                    fakSignal.Id,
+                                    fakOrder.Id,
+                                    fakExecutionIntent,
+                                    paperFakLookup,
+                                    paperFakSizing,
+                                    fakEstimate,
+                                    PaperLiveShadowOrderBookSnapshotResult.Found(
+                                        fakOrderBook,
+                                        paperFakLookup.Source,
+                                        paperFakLookup.Age),
+                                    expiration,
+                                    cancelDeadlineUtc,
+                                    nowUtc,
+                                    deferredPersistence,
+                                    cancellationToken);
+                                fakChildEntryResult = new ChildMirrorEntryResult(
+                                    nonLossDiffResult.EntriesPlaced + lossDiffResult.EntriesPlaced,
+                                    nonLossDiffResult.RunsSkipped + lossDiffResult.RunsSkipped);
                             }
 
                             entriesPlaced += 1 + fakChildEntryResult.EntriesPlaced;
@@ -6254,7 +6397,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     cancellationToken);
                                 if (parentEntryApplied)
                                 {
-                                    lossDiffLiveChildResult = await AddLossDiffChildrenAfterLiveParentEntryAsync(
+                                    lossDiffLiveChildResult = await AddLossDiffChildrenAfterParentEntryAsync(
                                         childAssignmentsByParent,
                                         strategySettings,
                                         variant,

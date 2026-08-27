@@ -221,13 +221,18 @@ For an eligible child, the parent FAK `ExecutionIntent` is already frozen. The
 child receives its own strategy and decision identifiers but preserves the same
 token/outcome, BUY side, target cash amount and shares, maximum order price,
 tick/minimum-size constraints, `FAK` time-in-force, and `postOnly=false`. Paper
-uses the parent's decision-time snapshot. If Live is separately enabled later,
-the existing Live-shadow path submits that unchanged child intent after the
-parent's accepted fill proves that the parent actually entered; it performs no
-new order-book read and does not resize or reprice from the parent's eventual
-fill. Parent fill data and each child's venue response are outcome data used only
-for their separate accounting and later decisions. Both children are seeded with
-`live_stakes=false`; this parity path does not itself authorize Live trading.
+uses the parent's decision-time snapshot. Each child then selects Paper or Live
+from its own effective `live_stakes` setting; it does not inherit the parent's
+transport mode. When the parent remains Paper, its complete FAK
+signal/order/fill/run entry chain must be durably persisted before an eligible
+Live child is submitted. That child submission creates no parent Live order. If
+the parent itself is Live, the existing accepted-parent-fill path remains in
+effect. In both cases, the Live-shadow path submits the unchanged child intent,
+performs no new order-book read, and does not resize or reprice from the parent's
+eventual fill. Parent fill data and each child's venue response are outcome data
+used only for their separate accounting and later decisions. Both children are
+seeded with `live_stakes=false`; this parity path does not itself authorize Live
+trading.
 
 The one-time pre-rollout history backfill does not create a new decision-time
 execution rule and is not consulted by future LossDiff gating. It clones only a

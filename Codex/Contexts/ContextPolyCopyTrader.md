@@ -1,15 +1,20 @@
 ## Active Update 2026-08-27 ETH LossDiff Paper-Parent Live-Child Correction Contract
 Goal: Correct the two fixed ETH LossDiff strategies so a Paper parent can independently trigger a Live child from the same frozen intent.
-Status: Approved; approval checkpoint commit pending before product edits
+Status: Completed
 Done:
 - Verified the approved 2026-08-23 contract did not require the parent to be Live and required the child to consume the frozen intent through its own Paper or Live path.
 - Traced the mixed-mode defect to implementation commit `dfa82c91`, which introduced `AddLossDiffChildrenAfterLiveParentEntryAsync` and calls it only after an accepted parent Live fill.
 - Locked scope to the exact parent and two exact LossDiff children, future mixed-mode dispatch, focused parity/regression tests, and directly affected documentation; counters, thresholds, history, schema, Production, deployment, and Live flags remain excluded.
 - Created and mechanically validated draft `RC-20260827-eth-lossdiff-paper-parent-live-child` at semantic digest `sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd`.
 - Recorded the exact user approval `APPROVE RC-20260827-eth-lossdiff-paper-parent-live-child sha256:5303e55a518bed1def5bb1eb688b23ea9f606dd4d15b78c97ffd23858d743cdd`.
-Next: Create the approval-only checkpoint commit, then implement and verify the correction.
-Notes: The `codex-temp-lifecycle` skill is selected for later build/test outputs under a marked `D:\CodexTemp` run. No product code, Production state, strategy flag, database row, service, deployment, or venue order changed.
-Blockers: Product edits remain blocked until the approval record is committed as a parent revision.
+- Committed the approval-only checkpoint as `9c58dc4b`, then changed the Paper FAK dispatch so the parent entry chain is durably persisted before an independently Live LossDiff child uses the unchanged frozen intent; no parent Live order is required or created.
+- Preserved the existing both-Paper and parent-Live paths, LossDiff thresholds/state rules, venue/risk/fill semantics, and one order-book read; corrected README and Paper/Live parity documentation.
+- Focused LossDiff tests passed `22/22` with `2` separately gated PostgreSQL backfill tests not executed; the complete Release solution build passed with `0` warnings and `0` errors.
+- Independent reviewer `agent:/root/reviewer_eth_lossdiff_paper_parent_live_child` compared the verbatim requests, approved contract, current diff, dispatch paths, docs, and TRX evidence and returned `PASS` with no findings.
+- Completed contract evidence, `git diff --check`, and WorkingTree/staged requirement validation all passed; the task-only implementation/bookkeeping commit is pushed to the configured upstream.
+Next: None.
+Notes: Approval checkpoint: `9c58dc4b`. All disposable build/test outputs used marked run `D:\CodexTemp\runs\manual-a0f984a0406a414cb1ad77906ba492b6`, which is cleaned during finalization. No Production state, strategy flag, database row, service, deployment, wallet, or venue order changed.
+Blockers: None.
 
 ## Active Update 2026-08-27 Recovered Paper Settlement Deadlock Alert
 Goal: Record the first material alert found by the post-deploy Maker-GTD monitor without changing Production.

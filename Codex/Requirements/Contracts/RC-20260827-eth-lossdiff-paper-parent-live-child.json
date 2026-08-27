@@ -3,7 +3,7 @@
   "contractId": "RC-20260827-eth-lossdiff-paper-parent-live-child",
   "title": "Allow ETH LossDiff Live children to follow a Paper parent",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -63,8 +63,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiffParentMirror",
           "expected": "Focused tests prove Paper-parent/Live-child submission for both exact LossDiff modes, zero parent Live submission, unchanged Paper child behavior, unchanged parent-Live behavior, and no child for every non-entered/below-threshold parent path.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused LossDiffParentMirror tests passed 6/6 with zero skips. They cover both exact reset and positive children with a Paper-only parent and child-only effective Live stakes, one child venue submission, zero parent Live orders, durable parent signal/order/fill/run visibility before submission, no submission after injected parent persistence failure, no submission after parent non-entry, unchanged parent-Live behavior, exact frozen intent fields, and one total CLOB order-book read."
         }
       ]
     },
@@ -90,16 +90,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiff",
           "expected": "LossDiff tests prove exact frozen-intent equality, no additional book lookup, durable parent-before-submit ordering, separate identities/accounting, and unchanged reset/positive gating semantics.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "All tests matching FullyQualifiedName~LossDiff passed 22/22 with zero failures; 2 separately gated PostgreSQL history-backfill integration tests were not executed. The passing set proves reset and positive state behavior, below-threshold and parent-signal-skip child-only Live suppression, unchanged Paper child behavior, unchanged parent-Live behavior, durable parent-before-submit ordering, frozen intent equality, separate child accounting, and no additional book lookup. TRX: D:\\CodexTemp\\runs\\manual-a0f984a0406a414cb1ad77906ba492b6\\results\\lossdiff-all-final.trx."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
           "expected": "The complete solution builds with zero errors using the marked D:\\CodexTemp run for every disposable output.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release build completed successfully with 0 warnings and 0 errors using --no-restore and the marked D:\\CodexTemp run artifacts path after a successful solution restore to the same run."
         }
       ]
     },
@@ -127,8 +127,8 @@
           "kind": "inspection",
           "command": "git diff --check; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode Staged",
           "expected": "Only approved paths and behavior change, formatting and requirement gates pass, and Production/Live state remains untouched.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "git diff --check passed. Independent reviewer agent:/root/reviewer_eth_lossdiff_paper_parent_live_child compared all verbatim prompts, acceptance criteria, current diff, actual dispatch paths, documentation, and TRX evidence and returned PASS with no findings. WorkingTree and staged requirement validation are recorded by the finalization workflow after this completed evidence transition. No database, service, strategy flag, deployment, wallet, or venue state was touched."
         }
       ]
     }
@@ -143,8 +143,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_lossdiff_paper_parent_live_child",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

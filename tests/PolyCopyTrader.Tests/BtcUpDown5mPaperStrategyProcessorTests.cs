@@ -6709,6 +6709,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         Assert.Equal(2, result.EntriesPlaced);
         Assert.Equal(0, result.RunsSkipped);
+        Assert.Equal(1, context.ClobClient.GetOrderBookCalls);
         var parentOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == parent.Id);
         var childOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
         Assert.Equal(parentOrder.AssetId, childOrder.AssetId);
@@ -6735,21 +6736,25 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
         var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
             item.Id == StrategyIds.EthLossDiff4Plus);
+        var tradingClient = new CapturingTradingClient();
         var context = CreateEthConfirmedAverageTestContext(
             currentReferencePriceUsd: 2020m,
             [parent.Code, child.Code],
+            tradingClient,
             configureRepository: (repository, now) => ConfigureLossDiffChild(
                 repository,
                 child,
                 StrategyChildParentAssignmentModes.LossDiffReset,
                 threshold: 4,
                 now,
-                wonOutcomes: [false, false, false, false, true]));
+                wonOutcomes: [false, false, false, false, true]),
+            liveStrategyCodes: [child.Code]);
 
         var result = await context.Processor.ProcessDiffCounterDueEntriesAsync();
 
         Assert.Equal(1, result.EntriesPlaced);
         Assert.Equal(1, result.RunsSkipped);
+        Assert.Equal(0, tradingClient.PlaceCalls);
         Assert.DoesNotContain(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
         var skipped = Assert.Single(context.Repository.StrategyMarketPaperRuns, run =>
             run.StrategyId == child.Id && run.Status == StrategyMarketPaperRunStatuses.Skipped);
@@ -6902,6 +6907,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         Assert.Equal(2, result.EntriesPlaced);
         Assert.Equal(2, tradingClient.PlaceCalls);
+        Assert.Equal(1, context.ClobClient.GetOrderBookCalls);
         Assert.Equal(2, tradingClient.Requests.Count);
         var parentRequest = tradingClient.Requests[0];
         var childRequest = tradingClient.Requests[1];
@@ -6929,6 +6935,128 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Contains("\"order_type\":\"FAK\"", childPaperOrder.RawDecisionJson, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProcessDiffCounterDueEntriesAsync_LossDiffParentMirrorPaperParentCanSubmitLiveChild(
+        bool positiveMode)
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == (positiveMode
+                ? StrategyIds.EthLossDiff13PlusPositive
+                : StrategyIds.EthLossDiff4Plus));
+        TestAppRepository? persistedRepository = null;
+        var tradingClient = new CapturingTradingClient
+        {
+            PlacementResult = new LiveOrderPlacementResult(
+                true,
+                positiveMode ? "0xlossdiff-positive-paper-parent" : "0xlossdiff-reset-paper-parent",
+                "matched",
+                null,
+                "0.80",
+                "1.25",
+                "{\"status\":\"matched\",\"makingAmount\":\"0.80\",\"takingAmount\":\"1.25\"}",
+                "{}"),
+            BeforePlace = _ =>
+            {
+                var repository = Assert.IsType<TestAppRepository>(persistedRepository);
+                Assert.Contains(repository.PaperOrders, order => order.StrategyId == parent.Id);
+                Assert.Contains(repository.PaperFills, fill =>
+                    repository.PaperOrders.Any(order =>
+                        order.Id == fill.PaperOrderId &&
+                        order.StrategyId == parent.Id));
+                Assert.Contains(repository.StrategyMarketPaperRuns, run =>
+                    run.StrategyId == parent.Id &&
+                    run.Status == StrategyMarketPaperRunStatuses.Entered);
+            }
+        };
+        var mode = positiveMode
+            ? StrategyChildParentAssignmentModes.LossDiffPositive
+            : StrategyChildParentAssignmentModes.LossDiffReset;
+        var threshold = positiveMode ? 13 : 4;
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 2020m,
+            [parent.Code, child.Code],
+            tradingClient,
+            configureRepository: (repository, now) => ConfigureLossDiffChild(
+                repository,
+                child,
+                mode,
+                threshold,
+                now,
+                Enumerable.Repeat(false, threshold).ToArray()),
+            liveStrategyCodes: [child.Code]);
+        persistedRepository = context.Repository;
+
+        var result = await context.Processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(2, result.EntriesPlaced);
+        Assert.Equal(1, tradingClient.PlaceCalls);
+        Assert.Equal(1, context.ClobClient.GetOrderBookCalls);
+        var childRequest = Assert.Single(tradingClient.Requests);
+        Assert.Equal(ClobV2OrderType.FAK, childRequest.OrderType);
+        Assert.False(childRequest.PostOnly);
+        Assert.Null(childRequest.GtdExpirationUtc);
+        Assert.DoesNotContain(context.Repository.LiveOrders, order => order.StrategyId == parent.Id);
+        var childLiveOrder = Assert.Single(context.Repository.LiveOrders, order => order.StrategyId == child.Id);
+        Assert.Equal(childRequest.TokenId, childLiveOrder.AssetId);
+        Assert.Equal(childRequest.Price, childLiveOrder.Price);
+        Assert.Equal(1.25m, childLiveOrder.FilledSize);
+        Assert.Equal(0.80m, childLiveOrder.FilledNotionalUsd);
+
+        var parentPaperOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == parent.Id);
+        var childPaperOrder = Assert.Single(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
+        Assert.Equal("paper_live_shadow_actual_fill", childPaperOrder.ExecutionSource);
+        using var decision = JsonDocument.Parse(Assert.IsType<string>(childPaperOrder.RawDecisionJson));
+        var intent = decision.RootElement.GetProperty("parent_execution_intent");
+        Assert.Equal(parentPaperOrder.AssetId, intent.GetProperty("asset_id").GetString());
+        Assert.Equal(parentPaperOrder.Outcome, childPaperOrder.Outcome);
+        Assert.Equal(childRequest.TokenId, intent.GetProperty("asset_id").GetString());
+        Assert.Equal(childRequest.Price, intent.GetProperty("maximum_order_price").GetDecimal());
+        Assert.Equal(childRequest.MarketBuyAmountUsd, intent.GetProperty("target_notional_usd").GetDecimal());
+        Assert.Equal(childRequest.SizeShares, intent.GetProperty("target_size_shares").GetDecimal());
+        Assert.True(decision.RootElement.GetProperty("loss_diff").GetProperty("gate_passed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ProcessDiffCounterDueEntriesAsync_LossDiffParentMirrorPaperPersistenceFailurePreventsLiveChildSubmission()
+    {
+        var parent = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
+        var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Id == StrategyIds.EthLossDiff4Plus);
+        var tradingClient = new CapturingTradingClient();
+        var context = CreateEthConfirmedAverageTestContext(
+            currentReferencePriceUsd: 2020m,
+            [parent.Code, child.Code],
+            tradingClient,
+            configureRepository: (repository, now) =>
+            {
+                ConfigureLossDiffChild(
+                    repository,
+                    child,
+                    StrategyChildParentAssignmentModes.LossDiffReset,
+                    threshold: 4,
+                    now,
+                    wonOutcomes: [false, false, false, false]);
+                repository.PaperEntryPersistenceBatchFailuresToThrow = 1;
+            },
+            liveStrategyCodes: [child.Code]);
+
+        var result = await context.Processor.ProcessDiffCounterDueEntriesAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, context.Repository.PaperEntryPersistenceBatchAttempts);
+        Assert.Empty(context.Repository.PaperOrders);
+        Assert.Equal(0, tradingClient.PlaceCalls);
+        Assert.DoesNotContain(context.Repository.LiveOrders, order => order.StrategyId == child.Id);
+        Assert.Single(context.Repository.ApiErrors, error =>
+            error.Operation == "PlaceDueEntry" &&
+            error.Message == "Injected paper entry persistence batch failure.");
+    }
+
     [Fact]
     public async Task ProcessDiffCounterDueEntriesAsync_LossDiffParentMirrorDoesNotCreateChildWhenParentSignalSkips()
     {
@@ -6936,20 +7064,24 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             item.Id == StrategyIds.EthDiffConfirmedAveragePremarketParent);
         var child = StrategyIds.CryptoUpDown5mVariants.Single(item =>
             item.Id == StrategyIds.EthLossDiff4Plus);
+        var tradingClient = new CapturingTradingClient();
         var context = CreateEthConfirmedAverageTestContext(
             currentReferencePriceUsd: 1980m,
             [parent.Code, child.Code],
+            tradingClient,
             configureRepository: (repository, now) => ConfigureLossDiffChild(
                 repository,
                 child,
                 StrategyChildParentAssignmentModes.LossDiffReset,
                 threshold: 4,
                 now,
-                wonOutcomes: [false, false, false, false]));
+                wonOutcomes: [false, false, false, false]),
+            liveStrategyCodes: [child.Code]);
 
         var result = await context.Processor.ProcessDiffCounterDueEntriesAsync();
 
         Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(0, tradingClient.PlaceCalls);
         Assert.DoesNotContain(context.Repository.PaperOrders, order => order.StrategyId == child.Id);
         Assert.DoesNotContain(context.Repository.StrategyMarketPaperRuns, run => run.StrategyId == child.Id);
         var parentRun = Assert.Single(context.Repository.StrategyMarketPaperRuns, run =>
@@ -15003,12 +15135,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         return markets;
     }
 
-    private static (BtcUpDown5mPaperStrategyProcessor Processor, TestAppRepository Repository) CreateEthConfirmedAverageTestContext(
+    private static (
+        BtcUpDown5mPaperStrategyProcessor Processor,
+        TestAppRepository Repository,
+        FakeClobClient ClobClient) CreateEthConfirmedAverageTestContext(
         decimal currentReferencePriceUsd,
         IReadOnlyCollection<string> enabledStrategyCodes,
         CapturingTradingClient? tradingClient = null,
         bool useIncompleteReferenceAverages = false,
-        Action<TestAppRepository, DateTimeOffset>? configureRepository = null)
+        Action<TestAppRepository, DateTimeOffset>? configureRepository = null,
+        IReadOnlyCollection<string>? liveStrategyCodes = null)
     {
         var marketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 35, 0, TimeSpan.Zero);
         var previousMarketStartUtc = marketStartUtc.AddMinutes(-5);
@@ -15023,7 +15159,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 var strategy = StrategyIds.UpDown5mStrategyVariants.Single(variant => variant.Code == strategyCode);
                 repository.StrategySettings[strategy.Id] = StrategyRuntimeSettings.Default(strategy.Id) with
                 {
-                    LiveStakes = true,
+                    LiveStakes = (liveStrategyCodes ?? enabledStrategyCodes)
+                        .Contains(strategyCode, StringComparer.OrdinalIgnoreCase),
                     LiveStakeAmount = 1m,
                     LiveAvailableBalance = 100m,
                     PaperStakeAmount = 1m
@@ -15100,6 +15237,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             OrderBook("eth-confirmed-current-up", bestBid: 0.54m, bestAsk: 0.55m, now),
             OrderBook("eth-confirmed-current-down", bestBid: 0.44m, bestAsk: 0.45m, now)
         };
+        var clobClient = new FakeClobClient(orderBooks);
         var processor = CreateProcessorCoreWithOptions(
             repository,
             [],
@@ -15111,6 +15249,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 enabledStrategyCodes,
                 maxConcurrentEntryDecisions: 4),
             gammaClient: new FakeGammaClient([]),
+            clobClient: clobClient,
             tradingClient: tradingClient,
             botOptions: tradingClient is null
                 ? null
@@ -15125,7 +15264,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 : new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 10m },
             cryptoReferencePriceAverageProvider: averageProvider);
 
-        return (processor, repository);
+        return (processor, repository, clobClient);
     }
 
     private static void ConfigureLossDiffChild(
@@ -16848,6 +16987,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         public ClobV2OrderRequest? LastRequest { get; private set; }
 
+        public Action<ClobV2OrderRequest>? BeforePlace { get; init; }
+
         public LiveOrderPlacementResult PlacementResult { get; init; } =
             new(
                 true,
@@ -16866,6 +17007,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         public Task<LiveOrderPlacementResult> PlaceLiveOrderAsync(ClobV2OrderRequest request, CancellationToken ct)
         {
+            BeforePlace?.Invoke(request);
             PlaceCalls++;
             LastRequest = request;
             Requests.Add(request);
