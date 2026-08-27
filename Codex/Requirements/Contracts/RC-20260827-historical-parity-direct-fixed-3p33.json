@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260827-historical-parity-direct-fixed-3p33",
+  "title": "Replace historical parity donors with direct 3.33-point fallback",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, пусть будет 3.33 для верности. Отказываемся от доноров."
+    },
+    {
+      "source": "user",
+      "text": "1. Оставить неизменными.\n2. Да, только там, где точную комиссию определить нельзя.\n\n\n\nЯ правильно понимаю, что это коснётся только истории? А для всех новых ставок у нас будут данные?"
+    },
+    {
+      "source": "user",
+      "text": "Но ведь у нас все новые ставки уже считаются с Net. Мы проходим только по старым."
+    },
+    {
+      "source": "user",
+      "text": "Давай понимать по старыми ставки, сделанные до 10.08.20266"
+    },
+    {
+      "source": "user",
+      "text": "2026, конечно"
+    }
+  ],
+  "scope": {
+    "goal": "For still-unfinished HistoricalGrossNetParity contributions originating before 2026-08-10T00:00:00Z, preserve exact Fee accounting and replace every donor lookup with a direct fixed fallback satisfying Net ROI = Gross ROI - 3.33 percentage points, without rewriting completed accounting or changing the ordinary accounting path for new bets.",
+    "inScope": [
+      "The existing HistoricalGrossNetParity workflow for canonical Gross-selected Paper and Live contributions whose proved originating entry is strictly before 2026-08-10T00:00:00Z.",
+      "Existing VenueReported, authoritative-Fee Net repair, complete exact local evidence, and exact historical CLOB calculation paths, with their current precedence and validation.",
+      "A direct terminal fixed fallback for a financially valid unresolved target when exact Fee accounting is unavailable: Fee = ROUND_AWAY_FROM_ZERO(GrossRoiBasisUsd * 0.0333, 8) and Net = Gross - Fee.",
+      "Removal of donor discovery, donor preview, donor matching, and donor-selection revalidation from every new fallback decision made by HistoricalGrossNetParity.",
+      "Backward-compatible reading and preservation of already completed exact, donor, and fixed HistoricalGrossNetParity accounting and audit evidence.",
+      "Focused tests and documentation needed to prove the changed historical fallback and unchanged ordinary new-bet accounting boundary."
+    ],
+    "outOfScope": [
+      "Rewriting any contribution already terminally completed under calculation version historical-gross-net-parity-v1, including an existing exact, donor, or fixed result.",
+      "Changing Gross PnL, Gross ROI, GrossRoiBasisUsd, stake/cost basis, source selection, lineage, component graphs, execution, settlement, signals, prices, sizes, risk logic, or strategy ordering.",
+      "Applying 3.33 points when a VenueReported, authoritative, complete exact local, or exact historical CLOB Fee is available.",
+      "Treating an unproved identity, Gross amount, ROI basis, lineage, component graph, origin cutoff, or other structural invariant as merely unavailable Fee; those targets remain explicit deferrals.",
+      "Changing the ordinary fee/Net calculation for new or post-cutoff Paper and Live bets, creating a new VenueReported ingress, or guaranteeing that external CLOB fee-schedule data can never be unavailable.",
+      "Deleting legacy donor models, hashes, storage readers, or audit compatibility required to preserve completed historical records.",
+      "Production database mutation, service deployment, service restart, configuration mutation, or trading action during this local implementation task."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Only canonical HistoricalGrossNetParity contributions with proved originating entry strictly earlier than 2026-08-10T00:00:00Z, UTC, that are not already terminally completed for calculation version historical-gross-net-parity-v1.",
+    "firstVerification": "Trace the current historical exact-to-fallback processor, donor-preview invocation, decision construction, storage selection revalidation, permanent-audit exclusion, late VenueReported revision path, and ordinary Paper/Live fee-accounting services; compare with a read-only Production snapshot before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Limit the changed behavior to unfinished historical contributions originating before 2026-08-10T00:00:00Z and leave ordinary new-bet Fee/Net accounting unchanged.",
+      "sourceRequestIndexes": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "sourceQuote": "Но ведь у нас все новые ставки уже считаются с Net. Мы проходим только по старым.",
+      "acceptanceCriteria": [
+        "HistoricalGrossNetParity retains its exact originating-entry predicate strictly before 2026-08-10T00:00:00Z UTC and its current canonical Gross contribution set.",
+        "The existing online Paper fill/position/run/settlement accounting and Live-order accounting paths are unchanged; they continue to persist Calculated or VenueReported Fee when available and explicit CalculationUnavailable when required external evidence is unavailable.",
+        "No post-cutoff row becomes eligible for the fixed historical fallback, and no execution, order, fill, settlement, strategy signal, risk, or balance behavior changes as part of this task.",
+        "Production preview evidence records the exact control target 5a4ef4c9-dc18-41b5-a3cd-92fb7b3c0795 as unresolved and confirms the ordinary new-bet path independently from source inspection."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PolymarketFeeAccountingServiceTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|PolymarketFeeAccountingServiceTests\"",
+          "expected": "Focused tests prove the unchanged strict historical cutoff and ordinary Paper/Live fee-accounting behavior while the historical fallback changes independently.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "When exact historical Fee accounting is unavailable for a financially valid unresolved target, bypass donors and immediately apply a fixed 3.33-percentage-point fallback.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, пусть будет 3.33 для верности. Отказываемся от доноров.",
+      "acceptanceCriteria": [
+        "VenueReported Fee, authoritative-Fee Net repair, complete exact local evidence, and a successful exact historical CLOB calculation retain precedence over the fixed fallback.",
+        "For a positive proved Gross ROI basis B, the fallback persists Fee = ROUND_AWAY_FROM_ZERO(B * 0.0333, 8), Net = Gross - Fee, decision kind Fixed0p0333, and a distinct versioned direct-fixed calculation source/evidence payload.",
+        "A basis of 100.00 produces Fee 3.33000000; a basis of 12.34 produces Fee 0.41092200; before display rounding the contribution algebra satisfies Net ROI = Gross ROI - 3.33 percentage points.",
+        "The processor does not construct donor candidate order, call donor preview storage, run donor matching, or provide donor candidates to a new fixed Paper or Live accounting transaction.",
+        "Storage accepts and atomically revalidates the new direct fixed decision without recomputing donor selection; CAS, cutoff, stable tuple, lineage, component, Gross, basis, audit, reconciliation, and Live balance-ordering guards remain enforced.",
+        "A nonpositive proved basis retains the existing NonpositiveBasis terminal behavior; structural or evidentiary conflicts remain deferred and never receive a fabricated fixed Fee."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityLiveFlowTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity\"",
+          "expected": "Tests prove exact-before-fixed precedence, exact 0.0333 coefficient and rounding, no donor calls or revalidation for new fallback decisions, preserved financial guards, and Paper/Live atomic application.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Leave all already completed HistoricalGrossNetParity accounting unchanged and retain backward compatibility for legacy donor/fixed audit evidence.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Оставить неизменными.",
+      "acceptanceCriteria": [
+        "The permanent calculation-version audit exclusion remains unchanged, so a completed exact, DonorRatio, Fixed0p033, or Fixed0p0333 contribution is not selected or financially rewritten.",
+        "Legacy donor decision kinds, donor evidence, membership/selection hashes, and storage readers remain compatible for completed records even though no new fallback invokes them.",
+        "The calculation version remains historical-gross-net-parity-v1 so existing completion evidence continues to exclude completed targets rather than causing a global replay.",
+        "The existing strictly newer associated VenueReported revision path may still supersede an earlier non-authoritative historical estimate without changing its authority ordering, idempotency, audit linkage, or balance correction rules.",
+        "Production preview evidence records 135262 existing completed ExistingExactPreserved decisions, zero existing donor/fixed decisions, and zero audit rows for the unresolved control target; implementation must preserve the general completed-record contract regardless of the current zero donor/fixed count."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/HistoricalGrossNetParityModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|VenueReportedRevision\"",
+          "expected": "Tests prove completed-row exclusion, legacy donor/fixed compatibility, unchanged calculation version, and unchanged late VenueReported supersession.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Preserve Gross-ordered one-strategy completion, bounded mutation, auditability, and restart safety while making fallback independent of donor runtime.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Отказываемся от доноров.",
+      "acceptanceCriteria": [
+        "The worker still selects the greatest-current-Gross unfinished strategy and completes that strategy before selecting another; exact-to-fallback phase boundaries remain strategy-local.",
+        "A fixed fallback target no longer performs a full 3006-strategy donor preview and therefore has no in-memory donor offset or donor-progress loss on restart.",
+        "Each target application remains a short atomic idempotent transaction with existing statement/lock timeouts, stable-tuple and CAS checks, immutable audit, reconciliation, and foreground yielding.",
+        "Logs and structured counters no longer claim donor work for a direct fixed target; documentation describes exact-to-direct-3.33 precedence, unchanged cutoff, completed-row preservation, and new-bet isolation.",
+        "Focused tests, affected solution build, requirement validators, diff checks, and independent semantic review all pass before completion."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "README.md",
+        "docs/configuration_reference.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityLiveFlowTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "Run VER-001 through VER-003, build PolyCopyTrader.sln with disposable outputs under the marked D:\\CodexTemp run, run git diff --check and requirement validation, and obtain independent semantic review of verbatim requests, approved contract, diff, and evidence.",
+          "expected": "All checks pass with no donor runtime for new historical fallback decisions, no change to ordinary new-bet accounting, no Production mutation, and no open review findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260827-historical-parity-direct-fixed-3p33 sha256:36999b41e5a89d88c23ae7f2febf3e605d7bbed18e8838bb3954956ea2e1f0f5",
+    "semanticDigest": "sha256:36999b41e5a89d88c23ae7f2febf3e605d7bbed18e8838bb3954956ea2e1f0f5"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/semantic_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
