@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260828-fast-forward-master",
+  "title": "Fast-forward master to the completed deployment history",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "ВСЕГДА пиши сразу в master"
+    },
+    {
+      "source": "user",
+      "text": "И как теперь вернуться в master и не потерять всё, что мы делали в других ветках?"
+    },
+    {
+      "source": "user",
+      "text": "Всё закоммичено и запушено"
+    },
+    {
+      "source": "user",
+      "text": "Переноси"
+    }
+  ],
+  "scope": {
+    "goal": "Move local master and origin/master forward to the complete committed history currently anchored at 922c2b0232450cf3b95d2b64a5d183c94834a029 on codex/reference-average-available-windows, including only the mandatory approval checkpoint added for this operation, preserve the other refs and stash entries, and leave master as the checked-out branch for subsequent work.",
+    "inScope": [
+      "Record and push the mandatory approval-only contract checkpoint as a direct descendant of verified clean source commit 922c2b0232450cf3b95d2b64a5d183c94834a029, without any product-file change.",
+      "Fast-forward local master from 02b13813aa2157e69c3a313b4bc86712dea9c674 to that approval checkpoint on codex/reference-average-available-windows.",
+      "Push the resulting local master to origin/master without force.",
+      "Leave the main worktree checked out on master with upstream origin/master.",
+      "Verify committed-history containment and exact local/remote ref equality after the push."
+    ],
+    "outOfScope": [
+      "Changing, deleting, merging, rebasing, or force-updating any codex/* branch except advancing codex/reference-average-available-windows by the mandatory approval-only contract checkpoint.",
+      "Applying, dropping, or modifying stash@{0}.",
+      "Editing product source, tests, documentation, configuration, or existing commit contents; only mandatory requirement/context/history bookkeeping is permitted.",
+      "Creating a merge commit, rewriting history, force-pushing, cherry-picking, squashing, or deleting refs.",
+      "Deploying or restarting the service, or reading or mutating Production data."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "Exactly the 140 existing committed descendants after 02b13813aa2157e69c3a313b4bc86712dea9c674 through 922c2b0232450cf3b95d2b64a5d183c94834a029, followed only by mandatory bookkeeping commits for this operation; no other historical commit range.",
+    "firstVerification": "Confirm a clean worktree, exact equality of the local deployment branch with its upstream, master-only/source-only counts of 0/140, and merge-base equal to the current master tip before moving any ref."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Move master to the complete committed source history using fast-forward only, with no history rewrite or synthetic merge commit.",
+      "sourceRequestIndexes": [1, 2, 3],
+      "sourceQuote": "Переноси",
+      "acceptanceCriteria": [
+        "Before mutation, the worktree is clean, codex/reference-average-available-windows equals origin/codex/reference-average-available-windows at 922c2b0232450cf3b95d2b64a5d183c94834a029, and master...source divergence is exactly 0/140.",
+        "The approved contract is committed separately as a direct child of 922c2b0232450cf3b95d2b64a5d183c94834a029 before master moves, and that checkpoint changes no product file.",
+        "git merge --ff-only advances local master to exactly that approval-checkpoint commit.",
+        "No merge commit, rebase, cherry-pick, squash, reset, force operation, or commit-content change occurs."
+      ],
+      "implementationPaths": [
+        ".git/refs/heads/master"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "git merge-base master codex/reference-average-available-windows; git rev-list --left-right --count master...codex/reference-average-available-windows; git merge --ff-only codex/reference-average-available-windows",
+          "expected": "The pre-contract preflight merge-base is the old master tip and divergence is 0/140; after the approval-only checkpoint, local master advances by fast-forward to that checkpoint with no product-file change in the checkpoint.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Publish the complete fast-forwarded history to origin/master and leave master as the branch used for subsequent work.",
+      "sourceRequestIndexes": [0, 3],
+      "sourceQuote": "ВСЕГДА пиши сразу в master",
+      "acceptanceCriteria": [
+        "A normal non-force push updates origin/master to the fast-forwarded approval checkpoint, and final mandatory bookkeeping is committed and pushed directly on master.",
+        "The checked-out branch after completion is master and its configured upstream is origin/master.",
+        "Immediately after the fast-forward push, local master, origin/master, codex/reference-average-available-windows, and origin/codex/reference-average-available-windows resolve to the approval checkpoint; after final bookkeeping, local master and origin/master resolve to the same final commit and contain that checkpoint."
+      ],
+      "implementationPaths": [
+        ".git/refs/heads/master",
+        "origin/master"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "git push origin master; git status --porcelain=v1 --branch; git rev-parse master origin/master codex/reference-average-available-windows origin/codex/reference-average-available-windows",
+          "expected": "The push succeeds without force; immediate checkpoint equality is verified; after final bookkeeping the worktree is on clean master tracking origin/master, both master refs are equal, and they contain the approval checkpoint.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Preserve every existing side branch and stash entry while moving master.",
+      "sourceRequestIndexes": [1, 3],
+      "sourceQuote": "не потерять всё, что мы делали в других ветках",
+      "acceptanceCriteria": [
+        "No local or remote codex/* branch is deleted; no codex/* branch moves except codex/reference-average-available-windows advancing by the mandatory approval-only checkpoint.",
+        "stash@{0} remains present and unchanged.",
+        "The standalone codex/reference-average-partial-24h ref remains present; it is not merged because its v4 behavior has been superseded by the v5 history already in the source branch."
+      ],
+      "implementationPaths": [
+        ".git/refs/heads/master"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Compare git for-each-ref refs/heads/codex refs/remotes/origin/codex and git stash list snapshots taken before and after the fast-forward.",
+          "expected": "Every pre-existing codex/* ref except the explicitly allowed approval-only source-branch advance retains the same object ID, and stash@{0} retains object ID 94b5b3c21613947d490d5874d89bb9c0d1df6d62.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260828-fast-forward-master sha256:202b31d3f154e1cf50b9050f9c9b6ad6ba4bebd2009a639ca8a5008a4e1580c1",
+    "semanticDigest": "sha256:202b31d3f154e1cf50b9050f9c9b6ad6ba4bebd2009a639ca8a5008a4e1580c1"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/semantic_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
