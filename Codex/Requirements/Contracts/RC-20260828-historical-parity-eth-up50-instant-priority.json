@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260828-historical-parity-eth-up50-instant-priority",
+  "title": "Prioritize historical Paper and Live Net accounting for ETH Up 50 bps Instant",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "А можно в виде исключения пересчитать стратегию ETH Up or Down 5m Up 50 bps Instant ? Paper и Live ставки"
+    },
+    {
+      "source": "user",
+      "text": "Подтверждаю"
+    }
+  ],
+  "scope": {
+    "goal": "Give the exact ETH Up or Down 5m Up 50 bps Instant strategy a closed one-time priority in the existing historical Gross/Net parity service so its pre-cutoff Paper and Live accounting completes before the service returns automatically to the ordinary current-Gross queue.",
+    "inScope": [
+      "Exact strategy b7c50005-0000-4000-8079-000000000150 / eth_up_down_5m_up_bps_50_instant / ETH Up or Down 5m Up 50 bps Instant only.",
+      "A closed priority exception in the existing HistoricalGrossNetParity strategy-selection path: when this strategy is unfinished, select it ahead of the ordinary Gross ranking while preserving its actual observed Gross and rank in logs and audit evidence.",
+      "All existing canonical historical Paper and Live contribution source kinds for the exact strategy whose proved originating time is strictly earlier than 2026-08-10T00:00:00Z UTC.",
+      "Existing exact, authoritative and local Polymarket Fee precedence followed by the already approved direct Fixed0p0333 fallback when an exact Fee cannot be determined.",
+      "Existing bounded pages, exact-to-fallback phases, restart reconstruction, immutable accounting audit, reconciliation, Live initial-balance ordering, CAS/idempotency and late VenueReported revision behavior.",
+      "After the exact strategy is terminally complete, automatic continuation of the unchanged ordinary greatest-current-Gross unfinished-strategy ordering."
+    ],
+    "outOfScope": [
+      "Any priority exception for another strategy or any general user-configurable priority framework.",
+      "Any Paper or Live contribution originating at or after 2026-08-10T00:00:00Z UTC; the verified 130 post-cutoff settled Paper runs and 130 post-cutoff settled Live orders remain on ordinary current accounting and are not historical candidates.",
+      "Changing Gross PnL, Gross ROI, stake or cost basis, Fee formula, the exact/local precedence, the Fixed0p0333 formula, candidate membership, source order, page size, timeouts, transaction boundaries, Live balance rules or late VenueReported revisions.",
+      "Changing strategy signals, risk, Paper execution, Live order placement, fills, settlements, strategy enablement, live_stakes, service mode or trading configuration.",
+      "Production database mutation, service deployment, restart or configuration mutation during this local implementation task."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Only canonical Paper and Live contributions for exact strategy UUID b7c50005-0000-4000-8079-000000000150 with proved originating time strictly before 2026-08-10T00:00:00Z UTC.",
+    "firstVerification": "Run a bounded UTC READ ONLY Production preview of the exact strategy identity, Gross rank, pre/post-cutoff Paper and Live counts, Fee/Net coverage and existing parity audit before implementation."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Select the exact ETH Up or Down 5m Up 50 bps Instant strategy as a closed priority exception whenever it has unfinished historical parity work.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "в виде исключения пересчитать стратегию ETH Up or Down 5m Up 50 bps Instant",
+      "acceptanceCriteria": [
+        "On a fresh service process, if exact strategy UUID b7c50005-0000-4000-8079-000000000150 has at least one unfinished historical candidate, the parity worker selects it before any ordinary current-Gross candidate even though its verified current Gross rank is 175.",
+        "The selected strategy remains active through every bounded exact and fallback page, including both Paper and Live source kinds, before another strategy can be selected.",
+        "The exception does not falsify financial evidence: candidate and audit records retain the strategy's actual Dashboard Gross value and actual ordinary Gross rank rather than assigning it rank 1.",
+        "Once the exact strategy has no unfinished historical candidate, the worker resumes the unchanged greatest-current-Gross ordering; a restart safely reconstructs completion from canonical rows and immutable audit instead of repeating financial writes.",
+        "No other strategy can inherit or configure this exception."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity\"",
+          "expected": "Focused tests prove exact-ID priority ahead of a higher-Gross strategy, actual rank/Gross preservation, full exact-to-fallback retention, automatic return to Gross ordering and restart-safe completed-target skipping.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Complete both Paper and Live historical Net accounting for the exact strategy under the existing pre-cutoff financial rules.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Paper и Live ставки",
+      "acceptanceCriteria": [
+        "The unchanged cutoff is strict UTC originating time before 2026-08-10T00:00:00Z.",
+        "The verified preview population is recognized: 408 old settled Paper runs, of which 2 already have exact Net and 406 remain; and 405 old settled Live orders, of which 2 already have exact Net and 403 remain.",
+        "Already formula-complete Paper and Live rows are preserved; VenueReported, authoritative repair and approved local exact calculation retain precedence.",
+        "When exact Fee cannot be determined for a positive proved basis, persist the existing Fixed0p0333 result Fee = ROUND_AWAY_8(basis * 0.0333) and Net = Gross - Fee; no donor selection is restored.",
+        "Existing chronological Live initial-balance application, clamping, durable ownership, idempotency and strictly newer valid VenueReported revision behavior remain unchanged.",
+        "The verified 130 post-cutoff settled Paper runs and 130 post-cutoff settled Live orders, all already Net-complete, are not selected or rewritten."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|VenueReportedRevision\"",
+          "expected": "Tests prove unchanged cutoff, Paper and Live inclusion, completed-row preservation, exact-before-Fixed0p0333 behavior, Live balance ordering and late VenueReported revision behavior.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Keep the exception bounded, auditable and isolated from trading and ordinary post-cutoff accounting.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Подтверждаю",
+      "acceptanceCriteria": [
+        "The existing batch size 50, cycle cadence, command/lock/lookup timeouts, short per-target transactions, compare-and-set guards, durable progress and foreground-work yielding are unchanged.",
+        "At the verified starting population, no more than 809 currently Net-missing historical Paper/Live contributions are financially eligible; processing remains incremental and restartable rather than one large transaction.",
+        "Logs identify the closed priority selection separately from ordinary greatest-current-Gross selection and continue to report candidates, applied, fallback-eligible, deferred and Live-balance counts.",
+        "No source, schema, strategy, order-placement, execution, risk or ordinary post-cutoff accounting behavior changes beyond the exact selection priority.",
+        "Focused tests, affected build, requirement validation, diff checks and independent semantic review pass before completion."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillProcessorTests.cs",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "Run VER-001 and VER-002, build the affected Service and tests with disposable outputs under the marked D:\\CodexTemp run, run git diff --check and requirement validation, and obtain independent semantic review of the verbatim requests, approved contract, actual diff and evidence.",
+          "expected": "All checks pass with no unapproved behavior, no Production mutation and no open semantic-review findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260828-historical-parity-eth-up50-instant-priority sha256:fb68e0dd2001ea5396c52665b01d0f72890030ee804020dfddc8fb41ac7c8887",
+    "semanticDigest": "sha256:fb68e0dd2001ea5396c52665b01d0f72890030ee804020dfddc8fb41ac7c8887"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_historical_parity_eth_up50_priority",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
