@@ -137,7 +137,7 @@
         "Each of 67 chains is committed in its own short READ COMMITTED transaction, with statement_timeout 15s, lock_timeout 2s and at least one second between committed batches; a separate final transaction writes the marker only after all chains verify.",
         "Between batches, read-only checks verify fresh Running service heartbeat, empty last_error, no unexpected waiting locks, unchanged source and plan, expected exact progress and unchanged protected flags/states/events; any deviation stops before the next batch and leaves a durable resumable prefix.",
         "Final verification confirms exactly 46 complete Reset chains and 21 complete Positive chains, 402 target rows, no partial chains or ID collisions, exact financial totals, one matching marker and zero unintended changes.",
-        "The operation uses the local verified .NET command against Production without deploying or restarting the running service and completes repository tests, build, requirement gates, independent semantic review, task-only commits and push."
+      "The operation uses the local verified .NET command against Production without deploying or restarting the running service and completes focused tests, a baseline-aware complete test-project comparison with zero new failures, solution build, requirement gates, independent semantic review, task-only commits and push."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
@@ -152,8 +152,8 @@
         {
           "id": "VER-004",
           "kind": "test",
-          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore",
-          "expected": "The complete test project passes with zero failures using only the marked D:\\CodexTemp run for disposable outputs.",
+          "command": "Run the complete test project for clean HEAD 68abcd3b2efadcd8e2075f8e8cb5fa18c5da5f4e and the current implementation under identical normal non-PostgreSQL-gated conditions, then compare exact failed test names; separately run FullyQualifiedName~EthUp8LossDiffHistoryBackfill with the disposable PostgreSQL gate enabled.",
+          "expected": "The current implementation has zero new failed test names versus clean HEAD (verified preview baseline: both have the same 129 failures, while current adds three passing tests), and the exact changed PostgreSQL test set passes 4/4 with zero skips using only the marked D:\\CodexTemp run for disposable outputs.",
           "result": "pending",
           "evidence": "pending"
         },
@@ -185,16 +185,27 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f",
-        "semanticDigest": "sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c",
+        "semanticDigest": "sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "Clean approved HEAD 68abcd3b2efadcd8e2075f8e8cb5fa18c5da5f4e has 129 pre-existing failures in the normal non-PostgreSQL-gated complete test-project run. Replace the impossible zero-total-failures acceptance gate with an exact-name comparison requiring zero new failures, while retaining the separate exact PostgreSQL backfill gate at 4/4 passed with zero skips.",
+      "impact": "The task can prove that this backfill introduces no test regression and that its complete PostgreSQL path passes, but it will not repair or claim resolution of the 129 unrelated pre-existing repository failures. Production apply remains blocked if any current failed test name is absent from the clean-HEAD baseline or any exact backfill test fails or skips.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c",
+        "semanticDigest": "sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f",
-    "semanticDigest": "sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f"
+    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c",
+    "semanticDigest": "sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_up8_lossdiff_history",
