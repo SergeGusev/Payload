@@ -331,7 +331,7 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
     }
 
     [Fact]
-    public void CandidateQuery_BoundsParityAuditByMaterializedCandidateScopeAndSourceShape()
+    public void CandidateQuery_PhasesLegacyParityScanOnOneReadOnlySnapshot()
     {
         var source = ReadRepositorySource();
         var start = source.IndexOf(
@@ -342,33 +342,68 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
             start,
             StringComparison.Ordinal);
         var candidateMethod = source[start..end];
+        var preflightStart = candidateMethod.IndexOf(
+            "await using var preflightCommand",
+            StringComparison.Ordinal);
+        var emptyPreflightStart = candidateMethod.IndexOf(
+            "if (preflightKeys.Count == 0)",
+            StringComparison.Ordinal);
+        var legacyScanStart = candidateMethod.IndexOf(
+            "await using var legacyParityCommand",
+            StringComparison.Ordinal);
+        var mainQueryStart = candidateMethod.IndexOf(
+            "await using var command",
+            legacyScanStart + 1,
+            StringComparison.Ordinal);
+        var legacyScan = candidateMethod[legacyScanStart..mainQueryStart];
+        var mainQuery = candidateMethod[mainQueryStart..];
 
-        Assert.Contains("candidate_scope AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
-        Assert.Contains("parity_sell_fill_keys AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
-        Assert.Contains("parity_run_source_keys AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
-        Assert.Contains("parity_legacy_run_order_ids AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("IsolationLevel.RepeatableRead", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("SET TRANSACTION READ ONLY;", candidateMethod, StringComparison.Ordinal);
+        Assert.True(preflightStart >= 0);
+        Assert.True(emptyPreflightStart > preflightStart);
+        Assert.True(legacyScanStart > emptyPreflightStart);
+        Assert.True(mainQueryStart > legacyScanStart);
+        Assert.Contains(
+            "return new HistoricalPaperFakFeeBackfillPage([], null, true);",
+            candidateMethod[emptyPreflightStart..legacyScanStart],
+            StringComparison.Ordinal);
+        Assert.Equal(
+            4,
+            candidateMethod.Split(
+                "CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds",
+                StringSplitOptions.None).Length - 1);
+
+        Assert.Contains("old_payload_json ->> 'paper_order_id'", legacyScan, StringComparison.Ordinal);
+        Assert.Contains("ANY(@CandidatePaperOrderIds)", legacyScan, StringComparison.Ordinal);
+        Assert.DoesNotContain("strategy_market_paper_runs", legacyScan, StringComparison.Ordinal);
+        Assert.Contains("candidate_scope AS MATERIALIZED", mainQuery, StringComparison.Ordinal);
+        Assert.Contains("parity_sell_fill_keys AS MATERIALIZED", mainQuery, StringComparison.Ordinal);
+        Assert.Contains("parity_run_source_keys AS MATERIALIZED", mainQuery, StringComparison.Ordinal);
         Assert.Contains(
             "parity_position_settlement_bindings AS MATERIALIZED",
-            candidateMethod,
+            mainQuery,
             StringComparison.Ordinal);
-        Assert.Contains("parity_excluded_fill_keys AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
-        Assert.Contains("?| scope.fill_ids", candidateMethod, StringComparison.Ordinal);
-        Assert.Contains("ANY(scope.paper_order_ids)", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("parity_excluded_fill_keys AS MATERIALIZED", mainQuery, StringComparison.Ordinal);
+        Assert.Contains("?| scope.fill_ids", mainQuery, StringComparison.Ordinal);
+        Assert.Contains("ANY(@LegacyParityPaperOrderIds)", mainQuery, StringComparison.Ordinal);
+        Assert.DoesNotContain("parity_legacy_run_order_ids", mainQuery, StringComparison.Ordinal);
+        Assert.DoesNotContain("ANY(scope.paper_order_ids)", mainQuery, StringComparison.Ordinal);
         Assert.Contains(
             "parity_audit.source_id = fill.fill_id",
-            candidateMethod,
+            mainQuery,
             StringComparison.Ordinal);
         Assert.Contains(
             "parity_audit.source_id = parity_run.id",
-            candidateMethod,
+            mainQuery,
             StringComparison.Ordinal);
         Assert.Contains(
             "parity_excluded.fill_id = fill.fill_id",
-            candidateMethod,
+            mainQuery,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
             "AND (\r\n                (parity_audit.source_kind = 'PaperSellFill'",
-            candidateMethod,
+            mainQuery,
             StringComparison.Ordinal);
     }
 

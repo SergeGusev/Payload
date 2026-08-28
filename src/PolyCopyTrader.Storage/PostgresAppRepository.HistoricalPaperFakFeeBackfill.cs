@@ -133,11 +133,127 @@ ORDER BY gross_realized_pnl_usd DESC, strategy.id;
 
         var pageSize = Math.Min(limit, HistoricalPaperFakFeeBackfillMaxPageSize);
         await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(
+            IsolationLevel.RepeatableRead,
+            cancellationToken);
+        await using (var configureCommand = CreateCommand(connection, "SET TRANSACTION READ ONLY;"))
+        {
+            configureCommand.Transaction = transaction;
+            configureCommand.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
+            await configureCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
         // Keep the chronological page strategy-local. The LATERAL boundary makes
         // PostgreSQL probe fills by paper_order_id for each materialized strategy
         // order instead of starting with the global LegacyUnknown fill timeline.
-        // Wide order/fill payloads are loaded only after the N+1 candidate keys
-        // are selected.
+        // Run the key preflight, legacy JSON binding scan, and remaining indexed
+        // candidate query as separately bounded commands on one frozen read-only
+        // snapshot. Wide order/fill payloads are loaded only after the N+1
+        // candidate keys are selected.
+        await using var preflightCommand = CreateCommand(connection, $$"""
+WITH strategy_orders AS MATERIALIZED (
+    SELECT paper_order.id
+    FROM public.paper_orders paper_order
+    WHERE paper_order.strategy_id = @StrategyId
+      AND paper_order.side = '{{TradeSide.Buy}}'
+      AND paper_order.execution_source IN (
+          '{{HistoricalPaperFakDirectSource}}',
+          '{{HistoricalPaperFakChildSource}}')
+),
+strategy_fill_keys AS MATERIALIZED (
+    SELECT
+        fill.id AS fill_id,
+        fill.paper_order_id,
+        fill.filled_at_utc
+    FROM strategy_orders strategy_order
+    CROSS JOIN LATERAL (
+        SELECT
+            candidate_fill.id,
+            candidate_fill.paper_order_id,
+            candidate_fill.filled_at_utc
+        FROM public.paper_fills candidate_fill
+        WHERE candidate_fill.paper_order_id = strategy_order.id
+          AND candidate_fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
+          AND candidate_fill.filled_at_utc < @FilledBeforeUtc
+          AND (
+              NOT @HasCursor
+              OR candidate_fill.filled_at_utc > @AfterFilledAtUtc
+              OR (
+                  candidate_fill.filled_at_utc = @AfterFilledAtUtc
+                  AND candidate_fill.paper_order_id > @AfterPaperOrderId)
+              OR (
+                  candidate_fill.filled_at_utc = @AfterFilledAtUtc
+                  AND candidate_fill.paper_order_id = @AfterPaperOrderId
+                  AND candidate_fill.id > @AfterFillId)
+          )
+        OFFSET 0
+    ) fill
+)
+SELECT
+    fill.fill_id,
+    fill.paper_order_id
+FROM strategy_fill_keys fill;
+""");
+        preflightCommand.Transaction = transaction;
+        preflightCommand.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
+        preflightCommand.Parameters.Add("FilledBeforeUtc", NpgsqlDbType.TimestampTz).Value =
+            UtcDateTime(filledBeforeUtc);
+        preflightCommand.Parameters.AddWithValue("StrategyId", strategyId);
+        preflightCommand.Parameters.AddWithValue("HasCursor", afterCursor is not null);
+        preflightCommand.Parameters.Add("AfterFilledAtUtc", NpgsqlDbType.TimestampTz).Value =
+            UtcDateTime(afterCursor?.FilledAtUtc ?? DateTimeOffset.MinValue);
+        preflightCommand.Parameters.AddWithValue(
+            "AfterPaperOrderId",
+            afterCursor?.PaperOrderId ?? Guid.Empty);
+        preflightCommand.Parameters.AddWithValue("AfterFillId", afterCursor?.FillId ?? Guid.Empty);
+
+        var preflightKeys = new List<(Guid FillId, Guid PaperOrderId)>();
+        await using (var preflightReader =
+                     await preflightCommand.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await preflightReader.ReadAsync(cancellationToken))
+            {
+                preflightKeys.Add((preflightReader.GetGuid(0), preflightReader.GetGuid(1)));
+            }
+        }
+
+        if (preflightKeys.Count == 0)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new HistoricalPaperFakFeeBackfillPage([], null, true);
+        }
+
+        var candidatePaperOrderIds = preflightKeys
+            .Select(key => key.PaperOrderId.ToString("D").ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        await using var legacyParityCommand = CreateCommand(connection, $$"""
+SELECT DISTINCT
+    parity_audit.old_payload_json ->> 'paper_order_id' AS paper_order_id
+FROM public.historical_gross_net_parity_audit parity_audit
+WHERE parity_audit.source_kind = 'PaperRun'
+  AND parity_audit.calculation_version =
+        '{{HistoricalGrossNetParityConstants.CalculationVersion}}'
+  AND parity_audit.operation_kind = 'AccountingDecision'
+  AND parity_audit.old_payload_json ->> 'paper_order_id' =
+        ANY(@CandidatePaperOrderIds);
+""");
+        legacyParityCommand.Transaction = transaction;
+        legacyParityCommand.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
+        legacyParityCommand.Parameters.Add(
+            "CandidatePaperOrderIds",
+            NpgsqlDbType.Array | NpgsqlDbType.Text).Value = candidatePaperOrderIds;
+
+        var legacyParityPaperOrderIds = new List<string>();
+        await using (var legacyParityReader =
+                     await legacyParityCommand.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await legacyParityReader.ReadAsync(cancellationToken))
+            {
+                legacyParityPaperOrderIds.Add(legacyParityReader.GetString(0));
+            }
+        }
+
         await using var command = CreateCommand(connection, $$"""
 WITH strategy_orders AS MATERIALIZED (
     SELECT paper_order.id
@@ -178,13 +294,9 @@ strategy_fill_keys AS MATERIALIZED (
     ) fill
 ),
 candidate_scope AS MATERIALIZED (
-    SELECT
-        COALESCE(
-            array_agg(DISTINCT lower(fill.fill_id::text)),
-            ARRAY[]::text[]) AS fill_ids,
-        COALESCE(
-            array_agg(DISTINCT lower(fill.paper_order_id::text)),
-            ARRAY[]::text[]) AS paper_order_ids
+    SELECT COALESCE(
+        array_agg(DISTINCT lower(fill.fill_id::text)),
+        ARRAY[]::text[]) AS fill_ids
     FROM strategy_fill_keys fill
 ),
 parity_sell_fill_keys AS MATERIALIZED (
@@ -213,17 +325,6 @@ parity_run_source_keys AS MATERIALIZED (
            AND parity_audit.operation_kind = 'AccountingDecision'
         WHERE parity_run.paper_order_id = fill.paper_order_id)
 ),
-parity_legacy_run_order_ids AS MATERIALIZED (
-    SELECT DISTINCT parity_audit.old_payload_json ->> 'paper_order_id' AS paper_order_id
-    FROM public.historical_gross_net_parity_audit parity_audit
-    CROSS JOIN candidate_scope scope
-    WHERE parity_audit.source_kind = 'PaperRun'
-      AND parity_audit.calculation_version =
-            '{{HistoricalGrossNetParityConstants.CalculationVersion}}'
-      AND parity_audit.operation_kind = 'AccountingDecision'
-      AND parity_audit.old_payload_json ->> 'paper_order_id' =
-            ANY(scope.paper_order_ids)
-),
 parity_position_settlement_bindings AS MATERIALIZED (
     SELECT
         parity_audit.evidence_payload_json
@@ -246,11 +347,6 @@ parity_excluded_fill_keys AS MATERIALIZED (
     UNION
     SELECT fill.fill_id
     FROM parity_run_source_keys fill
-    UNION
-    SELECT fill.fill_id
-    FROM strategy_fill_keys fill
-    INNER JOIN parity_legacy_run_order_ids parity_run
-        ON parity_run.paper_order_id = lower(fill.paper_order_id::text)
     UNION
     SELECT fill.fill_id
     FROM strategy_fill_keys fill
@@ -279,6 +375,8 @@ candidate_keys AS MATERIALIZED (
             AND fallback_run.net_realized_pnl_usd IS NOT NULL
             AND fallback_run.net_realized_pnl_usd =
                 fallback_run.realized_pnl_usd - fallback_run.fee_usd)
+      AND NOT (
+          lower(fill.paper_order_id::text) = ANY(@LegacyParityPaperOrderIds))
       AND NOT EXISTS (
           SELECT 1
           FROM parity_excluded_fill_keys parity_excluded
@@ -335,6 +433,7 @@ INNER JOIN public.paper_fills fill ON fill.id = candidate.fill_id
 INNER JOIN public.paper_orders paper_order ON paper_order.id = candidate.paper_order_id
 ORDER BY candidate.filled_at_utc, candidate.paper_order_id, candidate.fill_id;
 """);
+        command.Transaction = transaction;
         command.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
         command.Parameters.Add("FilledBeforeUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(filledBeforeUtc);
         command.Parameters.AddWithValue("StrategyId", strategyId);
@@ -344,15 +443,22 @@ ORDER BY candidate.filled_at_utc, candidate.paper_order_id, candidate.fill_id;
         command.Parameters.AddWithValue("AfterPaperOrderId", afterCursor?.PaperOrderId ?? Guid.Empty);
         command.Parameters.AddWithValue("AfterFillId", afterCursor?.FillId ?? Guid.Empty);
         command.Parameters.AddWithValue("FetchLimit", pageSize + 1);
+        command.Parameters.Add(
+            "LegacyParityPaperOrderIds",
+            NpgsqlDbType.Array | NpgsqlDbType.Text).Value = legacyParityPaperOrderIds.ToArray();
 
         var scanned = new List<HistoricalPaperFakFeeBackfillCandidate>(pageSize + 1);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            scanned.Add(new HistoricalPaperFakFeeBackfillCandidate(
-                ReadHistoricalPaperFakOrder(reader),
-                ReadHistoricalPaperFakFill(reader)));
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                scanned.Add(new HistoricalPaperFakFeeBackfillCandidate(
+                    ReadHistoricalPaperFakOrder(reader),
+                    ReadHistoricalPaperFakFill(reader)));
+            }
         }
+
+        await transaction.CommitAsync(cancellationToken);
 
         var reachedEnd = scanned.Count <= pageSize;
         var candidates = scanned.Take(pageSize).ToArray();

@@ -3,7 +3,7 @@
   "contractId": "RC-20260828-legacy-parity-phased-query",
   "title": "Phase the Legacy parity candidate query",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -57,40 +57,40 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~HistoricalPaperFakFeeBackfill --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
           "expected": "All focused source-contract and real-PostgreSQL integration tests pass, including unchanged inclusion/exclusion for every parity binding shape, no-scan empty preflight, one-snapshot phase wiring and full tuple paging.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused Release verification passed 23/23 with zero skips against allowlisted disposable PostgreSQL database pct_codex_skip_v2_20260828123100_a0f5bc60. It covered source contracts, all parity binding shapes including orphaned legacy PaperRun source_id, full tuple paging, and the empty-preflight terminal page. The disposable database was dropped and exact remaining count was zero."
         },
         {
           "id": "VER-002",
           "kind": "inspection",
           "command": "Run exact BEGIN READ ONLY, SET LOCAL statement_timeout='15s' Production phase previews for rank-2 strategy b7c50005-0001-4000-8166-000000000003 and cutoff 2026-08-07T22:44:55.219515Z.",
           "expected": "Preflight, legacy JSON scan and main candidate selection each complete below the unchanged 10-second product command timeout and return the same two fill keys, one legacy-bound exclusion and one remaining candidate as the deployed semantics.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Exact Production read-only prototypes for strategy b7c50005-0001-4000-8166-000000000003 and cutoff 2026-08-07T22:44:55.219515Z returned two eligible fill/order keys in 384 ms, one orphan-compatible legacy old-payload order binding in 4,479 ms, and the identical one remaining candidate in 1,180 ms. Every session used BEGIN READ ONLY and SET LOCAL statement_timeout='15s'; Production was not mutated."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts",
           "expected": "Release solution build succeeds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release solution build completed from the marked D:\\CodexTemp run with 0 errors and 126 pre-existing warnings."
         },
         {
           "id": "VER-004",
           "kind": "test",
           "command": "Run dotnet test PolyCopyTrader.sln -c Release from the marked D:\\CodexTemp run to inventory the repository baseline, then compare failing test names against the current known baseline and the three task files.",
           "expected": "Every test exercising the changed method passes. Repository-wide failures are non-blocking only when their names and code paths are unchanged baseline failures outside the three task files; they are reported as failures and never represented as a green run.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Current full suite and independently built approval-checkpoint d90f1eae baseline each produced exactly 1,522 passed, 129 failed, and 68 skipped tests. TRX comparison found 129 unique failures in each run, zero new failures, and zero missing failures. No full-suite green claim is made."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "Independent reviewer compares the verbatim request and approved semantic digest against the actual task diff and all verification evidence.",
           "expected": "Reviewer reports no scope drift, semantic regression, mixed-snapshot risk, or unsupported completion claim.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/reviewer_legacy_parity_query compared the verbatim request, approved contract, diff from d90f1eae, focused PostgreSQL evidence, Release build, Production prototype, and exact baseline delta. Verdict PASS with no open findings."
         }
       ]
     }
@@ -116,9 +116,9 @@
     "semanticDigest": "sha256:a0f5bc60660378b3820fbeac8c8ee4047ea0566ebdb2fb3cc46fa6a97b73a210"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer_legacy_parity_phased_query",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/reviewer_legacy_parity_query",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

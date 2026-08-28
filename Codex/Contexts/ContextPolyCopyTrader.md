@@ -1,3 +1,17 @@
+## Active Update 2026-08-28 Legacy Parity Phased Query
+Goal: Remove the remaining rank-2 Legacy candidate-query timeout without changing candidate membership, paging, accounting, timeout values, or trading behavior.
+Status: Completed locally and independently reviewed
+Done:
+- Split `GetHistoricalPaperFakFeeBackfillCandidatesAsync` into strategy-local key preflight, legacy `PaperRun.old_payload_json` binding scan, and indexed main candidate selection, each with its own unchanged 10-second command timeout.
+- Kept all three phases on one `REPEATABLE READ READ ONLY` transaction; an empty preflight commits and returns before the legacy audit scan is created or executed.
+- Preserved direct `PaperSellFill`, exact `PaperRun`, orphan-compatible legacy `PaperRun`, `PaperPosition`, `PaperSettlement`, fallback and terminal exclusions, full tuple cursor, order, limit and payload.
+- Exact Production read-only prototypes for rank 2 completed in 384 ms, 4,479 ms and 1,180 ms and reproduced two eligible keys, one legacy binding and one remaining candidate.
+- Focused disposable-PostgreSQL verification passed 23/23; Release solution build passed with zero errors and 126 existing warnings. Current and approval-checkpoint full suites both produced 1,522 passed, 129 failed and 68 skipped, with zero failed-name delta.
+- Requirement validator passed and independent reviewer `agent:/root/reviewer_legacy_parity_query` returned PASS with no findings.
+Next: Deploy the implementation commit, then verify the exact service build and the next Legacy rank-2 visit read-only.
+Notes: Approval contract `RC-20260828-legacy-parity-phased-query` digest is `sha256:a0f5bc60660378b3820fbeac8c8ee4047ea0566ebdb2fb3cc46fa6a97b73a210`; approval checkpoint is `d90f1eae`. No Production write, schema/index/configuration change, service action, strategy/order change, or Paper/Live execution change occurred.
+Blockers: None for local delivery.
+
 ## Active Update 2026-08-28 ETH Up8 LossDiff History Completed
 Goal: Finish the exact ETH Up8 LossDiff 3+ and 16+ Positive history backfill with truthful historical execution evidence.
 Status: Completed
@@ -10,6 +24,19 @@ Done:
 Next: None
 Notes: Reset 3+ has 46 Settled trades (31 wins, 15 losses, Net PnL 61.13382091); Positive 16+ has 21 Settled trades (15 wins, 6 losses, Net PnL 37.74246883). The final b83 verification made no Production writes and did not rewrite, delete or replay history.
 Blockers: None
+
+## Active Update 2026-08-28 Legacy Parity Query Deployment Verification
+Goal: Verify production build c3c12dca, service health, Paper bets, and the formerly blocked rank-2 Legacy candidate query without changing Production.
+Status: Completed read-only; rank 2 progressed, but the query still timed out once and remains near its limit
+Done:
+- Verified exact production build `1.0.0+c3c12dca5b57b922c35cc389bfde37ce029a993b`, started `2026-08-28T08:40:31.772109Z`, Running/Live with fresh heartbeat and `last_error=NULL`.
+- Verified 474 post-start Paper orders across 335 strategies through `2026-08-28T08:50:02.196878Z`: 472 Filled with 472 post-start fill rows and 2 Pending at that cutoff.
+- Verified rank 1 completed in 1,529 ms, then 37 ms and 45 ms. Exact rank 2 `b7c50005-0001-4000-8166-000000000003` first failed after 10,046 ms at `2026-08-28T08:48:42.320470Z` with an Npgsql read timeout in `GetHistoricalPaperFakFeeBackfillCandidatesAsync`.
+- Verified automatic recovery: rank 2 retried, returned one candidate in 9,020 ms, recorded one structural conflict and zero updates, completed its next phases in 94 ms and 37 ms, then the worker advanced to rank 3.
+- Independently confirmed the rank-2 strategy still has exactly two pre-cutoff `LegacyUnknown` fills. Post-start server logs contain the one Legacy ERR above and zero FTL entries in the checked interval.
+Next: Await user direction on further optimization of the remaining near-timeout query path.
+Notes: Exact database cutoff `2026-08-28T08:54:04.847145Z`; server logs checked through approximately `2026-08-28T08:54:58Z`. Every SQL session used `BEGIN READ ONLY` and `SET LOCAL statement_timeout='15s'` against `192.168.0.101:5432/polycopytrader`. No Production, service, strategy, order, configuration, or database state was changed.
+Blockers: The Legacy rank-2 candidate query is not reliably below its 10-second command timeout; the successful retry had only about 0.98 seconds of headroom.
 
 ## Active Update 2026-08-28 Legacy Parity Candidate Query
 Goal: Bound the Legacy historical Paper FAK candidate parity-audit exclusion without changing candidate membership, ordering, timeout, or trading behavior.

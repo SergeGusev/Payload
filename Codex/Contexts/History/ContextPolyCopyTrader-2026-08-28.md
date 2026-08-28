@@ -72,3 +72,17 @@ Request:
 
 Result:
 Recorded approval-only checkpoint `e1054df3` for the revised verification gate. Completed the bounded Legacy parity-candidate query in the three approved files, preserving every existing exclusion shape and query contract. Focused source tests passed 19/19, disposable PostgreSQL integration passed 4/4, a 150,005-row stress fixture passed in 625 ms, and the Release solution build passed with zero errors. The full solution inventory remained 1522 passed, 68 skipped, and 129 unrelated baseline failures; no green full-suite or Production runtime claim was made. Independent semantic review passed with no findings.
+
+## 2026-08-28T08:54:58.0460112Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified production read-only on exact build `c3c12dca5b57b922c35cc389bfde37ce029a993b`. The service was Running/Live with fresh heartbeat and no last error; 474 post-start Paper orders existed across 335 strategies, with 472 Filled and two Pending at the exact cutoff. The formerly blocked rank-2 Legacy query still timed out once after 10,046 ms, then recovered automatically: a retry completed in 9,020 ms with one structural conflict and zero updates, two later phases completed in 94 ms and 37 ms, and the worker advanced to rank 3. Both pre-cutoff rank-2 fills remain `LegacyUnknown`. Logs contained exactly that one post-start ERR and zero FTL entries in the checked interval. No Production state was changed.
+
+## 2026-08-28T09:36:13.3427038Z
+Request:
+Дорабатывай
+
+Result:
+Completed approved contract `RC-20260828-legacy-parity-phased-query` after checkpoint `d90f1eae`. The Legacy candidate lookup now runs strategy-local preflight, orphan-compatible legacy PaperRun JSON binding scan and indexed main selection as separate 10-second commands on one `REPEATABLE READ READ ONLY` snapshot; an empty preflight skips the JSON scan. Candidate membership, five parity binding shapes, fallback/terminal guards, tuple paging, order, payload and all accounting/trading behavior remain unchanged. Exact Production read-only prototypes completed in 384 ms, 4,479 ms and 1,180 ms. Focused real PostgreSQL verification passed 23/23, Release build passed with zero errors, and current versus checkpoint full-suite failed-name delta was zero at identical 1,522 passed / 129 failed / 68 skipped. Requirement validation and independent semantic review passed. No Production state changed.
