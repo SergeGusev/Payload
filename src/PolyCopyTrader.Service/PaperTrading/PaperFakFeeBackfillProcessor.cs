@@ -820,6 +820,9 @@ public sealed record HistoricalGrossNetParityCycleResult(
 
 internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetParityProcessor
 {
+    internal static readonly Guid ClosedPriorityStrategyId =
+        Guid.Parse("b7c50005-0000-4000-8079-000000000150");
+
     private readonly ILogger<HistoricalGrossNetParityProcessor> logger;
     private readonly HistoricalGrossNetParityOptions options;
     private readonly IHistoricalGrossNetParityStore store;
@@ -904,6 +907,7 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                                 options.LockTimeoutMilliseconds),
                             cancellationToken)
                         .ConfigureAwait(false);
+                    selectionRanking = PrioritizeClosedException(selectionRanking);
                     selectionRankingIndex = 0;
                 }
 
@@ -978,15 +982,31 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
                     selectionRankingIndex++;
                     activeStrategy = strategy;
                     page = candidatePage;
-                    logger.LogInformation(
-                        "Historical Gross/Net parity selected the greatest-current-Gross unfinished strategy. " +
-                        "StrategyId={StrategyId} StrategyCode={StrategyCode} StrategyRank={StrategyRank} Gross={Gross} " +
-                        "ProbedStrategies={ProbedStrategies}",
-                        strategy.StrategyId,
-                        strategy.StrategyCode,
-                        strategy.StrategyRank,
-                        strategy.GrossPnlUsd,
-                        probedStrategies);
+                    if (strategy.StrategyId == ClosedPriorityStrategyId)
+                    {
+                        logger.LogInformation(
+                            "Historical Gross/Net parity selected the closed ETH Up 50 bps Instant priority " +
+                            "strategy ahead of ordinary current-Gross order. StrategyId={StrategyId} " +
+                            "StrategyCode={StrategyCode} ActualStrategyRank={StrategyRank} Gross={Gross} " +
+                            "ProbedStrategies={ProbedStrategies}",
+                            strategy.StrategyId,
+                            strategy.StrategyCode,
+                            strategy.StrategyRank,
+                            strategy.GrossPnlUsd,
+                            probedStrategies);
+                    }
+                    else
+                    {
+                        logger.LogInformation(
+                            "Historical Gross/Net parity selected the greatest-current-Gross unfinished strategy. " +
+                            "StrategyId={StrategyId} StrategyCode={StrategyCode} StrategyRank={StrategyRank} Gross={Gross} " +
+                            "ProbedStrategies={ProbedStrategies}",
+                            strategy.StrategyId,
+                            strategy.StrategyCode,
+                            strategy.StrategyRank,
+                            strategy.GrossPnlUsd,
+                            probedStrategies);
+                    }
                     break;
                 }
 
@@ -1149,6 +1169,38 @@ internal sealed class HistoricalGrossNetParityProcessor : IHistoricalGrossNetPar
         {
             cycleGate.Release();
         }
+    }
+
+    private static IReadOnlyList<HistoricalGrossNetParityRankedStrategy> PrioritizeClosedException(
+        IReadOnlyList<HistoricalGrossNetParityRankedStrategy> currentGrossRanking)
+    {
+        var priorityIndex = -1;
+        for (var index = 0; index < currentGrossRanking.Count; index++)
+        {
+            if (currentGrossRanking[index].StrategyId == ClosedPriorityStrategyId)
+            {
+                priorityIndex = index;
+                break;
+            }
+        }
+
+        if (priorityIndex <= 0)
+        {
+            return currentGrossRanking;
+        }
+
+        var prioritized = new HistoricalGrossNetParityRankedStrategy[currentGrossRanking.Count];
+        prioritized[0] = currentGrossRanking[priorityIndex];
+        var destination = 1;
+        for (var index = 0; index < currentGrossRanking.Count; index++)
+        {
+            if (index != priorityIndex)
+            {
+                prioritized[destination++] = currentGrossRanking[index];
+            }
+        }
+
+        return prioritized;
     }
 
     private async Task<PageCounters> ProcessPageAsync(

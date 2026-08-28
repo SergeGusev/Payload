@@ -1036,6 +1036,105 @@ public sealed class PaperFakFeeBackfillProcessorTests
     }
 
     [Fact]
+    public async Task HistoricalParityProcessor_PrioritizesClosedEthUp50ExceptionThenResumesGrossOrder()
+    {
+        var priorityStrategyId = HistoricalGrossNetParityProcessor.ClosedPriorityStrategyId;
+        var highGrossStrategyId = Guid.Parse("71140000-0000-0000-0000-000000000001");
+        var priority = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71140000-0000-0000-0000-000000000011"),
+            priorityStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 30m,
+            basis: 100m,
+            fee: 0m,
+            net: null) with { StrategyRank = 175, StrategyGrossPnlUsd = 300.04429715m };
+        var highGross = CreateParityTarget(
+            HistoricalGrossNetParitySourceKind.LiveOrder,
+            Guid.Parse("71140000-0000-0000-0000-000000000012"),
+            highGrossStrategyId,
+            HistoricalGrossNetParityExactEligibility.FallbackRequired,
+            gross: 40m,
+            basis: 100m,
+            fee: 0m,
+            net: null) with { StrategyRank = 1, StrategyGrossPnlUsd = 900m };
+        var completed = new HashSet<Guid>();
+        var ranking = new[]
+        {
+            new HistoricalGrossNetParityRankedStrategy(
+                highGrossStrategyId,
+                "higher-gross",
+                1,
+                900m),
+            new HistoricalGrossNetParityRankedStrategy(
+                priorityStrategyId,
+                "eth_up_down_5m_up_bps_50_instant",
+                175,
+                300.04429715m)
+        };
+        var store = new RecordingParityStore
+        {
+            StrategyRankingFactory = _ => ranking,
+            CandidatePageFactory = request =>
+            {
+                var candidates = new[] { priority, highGross }
+                    .Where(target => target.StrategyId == request.StrategyId)
+                    .Where(target => !completed.Contains(target.SourceId))
+                    .ToArray();
+                return CreateParityPage(request.Phase, candidates, []);
+            },
+            LiveApplyFactory = request =>
+            {
+                completed.Add(request.Target.SourceId);
+                return new HistoricalGrossNetParityApplyResult(
+                    HistoricalGrossNetParityApplyStatus.Applied,
+                    true,
+                    request.Target.TargetTupleHash,
+                    HistoricalGrossNetParityOwnership.Completed);
+            }
+        };
+        var processor = CreateHistoricalParityProcessor(
+            store,
+            new RecordingHistoricalFeeService((_, _) =>
+                throw new InvalidOperationException("Fallback must not dispatch a historical lookup.")));
+
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal(HistoricalGrossNetParityCycleState.StrategyCompleted,
+            (await processor.RunCycleAsync(Guid.NewGuid())).State);
+
+        Assert.Equal([priorityStrategyId, priorityStrategyId, highGrossStrategyId, highGrossStrategyId],
+            store.CandidatePageRequests.Select(request => request.StrategyId).ToArray());
+        Assert.Equal([priorityStrategyId, highGrossStrategyId],
+            store.LiveAccountingRequests.Select(request => request.Target.StrategyId).ToArray());
+        Assert.Equal(175, store.LiveAccountingRequests[0].Target.StrategyRank);
+        Assert.Equal(300.04429715m, store.LiveAccountingRequests[0].Target.StrategyGrossPnlUsd);
+        Assert.Equal(HistoricalGrossNetParityDecisionKind.Fixed0p0333,
+            store.LiveAccountingRequests[0].Decision.DecisionKind);
+
+        var restartStore = new RecordingParityStore
+        {
+            StrategyRankingFactory = _ => ranking,
+            CandidatePageFactory = request => request.StrategyId == priorityStrategyId
+                ? CreateParityPage(request.Phase, [], [])
+                : CreateParityPage(request.Phase, [highGross], [])
+        };
+        var restarted = CreateHistoricalParityProcessor(
+            restartStore,
+            new RecordingHistoricalFeeService((_, _) =>
+                throw new InvalidOperationException("Fallback must not dispatch a historical lookup.")));
+
+        Assert.Equal(HistoricalGrossNetParityCycleState.ExactBoundaryReached,
+            (await restarted.RunCycleAsync(Guid.NewGuid())).State);
+        Assert.Equal([priorityStrategyId, highGrossStrategyId],
+            restartStore.CandidatePageRequests.Select(request => request.StrategyId).ToArray());
+    }
+
+    [Fact]
     public async Task HistoricalParityProcessor_ContinuesBoundedFrozenStrategyRanking()
     {
         var completedStrategyIds = Enumerable.Range(1, 50)

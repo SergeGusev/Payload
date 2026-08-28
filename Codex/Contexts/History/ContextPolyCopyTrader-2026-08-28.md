@@ -86,3 +86,14 @@ Request:
 
 Result:
 Completed approved contract `RC-20260828-legacy-parity-phased-query` after checkpoint `d90f1eae`. The Legacy candidate lookup now runs strategy-local preflight, orphan-compatible legacy PaperRun JSON binding scan and indexed main selection as separate 10-second commands on one `REPEATABLE READ READ ONLY` snapshot; an empty preflight skips the JSON scan. Candidate membership, five parity binding shapes, fallback/terminal guards, tuple paging, order, payload and all accounting/trading behavior remain unchanged. Exact Production read-only prototypes completed in 384 ms, 4,479 ms and 1,180 ms. Focused real PostgreSQL verification passed 23/23, Release build passed with zero errors, and current versus checkpoint full-suite failed-name delta was zero at identical 1,522 passed / 129 failed / 68 skipped. Requirement validation and independent semantic review passed. No Production state changed.
+
+## 2026-08-28T19:45:51.1956666Z
+Request:
+А можно в виде исключения пересчитать стратегию ETH Up or Down 5m Up 50 bps Instant ? Paper и Live ставки
+
+Подтверждаю
+
+`APPROVE RC-20260828-historical-parity-eth-up50-instant-priority sha256:fb68e0dd2001ea5396c52665b01d0f72890030ee804020dfddc8fb41ac7c8887`
+
+Result:
+Recorded approval checkpoint `c51aa228` and implemented the exact UUID-only priority in the existing historical parity worker. The final code preserves actual Gross rank/evidence, processes existing exact/local Fee before `Fixed0p0333`, includes pre-cutoff Paper and Live, completes the selected strategy before returning automatically to ordinary Gross order, and does not touch post-cutoff or trading behavior. Focused tests passed 19/19, the broad historical parity set passed 29 with 4 PostgreSQL environment skips and zero failures, and the final Release Service build passed with zero errors. Requirement validation and independent semantic review passed with no findings. No Production database write, deployment, restart, schema, configuration, strategy, order or trading action occurred.

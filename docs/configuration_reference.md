@@ -187,6 +187,16 @@ that strategy is complete does the service rerank the unfinished strategies by
 current Gross and select the next one. The old
 `PaperFakFeeBackfill` switch, cutoff, and apply gate remain independent.
 
+One closed priority exception was approved on 2026-08-28 for exact strategy
+`b7c50005-0000-4000-8079-000000000150` /
+`eth_up_down_5m_up_bps_50_instant`. If that strategy still has unresolved
+pre-cutoff Paper or Live work, a fresh worker selects it ahead of the ordinary
+Gross order and keeps it active through exact and direct-fixed-fallback phases.
+Its real current Gross and ordinary Gross rank remain unchanged in candidate,
+log, and audit evidence. Once it is complete, selection automatically returns
+to the ordinary greatest-current-Gross order. No other strategy inherits or can
+configure this exception, and post-cutoff accounting is unaffected.
+
 Selection is decomposed into a current-Gross ranking read followed by
 strategy-scoped, source-specific candidate reads. A ranking snapshot is retained
 only across the bounded probes needed to find the next unfinished strategy; it

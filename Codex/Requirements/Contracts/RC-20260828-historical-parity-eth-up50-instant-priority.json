@@ -3,7 +3,7 @@
   "contractId": "RC-20260828-historical-parity-eth-up50-instant-priority",
   "title": "Prioritize historical Paper and Live Net accounting for ETH Up 50 bps Instant",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -62,8 +62,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity\"",
           "expected": "Focused tests prove exact-ID priority ahead of a higher-Gross strategy, actual rank/Gross preservation, full exact-to-fallback retention, automatic return to Gross ordering and restart-safe completed-target skipping.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "historical-parity-focused-final2.trx: 19 passed, 0 failed, 0 skipped on the final source, including the exact-ID priority, retained actual rank/Gross, exact-to-Fixed0p0333 completion, ordinary-Gross resume and restart reconstruction test."
         }
       ]
     },
@@ -94,8 +94,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter \"HistoricalParity|HistoricalGrossNetParity|VenueReportedRevision\"",
           "expected": "Tests prove unchanged cutoff, Paper and Live inclusion, completed-row preservation, exact-before-Fixed0p0333 behavior, Live balance ordering and late VenueReported revision behavior.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "historical-parity-broad-final2.trx: 29 passed, 0 failed and 4 PostgreSQL environment-dependent tests skipped; the non-PostgreSQL cutoff, Paper/Live, completed-row, exact-before-fallback, Live balance and VenueReported revision coverage passed on the final source."
         }
       ]
     },
@@ -125,8 +125,8 @@
           "kind": "build",
           "command": "Run VER-001 and VER-002, build the affected Service and tests with disposable outputs under the marked D:\\CodexTemp run, run git diff --check and requirement validation, and obtain independent semantic review of the verbatim requests, approved contract, actual diff and evidence.",
           "expected": "All checks pass with no unapproved behavior, no Production mutation and no open semantic-review findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final Release build of PolyCopyTrader.Service succeeded with 0 errors and 1 existing CS9124 warning. git diff --check passed with only line-ending warnings. Requirement contract digest remained approved. Independent reviewer agent:/root/review_eth_up50_priority returned PASS with no findings after verifying the final-source TRX and Release artifact timestamps. No Production mutation, deployment, restart, schema, configuration, strategy, order or trading action was performed."
         }
       ]
     }
@@ -140,9 +140,9 @@
     "semanticDigest": "sha256:fb68e0dd2001ea5396c52665b01d0f72890030ee804020dfddc8fb41ac7c8887"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer_historical_parity_eth_up50_priority",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/review_eth_up50_priority",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

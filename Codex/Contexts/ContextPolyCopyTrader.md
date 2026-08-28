@@ -1,3 +1,16 @@
+## Active Update 2026-08-28 ETH Up 50 Instant Historical Priority
+Goal: Recalculate the pre-cutoff Paper and Live Net accounting for exact strategy `ETH Up or Down 5m Up 50 bps Instant` as a closed priority exception.
+Status: Completed locally and independently reviewed
+Done:
+- Verified Production read-only for exact UUID `b7c50005-0000-4000-8079-000000000150`: ordinary Gross rank 175, 406 old Paper and 403 old Live Net-missing contributions strictly before `2026-08-10T00:00:00Z`; all 130 post-cutoff Paper and 130 post-cutoff Live rows were already Net-complete.
+- Added an exact-ID-only selection priority to the existing historical parity worker while retaining the strategy's actual Gross and rank evidence; the worker keeps the strategy through exact and `Fixed0p0333` fallback phases and then automatically resumes ordinary greatest-current-Gross order.
+- Kept the existing cutoff, Paper/Live candidate membership, exact/local Fee precedence, direct 3.33-percentage-point fallback, batches, accounting, Live balance order, VenueReported revision behavior and all trading behavior unchanged.
+- Focused verification passed 19/19; broad historical parity verification passed 29 with 4 PostgreSQL environment-dependent skips and 0 failures; final Release Service build passed with 0 errors and one existing CS9124 warning.
+- Requirement validation preserved approved digest `sha256:fb68e0dd2001ea5396c52665b01d0f72890030ee804020dfddc8fb41ac7c8887`; independent reviewer `agent:/root/review_eth_up50_priority` returned PASS with no findings.
+Next: Deploy the implementation commit, then verify the exact Production build, closed priority-selection log and Paper/Live progress read-only.
+Notes: Approval checkpoint is `c51aa228`. No Production database write, deployment, restart, schema, configuration, strategy, order or trading action occurred during local implementation.
+Blockers: None for local delivery.
+
 ## Active Update 2026-08-28 Legacy Parity Phased Query
 Goal: Remove the remaining rank-2 Legacy candidate-query timeout without changing candidate membership, paging, accounting, timeout values, or trading behavior.
 Status: Completed locally and independently reviewed
