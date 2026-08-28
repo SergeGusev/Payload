@@ -3,7 +3,7 @@
   "contractId": "RC-20260828-paper-settlement-backfill-resilience",
   "title": "Fix Paper settlement deadlocks and Legacy backfill timeouts",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -60,16 +60,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~HistoricalPaperFakFeeBackfill --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
           "expected": "All focused Legacy fee-backfill unit/source-contract and PostgreSQL integration tests pass with no changed candidate membership or ordering.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused HistoricalPaperFakFeeBackfill tests passed 21/21 with zero failures and zero skips against the allowlisted disposable PostgreSQL 17 database pct_codex_skip_v2_20260828100500_a6c74e33. Candidate paging, eligibility, idempotency, parity exclusions, chronological ordering and the strategy-first LATERAL source contract all passed."
         },
         {
           "id": "VER-002",
           "kind": "inspection",
           "command": "Run the revised candidate SQL as EXPLAIN (ANALYZE, BUFFERS, SUMMARY) in a Production BEGIN READ ONLY transaction with statement_timeout 15s for b7c50005-0000-4000-8197-000000000005.",
           "expected": "The plan is strategy-local, uses paper_order_id fill lookups, returns the same zero eligible candidates and completes below the unchanged 10-second worker timeout without writing data.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Post-edit Production EXPLAIN ANALYZE ran in BEGIN READ ONLY with statement_timeout 15s for strategy b7c50005-0000-4000-8197-000000000005 and immutable cutoff 2026-08-07T22:44:55.2195150Z. It completed in 158.846 ms, returned zero candidates, used ix_paper_fills_order_time for 4,304 parameterized loops, and contained zero sequential-scan nodes on paper_fills. No Production data was written."
         }
       ]
     },
@@ -100,8 +100,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PaperSettlementProcessorTests --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
           "expected": "All Paper settlement processor tests pass, including exact deadlock retry boundaries and full position reload behavior.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PaperSettlementProcessorTests passed 7/7 with zero failures and zero skips. The focused cases prove one- and two-deadlock recovery, full reload after deadlock, third-attempt exhaustion, no retry for non-deadlock failure, and cancellation-aware retry delay."
         }
       ]
     },
@@ -129,16 +129,16 @@
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts",
           "expected": "The complete solution builds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release build completed with 0 warnings and 0 errors using only the marked D:\\CodexTemp run for disposable artifacts. Independent reviewer agent:/root/reviewer_paper_resilience compared both verbatim requests, approved contract, five-file product/test diff and verification evidence and returned PASS with no findings."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": ".\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree",
           "expected": "Requirement validation passes before staging, and the staged hook repeats the check before the implementation commit.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "git diff --check passed with line-ending notices only. Requirement validation passed in WorkingTree mode before staging and is repeated by the staged hook for the task-only implementation commit."
         }
       ]
     }
@@ -153,8 +153,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_paper_resilience",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

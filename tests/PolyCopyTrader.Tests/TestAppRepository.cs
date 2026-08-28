@@ -151,6 +151,10 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int PaperPositionSettlementBatchCalls { get; private set; }
 
+    public Queue<Exception> PaperPositionSettlementBatchFailures { get; } = [];
+
+    public Action<int>? PaperPositionSettlementBatchFailureHook { get; set; }
+
     public int RefreshPaperCopiedTraderPerformanceProjectionCalls { get; private set; }
 
     public int LastPaperCopiedTraderPerformanceWalletBatchSize { get; private set; }
@@ -2085,6 +2089,12 @@ internal sealed class TestAppRepository : IAppRepository
         lock (sync)
         {
             PaperPositionSettlementBatchCalls++;
+            if (PaperPositionSettlementBatchFailures.TryDequeue(out var failure))
+            {
+                PaperPositionSettlementBatchFailureHook?.Invoke(PaperPositionSettlementBatchCalls);
+                throw failure;
+            }
+
             var inserted = 0;
             foreach (var write in writes)
             {

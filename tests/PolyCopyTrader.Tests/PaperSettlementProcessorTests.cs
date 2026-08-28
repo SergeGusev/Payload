@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.PaperTrading;
@@ -79,6 +80,90 @@ public sealed class PaperSettlementProcessorTests
         Assert.Equal(-1.5m, no.RealizedPnlUsd);
         Assert.Equal(FeeAccountingStatus.LegacyUnknown.ToString(), no.FeeAccountingStatus);
         Assert.Null(no.NetRealizedPnlUsd);
+    }
+
+    [Fact]
+    public async Task SettleMarketResolutionAsync_DeadlockReloadsCurrentPositionsBeforeRetry()
+    {
+        var (repository, processor) = CreateSettlementProcessor();
+        repository.PaperPositionSettlementBatchFailures.Enqueue(CreateDeadlockException());
+        repository.PaperPositionSettlementBatchFailureHook = _ =>
+        {
+            repository.PaperPositions[0] = repository.PaperPositions[0] with
+            {
+                SizeShares = 7m,
+                EstimatedValueUsd = 2.8m,
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            };
+        };
+
+        var result = await SettleAsync(processor);
+
+        Assert.Equal(1, result.PositionsSettled);
+        Assert.Equal(2, repository.GetOpenPaperPositionsForMarketCalls);
+        Assert.Equal(2, repository.PaperPositionSettlementBatchCalls);
+        Assert.Equal(7m, Assert.Single(repository.PaperPositionSettlements).SettledSizeShares);
+    }
+
+    [Fact]
+    public async Task SettleMarketResolutionAsync_TwoDeadlocksSucceedOnThirdCompleteAttempt()
+    {
+        var (repository, processor) = CreateSettlementProcessor();
+        repository.PaperPositionSettlementBatchFailures.Enqueue(CreateDeadlockException());
+        repository.PaperPositionSettlementBatchFailures.Enqueue(CreateDeadlockException());
+
+        var result = await SettleAsync(processor);
+
+        Assert.Equal(1, result.SettlementsInserted);
+        Assert.Equal(3, repository.GetOpenPaperPositionsForMarketCalls);
+        Assert.Equal(3, repository.PaperPositionSettlementBatchCalls);
+    }
+
+    [Fact]
+    public async Task SettleMarketResolutionAsync_ThirdDeadlockIsRethrown()
+    {
+        var (repository, processor) = CreateSettlementProcessor();
+        repository.PaperPositionSettlementBatchFailures.Enqueue(CreateDeadlockException());
+        repository.PaperPositionSettlementBatchFailures.Enqueue(CreateDeadlockException());
+        repository.PaperPositionSettlementBatchFailures.Enqueue(CreateDeadlockException());
+
+        var exception = await Assert.ThrowsAsync<PostgresException>(() => SettleAsync(processor));
+
+        Assert.Equal(PostgresErrorCodes.DeadlockDetected, exception.SqlState);
+        Assert.Equal(3, repository.GetOpenPaperPositionsForMarketCalls);
+        Assert.Equal(3, repository.PaperPositionSettlementBatchCalls);
+        Assert.Empty(repository.PaperPositionSettlements);
+        Assert.Equal(5m, Assert.Single(repository.PaperPositions).SizeShares);
+    }
+
+    [Fact]
+    public async Task SettleMarketResolutionAsync_NonDeadlockFailureIsNotRetried()
+    {
+        var (repository, processor) = CreateSettlementProcessor();
+        repository.PaperPositionSettlementBatchFailures.Enqueue(
+            new InvalidOperationException("non-deadlock persistence failure"));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => SettleAsync(processor));
+
+        Assert.Equal("non-deadlock persistence failure", exception.Message);
+        Assert.Equal(1, repository.GetOpenPaperPositionsForMarketCalls);
+        Assert.Equal(1, repository.PaperPositionSettlementBatchCalls);
+    }
+
+    [Fact]
+    public async Task SettleMarketResolutionAsync_CancellationStopsDeadlockRetryDelay()
+    {
+        var (repository, processor) = CreateSettlementProcessor();
+        repository.PaperPositionSettlementBatchFailures.Enqueue(CreateDeadlockException());
+        using var cancellation = new CancellationTokenSource();
+        repository.PaperPositionSettlementBatchFailureHook = _ => cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            SettleAsync(processor, cancellation.Token));
+
+        Assert.Equal(1, repository.GetOpenPaperPositionsForMarketCalls);
+        Assert.Equal(1, repository.PaperPositionSettlementBatchCalls);
+        Assert.Empty(repository.PaperPositionSettlements);
     }
 
     [Fact]
@@ -167,6 +252,52 @@ public sealed class PaperSettlementProcessorTests
             RawJson: "{}",
             LastRefreshedUtc: DateTimeOffset.UtcNow);
     }
+
+    private static (TestAppRepository Repository, PaperSettlementProcessor Processor)
+        CreateSettlementProcessor()
+    {
+        var repository = new TestAppRepository();
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-yes",
+            "condition-1",
+            "Yes",
+            5m,
+            0.40m,
+            2m,
+            0m,
+            DateTimeOffset.UtcNow,
+            "0xleader",
+            FeeUsd: 0.10m,
+            FeeAccountingStatus: FeeAccountingStatus.Calculated.ToString(),
+            FeeLiquidityRole: FeeLiquidityRole.Taker.ToString(),
+            NetUnrealizedPnlUsd: -0.10m));
+        var processor = new PaperSettlementProcessor(
+            NullLogger<PaperSettlementProcessor>.Instance,
+            new FakeGammaClient([]),
+            new ExposureSnapshotCache(repository),
+            repository);
+        return (repository, processor);
+    }
+
+    private static Task<PaperSettlementProcessingResult> SettleAsync(
+        PaperSettlementProcessor processor,
+        CancellationToken cancellationToken = default) =>
+        processor.SettleMarketResolutionAsync(
+            "condition-1",
+            null,
+            "asset-yes",
+            "Yes",
+            "Politics",
+            "UnitTest",
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+
+    private static PostgresException CreateDeadlockException() =>
+        new(
+            "deadlock detected",
+            "ERROR",
+            "ERROR",
+            PostgresErrorCodes.DeadlockDetected);
 
     private static PolymarketGammaMarket GammaMarket(string conditionId, string category)
     {

@@ -283,6 +283,10 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
         var strategyOrders = SliceSql(
             candidateMethod,
             "WITH strategy_orders AS MATERIALIZED (",
+            "strategy_fill_keys AS MATERIALIZED (");
+        var strategyFillKeys = SliceSql(
+            candidateMethod,
+            "strategy_fill_keys AS MATERIALIZED (",
             "candidate_keys AS MATERIALIZED (");
         var candidateKeys = SliceSql(
             candidateMethod,
@@ -293,16 +297,22 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
         Assert.Contains("paper_order.strategy_id = @StrategyId", strategyOrders, StringComparison.Ordinal);
         Assert.Contains("paper_order.side", strategyOrders, StringComparison.Ordinal);
         Assert.Contains("paper_order.execution_source IN", strategyOrders, StringComparison.Ordinal);
-        Assert.Contains("FROM strategy_orders strategy_order", candidateKeys, StringComparison.Ordinal);
+        Assert.Contains("FROM strategy_orders strategy_order", strategyFillKeys, StringComparison.Ordinal);
         Assert.Contains(
-            "INNER JOIN public.paper_fills fill ON fill.paper_order_id = strategy_order.id",
-            candidateKeys,
+            "CROSS JOIN LATERAL (",
+            strategyFillKeys,
             StringComparison.Ordinal);
-        Assert.Contains("fill.fee_accounting_status", candidateKeys, StringComparison.Ordinal);
-        Assert.Contains("fill.filled_at_utc < @FilledBeforeUtc", candidateKeys, StringComparison.Ordinal);
-        Assert.Contains("NOT @HasCursor", candidateKeys, StringComparison.Ordinal);
         Assert.Contains(
-            "ORDER BY fill.filled_at_utc, fill.paper_order_id, fill.id",
+            "candidate_fill.paper_order_id = strategy_order.id",
+            strategyFillKeys,
+            StringComparison.Ordinal);
+        Assert.Contains("candidate_fill.fee_accounting_status", strategyFillKeys, StringComparison.Ordinal);
+        Assert.Contains("candidate_fill.filled_at_utc < @FilledBeforeUtc", strategyFillKeys, StringComparison.Ordinal);
+        Assert.Contains("NOT @HasCursor", strategyFillKeys, StringComparison.Ordinal);
+        Assert.Contains("OFFSET 0", strategyFillKeys, StringComparison.Ordinal);
+        Assert.Contains("FROM strategy_fill_keys fill", candidateKeys, StringComparison.Ordinal);
+        Assert.Contains(
+            "ORDER BY fill.filled_at_utc, fill.paper_order_id, fill.fill_id",
             candidateKeys,
             StringComparison.Ordinal);
         Assert.Contains("LIMIT @FetchLimit", candidateKeys, StringComparison.Ordinal);

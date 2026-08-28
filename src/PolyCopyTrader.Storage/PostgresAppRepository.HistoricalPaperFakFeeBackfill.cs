@@ -133,8 +133,11 @@ ORDER BY gross_realized_pnl_usd DESC, strategy.id;
 
         var pageSize = Math.Min(limit, HistoricalPaperFakFeeBackfillMaxPageSize);
         await using var connection = await OpenConnectionAsync(cancellationToken);
-        // Keep the chronological page narrow and strategy-local. Wide order/fill
-        // payloads are loaded only after the N+1 candidate keys are selected.
+        // Keep the chronological page strategy-local. The LATERAL boundary makes
+        // PostgreSQL probe fills by paper_order_id for each materialized strategy
+        // order instead of starting with the global LegacyUnknown fill timeline.
+        // Wide order/fill payloads are loaded only after the N+1 candidate keys
+        // are selected.
         await using var command = CreateCommand(connection, $$"""
 WITH strategy_orders AS MATERIALIZED (
     SELECT paper_order.id
@@ -145,16 +148,42 @@ WITH strategy_orders AS MATERIALIZED (
           '{{HistoricalPaperFakDirectSource}}',
           '{{HistoricalPaperFakChildSource}}')
 ),
-candidate_keys AS MATERIALIZED (
+strategy_fill_keys AS MATERIALIZED (
     SELECT
         fill.id AS fill_id,
         fill.paper_order_id,
         fill.filled_at_utc
     FROM strategy_orders strategy_order
-    INNER JOIN public.paper_fills fill ON fill.paper_order_id = strategy_order.id
-    WHERE fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
-      AND fill.filled_at_utc < @FilledBeforeUtc
-      AND NOT EXISTS (
+    CROSS JOIN LATERAL (
+        SELECT
+            candidate_fill.id,
+            candidate_fill.paper_order_id,
+            candidate_fill.filled_at_utc
+        FROM public.paper_fills candidate_fill
+        WHERE candidate_fill.paper_order_id = strategy_order.id
+          AND candidate_fill.fee_accounting_status = '{{FeeAccountingStatus.LegacyUnknown}}'
+          AND candidate_fill.filled_at_utc < @FilledBeforeUtc
+          AND (
+              NOT @HasCursor
+              OR candidate_fill.filled_at_utc > @AfterFilledAtUtc
+              OR (
+                  candidate_fill.filled_at_utc = @AfterFilledAtUtc
+                  AND candidate_fill.paper_order_id > @AfterPaperOrderId)
+              OR (
+                  candidate_fill.filled_at_utc = @AfterFilledAtUtc
+                  AND candidate_fill.paper_order_id = @AfterPaperOrderId
+                  AND candidate_fill.id > @AfterFillId)
+          )
+        OFFSET 0
+    ) fill
+),
+candidate_keys AS MATERIALIZED (
+    SELECT
+        fill.fill_id,
+        fill.paper_order_id,
+        fill.filled_at_utc
+    FROM strategy_fill_keys fill
+    WHERE NOT EXISTS (
           SELECT 1
           FROM public.strategy_market_paper_runs fallback_run
           WHERE fallback_run.paper_order_id = fill.paper_order_id
@@ -178,7 +207,7 @@ candidate_keys AS MATERIALIZED (
             AND parity_audit.operation_kind = 'AccountingDecision'
             AND (
                 (parity_audit.source_kind = 'PaperSellFill'
-                    AND parity_audit.source_id = fill.id)
+                    AND parity_audit.source_id = fill.fill_id)
                 OR
                 (parity_audit.source_kind = 'PaperRun'
                     AND (
@@ -194,7 +223,7 @@ candidate_keys AS MATERIALIZED (
                     AND parity_audit.evidence_payload_json
                             -> 'historicalGrossNetParityBindingV1'
                             -> 'paperFillIds'
-                        ? lower(fill.id::text))))
+                        ? lower(fill.fill_id::text))))
       AND NOT EXISTS (
           SELECT 1
           FROM public.strategy_market_paper_runs parity_terminal_run
@@ -203,18 +232,7 @@ candidate_keys AS MATERIALIZED (
                 'historical-gross-net-parity-donor-v1',
                 'historical-gross-net-parity-fixed-0p0333-v1',
                 'historical-gross-net-parity-nonpositive-basis-v1'))
-      AND (
-          NOT @HasCursor
-          OR fill.filled_at_utc > @AfterFilledAtUtc
-          OR (
-              fill.filled_at_utc = @AfterFilledAtUtc
-              AND fill.paper_order_id > @AfterPaperOrderId)
-          OR (
-              fill.filled_at_utc = @AfterFilledAtUtc
-              AND fill.paper_order_id = @AfterPaperOrderId
-              AND fill.id > @AfterFillId)
-      )
-    ORDER BY fill.filled_at_utc, fill.paper_order_id, fill.id
+    ORDER BY fill.filled_at_utc, fill.paper_order_id, fill.fill_id
     LIMIT @FetchLimit
 )
 SELECT
