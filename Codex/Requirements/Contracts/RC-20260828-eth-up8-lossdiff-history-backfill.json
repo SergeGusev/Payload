@@ -54,6 +54,7 @@
         "Each child has exactly one active assignment to the exact parent with its correct mode and exactly one durable state with threshold 3 or 16 and started_at_utc 2026-08-27T21:18:38.378192Z.",
         "Before apply, both children have zero pre-cutoff runs and LossDiff parent events, zero deterministic backfill target rows and no completion marker. Organic post-cutoff activity may coexist only outside the frozen backfill target and must remain unchanged by the backfill; the latest verified snapshot contains five Skipped runs, zero entered runs/orders/Live orders, five parent events and current LossDiff 2 for each child.",
         "The Production service is Running with a fresh heartbeat and empty last_error; any unexpected build, unhealthy heartbeat, waiting lock, changed flag, changed source or existing partial target history blocks apply."
+        ,"The exact accepted Production heartbeat build is info=1.0.0+7a0b967d9c610166975a57b066a5154ff2499cf9; assembly=1.0.0.0; mvid=50215310ddd6. Git ancestry must prove that commit 7a0b967d9c610166975a57b066a5154ff2499cf9 descends from the previously verified feature build 390c8a252e4c3ce937d1d126652e9690423fe179, and no intervening commit may change the exact Up8 child migration or history-command path."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
@@ -185,8 +186,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
-        "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
+        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
       }
     },
     {
@@ -196,8 +197,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
-        "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
+        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
       }
     },
     {
@@ -207,8 +208,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
-        "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
+        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
       }
     },
     {
@@ -218,16 +219,27 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
-        "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
+        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
+      }
+    },
+    {
+      "id": "DEV-005",
+      "text": "After approval of digest 34ec2d7d, Production restarted onto exact build 7a0b967d9c610166975a57b066a5154ff2499cf9 instead of the previously pinned 390c8a252e4c3ce937d1d126652e9690423fe179. Accept only the exact new heartbeat version info=1.0.0+7a0b967d9c610166975a57b066a5154ff2499cf9; assembly=1.0.0.0; mvid=50215310ddd6 for the corrected idempotency check, while retaining every migration, identity, source, membership, financial, marker, health and lock gate.",
+      "impact": "The corrected local command will recognize the currently running descendant build and can perform the marker-protected idempotent Production check. Read-only Git evidence proves 7a0b967d is a descendant of 390c8a25 and that no commit in the ancestry path changed the exact Up8 child migration or history-command file. Any later build change still blocks the command; this deviation authorizes no deployment, restart, strategy change, history row, order or other Production mutation.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
+        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
-    "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
+    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
+    "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_up8_lossdiff_history",
