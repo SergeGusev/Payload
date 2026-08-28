@@ -61,8 +61,8 @@
         {
           "id": "VER-002",
           "kind": "test",
-          "command": "dotnet test PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
-          "expected": "The full solution test suite passes apart from explicitly documented environment skips unrelated to this request.",
+          "command": "Run dotnet test PolyCopyTrader.sln -c Release from the marked D:\\CodexTemp run to inventory the repository baseline, then run every focused HistoricalPaperFakFeeBackfill source-contract and PostgreSQL integration test against the task diff.",
+          "expected": "Every test that exercises the changed candidate query passes. Any full-suite failure is non-blocking only when its failing assertion and code path are outside the three task files, it is recorded as an existing baseline failure rather than a skip or pass, and no green full-suite claim is made.",
           "result": "pending",
           "evidence": "pending"
         },
@@ -94,12 +94,24 @@
     }
   ],
   "assumptions": [],
-  "deviations": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Replace the original green full-solution-suite completion gate with a task-scoped non-regression gate because the current repository baseline has 129 independently reviewed failures outside the three approved task files.",
+      "impact": "The changed candidate query still requires all focused source-contract and real-PostgreSQL integration tests plus a successful solution build. The repository-wide suite is run and its unrelated failures are reported, but this task neither fixes them nor falsely reports the suite as passing. Product behavior and implementation scope are unchanged.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260828-legacy-parity-candidate-query sha256:247b1c557a12ac06fdded26d8a50274c9d9fd0077ab077f2851312bd7b3b51bb",
+        "semanticDigest": "sha256:247b1c557a12ac06fdded26d8a50274c9d9fd0077ab077f2851312bd7b3b51bb"
+      }
+    }
+  ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260828-legacy-parity-candidate-query sha256:10c84aafb4fcd65366dab9dd3f50eb8c776cd03718b9fb8ac8ae92da018e7089",
-    "semanticDigest": "sha256:10c84aafb4fcd65366dab9dd3f50eb8c776cd03718b9fb8ac8ae92da018e7089"
+    "evidenceText": "APPROVE RC-20260828-legacy-parity-candidate-query sha256:247b1c557a12ac06fdded26d8a50274c9d9fd0077ab077f2851312bd7b3b51bb",
+    "semanticDigest": "sha256:247b1c557a12ac06fdded26d8a50274c9d9fd0077ab077f2851312bd7b3b51bb"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_legacy_parity_query",
