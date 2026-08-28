@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260828-paper-settlement-backfill-resilience",
+  "title": "Fix Paper settlement deadlocks and Legacy backfill timeouts",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Проверь сервер, ставки и логи"
+    },
+    {
+      "source": "user",
+      "text": "Ок, фиксь"
+    }
+  ],
+  "scope": {
+    "goal": "Fix the two production defects established by the requested server, betting and log inspection: repeated Legacy historical-accounting candidate-query timeouts and transient PostgreSQL deadlocks during Paper settlement persistence.",
+    "inScope": [
+      "Make GetHistoricalPaperFakFeeBackfillCandidatesAsync select fills through the exact strategy's bounded order set and existing paper_order_id index before evaluating parity exclusions, while preserving all current candidate semantics and cursor ordering.",
+      "Retry Paper market-resolution settlement only after PostgreSQL deadlock SQLSTATE 40P01, reloading open positions and rebuilding the complete settlement batch on every attempt.",
+      "Add focused unit/source-contract and PostgreSQL integration coverage for the two fixes.",
+      "Run focused tests, solution build, requirement validation, independent semantic review, task bookkeeping, task-only commits and push."
+    ],
+    "outOfScope": [
+      "Changing any strategy, threshold, signal, stake, order, fill, PnL, fee formula, Maker-GTD execution semantic, Paper/Live classification or Live submission behavior.",
+      "Increasing the 10-second Legacy backfill command timeout, adding or changing PostgreSQL schema objects or indexes, or changing the backfill batch size, ordering, cutoff, cursor or eligibility rules.",
+      "Retrying non-deadlock settlement failures, replaying a previously built settlement batch after a deadlock, or changing settlement financial calculations.",
+      "Writing to Production, deploying, restarting the service, modifying Production configuration, or applying a database migration.",
+      "Fixing unrelated dashboard, ETH LossDiff history-backfill, historical parity, queue, performance-projection or repository-wide test failures."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Production evidence window 2026-08-28 04:39 through 06:42 UTC; implementation applies only to Legacy Paper FAK fee-backfill candidate reads and Paper market-resolution settlement persistence.",
+    "firstVerification": "Use read-only Production SQL and EXPLAIN with statement_timeout 15s to identify the exact failing strategy, candidate counts, existing indexes and current query plan before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Remove the verified Legacy candidate-query timeout without changing which historical Paper FAK fills are eligible or changing the timeout.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, фиксь",
+      "acceptanceCriteria": [
+        "The candidate query materializes the exact strategy's eligible Paper orders, then performs parameterized paper_fills lookups by paper_order_id before any historical parity anti-join.",
+        "The existing cutoff, fee status, two execution sources, full three-field cursor, fallback/parity/terminal exclusions, chronological ordering and pageSize+1 limit remain unchanged.",
+        "The 10-second command timeout, batch size and database schema remain unchanged.",
+        "A read-only Production EXPLAIN ANALYZE equivalent for strategy b7c50005-0000-4000-8197-000000000005 uses ix_paper_fills_order_time and completes within the existing 10-second budget; pre-edit evidence for the proposed shape was 145.804 ms for 4,304 strategy orders and zero eligible Legacy fills.",
+        "Existing candidate paging, eligibility, idempotency and parity-guard PostgreSQL integration tests continue to pass."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~HistoricalPaperFakFeeBackfill --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
+          "expected": "All focused Legacy fee-backfill unit/source-contract and PostgreSQL integration tests pass with no changed candidate membership or ordering.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Run the revised candidate SQL as EXPLAIN (ANALYZE, BUFFERS, SUMMARY) in a Production BEGIN READ ONLY transaction with statement_timeout 15s for b7c50005-0000-4000-8197-000000000005.",
+          "expected": "The plan is strategy-local, uses paper_order_id fill lookups, returns the same zero eligible candidates and completes below the unchanged 10-second worker timeout without writing data.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Make Paper settlement resilient to the verified transient PostgreSQL deadlocks without risking stale-position overwrite or retrying unrelated failures.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, фиксь",
+      "acceptanceCriteria": [
+        "Only PostgreSQL SQLSTATE 40P01 is retried; cancellation and every other exception are propagated without retry.",
+        "Settlement makes at most three complete attempts, with bounded 50 ms then 100 ms delays before attempts two and three.",
+        "Every retry reloads the current open positions and reconstructs settlement writes; it never replays writes built before the deadlock.",
+        "Exposure cache updates occur only after a successful database commit, and existing settlement PnL, fee and idempotency semantics remain unchanged.",
+        "Intermediate deadlocks are logged as warnings with attempt and phase; an exhausted third deadlock remains an error and is rethrown.",
+        "Focused tests prove one-deadlock recovery, two-deadlock recovery, third-deadlock exhaustion, no retry for non-deadlock errors, position reload on each retry and cancellation-aware delay."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperSettlementProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PaperSettlementProcessorTests --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
+          "expected": "All Paper settlement processor tests pass, including exact deadlock retry boundaries and full position reload behavior.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Deliver only the two approved resilience fixes with complete local verification and no Production mutation.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, фиксь",
+      "acceptanceCriteria": [
+        "Every governed changed path maps to REQ-001 or REQ-002; unrelated dirty user files and behavior remain untouched.",
+        "The complete solution builds with zero errors using disposable outputs only under the marked D:\\CodexTemp run.",
+        "Requirement validation passes and an independent reviewer compares the verbatim requests, approved contract, actual diff and verification evidence with no open findings.",
+        "No Production write, deployment, service restart, configuration change or database migration is performed in this task."
+      ],
+      "implementationPaths": [
+        "Codex/Requirements/Contracts/RC-20260828-paper-settlement-backfill-resilience.json",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-28.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts",
+          "expected": "The complete solution builds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": ".\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree",
+          "expected": "Requirement validation passes before staging, and the staged hook repeats the check before the implementation commit.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260828-paper-settlement-backfill-resilience sha256:7761aa1ad48f276aca74edba08cf3ffa91aa6ca21731fb409ccc5391be2d60bb",
+    "semanticDigest": "sha256:7761aa1ad48f276aca74edba08cf3ffa91aa6ca21731fb409ccc5391be2d60bb"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_paper_resilience",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
