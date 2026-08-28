@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260828-legacy-parity-phased-query",
+  "title": "Phase the Legacy parity candidate query",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Дорабатывай"
+    }
+  ],
+  "scope": {
+    "goal": "Eliminate the remaining rank-2 Legacy candidate-query command timeout by separating its strategy-local preflight, legacy JSON binding scan, and main candidate selection into independently bounded commands without changing candidate membership, paging, ordering, or accounting behavior.",
+    "inScope": [
+      "Change only GetHistoricalPaperFakFeeBackfillCandidatesAsync and its focused source-contract and PostgreSQL integration tests.",
+      "Run the strategy-local eligible LegacyUnknown fill-key preflight, the legacy PaperRun old_payload_json binding scan, and the remaining indexed candidate query as separate SELECT commands inside one REPEATABLE READ READ ONLY transaction.",
+      "Skip the legacy JSON scan when the strategy-local preflight returns no eligible fill keys.",
+      "Preserve PaperSellFill, exact PaperRun, legacy old-payload PaperRun, PaperPosition, and PaperSettlement parity exclusions exactly, including orphaned legacy PaperRun audit source IDs whose old payload binds a candidate order.",
+      "Preserve the existing 10-second command timeout on every phase, immutable cutoff, optional full tuple cursor, strategy/source/status filters, fallback and terminal-run guards, chronological order, page size and returned payload.",
+      "Run focused tests, a Release solution build, baseline-aware full-suite inventory, exact read-only Production phase preview, requirement validation, independent semantic review, task-only commits and push."
+    ],
+    "outOfScope": [
+      "No database schema, index, migration, audit-row, strategy, order, fill, run, position, settlement, PnL, ROI, fee, configuration, timeout, worker scheduling, retry, or service-startup changes.",
+      "No Production writes, deployment, service stop, service restart, or log cleanup.",
+      "No change to Paper or Live execution behavior or to other historical-accounting phases and queries."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact Legacy Paper FAK candidate selection for one caller-supplied strategy visit, immutable cutoff and optional cursor; Production preview pins rank-2 strategy b7c50005-0001-4000-8166-000000000003 and cutoff 2026-08-07T22:44:55.219515Z.",
+    "firstVerification": "Use BEGIN READ ONLY and SET LOCAL statement_timeout='15s' against 192.168.0.101:5432/polycopytrader to identify the physical plan and time the proposed phases for exact rank 2 without changing Production."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Доработать оставшийся нестабильный Legacy parity candidate query так, чтобы каждая тяжёлая фаза имела отдельный 10-секундный command budget и весь метод сохранял исходный единый read-only snapshot и точный результат.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Дорабатывай",
+      "acceptanceCriteria": [
+        "A strategy-local preflight selects only the exact eligible LegacyUnknown fill/order keys under the existing cutoff and cursor predicates.",
+        "When the preflight is empty, no historical_gross_net_parity_audit legacy JSON scan is executed.",
+        "When the preflight is non-empty, a separate SELECT returns exactly the candidate order IDs bound by PaperRun AccountingDecision old_payload_json, with its own unchanged 10-second command timeout.",
+        "The main candidate SELECT excludes the preflight legacy-bound order IDs and retains the existing indexed PaperSellFill, exact PaperRun, PaperPosition and PaperSettlement exclusions, fallback/terminal guards, tuple ordering, limit and returned payload.",
+        "All phase commands execute on the same connection inside one REPEATABLE READ READ ONLY transaction so concurrent append-only audit activity cannot create a mixed-snapshot result.",
+        "Focused PostgreSQL tests prove that all existing parity binding shapes, including an orphaned legacy PaperRun source_id bound only by old_payload_json, still produce the identical candidate set and paging behavior.",
+        "No schema, index, timeout, configuration, worker, strategy, settlement, Paper execution, Live execution or Production mutation is present in the diff."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~HistoricalPaperFakFeeBackfill --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
+          "expected": "All focused source-contract and real-PostgreSQL integration tests pass, including unchanged inclusion/exclusion for every parity binding shape, no-scan empty preflight, one-snapshot phase wiring and full tuple paging.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Run exact BEGIN READ ONLY, SET LOCAL statement_timeout='15s' Production phase previews for rank-2 strategy b7c50005-0001-4000-8166-000000000003 and cutoff 2026-08-07T22:44:55.219515Z.",
+          "expected": "Preflight, legacy JSON scan and main candidate selection each complete below the unchanged 10-second product command timeout and return the same two fill keys, one legacy-bound exclusion and one remaining candidate as the deployed semantics.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts",
+          "expected": "Release solution build succeeds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run dotnet test PolyCopyTrader.sln -c Release from the marked D:\\CodexTemp run to inventory the repository baseline, then compare failing test names against the current known baseline and the three task files.",
+          "expected": "Every test exercising the changed method passes. Repository-wide failures are non-blocking only when their names and code paths are unchanged baseline failures outside the three task files; they are reported as failures and never represented as a green run.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Independent reviewer compares the verbatim request and approved semantic digest against the actual task diff and all verification evidence.",
+          "expected": "Reviewer reports no scope drift, semantic regression, mixed-snapshot risk, or unsupported completion claim.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Use task-scoped non-regression rather than require the currently failing full repository suite to become green.",
+      "impact": "All tests exercising the changed query and all focused real-PostgreSQL integration tests must pass, and the Release build must have zero errors. Existing full-suite failures outside the three task files remain visible and are neither fixed nor reported as passes by this task.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260828-legacy-parity-phased-query sha256:a0f5bc60660378b3820fbeac8c8ee4047ea0566ebdb2fb3cc46fa6a97b73a210",
+        "semanticDigest": "sha256:a0f5bc60660378b3820fbeac8c8ee4047ea0566ebdb2fb3cc46fa6a97b73a210"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260828-legacy-parity-phased-query sha256:a0f5bc60660378b3820fbeac8c8ee4047ea0566ebdb2fb3cc46fa6a97b73a210",
+    "semanticDigest": "sha256:a0f5bc60660378b3820fbeac8c8ee4047ea0566ebdb2fb3cc46fa6a97b73a210"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_legacy_parity_phased_query",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
