@@ -52,7 +52,7 @@
         "Production migration 0003-eth-up8-lossdiff-gated-children exists with semantic checksum 5e4effb4845ee9896f64f5ebbbed41eef13ecb2d6bc25b61caf0b0e417b6d267.",
         "The exact parent and both exact children exist; all three are enabled, unpaused, not auto-paused and Paper-only, while both children retain $1 Paper stake, $1 Live stake and $100 Live balance.",
         "Each child has exactly one active assignment to the exact parent with its correct mode and exactly one durable state with threshold 3 or 16 and started_at_utc 2026-08-27T21:18:38.378192Z.",
-        "Before apply, both children have zero runs, orders, fills, settlements and LossDiff parent events, and no completion marker exists.",
+        "Before apply, both children have zero pre-cutoff runs and LossDiff parent events, zero deterministic backfill target rows and no completion marker. Organic post-cutoff activity may coexist only outside the frozen backfill target and must remain unchanged by the backfill; the latest verified snapshot contains five Skipped runs, zero entered runs/orders/Live orders, five parent events and current LossDiff 2 for each child.",
         "The Production service is Running with a fresh heartbeat and empty last_error; any unexpected build, unhealthy heartbeat, waiting lock, changed flag, changed source or existing partial target history blocks apply."
       ],
       "implementationPaths": [
@@ -65,7 +65,7 @@
           "id": "VER-001",
           "kind": "inspection",
           "command": "Run the exact new backfill command without --apply against Production.",
-          "expected": "The command reports the exact migration, service, identities, flags, assignments, states, zero target history and no marker inside a rolled-back read-only transaction.",
+          "expected": "The command reports the exact migration, service, identities, flags, assignments and states, zero pre-cutoff child runs/events, zero deterministic target history and no marker inside a rolled-back read-only transaction; a separate read-only query identifies and preserves any organic post-cutoff activity.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -185,8 +185,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c",
-        "semanticDigest": "sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8",
+        "semanticDigest": "sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8"
       }
     },
     {
@@ -196,16 +196,27 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c",
-        "semanticDigest": "sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8",
+        "semanticDigest": "sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8"
+      }
+    },
+    {
+      "id": "DEV-003",
+      "text": "After the original zero-activity preview and before Production apply, the running service organically created five post-cutoff Skipped runs and five LossDiff parent events for each child, advancing both current LossDiff values to 2. Permit this and later organic post-cutoff activity to coexist outside the immutable pre-cutoff backfill target instead of requiring the live children to remain at their rollout-zero state.",
+      "impact": "The backfill still inserts only the frozen 67 pre-cutoff chains and must not update or delete organic post-cutoff runs, events or states. The command preserves them through invariant checks; if the live service changes protected state during a batch sequence, apply stops before the next batch and resumes only after a fresh preview. At the verified snapshot, all ten organic runs are Skipped and have zero Paper orders and zero Live orders.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8",
+        "semanticDigest": "sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c",
-    "semanticDigest": "sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c"
+    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8",
+    "semanticDigest": "sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_up8_lossdiff_history",
