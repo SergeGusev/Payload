@@ -3,7 +3,7 @@
   "contractId": "RC-20260828-historical-parity-eth-up50-instant-priority",
   "title": "Prioritize historical Paper and Live Net accounting for ETH Up 50 bps Instant",
   "author": "agent:/root",
-  "status": "draft",
+  "status": "approved",
   "originalRequests": [
     {
       "source": "user",
