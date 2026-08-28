@@ -66,8 +66,8 @@
           "kind": "inspection",
           "command": "Run the exact new backfill command without --apply against Production.",
           "expected": "The command reports the exact migration, service, identities, flags, assignments and states, zero pre-cutoff child runs/events, zero deterministic target history and no marker inside a rolled-back read-only transaction; a separate read-only query identifies and preserves any organic post-cutoff activity.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final Production preview before apply (`logs/up8-preview-final-ab25.txt` under marked run) reproduced 1,022 source rows, exact source/full digests, 46 Reset plus 21 Positive targets, zero target rows, zero pre-cutoff events, healthy heartbeat and zero waiting locks; the post-lock resume preview verified the exact 54-chain durable prefix before continuation."
         }
       ]
     },
@@ -81,7 +81,7 @@
         "For every candidate entry, only exact-parent outcomes settled strictly before that entry affect its pre-entry LossDiff.",
         "Reset 3+ uses loss +1 and win reset to zero and selects exactly 46 entries: 31 wins, 15 losses, stake $276.24179998, gross PnL $69.99539091, fee $8.86157000 and Net PnL $61.13382091.",
         "Positive 16+ uses loss +1 and win -1 with a zero floor and selects exactly 21 entries: 15 wins, 6 losses, stake $126.00000010, gross PnL $41.83029883, fee $4.08783000 and Net PnL $37.74246883.",
-        "Two independent calculations reproduce exact source membership, selected parent-run IDs, counts and financial totals before apply; any mismatch blocks writes."
+        "Two independent calculations reproduce exact source membership, selected parent-run IDs, counts and financial totals before apply; the retained evidence includes both exact selected run-ID sets, and any mismatch blocks writes."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Service/Startup/EthLossDiffHistoryBackfillCommand.cs",
@@ -94,7 +94,7 @@
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffHistoryBackfill",
           "expected": "Focused tests prove the exact frozen source facts, both causal formulas, thresholds, selected membership, financial totals and argument/digest gates.",
           "result": "pending",
-          "evidence": "pending"
+          "evidence": "Must be rerun after adding explicit reset-after-win, Positive decrement/zero-floor/settlement-ordering coverage and retaining the second independent exact membership/run-ID calculation."
         }
       ]
     },
@@ -106,7 +106,7 @@
       "acceptanceCriteria": [
         "Each selected entry creates exactly one deterministic child signal, paper order, paper fill, closed paper position, paper position settlement and Settled strategy run with the exact child's strategy identity.",
         "Copied chains preserve the parent's market, selected outcome/token, side, entry price, size, stake, timestamps, settlement value, gross PnL, fee fields and Net PnL without repricing, resizing or recalculation.",
-        "Exactly 402 financial/history rows are inserted for 67 chains, followed only after complete verification by one exact completion marker; no other row is inserted, updated or deleted.",
+        "The backfill directly inserts exactly 402 primary financial/history rows for 67 chains, followed only after complete verification by one exact completion marker; its SQL contains no other direct insert, update or delete. Existing enabled PostgreSQL triggers synchronously enqueue the normal dashboard projection and copied-trader performance refresh work caused by the inserted orders, fills, runs, positions and settlements, and existing background workers may consume those queues and update derived projection/performance state.",
         "The 21 Positive chains and 20 of 46 Reset chains retain their embedded execution-intent order-book snapshots; the remaining 26 Reset chains retain only the complete recorded parent-chain evidence and are explicitly marked as such rather than receiving fabricated snapshots.",
         "Existing strategy flags, balances, current LossDiff states, LossDiff parent events and all parent rows remain byte-for-byte unchanged by the backfill."
       ],
@@ -123,7 +123,7 @@
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffHistoryBackfill",
           "expected": "Focused PostgreSQL tests prove complete six-row chains, deterministic IDs, exact field copying, snapshot handling, idempotency, collision refusal, one-chain atomicity and unchanged states/events/flags.",
           "result": "pending",
-          "evidence": "pending"
+          "evidence": "Must be rerun after the trigger-side-effect contract is represented explicitly and the corrected operational invariant checks are implemented."
         }
       ]
     },
@@ -135,8 +135,8 @@
       "acceptanceCriteria": [
         "Apply requires the exact approved semantic digest and an exclusive dedicated advisory lock; preview never accepts apply authority and always rolls back with writes=0.",
         "Each of 67 chains is committed in its own short READ COMMITTED transaction, with statement_timeout 15s, lock_timeout 2s and at least one second between committed batches; a separate final transaction writes the marker only after all chains verify.",
-        "Between batches, read-only checks verify fresh Running service heartbeat, empty last_error, no unexpected waiting locks, unchanged source and plan, expected exact progress and unchanged protected flags/states/events; any deviation stops before the next batch and leaves a durable resumable prefix.",
-        "Final verification confirms exactly 46 complete Reset chains and 21 complete Positive chains, 402 target rows, no partial chains or ID collisions, exact financial totals, one matching marker and zero unintended changes.",
+        "Before every next batch, the command rereads the exact parent source from Production, recomputes and compares the source digest, full-chain digest and selected membership/run-ID plan against the invocation baseline, and compares the protected flags/states/events invariant against the invocation baseline, together with fresh Running heartbeat, empty last_error, no unexpected waiting locks and exact progress; any deviation stops before the next batch and leaves a durable resumable prefix.",
+        "Final verification confirms exactly 46 complete Reset chains and 21 complete Positive chains, 402 primary target rows, no partial chains or ID collisions, exact financial totals and one matching marker; it separately accounts for the normal enabled trigger/worker side effects and confirms no unexpected direct business/trading changes.",
       "The operation uses the local verified .NET command against Production without deploying or restarting the running service and completes focused tests, a baseline-aware complete test-project comparison with zero new failures, solution build, requirement gates, independent semantic review, task-only commits and push."
       ],
       "implementationPaths": [
@@ -155,7 +155,7 @@
           "command": "Run the complete test project for clean HEAD 68abcd3b2efadcd8e2075f8e8cb5fa18c5da5f4e and the current implementation under identical normal non-PostgreSQL-gated conditions, then compare exact failed test names; separately run FullyQualifiedName~EthUp8LossDiffHistoryBackfill with the disposable PostgreSQL gate enabled.",
           "expected": "The current implementation has zero new failed test names versus clean HEAD (verified preview baseline: both have the same 129 failures, while current adds three passing tests), and the exact changed PostgreSQL test set passes 4/4 with zero skips using only the marked D:\\CodexTemp run for disposable outputs.",
           "result": "pending",
-          "evidence": "pending"
+          "evidence": "Previous baseline comparison remains retained, but the current implementation must be rebuilt and retested after the reviewer-required corrections."
         },
         {
           "id": "VER-005",
@@ -163,15 +163,15 @@
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
           "expected": "The complete solution builds with zero errors using only the marked D:\\CodexTemp run for disposable outputs.",
           "result": "pending",
-          "evidence": "pending"
+          "evidence": "Previous build evidence remains retained, but the solution must be rebuilt after the reviewer-required corrections."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "Run the approval-gated exact backfill apply, then independently verify Production in a fresh REPEATABLE READ READ ONLY transaction.",
-          "expected": "Exactly 67 complete chains and one matching marker exist with exact financial totals, no partial/conflicting rows, unchanged protected state and healthy service.",
+          "expected": "Exactly 67 complete chains and one matching marker exist with exact financial totals, no partial/conflicting rows, unchanged protected state, healthy service and an explicit accounting of normal trigger/worker side effects.",
           "result": "pending",
-          "evidence": "pending"
+          "evidence": "Primary Production result is verified: 46/21 chains, 67 each of signals/orders/fills/runs/positions/settlements, exact financial totals and one marker. Read-only Production inspection at 2026-08-28T07:11:33.690936Z verified active dashboard projection and copied-trader performance triggers on the inserted tables; their queues were already consumed, four derived copied-trader performance rows exist, both dashboard lifetime projections advanced, and no child skip tombstones exist. Final corrected-code/idempotency verification is still pending."
         }
       ]
     }
@@ -185,8 +185,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8",
-        "semanticDigest": "sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
+        "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
       }
     },
     {
@@ -196,8 +196,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8",
-        "semanticDigest": "sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
+        "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
       }
     },
     {
@@ -207,16 +207,27 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8",
-        "semanticDigest": "sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
+        "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
+      }
+    },
+    {
+      "id": "DEV-004",
+      "text": "The approved contract incorrectly stated that the 402 primary rows and marker would cause no other database writes. Production has pre-existing enabled triggers on paper_orders, paper_fills, strategy_market_paper_runs, paper_positions and paper_position_settlements. Those triggers synchronously enqueue dashboard projection events for all five projected row types and copied-trader performance refresh work for orders, fills, positions and settlements; the running workers consume those queues and update derived state. Keep these normal schema side effects enabled and account for them explicitly rather than disabling or bypassing triggers.",
+      "impact": "The backfill still directly writes only the exact 402 primary rows and one marker, but total physical database writes are greater and timing-dependent because existing workers may consume/coalesce queues during the one-second batch gaps. For the 67 completed chains, the five dashboard trigger paths imply 335 synchronous projection-event insertions before worker consumption. Copied-trader refresh queue writes are coalesced per wallet and therefore do not have a stable physical-row count. Read-only Production evidence confirms the triggers are enabled, their queues are now empty, four derived copied-trader performance rows exist, and both child dashboard lifetime projection states advanced. No trigger bypass, rollback or new Production mutation is authorized by this correction.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
+        "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8",
-    "semanticDigest": "sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8"
+    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168",
+    "semanticDigest": "sha256:34ec2d7de85c128ff4344d5af74cc62b8e94f6b423024fb2e022fbabb9f53168"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_up8_lossdiff_history",
