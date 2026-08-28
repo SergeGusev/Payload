@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260828-legacy-parity-candidate-query",
+  "title": "Bound the Legacy candidate parity-audit query",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, дорабатывай запрос"
+    }
+  ],
+  "scope": {
+    "goal": "Make the remaining Legacy historical Paper FAK candidate query complete within its existing timeout by making its parity-audit exclusions bounded and indexable without changing candidate membership or order.",
+    "inScope": [
+      "Change only GetHistoricalPaperFakFeeBackfillCandidatesAsync and its focused tests.",
+      "Replace the combined multi-source historical_gross_net_parity_audit OR predicate with source-specific bounded checks over the already materialized strategy candidate keys.",
+      "Preserve exclusions for PaperSellFill, PaperRun including legacy old-payload binding, PaperPosition, and PaperSettlement accounting decisions.",
+      "Preserve the existing 10-second command timeout, strategy/source/status/cutoff/cursor filters, fallback and terminal-run guards, chronological ordering, page limit, returned payload, and read-only candidate behavior.",
+      "Run focused tests, a solution build, requirement validation, independent semantic review, task-only commits, and push."
+    ],
+    "outOfScope": [
+      "No strategy, signal, order, fill, settlement, PnL, ROI, fee, execution, Paper, or Live behavior changes.",
+      "No database schema, index, migration, data, configuration, timeout, worker scheduling, retry policy, or service startup changes.",
+      "No Production writes, deployment, service stop, service restart, or log cleanup.",
+      "No changes to the already deployed Paper settlement deadlock handling or to other Legacy backfill phases and queries."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact Legacy Paper FAK candidate selection for one strategy visit; immutable runtime cutoff and optional cursor remain caller-supplied and unchanged.",
+    "firstVerification": "Inspect the exact deployed failure and current SQL, then verify read-only that rank-2 strategy b7c50005-0001-4000-8166-000000000003 has only two LegacyUnknown fills before cutoff 2026-08-07T22:44:55.219515Z and that the timeout occurs after the strategy-first fill probe in the combined parity-audit exclusion."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Доработать только parity-audit exclusion внутри GetHistoricalPaperFakFeeBackfillCandidatesAsync так, чтобы проверка была bounded/indexable и сохраняла точный результат существующего запроса.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "дорабатывай запрос",
+      "acceptanceCriteria": [
+        "The candidate query first materializes the exact strategy's eligible LegacyUnknown fill keys and evaluates each parity source shape against that bounded set instead of using one correlated multi-source OR over the audit table.",
+        "PaperSellFill decisions are matched by exact fill source_id; PaperRun decisions are matched by exact run source_id or the legacy old_payload_json paper_order_id binding; PaperPosition and PaperSettlement decisions are matched by the existing evidence paperFillIds binding.",
+        "A candidate excluded by any one of the four existing parity decision shapes remains excluded, and an otherwise eligible candidate with no matching parity decision remains included.",
+        "The existing strategy/source/status/cutoff/cursor filters, fallback and terminal-run exclusions, chronological tuple ordering, fetch limit, returned records, 10-second command timeout, and read-only behavior are unchanged.",
+        "No schema, index, migration, configuration, worker, settlement, strategy, Paper execution, or Live execution behavior changes are present in the diff."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~HistoricalPaperFakFeeBackfill --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
+          "expected": "All focused source-contract and PostgreSQL integration tests pass, including exact inclusion/exclusion coverage for every retained parity binding shape and unchanged tuple paging.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
+          "expected": "The full solution test suite passes apart from explicitly documented environment skips unrelated to this request.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts",
+          "expected": "Release build succeeds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Run an exact BEGIN READ ONLY, SET LOCAL statement_timeout='15s' Production EXPLAIN (ANALYZE, BUFFERS) for rank-2 strategy b7c50005-0001-4000-8166-000000000003 and cutoff 2026-08-07T22:44:55.219515Z when direct server access is available.",
+          "expected": "The rewritten equivalent query completes within the product's existing 10-second command budget and the plan keeps parity evaluation bounded by the materialized candidate keys. If Production access remains unavailable, record that blocker and do not claim Production runtime verification.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Independent reviewer compares the verbatim request and approved semantic digest against the actual task diff and verification evidence.",
+          "expected": "Reviewer reports no scope drift, semantic regression, or unsupported completion claim.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260828-legacy-parity-candidate-query sha256:10c84aafb4fcd65366dab9dd3f50eb8c776cd03718b9fb8ac8ae92da018e7089",
+    "semanticDigest": "sha256:10c84aafb4fcd65366dab9dd3f50eb8c776cd03718b9fb8ac8ae92da018e7089"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_legacy_parity_query",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
