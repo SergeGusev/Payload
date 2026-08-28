@@ -1,3 +1,16 @@
+## Active Update 2026-08-28 Paper Settlement And Legacy Backfill Resilience
+Goal: Fix the verified Legacy historical-accounting candidate-query timeout and transient PostgreSQL Paper-settlement deadlocks without changing trading or financial semantics.
+Status: Completed locally; deployment and Production mutation were not performed
+Done:
+- Changed the Legacy candidate read to materialize the exact strategy's orders and probe `paper_fills` by the existing `paper_order_id` index before parity exclusions, preserving the immutable cutoff, full cursor, eligibility, order, page size, and 10-second command timeout.
+- Added settlement retry only for PostgreSQL `40P01`: at most three complete attempts, 50/100 ms cancellation-aware delays, and a fresh position reload plus write rebuild on every retry; all other failures remain immediate and cache updates remain post-commit.
+- Focused settlement tests passed 7/7; focused Legacy backfill tests passed 21/21 against disposable PostgreSQL; Release solution build passed with 0 warnings and 0 errors.
+- Post-edit Production `EXPLAIN ANALYZE` in `BEGIN READ ONLY` completed in 158.846 ms for the exact blocked strategy, used `ix_paper_fills_order_time` for 4,304 loops, returned zero candidates, and performed no sequential scan of `paper_fills`.
+- Independent reviewer `agent:/root/reviewer_paper_resilience` compared the original requests, approved contract, task diff and verification and returned PASS with no findings.
+Next: Deploy the resulting commit, then verify fresh Production logs and worker progress read-only.
+Notes: No strategy, Maker-GTD, Live, fee/PnL formula, schema, database row, service, configuration, deployment, or restart was changed in this task.
+Blockers: None.
+
 ## Active Update 2026-08-28 Deployment Verification 390c8a25
 Goal: Verify the user-deployed service build, ETH Up8 LossDiff migration, service health, and historical parity continuation without changing Production.
 Status: Completed read-only; deployed feature is healthy, separate Legacy backfill timeouts persist
