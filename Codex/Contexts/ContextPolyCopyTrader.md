@@ -1,3 +1,67 @@
+## Active Update 2026-08-28 ETH Up8 LossDiff History Completed
+Goal: Finish the exact ETH Up8 LossDiff 3+ and 16+ Positive history backfill with truthful historical execution evidence.
+Status: Completed
+Done:
+- Recorded revised approval checkpoint `cf7e3950` for digest `sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5`, including explicit DEV-006 acceptance of the earlier ab25 binary's actual 3-second/fixed-plan execution profile.
+- Bound the corrected command, focused contract test and README to exact b83 while preserving `AppliedHistoryContractDigest=ab25` for the existing completion marker.
+- Final focused disposable-PostgreSQL tests passed 8/8 with zero skips; final Release solution build completed with zero errors and 126 existing warnings; final full non-PostgreSQL run had the same exact 129 failed names as clean baseline, with zero new and zero baseline-only failures.
+- Exact b83 Production preview returned `PREVIEW_OK ... writes=0`, exact b83 apply returned `IDEMPOTENT_OK ... writes=0`, and independent READ ONLY verification at `2026-08-28T08:38:53.848824Z` confirmed 67 complete chains, exact financial totals, one marker, healthy exact service and zero waiting locks.
+- Independent reviewer `agent:/root/reviewer_eth_up8_lossdiff_history` compared the original requests, approved contract, exact task diff, tests and evidence and returned PASS with no findings.
+Next: None
+Notes: Reset 3+ has 46 Settled trades (31 wins, 15 losses, Net PnL 61.13382091); Positive 16+ has 21 Settled trades (15 wins, 6 losses, Net PnL 37.74246883). The final b83 verification made no Production writes and did not rewrite, delete or replay history.
+Blockers: None
+
+## Active Update 2026-08-28 Legacy Parity Candidate Query
+Goal: Bound the Legacy historical Paper FAK candidate parity-audit exclusion without changing candidate membership, ordering, timeout, or trading behavior.
+Status: Completed
+Done:
+- Replaced the combined correlated multi-source parity-audit OR with source-specific CTEs bounded by the materialized strategy fill/order keys.
+- Preserved PaperSellFill, exact and legacy PaperRun, PaperPosition, and PaperSettlement exclusion shapes; added focused source-contract and real-PostgreSQL coverage.
+- Recorded approval checkpoints `0cb63d35` and `e1054df3`; independent reviewer passed the final approved digest with no findings.
+Next: Deploy the implementation commit and verify the rank-2 Legacy backfill visit read-only when direct Production access is available.
+Notes: Focused source tests passed 19/19; PostgreSQL integration passed 4/4; 150,005-row disposable stress run passed in 625 ms; Release solution build passed with 0 errors and 126 existing warnings. Full solution inventory was 1522 passed, 68 skipped, and 129 unrelated baseline failures, not a green full-suite claim. Direct Production EXPLAIN was blocked by pg_hba/SSL, so no Production runtime claim is made.
+Blockers: Production runtime confirmation requires deployment and available direct Production access.
+
+## Active Update 2026-08-28 ETH Up8 LossDiff Historical Execution Reconciliation
+Goal: Finish the exact ETH Up8 LossDiff 3+ and 16+ Positive history backfill without overstating the gates that governed its already completed Production writes.
+Status: Blocked pending approval of corrected semantic digest
+Done:
+- Recorded the user's exact `a11c642d...` approval in checkpoint `141a6e19`; the corrected Production preview reproduced the exact 1,022-row source, 46/21 plan, 402 primary target rows and marker with writes=0.
+- The first corrected no-op apply stopped safely on one transient waiting lock without writes; a fresh read-only diagnostic found zero waiters and a healthy exact `7a0b967d...` service, and the one bounded retry returned `IDEMPOTENT_OK ... writes=0`.
+- Independent READ ONLY verification at `2026-08-28T08:05:29.953313Z` confirmed 67 complete six-row chains, exact financial totals, one matching marker, zero waiting locks, enabled expected triggers and empty projection/performance queues.
+- Independent reviewer FAIL and separate local decompilation of exact old binary SHA-256 `D7E7A47D779D3498781F26576E2070BF4C05AF97C741B33FAE85D23228DABA50` proved that the original 67-chain mutation used `lock_timeout=3s`, reused the invocation source/plan between batches and did not compare the observed invariant digest to its invocation baseline; the later corrected a11 no-op cannot retroactively satisfy those stronger gates.
+- Drafted DEV-006 to ratify only the truthful historical execution profile and explicitly withdraw the stronger retrospective claim; revised semantic digest is `sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5`.
+Next: Obtain exact user approval of the revised digest, record the approval-only checkpoint, rerun independent semantic review, complete the contract, stage only the eight Up8 task files, validate, commit and push.
+Notes: Production history is complete and was not rewritten, deleted or replayed. The a11 apply path made zero writes. Three unrelated HistoricalPaperFakFeeBackfill files and unrelated concurrent commit `0cb63d35` remain outside this task.
+Blockers: Exact user approval of digest `sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5`.
+
+## Active Update 2026-08-28 Paper Resilience Deployment Verification
+Goal: Verify the deployed Paper settlement and Legacy backfill resilience build, service health, bets, settlements, and logs without changing Production.
+Status: Completed read-only; ordinary Paper is healthy, Legacy backfill still has a timeout on rank 2
+Done:
+- Verified exact deployed build `1.0.0+7a0b967d9c610166975a57b066a5154ff2499cf9`, started `2026-08-28T07:28:32.524435Z`, remains `Running` / `Live`, with fresh heartbeat and `last_error=NULL`.
+- Verified 296 post-start Paper orders across 207 strategies; all 296 are `Filled`, all have fill rows, and 131 settlements exist for the entered post-start market conditions through `2026-08-28T07:35:07.040883Z`.
+- Verified no post-start settlement `40P01` or `Paper resolution settlement deadlocked` log event; the new settlement retry branch has not yet been exercised in Production.
+- Verified Legacy rank 1 `btc_up_down_5m_5_child_progress_roi` completed twice, first in 1,416 ms and then completed its remaining phase in 56 ms without timeout.
+- Found Legacy rank 2 `btc_up_down_5m_3_diff_shift_progress_lower_enter_premarket` still failed after 10,084 ms at `2026-08-28T07:37:36.937Z`; the stack is still `GetHistoricalPaperFakFeeBackfillCandidatesAsync`, with `NpgsqlException: Exception while reading from stream` caused by a read timeout. One retry was scheduled for 60 seconds.
+- Logs contain no FTL and no settlement deadlocks. They do contain transient WebSocket side-effect queue warnings after startup, with observed queue delay up to about 5.8 seconds; the queue later reached zero at the next Legacy cycle start while Paper activity and settlements continued.
+Next: Fix the remaining strategy-dependent Legacy candidate-query timeout; no Production action is required to keep ordinary Paper trading running.
+Notes: All SQL used `BEGIN READ ONLY`, `statement_timeout=15s`, exact post-start UTC cutoffs, and bounded/indexed reads against `192.168.0.101:5432/polycopytrader`; logs came from `\\192.168.0.101\CodexLogs`. No Production, service, database, order, strategy, or configuration state changed. Bookkeeping remains uncommitted because the shared worktree and branch contain an unrelated active ETH Up8 task.
+Blockers: Legacy historical accounting cannot progress past rank 2 until the remaining candidate-query timeout is corrected.
+
+## Active Update 2026-08-28 ETH Up8 LossDiff History Backfill Build Reconciliation
+Goal: Finish the exact ETH Up8 LossDiff 3+ and 16+ Positive history backfill with an accurate Production build gate and passing independent review.
+Status: Blocked pending approval of corrected semantic digest
+Done:
+- Recorded the user's exact `34ec2d7d...` approval in checkpoint `3e660616`, implemented the four reviewer corrections, bound runtime selection to independently calculated exact 46/21 parent-run ID digests, and passed the focused disposable-PostgreSQL suite 8/8 with zero skips.
+- Production history remains complete at 46 Reset plus 21 Positive chains, 402 primary rows, exact financial totals and one marker; the corrected preview confirmed the exact 1,022-row source, 46/21 plan and marker with writes=0.
+- The corrected preview then fail-closed because the command pinned feature build `390c8a25...`, while a newer Production restart now reports exact build `7a0b967d...`; a separate read-only heartbeat query confirmed Running/Live, empty last_error and a 21.623-second heartbeat age.
+- Git independently proves `7a0b967d...` descends from `390c8a25...` and the ancestry path contains no change to the exact Up8 child migration or history-command path.
+- Drafted only the exact-build reconciliation as DEV-005; revised semantic digest is `sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166`.
+Next: Obtain exact approval of the revised digest, commit the approval-only checkpoint, update only the pinned heartbeat build, rerun focused/build/baseline/idempotent read-only verification, obtain clean independent review, commit and push.
+Notes: The blocked preview opened no write path and reported writes=0. No Production data, service, strategy, order, deployment or restart was changed.
+Blockers: Exact user approval of digest `sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166`.
+
 ## Active Update 2026-08-28 Paper Settlement And Legacy Backfill Resilience
 Goal: Fix the verified Legacy historical-accounting candidate-query timeout and transient PostgreSQL Paper-settlement deadlocks without changing trading or financial semantics.
 Status: Completed locally; deployment and Production mutation were not performed
@@ -10,6 +74,18 @@ Done:
 Next: Deploy the resulting commit, then verify fresh Production logs and worker progress read-only.
 Notes: No strategy, Maker-GTD, Live, fee/PnL formula, schema, database row, service, configuration, deployment, or restart was changed in this task.
 Blockers: None.
+
+## Active Update 2026-08-28 ETH Up8 LossDiff History Backfill
+Goal: Verify the deployed ETH Up8 LossDiff 3+ and 16+ Positive children and generate their exact pre-rollout Paper history gently in Production.
+Status: Blocked before Production apply pending organic post-cutoff activity approval
+Done:
+- Recorded approval checkpoints `68abcd3b` and `e7cc3e68`, implemented the exact bounded backfill profile, passed the focused PostgreSQL suite 4/4 with zero skips, matched the clean-HEAD 129-failure baseline with zero new failed names, and built the Release solution with zero errors.
+- A fresh Production preview still verifies the immutable 1,022-row parent source, expected 46 Reset plus 21 Positive chains, zero pre-cutoff child runs/events, zero target rows, no marker, healthy service, and no waiting locks; no Production write has run.
+- Fresh independent SQL found normal post-rollout evolution since the initial preview: each child now has five post-cutoff LossDiff events, current value 2, and five Skipped runs with zero entered runs, Paper orders, and Live orders.
+- Revised the contract minimally so organic post-cutoff activity may coexist outside the frozen backfill target and must remain unchanged; new semantic digest is `sha256:ab25b0935aea29c666905707a6b3487135336142ec93f8c195ad65954e123cb8`.
+Next: Obtain the user's exact approval of the revised digest, commit a new approval checkpoint, rerun the immediate Production preview, then execute the 67 one-chain transactions and independently verify the result.
+Notes: All diagnostics and builds use marked `D:\CodexTemp\runs\manual-2c1b985092f34f8eb43d12f3d0ed8b02`. Production remains unchanged.
+Blockers: Organic post-cutoff activity contradicts the former literal zero-activity acceptance criterion and requires explicit approval of the corrected boundary.
 
 ## Active Update 2026-08-28 Deployment Verification 390c8a25
 Goal: Verify the user-deployed service build, ETH Up8 LossDiff migration, service health, and historical parity continuation without changing Production.

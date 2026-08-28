@@ -136,3 +136,9 @@ Request:
 
 Result:
 After approval-only checkpoint `06d9b912`, prepared exactly the requested ETH Up 8 bps LossDiff 3+ and LossDiff 16+ Positive catalog children, migration 0003 with zero-start state and no history, exact-parent diagnostic persistence, focused tests, and directly affected documentation. Focused tests passed 4/4, all LossDiff tests passed 26 with 2 gated legacy-history skips, the full migration class passed 11/11 without skips on an isolated disposable PostgreSQL 17.5 cluster, and the Release solution built with zero errors. Clean HEAD already fails 131 full-suite tests; the current diff fails 128 with zero new failed test names. Independent review found no implementation mismatch but blocked completion because approved VER-005 literally requires zero full-suite failures. No commit/push, deployment, Local/Production database mutation, history generation, Live change, or venue action was performed; user choice is required between a baseline-aware contract revision and expanding scope to repair the pre-existing suite.
+## 2026-08-27T22:13:03.4964024Z
+Request:
+`APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:83e3f2463886a2a1e364ce8d1c372901807da21a3de6451895f0e6d725eae65f`
+
+Result:
+Recorded the approved checkpoint and implemented/verified the exact backfill locally, but did not mutate Production. The literal zero-total-failure gate was contradicted by an independent clean-HEAD run: clean HEAD and current implementation share the same 129 failed non-PostgreSQL test names, while focused PostgreSQL backfill tests pass 4/4. Drafted the minimum baseline-aware revision at digest `sha256:a6c1c2184721cc937ed11ace16613237371d5261e6e9421f1cb747cedb94dc4c`; Production apply is blocked pending its exact user approval.

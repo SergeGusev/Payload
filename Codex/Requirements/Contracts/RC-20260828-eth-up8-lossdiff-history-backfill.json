@@ -3,7 +3,7 @@
   "contractId": "RC-20260828-eth-up8-lossdiff-history-backfill",
   "title": "Backfill ETH Up 8 bps LossDiff child history",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -95,7 +95,7 @@
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffHistoryBackfill",
           "expected": "Focused tests prove the exact frozen source facts, both causal formulas, thresholds, selected membership, financial totals and argument/digest gates.",
           "result": "passed",
-          "evidence": "The final focused disposable-PostgreSQL run passed 8/8 with zero skips (`up8-a11-focused-pg-final.trx`). Unit tests explicitly cover Reset-after-win, Positive decrement and zero floor, strictly prior settlement ordering, all four operational-baseline drift checks, exact approval/build/marker bindings, and retained independent 46/21 parent-run ID sets whose SHA-256 digests are runtime gates."
+          "evidence": "The final focused disposable-PostgreSQL run passed 8/8 with zero skips (`up8-b83-focused-pg.trx`). Unit tests explicitly cover Reset-after-win, Positive decrement and zero floor, strictly prior settlement ordering, all four operational-baseline drift checks, exact b83 approval/build/ab25 marker bindings, and retained independent 46/21 parent-run ID sets whose SHA-256 digests are runtime gates."
         }
       ]
     },
@@ -124,7 +124,7 @@
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffHistoryBackfill",
           "expected": "Focused PostgreSQL tests prove complete six-row chains, deterministic IDs, exact field copying, snapshot handling, idempotency, collision refusal, one-chain atomicity and unchanged states/events/flags.",
           "result": "passed",
-          "evidence": "The final focused disposable-PostgreSQL run passed 8/8 with zero skips and proves one complete six-row chain, deterministic IDs, copied financial/evidence fields, idempotency, collision refusal, unchanged protected invariant digest, five exact dashboard projection events and one coalesced copied-trader performance queue row for the child wallet."
+          "evidence": "The final b83-focused disposable-PostgreSQL run passed 8/8 with zero skips and proves one complete six-row chain, deterministic IDs, copied financial/evidence fields, idempotency, collision refusal, unchanged protected invariant digest, five exact dashboard projection events and one coalesced copied-trader performance queue row for the child wallet."
         }
       ]
     },
@@ -157,7 +157,7 @@
           "command": "Run the complete test project for clean HEAD 68abcd3b2efadcd8e2075f8e8cb5fa18c5da5f4e and the current implementation under identical normal non-PostgreSQL-gated conditions, then compare exact failed test names; separately run FullyQualifiedName~EthUp8LossDiffHistoryBackfill with the disposable PostgreSQL gate enabled.",
           "expected": "The current implementation has zero new failed test names versus clean HEAD (verified preview baseline: both have the same 129 failures, while current adds three passing tests), and the exact changed PostgreSQL test set passes 4/4 with zero skips using only the marked D:\\CodexTemp run for disposable outputs.",
           "result": "passed",
-          "evidence": "Final normal non-PostgreSQL current run: 1,717 total, 1,521 passed, 129 failed and 67 skipped (`current-a11-nonpg-envfixed.trx`). Exact-name comparison against `head-baseline-nonpg-corrected.trx` found 129 baseline/current failed names, zero new names and zero baseline-only names. The separate changed PostgreSQL set passed 8/8 with zero skips."
+          "evidence": "Final normal non-PostgreSQL current b83 run: 1,719 total, 1,522 passed, 129 failed and 68 skipped (`current-b83-nonpg.trx`). Exact-name comparison against `head-baseline-nonpg-corrected.trx` found 129 baseline/current failed names, zero new names and zero baseline-only names; the extra pass and skip belong to unrelated concurrent shared-tree work. The separate exact changed PostgreSQL set passed 8/8 with zero skips."
         },
         {
           "id": "VER-005",
@@ -165,7 +165,7 @@
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
           "expected": "The complete solution builds with zero errors using only the marked D:\\CodexTemp run for disposable outputs.",
           "result": "passed",
-          "evidence": "Final Release build of PolyCopyTrader.sln completed with zero errors and 126 existing warnings, with all disposable outputs under the marked D:\\CodexTemp run."
+          "evidence": "Final b83 Release build of PolyCopyTrader.sln completed with zero errors and 126 existing warnings (`solution-build-b83.log`), with all disposable outputs under the marked D:\\CodexTemp run."
         },
         {
           "id": "VER-006",
@@ -173,7 +173,7 @@
           "command": "Run the approval-gated exact backfill apply, then independently verify Production in a fresh REPEATABLE READ READ ONLY transaction.",
           "expected": "Exactly 67 complete chains and one matching marker exist with exact financial totals, no partial/conflicting rows, unchanged protected state, healthy service and an explicit accounting of normal trigger/worker side effects.",
           "result": "passed",
-          "evidence": "Approval-gated corrected apply returned IDEMPOTENT_OK with writes=0 after verifying the exact 1,022-row source, 46/21 plan, 402 target rows, marker, current accepted build, heartbeat and zero locks. Independent REPEATABLE READ READ ONLY verification at cutoff 2026-08-28T07:54:56.955551Z confirmed 67 each of signals/orders/fills/runs/positions/settlements; Reset 46/31/15, stake 276.24179998, gross 69.99539091, fee 8.86157000, Net 61.13382091; Positive 21/15/6, stake 126.00000010, gross 41.83029883, fee 4.08783000, Net 37.74246883; one 67-chain marker with applied contract ab25 and exact source/full digests; both children enabled/unpaused/Paper-only at current LossDiff 2; nine relevant triggers enabled, pending/inflight queues zero, four derived performance rows, two lifetime projections, zero v1/v2 child tombstones and zero waiting locks."
+          "evidence": "Exact b83 preview returned PREVIEW_OK with writes=0, then the b83 approval-gated corrected apply returned IDEMPOTENT_OK with writes=0 after verifying the exact 1,022-row source, 46/21 plan, 402 target rows, marker, current accepted build, heartbeat and zero locks. Independent REPEATABLE READ READ ONLY verification at cutoff 2026-08-28T08:38:53.848824Z confirmed 67 each of signals/orders/fills/runs/positions/settlements; Reset 46/31/15, stake 276.24179998, gross 69.99539091, fee 8.86157000, Net 61.13382091; Positive 21/15/6, stake 126.00000010, gross 41.83029883, fee 4.08783000, Net 37.74246883; one 67-chain marker with applied contract ab25 and exact source/full digests; both children enabled/unpaused/Paper-only at current LossDiff 2; nine relevant triggers enabled, pending/inflight queues zero, four derived performance rows, two lifetime projections, zero v1/v2 child tombstones and zero waiting locks. DEV-006 separately records the exact earlier execution profile that governed the original writes; the b83 command made no Production writes."
         }
       ]
     }
@@ -255,8 +255,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_up8_lossdiff_history",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }
