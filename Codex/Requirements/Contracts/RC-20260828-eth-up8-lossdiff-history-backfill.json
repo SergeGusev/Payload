@@ -68,7 +68,7 @@
           "command": "Run the exact new backfill command without --apply against Production.",
           "expected": "The command reports the exact migration, service, identities, flags, assignments and states, zero pre-cutoff child runs/events, zero deterministic target history and no marker inside a rolled-back read-only transaction; a separate read-only query identifies and preserves any organic post-cutoff activity.",
           "result": "passed",
-          "evidence": "Final Production preview before apply (`logs/up8-preview-final-ab25.txt` under marked run) reproduced 1,022 source rows, exact source/full digests, 46 Reset plus 21 Positive targets, zero target rows, zero pre-cutoff events, healthy heartbeat and zero waiting locks; the post-lock resume preview verified the exact 54-chain durable prefix before continuation."
+          "evidence": "Final corrected-code Production preview reproduced the exact server identity, current accepted build, 1,022 source rows, exact source/full and 46/21 run-ID membership digests, 46 Reset plus 21 Positive targets, 402 completed primary target rows, one matching marker, healthy heartbeat, zero waiting locks and zero imported pre-cutoff events; PREVIEW_OK rolled back with writes=0."
         }
       ]
     },
@@ -94,8 +94,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffHistoryBackfill",
           "expected": "Focused tests prove the exact frozen source facts, both causal formulas, thresholds, selected membership, financial totals and argument/digest gates.",
-          "result": "pending",
-          "evidence": "Must be rerun after adding explicit reset-after-win, Positive decrement/zero-floor/settlement-ordering coverage and retaining the second independent exact membership/run-ID calculation."
+          "result": "passed",
+          "evidence": "The final focused disposable-PostgreSQL run passed 8/8 with zero skips (`up8-a11-focused-pg-final.trx`). Unit tests explicitly cover Reset-after-win, Positive decrement and zero floor, strictly prior settlement ordering, all four operational-baseline drift checks, exact approval/build/marker bindings, and retained independent 46/21 parent-run ID sets whose SHA-256 digests are runtime gates."
         }
       ]
     },
@@ -123,8 +123,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~EthUp8LossDiffHistoryBackfill",
           "expected": "Focused PostgreSQL tests prove complete six-row chains, deterministic IDs, exact field copying, snapshot handling, idempotency, collision refusal, one-chain atomicity and unchanged states/events/flags.",
-          "result": "pending",
-          "evidence": "Must be rerun after the trigger-side-effect contract is represented explicitly and the corrected operational invariant checks are implemented."
+          "result": "passed",
+          "evidence": "The final focused disposable-PostgreSQL run passed 8/8 with zero skips and proves one complete six-row chain, deterministic IDs, copied financial/evidence fields, idempotency, collision refusal, unchanged protected invariant digest, five exact dashboard projection events and one coalesced copied-trader performance queue row for the child wallet."
         }
       ]
     },
@@ -135,8 +135,9 @@
       "sourceQuote": "сделй им историю",
       "acceptanceCriteria": [
         "Apply requires the exact approved semantic digest and an exclusive dedicated advisory lock; preview never accepts apply authority and always rolls back with writes=0.",
-        "Each of 67 chains is committed in its own short READ COMMITTED transaction, with statement_timeout 15s, lock_timeout 2s and at least one second between committed batches; a separate final transaction writes the marker only after all chains verify.",
-        "Before every next batch, the command rereads the exact parent source from Production, recomputes and compares the source digest, full-chain digest and selected membership/run-ID plan against the invocation baseline, and compares the protected flags/states/events invariant against the invocation baseline, together with fresh Running heartbeat, empty last_error, no unexpected waiting locks and exact progress; any deviation stops before the next batch and leaves a durable resumable prefix.",
+        "The corrected command uses one short READ COMMITTED transaction per chain, statement_timeout 15s, lock_timeout 2s and at least one second between committed batches; a separate final transaction writes the marker only after all chains verify. The already completed Production mutation used the earlier execution profile accepted explicitly in DEV-006.",
+        "Before every next writable batch, the corrected command rereads the exact parent source from Production, recomputes and compares the source digest, full-chain digest and selected membership/run-ID plan against the invocation baseline, and compares the protected flags/states/events invariant against the invocation baseline, together with fresh Running heartbeat, empty last_error, no unexpected waiting locks and exact progress. The already completed Production mutation instead used the narrower checks stated explicitly in DEV-006, and no retroactive claim is made that the corrected gates governed those writes.",
+        "The retained old-binary hash, decompilation and batch logs truthfully document the exact historical execution profile; corrected a11 preview, idempotent writes=0 apply and independent READ ONLY verification prove the resulting 67 chains and marker but do not retroactively strengthen the gates that governed their original insertion.",
         "Final verification confirms exactly 46 complete Reset chains and 21 complete Positive chains, 402 primary target rows, no partial chains or ID collisions, exact financial totals and one matching marker; it separately accounts for the normal enabled trigger/worker side effects and confirms no unexpected direct business/trading changes.",
       "The operation uses the local verified .NET command against Production without deploying or restarting the running service and completes focused tests, a baseline-aware complete test-project comparison with zero new failures, solution build, requirement gates, independent semantic review, task-only commits and push."
       ],
@@ -155,24 +156,24 @@
           "kind": "test",
           "command": "Run the complete test project for clean HEAD 68abcd3b2efadcd8e2075f8e8cb5fa18c5da5f4e and the current implementation under identical normal non-PostgreSQL-gated conditions, then compare exact failed test names; separately run FullyQualifiedName~EthUp8LossDiffHistoryBackfill with the disposable PostgreSQL gate enabled.",
           "expected": "The current implementation has zero new failed test names versus clean HEAD (verified preview baseline: both have the same 129 failures, while current adds three passing tests), and the exact changed PostgreSQL test set passes 4/4 with zero skips using only the marked D:\\CodexTemp run for disposable outputs.",
-          "result": "pending",
-          "evidence": "Previous baseline comparison remains retained, but the current implementation must be rebuilt and retested after the reviewer-required corrections."
+          "result": "passed",
+          "evidence": "Final normal non-PostgreSQL current run: 1,717 total, 1,521 passed, 129 failed and 67 skipped (`current-a11-nonpg-envfixed.trx`). Exact-name comparison against `head-baseline-nonpg-corrected.trx` found 129 baseline/current failed names, zero new names and zero baseline-only names. The separate changed PostgreSQL set passed 8/8 with zero skips."
         },
         {
           "id": "VER-005",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
           "expected": "The complete solution builds with zero errors using only the marked D:\\CodexTemp run for disposable outputs.",
-          "result": "pending",
-          "evidence": "Previous build evidence remains retained, but the solution must be rebuilt after the reviewer-required corrections."
+          "result": "passed",
+          "evidence": "Final Release build of PolyCopyTrader.sln completed with zero errors and 126 existing warnings, with all disposable outputs under the marked D:\\CodexTemp run."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "Run the approval-gated exact backfill apply, then independently verify Production in a fresh REPEATABLE READ READ ONLY transaction.",
           "expected": "Exactly 67 complete chains and one matching marker exist with exact financial totals, no partial/conflicting rows, unchanged protected state, healthy service and an explicit accounting of normal trigger/worker side effects.",
-          "result": "pending",
-          "evidence": "Primary Production result is verified: 46/21 chains, 67 each of signals/orders/fills/runs/positions/settlements, exact financial totals and one marker. Read-only Production inspection at 2026-08-28T07:11:33.690936Z verified active dashboard projection and copied-trader performance triggers on the inserted tables; their queues were already consumed, four derived copied-trader performance rows exist, both dashboard lifetime projections advanced, and no child skip tombstones exist. Final corrected-code/idempotency verification is still pending."
+          "result": "passed",
+          "evidence": "Approval-gated corrected apply returned IDEMPOTENT_OK with writes=0 after verifying the exact 1,022-row source, 46/21 plan, 402 target rows, marker, current accepted build, heartbeat and zero locks. Independent REPEATABLE READ READ ONLY verification at cutoff 2026-08-28T07:54:56.955551Z confirmed 67 each of signals/orders/fills/runs/positions/settlements; Reset 46/31/15, stake 276.24179998, gross 69.99539091, fee 8.86157000, Net 61.13382091; Positive 21/15/6, stake 126.00000010, gross 41.83029883, fee 4.08783000, Net 37.74246883; one 67-chain marker with applied contract ab25 and exact source/full digests; both children enabled/unpaused/Paper-only at current LossDiff 2; nine relevant triggers enabled, pending/inflight queues zero, four derived performance rows, two lifetime projections, zero v1/v2 child tombstones and zero waiting locks."
         }
       ]
     }
@@ -186,8 +187,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
-        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5",
+        "semanticDigest": "sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5"
       }
     },
     {
@@ -197,8 +198,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
-        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5",
+        "semanticDigest": "sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5"
       }
     },
     {
@@ -208,8 +209,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
-        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5",
+        "semanticDigest": "sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5"
       }
     },
     {
@@ -219,8 +220,8 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
-        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5",
+        "semanticDigest": "sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5"
       }
     },
     {
@@ -230,16 +231,27 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
-        "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5",
+        "semanticDigest": "sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5"
+      }
+    },
+    {
+      "id": "DEV-006",
+      "text": "The 67 Production chains and completion marker were actually committed between 2026-08-28T06:44Z and 2026-08-28T06:53Z by the earlier ab25 command binary (SHA-256 D7E7A47D779D3498781F26576E2070BF4C05AF97C741B33FAE85D23228DABA50), before the stricter corrected command was built. That binary used statement_timeout 15s and lock_timeout 3s, not 2s. Before each chain it rechecked the exact catalog identities and flags, qualifying-source row count, healthy exact service build, last_error, waiting locks, imported pre-cutoff events, target progress and collisions against the initially verified 1,022-row source and 46/21 plan; it recomputed the protected invariant digest for observation but did not compare that digest to the invocation baseline, and it did not reread/recompute the full source, full-chain digest or selected membership before every chain. It did reread and rebuild the complete source and plan before and after writing the final marker. Accept this exact historical execution profile as sufficient for the already completed backfill instead of claiming that the later 2-second/full-reread/baseline-invariant gates governed the original writes.",
+      "impact": "The persisted history is not rewritten, deleted or replayed. Exact post-operation and corrected a11 no-op verification prove one matching marker, 67 complete six-row chains, exact 46/21 memberships and financial totals, unchanged current strategy identities/settings, zero partial chains and zero waiting locks. Those after-the-fact checks cannot prove that no transient source or protected-state drift occurred between the old binary's individual batches, so that stronger historical claim is explicitly withdrawn. The corrected command retains the stricter 2-second/full-reread/baseline-invariant gates for any code path that could otherwise write, but the existing marker makes the approved retry idempotent with writes=0.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5",
+        "semanticDigest": "sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166",
-    "semanticDigest": "sha256:a11c642dcd036c1e3fb86a9bb217417529e3dbb4b2a5aad220b614de1c985166"
+    "evidenceText": "APPROVE RC-20260828-eth-up8-lossdiff-history-backfill sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5",
+    "semanticDigest": "sha256:b83c8ba3ee3b432a551aeeb1ed76d33d30e76ff4765c63831341ad9f12fe7be5"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_eth_up8_lossdiff_history",
