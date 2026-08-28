@@ -1,4 +1,5 @@
 using Npgsql;
+using System.Text.Json;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
@@ -127,6 +128,96 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
                 conflictAccountingBefore,
                 await ReadAccountingSnapshotAsync(factory, scenario.ConflictOrderId));
             Assert.Equal(projectionBefore, await ReadProjectionSnapshotAsync(factory, scenario));
+        }
+        finally
+        {
+            await CleanupScenarioAsync(factory, scenario);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task CandidateQuery_PreservesEveryParityDecisionBindingShape()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var scenario = BackfillScenario.Create();
+        var orders = Enumerable.Range(0, 6)
+            .Select(index => CreateOrder(
+                scenario,
+                Guid.NewGuid(),
+                $"parity-asset-{index}-{scenario.Suffix}",
+                $"parity-condition-{index}-{scenario.Suffix}",
+                scenario.BaseUtc.AddSeconds(index),
+                "btc_updown5m_fak_taker_paper"))
+            .ToArray();
+        var fills = orders
+            .Select(order => CreateLegacyFill(Guid.NewGuid(), order))
+            .ToArray();
+        var run = CreateSettledRun(Guid.NewGuid(), orders[1]);
+
+        try
+        {
+            await SeedStrategyAsync(factory, scenario);
+            foreach (var order in orders)
+            {
+                await repository.AddPaperOrderAsync(order);
+            }
+
+            foreach (var fill in fills)
+            {
+                await repository.AddPaperFillAsync(fill);
+            }
+
+            Assert.True(await repository.TryAddStrategyMarketPaperRunAsync(run));
+            await InsertParityDecisionAuditAsync(
+                factory,
+                scenario.StrategyId,
+                "PaperSellFill",
+                fills[0].Id,
+                "{}",
+                "{}");
+            await InsertParityDecisionAuditAsync(
+                factory,
+                scenario.StrategyId,
+                "PaperRun",
+                run.Id,
+                "{}",
+                "{}");
+            await InsertParityDecisionAuditAsync(
+                factory,
+                scenario.StrategyId,
+                "PaperRun",
+                Guid.NewGuid(),
+                JsonSerializer.Serialize(new
+                {
+                    paper_order_id = orders[2].Id.ToString("D").ToLowerInvariant()
+                }),
+                "{}");
+            await InsertParityDecisionAuditAsync(
+                factory,
+                scenario.StrategyId,
+                "PaperPosition",
+                Guid.NewGuid(),
+                "{}",
+                CreateParityBindingEvidence(fills[3].Id));
+            await InsertParityDecisionAuditAsync(
+                factory,
+                scenario.StrategyId,
+                "PaperSettlement",
+                Guid.NewGuid(),
+                "{}",
+                CreateParityBindingEvidence(fills[4].Id));
+
+            var page = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                scenario.CutoffUtc,
+                scenario.StrategyId,
+                20);
+
+            Assert.True(page.ReachedEnd);
+            var candidate = Assert.Single(page.Candidates);
+            Assert.Equal(orders[5].Id, candidate.Order.Id);
+            Assert.Equal(fills[5].Id, candidate.Fill.Id);
         }
         finally
         {
@@ -708,6 +799,47 @@ VALUES (
         command.Parameters.AddWithValue("CreatedAtUtc", scenario.BaseUtc.UtcDateTime);
         Assert.Equal(1, await command.ExecuteNonQueryAsync());
     }
+
+    private static async Task InsertParityDecisionAuditAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        string sourceKind,
+        Guid sourceId,
+        string oldPayloadJson,
+        string evidencePayloadJson)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO public.historical_gross_net_parity_audit (
+    audit_id, source_kind, source_id, strategy_id, calculation_version,
+    operation_kind, evidence_version, old_payload_json, new_payload_json,
+    evidence_payload_json)
+VALUES (
+    @AuditId, @SourceKind, @SourceId, @StrategyId, 'historical-gross-net-parity-v1',
+    'AccountingDecision', @EvidenceVersion, @OldPayload::jsonb, '{}'::jsonb,
+    @EvidencePayload::jsonb);
+""",
+            connection);
+        command.Parameters.AddWithValue("AuditId", Guid.NewGuid());
+        command.Parameters.AddWithValue("SourceKind", sourceKind);
+        command.Parameters.AddWithValue("SourceId", sourceId);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("EvidenceVersion", Guid.NewGuid().ToString("N"));
+        command.Parameters.AddWithValue("OldPayload", oldPayloadJson);
+        command.Parameters.AddWithValue("EvidencePayload", evidencePayloadJson);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static string CreateParityBindingEvidence(Guid fillId) =>
+        JsonSerializer.Serialize(new
+        {
+            historicalGrossNetParityBindingV1 = new
+            {
+                paperFillIds = new[] { fillId.ToString("D").ToLowerInvariant() }
+            }
+        });
 
     private static PaperOrder CreateOrder(
         BackfillScenario scenario,

@@ -3,7 +3,7 @@
   "contractId": "RC-20260828-legacy-parity-candidate-query",
   "title": "Bound the Legacy candidate parity-audit query",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -55,40 +55,40 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~HistoricalPaperFakFeeBackfill --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
           "expected": "All focused source-contract and PostgreSQL integration tests pass, including exact inclusion/exclusion coverage for every retained parity binding shape and unchanged tuple paging.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused source-contract run passed 19/19. The four PostgreSQL integration tests passed 4/4 against an exact allowlisted disposable PostgreSQL 17 database, including CandidateQuery_PreservesEveryParityDecisionBindingShape; the database was independently verified and dropped after the run. A repeat without the PostgreSQL test connection passed the same 19 source-contract tests and reported the expected four environment skips."
         },
         {
           "id": "VER-002",
           "kind": "test",
           "command": "Run dotnet test PolyCopyTrader.sln -c Release from the marked D:\\CodexTemp run to inventory the repository baseline, then run every focused HistoricalPaperFakFeeBackfill source-contract and PostgreSQL integration test against the task diff.",
           "expected": "Every test that exercises the changed candidate query passes. Any full-suite failure is non-blocking only when its failing assertion and code path are outside the three task files, it is recorded as an existing baseline failure rather than a skip or pass, and no green full-suite claim is made.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Full solution inventory completed with 1522 passed, 68 skipped, and 129 failures. Inspection confirmed the 129 failing assertions and code paths are outside the three approved task files; they are recorded as unrelated repository baseline failures and are not represented as a green full-suite run. All 19 focused source-contract tests and all 4 focused real-PostgreSQL integration tests for the changed query passed."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts",
           "expected": "Release build succeeds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release solution build succeeded with 0 errors and 126 pre-existing warnings."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Run an exact BEGIN READ ONLY, SET LOCAL statement_timeout='15s' Production EXPLAIN (ANALYZE, BUFFERS) for rank-2 strategy b7c50005-0001-4000-8166-000000000003 and cutoff 2026-08-07T22:44:55.219515Z when direct server access is available.",
           "expected": "The rewritten equivalent query completes within the product's existing 10-second command budget and the plan keeps parity evaluation bounded by the materialized candidate keys. If Production access remains unavailable, record that blocker and do not claim Production runtime verification.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Direct Production access from this host was unavailable: the server rejected the non-SSL route through pg_hba.conf and does not offer SSL, while the available 127.0.0.1 endpoint was independently identified as a local database and excluded. No Production EXPLAIN or runtime-performance claim is made. Supplemental non-Production stress evidence: the exact binding-shape integration test passed in 625 ms with 150005 audit rows in a disposable PostgreSQL 17 database."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "Independent reviewer compares the verbatim request and approved semantic digest against the actual task diff and verification evidence.",
           "expected": "Reviewer reports no scope drift, semantic regression, or unsupported completion claim.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/reviewer_legacy_parity_query compared the verbatim request, approved digest sha256:247b1c557a12ac06fdded26d8a50274c9d9fd0077ab077f2851312bd7b3b51bb including DEV-001, the exact three-file task diff, and all verification evidence. Verdict PASS with no open findings."
         }
       ]
     }
@@ -115,8 +115,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_legacy_parity_query",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

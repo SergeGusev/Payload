@@ -331,6 +331,48 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
     }
 
     [Fact]
+    public void CandidateQuery_BoundsParityAuditByMaterializedCandidateScopeAndSourceShape()
+    {
+        var source = ReadRepositorySource();
+        var start = source.IndexOf(
+            "GetHistoricalPaperFakFeeBackfillCandidatesAsync",
+            StringComparison.Ordinal);
+        var end = source.IndexOf(
+            "ApplyHistoricalPaperFakFeeBackfillBatchAsync",
+            start,
+            StringComparison.Ordinal);
+        var candidateMethod = source[start..end];
+
+        Assert.Contains("candidate_scope AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("parity_sell_fill_keys AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("parity_run_source_keys AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("parity_legacy_run_order_ids AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "parity_position_settlement_bindings AS MATERIALIZED",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains("parity_excluded_fill_keys AS MATERIALIZED", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("?| scope.fill_ids", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains("ANY(scope.paper_order_ids)", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "parity_audit.source_id = fill.fill_id",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "parity_audit.source_id = parity_run.id",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "parity_excluded.fill_id = fill.fill_id",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "AND (\r\n                (parity_audit.source_kind = 'PaperSellFill'",
+            candidateMethod,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void StrategyRankQuery_UsesGrossOrderAndIncludesExactOrUnresolvedRunWork()
     {
         var source = ReadRepositorySource();
