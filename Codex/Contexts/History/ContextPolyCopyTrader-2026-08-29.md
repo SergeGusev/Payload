@@ -154,3 +154,10 @@ Request:
 
 Result:
 Diagnosed the two unresolved post-deploy observations read-only. Current Production logs are now visible through `\\192.168.0.101\CodexLogs`; startup proves `D:\1\logs` was unavailable and the service safely selected `C:\PayLoad\PayloadService\logs` with `fallback=true`, while the exact caught exception is unavailable because it was emitted only to startup stderr. The recurring ETH/SOL Follow Market skips are caused by `GetFreshTakerOrderBookAsync` accepting fresh WebSocket cache depth without requiring `MinOrderSize`, thereby bypassing enabled REST fallback; the one-attempt Follow Market sizing step then rejects the incomplete snapshot. Production logs independently showed the same ETH market skip at `2026-08-29T18:15:30.074Z` with executable cache depth and null min size, followed by Filled REST-backed Follow Market orders at `18:16:00.131Z`. Service health and ordinary Paper betting remained healthy. No Production or product-source state was changed.
+
+## 2026-08-29T18:31:43.0346900+00:00
+Request:
+Что-нибудь надо делать или всё в порядке?
+
+Result:
+Clarified that the service and general betting are healthy and can continue running, but the confirmed Follow Market admission defect should be corrected because affected one-shot due points are permanently skipped. The current behavior is fail-closed and does not create malformed orders; it loses otherwise qualifying opportunities. No new Production check or state change was performed.

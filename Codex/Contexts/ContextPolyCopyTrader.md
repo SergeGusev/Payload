@@ -1,3 +1,13 @@
+## Active Update 2026-08-29 Follow Market Action Decision
+Goal: Clarify whether the diagnosed Follow Market condition requires action.
+Status: Completed
+Done:
+- Confirmed from the persisted read-only diagnosis that the service and general Paper betting were healthy, but exact Follow Market attempts were intermittently and permanently skipped when fresh WebSocket depth lacked venue `MinOrderSize`.
+- Clarified that operation can continue safely because the path fails closed, but correcting Follow Market cache admission is required to stop losing otherwise qualifying one-shot opportunities.
+Next: Implement the exact bounded Follow Market admission correction only after an approved requirement contract.
+Notes: No new Production query or mutation was needed; no product source or runtime state changed.
+Blockers: Source correction requires explicit approval of its requirement digest.
+
 ## Active Update 2026-08-29 Follow Market Min-Order Diagnosis
 Goal: Diagnose recurring ETH/SOL Follow Market `follow_market_min_order_size_unavailable` skips and the apparent absence of current Production logs without changing Production or product behavior.
 Status: Completed diagnosis; Follow Market admission defect confirmed, current logs are visible through fallback
