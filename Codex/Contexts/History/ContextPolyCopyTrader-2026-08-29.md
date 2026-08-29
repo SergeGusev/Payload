@@ -131,3 +131,12 @@ Request:
 
 Result:
 Verified Production read-only after deployment. At `2026-08-29T13:04:07.290029Z` the service was `Running`/`Live` on exact build `044b2b8743d7140af75c435de6c15ec34a74eec1`, with heartbeat age `27.808s`, unchanged start `2026-08-29T12:55:39.180757Z`, and NULL `last_error`. Ordered migration 0004 was registered with the approved checksum and the exact Production btree index `(trader_wallet, id)` was valid/ready/live. A bounded sample found 121 post-start Paper orders, all Filled with zero Pending; a separate bounded query found 248 post-start fill rows, latest at `13:04:32.454Z`, and runtime run/tombstone rows independently confirmed active cycles. However, Production has zero of the deployed 270 BTC/ETH/SOL Follow Market strategy rows; missing runtime rows default to disabled and no storage seed/migration exists, so that new family cannot bet. The authorized `\\192.168.0.101\CodexLogs` share is also stale at `12:12:24Z`, before this process start, so post-deploy ERR/FTL verification from logs is unavailable. No Production state was changed.
+
+## 2026-08-29T17:42:52.8275040Z
+Request:
+Ок, действуй
+
+`APPROVE RC-20260829-follow-market-registration-and-production-logs sha256:6aa236ab2f14a045184ab36ae9d012b165b950b80016dc7ae75ff7e638f76fd9`
+
+Result:
+Completed the approved local-only correction. Added ordered transactional migration `0005-follow-market-strategies` for exactly 270 existing BTC/ETH/SOL Follow Market variants, preserving history, forcing Paper enabled/Live disabled state, rejecting identity collisions and remaining idempotent. Added Production file-log routing to exact `D:\1\logs` with executable-local default and explicit diagnostic fallback for empty, invalid or unavailable overrides. Final focused tests passed 7/7; real disposable-local-PostgreSQL regressions passed 3/3 and the database was removed; Release solution build and Service publish completed with zero warnings/errors, and the published Production configuration contains `D:\1\logs`. Independent semantic review returned PASS with no findings. No Production or deployment state changed.

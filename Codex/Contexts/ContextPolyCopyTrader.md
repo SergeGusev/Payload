@@ -1,3 +1,16 @@
+## Active Update 2026-08-29 Follow Market Registration And Production Logs
+Goal: Register the exact existing 270 Follow Market strategies through ordered migration 0005 and route Production service files to `D:\1\logs` without making an unavailable configured path fatal.
+Status: Completed locally and independently reviewed; not deployed
+Done:
+- Added transactional checksum-bound migration `0005-follow-market-strategies`, ordered after 0004, for exactly 270 catalog-identical rows: 90 each for BTC, ETH and SOL with M `30..270` step `30` and N `50..95` step `5`.
+- Initial rows are enabled Paper configuration with Live disabled and pauses cleared. Matching rows refresh catalog metadata/state without deleting history; ID/code cross-collisions fail the transaction; a second initializer run is idempotent.
+- Added `ServiceLogging:Directory`; Production publishes exact `D:\1\logs`, while the default remains executable-local `logs`. Missing configuration uses the default; empty, invalid or unavailable explicit paths emit a diagnostic and fall back without preventing Serilog startup.
+- Added focused migration and log resolver/file-write coverage and documented both settings.
+- Independent reviewer `agent:/root/review_follow_market_registration_logs` compared the verbatim requests, approved contract, all eight governed paths and verification evidence and returned PASS with no open findings.
+Next: User deploys the committed source. Runtime verification after deployment remains separate.
+Notes: Requirement digest `sha256:6aa236ab2f14a045184ab36ae9d012b165b950b80016dc7ae75ff7e638f76fd9`. Final focused suite passed 7/7; real local PostgreSQL regression passed 3/3 and its exact disposable database was dropped and confirmed absent; final Release solution build and Service publish completed with 0 warnings/errors; published Production configuration contains `D:\1\logs`; WorkingTree and Staged requirement gates plus diff checks passed. Protected cleanup removed the marked 439,805,151-byte temp run and verified it absent. No Production database, service, strategy, order, configuration, deployment or share state was changed.
+Blockers: None for local source delivery.
+
 ## Active Update 2026-08-29 Post-Deploy Startup And Betting Verification
 Goal: Verify the newly published Production build, startup migration, betting activity, and server logs without changing Production.
 Status: Startup and ordinary Paper betting verified; Follow Market registration and post-deploy log visibility are defective

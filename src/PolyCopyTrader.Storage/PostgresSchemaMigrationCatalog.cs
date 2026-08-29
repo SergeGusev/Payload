@@ -82,8 +82,25 @@ public static class PostgresSchemaMigrationCatalog
                 $"actual {signalsTraderWalletIndex.SemanticChecksum}.");
         }
 
+        var followMarketStrategies = new PostgresSchemaMigration(
+            order: 4,
+            id: PostgresFollowMarketStrategySchemaMigration.Id,
+            sql: PostgresFollowMarketStrategySchemaMigration.Sql,
+            transactional: true,
+            details: "seed exact BTC ETH SOL Follow Market Paper strategies");
+        if (!string.Equals(
+                followMarketStrategies.SemanticChecksum,
+                PostgresFollowMarketStrategySchemaMigration.SemanticChecksum,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"PostgreSQL migration checksum mismatch for '{PostgresFollowMarketStrategySchemaMigration.Id}'. " +
+                $"Expected {PostgresFollowMarketStrategySchemaMigration.SemanticChecksum}, " +
+                $"actual {followMarketStrategies.SemanticChecksum}.");
+        }
+
         return ValidateAndOrder(
-            [baseline, lossDiffStrategies, ethUp8LossDiffStrategies, signalsTraderWalletIndex]);
+            [baseline, lossDiffStrategies, ethUp8LossDiffStrategies, signalsTraderWalletIndex, followMarketStrategies]);
     }
 
     public static IReadOnlyList<PostgresSchemaMigration> ValidateAndOrder(

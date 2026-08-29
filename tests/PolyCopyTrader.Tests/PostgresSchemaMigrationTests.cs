@@ -73,11 +73,12 @@ public sealed class PostgresSchemaMigrationTests
     public void DefaultCatalog_IsBoundToApprovedLegacyChecksum()
     {
         var catalog = PostgresSchemaMigrationCatalog.CreateDefault();
-        Assert.Equal(4, catalog.Count);
+        Assert.Equal(5, catalog.Count);
         var baseline = catalog[0];
         var lossDiff = catalog[1];
         var ethUp8LossDiff = catalog[2];
         var signalsTraderWalletIndex = catalog[3];
+        var followMarketStrategies = catalog[4];
 
         Assert.Equal(PostgresSchemaMigrationCatalog.LegacyBaselineId, baseline.Id);
         Assert.Equal(
@@ -127,6 +128,121 @@ public sealed class PostgresSchemaMigrationTests
         Assert.Contains("index_metadata.indisvalid", signalsTraderWalletIndex.CompletionCheckSql, StringComparison.Ordinal);
         Assert.Contains("index_metadata.indisready", signalsTraderWalletIndex.CompletionCheckSql, StringComparison.Ordinal);
         Assert.Contains("index_metadata.indislive", signalsTraderWalletIndex.CompletionCheckSql, StringComparison.Ordinal);
+        Assert.Equal(PostgresFollowMarketStrategySchemaMigration.Id, followMarketStrategies.Id);
+        Assert.Equal(4, followMarketStrategies.Order);
+        Assert.True(followMarketStrategies.Transactional);
+        Assert.False(followMarketStrategies.IsLegacyBaseline);
+        Assert.Equal(
+            PostgresFollowMarketStrategySchemaMigration.SemanticChecksum,
+            followMarketStrategies.SemanticChecksum);
+        Assert.Null(followMarketStrategies.CompletionCheckSql);
+    }
+
+    [Fact]
+    public void FollowMarketMigration_ChecksumMatchesGeneratedSql()
+    {
+        var actual = PostgresSchemaMigration.CalculateSemanticChecksum(
+            PostgresFollowMarketStrategySchemaMigration.Sql);
+        Assert.True(
+            string.Equals(
+                PostgresFollowMarketStrategySchemaMigration.SemanticChecksum,
+                actual,
+                StringComparison.Ordinal),
+            $"Actual Follow Market migration checksum: {actual}");
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresMigrationIntegration")]
+    public async Task FollowMarketMigration_SeedsExactCatalogRejectsIdentityCollisionsAndIsIdempotent()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = CreateFactory(connectionString);
+        var baseline = new PostgresSchemaMigration(
+            0,
+            "follow-market-test-baseline",
+            FollowMarketTestBaselineSql,
+            transactional: false,
+            details: "Follow Market test baseline",
+            isLegacyBaseline: true);
+        var migration = new PostgresSchemaMigration(
+            1,
+            PostgresFollowMarketStrategySchemaMigration.Id,
+            PostgresFollowMarketStrategySchemaMigration.Sql,
+            transactional: true,
+            details: "Follow Market test migration");
+        var expected = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.FollowMarketFak)
+            .OrderBy(variant => variant.Code, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(270, expected.Length);
+        Assert.Equal(90, expected.Count(variant => variant.ReferenceAssetSymbol == "BTC"));
+        Assert.Equal(90, expected.Count(variant => variant.ReferenceAssetSymbol == "ETH"));
+        Assert.Equal(90, expected.Count(variant => variant.ReferenceAssetSymbol == "SOL"));
+
+        await ResetPublicSchemaAsync(connectionString);
+        var initializer = new PostgresSchemaInitializer(factory, [baseline, migration]);
+        await initializer.InitializeAsync();
+
+        var actual = await ReadFollowMarketStrategiesAsync(connectionString);
+        Assert.Equal(expected.Length, actual.Count);
+        for (var index = 0; index < expected.Length; index++)
+        {
+            Assert.Equal(expected[index].Id, actual[index].Id);
+            Assert.Equal(expected[index].Code, actual[index].Code);
+            Assert.Equal(expected[index].Name, actual[index].Name);
+            Assert.Equal(expected[index].Description, actual[index].Description);
+        }
+
+        Assert.Equal(270, await ScalarAsync<int>(
+            connectionString,
+            """
+SELECT count(*)::integer
+FROM public.strategies
+WHERE code LIKE '%_up_down_5m_follow_market_%'
+  AND enabled
+  AND NOT live_stakes
+  AND NOT paused
+  AND NOT auto_live_paused
+  AND paper_stake_amount = 1.00
+  AND live_stake_amount = 1.00
+  AND live_available_balance = 100.00;
+"""));
+        Assert.Equal(1, await ScalarAsync<int>(
+            connectionString,
+            $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id='{migration.Id}';"));
+
+        await initializer.InitializeAsync();
+        Assert.Equal(270, (await ReadFollowMarketStrategiesAsync(connectionString)).Count);
+        Assert.Equal(1, await ScalarAsync<int>(
+            connectionString,
+            $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id='{migration.Id}';"));
+
+        var first = expected[0];
+        foreach (var collisionSql in new[]
+                 {
+                     $"INSERT INTO public.strategies(id, code, name, description) VALUES ('{first.Id:D}', 'conflicting_follow_market_code', 'conflict', 'conflict');",
+                     $"INSERT INTO public.strategies(id, code, name, description) VALUES ('{Guid.NewGuid():D}', '{first.Code}', 'conflict', 'conflict');"
+                 })
+        {
+            await ResetPublicSchemaAsync(connectionString);
+            await new PostgresSchemaInitializer(factory, [baseline]).InitializeAsync();
+            await ExecuteAsync(connectionString, collisionSql);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new PostgresSchemaInitializer(factory, [baseline, migration]).InitializeAsync());
+            Assert.Equal(1, await ScalarAsync<int>(
+                connectionString,
+                "SELECT count(*)::integer FROM public.strategies;"));
+            Assert.Equal(0, await ScalarAsync<int>(
+                connectionString,
+                $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id='{migration.Id}';"));
+        }
     }
 
     [Fact]
@@ -730,7 +846,7 @@ VALUES (
         Assert.Equal(0, await ScalarAsync<int>(
             connectionString,
             "SELECT sum(current_value)::integer FROM public.strategy_loss_diff_states WHERE parent_strategy_id = 'b7c50005-0000-4000-8137-000000000108';"));
-        Assert.Equal(4, await ScalarAsync<int>(
+        Assert.Equal(5, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
@@ -839,7 +955,7 @@ JOIN pg_namespace ns ON ns.oid=cls.relnamespace
 WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
 """);
         Assert.True(relationCount > 100);
-        Assert.Equal(4, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(5, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
 
         await Task.Delay(25);
         await initializer.InitializeAsync();
@@ -847,7 +963,7 @@ WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
         Assert.Equal(
             firstUpdatedAt,
             await ScalarAsync<DateTime>(connectionString, "SELECT max(updated_at_utc) FROM public.strategies;"));
-        Assert.Equal(4, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(5, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
 
     private static string CreateSettledLossDiffParentRunsSql(
@@ -979,6 +1095,65 @@ GRANT ALL ON SCHEMA public TO PUBLIC;
 
         return (T)value;
     }
+
+    private static async Task<IReadOnlyList<FollowMarketStrategyRow>> ReadFollowMarketStrategiesAsync(
+        string connectionString)
+    {
+        var rows = new List<FollowMarketStrategyRow>();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SELECT id, code, name, description
+FROM public.strategies
+WHERE code LIKE '%_up_down_5m_follow_market_%'
+ORDER BY code;
+""",
+            connection);
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(new FollowMarketStrategyRow(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3)));
+        }
+
+        return rows;
+    }
+
+    private sealed record FollowMarketStrategyRow(
+        Guid Id,
+        string Code,
+        string Name,
+        string Description);
+
+    private const string FollowMarketTestBaselineSql = """
+CREATE TABLE public.strategies (
+    id uuid PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    name text NOT NULL,
+    description text NOT NULL,
+    enabled boolean NOT NULL DEFAULT true,
+    live_stakes boolean NOT NULL DEFAULT false,
+    auto_live_paused boolean NOT NULL DEFAULT false,
+    auto_live_paused_at_utc timestamptz NULL,
+    auto_live_pause_window_start_utc timestamptz NULL,
+    paused boolean NOT NULL DEFAULT false,
+    paused_until_utc timestamptz NULL,
+    paper_stake_amount numeric NOT NULL DEFAULT 1.00,
+    live_stake_amount numeric NOT NULL DEFAULT 1.00,
+    paper_lost_coeff numeric NOT NULL DEFAULT 1.00,
+    live_lost_coeff numeric NOT NULL DEFAULT 1.00,
+    paper_lost_counter integer NOT NULL DEFAULT 0,
+    live_lost_counter integer NOT NULL DEFAULT 0,
+    live_available_balance numeric NOT NULL DEFAULT 100.00,
+    live_enabled_at_utc timestamptz NULL,
+    created_at_utc timestamptz NOT NULL DEFAULT clock_timestamp(),
+    updated_at_utc timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+""";
 
     private const string EligibleLegacySchemaSql = """
 CREATE TABLE public.service_heartbeats (

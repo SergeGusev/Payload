@@ -3,7 +3,7 @@
   "contractId": "RC-20260829-follow-market-registration-and-production-logs",
   "title": "Register Follow Market strategies and restore Production log visibility",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -72,8 +72,8 @@
           "kind": "test",
           "command": "Run focused PostgresSchemaMigrationTests against an allowlisted disposable local PostgreSQL database with all outputs under the marked D:\\CodexTemp run.",
           "expected": "Exactly 270 catalog-matching Follow Market rows are inserted with the approved runtime flags; collisions fail closed; migration ledger and rerun are idempotent; migrations 0001..0004 are unchanged.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "The final focused checksum/catalog suite passed 7/7 together with the logging tests. The real PostgreSQL regression passed 3/3 against the exact disposable local database pct_codex_follow_market_regression3_20260829_c00fce4d: full baseline plus migration 0005, exact 270-row catalog parity and flags, singleton ledger/idempotent rerun, and both ID/code collision rollbacks. Individual durations were 1.317s, 0.423s, and 0.967s, confirming the database branches executed. The disposable database was dropped and verified absent (remaining count 0)."
         }
       ]
     },
@@ -101,16 +101,16 @@
           "kind": "test",
           "command": "Run focused ServiceLogPathResolver and Serilog file-sink tests with all directories and results under the marked D:\\CodexTemp run.",
           "expected": "Production selects D:\\1\\logs, other environments retain the executable-local default, a writable configured directory receives a flushed log record, and an unavailable directory falls back with an explicit diagnostic without aborting logger creation.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final ServiceLogPathResolverTests passed 5/5, including configured/default resolution, explicit empty override diagnostic and fallback, unavailable-directory IOException diagnostic and fallback, and an actual flushed Serilog file record. The combined final resolver plus migration-checksum suite passed 7/7 with zero failures or skips."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "Build and publish PolyCopyTrader.Service plus build PolyCopyTrader.sln in Release with disposable outputs under the marked D:\\CodexTemp run; inspect publish configuration files.",
           "expected": "Build/publish complete with zero errors and appsettings.Production.json containing D:\\1\\logs is present in publish output.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final Release solution build completed with 0 warnings and 0 errors. Final PolyCopyTrader.Service Release publish succeeded; the exact published appsettings.Production.json was present and resolved ServiceLogging.Directory to D:\\1\\logs, and PolyCopyTrader.Service.exe was present."
         }
       ]
     },
@@ -141,8 +141,8 @@
           "kind": "inspection",
           "command": "Run git diff --check, requirement validation in WorkingTree and Staged modes, exact migration checksum/catalog inspection, and independent semantic review.",
           "expected": "All checks pass with no out-of-scope changed file or open reviewer finding.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "git diff --check and staged diff check passed. Validate-RequirementContract passed in WorkingTree mode with governedFiles=8/contracts=1 and in Staged mode with governedFiles=8/contracts=1. Independent reviewer agent:/root/review_follow_market_registration_logs compared all five verbatim request records, the approved contract/digest and assumption, all eight governed implementation paths, call paths, and final evidence, and returned PASS with no open findings. All disposable outputs remained under marked run manual-c00fce4d4b5b46ae977213a219d15d84; protected cleanup removed 1,645 files / 439,805,151 bytes and the run path was verified absent."
         }
       ]
     }
@@ -169,8 +169,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/review_follow_market_registration_logs",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

@@ -281,8 +281,11 @@ if (args.Contains(Btc5mHistoryFillCommand.CommandFlag, StringComparer.OrdinalIgn
     return;
 }
 
-var logsDirectory = Path.Combine(AppContext.BaseDirectory, "logs");
-Directory.CreateDirectory(logsDirectory);
+var serviceLogPath = ServiceLogPathResolver.Resolve(
+    builder.Configuration,
+    AppContext.BaseDirectory,
+    Console.Error);
+var logsDirectory = serviceLogPath.DirectoryPath;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
@@ -295,6 +298,11 @@ Log.Logger = new LoggerConfiguration()
         rollOnFileSizeLimit: true,
         retainedFileCountLimit: 30)
     .CreateLogger();
+
+Log.Information(
+    "Service file logging directory selected: {LogsDirectory}; fallback={UsedFallback}",
+    logsDirectory,
+    serviceLogPath.UsedFallback);
 
 if (!StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
 {
