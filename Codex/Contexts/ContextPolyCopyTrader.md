@@ -1,3 +1,17 @@
+## Active Update 2026-08-29 Post-Deploy Startup And Betting Verification
+Goal: Verify the newly published Production build, startup migration, betting activity, and server logs without changing Production.
+Status: Startup and ordinary Paper betting verified; Follow Market registration and post-deploy log visibility are defective
+Done:
+- At exact database cutoff `2026-08-29T13:04:07.290029Z`, `PolyCopyTrader.Service` was `Running`/`Live`, started at `2026-08-29T12:55:39.180757Z`, heartbeat age was `27.808s`, `last_error` was NULL, and the exact deployed version was `044b2b8743d7140af75c435de6c15ec34a74eec1`.
+- Migration `0004-signals-trader-wallet-id-index` was registered at `2026-08-29T12:55:39.129746Z` with approved checksum `86bc4907878ec4475afbc47fea9e5f760a86a9d2adf072db733116668c2bd164`. Exact Production index `public.ix_signals_trader_wallet_id` is a valid/ready/live ordinary btree on ordered keys `(trader_wallet, id)`.
+- A bounded last-500 sample at cutoff `2026-08-29T13:04:24.571104Z` found 121 Paper orders created after this process start; all 121 were `Filled` and zero were `Pending`. A separate bounded fill query found 248 fill rows after process start, latest at `2026-08-29T13:04:32.454Z`; this independently confirms fresh Paper lifecycle activity.
+- Runtime cycles were independently visible in `strategy_market_paper_runs` at `2026-08-29T12:59:30.498710Z` and skip tombstones at `2026-08-29T12:59:55.126725Z`.
+- Production contains zero BTC/ETH/SOL Follow Market strategy rows, although deployed source enumerates 270 variants. The runtime settings path returns `Enabled=false` for a missing database row, and no storage seed/migration for these Follow Market identifiers exists, so all 270 deployed variants are currently disabled and cannot place Paper orders.
+- `\\192.168.0.101\CodexLogs` remained stale: its newest file was `polycopytrader-service-20260829_054.log`, last written `2026-08-29T12:12:24Z`, before the new process started. Therefore post-deploy ERR/FTL log absence could not be verified from the authorized server log share; database heartbeat `last_error=NULL` does not replace that missing evidence.
+Next: Under separate approved source-edit scope, add exact ordered registration/seed for the 270 Follow Market rows and restore exposure of the current process logs in `CodexLogs`.
+Notes: Every SQL session targeted only `192.168.0.101:5432/polycopytrader`, forced read-only mode, UTC, `statement_timeout=15s`, `lock_timeout=2s`, and bounded/indexed queries. No Production database, service, strategy, order, configuration, deployment, or log state was changed.
+Blockers: Follow Market cannot run until its exact strategy rows exist; current-process log verification is blocked by the stale authorized log share.
+
 ## Active Update 2026-08-29 Signals Index Ordered Startup Migration
 Goal: Restore service startup by keeping legacy baseline 0001 immutable and moving `ix_signals_trader_wallet_id` to ordered migration 0004.
 Status: Completed locally and independently reviewed; not deployed

@@ -124,3 +124,10 @@ Request:
 
 Result:
 Restored startup source compatibility without changing the immutable baseline checksum guard. Removed the dirty `ix_signals_trader_wallet_id` DDL from baseline 0001 and added exact ordered non-transactional migration `0004-signals-trader-wallet-id-index` with fixed checksum `86bc4907878ec4475afbc47fea9e5f760a86a9d2adf072db733116668c2bd164`, concurrent creation and fail-closed exact-shape completion validation. Focused tests passed 13/13 against a disposable local PostgreSQL database, including pre-existing-index recognition, absent-index creation, idempotence and rejection of wrong shapes; the database was dropped and confirmed absent. Release build passed with zero warnings/errors, requirement gates passed, and independent review returned PASS. Production and deployment were not changed.
+
+## 2026-08-29T13:05:30Z
+Request:
+Выложено, проверяй
+
+Result:
+Verified Production read-only after deployment. At `2026-08-29T13:04:07.290029Z` the service was `Running`/`Live` on exact build `044b2b8743d7140af75c435de6c15ec34a74eec1`, with heartbeat age `27.808s`, unchanged start `2026-08-29T12:55:39.180757Z`, and NULL `last_error`. Ordered migration 0004 was registered with the approved checksum and the exact Production btree index `(trader_wallet, id)` was valid/ready/live. A bounded sample found 121 post-start Paper orders, all Filled with zero Pending; a separate bounded query found 248 post-start fill rows, latest at `13:04:32.454Z`, and runtime run/tombstone rows independently confirmed active cycles. However, Production has zero of the deployed 270 BTC/ETH/SOL Follow Market strategy rows; missing runtime rows default to disabled and no storage seed/migration exists, so that new family cannot bet. The authorized `\\192.168.0.101\CodexLogs` share is also stale at `12:12:24Z`, before this process start, so post-deploy ERR/FTL verification from logs is unavailable. No Production state was changed.
