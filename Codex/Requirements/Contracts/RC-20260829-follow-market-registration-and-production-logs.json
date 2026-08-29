@@ -3,7 +3,7 @@
   "contractId": "RC-20260829-follow-market-registration-and-production-logs",
   "title": "Register Follow Market strategies and restore Production log visibility",
   "author": "agent:/root",
-  "status": "draft",
+  "status": "approved",
   "originalRequests": [
     {
       "source": "user",
