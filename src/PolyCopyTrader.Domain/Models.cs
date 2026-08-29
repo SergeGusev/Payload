@@ -1270,6 +1270,10 @@ public static class StrategyIds
     public const decimal ReferenceAverageMakerGtdMaximumOrderPrice = 0.99m;
     public const string OptimisticTouchNoDepthPaperLabel =
         "optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills";
+    private static readonly int[] FollowMarketEntryDelaySeconds =
+        [30, 60, 90, 120, 150, 180, 210, 240, 270];
+    private static readonly int[] FollowMarketThresholdCents =
+        [50, 55, 60, 65, 70, 75, 80, 85, 90, 95];
     public const string FollowLeaderIdValue = "f0110a0d-1ead-4c00-8b01-000000000001";
     public const string FollowLeaderCode = "follow_leader";
     public const string FollowLeaderName = "Follow leader";
@@ -1411,7 +1415,9 @@ public static class StrategyIds
     private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateBtcUpDown5mVariants()
     {
         int[] delays = [30, 60, 90, 120, 150, 180, 210, 240, 270];
-        var variants = new List<BtcUpDown5mStrategyVariant>(5244);
+        var variants = new List<BtcUpDown5mStrategyVariant>(5334);
+
+        variants.AddRange(CreateFollowMarketFakVariants("BTC", 8233));
 
         for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
         {
@@ -1485,6 +1491,39 @@ public static class StrategyIds
         variants.AddRange(CreateBtcPreOpenFixedDirectionVariants());
 
         return ExcludeRetiredProgressVariants(variants);
+    }
+
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateFollowMarketFakVariants(
+        string assetSymbol,
+        int idGroup)
+    {
+        var normalizedAsset = assetSymbol.Trim().ToUpperInvariant();
+        var assetCode = normalizedAsset.ToLowerInvariant();
+        var variants = new List<BtcUpDown5mStrategyVariant>(
+            FollowMarketEntryDelaySeconds.Length * FollowMarketThresholdCents.Length);
+        foreach (var entryDelaySeconds in FollowMarketEntryDelaySeconds)
+        {
+            foreach (var thresholdCents in FollowMarketThresholdCents)
+            {
+                var idSuffix = (entryDelaySeconds * 1_000) + thresholdCents;
+                variants.Add(new BtcUpDown5mStrategyVariant(
+                    Guid.Parse($"b7c50005-0000-4000-{idGroup:0000}-{idSuffix:000000000000}"),
+                    $"{assetCode}_up_down_5m_follow_market_{entryDelaySeconds}_{thresholdCents}",
+                    $"{normalizedAsset} Follow Market {entryDelaySeconds} {thresholdCents}",
+                    $"{entryDelaySeconds} seconds after the {normalizedAsset} 5m market starts, compare the fresh immediately executable Up and Down best asks and select the unique higher-priced outcome. If that ask is at least {thresholdCents} cents, submit one minimum-size Paper BUY FAK intent capped at 0.99. Cumulative depth is not an entry gate; actual full, partial, or no-fill execution is retained and no retry is made.",
+                    BtcUpDown5mStrategyDirection.Dynamic,
+                    entryDelaySeconds,
+                    BtcUpDown5mStrategyBehavior.FollowMarketFak,
+                    MarketInterval: BtcUpDownMarketInterval.FiveMinutes,
+                    Category: "Follow Market",
+                    ReferenceAssetSymbol: normalizedAsset,
+                    PaperOnly: true,
+                    FakMaximumOrderPrice: 0.99m,
+                    FollowMarketThresholdCents: thresholdCents));
+            }
+        }
+
+        return variants;
     }
 
     private static BtcUpDown5mStrategyVariant CreateBtcUpDown5mVariant(
@@ -1718,6 +1757,10 @@ public static class StrategyIds
         foreach (var asset in assets)
         {
             var terminalLowerEnterVariants = new List<BtcUpDown5mStrategyVariant>();
+
+            variants.AddRange(CreateFollowMarketFakVariants(
+                asset.Symbol,
+                string.Equals(asset.Symbol, "ETH", StringComparison.OrdinalIgnoreCase) ? 8234 : 8235));
 
             for (var thresholdTenths = 1; thresholdTenths <= 50; thresholdTenths++)
             {
@@ -3855,7 +3898,8 @@ public enum BtcUpDown5mStrategyBehavior
     LowEnterReferenceAverageBpsThresholdFakPremarket,
     ThreeHourReferenceAverageBpsThresholdFakPremarket,
     ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket,
-    ReferenceAverageBpsThresholdMakerGtdPremarket
+    ReferenceAverageBpsThresholdMakerGtdPremarket,
+    FollowMarketFak
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
@@ -3884,7 +3928,8 @@ public sealed record BtcUpDown5mStrategyVariant(
     decimal? FakMaximumOrderPrice = null,
     Guid? LowerEnterSourceStrategyId = null,
     decimal? MakerMaximumOrderPrice = null,
-    Guid? ParentStrategyId = null)
+    Guid? ParentStrategyId = null,
+    int FollowMarketThresholdCents = 0)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }

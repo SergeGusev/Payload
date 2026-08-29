@@ -35,6 +35,26 @@ Therefore the supported Live equivalent for a capped Paper FAK BUY is:
 maximum order price. Paper may fill only snapshot asks at or below that price;
 it must mark an unfilled remainder cancelled immediately.
 
+### Follow Market FAK family
+
+The BTC, ETH, and SOL `Follow Market M N` catalog family applies only to
+5-minute Up/Down markets. Its exact grid is `M=30..270` seconds in steps of `30`
+and `N=50..95` cents in steps of `5`, for 90 variants per asset and 270 total.
+At `market start + M`, the decision reads fresh immediately executable best asks
+for both outcomes, skips an exact tie, selects the unique higher ask, and passes
+the inclusive threshold only when `selected best ask >= N/100`.
+
+Each passing decision freezes one BUY FAK intent with `postOnly=false` and hard
+maximum price `0.99`. Its cash amount is the smallest valid CLOB market-BUY
+notional obtained from the selected book's exact venue `min_order_size` at the
+worst price, rounded upward only to the market-buy cash precision. Missing
+`min_order_size` fails closed; no configured-stake fallback or safety multiplier
+is added. Cumulative ask depth is retained as evidence but is not a pre-submit
+entry predicate. Paper consumes the same intent and records the actual
+snapshot-derived full, partial, or no-fill FAK result; the unfilled remainder is
+cancelled immediately and the strategy never retries that market. Every variant
+has `PaperOnly=true`, so this family does not submit Live orders.
+
 ## Maker post-only GTD intent and Paper approximation
 
 The current official CLOB documentation also supports a share-based `GTD` BUY

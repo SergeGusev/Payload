@@ -16,6 +16,23 @@ This repository is currently at Task 18 plus local debugging, trader discovery, 
 - Default mode is read-only/paper-first by project policy.
 - Every Paper execution change is governed by the mandatory [Paper/Live execution parity contract](docs/architecture/PAPER_LIVE_PARITY.md). The default remains: no proven Live equivalent means no Paper trade or Paper PnL claim. The only exception is the exact closed ETH Reference Average Maker-GTD family enumerated in that contract; its TouchNoDepth fills are not Live-equivalent and cannot be generalized.
 
+### Follow Market FAK strategies
+
+The catalog contains 270 Paper-only `Follow Market M N` strategies for BTC, ETH,
+and SOL 5-minute Up/Down markets: `M=30..270` seconds in steps of `30`, and
+`N=50..95` cents in steps of `5`. At `market start + M`, a strategy reads fresh
+immediately executable Up and Down best asks, skips an exact tie, and selects the
+unique higher ask. It submits one BUY FAK attempt when that ask is greater than
+or equal to `N/100`; for example, an Up ask of `0.65` activates thresholds
+`50`, `55`, `60`, and `65`.
+
+The immutable intent is capped at `0.99`, is not post-only, and uses the smallest
+valid market-BUY cash amount derived from the selected book's exact
+`min_order_size`, rounded upward only as required by CLOB market-buy precision.
+Cumulative depth is not an entry gate. Paper records the actual snapshot-based
+full, partial, or no-fill FAK outcome and never retries that strategy/market.
+These variants have `PaperOnly=true`, so their Live submission is disabled.
+
 ## Project Structure
 
 ```text
