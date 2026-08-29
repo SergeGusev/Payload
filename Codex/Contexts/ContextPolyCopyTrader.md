@@ -1,3 +1,15 @@
+## Active Update 2026-08-29 Maker-GTD Midpoint-Even Initial Timestamps
+Goal: Make Maker-GTD immutable initial-order timestamp equivalence match PostgreSQL's actual midpoint-to-even microsecond storage.
+Status: Completed locally and independently reviewed
+Done:
+- Changed only the shared initial-order timestamp normalizer used for `CreatedAtUtc` and `ExpiresAtUtc`: exact half-microsecond ties now round to the even PostgreSQL microsecond.
+- Verified the exact Production shape `.7195025 -> .719502` and odd tie `.7195035 -> .719504`; different stored microseconds remain a shape mismatch.
+- Final focused tests passed `71/71` with zero skips against an allowlisted disposable local PostgreSQL database; the database was dropped and independently confirmed absent.
+- Release solution build passed with `0` errors and 126 warnings outside the changed lines; requirement WorkingTree validation and independent semantic review passed with no findings.
+Next: Deploy the implementation commit, then verify the first post-deploy Maker-GTD accepted order through Filled or Expired read-only.
+Notes: Approval digest `sha256:a6b68ba6fcb21b9da8b128921c52c54600d6fe48a9ea1a8574859b5a229a90ca`; approval checkpoint `a8018bed`. Production was inspected read-only and was not changed. Mandatory classification remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: None for local delivery.
+
 ## Active Update 2026-08-29 ETH Up 50 Priority Deployment Verification
 Goal: Verify the deployed ETH Up 50 historical parity priority, service health and current Paper/Live progress without changing Production.
 Status: Completed read-only; phased Legacy query is confirmed fixed, ETH priority scan is progressing, and a separate Maker-GTD timestamp-equivalence defect was found

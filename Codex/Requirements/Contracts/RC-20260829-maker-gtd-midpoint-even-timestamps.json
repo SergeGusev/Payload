@@ -3,7 +3,7 @@
   "contractId": "RC-20260829-maker-gtd-midpoint-even-timestamps",
   "title": "Match Maker-GTD immutable timestamps to PostgreSQL midpoint-even microsecond storage",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -53,8 +53,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter MakerGtdPaperAtomicRepositoryTests|MakerGtdPaperLifecycleIntegrationTests with TEMP/TMP and all disposable outputs under the active marked D:\\CodexTemp run",
           "expected": "The exact production regression, even/odd midpoint ties, non-tie rounding, distinct-microsecond rejection, full-fill, expiry, idempotency and lifecycle checks pass.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The final focused Maker-GTD atomic/lifecycle run passed 71/71 with zero failures and zero skips against allowlisted local disposable PostgreSQL database pct_codex_skip_v2_20260829131000_a6b68ba6. The real JSONB-recordset regression proved the exact Production even tie 2026-08-29T08:09:31.7195025Z persisted as .719502, applied one atomic fill, accepted an idempotent exact retry, retained exactly one fill, and verified the shared ExpiresAtUtc value. Focused theories also passed for odd-tie .7195035 -> .719504, prior upward-rounding cases, both initial-order timestamps together, different-microsecond rejection, and expiry. The disposable database was dropped and the exact post-drop database count was zero. Final TRX SHA-256: DAA247B8A6134831A44916BDDFFF75BAA3F35A6723E85652C80DD6279E468E4F."
         }
       ]
     },
@@ -80,8 +80,8 @@
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore with TEMP/TMP and disposable outputs under the active marked D:\\CodexTemp run; git diff --check; requirement validation in WorkingTree and Staged modes; independent semantic review",
           "expected": "The approved timestamp-only diff builds and all scope, traceability, parity-label, and review gates pass without Production mutation.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The Release solution build succeeded with 0 errors and 126 warnings outside the changed lines. git diff --check returned no errors. Independent reviewer agent:/root/review_midpoint_even inspected the approved contract, product/test diff, surrounding call paths and verification evidence and returned PASS with no findings. The diff contains no strategy, price, size, intent, evidence, lifecycle, accounting, classification, Live, schema, configuration, deployment, service or Production-data change. Production was inspected read-only only and was not mutated. The mandatory label remains optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills."
         }
       ]
     }
@@ -95,9 +95,9 @@
     "semanticDigest": "sha256:a6b68ba6fcb21b9da8b128921c52c54600d6fe48a9ea1a8574859b5a229a90ca"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer_maker_gtd_midpoint_even_timestamps",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/review_midpoint_even",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

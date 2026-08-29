@@ -57,7 +57,7 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
     public async Task PostgresFullFill_JsonbRoundedInitialTimestampAndDirectTruncatedOutcome_RetryIsIdempotent()
     {
         var callerCreatedAtUtc = DateTimeOffset.Parse(
-            "2026-08-27T05:59:33.1706318+00:00",
+            "2026-08-29T08:09:31.7195025+00:00",
             CultureInfo.InvariantCulture);
         var fixture = CreateFixture(
             fillAtUtc: callerCreatedAtUtc.AddSeconds(30),
@@ -82,8 +82,11 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
         var persistedPendingOrder = await repository.GetPaperOrderAsync(fixture.PendingOrder.Id);
         Assert.NotNull(persistedPendingOrder);
         Assert.Equal(
-            DateTimeOffset.Parse("2026-08-27T05:59:33.1706320+00:00", CultureInfo.InvariantCulture),
+            DateTimeOffset.Parse("2026-08-29T08:09:31.7195020+00:00", CultureInfo.InvariantCulture),
             persistedPendingOrder.CreatedAtUtc);
+        Assert.Equal(
+            DateTimeOffset.Parse("2026-08-29T08:13:31.7195020+00:00", CultureInfo.InvariantCulture),
+            persistedPendingOrder.ExpiresAtUtc);
         var persistedRestingRun = Assert.Single(
             await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync([fixture.PendingOrder.Id]));
         var requestedEnteredRun = persistedRestingRun with
@@ -253,10 +256,12 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
     }
 
     [Theory]
+    [InlineData("2026-08-29T08:09:31.7195025+00:00", "2026-08-29T08:09:31.7195020+00:00")]
+    [InlineData("2026-08-29T08:09:31.7195035+00:00", "2026-08-29T08:09:31.7195040+00:00")]
     [InlineData("2026-08-27T05:59:33.1706315+00:00", "2026-08-27T05:59:33.1706320+00:00")]
     [InlineData("2026-08-27T05:59:33.1706318+00:00", "2026-08-27T05:59:33.1706320+00:00")]
     [InlineData("2026-08-27T05:59:33.3761549+00:00", "2026-08-27T05:59:33.3761550+00:00")]
-    public async Task FullFill_PostgresRoundedCreatedAtTimestamp_IsEligible(
+    public async Task FullFill_PostgresRoundedInitialOrderTimestamps_AreEligible(
         string callerCreatedAtText,
         string persistedCreatedAtText)
     {
@@ -266,7 +271,11 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
             fillAtUtc: callerCreatedAtUtc.AddSeconds(30),
             createdAtUtc: callerCreatedAtUtc);
         var repository = Seed(fixture);
-        repository.PaperOrders[0] = fixture.PendingOrder with { CreatedAtUtc = persistedCreatedAtUtc };
+        repository.PaperOrders[0] = fixture.PendingOrder with
+        {
+            CreatedAtUtc = persistedCreatedAtUtc,
+            ExpiresAtUtc = persistedCreatedAtUtc.AddMinutes(4)
+        };
 
         var result = await repository.TryApplyMakerGtdPaperFullFillAsync(fixture.FullFillRequest);
 
@@ -469,14 +478,18 @@ public sealed class MakerGtdPaperAtomicRepositoryTests
     public async Task Expiry_PostgresRoundedCreatedAtTimestamp_IsEligible()
     {
         var callerCreatedAtUtc = DateTimeOffset.Parse(
-            "2026-08-27T05:59:33.1706318+00:00",
+            "2026-08-29T08:09:31.7195025+00:00",
             CultureInfo.InvariantCulture);
         var persistedCreatedAtUtc = DateTimeOffset.Parse(
-            "2026-08-27T05:59:33.1706320+00:00",
+            "2026-08-29T08:09:31.7195020+00:00",
             CultureInfo.InvariantCulture);
         var fixture = CreateFixture(createdAtUtc: callerCreatedAtUtc);
         var repository = Seed(fixture);
-        repository.PaperOrders[0] = fixture.PendingOrder with { CreatedAtUtc = persistedCreatedAtUtc };
+        repository.PaperOrders[0] = fixture.PendingOrder with
+        {
+            CreatedAtUtc = persistedCreatedAtUtc,
+            ExpiresAtUtc = persistedCreatedAtUtc.AddMinutes(4)
+        };
 
         var result = await repository.TryExpireMakerGtdPaperOrderAsync(fixture.ExpiryRequest);
 
@@ -801,9 +814,11 @@ VALUES (@Id, @Code, @Name, @CreatedAtUtc, @CreatedAtUtc);
         const long ticksPerMicrosecond = 10;
         var utcTicks = value.UtcDateTime.Ticks;
         var wholeMicroseconds = utcTicks / ticksPerMicrosecond;
-        return utcTicks % ticksPerMicrosecond >= ticksPerMicrosecond / 2
-            ? wholeMicroseconds + 1
-            : wholeMicroseconds;
+        var remainingTicks = utcTicks % ticksPerMicrosecond;
+        return remainingTicks > ticksPerMicrosecond / 2 ||
+            (remainingTicks == ticksPerMicrosecond / 2 && (wholeMicroseconds & 1) != 0)
+                ? wholeMicroseconds + 1
+                : wholeMicroseconds;
     }
 
     private static string Sha256(string value)

@@ -682,9 +682,11 @@ internal static class MakerGtdPaperPersistenceTransitions
         const long ticksPerMicrosecond = 10;
         var utcTicks = value.UtcDateTime.Ticks;
         var wholeMicroseconds = utcTicks / ticksPerMicrosecond;
-        return utcTicks % ticksPerMicrosecond >= ticksPerMicrosecond / 2
-            ? wholeMicroseconds + 1
-            : wholeMicroseconds;
+        var remainingTicks = utcTicks % ticksPerMicrosecond;
+        return remainingTicks > ticksPerMicrosecond / 2 ||
+            (remainingTicks == ticksPerMicrosecond / 2 && (wholeMicroseconds & 1) != 0)
+                ? wholeMicroseconds + 1
+                : wholeMicroseconds;
     }
 
     private static void AddMismatch(
