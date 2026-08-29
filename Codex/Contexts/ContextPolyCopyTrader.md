@@ -1,3 +1,17 @@
+## Active Update 2026-08-29 ETH Up 50 Priority Deployment Verification
+Goal: Verify the deployed ETH Up 50 historical parity priority, service health and current Paper/Live progress without changing Production.
+Status: Completed read-only; exact scan is progressing and fallback writes have not started yet
+Done:
+- Verified exact Production build `1.0.0+c82e05194aa1ca9047aeff0942231f7ab3ef25c1`, started `2026-08-29T08:09:22.172Z`, Running/Live with a fresh heartbeat and `last_error=NULL`.
+- Verified the closed priority runtime log at `2026-08-29T08:14:23.382Z`: exact UUID `b7c50005-0000-4000-8079-000000000150` was selected ahead of ordinary Gross with its real current rank 194 and Gross `303.07384912`.
+- Verified six consecutive Exact pages of 50 candidates through `2026-08-29T08:19:20.411Z`; each had 50 fallback-eligible targets, zero donor targets, zero deferred targets and no page error. The worker has therefore scanned 300 targets while retaining the exact strategy.
+- Independent Production SQL at `2026-08-29T08:15:38.966Z` still showed 408 old Paper runs (2 Net-complete, 406 missing) and 405 old Live orders (2 Net-complete, 403 missing); no post-deploy audit rows existed yet because the worker had not reached the fallback phase.
+- Verified 131 post-cutoff Paper and 131 post-cutoff Live rows, all Net-complete and outside historical selection. No post-start ERR or FTL was found in the checked log; a large startup warning burst ended by `2026-08-29T08:16:07.575Z` in the checked interval.
+- One transient waiting PostgreSQL lock appeared at `2026-08-29T08:19:37Z`; an immediate independent lock-detail query returned zero waiters, so no persistent blocking was observed.
+Next: Recheck after the Exact scan reaches its boundary to confirm `Fixed0p0333` Paper/Live writes, audit growth and final automatic return to ordinary Gross order.
+Notes: All SQL used explicit Production host `192.168.0.101`, `BEGIN READ ONLY`, a 10-second statement timeout, exact UUID and UTC cutoff. Logs were read through encrypted SMB. No Production, service, database, configuration, strategy or order state was changed.
+Blockers: None; historical calculation is still running.
+
 ## Active Update 2026-08-28 ETH Up 50 Instant Historical Priority
 Goal: Recalculate the pre-cutoff Paper and Live Net accounting for exact strategy `ETH Up or Down 5m Up 50 bps Instant` as a closed priority exception.
 Status: Completed locally and independently reviewed
