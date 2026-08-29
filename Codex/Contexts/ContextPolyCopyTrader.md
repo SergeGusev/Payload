@@ -1,3 +1,16 @@
+## Active Update 2026-08-29 Signals Index Ordered Startup Migration
+Goal: Restore service startup by keeping legacy baseline 0001 immutable and moving `ix_signals_trader_wallet_id` to ordered migration 0004.
+Status: Completed locally and independently reviewed; not deployed
+Done:
+- Restored `PostgresSchema.SchemaSql` to approved checksum `4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2`; checksum guard remains unchanged.
+- Added non-transactional migration `0004-signals-trader-wallet-id-index` with checksum `86bc4907878ec4475afbc47fea9e5f760a86a9d2adf072db733116668c2bd164` and `CREATE INDEX CONCURRENTLY IF NOT EXISTS` for exact `public.signals(trader_wallet, id)`.
+- Added a fail-closed completion check for exact identity, btree shape, ordered keys, ordinary non-unique/non-partial semantics, no INCLUDE/expression/options, canonical definition, and valid/ready/live flags.
+- Focused tests passed 13/13 on an allowlisted disposable local PostgreSQL database; exact existing-index recognition, absent-index creation, singleton ledger, idempotent rerun and wrong-shape rejection were verified. The database was dropped and confirmed absent.
+- Release solution build passed with zero warnings and zero errors; Staged and isolated WorkingTree requirement gates passed; independent reviewer `agent:/root/review_signals_index_migration` returned PASS.
+Next: User publishes the local implementation commit, then verifies service startup. On current Production evidence the exact index already exists, so 0004 should validate it and register the ledger entry without rebuilding the physical index.
+Notes: Approval digest `sha256:ff13a2000cb50f51785a44cb4435826dcc47ac4c0f22e1683fd8bafbac8463e7`. Production, service, database, configuration and deployment were not changed. Context/history remain outside the task commit because they contain concurrent unrelated edits.
+Blockers: None for local source delivery.
+
 ## Active Update 2026-08-29 Follow Market FAK Strategies
 Goal: Add the approved BTC, ETH, and SOL 5-minute Follow Market M N Paper strategy family.
 Status: Completed locally and independently reviewed
@@ -11,6 +24,58 @@ Next: None
 Notes: Requirement digest `sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523`; focused tests passed 12/12; solution build passed with 0 errors and 5 pre-existing warnings; staged and exact-scope isolated WorkingTree requirement validation passed (`governedFiles=6`, `contracts=1`). The shared WorkingTree validator was blocked only by concurrent out-of-scope `PostgresSchema.cs`; those storage changes were not staged. A broader legacy processor run had 113 failures, and representative More/Middle/PreviousScore failures were independently reproduced on baseline commit `58a2abae`.
 Blockers: None
 
+## Active Update 2026-08-29 Production Startup Baseline Checksum Failure
+Goal: Diagnose why the newly published Production service exits immediately, using logs and read-only runtime evidence only.
+Status: Completed diagnosis; service is stopped by the immutable migration checksum guard
+Done:
+- Two startup attempts at `2026-08-29T12:12:20.642Z` and `12:12:24.168Z` terminated with the same FTL before host startup completed: migration `0001-legacy-baseline-a3b0457f` expected checksum `4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2` but calculated `6dcac6e1d5ef16c9ffeb1bad5d281c4121adff9ddff2d722696aceb43d3d6ab0`.
+- The exact local worktree diff adds `ix_signals_trader_wallet_id` inside immutable `PostgresSchema.SchemaSql`; the current local Release assembly independently calculates the identical rejected checksum `6dcac6e1...`.
+- Neither clean commit `2367aec2` nor current committed `HEAD` contains that index in `PostgresSchema.SchemaSql`; the offending change exists only in the dirty working tree. A clean build from `2367aec2` therefore preserves the approved baseline checksum and is the bounded recovery artifact.
+- The catalog constructs baseline `0001` from `PostgresSchema.SchemaSql` and validates its checksum before the schema initializer can run, so this source change directly causes the fail-fast exception at `PostgresSchemaMigrationCatalog.CreateDefault()` line 27.
+- Production heartbeat at `2026-08-29T12:14:43.912433Z` was 199.052 seconds old and still described the stopped prior `c82e051...` process, independently confirming that neither new startup attempt became Running.
+Next: For immediate recovery, publish/start a build whose immutable baseline remains `4dba8fe...` (for example the clean `2367aec2` source). If `ix_signals_trader_wallet_id` is required, implement it as a new ordered migration under a separately approved change rather than editing migration `0001`.
+Notes: Server logs were read from `\\192.168.0.101\CodexLogs`; the heartbeat query used explicit Production, `READ ONLY`, UTC and `statement_timeout=15s`. No service, database, schema, source, deployment or configuration state was changed. Context/history remain uncommitted because the worktree already contains unrelated ahead/dirty work.
+Blockers: The currently published binary cannot start while its calculated immutable-baseline checksum is `6dcac6e1...`.
+
+## Active Update 2026-08-29 Maker-GTD Deployment Verification
+Goal: Verify Production service health, ordinary Paper activity, and the deployed Maker-GTD midpoint-even fix without changing Production.
+Status: Completed read-only; expected fix is not active and a separate Legacy backfill error is ongoing
+Done:
+- At exact database cutoff `2026-08-29T12:08:00.835404Z`, the service was Running/Live with heartbeat age 36.006 seconds and `last_error=NULL`, but `started_at_utc` remained `2026-08-29T08:09:22.172019Z` and version remained `1.0.0+c82e05194aa1ca9047aeff0942231f7ab3ef25c1`, not implementation commit `2367aec2`.
+- Ordinary Paper activity continued: 209 fills across 156 strategies in the preceding 10 minutes; latest fill was `2026-08-29T12:05:02.073061Z`.
+- All exact 28 ETH Reference Average Maker-GTD strategies were enabled, unpaused and Live-disabled. Their latest complete evaluation for market `eth-updown-5m-1788005100` at about `2026-08-29T12:04:30Z` was 28/28 lawful skips for `reference_average_move_below_bps_threshold`; recent checked logs contained zero shape mismatches.
+- Since the still-running old process started, the exact Maker-GTD family has 18 Filled orders with 18 fill rows and one historical Expired order. No accepted order exists under the intended post-fix build, so the midpoint-even runtime path is not yet verified.
+- Recent logs contained 19 repeated ERR cycles for historical accounting backfill `Legacy`; the latest inspected failure was an Npgsql read timeout in `ApplyHistoricalPaperFakFeeBackfillBatchAsync` line 507. No FTL was present in the same checked files, and no waiting database lock was observed.
+Next: Load and start the intended Production build containing `2367aec2`, then repeat this read-only verification; investigate the separate recurring Legacy apply-batch timeout under its own approved scope.
+Notes: All SQL used explicit Production `192.168.0.101:5432/polycopytrader`, `SET TRANSACTION READ ONLY`, UTC, `statement_timeout=15s`, `lock_timeout=2s`, exact identifiers and bounded/indexed queries. Logs came from `\\192.168.0.101\CodexLogs`. No Production state changed. Maker-GTD classification: `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. This context/history update remains uncommitted because local `master` was already two unrelated commits ahead of `origin/master` with overlapping dirty context/history and product files; no unrelated state was staged or pushed.
+Blockers: Production is still running the pre-fix build, so the requested post-deploy lifecycle result cannot yet be established.
+
+## Active Update 2026-08-29 ETH Up8 LossDiff Progress Through Last Zero
+Goal: Recalculate capped current-LossDiff Positive Progress N=1..18 only through the last plotted zero of the exact ETH Up 8 bps parent.
+Status: Completed read-only
+Done:
+- Resolved the last plotted zero at `2026-08-19T08:47:35.790942Z`; it followed a win while the counter was already zero. The last actual positive-to-zero transition was `2026-08-19T07:05:06.382821Z`, and the three intervening parent entries all had multiplier zero, so both boundaries produce the same modeled strategy results.
+- Limited parent entries by `entered_at_utc <= cutoff`: 750 settled parent rows remained and 282 later rows were excluded. Exactly 439 entries had causal Positive LossDiff, comprising 261 wins and 178 losses with maximum multiplier 8.
+- Recomputed caps N=1..18 from exact single-fill evidence and the saved Taker fee schedule. Every selected row had one matching fill, matching price/shares, complete fee evidence and no waiting lock.
+- Independent PostgreSQL window/event calculations and PowerShell raw-row replay matched on stake, Gross, fee, Net, ROI, drawdown, maximum individual stake and peak simultaneous stake for every cap.
+- N=8 had Net `$594.90601510`, ROI `8.123592930299750988%`, max drawdown `$230.58175162`, max single stake `$48.07440000` and peak simultaneous stake `$96.14880000`. N=8..18 are identical because the truncated period never exceeded LossDiff 8.
+Next: None
+Notes: Production preview cutoff `2026-08-29T10:15:45.508815Z`; all SQL used UTC, `BEGIN READ ONLY`, `statement_timeout=15s` and `lock_timeout=2s`. Results remain ResearchOnly because scaled sizes reuse parent fill prices without order-book depth replay. No Production or product state changed.
+Blockers: None
+
+## Active Update 2026-08-29 ETH Up8 LossDiff Progress Caps 1-18
+Goal: Repeat the current-LossDiff Positive capped-Progress simulation for exact ETH Up 8 bps with maximum multipliers 1 through 18.
+Status: Completed read-only
+Done:
+- Resolved exact parent `b7c50005-0000-4000-8137-000000000108` and previewed 1,032 complete settled rows from `2026-07-03T07:49:30.243618Z` through `2026-08-28T14:59:30.613753Z`: 581 wins, 451 losses, zero financial-shape defects and zero waiting locks.
+- Replayed the causal nonnegative Positive counter using only outcomes settled before each candidate entry; 720 entries had positive LossDiff, with maximum 18.
+- For caps N=1..18 used `min(current LossDiff,N)`, scaled stake/shares/Gross, and recomputed every fee from exact saved Taker schedule evidence with five-decimal away-from-zero rounding.
+- Independent PostgreSQL set/window/event calculations and PowerShell raw-row replay agreed exactly for all 18 caps on stake, Gross, fee, Net, ROI, drawdown, maximum individual stake and peak simultaneous open stake.
+- Highest Net ROI was N=1 at `0.9032308145229393%` with Net `$39.04871935`; highest Net PnL was N=3 at `$65.54854285` with ROI `0.6136911696584337%`. Caps 5..16 were Net-negative; N=17 and N=18 were only slightly positive at `$1.01141802` and `$4.84341802`.
+Next: None
+Notes: Production cutoff `2026-08-29T10:07:09.872129Z`; all SQL used UTC, `BEGIN READ ONLY`, `statement_timeout=15s` and `lock_timeout=2s`. Results remain ResearchOnly because scaled sizes reuse parent fill prices without order-book depth replay. No Production or product state changed.
+Blockers: None
+
 ## Active Update 2026-08-29 Maker-GTD Midpoint-Even Initial Timestamps
 Goal: Make Maker-GTD immutable initial-order timestamp equivalence match PostgreSQL's actual midpoint-to-even microsecond storage.
 Status: Completed locally and independently reviewed
@@ -22,6 +87,44 @@ Done:
 Next: Deploy the implementation commit, then verify the first post-deploy Maker-GTD accepted order through Filled or Expired read-only.
 Notes: Approval digest `sha256:a6b68ba6fcb21b9da8b128921c52c54600d6fe48a9ea1a8574859b5a229a90ca`; approval checkpoint `a8018bed`. Production was inspected read-only and was not changed. Mandatory classification remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
 Blockers: None for local delivery.
+
+## Active Update 2026-08-29 ETH Up4 LossDiff Progress Caps 1-15
+Goal: Simulate current-LossDiff Positive Progress for maximum multipliers 1 through 15 and retain cap 16 as the control.
+Status: Completed read-only
+Done:
+- Reused exact parent `b7c50005-0000-4000-8137-000000000104`, the user-confirmed full 1,657-row settled period, and the causal no-lookahead Positive counter.
+- For every selected entry used multiplier `min(current LossDiff, N)`; all caps retained the same 1,090 trades, 618 wins and 472 losses.
+- Recomputed Polymarket fee per scaled order from exact saved Taker schedule inputs and five-decimal away-from-zero rounding; every modeled fee was complete.
+- Independent PostgreSQL set/window/event calculations and PowerShell raw-row replay agreed exactly for all caps 1..16 on stake, Gross, fee, Net, ROI, drawdown, single-stake maximum and peak concurrent stake.
+- Among requested caps, N=2 had the highest Net ROI `3.5864437099483490%` with Net `$412.40257997` and peak concurrent stake `$48`; N=15 had the highest Net PnL `$780.70267997` with ROI `2.3597858921586270%` and peak concurrent stake `$252.00000070`. Control N=16 reproduced Net `$802.58269557`, ROI `2.4224067847680927%` and peak concurrent stake `$252.00000070`.
+Next: None
+Notes: Production cutoff `2026-08-29T09:14:02.042376Z`; all SQL used UTC, `BEGIN READ ONLY`, `statement_timeout=15s` and `lock_timeout=2s`. Results remain ResearchOnly because scaled sizes reuse parent fill price without order-book depth replay. No Production or product state changed.
+Blockers: None
+
+## Active Update 2026-08-29 ETH Up4 LossDiff Progress Peak Concurrent Stake
+Goal: Determine the maximum nominal capital simultaneously committed by the confirmed ETH Up4 LossDiff Positive current-multiplier simulation.
+Status: Completed read-only
+Done:
+- Reused the exact 1,657-row source and 1,090 modeled-trade causal definition from the confirmed simulation.
+- Treated each modeled stake as committed on the half-open interval from parent `entered_at_utc` through, but excluding, `settled_at_utc`.
+- SQL event sweep and an independent PowerShell raw-row interval sweep both found the same peak: `$252.00000070` across three concurrent trades at `2026-08-20T15:19:30.453370Z`.
+- The three open stakes were `$84.00000000`, `$84.00000000`, and `$84.00000070`, each at LossDiff multiplier 14.
+Next: None
+Notes: This value is open nominal stake only; fee is excluded from committed principal. Production cutoff `2026-08-29T09:00:48.887198Z`; all SQL was UTC and `READ ONLY`. No Production or product state changed.
+Blockers: None
+
+## Active Update 2026-08-29 ETH Up4 LossDiff Positive Current-Multiplier Progress Simulation
+Goal: Simulate the exact ETH Up 4 bps parent with each causal Positive LossDiff value used as the current stake multiplier and report Net PnL after Polymarket fees.
+Status: Completed read-only
+Done:
+- Locked exact parent UUID `b7c50005-0000-4000-8137-000000000104` and the user-confirmed full settled period: 1,657 rows from `2026-07-03T06:34:42.611438Z` through `2026-08-28T15:19:30.930280Z`.
+- Replayed the nonnegative Positive counter without lookahead: for each candidate entry, only parent outcomes with `settled_at_utc < entered_at_utc` were applied in parent-entry order; value zero skipped, positive value `k` scaled stake, shares and Gross by `k`.
+- Recalculated every selected fee from scaled shares, saved fill price and the exact saved Polymarket fee schedule, including five-decimal away-from-zero rounding. All 1,090 selected rows were Calculated/Taker with complete schedule evidence; parent formula mismatches and missing modeled fees were both zero.
+- Result: 1,090 trades, 618 wins, 472 losses, total stake `$33,131.62350009`, Gross `$1,895.28760557`, fee `$1,092.70491`, Net `$802.58269557`, ROI `2.4224067847680927%`, maximum drawdown `$1,158.51617951`, multiplier range `1..16`, average `5.063302752293578`, maximum single stake `$96`.
+- Independent PostgreSQL set calculation and PowerShell raw-row replay agreed exactly on membership, distribution and every financial total; raw replay digest `sha256:7311f2825915b96d7242043cd49a53e6e9c4857c7654b72f286f03961906b54f`.
+Next: None
+Notes: Production cutoff `2026-08-29T08:54:07.515765Z`; all SQL used `BEGIN READ ONLY`, UTC, `statement_timeout=15s` and `lock_timeout=2s`. This is ResearchOnly proportional execution: multiplied size was priced at the parent's observed fill price without an order-book depth replay, so it is not Live-equivalent evidence. No Production, service, database, strategy, order, configuration or product-source state changed.
+Blockers: None
 
 ## Active Update 2026-08-29 ETH Up 50 Priority Deployment Verification
 Goal: Verify the deployed ETH Up 50 historical parity priority, service health and current Paper/Live progress without changing Production.

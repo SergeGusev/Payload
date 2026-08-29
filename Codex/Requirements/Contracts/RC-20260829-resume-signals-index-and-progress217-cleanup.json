@@ -1,163 +1,120 @@
 {
   "schemaVersion": 1,
   "contractId": "RC-20260829-resume-signals-index-and-progress217-cleanup",
-  "title": "Finish the permanent signals wallet index and resume Progress-217 cleanup in 1000-row batches",
+  "title": "Execute the Progress-217 cleanup with evidence-sized batches",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "draft",
   "originalRequests": [
-    {
-      "source": "user",
-      "text": "Разрешаю. И уменьши порции для удаления"
-    },
-    {
-      "source": "user",
-      "text": "Давай по 1000"
-    },
-    {
-      "source": "user",
-      "text": "Что у нас дальше по этой задаче?"
-    },
-    {
-      "source": "user",
-      "text": "Ок, действуй"
-    }
+    { "source": "user", "text": "Разрешаю. И уменьши порции для удаления" },
+    { "source": "user", "text": "Давай по 1000" },
+    { "source": "user", "text": "Что у нас дальше по этой задаче?" },
+    { "source": "user", "text": "Ок, действуй" },
+    { "source": "user", "text": "Мы делаем так, чтобы это работало. Ты сам определи, сколько надо удалять строк и выполнять транзакций" },
+    { "source": "user", "text": "Не нужно этого делать, я это делаю в другом чате" }
   ],
   "scope": {
-    "goal": "Finish the already approved permanent public.signals(trader_wallet, id) index in current master source, then delete the exact already approved 217 stopped unreferenced negative-Progress strategies and exactly attributable structured product history in independently committed batches of at most 1000 rows, without stopping the service or touching the six retained source/owner strategies.",
+    "goal": "Delete the exact already approved 217 stopped unreferenced negative-Progress strategies and exactly attributable structured product history in independently committed, health-gated batches sized from measured production evidence, without making any index, schema-migration or baseline change.",
     "inScope": [
       "Reuse without recalculation the exact immutable 217 UUID/code target set approved by RC-20260819-remove-217-unreferenced-negative-progress-strategies at sha256:f5f2af6d514277bfeacdc14c70e6efdcceb50173a240aeb538160149791ff0ac.",
-      "Preserve exactly the three excluded source strategies and their three retained LowerEnter owners named in the approved Progress-217 contract, including all their rows, references, and structured history.",
-      "Add the already approved permanent non-unique unfiltered B-tree index public.ix_signals_trader_wallet_id on public.signals(trader_wallet, id) to current master PostgresSchema and its focused StorageTests assertion; do not rebuild the already valid local or product indexes.",
-      "Complete the lifecycle/evidence of RC-20260820-add-signals-trader-wallet-index without changing its approved semantic payload.",
-      "Immediately before product deletion, rerun exact read-only identity, 217 membership/state, retained-reference, post-witness Paper/Live/run, active-Live, dependency-count, service-heartbeat/error, lock, and cleanup-marker gates.",
-      "Treat the current local database as verification-only because the 2026-08-29 read-only snapshot found zero of the exact 217 target rows; do not insert a marker or run cleanup DML locally unless a later fresh preview contradicts that zero count and the user approves the changed scope.",
-      "Execute product cleanup in FK-safe table order using independently committed, idempotent, restartable batches that affect at most 1000 physical rows per transaction.",
-      "Use only existing rows and the remaining exact target-owned rows as the durable resume point; do not add a generalized batching table, migration framework, trigger, or permanent progress object.",
-      "Before every next batch, verify an advancing healthy product heartbeat, empty service last_error, zero ungranted locks, unchanged exact target/retained identity guards, and the previous batch's exact affected count; stop on any deviation.",
-      "Delete only exactly attributable structured target history already enumerated by the approved Progress-217 contract, then delete the exact 217 strategy rows after all guarded dependencies reach zero.",
-      "Do not create a backup and do not stop or restart the service.",
-      "After the final batch, verify zero exact target strategies, zero exact structured residuals, cleanup marker present once, six retained strategy payloads unchanged, non-target strategy identities unchanged, service healthy, and no target reseed after at least two worker cycles.",
-      "Run focused index/catalog/cleanup tests, Release build, requirement gates, diff checks, and an independent semantic review before committing and pushing current master."
+      "Preserve exactly the three excluded source strategies and their three retained LowerEnter owners named in the approved Progress-217 contract, including all their rows, references and structured history.",
+      "Immediately before product deletion, rerun exact read-only identity, membership/state, retained-reference, post-witness Paper/Live/run, active-Live, dependency-count, service-health, lock and cleanup-marker gates.",
+      "Treat the current local database as verification-only while its exact target count remains zero; do not run cleanup DML or insert a cleanup marker locally.",
+      "Start large product relations at at most 10000 deleted physical rows per independently committed transaction, one physical relation per transaction and in FK-safe order.",
+      "If any completed 10000-row batch takes more than 5 seconds, halve the next batch for that relation to 5000; if a 5000-row batch takes more than 5 seconds, halve to 2500; if a 2500-row batch takes more than 5 seconds, use 1000 for the remaining rows of that relation. Never automatically increase above 10000.",
+      "Use the remaining exact target-owned rows as the durable resume point. Every batch must be idempotent, auditable and followed by its exact affected/remaining count.",
+      "Before every next batch require an advancing product heartbeat no more than 60 seconds old, empty service last_error, zero ungranted locks, unchanged exact target/retained identity guards and the previous batch's expected affected count; stop on any deviation.",
+      "Delete the exact 217 strategy rows only after every guarded dependency and exact structured residual reaches zero, then insert the cleanup marker once.",
+      "Do not create a backup and do not stop or restart the service. Wait for the separate chat/user workflow to restore a healthy service before any DELETE.",
+      "After the final batch, verify zero exact target strategies, zero exact structured residuals, one cleanup marker, unchanged six retained payloads and non-target identities, healthy service and no target reseed after at least two worker cycles.",
+      "Run focused existing catalog/cleanup tests, exact operational dry-runs, requirement gates, diff checks and independent semantic review before completion."
     ],
     "outOfScope": [
-      "Recalculating Gross PnL, changing the 217 allowlist, deleting additional local-only strategies, or adding any target beyond the approved UUID/code pairs.",
-      "Deleting, updating, remapping, disabling, or otherwise modifying the three retained source strategies or their three retained LowerEnter owners.",
+      "Any index, PostgreSQL schema, ordered migration, immutable baseline, migration checksum, index test, index rebuild or index deployment change; all such work belongs to the user's other chat.",
+      "Editing, reverting, staging or committing the current PostgresSchema.cs or StorageTests.cs changes owned by the other chat.",
+      "Recalculating Gross PnL, changing the exact 217 allowlist, deleting additional local-only strategies, or adding any target beyond the approved UUID/code pairs.",
+      "Deleting, updating, remapping, disabling or otherwise modifying the three retained source strategies or their three retained LowerEnter owners.",
       "Deleting shared/global rows without an exact target owner, shared compact-v2 dimension rows, unstructured global logs, or unrelated strategy/history data.",
       "Stopping or restarting the service, cancelling orders, changing Live/Paper mode, or pausing unrelated strategies.",
-      "Creating a backup, dump, archive, restore point, database clone, generalized cleanup framework, or permanent batching/progress table.",
-      "Dropping, rebuilding, or changing either existing ix_signals_trader_wallet_id database index; both exact indexes were already verified valid/ready/live on 2026-08-29.",
+      "Creating a backup, dump, archive, restore point, database clone, generalized cleanup framework, permanent batching/progress table, trigger, or reusable deletion service.",
       "VACUUM FULL, pg_repack, REINDEX, physical database shrink, compact-v2 activation, or any separate storage-reclamation operation.",
       "Any trading logic, strategy behavior, dashboard/report behavior, or unrelated source/documentation change."
     ],
     "mode": "mutation",
-    "periodOrFilter": "Exact fixed 217 UUID/code product target set; product Stage-1 witness 2026-08-13T21:25:10.499570Z; maximum 1000 deleted physical rows per committed transaction; local current target count is zero and remains read-only.",
-    "firstVerification": "Verify current master/index-contract state and run bounded UTC read-only local/product snapshots for exact index catalogs, service health, exact 217 membership/control state, post-witness identities, active references, cleanup markers, and dependency scale before any governed edit or DELETE."
+    "periodOrFilter": "Exact fixed 217 UUID/code product target set; product Stage-1 witness 2026-08-13T21:25:10.499570Z; initial maximum 10000 physical rows per committed relation-local transaction with deterministic 5-second downshift thresholds; local remains read-only while exact target count is zero.",
+    "firstVerification": "Obtain two consecutive advancing healthy product heartbeats no more than 60 seconds old, then run the exact bounded dependency preview before any product DELETE."
   },
   "requirements": [
     {
       "id": "REQ-001",
-      "text": "Finish the already approved permanent signals trader-wallet index in current master source without rebuilding either existing database index.",
-      "sourceRequestIndexes": [2, 3],
-      "sourceQuote": "Ок, действуй",
+      "text": "Delete the exact 217 product targets and exactly attributable structured history using production-evidence-sized, independently committed transactions.",
+      "sourceRequestIndexes": [0, 1, 3, 4],
+      "sourceQuote": "Ты сам определи, сколько надо удалять строк и выполнять транзакций",
       "acceptanceCriteria": [
-        "Current master PostgresSchema contains exactly one CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_signals_trader_wallet_id ON signals(trader_wallet, id) definition.",
-        "A focused StorageTests assertion verifies the exact name, relation, non-unique B-tree key order, lack of predicate and INCLUDE columns, and concurrency.",
-        "Current local and product catalog checks remain exact and valid/ready/live; neither database index is rebuilt or replaced.",
-        "The identical exact 217-wallet product EXPLAIN uses ix_signals_trader_wallet_id and contains no sequential scan of public.signals.",
-        "Focused test and Release solution build pass with zero errors."
-      ],
-      "implementationPaths": [
-        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
-        "tests/PolyCopyTrader.Tests/StorageTests.cs",
-        "Codex/Requirements/Contracts/RC-20260820-add-signals-trader-wallet-index.json"
-      ],
-      "verification": [
-        {
-          "id": "VER-001",
-          "kind": "test",
-          "command": "Run the exact StorageTests index assertion and Release solution build with outputs under the active marked D:\\CodexTemp run.",
-          "expected": "Focused index test passes and Release build has zero errors.",
-          "result": "pending",
-          "evidence": "pending"
-        },
-        {
-          "id": "VER-002",
-          "kind": "runtime",
-          "command": "Read both exact index catalogs and run read-only EXPLAIN for the exact 217-wallet product lookup.",
-          "expected": "Both indexes retain the exact approved definition and product uses an index-driven plan without a signals sequential scan.",
-          "result": "pending",
-          "evidence": "pending"
-        }
-      ]
-    },
-    {
-      "id": "REQ-002",
-      "text": "Delete the exact 217 product targets and their exactly attributable structured history in committed portions of at most 1000 rows.",
-      "sourceRequestIndexes": [0, 1, 3],
-      "sourceQuote": "Давай по 1000",
-      "acceptanceCriteria": [
-        "A fresh pre-mutation snapshot finds exactly 217 exact UUID/code product targets, all disabled, Live-off and permanently paused, with zero post-witness Paper/Live/run identities, zero active Live orders, zero active retained-owner references, zero ID/code collisions, and no cleanup marker.",
-        "Every deletion transaction affects at most 1000 physical rows, commits independently, is idempotent on retry, and leaves an auditable remaining-row count as its resume point.",
-        "FK-safe order and exact shared-owner guards prevent deleting any row still owned or referenced by a retained/non-target entity.",
-        "No batch begins unless the service heartbeat advances, last_error is empty, ungranted-lock count is zero, and retained/target identity gates still match the preview.",
-        "The exact 217 strategy rows are deleted only after every exact structured dependency and residual count reaches zero.",
-        "No local DML runs while the exact local target count remains zero."
+        "A fresh pre-mutation snapshot finds exactly 217 exact UUID/code targets, all disabled, Live-off and permanently paused, with zero post-witness Paper/Live/run identities, zero active Live orders, zero active retained-owner references, zero identity collisions and no cleanup marker.",
+        "The preview records exact physical-row counts per relation and computes the initial transaction count using at most 10000 rows per relation-local transaction; the 2026-08-29 partial preview lower bound is 5952670 rows and 608 relation-local transactions before indirect rows.",
+        "Every deletion transaction affects no more than its current 10000/5000/2500/1000 relation batch limit, commits independently, is idempotent on retry and records its duration, affected count and remaining count.",
+        "A relation's next batch limit downshifts exactly at the approved 5-second thresholds and never rises above 10000.",
+        "FK-safe order and exact shared-owner guards prevent deleting any retained/non-target row; any historical immutable-audit row requiring trigger bypass stops the task for separate approval rather than disabling a trigger.",
+        "No batch begins unless heartbeat age is at most 60 seconds and advancing, last_error is empty, ungranted locks are zero and target/retained identity gates still match.",
+        "The exact 217 strategies are deleted only after all structured dependencies and residuals reach zero; no local cleanup DML runs while local exact target count is zero."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Domain/Models.cs",
-        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs"
-      ],
-      "verification": [
-        {
-          "id": "VER-003",
-          "kind": "runtime",
-          "command": "Run the exact read-only preflight, record per-relation counts and computed <=1000 batch counts, then execute and verify each independently committed product batch.",
-          "expected": "All committed batches satisfy the 1000-row maximum and every between-batch health/invariant gate passes.",
-          "result": "pending",
-          "evidence": "pending"
-        },
-        {
-          "id": "VER-004",
-          "kind": "test",
-          "command": "Run focused real-PostgreSQL fixtures for nominal multi-batch completion, retry/idempotency, forced rollback, shared-owner abort, active-reference abort, and retained-row preservation.",
-          "expected": "All cleanup fixtures pass, including multiple nonempty 1000-row pages and restart from committed partial progress.",
-          "result": "pending",
-          "evidence": "pending"
-        }
-      ]
-    },
-    {
-      "id": "REQ-003",
-      "text": "Prove exact completion without changing retained or unrelated data and without stopping the service or creating a backup.",
-      "sourceRequestIndexes": [0, 3],
-      "sourceQuote": "Разрешаю",
-      "acceptanceCriteria": [
-        "Post-mutation product checks find zero exact target strategies and zero exact structured target residuals, and the cleanup marker exists exactly once.",
-        "All six retained strategy full-row payloads and references equal their pre-mutation values; non-target strategy identity count and fingerprints are unchanged.",
-        "Product service remains Running/Live with advancing heartbeat, empty last_error and zero ungranted locks after final commit and after at least two worker cycles.",
-        "No target is reseeded and no target Paper/Live/run identity appears after completion.",
-        "No backup, service stop/restart, order cancellation, index rebuild, vacuum, or unrelated mutation occurs."
-      ],
-      "implementationPaths": [
         "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
         "Codex/Requirements/Contracts/RC-20260819-remove-217-unreferenced-negative-progress-strategies.json"
       ],
       "verification": [
         {
-          "id": "VER-005",
+          "id": "VER-001",
           "kind": "runtime",
-          "command": "Run immediate and two-worker-cycle product postchecks plus an independent exact retained/non-target comparison.",
-          "expected": "Target/residual counts are zero, marker count is one, retained/non-target fingerprints match, and service health remains normal.",
+          "command": "Run the exact read-only preflight, record per-relation counts and calculated transaction counts, then execute and verify each independently committed product batch.",
+          "expected": "All batches stay within their current approved limit, health/invariant gates pass between commits and actual transaction count is reported from the audit ledger.",
           "result": "pending",
-          "evidence": "pending"
+          "evidence": ""
         },
         {
-          "id": "VER-006",
-          "kind": "inspection",
-          "command": "Compare both verbatim continuation prompts, this approved contract, existing approved target contracts, actual diff/commands and all test/runtime evidence; run WorkingTree/Staged gates and diff checks.",
-          "expected": "Independent semantic review passes with no finding and all mechanical gates pass before commit/push.",
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused disposable-PostgreSQL fixtures for multi-batch completion, retry/idempotency, forced rollback, shared-owner abort, active-reference abort, duration downshift and retained-row preservation.",
+          "expected": "Every exact cleanup and downshift fixture passes with no retained/non-target change.",
           "result": "pending",
-          "evidence": "pending"
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Prove exact completion without changing retained or unrelated data and without stopping the service or creating a backup.",
+      "sourceRequestIndexes": [0, 3, 4, 5],
+      "sourceQuote": "чтобы это работало",
+      "acceptanceCriteria": [
+        "Product postchecks find zero exact target strategies, zero exact structured target residuals and exactly one cleanup marker.",
+        "All six retained full-row payloads/references and the non-target strategy identity fingerprint equal the pre-mutation values.",
+        "Product service is Running/Live with advancing heartbeat, empty last_error and zero ungranted locks after final commit and after at least two worker cycles.",
+        "No target is reseeded and no target Paper/Live/run identity appears after completion.",
+        "No index/schema/migration/baseline file is edited, reverted, staged or committed by this task.",
+        "No backup, service stop/restart by Codex, order cancellation, trigger bypass, vacuum, or unrelated mutation occurs."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "Codex/Requirements/Contracts/RC-20260829-resume-signals-index-and-progress217-cleanup.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "runtime",
+          "command": "Run immediate and two-worker-cycle product postchecks plus an independent exact retained/non-target comparison.",
+          "expected": "Target/residual counts are zero, marker count is one, retained/non-target fingerprints match and service health remains normal.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Compare all verbatim continuation prompts, the approved contract, actual commands and all test/runtime evidence; verify no index/schema/migration/baseline path entered this task.",
+          "expected": "Independent semantic review passes with no finding and the index work remains wholly outside this task.",
+          "result": "pending",
+          "evidence": ""
         }
       ]
     }
@@ -166,21 +123,32 @@
   "deviations": [
     {
       "id": "DEV-001",
-      "text": "Replace the previously approved one-transaction-per-database Progress-217 deletion with independently committed batches of at most 1000 physical rows on product.",
-      "impact": "The cleanup is restartable and reduces sustained lock/load impact, but the product database can temporarily contain partially removed target history between successful batches. Exact stopped-target, FK-order, shared-owner, health, and residual gates protect retained data; there is no global rollback across already committed batches and no backup by explicit user choice.",
+      "text": "Replace the previously approved maximum 1000-row product batch with a 10000-row initial maximum and deterministic 5000/2500/1000 downshifts when a completed relation batch exceeds 5 seconds.",
+      "impact": "The known lower-bound transaction count falls from 5961 to 608 before indirect rows, reducing health-check and commit overhead. A committed batch may contain up to 10000 target-owned physical rows and cannot be globally rolled back with earlier commits; exact health, duration, identity and residual gates remain fail closed.",
       "approval": {
-        "status": "approved",
+        "status": "pending",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:e23ec6885f2a70b63e68903d940dee07361bdca3c769170d03620f015c99a96a",
-        "semanticDigest": "sha256:e23ec6885f2a70b63e68903d940dee07361bdca3c769170d03620f015c99a96a"
+        "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:<pending>",
+        "semanticDigest": "pending"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "Remove all permanent-index and schema-migration work from this task because the user assigned it to another chat.",
+      "impact": "This task cannot restore the currently stale product heartbeat or modify the deployed schema path. Product deletion waits until the separate workflow restores a healthy advancing service, then proceeds without touching any index-related file or database index.",
+      "approval": {
+        "status": "pending",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:<pending>",
+        "semanticDigest": "pending"
       }
     }
   ],
   "approval": {
-    "status": "approved",
+    "status": "pending",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:e23ec6885f2a70b63e68903d940dee07361bdca3c769170d03620f015c99a96a",
-    "semanticDigest": "sha256:e23ec6885f2a70b63e68903d940dee07361bdca3c769170d03620f015c99a96a"
+    "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:<pending>",
+    "semanticDigest": "pending"
   },
   "independentReview": {
     "reviewer": "pending",

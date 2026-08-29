@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260829-capture-all-remaining-worktree-changes",
+  "title": "Capture every remaining local worktree change in one commit",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Не мудри. Захвати все чужие изменения"
+    }
+  ],
+  "scope": {
+    "goal": "Stage and commit every local worktree change that remained after the signals-index migration commit, without filtering by ownership.",
+    "inScope": [
+      "Capture Codex/Contexts/ContextPolyCopyTrader.md exactly at Git blob 5ed48dcef900a3342be08dfa581da998ffa2d2d2.",
+      "Capture Codex/Contexts/History/ContextPolyCopyTrader-2026-08-29.md exactly at Git blob f0447148d1ba76ffe96aded2f4767dcdb0f76ee4.",
+      "Capture Codex/Requirements/Contracts/RC-20260829-resume-signals-index-and-progress217-cleanup.json exactly at Git blob c210396f41692c7175b8565b7044b76e5df57d45, including its current draft/pending state.",
+      "Capture this requirement contract after the user's exact digest approval and commit all four paths together on current local master."
+    ],
+    "outOfScope": [
+      "Editing, completing, approving, interpreting or executing the draft Progress-217 cleanup contract.",
+      "Any additional source, test, documentation, database, Production, service, strategy, order, configuration, deployment, push or branch change.",
+      "Changing the content of the three captured files after the recorded blob snapshot; any mismatch requires a new preview and approval."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact four-path local snapshot after commit 9261b900 on 2026-08-29; no remote or runtime action.",
+    "firstVerification": "Verify git status contains exactly the three pre-existing modified paths, no staged paths, and their exact recorded Git blob hashes before approval."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Capture all remaining local changes without ownership filtering or content alteration.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "Захвати все чужие изменения",
+      "acceptanceCriteria": [
+        "Before staging, the three pre-existing files still match the recorded Git blob hashes.",
+        "The staged snapshot contains exactly those three files plus this approved contract.",
+        "The three pre-existing files are committed byte-for-byte as previewed; the draft Progress-217 contract remains draft/pending.",
+        "After the commit, the local worktree has no remaining staged, modified, deleted or untracked paths.",
+        "Nothing is pushed or deployed and no Production/runtime state is changed."
+      ],
+      "implementationPaths": [
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-08-29.md",
+        "Codex/Requirements/Contracts/RC-20260829-resume-signals-index-and-progress217-cleanup.json",
+        "Codex/Requirements/Contracts/RC-20260829-capture-all-remaining-worktree-changes.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Recompute the three Git blob hashes, stage all four exact paths, run git diff --cached --check and requirement Staged validation, commit, then verify git status --porcelain is empty.",
+          "expected": "Exact approved snapshot is committed and the worktree is clean without push or deployment.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260829-capture-all-remaining-worktree-changes sha256:6b58744cba58929dd0acee10e1567d2db9f10f1982d0a431b0e953d41e794748",
+    "semanticDigest": "sha256:6b58744cba58929dd0acee10e1567d2db9f10f1982d0a431b0e953d41e794748"
+  },
+  "independentReview": {
+    "reviewer": "not-required-no-content-change",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
