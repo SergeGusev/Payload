@@ -140,3 +140,10 @@ Request:
 
 Result:
 Completed the approved local-only correction. Added ordered transactional migration `0005-follow-market-strategies` for exactly 270 existing BTC/ETH/SOL Follow Market variants, preserving history, forcing Paper enabled/Live disabled state, rejecting identity collisions and remaining idempotent. Added Production file-log routing to exact `D:\1\logs` with executable-local default and explicit diagnostic fallback for empty, invalid or unavailable overrides. Final focused tests passed 7/7; real disposable-local-PostgreSQL regressions passed 3/3 and the database was removed; Release solution build and Service publish completed with zero warnings/errors, and the published Production configuration contains `D:\1\logs`. Independent semantic review returned PASS with no findings. No Production or deployment state changed.
+
+## 2026-08-29T18:06:55.5151539Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified Production read-only after deployment of exact build `3fc4d90b81d948ef091acc13bf92bad497c5afd4`. Service heartbeat was Running/Live with NULL last_error; migration 0005 had the exact approved checksum; all exact 270 Follow Market rows existed with 90 per asset, zero identity mismatch, zero Live-enabled and zero paused. All 270 strategies produced runtime rows; by `18:02:54.755761Z`, 164 Follow Market FAK Paper orders were all Filled with 164 independent fill rows and exact Follow Market decision evidence. A separate last-500 check found 500/500 newest post-start Paper orders Filled, latest fill `18:05:02.354472Z`, and no waiting locks. Recurring fail-closed `follow_market_min_order_size_unavailable` skips remained through `18:06:00.055544Z` for 32 ETH and 37 SOL attempts; the cause is not established. The authorized `CodexLogs` share remained stale at `17:58:08.3023624Z`, before this process start, so new ERR/FTL logs remain unavailable and the share-path-versus-fallback cause is unknown. No Production state changed.

@@ -1,3 +1,18 @@
+## Active Update 2026-08-29 Follow Market Registration Post-Deploy Verification
+Goal: Verify the deployed Follow Market registration/log-routing build, Production service health, and Paper betting without changing Production.
+Status: Core deployment verified; recurring ETH/SOL min-order-size skips and server-log visibility remain unresolved
+Done:
+- At cutoff `2026-08-29T18:00:18.175952Z`, the service was `Running`/`Live` on exact build `3fc4d90b81d948ef091acc13bf92bad497c5afd4`, started at `2026-08-29T17:58:26.835273Z`, heartbeat age `51.177s`, and `last_error=NULL`.
+- Migration `0005-follow-market-strategies` was applied at `2026-08-29T17:58:26.731777Z` with exact checksum `7adfb6e9831bb6a8a9ee3e15f33e91bd16fae4be822afc54433dd02b3739c7df`.
+- Exact generated allowlist matched 270/270 strategy rows: 90 each BTC/ETH/SOL; zero missing rows, ID/code collisions, Live-enabled rows, or paused rows.
+- By cutoff `2026-08-29T18:02:54.755761Z`, all 270 Follow Market strategies had runtime rows. There were 164 Paper FAK orders, all `Filled`, plus exactly 164 fill rows; decision source was `follow_market_fresh_executable_best_ask` and execution source was `btc_updown5m_fak_taker_paper`.
+- A separate bounded last-500 check at cutoff `2026-08-29T18:05:15.263434Z` found all 500 newest Paper orders and fills after process start, all 500 orders `Filled`; latest fill was `2026-08-29T18:05:02.354472Z`; zero waiting lock backends were present.
+- Follow Market fail-closed skips for unavailable `min_order_size` remained active through `2026-08-29T18:06:00.055544Z`: 32 ETH plus 37 SOL across five due-time points; BTC had none. These exact attempts did not create orders. Earlier checked skips also included lawful threshold misses and seven `spread_too_wide_abs` safety rejections.
+- `\\192.168.0.101\CodexLogs` still did not expose current-process logs: newest file `polycopytrader-service-20260829_072.log` ended at `2026-08-29T17:58:08.3023624Z`, 18.5 seconds before the new process start, and the share had no subdirectories. Therefore current ERR/FTL absence cannot be verified from logs, and runtime evidence cannot distinguish share-path mismatch from file-sink fallback.
+Next: If requested, diagnose the recurring ETH/SOL `min_order_size` evidence path and the server mapping/fallback for `D:\1\logs` under separately approved scopes.
+Notes: Every SQL session targeted only `192.168.0.101:5432/polycopytrader`, used `BEGIN TRANSACTION READ ONLY`, UTC, `statement_timeout=15s`, `lock_timeout=2s`, exact allowlists and bounded/indexed queries. Two combined analytical plans hit the 15-second timeout; split per-strategy and last-500 indexed checks completed in about two seconds and supplied the reported evidence. No Production database, service, strategy, order, configuration, deployment, share, or log state was changed.
+Blockers: Current server logs are not visible through the authorized share; the cause of the recurring ETH/SOL `min_order_size` absence is not established by available read-only evidence.
+
 ## Active Update 2026-08-29 Follow Market Registration And Production Logs
 Goal: Register the exact existing 270 Follow Market strategies through ordered migration 0005 and route Production service files to `D:\1\logs` without making an unavailable configured path fatal.
 Status: Completed locally and independently reviewed; not deployed
