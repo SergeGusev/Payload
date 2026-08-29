@@ -3,7 +3,7 @@
   "contractId": "RC-20260829-follow-market-fak-strategies",
   "title": "Add BTC ETH SOL Follow Market FAK strategy families",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -66,8 +66,8 @@
           "kind": "test",
           "command": "Run focused strategy-catalog tests for Follow Market variants under the marked D:\\CodexTemp run.",
           "expected": "Exactly 270 unique variants exist with the exact assets, M values, N values, five-minute interval, identifiers, names, behavior, and 0.99 FAK cap.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused catalog and integration selection completed in the final 12-test set: exactly 270 Follow Market variants, 90 per BTC/ETH/SOL, with exact M/N grids, unique ids/codes/names, five-minute interval, PaperOnly=true, and 0.99 cap."
         }
       ]
     },
@@ -96,8 +96,8 @@
           "kind": "test",
           "command": "Run focused Follow Market timing, direction, threshold-boundary, stale/missing/tied-quote, and one-attempt processor tests under the marked D:\\CodexTemp run.",
           "expected": "The processor applies the exact M schedule and inclusive N threshold, selects only a unique current leader, emits explicit skips for unavailable decisions, and never retries a strategy/market tuple.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused processor tests passed for inclusive 0.65 threshold (N=65 enters, N=70 skips), higher-ask Up selection, exact-tie skip, stale-cache plus missing-REST skip, and a second processing cycle producing no repeated strategy/market order."
         }
       ]
     },
@@ -128,8 +128,8 @@
           "kind": "test",
           "command": "Run focused Follow Market sizing and shared FAK intent parity tests under the marked D:\\CodexTemp run.",
           "expected": "Paper and Live adapters preserve the same BUY FAK 0.99 intent and exact minimum valid rounded size while depth never changes the frozen decision or intent.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused processor and FakBuyExecutionParity tests passed: immutable BUY FAK, postOnly=false, 0.99 cap, venue min_order_size=5 producing exact 4.95 market-buy notional and 5-share worst-price size, safety multiplier 1.0, and no cumulative-depth decision gate."
         }
       ]
     },
@@ -162,24 +162,24 @@
           "kind": "test",
           "command": "Run the complete focused Follow Market processor and FakBuyExecutionParity test sets under the marked D:\\CodexTemp run.",
           "expected": "Full, partial, no-fill, cancellation, price-cap, persistence, and post-fill non-interference cases pass while Live remains disabled.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "FakBuyExecutionParity tests passed for the 0.99 intent with full, partial, and no-fill outcomes; processor integration passed persistence of the selected decision, immutable intent, snapshot execution evidence, filled Paper order, and terminal one-attempt behavior."
         },
         {
           "id": "VER-005",
           "kind": "build",
           "command": "Build PolyCopyTrader.sln and run the relevant test project with artifacts and results below the marked D:\\CodexTemp run, then run git diff --check and WorkingTree/Staged requirement validation.",
           "expected": "The solution builds, relevant tests pass, the diff is clean, and requirement validation maps every governed path to this approved contract.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln build succeeded with 0 errors. Final focused set passed 12/12. git diff --check reported no whitespace errors. Staged validation passed with governedFiles=6 and contracts=1. Exact-scope isolated WorkingTree validation passed with governedFiles=6 and contracts=1; the shared WorkingTree check was separately blocked only by the concurrent out-of-scope PostgresSchema.cs change. Five build warnings and broader legacy processor failures were outside this diff; representative More/Middle/PreviousScore failures were independently reproduced at baseline commit 58a2abae."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "Have an independent reviewer compare all three verbatim requests, the approved semantic digest, the complete diff, and verification evidence.",
           "expected": "Independent semantic review passes with no open findings and confirms no behavior or file change outside REQ-001 through REQ-004.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/follow_market_semantic_reviewer compared all three verbatim requests, the approved digest, every governed diff, and verification evidence and returned PASS with no findings."
         }
       ]
     }
@@ -229,8 +229,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/follow_market_semantic_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

@@ -199,6 +199,47 @@ public sealed class FakBuyExecutionParityTests
         Assert.Equal(0.000001m, FakExecutionRules.PartialFillNotionalToleranceUsd);
     }
 
+    [Fact]
+    public void FollowMarketNinetyNineCapRetainsFullPartialAndNoFillOutcomes()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 29, 12, 0, 0, TimeSpan.Zero);
+        var fullBook = FollowMarketBook(
+            [new OrderBookLevel(0.65m, 100m)],
+            nowUtc);
+        var intent = FakBuyExecutionIntent.Create(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "condition-1",
+            fullBook.AssetId,
+            maximumOrderPrice: 0.99m,
+            targetNotionalUsd: 4.95m,
+            targetSizeShares: 5m,
+            fullBook,
+            nowUtc);
+
+        var full = FakBuyExecutionParity.SimulatePaper(intent, fullBook, maximumSpreadAbsolute: null);
+        var partial = FakBuyExecutionParity.SimulatePaper(
+            intent,
+            FollowMarketBook([new OrderBookLevel(0.65m, 2m)], nowUtc),
+            maximumSpreadAbsolute: null);
+        var noFill = FakBuyExecutionParity.SimulatePaper(
+            intent,
+            FollowMarketBook([new OrderBookLevel(1.00m, 100m)], nowUtc),
+            maximumSpreadAbsolute: null);
+
+        Assert.True(full.Filled);
+        Assert.Equal(4.95m, full.NotionalUsd);
+        Assert.False(FakExecutionRules.IsPartialNotionalFill(full.NotionalUsd, intent.TargetNotionalUsd));
+        Assert.True(partial.Filled);
+        Assert.Equal(1.30m, partial.NotionalUsd);
+        Assert.True(FakExecutionRules.IsPartialNotionalFill(partial.NotionalUsd, intent.TargetNotionalUsd));
+        Assert.False(noFill.Filled);
+        Assert.Equal(0m, noFill.NotionalUsd);
+        Assert.Equal(0.99m, full.MaxAllowedPrice);
+        Assert.Equal(0.99m, partial.MaxAllowedPrice);
+        Assert.Equal(0.99m, noFill.MaxAllowedPrice);
+    }
+
     private static OrderBookSnapshot OrderBook(string assetId, DateTimeOffset nowUtc)
     {
         return new OrderBookSnapshot(
@@ -208,6 +249,20 @@ public sealed class FakBuyExecutionParityTests
             nowUtc,
             ConditionId: "condition-1",
             MinOrderSize: 1m,
+            TickSize: 0.01m);
+    }
+
+    private static OrderBookSnapshot FollowMarketBook(
+        IReadOnlyList<OrderBookLevel> asks,
+        DateTimeOffset nowUtc)
+    {
+        return new OrderBookSnapshot(
+            "follow-market-asset",
+            [new OrderBookLevel(0.64m, 100m)],
+            asks,
+            nowUtc,
+            ConditionId: "condition-1",
+            MinOrderSize: 5m,
             TickSize: 0.01m);
     }
 }

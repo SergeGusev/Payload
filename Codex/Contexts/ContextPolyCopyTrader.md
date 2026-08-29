@@ -1,3 +1,16 @@
+## Active Update 2026-08-29 Follow Market FAK Strategies
+Goal: Add the approved BTC, ETH, and SOL 5-minute Follow Market M N Paper strategy family.
+Status: Completed locally and independently reviewed
+Done:
+- Added exactly 270 unique variants: 90 per asset, with M `30..270` step `30` and N `50..95` step `5`.
+- At `marketStartUtc + M`, each strategy compares fresh executable Up/Down best asks, selects the unique higher ask, applies inclusive `ask >= N/100`, and explicitly skips missing/stale/invalid/tied quotes.
+- Passing decisions create one immutable BUY FAK intent capped at `0.99`, sized to the exact venue `min_order_size` with CLOB market-buy rounding, multiplier `1.0`, no configured-stake fallback, no cumulative-depth entry gate, and no retry.
+- Existing common FAK execution retains full, partial, and no-fill outcomes and durable decision/intent/snapshot/fill/fee/settlement evidence. All new variants are `PaperOnly=true`; no Live submission or production operation was performed.
+- Updated README and the Paper/Live parity contract; independent reviewer `agent:/root/follow_market_semantic_reviewer` returned PASS with no findings.
+Next: None
+Notes: Requirement digest `sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523`; focused tests passed 12/12; solution build passed with 0 errors and 5 pre-existing warnings; staged and exact-scope isolated WorkingTree requirement validation passed (`governedFiles=6`, `contracts=1`). The shared WorkingTree validator was blocked only by concurrent out-of-scope `PostgresSchema.cs`; those storage changes were not staged. A broader legacy processor run had 113 failures, and representative More/Middle/PreviousScore failures were independently reproduced on baseline commit `58a2abae`.
+Blockers: None
+
 ## Active Update 2026-08-29 Maker-GTD Midpoint-Even Initial Timestamps
 Goal: Make Maker-GTD immutable initial-order timestamp equivalence match PostgreSQL's actual midpoint-to-even microsecond storage.
 Status: Completed locally and independently reviewed
