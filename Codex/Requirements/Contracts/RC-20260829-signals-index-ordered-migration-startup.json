@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260829-signals-index-ordered-migration-startup",
+  "title": "Restore startup and move the signals wallet index to ordered migration 0004",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Сервис не стартует. Проверь по логам, что не так"
+    },
+    {
+      "source": "user",
+      "text": "У меня уже на сервере выложена последняя версия и она не стартует. Что делать?"
+    },
+    {
+      "source": "user",
+      "text": "Ты сам можешь всё исправить?"
+    },
+    {
+      "source": "user",
+      "text": "Только исправь исходники. Выложу я сам"
+    }
+  ],
+  "scope": {
+    "goal": "Correct the source so the service startup catalog retains the approved immutable legacy baseline checksum while the required signals(trader_wallet, id) index is represented by its own ordered migration.",
+    "inScope": [
+      "Remove only the ix_signals_trader_wallet_id DDL from immutable PostgresSchema.SchemaSql, restoring migration 0001 checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2.",
+      "Add ordered migration 0004 for exactly the non-unique btree index public.ix_signals_trader_wallet_id on public.signals(trader_wallet, id), using CREATE INDEX CONCURRENTLY IF NOT EXISTS.",
+      "Give migration 0004 its own fixed semantic checksum and a fail-closed completion check that requires the exact public index identity, ordered key columns trader_wallet then id, ordinary non-unique/non-partial btree shape, and PostgreSQL indisvalid, indisready and indislive state.",
+      "Register migration 0004 after existing migrations 0001, 0002 and 0003 without changing their IDs, ordering, SQL or checksums.",
+      "Update only focused migration/schema tests so they prove the baseline no longer contains the index, migration 0004 owns its exact DDL and checksum, the catalog order is 0001..0004, an existing exact valid index is recognized idempotently, and a disposable PostgreSQL database can create and re-run migration 0004.",
+      "Run focused tests, a Release solution build, requirement validation, independent semantic review, and task-only source commits while preserving every unrelated staged or unstaged change."
+    ],
+    "outOfScope": [
+      "Production deployment, file copy, service start/stop/restart, database write, manual migration-ledger change, manual CREATE/DROP/REINDEX, configuration change, backup, or any order/strategy/Live action.",
+      "Changing the legacy baseline checksum constant, accepting checksum 6dcac6e1d5ef16c9ffeb1bad5d281c4121adff9ddff2d722696aceb43d3d6ab0, replaying baseline 0001, or altering the SQL/checksum/behavior of migrations 0002 and 0003.",
+      "Any index other than public.ix_signals_trader_wallet_id, any query rewrite, performance tuning, strategy behavior, Maker-GTD lifecycle behavior, Legacy accounting backfill timeout, Follow Market FAK work, Progress strategy work, or unrelated documentation/source/test changes already present in the worktree."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact startup failure observed on 2026-08-29 UTC; exact schema object public.ix_signals_trader_wallet_id and migration catalog 0001..0004 only.",
+    "firstVerification": "Use explicit Production BEGIN READ ONLY with statement_timeout=15s and UTC to inspect the exact index, signals relation scale, migration ledger and waiting locks before source edits."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Restore service-startup source compatibility with the approved immutable PostgreSQL baseline without weakening or changing its checksum guard.",
+      "sourceRequestIndexes": [0, 1, 2, 3],
+      "sourceQuote": "Только исправь исходники",
+      "acceptanceCriteria": [
+        "PostgresSchema.SchemaSql no longer contains ix_signals_trader_wallet_id.",
+        "PostgresSchemaMigrationCatalog.CreateDefault calculates baseline 0001 semantic checksum exactly 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2.",
+        "The expected checksum constant and fail-fast mismatch guard remain unchanged.",
+        "Migrations 0002 and 0003 remain byte-for-byte unchanged.",
+        "Resolving PostgresSchemaInitializer through Production DI no longer throws the observed 0001 baseline checksum mismatch."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~PostgresSchemaMigrationTests|FullyQualifiedName~StorageTests.PostgresSchema_HasOpenExposureAndRecentSignalIndexes with all disposable outputs under the active marked D:\\CodexTemp run",
+          "expected": "Baseline checksum, DI resolution, catalog and focused schema ownership tests pass without skips or failures.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preserve the exact signals wallet/id index as an independently auditable, idempotent ordered PostgreSQL migration rather than legacy baseline SQL.",
+      "sourceRequestIndexes": [1, 2, 3],
+      "sourceQuote": "Только исправь исходники",
+      "acceptanceCriteria": [
+        "Catalog migration order 3 has ID 0004-signals-trader-wallet-id-index and is non-transactional with CREATE INDEX CONCURRENTLY IF NOT EXISTS.",
+        "Migration SQL creates exactly public.ix_signals_trader_wallet_id on public.signals using btree key columns trader_wallet then id, without UNIQUE, WHERE or INCLUDE.",
+        "The migration has a fixed verified semantic checksum distinct from 0001..0003.",
+        "The completion check returns true only for the exact public index shape with indisvalid=true, indisready=true and indislive=true; a same-name wrong, invalid, partial, unique, included-column, expression or wrong-order index does not count as complete.",
+        "On existing Production evidence at cutoff 2026-08-29T12:27:53.046035Z the exact index already exists with the required definition and valid/ready/live state, so deployment will skip physical index creation and only register pending migration 0004 after validating it.",
+        "A disposable PostgreSQL integration test proves creation on an absent index, completion recognition, one ledger row and idempotent second initializer execution.",
+        "No Production state is changed by this source task."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSignalsTraderWalletIndexSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run the focused PostgresSchemaMigrationTests against an allowlisted disposable local PostgreSQL database via POLYCOPYTRADER_MIGRATION_TEST_POSTGRES_CONNECTION, then verify the exact disposable database is dropped.",
+          "expected": "Migration 0004 creates or recognizes only the exact valid index, records one checksum-bound ledger row, and reruns idempotently with zero skips or failures.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore with TEMP/TMP and disposable outputs under the active marked D:\\CodexTemp run; git diff --check; requirement validation in WorkingTree and Staged modes; independent semantic review",
+          "expected": "Release solution build has zero errors, the approved task-only diff passes mechanical gates, and the independent reviewer reports no scope or semantic deviation.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260829-signals-index-ordered-migration-startup sha256:ff13a2000cb50f51785a44cb4435826dcc47ac4c0f22e1683fd8bafbac8463e7",
+    "semanticDigest": "sha256:ff13a2000cb50f51785a44cb4435826dcc47ac4c0f22e1683fd8bafbac8463e7"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/review_signals_index_migration",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
