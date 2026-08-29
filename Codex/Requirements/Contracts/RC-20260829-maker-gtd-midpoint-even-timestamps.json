@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260829-maker-gtd-midpoint-even-timestamps",
+  "title": "Match Maker-GTD immutable timestamps to PostgreSQL midpoint-even microsecond storage",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, делай"
+    }
+  ],
+  "scope": {
+    "goal": "Correct the verified Maker-GTD atomic-transition timestamp comparison so an original order timestamp and its persisted PostgreSQL timestamptz value compare equal exactly when PostgreSQL stores them in the same microsecond.",
+    "inScope": [
+      "The shared Maker-GTD immutable initial-order timestamp normalizer used for created_at_utc and expires_at_utc comparisons in atomic full-fill, expiry, and already-applied shape checks.",
+      "PostgreSQL midpoint-to-even behavior at the exact half-microsecond boundary, including the production shape 2026-08-29T08:09:31.7195025Z persisted as 2026-08-29T08:09:31.719502Z.",
+      "Focused regression coverage for even and odd half-microsecond ties, non-tie upward rounding, unchanged exact microseconds, and timestamps that resolve to different PostgreSQL microseconds.",
+      "Required focused tests, affected build, requirement validation, independent semantic review, context/history bookkeeping, commit, and push."
+    ],
+    "outOfScope": [
+      "Production database mutation, replay or repair of expired order fec9a0b5-bd77-4bcd-ba58-8a34e8899ffa, deployment, service restart, configuration change, strategy mutation, order submission, cancellation, or any Live action.",
+      "Any change to Maker-GTD strategy selection, Reference Average signal logic, price, tick rounding, size, PostOnly/GTD intent, TouchNoDepth evidence, acceptance, fill, expiry, continuity, deadline, accounting, or Paper/Live classification.",
+      "Any relaxation of non-timestamp immutable fields, lifecycle state, execution source, order/run linkage, position concurrency, atomicity, or idempotency guards.",
+      "Slow market-data side-effect queues, CLOB 404 responses, historical Gross/Net parity, Legacy backfill, Dashboard behavior, and unrelated timestamps that do not use the initial-order PostgreSQL JSONB-recordset persistence path."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact Maker-GTD Paper atomic transitions; production evidence is the exact order fec9a0b5-bd77-4bcd-ba58-8a34e8899ffa and timestamps observed on 2026-08-29 UTC.",
+    "firstVerification": "Use a bounded Production BEGIN READ ONLY session with statement_timeout=15s and UTC to verify the exact order and the PostgreSQL jsonb_to_recordset conversion of .7195025 to the stored .719502 microsecond before editing code."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Implement the authorized Maker-GTD timestamp-equivalence correction using PostgreSQL's actual midpoint-to-even microsecond storage behavior.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "делай",
+      "acceptanceCriteria": [
+        "The production shape 2026-08-29T08:09:31.7195025Z compares equal to persisted 2026-08-29T08:09:31.719502Z.",
+        "An odd lower microsecond half-tie such as 2026-08-29T08:09:31.7195035Z compares equal to persisted 2026-08-29T08:09:31.719504Z.",
+        "Existing non-tie upward-rounding shapes remain equivalent to their PostgreSQL values.",
+        "Timestamps that PostgreSQL stores in different microseconds remain unequal and continue to produce the existing shape-mismatch reason and diagnostic.",
+        "The same storage-precision rule applies consistently to the shared created_at_utc and expires_at_utc immutable initial-order checks."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/MakerGtdPaperPersistence.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperAtomicRepositoryTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter MakerGtdPaperAtomicRepositoryTests|MakerGtdPaperLifecycleIntegrationTests with TEMP/TMP and all disposable outputs under the active marked D:\\CodexTemp run",
+          "expected": "The exact production regression, even/odd midpoint ties, non-tie rounding, distinct-microsecond rejection, full-fill, expiry, idempotency and lifecycle checks pass.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep every non-timestamp Maker-GTD execution and persistence rule unchanged and make no Production/runtime change in this implementation task.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Ок, делай",
+      "acceptanceCriteria": [
+        "No strategy, price, size, intent, evidence, lifecycle, accounting, classification, Live, database schema, configuration, deployment, service, or Production data behavior changes except the exact immutable timestamp equivalence described by REQ-001.",
+        "The mandatory label remains optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.",
+        "The affected Release build passes, git diff --check passes, requirement validation passes, and an independent reviewer finds no scope or semantic deviation."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/MakerGtdPaperPersistence.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperAtomicRepositoryTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore with TEMP/TMP and disposable outputs under the active marked D:\\CodexTemp run; git diff --check; requirement validation in WorkingTree and Staged modes; independent semantic review",
+          "expected": "The approved timestamp-only diff builds and all scope, traceability, parity-label, and review gates pass without Production mutation.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260829-maker-gtd-midpoint-even-timestamps sha256:a6b68ba6fcb21b9da8b128921c52c54600d6fe48a9ea1a8574859b5a229a90ca",
+    "semanticDigest": "sha256:a6b68ba6fcb21b9da8b128921c52c54600d6fe48a9ea1a8574859b5a229a90ca"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_maker_gtd_midpoint_even_timestamps",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
