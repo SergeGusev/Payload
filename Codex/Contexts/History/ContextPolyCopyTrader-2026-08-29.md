@@ -147,3 +147,10 @@ Request:
 
 Result:
 Verified Production read-only after deployment of exact build `3fc4d90b81d948ef091acc13bf92bad497c5afd4`. Service heartbeat was Running/Live with NULL last_error; migration 0005 had the exact approved checksum; all exact 270 Follow Market rows existed with 90 per asset, zero identity mismatch, zero Live-enabled and zero paused. All 270 strategies produced runtime rows; by `18:02:54.755761Z`, 164 Follow Market FAK Paper orders were all Filled with 164 independent fill rows and exact Follow Market decision evidence. A separate last-500 check found 500/500 newest post-start Paper orders Filled, latest fill `18:05:02.354472Z`, and no waiting locks. Recurring fail-closed `follow_market_min_order_size_unavailable` skips remained through `18:06:00.055544Z` for 32 ETH and 37 SOL attempts; the cause is not established. The authorized `CodexLogs` share remained stale at `17:58:08.3023624Z`, before this process start, so new ERR/FTL logs remain unavailable and the share-path-versus-fallback cause is unknown. No Production state changed.
+
+## 2026-08-29T18:24:02.4299243+00:00
+Request:
+Ок, разбирайся
+
+Result:
+Diagnosed the two unresolved post-deploy observations read-only. Current Production logs are now visible through `\\192.168.0.101\CodexLogs`; startup proves `D:\1\logs` was unavailable and the service safely selected `C:\PayLoad\PayloadService\logs` with `fallback=true`, while the exact caught exception is unavailable because it was emitted only to startup stderr. The recurring ETH/SOL Follow Market skips are caused by `GetFreshTakerOrderBookAsync` accepting fresh WebSocket cache depth without requiring `MinOrderSize`, thereby bypassing enabled REST fallback; the one-attempt Follow Market sizing step then rejects the incomplete snapshot. Production logs independently showed the same ETH market skip at `2026-08-29T18:15:30.074Z` with executable cache depth and null min size, followed by Filled REST-backed Follow Market orders at `18:16:00.131Z`. Service health and ordinary Paper betting remained healthy. No Production or product-source state was changed.
