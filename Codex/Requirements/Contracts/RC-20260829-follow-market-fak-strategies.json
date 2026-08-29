@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260829-follow-market-fak-strategies",
+  "title": "Add BTC ETH SOL Follow Market FAK strategy families",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Сделай для каждой из валют (BTC, ETH, SOL) набор стратегий Follow Market M N,&#x20;\n\nгде M меняется от 30 до 570 с шагом 30 и означает время после начала рынка в секундах,&#x20;\nа N меняется от 50 до 95 с шагом 2 и означает ставку, по которой можно сразу гарантированно купить позицию в FAK режиме. Стратегия покупает если ставка равна или больше N\n\nПокупаем в режиме FAK с минимально доступной суммой.&#x20;\n\nТо есть идея в следующем - следуем за рынком и покупаем каждые 30 секунд, если выполняются условия по N"
+    },
+    {
+      "source": "user",
+      "text": "Re: Это стратегии для **15-минутных рынков**? `M=570` невозможно для 5-минутного рынка. &#x20;\n\nДля 5-ти минутных. Это я ошибся, имел в виду 270\n\nRe: Какой набор `N` нужен: `50, 52, …, 94` или дополнительно `95`? &#x20;\n\nОт 50 до 95 включительно с шагом 5\n\nRe: В момент `start + M` покупаем исход `Up/Down` с более высокой текущей исполнимой ценой ask, если она `≥ N/100`? &#x20;\n\nЯ не понял этого вопроса. Покупаем так, чтобы FAK ставка сработала по этой ставке.\n\nRe: Каждая стратегия `(валюта, M, N)` делает только одну FAK-попытку на рынок; при недостаточной глубине повторов нет? &#x20;\n\nТолько одна попытка. Глубину стакана не учитываем, считаем, что она достаточна"
+    },
+    {
+      "source": "user",
+      "text": "Ты мне задаёшь вопросы, требующщие слишком глубокого понимания, которого у меня нет. Я, грубо, вижу это примерно так:  Up продают по 65, мы для стратегий с N <= 65 делаем FAK заявку с 0.99, чтобы мы все взяли точно."
+    }
+  ],
+  "scope": {
+    "goal": "Add 270 Paper Follow Market strategy variants for BTC, ETH, and SOL five-minute markets that each make one threshold-gated minimum-size BUY FAK attempt at a configured post-open time with a 0.99 hard price cap.",
+    "inScope": [
+      "Exactly BTC, ETH, and SOL five-minute Up/Down markets.",
+      "Exactly nine entry delays M in seconds: 30, 60, 90, 120, 150, 180, 210, 240, and 270.",
+      "Exactly ten price thresholds N in cents: 50, 55, 60, 65, 70, 75, 80, 85, 90, and 95.",
+      "Exactly one catalog strategy for every asset/M/N tuple, for 3 * 9 * 10 = 270 unique strategies named with the Follow Market M N family identity.",
+      "At market start plus M seconds, select the unique leading Up/Down outcome by its fresh immediately executable best ask; enter when that ask in cents is greater than or equal to N.",
+      "Submit the selected outcome as one BUY FAK intent with hard maximum order price 0.99 and the smallest valid venue-reported minimum order size after required CLOB amount rounding.",
+      "Do not use cumulative order-book depth as a pre-submit entry gate and do not retry the asset/M/N strategy in the same market after its one attempt.",
+      "Preserve Paper/live intent parity and durable decision, intent, snapshot, fill, fee, partial-fill/cancellation, and settlement evidence while leaving Live submission disabled."
+    ],
+    "outOfScope": [
+      "Any asset other than BTC, ETH, or SOL; any interval other than five minutes; M outside 30 through 270 step 30; or N outside 50 through 95 step 5.",
+      "Enabling Live stakes, placing a real order, deployment, service restart, production database mutation, historical backfill, or changing any existing strategy.",
+      "Retries, recurring attempts inside one strategy, aggregate-depth eligibility filters, repricing after intent creation, order types other than BUY FAK, or a hard price cap other than 0.99.",
+      "Unrelated catalog cleanup, refactoring, UI changes, risk-rule changes, fee-rule changes, or changes to other execution families."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future BTC/ETH/SOL five-minute markets only; one decision per strategy at marketStartUtc + M seconds.",
+    "firstVerification": "Inspect the current strategy catalog, exact five-minute scheduling path, fresh outcome-order-book path, minimum-size calculation, common FAK ExecutionIntent adapters, persistence evidence, and focused tests before product edits."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Register exactly 270 unique Follow Market variants: BTC, ETH, and SOL crossed with M=30..270 step 30 and N=50..95 step 5, limited to five-minute markets.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Для 5-ти минутных. Это я ошибся, имел в виду 270",
+      "acceptanceCriteria": [
+        "The catalog contains exactly 90 Follow Market variants per asset and exactly 270 total.",
+        "For every asset, the distinct delays are exactly 30,60,90,120,150,180,210,240,270 and the distinct thresholds are exactly 50,55,60,65,70,75,80,85,90,95.",
+        "Every asset/M/N tuple has one stable unique UUID, code, display name, description, five-minute interval, dynamic outcome direction, FAK behavior, threshold, and 0.99 maximum price; no tuple is duplicated.",
+        "No existing strategy definition or behavior changes."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused strategy-catalog tests for Follow Market variants under the marked D:\\CodexTemp run.",
+          "expected": "Exactly 270 unique variants exist with the exact assets, M values, N values, five-minute interval, identifiers, names, behavior, and 0.99 FAK cap.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "At marketStartUtc + M, make one decision using the fresh executable Up and Down best asks, choose the uniquely higher-priced outcome, and enter exactly when its ask is greater than or equal to N/100.",
+      "sourceRequestIndexes": [
+        0,
+        2
+      ],
+      "sourceQuote": "Up продают по 65, мы для стратегий с N <= 65",
+      "acceptanceCriteria": [
+        "At ask 0.65, the same asset/M variants N=50,55,60,65 enter and N=70,75,80,85,90,95 skip.",
+        "Equality enters: ask 0.65 satisfies N=65.",
+        "The selected position is the unique outcome with the higher fresh executable best ask; missing, stale, invalid, or exactly tied leading asks produce an explicit skipped decision rather than an invented direction.",
+        "Each asset/M/N strategy records no more than one attempt for one market, including after a partial fill or no fill."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused Follow Market timing, direction, threshold-boundary, stale/missing/tied-quote, and one-attempt processor tests under the marked D:\\CodexTemp run.",
+          "expected": "The processor applies the exact M schedule and inclusive N threshold, selects only a unique current leader, emits explicit skips for unavailable decisions, and never retries a strategy/market tuple.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "For an eligible Follow Market decision, create one BUY FAK ExecutionIntent capped at 0.99 for the smallest valid venue-reported minimum order size, without a cumulative-depth entry filter or the existing 1.10 minimum-stake safety multiplier.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        2
+      ],
+      "sourceQuote": "делаем FAK заявку с 0.99",
+      "acceptanceCriteria": [
+        "The immutable intent side is BUY, time-in-force is FAK, post-only is false, and MaximumOrderPrice is exactly 0.99.",
+        "The requested market-buy notional is the smallest amount which, after current CLOB amount rounding, validates as at least the venue-reported min_order_size at the 0.99 worst price; the sizing safety multiplier for this family is exactly 1.0.",
+        "Missing or invalid venue min_order_size fails closed with an explicit skip; the implementation does not silently substitute a configured stake or larger safety buffer.",
+        "Cumulative ask depth does not authorize or reject the pre-submit signal and cannot resize or reprice the frozen intent."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/FakBuyExecutionIntent.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/FakBuyExecutionParityTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run focused Follow Market sizing and shared FAK intent parity tests under the marked D:\\CodexTemp run.",
+          "expected": "Paper and Live adapters preserve the same BUY FAK 0.99 intent and exact minimum valid rounded size while depth never changes the frozen decision or intent.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Process the common 0.99 FAK intent with real FAK outcome semantics and durable audit evidence: available asks may fill fully or partially and any remainder is cancelled; a changed or empty book may produce no fill, without a retry.",
+      "sourceRequestIndexes": [
+        1,
+        2
+      ],
+      "sourceQuote": "Глубину стакана не учитываем, считаем, что она достаточна",
+      "acceptanceCriteria": [
+        "Paper execution consumes the same pre-submit intent as Live and records actual fill price, filled shares, filled notional, fees, partial-fill/cancellation state, or an explicit no-fill reason from the execution snapshot.",
+        "No post-intent book fetch is used to validate liquidity, authorize, resize, reprice, roll back, or retry the originating order.",
+        "Focused tests cover full fill, partial fill with cancelled remainder, no fill, 0.99 price boundary, and prove that post-fill data cannot change original acceptance.",
+        "Decision, intent, market identity, quote/snapshot timestamps, fill evidence, fee role, result, and settlement remain durably correlated and the family is eligible for ordinary Paper accounting only while the parity tests pass.",
+        "Live submission remains disabled and this task places no real order."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/FakBuyExecutionIntent.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/FakBuyExecutionParityTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "Run the complete focused Follow Market processor and FakBuyExecutionParity test sets under the marked D:\\CodexTemp run.",
+          "expected": "Full, partial, no-fill, cancellation, price-cap, persistence, and post-fill non-interference cases pass while Live remains disabled.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln and run the relevant test project with artifacts and results below the marked D:\\CodexTemp run, then run git diff --check and WorkingTree/Staged requirement validation.",
+          "expected": "The solution builds, relevant tests pass, the diff is clean, and requirement validation maps every governed path to this approved contract.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Have an independent reviewer compare all three verbatim requests, the approved semantic digest, the complete diff, and verification evidence.",
+          "expected": "Independent semantic review passes with no open findings and confirms no behavior or file change outside REQ-001 through REQ-004.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "Follow Market means buying the unique Up/Down outcome with the higher fresh immediately executable best ask at the decision time; an exact tie has no unique market leader and is skipped.",
+      "impact": "The family follows the currently more expensive outcome. A rare exact best-ask tie produces no position rather than an arbitrary Up or Down choice.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260829-follow-market-fak-strategies sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523",
+        "semanticDigest": "sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "Минимально доступная сумма means the smallest market-buy notional that the existing CLOB amount rounding accepts as at least the venue-reported min_order_size at the 0.99 worst price, with no 1.10 sizing safety multiplier and no fallback configured stake when min_order_size is unavailable.",
+      "impact": "Each requested order is as small as the venue contract and CLOB precision permit. It can be smaller than existing strategy-family orders that intentionally add a 10 percent safety margin; missing minimum-size evidence skips this strategy attempt.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260829-follow-market-fak-strategies sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523",
+        "semanticDigest": "sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The strategy decision ignores cumulative depth as requested, but the implementation does not fabricate a guaranteed full fill from the statements считаем, что она достаточна and чтобы мы все взяли точно. It submits and simulates the same executable 0.99 FAK intent and records the actual full, partial, or zero fill outcome.",
+      "impact": "The signal is not blocked by a cumulative-depth sufficiency calculation, but a book change or insufficient executable liquidity can yield a smaller position or no position. This preserves actual FAK semantics and allows ordinary Paper accounting; assuming a counterfactual full fill would instead force ResearchOnly classification and exclude Paper PnL.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260829-follow-market-fak-strategies sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523",
+        "semanticDigest": "sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260829-follow-market-fak-strategies sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523",
+    "semanticDigest": "sha256:7f1df7c333de54a9fcc378b1dcaa48d0d7bc9612be6806d6919415929c84c523"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/follow_market_semantic_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
