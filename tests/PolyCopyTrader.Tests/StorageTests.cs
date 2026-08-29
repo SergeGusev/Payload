@@ -2057,6 +2057,7 @@ public sealed class StorageTests
 
         Assert.Contains("ix_signals_created_time", source, StringComparison.Ordinal);
         Assert.Contains("ON signals(created_at_utc DESC, id DESC)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ix_signals_trader_wallet_id", source, StringComparison.Ordinal);
         Assert.Contains("ix_paper_orders_open_time_asset", source, StringComparison.Ordinal);
         Assert.Contains("WHERE status IN ('Pending', 'PartiallyFilled')", source, StringComparison.Ordinal);
         Assert.Contains("ix_paper_positions_open_updated_cover", source, StringComparison.Ordinal);

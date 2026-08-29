@@ -73,10 +73,11 @@ public sealed class PostgresSchemaMigrationTests
     public void DefaultCatalog_IsBoundToApprovedLegacyChecksum()
     {
         var catalog = PostgresSchemaMigrationCatalog.CreateDefault();
-        Assert.Equal(3, catalog.Count);
+        Assert.Equal(4, catalog.Count);
         var baseline = catalog[0];
         var lossDiff = catalog[1];
         var ethUp8LossDiff = catalog[2];
+        var signalsTraderWalletIndex = catalog[3];
 
         Assert.Equal(PostgresSchemaMigrationCatalog.LegacyBaselineId, baseline.Id);
         Assert.Equal(
@@ -107,6 +108,96 @@ public sealed class PostgresSchemaMigrationTests
         Assert.Contains(StrategyIds.EthUp8BpsReferenceAveragePremarketParentIdValue, ethUp8LossDiff.Sql, StringComparison.Ordinal);
         Assert.Contains("ON CONFLICT (child_strategy_id) DO NOTHING", ethUp8LossDiff.Sql, StringComparison.Ordinal);
         Assert.DoesNotContain("INSERT INTO public.strategy_market_paper_runs", ethUp8LossDiff.Sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(PostgresSignalsTraderWalletIndexSchemaMigration.Id, signalsTraderWalletIndex.Id);
+        Assert.Equal(3, signalsTraderWalletIndex.Order);
+        Assert.False(signalsTraderWalletIndex.Transactional);
+        Assert.False(signalsTraderWalletIndex.IsLegacyBaseline);
+        Assert.Equal(
+            PostgresSignalsTraderWalletIndexSchemaMigration.SemanticChecksum,
+            signalsTraderWalletIndex.SemanticChecksum);
+        Assert.Equal(
+            PostgresSignalsTraderWalletIndexSchemaMigration.CompletionCheckSql,
+            signalsTraderWalletIndex.CompletionCheckSql);
+        Assert.Equal(
+            """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_signals_trader_wallet_id
+            ON public.signals(trader_wallet, id);
+            """.Replace("\r\n", "\n", StringComparison.Ordinal),
+            signalsTraderWalletIndex.Sql);
+        Assert.Contains("index_metadata.indisvalid", signalsTraderWalletIndex.CompletionCheckSql, StringComparison.Ordinal);
+        Assert.Contains("index_metadata.indisready", signalsTraderWalletIndex.CompletionCheckSql, StringComparison.Ordinal);
+        Assert.Contains("index_metadata.indislive", signalsTraderWalletIndex.CompletionCheckSql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresMigrationIntegration")]
+    public async Task SignalsTraderWalletIndexMigration_CreatesExactShapeRejectsWrongShapesAndIsIdempotent()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = CreateFactory(connectionString);
+        var baseline = new PostgresSchemaMigration(
+            0,
+            "signals-index-test-baseline",
+            "CREATE TABLE public.signals(id uuid NOT NULL, trader_wallet text NOT NULL, accepted boolean NOT NULL DEFAULT false);",
+            transactional: false,
+            details: "signals index test baseline",
+            isLegacyBaseline: true);
+        var migration = PostgresSchemaMigrationCatalog.CreateDefault()[3];
+
+        await ResetPublicSchemaAsync(connectionString);
+        var initializer = new PostgresSchemaInitializer(factory, [baseline, migration]);
+        await initializer.InitializeAsync();
+        Assert.True(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        Assert.Equal(
+            1,
+            await ScalarAsync<int>(
+                connectionString,
+                $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+
+        await initializer.InitializeAsync();
+        Assert.Equal(
+            1,
+            await ScalarAsync<int>(
+                connectionString,
+                $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+
+        await ResetPublicSchemaAsync(connectionString);
+        await new PostgresSchemaInitializer(factory, [baseline]).InitializeAsync();
+        await ExecuteAsync(connectionString, migration.Sql);
+        await new PostgresSchemaInitializer(factory, [baseline, migration]).InitializeAsync();
+        Assert.True(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        Assert.Equal(
+            1,
+            await ScalarAsync<int>(
+                connectionString,
+                $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+
+        var wrongIndexStatements = new[]
+        {
+            "CREATE UNIQUE INDEX ix_signals_trader_wallet_id ON public.signals(trader_wallet, id);",
+            "CREATE INDEX ix_signals_trader_wallet_id ON public.signals(trader_wallet, id) WHERE accepted;",
+            "CREATE INDEX ix_signals_trader_wallet_id ON public.signals(trader_wallet) INCLUDE (id);",
+            "CREATE INDEX ix_signals_trader_wallet_id ON public.signals((lower(trader_wallet)), id);",
+            "CREATE INDEX ix_signals_trader_wallet_id ON public.signals(id, trader_wallet);",
+            "CREATE INDEX ix_signals_trader_wallet_id ON public.signals(trader_wallet DESC, id);",
+            "CREATE INDEX ix_signals_trader_wallet_id ON public.signals(trader_wallet COLLATE \"C\", id);",
+            "CREATE INDEX ix_signals_trader_wallet_id ON public.signals(trader_wallet text_pattern_ops, id);"
+        };
+
+        foreach (var wrongIndexStatement in wrongIndexStatements)
+        {
+            await ResetPublicSchemaAsync(connectionString);
+            await ExecuteAsync(
+                connectionString,
+                "CREATE TABLE public.signals(id uuid NOT NULL, trader_wallet text NOT NULL, accepted boolean NOT NULL DEFAULT false);");
+            await ExecuteAsync(connectionString, wrongIndexStatement);
+            Assert.False(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        }
     }
 
     [Fact]
@@ -639,7 +730,7 @@ VALUES (
         Assert.Equal(0, await ScalarAsync<int>(
             connectionString,
             "SELECT sum(current_value)::integer FROM public.strategy_loss_diff_states WHERE parent_strategy_id = 'b7c50005-0000-4000-8137-000000000108';"));
-        Assert.Equal(3, await ScalarAsync<int>(
+        Assert.Equal(4, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
@@ -748,7 +839,7 @@ JOIN pg_namespace ns ON ns.oid=cls.relnamespace
 WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
 """);
         Assert.True(relationCount > 100);
-        Assert.Equal(3, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(4, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
 
         await Task.Delay(25);
         await initializer.InitializeAsync();
@@ -756,7 +847,7 @@ WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
         Assert.Equal(
             firstUpdatedAt,
             await ScalarAsync<DateTime>(connectionString, "SELECT max(updated_at_utc) FROM public.strategies;"));
-        Assert.Equal(3, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(4, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
 
     private static string CreateSettledLossDiffParentRunsSql(

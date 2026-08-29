@@ -64,7 +64,26 @@ public static class PostgresSchemaMigrationCatalog
                 $"actual {ethUp8LossDiffStrategies.SemanticChecksum}.");
         }
 
-        return ValidateAndOrder([baseline, lossDiffStrategies, ethUp8LossDiffStrategies]);
+        var signalsTraderWalletIndex = new PostgresSchemaMigration(
+            order: 3,
+            id: PostgresSignalsTraderWalletIndexSchemaMigration.Id,
+            sql: PostgresSignalsTraderWalletIndexSchemaMigration.Sql,
+            transactional: false,
+            details: "create exact signals trader-wallet/id lookup index",
+            completionCheckSql: PostgresSignalsTraderWalletIndexSchemaMigration.CompletionCheckSql);
+        if (!string.Equals(
+                signalsTraderWalletIndex.SemanticChecksum,
+                PostgresSignalsTraderWalletIndexSchemaMigration.SemanticChecksum,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"PostgreSQL migration checksum mismatch for '{PostgresSignalsTraderWalletIndexSchemaMigration.Id}'. " +
+                $"Expected {PostgresSignalsTraderWalletIndexSchemaMigration.SemanticChecksum}, " +
+                $"actual {signalsTraderWalletIndex.SemanticChecksum}.");
+        }
+
+        return ValidateAndOrder(
+            [baseline, lossDiffStrategies, ethUp8LossDiffStrategies, signalsTraderWalletIndex]);
     }
 
     public static IReadOnlyList<PostgresSchemaMigration> ValidateAndOrder(

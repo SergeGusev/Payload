@@ -3,7 +3,7 @@
   "contractId": "RC-20260829-signals-index-ordered-migration-startup",
   "title": "Restore startup and move the signals wallet index to ordered migration 0004",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -66,8 +66,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --no-restore --filter FullyQualifiedName~PostgresSchemaMigrationTests|FullyQualifiedName~StorageTests.PostgresSchema_HasOpenExposureAndRecentSignalIndexes with all disposable outputs under the active marked D:\\CodexTemp run",
           "expected": "Baseline checksum, DI resolution, catalog and focused schema ownership tests pass without skips or failures.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused Release tests passed 13/13 with zero skips; baseline checksum, four-entry catalog, Production DI resolution and baseline ownership assertions passed."
         }
       ]
     },
@@ -97,16 +97,16 @@
           "kind": "test",
           "command": "Run the focused PostgresSchemaMigrationTests against an allowlisted disposable local PostgreSQL database via POLYCOPYTRADER_MIGRATION_TEST_POSTGRES_CONNECTION, then verify the exact disposable database is dropped.",
           "expected": "Migration 0004 creates or recognizes only the exact valid index, records one checksum-bound ledger row, and reruns idempotently with zero skips or failures.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Allowlisted local PostgreSQL database pct_codex_skip_v2_signals_index_20260829 proved absent-index creation, pre-existing exact-index recognition, one ledger row, idempotent rerun, and rejection of unique, partial, INCLUDE, expression, wrong-order, DESC, explicit-collation and non-default-opclass shapes; database was dropped and confirmed absent."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore with TEMP/TMP and disposable outputs under the active marked D:\\CodexTemp run; git diff --check; requirement validation in WorkingTree and Staged modes; independent semantic review",
           "expected": "Release solution build has zero errors, the approved task-only diff passes mechanical gates, and the independent reviewer reports no scope or semantic deviation.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final Release solution build passed with 0 warnings and 0 errors; git diff checks passed; staged requirement validation passed after completion transition; independent reviewer agent:/root/review_signals_index_migration returned PASS with no remaining findings."
         }
       ]
     }
@@ -121,8 +121,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/review_signals_index_migration",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }
