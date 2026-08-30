@@ -1853,8 +1853,22 @@ public sealed class StorageTests
         var batchMarkEnd = source.IndexOf("UpsertPaperPositionsAsync", batchMarkStart, StringComparison.Ordinal);
         Assert.True(batchMarkEnd > batchMarkStart);
         var batchMarkMethod = source[batchMarkStart..batchMarkEnd];
+        Assert.DoesNotContain("BeginTransactionAsync", batchMarkMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("LockPaperPositionKeysAsync", batchMarkMethod, StringComparison.Ordinal);
+        Assert.DoesNotContain("command.Transaction = transaction", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("eligible_positions AS MATERIALIZED", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("FOR UPDATE OF target_position SKIP LOCKED", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.copied_trader_wallet COLLATE \"C\"", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.asset_id COLLATE \"C\"", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.condition_id = mark_update.expected_condition_id", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.outcome = mark_update.expected_outcome", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.size_shares = mark_update.expected_size_shares", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.average_price = mark_update.expected_average_price", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.estimated_value_usd = mark_update.expected_estimated_value_usd", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.unrealized_pnl_usd = mark_update.expected_unrealized_pnl_usd", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("target_position.updated_at_utc = mark_update.expected_updated_at_utc", batchMarkMethod, StringComparison.Ordinal);
         Assert.Contains("net_unrealized_pnl_usd = update.NetUnrealizedPnlUsd", batchMarkMethod, StringComparison.Ordinal);
-        Assert.Contains("net_unrealized_pnl_usd = mark_update.net_unrealized_pnl_usd", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("net_unrealized_pnl_usd = eligible_position.net_unrealized_pnl_usd", batchMarkMethod, StringComparison.Ordinal);
         Assert.Contains("expected_net_unrealized_pnl_usd numeric", batchMarkMethod, StringComparison.Ordinal);
         Assert.Contains("IS NOT DISTINCT FROM mark_update.expected_net_unrealized_pnl_usd", batchMarkMethod, StringComparison.Ordinal);
     }

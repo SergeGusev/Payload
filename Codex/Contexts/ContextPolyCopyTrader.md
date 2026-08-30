@@ -1,3 +1,16 @@
+## Active Update 2026-08-30 Non-Blocking Paper Position Marks
+Goal: Remove the verified Production lock wait from batch Paper position-mark persistence without changing order, fill, settlement, strategy, or queue behavior.
+Status: Completed locally and independently reviewed; not deployed
+Done:
+- `TryUpdatePaperPositionMarksAsync` no longer acquires Paper-wallet advisory locks or explicit blocking row pre-locks for best-effort batch marks.
+- The single PostgreSQL statement retains the complete expected-state CAS, locks eligible rows in deterministic order with `FOR UPDATE ... SKIP LOCKED`, updates by locked row id, and returns only committed rows for exposure-cache application.
+- A contended or concurrently changed position remains untouched and can be retried only by a later ordinary market-data update from a fresh exposure snapshot.
+- Added a real PostgreSQL concurrency test proving that one independently locked row does not delay a free row, is omitted without overwrite, and updates successfully after lock release; README documents the exact synchronous/non-blocking boundary.
+- Independent reviewer `agent:/root/review_position_mark_nonblocking_cas` compared the verbatim request, approved contract, complete diff, and evidence and returned PASS with no open findings after one README overstatement was narrowed.
+Next: User-controlled deployment, then read-only verification of `IAppRepository.TryUpdatePaperPositionMarks` processing duration, general queue delay/backlog recovery, Paper fills, heartbeat, and ERR/FTL logs across busy five-minute boundaries.
+Notes: Approved contract `RC-20260830-position-mark-nonblocking-cas` digest `sha256:261747a0fdb619f8704cff07d1b473de75981b0c6115b104fa2d2f83a37c5c8a`; corrected approval checkpoint commit `620901b7`. Release focused/relevant tests passed 17/17 on source and an exact disposable loopback PostgreSQL database; Release solution build passed with 0 errors and 126 existing warnings. Broad StorageTests passed 116/117 with one unchanged unrelated catalog-count failure (`324` expected versus `321` actual). The exact disposable database was dropped and confirmed absent. Protected cleanup removed the exact marked 207,878,786-byte test run and verified it absent. No Production, service, strategy, order, configuration, deployment, schema, migration, index, queue topology, or execution semantics changed.
+Blockers: None.
+
 ## Active Update 2026-08-30 Market-Data Latency Post-Deploy Verification
 Goal: Verify Production service health, betting activity, logs, and the new market-data latency evidence after deployment of commit `2f77bd06`.
 Status: Deployment and betting verified; exact foreground latency bottleneck confirmed

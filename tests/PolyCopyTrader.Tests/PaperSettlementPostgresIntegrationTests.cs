@@ -95,6 +95,118 @@ public sealed class PaperSettlementPostgresIntegrationTests
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task BatchMarkUpdates_SkipLockedPositionAndUpdateFreePosition()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var lockedWallet = $"mark-locked-{suffix}";
+        var freeWallet = $"mark-free-{suffix}";
+        var wallets = new[] { lockedWallet, freeWallet };
+        var initialUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var lockedPosition = Position(
+            lockedWallet,
+            $"asset-{suffix}-locked",
+            $"condition-{suffix}",
+            "Yes",
+            4m,
+            0.25m,
+            initialUtc);
+        var freePosition = Position(
+            freeWallet,
+            $"asset-{suffix}-free",
+            $"condition-{suffix}",
+            "No",
+            3m,
+            0.40m,
+            initialUtc);
+
+        try
+        {
+            await repository.UpsertPaperPositionsAsync([lockedPosition, freePosition]);
+            var expectedLocked = Assert.IsType<PaperPosition>(
+                await repository.GetPaperPositionAsync(lockedWallet, lockedPosition.AssetId));
+            var expectedFree = Assert.IsType<PaperPosition>(
+                await repository.GetPaperPositionAsync(freeWallet, freePosition.AssetId));
+            var markUtc = initialUtc.AddSeconds(1);
+
+            await using (var blockerConnection = factory.CreateConnection())
+            {
+                await blockerConnection.OpenAsync();
+                await using var blockerTransaction = await blockerConnection.BeginTransactionAsync();
+                await using (var lockCommand = new NpgsqlCommand(
+                    """
+SELECT id
+FROM paper_positions
+WHERE copied_trader_wallet = @Wallet
+  AND asset_id = @AssetId
+FOR UPDATE;
+""",
+                    blockerConnection,
+                    blockerTransaction))
+                {
+                    lockCommand.Parameters.AddWithValue("Wallet", lockedWallet);
+                    lockCommand.Parameters.AddWithValue("AssetId", lockedPosition.AssetId);
+                    Assert.IsType<Guid>(await lockCommand.ExecuteScalarAsync());
+                }
+
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                var updated = await repository.TryUpdatePaperPositionMarksAsync(
+                [
+                    new PaperPositionMarkUpdate(
+                        expectedLocked,
+                        EstimatedValueUsd: 3m,
+                        UnrealizedPnlUsd: 2m,
+                        UpdatedAtUtc: markUtc),
+                    new PaperPositionMarkUpdate(
+                        expectedFree,
+                        EstimatedValueUsd: 2m,
+                        UnrealizedPnlUsd: 0.8m,
+                        UpdatedAtUtc: markUtc)
+                ],
+                    timeout.Token);
+
+                var persistedFree = Assert.Single(updated);
+                Assert.Equal(freeWallet, persistedFree.CopiedTraderWallet);
+                Assert.Equal(2m, persistedFree.EstimatedValueUsd);
+                Assert.Equal(0.8m, persistedFree.UnrealizedPnlUsd);
+
+                var unchangedLocked = Assert.IsType<PaperPosition>(
+                    await repository.GetPaperPositionAsync(lockedWallet, lockedPosition.AssetId));
+                Assert.Equal(expectedLocked, unchangedLocked);
+
+                await blockerTransaction.CommitAsync();
+            }
+
+            var retried = await repository.TryUpdatePaperPositionMarksAsync(
+            [
+                new PaperPositionMarkUpdate(
+                    expectedLocked,
+                    EstimatedValueUsd: 3m,
+                    UnrealizedPnlUsd: 2m,
+                    UpdatedAtUtc: markUtc)
+            ]);
+
+            var persistedLocked = Assert.Single(retried);
+            Assert.Equal(lockedWallet, persistedLocked.CopiedTraderWallet);
+            Assert.Equal(3m, persistedLocked.EstimatedValueUsd);
+            Assert.Equal(2m, persistedLocked.UnrealizedPnlUsd);
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, wallets);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task SettlementBatch_FiltersMarketAndRollsBackBothTablesOnFailure()
     {
         var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");

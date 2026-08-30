@@ -3,7 +3,7 @@
   "contractId": "RC-20260830-position-mark-nonblocking-cas",
   "title": "Make Paper position-mark persistence non-blocking",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -116,7 +116,7 @@
           "command": "Build PolyCopyTrader.sln in Release and run the approved focused/relevant tests with outputs under the marked D:\\CodexTemp run; run git diff --check, requirement gates, and independent semantic review.",
           "expected": "Build, tests, gates, cleanup, and review pass; the diff stays within the approved repository batch-mark persistence, focused tests, and documentation paths.",
           "result": "passed",
-          "evidence": "PolyCopyTrader.sln Release build passed with 0 errors and 126 existing warnings. The isolated broad StorageTests run passed 116/117; its sole failure was the unrelated existing catalog assertion expected 324 versus actual 321, outside all touched code and before mark persistence. The approved focused/relevant matrix passed 17/17. git diff --check and WorkingTree validation passed. Independent reviewer agent:/root/review_position_mark_nonblocking_cas compared the verbatim request, approved contract, complete corrected diff, and evidence and returned PASS with no open findings. Staged validation, protected cleanup, and commit evidence are recorded by finalization."
+          "evidence": "PolyCopyTrader.sln Release build passed with 0 errors and 126 existing warnings. The isolated broad StorageTests run passed 116/117; its sole failure was the unrelated existing catalog assertion expected 324 versus actual 321, outside all touched code and before mark persistence. The approved focused/relevant matrix passed 17/17. git diff --check and WorkingTree validation passed. Independent reviewer agent:/root/review_position_mark_nonblocking_cas compared the verbatim request, approved contract, complete corrected diff, and evidence and returned PASS with no open findings. Build servers shut down successfully; protected cleanup removed 790 files / 207,878,786 bytes from marked run manual-185853cb75a54406b1bc4e9777ea4e87 and Test-Path confirmed the run absent. Staged validation and commit evidence are recorded by finalization."
         }
       ]
     }

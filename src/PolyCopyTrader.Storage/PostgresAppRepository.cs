@@ -2725,13 +2725,6 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
 			updated_at_utc = UtcDateTime(update.UpdatedAtUtc)
 		}).ToArray();
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
-		await LockPaperPositionKeysAsync(
-			connection,
-			transaction,
-			updates.Select(update => update.ExpectedPosition).ToArray(),
-			[],
-			cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH mark_updates AS (
     SELECT *
@@ -2751,16 +2744,18 @@ WITH mark_updates AS (
         net_unrealized_pnl_usd numeric,
         updated_at_utc timestamptz
     )
-), updated_positions AS (
-    UPDATE paper_positions AS target_position
-    SET estimated_value_usd = mark_update.estimated_value_usd,
-        unrealized_pnl_usd = mark_update.unrealized_pnl_usd,
-        net_unrealized_pnl_usd = mark_update.net_unrealized_pnl_usd,
-        updated_at_utc = mark_update.updated_at_utc
-    FROM mark_updates AS mark_update
-    WHERE target_position.copied_trader_wallet = mark_update.copied_trader_wallet
-      AND target_position.asset_id = mark_update.asset_id
-      AND target_position.condition_id = mark_update.expected_condition_id
+), eligible_positions AS MATERIALIZED (
+    SELECT
+        target_position.id,
+        mark_update.estimated_value_usd,
+        mark_update.unrealized_pnl_usd,
+        mark_update.net_unrealized_pnl_usd,
+        mark_update.updated_at_utc
+    FROM paper_positions AS target_position
+    INNER JOIN mark_updates AS mark_update
+        ON target_position.copied_trader_wallet = mark_update.copied_trader_wallet
+       AND target_position.asset_id = mark_update.asset_id
+    WHERE target_position.condition_id = mark_update.expected_condition_id
       AND target_position.outcome = mark_update.expected_outcome
       AND target_position.size_shares = mark_update.expected_size_shares
       AND target_position.average_price = mark_update.expected_average_price
@@ -2768,6 +2763,18 @@ WITH mark_updates AS (
       AND target_position.unrealized_pnl_usd = mark_update.expected_unrealized_pnl_usd
       AND target_position.net_unrealized_pnl_usd IS NOT DISTINCT FROM mark_update.expected_net_unrealized_pnl_usd
       AND target_position.updated_at_utc = mark_update.expected_updated_at_utc
+    ORDER BY
+        target_position.copied_trader_wallet COLLATE "C",
+        target_position.asset_id COLLATE "C"
+    FOR UPDATE OF target_position SKIP LOCKED
+), updated_positions AS (
+    UPDATE paper_positions AS target_position
+    SET estimated_value_usd = eligible_position.estimated_value_usd,
+        unrealized_pnl_usd = eligible_position.unrealized_pnl_usd,
+        net_unrealized_pnl_usd = eligible_position.net_unrealized_pnl_usd,
+        updated_at_utc = eligible_position.updated_at_utc
+    FROM eligible_positions AS eligible_position
+    WHERE target_position.id = eligible_position.id
     RETURNING
         target_position.asset_id,
         target_position.condition_id,
@@ -2810,7 +2817,6 @@ SELECT
 FROM updated_positions
 ORDER BY copied_trader_wallet, asset_id;
 """);
-		command.Transaction = transaction;
 		AddJsonbParameter(command, "PaperPositionMarkUpdatesJson", JsonSerializer.Serialize(rows));
 		List<PaperPosition> updatedPositions = [];
 		await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -2821,7 +2827,6 @@ ORDER BY copied_trader_wallet, asset_id;
 			}
 		}
 
-		await transaction.CommitAsync(cancellationToken);
 		return updatedPositions;
 	}
 
