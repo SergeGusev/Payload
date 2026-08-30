@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260830-market-data-side-effect-latency-evidence",
+  "title": "Expose exact market-data side-effect latency and make historical backfill yield",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Что за предупреждения о задержках и можем ли мы их узбежать?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, действуй"
+    }
+  ],
+  "scope": {
+    "goal": "Implement the first evidence-led latency correction stage accepted by the user: make every slow general market-data side-effect warning identify the exact processing phase and operation responsible, and prevent historical accounting backfill from starting while foreground market-data or Paper-entry work is pending.",
+    "inScope": [
+      "Extend the existing general market-data side-effect execution trace and slow warning with the active phase/operation, the slowest observed phase/operation, and their measured durations, while retaining queue delay, total processing duration, component, event type, asset, and pending-count evidence.",
+      "Instrument the existing MarketDataSideEffectHandler and PaperTradingMarketDataUpdater phase/operation transitions so slow exposure loads, settlement, ordinary fills, Maker-GTD updates, position marks, repository operations, and publication/serialization waits can be distinguished without logging secrets or full raw payloads.",
+      "Change the historical accounting backfill coordinator so any cycle preview that observes pending Paper-entry batches or pending market-data updates always yields and performs no Legacy or parity backfill processor call; backfill resumes only on a later cycle whose foreground counts are both zero.",
+      "Add focused deterministic tests for slow-warning evidence, phase/operation accounting, queue semantics, and unconditional foreground yield, and document the diagnostic fields and yield rule."
+    ],
+    "outOfScope": [
+      "Changing market-data event admission, coalescing eligibility, drop/reject rules, queue capacity, warning threshold, worker count, asset scheduling, per-asset ordering, Paper updater locking, or PostgreSQL locking in this first evidence stage.",
+      "Separating position marks into another lane, adding cross-asset parallelism, or changing fills, settlements, Maker-GTD lifecycle, Follow Market decisions, strategy behavior, execution intent, order/fill semantics, accounting, PnL, or Live submission before post-deploy phase evidence identifies the exact bottleneck.",
+      "Schema, migration, database, strategy, order, configuration, deployment, Production service, server, or historical-data mutation."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future market-data side-effect and historical-backfill cycles after user-controlled deployment; no historical replay and no Production mutation.",
+    "firstVerification": "Inspect the existing single-worker queue, execution-trace state transitions, handler/updater operations, historical-backfill foreground gate, focused queue/updater/backfill tests, and current production warning/metric evidence before product edits."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Every general market-data side-effect slow warning must identify whether time was spent waiting or processing and expose the exact active and slowest phase/operation evidence available for that work item.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "The warning retains QueueDelayMs, ProcessingDurationMs, Component, EventType, AssetId, and PendingUpdates and adds active phase/operation plus phase age and slowest completed phase/operation plus duration.",
+        "Phase timing is accumulated at every trace transition and finalized when processing completes, so a later fast phase cannot hide an earlier slow phase.",
+        "MarketDataSideEffectHandler and PaperTradingMarketDataUpdater identify publication wait, serialization wait, exposure load, market resolution, Maker-GTD application, ordinary Paper fill/repository operations, and position-mark update operations.",
+        "No private data, full raw event payload, or RawDecisionJson is added to logs."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectDiagnostics.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectHandler.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused MarketDataSideEffectQueue and PaperTradingMarketDataUpdater trace/slow-warning tests in Release with disposable outputs under the marked D:\\CodexTemp run.",
+          "expected": "Deterministic tests prove queue versus processing classification, active and slowest phase/operation timing, earlier-slow-phase retention, and unchanged event completion/order semantics.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Historical accounting backfill must perform no processor work whenever either foreground Paper-entry batches or market-data updates are pending at its cycle preview.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Every nonzero PendingPaperEntryBatches or PendingMarketDataUpdates preview returns ForegroundWorkPending without invoking the Legacy or parity processor, including consecutive busy cycles.",
+        "A later preview with both counts zero resumes the existing bounded lane-selection and processor behavior.",
+        "The foreground-yield log/event reports the observed counts without claiming that backfill caused a latency spike."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillWorker.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillWorkerTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused PaperFakFeeBackfillWorker foreground-yield tests in Release under the marked D:\\CodexTemp run.",
+          "expected": "Consecutive busy cycles never call either backfill processor; the first idle cycle resumes exactly one existing bounded processor cycle.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Keep this first stage diagnostic and foreground-priority-only, with no Paper lifecycle, strategy, queue-topology, Production, or deployment change.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "README documents the new slow-warning fields, unconditional foreground yield, and the need for post-deploy evidence before selecting the structural bottleneck correction.",
+        "Existing queue coalescing, admission, ordering, worker topology, Paper fill/settlement behavior, and Maker-GTD dedicated lane remain unchanged.",
+        "Focused tests, the relevant broader test classes, Release solution build, git diff --check, and WorkingTree/Staged requirement validation pass.",
+        "An independent reviewer compares the verbatim requests, approved contract, complete diff, and verification evidence and reports PASS with no open finding.",
+        "No Production database, service, strategy, order, configuration, deployment, or server state is changed, and all disposable artifacts are removed from the marked D:\\CodexTemp run."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectDiagnostics.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectHandler.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperFakFeeBackfillWorker.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperFakFeeBackfillWorkerTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln in Release with disposable outputs under the marked D:\\CodexTemp run; run focused and relevant broader tests, git diff --check, WorkingTree/Staged requirement validation, and independent semantic review.",
+          "expected": "Build, tests, gates, and review pass; the diff is limited to approved telemetry, foreground yield, tests, and documentation, with no queue-topology or Paper behavior change.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260830-market-data-side-effect-latency-evidence sha256:b84fba2456e3f1e1079c9ae139bd219ec794146f94f3750116e7d34e7bc73f9f",
+    "semanticDigest": "sha256:b84fba2456e3f1e1079c9ae139bd219ec794146f94f3750116e7d34e7bc73f9f"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/review_market_data_latency_evidence",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
