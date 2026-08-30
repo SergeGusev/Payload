@@ -923,6 +923,7 @@ public sealed class MarketDataSideEffectQueue(
     {
         var processingStarted = Stopwatch.GetTimestamp();
         var queueDelay = DateTimeOffset.UtcNow - workItem.EnqueuedAtUtc;
+        MarketDataSideEffectExecutionTraceSnapshot? completedTrace = null;
         if (queueDelay < TimeSpan.Zero)
         {
             queueDelay = TimeSpan.Zero;
@@ -955,6 +956,9 @@ public sealed class MarketDataSideEffectQueue(
         }
         finally
         {
+            var completedAtUtc = DateTimeOffset.UtcNow;
+            workItem.ExecutionTrace?.MarkProcessingCompleted(completedAtUtc);
+            completedTrace = workItem.ExecutionTrace?.Capture(completedAtUtc);
             CompleteInFlightUpdate(workItem);
         }
 
@@ -962,14 +966,28 @@ public sealed class MarketDataSideEffectQueue(
         if (queueDelay.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds ||
             processingDuration.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds)
         {
+            var queueDelayWasSlow = queueDelay.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds;
+            var processingWasSlow = processingDuration.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds;
+            var latencyCategory = queueDelayWasSlow && processingWasSlow
+                ? "QueueDelayAndProcessing"
+                : queueDelayWasSlow
+                    ? "QueueDelay"
+                    : "Processing";
             logger.LogWarning(
-                "Queued market-data side effect was slow. Component={Component} EventType={EventType} AssetId={AssetId} QueueDelayMs={QueueDelayMs} ProcessingDurationMs={ProcessingDurationMs} PendingUpdates={PendingUpdates}",
+                "Queued market-data side effect was slow. Component={Component} EventType={EventType} AssetId={AssetId} LatencyCategory={LatencyCategory} QueueDelayMs={QueueDelayMs} ProcessingDurationMs={ProcessingDurationMs} PendingUpdates={PendingUpdates} ActivePhase={ActivePhase} ActiveOperation={ActiveOperation} ActivePhaseDurationMs={ActivePhaseDurationMs} SlowestPhase={SlowestPhase} SlowestOperation={SlowestOperation} SlowestPhaseDurationMs={SlowestPhaseDurationMs}",
                 workItem.Component,
                 workItem.Update.EventType,
                 workItem.Update.AssetId,
+                latencyCategory,
                 queueDelay.TotalMilliseconds,
                 processingDuration.TotalMilliseconds,
-                GetPendingUpdateCount());
+                GetPendingUpdateCount(),
+                completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing,
+                completedTrace?.Operation,
+                completedTrace?.PhaseAgeMilliseconds ?? processingDuration.TotalMilliseconds,
+                completedTrace?.SlowestPhase ?? completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing,
+                completedTrace?.SlowestOperation ?? completedTrace?.Operation,
+                completedTrace?.SlowestPhaseDurationMilliseconds ?? processingDuration.TotalMilliseconds);
         }
     }
 

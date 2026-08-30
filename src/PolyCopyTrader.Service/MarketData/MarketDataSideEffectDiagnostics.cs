@@ -41,7 +41,11 @@ public sealed record MarketDataSideEffectExecutionTraceSnapshot(
     double ReceivedAgeMilliseconds,
     double QueueAgeMilliseconds,
     double? ProcessingAgeMilliseconds,
-    double PhaseAgeMilliseconds);
+    double PhaseAgeMilliseconds,
+    string? Operation = null,
+    string? SlowestPhase = null,
+    string? SlowestOperation = null,
+    double SlowestPhaseDurationMilliseconds = 0d);
 
 public sealed class MarketDataSideEffectExecutionTrace
 {
@@ -54,7 +58,12 @@ public sealed class MarketDataSideEffectExecutionTrace
     private readonly DateTimeOffset enqueuedAtUtc;
     private DateTimeOffset? processingStartedAtUtc;
     private string phase = MarketDataSideEffectPhases.Queued;
+    private string? operation;
     private DateTimeOffset phaseEnteredAtUtc;
+    private DateTimeOffset? processingCompletedAtUtc;
+    private string? slowestPhase;
+    private string? slowestOperation;
+    private double slowestPhaseDurationMilliseconds;
 
     public MarketDataSideEffectExecutionTrace(
         string component,
@@ -79,17 +88,39 @@ public sealed class MarketDataSideEffectExecutionTrace
         {
             processingStartedAtUtc ??= startedAtUtc;
             phase = MarketDataSideEffectPhases.Processing;
+            operation = null;
             phaseEnteredAtUtc = startedAtUtc;
         }
     }
 
     public void EnterPhase(string nextPhase, DateTimeOffset enteredAtUtc)
     {
+        EnterPhase(nextPhase, nextOperation: null, enteredAtUtc);
+    }
+
+    public void EnterPhase(string nextPhase, string? nextOperation, DateTimeOffset enteredAtUtc)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(nextPhase);
         lock (sync)
         {
+            CompleteCurrentPhase(enteredAtUtc);
             phase = nextPhase;
+            operation = string.IsNullOrWhiteSpace(nextOperation) ? null : nextOperation;
             phaseEnteredAtUtc = enteredAtUtc;
+        }
+    }
+
+    public void MarkProcessingCompleted(DateTimeOffset completedAtUtc)
+    {
+        lock (sync)
+        {
+            if (processingCompletedAtUtc is not null)
+            {
+                return;
+            }
+
+            processingCompletedAtUtc = completedAtUtc;
+            CompleteCurrentPhase(completedAtUtc);
         }
     }
 
@@ -97,7 +128,22 @@ public sealed class MarketDataSideEffectExecutionTrace
     {
         lock (sync)
         {
-            var queueEndUtc = processingStartedAtUtc ?? capturedAtUtc;
+            var effectiveCapturedAtUtc = processingCompletedAtUtc is { } completedAtUtc && completedAtUtc < capturedAtUtc
+                ? completedAtUtc
+                : capturedAtUtc;
+            var queueEndUtc = processingStartedAtUtc ?? effectiveCapturedAtUtc;
+            var currentPhaseDurationMilliseconds = NonNegativeMilliseconds(effectiveCapturedAtUtc - phaseEnteredAtUtc);
+            var capturedSlowestPhase = slowestPhase;
+            var capturedSlowestOperation = slowestOperation;
+            var capturedSlowestDurationMilliseconds = slowestPhaseDurationMilliseconds;
+            if (processingStartedAtUtc is not null &&
+                currentPhaseDurationMilliseconds > capturedSlowestDurationMilliseconds)
+            {
+                capturedSlowestPhase = phase;
+                capturedSlowestOperation = operation;
+                capturedSlowestDurationMilliseconds = currentPhaseDurationMilliseconds;
+            }
+
             return new MarketDataSideEffectExecutionTraceSnapshot(
                 component,
                 eventType,
@@ -112,10 +158,32 @@ public sealed class MarketDataSideEffectExecutionTrace
                 NonNegativeMilliseconds(capturedAtUtc - receivedAtUtc),
                 NonNegativeMilliseconds(queueEndUtc - enqueuedAtUtc),
                 processingStartedAtUtc is { } processingStarted
-                    ? NonNegativeMilliseconds(capturedAtUtc - processingStarted)
+                    ? NonNegativeMilliseconds(effectiveCapturedAtUtc - processingStarted)
                     : null,
-                NonNegativeMilliseconds(capturedAtUtc - phaseEnteredAtUtc));
+                currentPhaseDurationMilliseconds,
+                operation,
+                capturedSlowestPhase,
+                capturedSlowestOperation,
+                capturedSlowestDurationMilliseconds);
         }
+    }
+
+    private void CompleteCurrentPhase(DateTimeOffset completedAtUtc)
+    {
+        if (processingStartedAtUtc is null || phase == MarketDataSideEffectPhases.Queued)
+        {
+            return;
+        }
+
+        var durationMilliseconds = NonNegativeMilliseconds(completedAtUtc - phaseEnteredAtUtc);
+        if (durationMilliseconds <= slowestPhaseDurationMilliseconds)
+        {
+            return;
+        }
+
+        slowestPhase = phase;
+        slowestOperation = operation;
+        slowestPhaseDurationMilliseconds = durationMilliseconds;
     }
 
     private static double NonNegativeMilliseconds(TimeSpan duration)

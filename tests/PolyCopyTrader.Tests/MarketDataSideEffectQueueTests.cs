@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -9,6 +10,98 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class MarketDataSideEffectQueueTests
 {
+    [Fact]
+    public void ExecutionTrace_RetainsEarlierSlowestPhaseAndFinalActiveOperation()
+    {
+        var enqueuedAtUtc = new DateTimeOffset(2026, 8, 30, 12, 0, 0, TimeSpan.Zero);
+        var trace = new MarketDataSideEffectExecutionTrace(
+            "test-component",
+            MarketDataEventType.PriceChange,
+            "asset-1",
+            "condition-1",
+            enqueuedAtUtc,
+            enqueuedAtUtc);
+
+        trace.MarkProcessingStarted(enqueuedAtUtc.AddMilliseconds(10));
+        trace.EnterPhase(
+            MarketDataSideEffectPhases.LoadExposureSnapshot,
+            "ExposureSnapshotCache.GetSnapshot",
+            enqueuedAtUtc.AddMilliseconds(20));
+        trace.EnterPhase(
+            MarketDataSideEffectPhases.ApplyOrdinaryPaperUpdate,
+            "IAppRepository.GetPaperFillsForOrder",
+            enqueuedAtUtc.AddMilliseconds(2_020));
+        trace.EnterPhase(
+            MarketDataSideEffectPhases.UpdatePositionMarks,
+            "IAppRepository.TryUpdatePaperPositionMarks",
+            enqueuedAtUtc.AddMilliseconds(2_120));
+        trace.MarkProcessingCompleted(enqueuedAtUtc.AddMilliseconds(2_220));
+
+        var snapshot = trace.Capture(enqueuedAtUtc.AddMilliseconds(3_000));
+
+        Assert.Equal(MarketDataSideEffectPhases.UpdatePositionMarks, snapshot.Phase);
+        Assert.Equal("IAppRepository.TryUpdatePaperPositionMarks", snapshot.Operation);
+        Assert.Equal(100d, snapshot.PhaseAgeMilliseconds, 3);
+        Assert.Equal(MarketDataSideEffectPhases.LoadExposureSnapshot, snapshot.SlowestPhase);
+        Assert.Equal("ExposureSnapshotCache.GetSnapshot", snapshot.SlowestOperation);
+        Assert.Equal(2_000d, snapshot.SlowestPhaseDurationMilliseconds, 3);
+        Assert.NotNull(snapshot.ProcessingAgeMilliseconds);
+        Assert.Equal(2_210d, snapshot.ProcessingAgeMilliseconds.Value, 3);
+    }
+
+    [Fact]
+    public async Task SlowWarning_ContainsActiveAndSlowestPhaseOperationEvidence()
+    {
+        var logger = new RecordingLogger<MarketDataSideEffectQueue>();
+        var queue = CreateQueue(
+            new SlowPhaseHandler(),
+            slowProcessingMilliseconds: 1,
+            logger: logger);
+        await queue.StartAsync(CancellationToken.None);
+
+        Enqueue(queue, Quote("asset-slow", 0.49m));
+        await queue.StopAsync(CancellationToken.None);
+
+        var warning = Assert.Single(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Warning &&
+                entry.Message.StartsWith("Queued market-data side effect was slow.", StringComparison.Ordinal));
+        Assert.Equal(MarketDataSideEffectPhases.UpdatePositionMarks, warning.Properties["ActivePhase"]);
+        Assert.Equal("FastOperation", warning.Properties["ActiveOperation"]);
+        Assert.Equal(MarketDataSideEffectPhases.LoadExposureSnapshot, warning.Properties["SlowestPhase"]);
+        Assert.Equal("SlowOperation", warning.Properties["SlowestOperation"]);
+        Assert.Equal("Processing", warning.Properties["LatencyCategory"]);
+        Assert.True(Convert.ToDouble(warning.Properties["SlowestPhaseDurationMs"]) >= 10d);
+        Assert.True(Convert.ToDouble(warning.Properties["ProcessingDurationMs"]) >= 10d);
+    }
+
+    [Fact]
+    public async Task SlowWarning_ClassifiesQueueDelaySeparatelyFromProcessing()
+    {
+        var logger = new RecordingLogger<MarketDataSideEffectQueue>();
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(
+            handler,
+            slowProcessingMilliseconds: 10,
+            logger: logger);
+        await queue.StartAsync(CancellationToken.None);
+
+        Enqueue(queue, Trade("queue-blocker", 0.50m));
+        await handler.WaitForFirstUpdateAsync();
+        Enqueue(queue, Trade("queue-waiter", 0.51m));
+        await Task.Delay(25);
+        handler.ReleaseFirstUpdate();
+        await queue.StopAsync(CancellationToken.None);
+
+        var queueDelayWarning = Assert.Single(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Warning &&
+                entry.Properties.TryGetValue("LatencyCategory", out var category) &&
+                string.Equals(category as string, "QueueDelay", StringComparison.Ordinal));
+        Assert.True(Convert.ToDouble(queueDelayWarning.Properties["QueueDelayMs"]) >= 10d);
+        Assert.True(Convert.ToDouble(queueDelayWarning.Properties["ProcessingDurationMs"]) < 10d);
+    }
+
     [Fact]
     public void WebSocketClassification_SeparatesExactMakerFromOrdinaryPaperOrderIds()
     {
@@ -1025,20 +1118,23 @@ public sealed class MarketDataSideEffectQueueTests
     }
 
     private static MarketDataSideEffectQueue CreateQueue(
-        ControlledHandler handler,
+        IMarketDataSideEffectHandler handler,
         int maxPendingUpdatesPerAsset = 32,
         int diagnosticCapacity = 256,
         bool persistMarketDataEvents = false,
         IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
-        IPaperTradingMarketDataUpdater? paperTradingMarketDataUpdater = null)
+        IPaperTradingMarketDataUpdater? paperTradingMarketDataUpdater = null,
+        int slowProcessingMilliseconds = 1_000,
+        ILogger<MarketDataSideEffectQueue>? logger = null)
     {
         return new MarketDataSideEffectQueue(
-            NullLogger<MarketDataSideEffectQueue>.Instance,
+            logger ?? NullLogger<MarketDataSideEffectQueue>.Instance,
             new MarketDataWebSocketOptions
             {
                 SideEffectMaxPendingUpdatesPerAsset = maxPendingUpdatesPerAsset,
                 SideEffectDiagnosticQueueCapacity = diagnosticCapacity,
                 SideEffectMetricsIntervalSeconds = 3_600,
+                SideEffectSlowProcessingMilliseconds = slowProcessingMilliseconds,
                 PersistMarketDataEvents = persistMarketDataEvents
             },
             handler,
@@ -1335,4 +1431,57 @@ public sealed class MarketDataSideEffectQueueTests
             releaseFirstUpdate.TrySetResult(true);
         }
     }
+
+    private sealed class SlowPhaseHandler : IMarketDataSideEffectHandler
+    {
+        public async Task ProcessUpdateAsync(
+            MarketDataSideEffectWorkItem workItem,
+            CancellationToken cancellationToken = default)
+        {
+            workItem.ExecutionTrace?.EnterPhase(
+                MarketDataSideEffectPhases.LoadExposureSnapshot,
+                "SlowOperation",
+                DateTimeOffset.UtcNow);
+            await Task.Delay(25, cancellationToken);
+            workItem.ExecutionTrace?.EnterPhase(
+                MarketDataSideEffectPhases.UpdatePositionMarks,
+                "FastOperation",
+                DateTimeOffset.UtcNow);
+        }
+
+        public Task PersistFrameDiagnosticAsync(
+            MarketWebSocketFrameDiagnostic diagnostic,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task PersistApiErrorAsync(
+            ApiError apiError,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public ConcurrentQueue<LogEntry> Entries { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            var properties = state is IEnumerable<KeyValuePair<string, object?>> values
+                ? values.ToDictionary(item => item.Key, item => item.Value)
+                : new Dictionary<string, object?>();
+            Entries.Enqueue(new LogEntry(logLevel, formatter(state, exception), properties));
+        }
+    }
+
+    private sealed record LogEntry(
+        LogLevel Level,
+        string Message,
+        IReadOnlyDictionary<string, object?> Properties);
 }

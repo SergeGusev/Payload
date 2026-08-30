@@ -25,7 +25,6 @@ public sealed class PaperFakFeeBackfillWorker(
         appConfiguration?.HistoricalGrossNetParity ??
         new HistoricalGrossNetParityOptions { Enabled = false };
     private IHistoricalGrossNetParityProcessor? parityProcessor = historicalGrossNetParityProcessor;
-    private bool deferNextCycleForForeground = true;
     private bool legacySweepIdle;
     private bool paritySweepIdle;
     private HistoricalBackfillLane nextLane = HistoricalBackfillLane.Parity;
@@ -217,11 +216,10 @@ public sealed class PaperFakFeeBackfillWorker(
         var marketDataQueueMetrics = marketDataSideEffectQueue.GetMetrics();
         var foregroundWorkPending = pendingPaperEntryBatches > 0 ||
             marketDataQueueMetrics.PendingUpdates > 0;
-        if (foregroundWorkPending && deferNextCycleForForeground)
+        if (foregroundWorkPending)
         {
-            deferNextCycleForForeground = false;
             logger.LogDebug(
-                "Historical accounting backfill cycle deferred once for foreground queues. " +
+                "Historical accounting backfill cycle deferred for foreground queues. " +
                 "PendingPaperEntryBatches={PendingPaperEntryBatches} PendingMarketDataUpdates={PendingMarketDataUpdates}",
                 pendingPaperEntryBatches,
                 marketDataQueueMetrics.PendingUpdates);
@@ -231,7 +229,7 @@ public sealed class PaperFakFeeBackfillWorker(
                     CreateWorkerEvent(
                         PaperFakFeeBackfillEventTypes.ForegroundDeferred,
                         PaperFakFeeBackfillEventLevels.Information,
-                        "Historical Paper FAK fee backfill cycle deferred once for foreground queues.") with
+                        "Historical Paper FAK fee backfill cycle deferred for foreground queues.") with
                     {
                         PendingPaperEntryBatches = pendingPaperEntryBatches,
                         PendingMarketDataUpdates = marketDataQueueMetrics.PendingUpdates
@@ -241,18 +239,6 @@ public sealed class PaperFakFeeBackfillWorker(
 
             return PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending;
         }
-
-        if (foregroundWorkPending)
-        {
-            logger.LogInformation(
-                "Historical accounting backfill is taking one bounded cycle after yielding to persistent " +
-                "foreground queues. PendingPaperEntryBatches={PendingPaperEntryBatches} " +
-                "PendingMarketDataUpdates={PendingMarketDataUpdates}",
-                pendingPaperEntryBatches,
-                marketDataQueueMetrics.PendingUpdates);
-        }
-
-        deferNextCycleForForeground = true;
         var lane = SelectNextLane();
         if (lane is null)
         {

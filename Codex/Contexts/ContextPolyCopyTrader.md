@@ -1,3 +1,15 @@
+## Active Update 2026-08-30 Market-Data Side-Effect Latency Evidence
+Goal: Make general market-data latency warnings identify the exact slow operation and prevent historical accounting backfill from starting while foreground queues are pending.
+Status: Completed locally and independently reviewed; not deployed
+Done:
+- Slow general side-effect warnings now classify `QueueDelay`, `Processing`, or both and retain active plus slowest phase/operation durations across the complete work item.
+- Added exact trace-only attribution for handler phases, publication/serialization waits, exposure loads, settlement, ordinary and Maker-GTD evaluation, fee accounting, repository persistence, and position marks without changing existing failure Phase/Operation output.
+- Historical FAK/parity backfill now yields on every consecutive preview with pending Paper-entry batches or market-data updates and resumes existing bounded processing only when both counts are zero.
+- Updated focused tests and README; independent reviewer `agent:/root/review_market_data_latency_evidence` returned PASS with no open findings after two findings were corrected.
+Next: User-controlled deployment, followed by read-only inspection of new slow warnings to identify whether a later structural queue correction is actually required.
+Notes: Approved contract `RC-20260830-market-data-side-effect-latency-evidence` digest `sha256:b84fba2456e3f1e1079c9ae139bd219ec794146f94f3750116e7d34e7bc73f9f`. Focused Release classes passed 49/49; Release solution build passed with 0 errors and one warning in unchanged `PaperFakFeeBackfillProcessor.cs`; `git diff --check` plus WorkingTree and Staged requirement validation passed. Protected cleanup removed the exact marked 209,419,522-byte temp run. Queue topology, admission, coalescing, ordering, capacity, Paper lifecycle, strategies, configuration, Production service/database, and deployment were not changed.
+Blockers: None.
+
 ## Active Update 2026-08-30 Follow Market Exact Min-Size REST Evidence
 Goal: Prevent exact Follow Market one-shot opportunities from being lost when a fresh executable WebSocket snapshot lacks venue `MinOrderSize`.
 Status: Completed

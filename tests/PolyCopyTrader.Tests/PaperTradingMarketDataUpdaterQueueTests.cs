@@ -11,6 +11,59 @@ namespace PolyCopyTrader.Tests;
 public sealed class PaperTradingMarketDataUpdaterQueueTests
 {
     [Fact]
+    public async Task ApplyUpdateAsync_AttributesSlowOrdinaryFeeAccountingToExactOperation()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "0xleader",
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-1",
+            "condition-1",
+            "Yes",
+            0.50m,
+            10m,
+            5m,
+            now.AddMinutes(-1),
+            now.AddMinutes(1));
+        repository.PaperOrders.Add(order);
+        var feeService = new BlockingFeeAccountingService();
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository,
+            feeAccountingService: feeService);
+        var trace = CreateTrace(now);
+        trace.MarkProcessingStarted(now);
+
+        var applyTask = updater.ApplyUpdateAsync(
+            BookUpdate(now),
+            now,
+            new HashSet<Guid> { order.Id },
+            CancellationToken.None,
+            trace);
+        await feeService.WaitForPaperFillAsync();
+        await Task.Delay(25);
+
+        var activeSnapshot = trace.Capture(DateTimeOffset.UtcNow);
+        Assert.Equal(MarketDataSideEffectPhases.ApplyOrdinaryPaperUpdate, activeSnapshot.Phase);
+        Assert.Equal("IPolymarketFeeAccountingService.ApplyToPaperFill", activeSnapshot.Operation);
+
+        feeService.ReleasePaperFill();
+        await applyTask.WaitAsync(TimeSpan.FromSeconds(5));
+        trace.MarkProcessingCompleted(DateTimeOffset.UtcNow);
+        var completedSnapshot = trace.Capture(DateTimeOffset.UtcNow);
+        Assert.Equal("IPolymarketFeeAccountingService.ApplyToPaperFill", completedSnapshot.SlowestOperation);
+        Assert.True(completedSnapshot.SlowestPhaseDurationMilliseconds >= 10d);
+    }
+
+    [Fact]
     public async Task ApplyUpdateAsync_UsesReceiptOrderIdsAndReceiptTimeForDeferredFill()
     {
         var repository = new TestAppRepository();
@@ -140,9 +193,9 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         Assert.Contains("EventType=Book", apiError.Message, StringComparison.Ordinal);
         Assert.Contains("Operation=IAppRepository.TryUpdatePaperPositionMarks", apiError.Message, StringComparison.Ordinal);
         Assert.Contains("simulated paper position mark update failure", apiError.Message, StringComparison.Ordinal);
-        Assert.Equal(
-            MarketDataSideEffectPhases.UpdatePositionMarks,
-            trace.Capture(DateTimeOffset.UtcNow).Phase);
+        var traceSnapshot = trace.Capture(DateTimeOffset.UtcNow);
+        Assert.Equal(MarketDataSideEffectPhases.UpdatePositionMarks, traceSnapshot.Phase);
+        Assert.Equal("IAppRepository.TryUpdatePaperPositionMarks", traceSnapshot.Operation);
     }
 
     [Fact]
@@ -590,6 +643,42 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new PaperSettlementProcessingResult(0, 0, 0, 0));
+        }
+    }
+
+    private sealed class BlockingFeeAccountingService : IPolymarketFeeAccountingService
+    {
+        private readonly TaskCompletionSource<bool> paperFillStarted = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<bool> releasePaperFill = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<PaperFill> ApplyToPaperFillAsync(
+            PaperOrder order,
+            PaperFill fill,
+            CancellationToken cancellationToken = default)
+        {
+            paperFillStarted.TrySetResult(true);
+            await releasePaperFill.Task.WaitAsync(cancellationToken);
+            return fill;
+        }
+
+        public Task<LiveOrder> ApplyToLiveOrderAsync(
+            LiveOrder order,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<PaperEntryPersistenceBatch> ApplyToEntryBatchAsync(
+            PaperEntryPersistenceBatch batch,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task WaitForPaperFillAsync()
+        {
+            return paperFillStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+
+        public void ReleasePaperFill()
+        {
+            releasePaperFill.TrySetResult(true);
         }
     }
 }

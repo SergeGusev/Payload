@@ -44,6 +44,7 @@ public sealed class MarketDataSideEffectHandler(
     {
         await RunPhaseAsync(
             MarketDataSideEffectPhases.RecordResolvedEvent,
+            "CryptoResolvedEventRecorder.Record",
             workItem.ExecutionTrace,
             () => cryptoResolvedEventRecorder.RecordAsync(
                 workItem.Component,
@@ -54,6 +55,7 @@ public sealed class MarketDataSideEffectHandler(
 
         await RunPhaseAsync(
             MarketDataSideEffectPhases.RecordTradeTick,
+            "MarketTradeTickDiagnosticService.Record",
             workItem.ExecutionTrace,
             () => tradeTickDiagnosticService.RecordAsync(workItem.Update, cancellationToken));
 
@@ -61,6 +63,7 @@ public sealed class MarketDataSideEffectHandler(
         {
             await RunPhaseAsync(
                 MarketDataSideEffectPhases.PersistOrderBookSnapshot,
+                "IAppRepository.AddOrderBookSnapshot",
                 workItem.ExecutionTrace,
                 () => repository.AddOrderBookSnapshotAsync(workItem.Update.OrderBookSnapshot, cancellationToken));
         }
@@ -69,12 +72,14 @@ public sealed class MarketDataSideEffectHandler(
         {
             await RunPhaseAsync(
                 MarketDataSideEffectPhases.PersistMarketDataEvent,
+                "IAppRepository.AddMarketDataEvent",
                 workItem.ExecutionTrace,
                 () => repository.AddMarketDataEventAsync(ToMarketDataEvent(workItem.Update), cancellationToken));
         }
 
         await RunPhaseAsync(
             MarketDataSideEffectPhases.ApplyPaperTradingUpdate,
+            "PaperTradingMarketDataUpdater.ApplyUpdate",
             workItem.ExecutionTrace,
             () => paperTradingUpdater.ApplyUpdateAsync(
                 workItem.Update,
@@ -98,10 +103,11 @@ public sealed class MarketDataSideEffectHandler(
 
     private static async Task RunPhaseAsync(
         string phase,
+        string operation,
         MarketDataSideEffectExecutionTrace? executionTrace,
         Func<Task> action)
     {
-        executionTrace?.EnterPhase(phase, DateTimeOffset.UtcNow);
+        executionTrace?.EnterPhase(phase, operation, DateTimeOffset.UtcNow);
         try
         {
             await action();

@@ -30,7 +30,7 @@ public sealed class PaperFakFeeBackfillWorkerTests
     }
 
     [Fact]
-    public async Task RunCycle_AllowsOneBoundedBackfillTurnAfterYieldingToPersistentMarketData()
+    public async Task RunCycle_ContinuesYieldingToPersistentMarketData()
     {
         var processor = new RecordingProcessor();
         var eventRecorder = new RecordingEventRecorder();
@@ -45,23 +45,21 @@ public sealed class PaperFakFeeBackfillWorkerTests
         var third = await worker.RunCycleAsync();
 
         Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, first);
-        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.Processed, second);
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, second);
         Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, third);
-        Assert.Equal(1, processor.Calls);
+        Assert.Equal(0, processor.Calls);
         var deferredEvents = eventRecorder.Events
             .Where(entry => entry.EventType == PaperFakFeeBackfillEventTypes.ForegroundDeferred)
             .ToArray();
-        Assert.Equal(2, deferredEvents.Length);
+        Assert.Equal(3, deferredEvents.Length);
         Assert.All(deferredEvents, entry => Assert.Equal(1, entry.PendingMarketDataUpdates));
-        var cycleStarted = Assert.Single(
+        Assert.DoesNotContain(
             eventRecorder.Events,
             entry => entry.EventType == PaperFakFeeBackfillEventTypes.CycleStarted);
-        Assert.NotNull(cycleStarted.CycleId);
-        Assert.Equal(Assert.Single(processor.CycleIds), cycleStarted.CycleId);
     }
 
     [Fact]
-    public async Task RunCycle_AllowsOneBoundedBackfillTurnAfterYieldingToPersistentPaperEntries()
+    public async Task RunCycle_ContinuesYieldingToPersistentPaperEntries()
     {
         var processor = new RecordingProcessor();
         var paperQueue = new StubPaperEntryPersistenceQueue(1);
@@ -75,9 +73,9 @@ public sealed class PaperFakFeeBackfillWorkerTests
         var third = await worker.RunCycleAsync();
 
         Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, first);
-        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.Processed, second);
+        Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, second);
         Assert.Equal(PaperFakFeeBackfillWorkerCycleDisposition.ForegroundWorkPending, third);
-        Assert.Equal(1, processor.Calls);
+        Assert.Equal(0, processor.Calls);
     }
 
     [Fact]
