@@ -1,3 +1,16 @@
+## Active Update 2026-08-30 Market-Data Latency Post-Deploy Verification
+Goal: Verify Production service health, betting activity, logs, and the new market-data latency evidence after deployment of commit `2f77bd06`.
+Status: Deployment and betting verified; exact foreground latency bottleneck confirmed
+Done:
+- At cutoff `2026-08-30T09:43:24.657397Z`, `PolyCopyTrader.Service` was `Running`/`Live` on exact build `2f77bd06b4005f37a10fdc65d81614d28c918993`, started at `2026-08-30T09:35:11.399016Z`, heartbeat age was `12.917s`, and `last_error` was NULL.
+- Between process start and cutoff `2026-08-30T09:40:29.393553Z`, Production created 386 Paper orders, all `Filled`, with exactly 386 fill rows; the latest order and fill were at `2026-08-30T09:40:03.145498Z`.
+- Server logs contained no post-start ERR/FTL. Queue metrics showed zero rejected/failed updates and repeated recovery from transient backlog; the latest checked sample declined from 134 pending at `09:44:41.615Z` to 4 at `09:45:41.612Z`.
+- New telemetry identified `IAppRepository.TryUpdatePaperPositionMarks` as the real processing bottleneck: observed phase time up to `1873.8231ms`, causing general-queue delay up to `2637.4747ms` and observed backlog up to 76 in the analyzed warning set. Fast `ExposureSnapshotCache.GetSnapshot` entries were queue-delay followers, not the processing cause.
+- Historical backfill foreground priority worked: 11 `ForegroundDeferred` events were followed by one bounded idle-time cycle completion.
+Next: If the user explicitly requests a source correction, lock and approve a contract limited to the verified position-mark persistence bottleneck.
+Notes: Production SQL targeted only `192.168.0.101:5432/polycopytrader` and used read-only transactions, UTC, `statement_timeout=15s`, `lock_timeout=2s`, and bounded/indexed queries. Logs were read only from `\\192.168.0.101\CodexLogs`. No Production, database, service, strategy, order, configuration, deployment, or product-source state was changed.
+Blockers: None for verification; a behavior/performance correction requires a separately approved requirement contract.
+
 ## Active Update 2026-08-30 Market-Data Side-Effect Latency Evidence
 Goal: Make general market-data latency warnings identify the exact slow operation and prevent historical accounting backfill from starting while foreground queues are pending.
 Status: Completed locally and independently reviewed; not deployed
