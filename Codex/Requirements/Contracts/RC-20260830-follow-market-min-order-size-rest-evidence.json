@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260830-follow-market-min-order-size-rest-evidence",
+  "title": "Complete Follow Market venue minimum-size evidence before FAK intent",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Давай исправлять"
+    }
+  ],
+  "scope": {
+    "goal": "Correct the verified Follow Market defect in which a fresh executable WebSocket order-book snapshot without venue min_order_size consumes the strategy's only market attempt even though the same attempt can obtain exact CLOB /book evidence.",
+    "inScope": [
+      "Apply only to the exact existing 270 BTC/ETH/SOL 5-minute Follow Market FAK PaperOnly variants with behavior FollowMarketFak.",
+      "Before freezing any Follow Market BUY FAK execution intent, accept a fresh executable WebSocket book only when it also contains a positive exact venue MinOrderSize; otherwise, when PaperTakerRestFallbackEnabled=true, fetch the exact CLOB /book for that asset during the same due attempt.",
+      "Use the existing per-cycle asset fetch dictionary so each required asset has at most one CLOB /book request even though Follow Market selection, pricing, sizing, and Paper FAK simulation inspect the book more than once.",
+      "Use only a positive MinOrderSize returned by the fresh exact CLOB /book for minimum BUY sizing; retain explicit fail-closed rejection when REST is disabled, unavailable, stale, lacks executable asks, or still lacks a positive MinOrderSize.",
+      "Preserve the already approved one-attempt-per-strategy/market rule, inclusive threshold, higher-ask outcome selection, tie rejection, 0.99 BUY FAK cap, no cumulative-depth entry gate, Paper fill model, and PaperOnly state.",
+      "Add focused regression tests and update the Follow Market execution documentation to identify the REST completion as pre-intent evidence acquisition."
+    ],
+    "outOfScope": [
+      "Configured or Gamma market-minimum fallback, substituted/default minimum size, safety multiplier change, configured Paper stake sizing, or any change to the exact venue MinOrderSize formula.",
+      "A retry after the strategy's scheduled market attempt, delayed re-evaluation, additional order, changed threshold/direction selection, changed FAK price or fill semantics, or a post-intent order-book revalidation.",
+      "Any strategy behavior other than FollowMarketFak, including other FAK families, Maker-GTD, Reference Average, Child, Child ROI, Optimized, Progress, or Follow Leader.",
+      "Any catalog, UUID, strategy row, configuration value, schema, migration, historical accounting, settlement, Dashboard, logging, service startup, deployment, Production database/service, Live order, or server-state change."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact existing 270 Follow Market PaperOnly variants for future due attempts after user-controlled deployment; no historical backfill and no Production mutation.",
+    "firstVerification": "Inspect the exact FollowMarketFak dispatch path, WebSocket price-change snapshots, CLOB /book parser, per-cycle fetch deduplication, current fallback configuration, focused tests, and Paper/Live parity contract before product edits."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "A fresh executable Follow Market WebSocket snapshot without a positive venue MinOrderSize must be completed from exact CLOB /book evidence during the same due attempt before the BUY FAK intent is frozen.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Давай исправлять",
+      "acceptanceCriteria": [
+        "The exact FollowMarketFak order-book path accepts a fresh executable WebSocket snapshot directly only when MinOrderSize is positive.",
+        "When that WebSocket snapshot has missing, null, zero, or negative MinOrderSize and PaperTakerRestFallbackEnabled=true, the same attempt fetches exact CLOB /book evidence for the affected asset before outcome decision/intent creation continues.",
+        "A fresh executable REST book with positive MinOrderSize supplies both market evidence and the exact venue minimum used by CreateFollowMarketMinimumStakeSizing.",
+        "The shared per-cycle fetch dictionary limits the exact CLOB /book call to one per affected asset across decision, pricing, sizing, and Paper FAK simulation.",
+        "No configured or Gamma minimum-size fallback is applied to Follow Market."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused BtcUpDown5mPaperStrategyProcessor Follow Market tests in Release with all disposable outputs under the marked D:\\CodexTemp run.",
+          "expected": "Fresh executable cache books without MinOrderSize obtain exact REST books once per affected asset, enter/fill from the REST minimum when all existing predicates pass, and preserve one attempt per strategy/market.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Follow Market must remain fail-closed when exact positive venue minimum-size evidence still cannot be obtained, without changing other strategy families.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Давай исправлять",
+      "acceptanceCriteria": [
+        "If REST fallback is disabled, the affected WebSocket snapshot is rejected without a REST call and without an order.",
+        "If REST is missing, stale, has no executable ask depth, or returns no positive MinOrderSize, the strategy records the corresponding existing explicit rejection and creates no order.",
+        "The strategy still records only one terminal attempt for that strategy/market; it does not retry in a later processor pass.",
+        "The generic GetFreshTakerOrderBookAsync behavior and every non-FollowMarketFak caller remain unchanged.",
+        "No Live order path is enabled or invoked."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused success, fail-closed, deduplication, one-attempt, and adjacent non-Follow-Market regression tests in Release under the marked D:\\CodexTemp run.",
+          "expected": "Exact positive REST MinOrderSize succeeds only for Follow Market; missing evidence rejects explicitly; one-attempt and unrelated order-book behavior remain unchanged.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Keep the correction pre-intent, parity-safe, documented, locally verified, and bounded to user-controlled deployment.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Давай исправлять",
+      "acceptanceCriteria": [
+        "README and PAPER_LIVE_PARITY state that missing venue MinOrderSize in an otherwise fresh executable WebSocket snapshot triggers exact REST evidence acquisition before the immutable intent is frozen.",
+        "No newer market data is fetched after intent freeze to resize, reprice, authorize, reject, or roll back that intent.",
+        "Focused tests, Release solution build, git diff --check, and WorkingTree/Staged requirement validation pass.",
+        "An independent reviewer compares the verbatim request, approved semantic contract, complete diff, and verification evidence and reports PASS with no open finding.",
+        "No Production database, service, strategy, order, configuration, deployment, or server state is changed by this task, and disposable artifacts are removed from the marked D:\\CodexTemp run before completion."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln in Release with disposable outputs under the marked D:\\CodexTemp run; run git diff --check and requirement validation in WorkingTree and Staged modes; obtain independent semantic review.",
+          "expected": "Build and gates pass, the diff contains only approved paths/semantics, and the reviewer reports no deviation.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260830-follow-market-min-order-size-rest-evidence sha256:7e86fcd84c474e583c3bd893a1766d59f8dac40b45b28b96a30b6a463032b937",
+    "semanticDigest": "sha256:7e86fcd84c474e583c3bd893a1766d59f8dac40b45b28b96a30b6a463032b937"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/review_follow_market_min_order_size_rest_evidence",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
