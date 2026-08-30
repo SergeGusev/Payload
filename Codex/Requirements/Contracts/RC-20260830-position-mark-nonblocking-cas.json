@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260830-position-mark-nonblocking-cas",
+  "title": "Make Paper position-mark persistence non-blocking",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Исправляй"
+    }
+  ],
+  "scope": {
+    "goal": "Correct the verified Production latency in IAppRepository.TryUpdatePaperPositionMarks by preventing best-effort Paper position-mark persistence from waiting behind contended Paper wallet or position locks, while preserving conditional-update and accounting correctness.",
+    "inScope": [
+      "Change only the PostgreSQL batch Paper position-mark persistence path so it does not pre-acquire Paper wallet advisory locks or explicit blocking row locks.",
+      "Select currently matching position rows with PostgreSQL row locking in deterministic order and SKIP LOCKED, update only rows whose complete expected state still matches, and return only rows actually updated.",
+      "Leave a contended or concurrently changed position unchanged in that call; a later market-data update may retry it from a fresh exposure snapshot.",
+      "Add focused repository and PostgreSQL concurrency tests proving that an independently locked position does not delay updates to free positions, that skipped positions are not overwritten, and that the existing stale/settled-position protection remains intact.",
+      "Document the non-blocking best-effort mark rule and its verified boundary."
+    ],
+    "outOfScope": [
+      "Changing market-data queue topology, worker count, admission, coalescing, ordering, capacity, thresholds, diagnostics, or Maker-GTD dedicated-lane behavior.",
+      "Changing strategy decisions, order creation, Paper or Live execution semantics, fills, settlements, realized PnL, fees, exposure sizing, risk controls, or Live submission.",
+      "Changing the single-position mark method, other Paper-position mutation methods, database schema, indexes, migrations, configuration, Production database, service, orders, strategies, deployment, or server state.",
+      "Adding retries, a new background worker, a new queue, generalized batching infrastructure, or unrelated cleanup/refactoring."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future batch Paper position-mark updates after user-controlled deployment; no historical replay and no Production mutation.",
+    "firstVerification": "Inspect the exact PaperTradingMarketDataUpdater call path, TryUpdatePaperPositionMarksAsync PostgreSQL transaction and lock sequence, Paper-position indexes, existing concurrency tests, and read-only Production evidence for the observed slow batch before editing product code."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Batch Paper position-mark persistence must not wait for wallet advisory locks or already locked position rows.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Исправляй",
+      "acceptanceCriteria": [
+        "TryUpdatePaperPositionMarksAsync no longer calls LockPaperPositionKeysAsync and therefore does not acquire Paper wallet advisory locks for mark-only persistence.",
+        "The batch query orders candidate keys deterministically and uses FOR UPDATE OF the target position SKIP LOCKED before applying mark changes.",
+        "When one requested position is locked by an independent transaction, the method completes without waiting for that lock, updates eligible free positions, and omits the locked position from its returned rows.",
+        "No queue, worker, strategy, execution, settlement, schema, index, migration, configuration, or Production state is changed."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused StorageTests and PaperSettlementPostgresIntegrationTests in Release against an allowlisted disposable local PostgreSQL database, with all disposable outputs under the marked D:\\CodexTemp run.",
+          "expected": "The locked-row concurrency test proves bounded non-blocking completion, free-row progress, locked-row omission, and successful later retry after lock release; existing repository shape and integration tests pass.",
+          "result": "passed",
+          "evidence": "Release PaperSettlementPostgresIntegrationTests passed 3/3 against exact disposable loopback database pct_codex_skip_v2_20260830131542_13f44a7e. BatchMarkUpdates_SkipLockedPositionAndUpdateFreePosition held one requested row under an independent transaction, completed the batch within its 2-second cancellation bound, returned and persisted only the free row, left the locked row unchanged, and successfully updated that row after lock release. The allowlisted database was dropped and confirmed absent."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "The non-blocking optimization must preserve the existing complete compare-and-set guard and return contract for every row that is updated.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Исправляй",
+      "acceptanceCriteria": [
+        "A row is eligible only when wallet, asset, condition, outcome, size, average price, estimated value, unrealized PnL, net unrealized PnL, and updated timestamp all match the caller's expected position.",
+        "A settled, filled, re-marked, deleted, or otherwise concurrently changed position is not restored or overwritten by stale mark data.",
+        "Estimated value, gross unrealized PnL, net unrealized PnL, and updated timestamp retain their current calculation and persistence semantics for successfully updated rows.",
+        "The method returns the complete persisted PaperPosition values only for successfully updated rows, and ExposureSnapshotCache continues to receive only those returned rows."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run existing and focused conditional mark, settlement-concurrency, batch-return, and PaperTradingMarketDataUpdater position-mark tests in Release under the marked D:\\CodexTemp run.",
+          "expected": "All complete-state CAS predicates remain mechanically present; stale or settled rows remain unchanged; returned rows and exposure-cache updates match only committed mark writes.",
+          "result": "passed",
+          "evidence": "The three real PostgreSQL settlement/mark tests, two focused StorageTests source/CAS tests, and twelve PaperTradingMarketDataUpdaterQueueTests passed 17/17 in Release. Static assertions cover every complete-state predicate, deterministic ordering, SKIP LOCKED, absence of batch wallet/pre-lock calls, nullable net PnL, returned-row semantics, cache application, settlement protection, and serialization behavior."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Deliver the correction as a bounded local source change with deterministic verification and no Production mutation.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Исправляй",
+      "acceptanceCriteria": [
+        "README documents that mark-only persistence is best-effort, skips contended rows, and retries them only through later ordinary market-data updates.",
+        "Focused tests, relevant broader tests, Release solution build, git diff --check, WorkingTree/Staged requirement validation, and independent semantic review pass.",
+        "The independent reviewer compares the verbatim request, approved contract, complete diff, and verification evidence and returns PASS with no open finding.",
+        "All disposable build, test, database, and diagnostic artifacts are created only under the marked D:\\CodexTemp run and are removed before completion.",
+        "No Production database, service, strategy, order, configuration, deployment, or server state is changed."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln in Release and run the approved focused/relevant tests with outputs under the marked D:\\CodexTemp run; run git diff --check, requirement gates, and independent semantic review.",
+          "expected": "Build, tests, gates, cleanup, and review pass; the diff stays within the approved repository batch-mark persistence, focused tests, and documentation paths.",
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release build passed with 0 errors and 126 existing warnings. The isolated broad StorageTests run passed 116/117; its sole failure was the unrelated existing catalog assertion expected 324 versus actual 321, outside all touched code and before mark persistence. The approved focused/relevant matrix passed 17/17. git diff --check and WorkingTree validation passed. Independent reviewer agent:/root/review_position_mark_nonblocking_cas compared the verbatim request, approved contract, complete corrected diff, and evidence and returned PASS with no open findings. Staged validation, protected cleanup, and commit evidence are recorded by finalization."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260830-position-mark-nonblocking-cas sha256:261747a0fdb619f8704cff07d1b473de75981b0c6115b104fa2d2f83a37c5c8a",
+    "semanticDigest": "sha256:261747a0fdb619f8704cff07d1b473de75981b0c6115b104fa2d2f83a37c5c8a"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/review_position_mark_nonblocking_cas",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
+    "findings": []
+  }
+}
