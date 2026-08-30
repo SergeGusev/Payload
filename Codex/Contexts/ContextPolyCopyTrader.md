@@ -1,3 +1,16 @@
+## Active Update 2026-08-30 Non-Blocking Position Marks Post-Deploy Verification
+Goal: Verify Production service health, betting, logs, and market-data latency after deployment of commit `6171b515`.
+Status: Completed; deployment healthy and the verified lock-delay symptom is absent
+Done:
+- At cutoff `2026-08-30T10:44:04.275812Z`, `PolyCopyTrader.Service` was `Running`/`Live` on exact build `6171b515793fabe216761474e82fa27312020e4b`, started at `2026-08-30T10:39:22.860194Z`, heartbeat age was `41.183s`, and `last_error` was NULL.
+- From exact process start through the database cutoff, Production created 282 Paper orders, all `Filled`, with exactly 282 fill rows; the latest order/fill was `2026-08-30T10:43:30.078611Z`.
+- 538 Paper positions were updated after process start, latest at `2026-08-30T10:43:55.310576Z`, confirming the mark/update path was active rather than merely idle.
+- Through log cutoff `2026-08-30T10:44:42.748347Z`, the new process produced 23,424 log lines, zero ERR/FTL, and zero market-data slow warnings. Therefore no `TryUpdatePaperPositionMarks` call crossed the configured one-second slow threshold during this active sample.
+- The worker processed 56,544 general side effects and coalesced 112,583 updates with zero rejected/failed updates; the latest metric had pending/in-flight general work at zero. Observed periodic backlog was only 0..4 and repeatedly drained to zero across the first busy five-minute boundary.
+Next: Continue normal operation; if requested, perform another read-only check over a longer/busier Production interval.
+Notes: Production SQL targeted only `192.168.0.101:5432/polycopytrader` and used read-only transactions, UTC, `statement_timeout=15s`, `lock_timeout=2s`, and bounded/indexed queries. Server logs were read only from `\\192.168.0.101\CodexLogs`. One initial multi-statement CTE query referenced a statement-local CTE from a later statement and failed read-only with `relation recent_orders does not exist`; the corrected bounded queries completed. No Production, database, service, strategy, order, configuration, deployment, or source state was changed.
+Blockers: None.
+
 ## Active Update 2026-08-30 Non-Blocking Paper Position Marks
 Goal: Remove the verified Production lock wait from batch Paper position-mark persistence without changing order, fill, settlement, strategy, or queue behavior.
 Status: Completed locally and independently reviewed; not deployed

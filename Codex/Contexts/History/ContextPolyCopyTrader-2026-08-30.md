@@ -31,3 +31,10 @@ Request:
 
 Result:
 Implemented the approved local correction for batch Paper position marks. The PostgreSQL path preserves complete-state CAS but removes Paper-wallet advisory/pre-lock waits and skips already locked rows in deterministic order; skipped rows remain unchanged for a later fresh market-data update, and only committed rows reach the exposure cache. Real disposable-PostgreSQL and focused source/updater tests passed 17/17; Release solution build passed with 0 errors; independent semantic review returned PASS with no open findings. The sole broad StorageTests failure was the unchanged unrelated catalog count `324 != 321`. No Production state, queue topology, strategy, order/fill/settlement semantics, schema, migration, index, or configuration was changed.
+
+## 2026-08-30T10:44:48.2259707Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified Production build `6171b515793fabe216761474e82fa27312020e4b` read-only. The service was Running/Live with fresh heartbeat and no `last_error`; 282 post-start Paper orders were all Filled with 282 fill rows, and 538 positions were updated. Across 56,544 processed general side effects, including the first busy five-minute boundary, logs contained zero ERR/FTL and zero slow warnings; pending general work remained 0..4 and drained to zero with no rejected or failed updates. The previous `TryUpdatePaperPositionMarks` lock-delay symptom was not observed. No Production or product-source state was changed.
