@@ -3,7 +3,7 @@
   "contractId": "RC-20260830-follow-market-min-order-size-rest-evidence",
   "title": "Complete Follow Market venue minimum-size evidence before FAK intent",
   "author": "agent:/root",
-  "status": "draft",
+  "status": "approved",
   "originalRequests": [
     {
       "source": "user",
