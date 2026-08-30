@@ -3,7 +3,7 @@
   "contractId": "RC-20260830-follow-market-min-order-size-rest-evidence",
   "title": "Complete Follow Market venue minimum-size evidence before FAK intent",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -55,8 +55,8 @@
           "kind": "test",
           "command": "Run focused BtcUpDown5mPaperStrategyProcessor Follow Market tests in Release with all disposable outputs under the marked D:\\CodexTemp run.",
           "expected": "Fresh executable cache books without MinOrderSize obtain exact REST books once per affected asset, enter/fill from the REST minimum when all existing predicates pass, and preserve one attempt per strategy/market.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release focused Follow Market run passed 8/8. The success theory covered cached MinOrderSize null, 0, and -1; every case fetched exact REST books once for asset-up and once for asset-down, produced a Filled Paper order with 4.95 USD notional, and persisted execution_intent_min_order_size=5. Existing inclusive-threshold, tie, stale/missing REST, and one-attempt tests passed in the same run."
         }
       ]
     },
@@ -84,8 +84,8 @@
           "kind": "test",
           "command": "Run focused success, fail-closed, deduplication, one-attempt, and adjacent non-Follow-Market regression tests in Release under the marked D:\\CodexTemp run.",
           "expected": "Exact positive REST MinOrderSize succeeds only for Follow Market; missing evidence rejects explicitly; one-attempt and unrelated order-book behavior remain unchanged.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused fail-closed tests proved that a REST book still lacking positive MinOrderSize records follow_market_min_order_size_unavailable, creates no order, and performs no second-cycle fetch; disabled REST fallback performs zero CLOB calls and records the same explicit rejection. An adjacent non-Follow-Market immutable-intent FAK test passed 1/1. The broader processor-class run had 196 passes and 113 pre-existing failures; an isolated detached baseline at approval commit a490064d reproduced the sampled 11 adjacent failures identically, so they are not regressions from this four-file diff."
         }
       ]
     },
@@ -115,8 +115,8 @@
           "kind": "build",
           "command": "Build PolyCopyTrader.sln in Release with disposable outputs under the marked D:\\CodexTemp run; run git diff --check and requirement validation in WorkingTree and Staged modes; obtain independent semantic review.",
           "expected": "Build and gates pass, the diff contains only approved paths/semantics, and the reviewer reports no deviation.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release build passed with 0 warnings and 0 errors after restore into the marked D:\\CodexTemp run. git diff --check passed. Independent reviewer agent:/root/review_follow_market_min_size compared the verbatim request, approved contract, full four-file diff, call paths, parity semantics, TRX evidence, and baseline comparison and returned PASS with no open findings. Local .NET build servers were shut down after verification; protected cleanup removed the exact marked run manual-31ecdb08171a4adc9e4ac8a35d62a846 and Test-Path confirmed it absent."
         }
       ]
     }
@@ -130,9 +130,9 @@
     "semanticDigest": "sha256:7e86fcd84c474e583c3bd893a1766d59f8dac40b45b28b96a30b6a463032b937"
   },
   "independentReview": {
-    "reviewer": "agent:/root/review_follow_market_min_order_size_rest_evidence",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/review_follow_market_min_size",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

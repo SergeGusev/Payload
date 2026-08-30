@@ -48,9 +48,13 @@ Each passing decision freezes one BUY FAK intent with `postOnly=false` and hard
 maximum price `0.99`. Its cash amount is the smallest valid CLOB market-BUY
 notional obtained from the selected book's exact venue `min_order_size` at the
 worst price, rounded upward only to the market-buy cash precision. Missing
-`min_order_size` fails closed; no configured-stake fallback or safety multiplier
-is added. Cumulative ask depth is retained as evidence but is not a pre-submit
-entry predicate. Paper consumes the same intent and records the actual
+`min_order_size` in an otherwise fresh executable WebSocket snapshot triggers an
+exact CLOB `/book` fetch during the same due attempt, before the immutable intent
+is frozen. A missing or non-positive value after that pre-intent evidence fetch
+fails closed; no configured-stake fallback or safety multiplier is added. The
+service does not re-fetch after intent freeze to resize, reprice, authorize, or
+reject the intent. Cumulative ask depth is retained as evidence but is not a
+pre-submit entry predicate. Paper consumes the same intent and records the actual
 snapshot-derived full, partial, or no-fill FAK result; the unfilled remainder is
 cancelled immediately and the strategy never retries that market. Every variant
 has `PaperOnly=true`, so this family does not submit Live orders.

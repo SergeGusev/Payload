@@ -1,3 +1,15 @@
+## Active Update 2026-08-30 Follow Market Exact Min-Size REST Evidence
+Goal: Prevent exact Follow Market one-shot opportunities from being lost when a fresh executable WebSocket snapshot lacks venue `MinOrderSize`.
+Status: Completed
+Done:
+- Added a FollowMarketFak-only order-book admission path for the exact existing 270 BTC/ETH/SOL PaperOnly variants: a fresh executable cache book is accepted directly only with positive `MinOrderSize`; otherwise enabled REST fallback completes exact CLOB `/book` evidence during the same due attempt.
+- Reused the existing per-cycle asset fetch dictionary, so decision, pricing, sizing, and Paper simulation cause at most one REST `/book` call per affected asset.
+- Preserved fail-closed behavior, exact venue minimum sizing, inclusive threshold, higher-ask/tie logic, `0.99` BUY FAK cap, no cumulative-depth gate, one attempt per strategy/market, Paper fill semantics, and Live-disabled state; generic non-Follow-Market lookup behavior is unchanged.
+- Added focused null/zero/negative cache-minimum, REST success/deduplication, REST-minimum missing, fallback-disabled, tie, stale/missing REST, and one-attempt coverage; updated README and Paper/Live parity documentation.
+Next: User-controlled deployment, then read-only Production verification of the first Follow Market cache-without-minimum event and its same-attempt CLOB `/book` completion.
+Notes: Approved contract `RC-20260830-follow-market-min-order-size-rest-evidence` digest `sha256:7e86fcd84c474e583c3bd893a1766d59f8dac40b45b28b96a30b6a463032b937`; approval checkpoint commits `a490064d` and lifecycle correction `fe47df6d`. Focused Follow Market tests passed 8/8; adjacent non-Follow-Market immutable-intent FAK test passed 1/1; Release solution build passed with 0 warnings/errors; `git diff --check` passed. Broader processor suite reported 196 passes/113 pre-existing failures, and the sampled 11 adjacent failures were reproduced identically at baseline commit `a490064d`. Independent review `agent:/root/review_follow_market_min_size` returned PASS with no findings. Protected cleanup removed marked temp run `manual-31ecdb08171a4adc9e4ac8a35d62a846`. No Production/server/database/order/configuration/deployment state was changed.
+Blockers: None.
+
 ## Active Update 2026-08-29 Follow Market Action Decision
 Goal: Clarify whether the diagnosed Follow Market condition requires action.
 Status: Completed

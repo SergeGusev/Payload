@@ -18,6 +18,13 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class BtcUpDown5mPaperStrategyProcessorTests
 {
+    public static TheoryData<decimal?> InvalidFollowMarketCacheMinOrderSizes =>
+    [
+        null,
+        0m,
+        -1m
+    ];
+
     private static BtcUpDown5mStrategyVariant More60Variant =>
         StrategyIds.GetBtcUpDown5mVariant(BtcUpDown5mStrategyDirection.More, 60);
 
@@ -2263,6 +2270,166 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(2, repository.StrategyMarketPaperRuns.Count);
     }
 
+    [Theory]
+    [MemberData(nameof(InvalidFollowMarketCacheMinOrderSizes))]
+    public async Task ProcessAsync_FollowMarketCompletesInvalidCacheMinOrderSizeFromRest(
+        decimal? cachedMinOrderSize)
+    {
+        var now = new DateTimeOffset(2026, 8, 30, 12, 0, 30, TimeSpan.Zero);
+        var marketStartUtc = now.AddSeconds(-30);
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_5m_follow_market_30_65");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.65m,
+            downPrice: 0.35m));
+        var cacheOrderBooks = new[]
+        {
+            OrderBook(
+                "asset-up",
+                [new OrderBookLevel(0.64m, 100m)],
+                [new OrderBookLevel(0.65m, 100m)],
+                now,
+                minOrderSize: cachedMinOrderSize,
+                tickSize: 0.01m),
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.34m, 100m)],
+                [new OrderBookLevel(0.35m, 100m)],
+                now,
+                minOrderSize: cachedMinOrderSize,
+                tickSize: 0.01m)
+        };
+        var restOrderBooks = new[]
+        {
+            cacheOrderBooks[0] with { MinOrderSize = 5m },
+            cacheOrderBooks[1] with { MinOrderSize = 5m }
+        };
+        var clobClient = new FakeClobClient(restOrderBooks);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            cacheOrderBooks,
+            _ => { },
+            restOrderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            clobClient: clobClient,
+            timeProvider: new ManualTimeProvider(now));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.EntriesPlaced);
+        Assert.Equal(0, result.RunsSkipped);
+        Assert.Equal(1, clobClient.GetOrderBookCallsForAsset("asset-up"));
+        Assert.Equal(1, clobClient.GetOrderBookCallsForAsset("asset-down"));
+        var order = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Filled, order.Status);
+        Assert.Equal(4.95m, order.NotionalUsd);
+        using var diagnostics = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
+        var root = diagnostics.RootElement;
+        Assert.Equal("clob_book", root.GetProperty("up").GetProperty("quote_source").GetString());
+        Assert.Equal("clob_book", root.GetProperty("down").GetProperty("quote_source").GetString());
+        Assert.Equal(5m, root.GetProperty("execution_intent_min_order_size").GetDecimal());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FollowMarketFailsClosedWhenRestMinOrderSizeIsUnavailable()
+    {
+        var now = new DateTimeOffset(2026, 8, 30, 12, 0, 30, TimeSpan.Zero);
+        var marketStartUtc = now.AddSeconds(-30);
+        var variant = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Code == "eth_up_down_5m_follow_market_30_65");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.65m,
+            downPrice: 0.35m,
+            slug: $"eth-updown-5m-{marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "eth-up-or-down-5m",
+            question: "ETH Up or Down - Follow Market missing venue minimum"));
+        var incompleteOrderBooks = new[]
+        {
+            OrderBook("asset-up", bestBid: 0.64m, bestAsk: 0.65m, now),
+            OrderBook("asset-down", bestBid: 0.34m, bestAsk: 0.35m, now)
+        };
+        var clobClient = new FakeClobClient(incompleteOrderBooks);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            incompleteOrderBooks,
+            _ => { },
+            incompleteOrderBooks,
+            CreateBtcOptions(paperTakerPricingEnabled: false, [variant.Code]),
+            clobClient: clobClient,
+            timeProvider: new ManualTimeProvider(now));
+
+        var firstResult = await processor.ProcessAsync();
+        var secondResult = await processor.ProcessAsync();
+
+        Assert.Equal(0, firstResult.EntriesPlaced);
+        Assert.Equal(1, firstResult.RunsSkipped);
+        Assert.Equal(0, secondResult.EntriesPlaced);
+        Assert.Equal(0, secondResult.RunsSkipped);
+        Assert.Equal(1, clobClient.GetOrderBookCallsForAsset("asset-up"));
+        Assert.Equal(1, clobClient.GetOrderBookCallsForAsset("asset-down"));
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal("follow_market_min_order_size_unavailable", run.SkipReason);
+        Assert.Empty(repository.PaperOrders);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FollowMarketDoesNotFetchRestWhenFallbackIsDisabled()
+    {
+        var now = new DateTimeOffset(2026, 8, 30, 12, 0, 30, TimeSpan.Zero);
+        var marketStartUtc = now.AddSeconds(-30);
+        var variant = StrategyIds.CryptoUpDown5mVariants.Single(item =>
+            item.Code == "sol_up_down_5m_follow_market_30_65");
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(
+            marketStartUtc,
+            marketStartUtc.AddMinutes(5),
+            upPrice: 0.65m,
+            downPrice: 0.35m,
+            slug: $"sol-updown-5m-{marketStartUtc.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture)}",
+            seriesSlug: "sol-up-or-down-5m",
+            question: "SOL Up or Down - Follow Market REST disabled"));
+        var incompleteOrderBooks = new[]
+        {
+            OrderBook("asset-up", bestBid: 0.64m, bestAsk: 0.65m, now),
+            OrderBook("asset-down", bestBid: 0.34m, bestAsk: 0.35m, now)
+        };
+        var restOrderBooks = new[]
+        {
+            incompleteOrderBooks[0] with { MinOrderSize = 5m },
+            incompleteOrderBooks[1] with { MinOrderSize = 5m }
+        };
+        var clobClient = new FakeClobClient(restOrderBooks);
+        var processor = CreateProcessorCoreWithOptions(
+            repository,
+            [],
+            incompleteOrderBooks,
+            _ => { },
+            restOrderBooks,
+            CreateBtcOptions(
+                paperTakerPricingEnabled: false,
+                [variant.Code],
+                paperTakerRestFallbackEnabled: false),
+            clobClient: clobClient,
+            timeProvider: new ManualTimeProvider(now));
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(0, result.EntriesPlaced);
+        Assert.Equal(1, result.RunsSkipped);
+        Assert.Equal(0, clobClient.GetOrderBookCalls);
+        var run = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal("follow_market_min_order_size_unavailable", run.SkipReason);
+        Assert.Empty(repository.PaperOrders);
+    }
+
     [Fact]
     public async Task ProcessAsync_FollowMarketSkipsWhenBestAsksAreTied()
     {
@@ -2281,8 +2448,20 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             question: "ETH Up or Down - Follow Market tie"));
         var orderBooks = new[]
         {
-            OrderBook("asset-up", bestBid: 0.64m, bestAsk: 0.65m, now),
-            OrderBook("asset-down", bestBid: 0.64m, bestAsk: 0.65m, now)
+            OrderBook(
+                "asset-up",
+                [new OrderBookLevel(0.64m, 100m)],
+                [new OrderBookLevel(0.65m, 100m)],
+                now,
+                minOrderSize: 5m,
+                tickSize: 0.01m),
+            OrderBook(
+                "asset-down",
+                [new OrderBookLevel(0.64m, 100m)],
+                [new OrderBookLevel(0.65m, 100m)],
+                now,
+                minOrderSize: 5m,
+                tickSize: 0.01m)
         };
         var processor = CreateProcessorCoreWithOptions(
             repository,
@@ -14600,7 +14779,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         int paperTakerMaxQuoteAgeMilliseconds = 1_500,
         int entryGraceSeconds = 10,
         bool persistDiffCounterSnapshots = true,
-        bool persistStageTimings = true)
+        bool persistStageTimings = true,
+        bool paperTakerRestFallbackEnabled = true)
     {
         return new BtcUpDown5mStrategyOptions
         {
@@ -14616,7 +14796,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             PersistDiffCounterSnapshots = persistDiffCounterSnapshots,
             PersistStageTimings = persistStageTimings,
             PaperTakerPricingEnabled = paperTakerPricingEnabled,
-            PaperTakerRestFallbackEnabled = true,
+            PaperTakerRestFallbackEnabled = paperTakerRestFallbackEnabled,
             PaperTakerMaxQuoteAgeMilliseconds = paperTakerMaxQuoteAgeMilliseconds,
             PaperTakerMaxEntryPrice = 0.80m,
             PaperTakerMaxReferenceSlippage = 0.05m,

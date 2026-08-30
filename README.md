@@ -29,6 +29,10 @@ or equal to `N/100`; for example, an Up ask of `0.65` activates thresholds
 The immutable intent is capped at `0.99`, is not post-only, and uses the smallest
 valid market-BUY cash amount derived from the selected book's exact
 `min_order_size`, rounded upward only as required by CLOB market-buy precision.
+Caches built from WebSocket price changes can contain executable depth without
+that venue field; in that case the same due attempt obtains an exact CLOB
+`/book` before freezing the FAK intent. The fetch is pre-intent evidence
+completion, not a later retry or a post-intent resize/reprice check.
 Cumulative depth is not an entry gate. Paper records the actual snapshot-based
 full, partial, or no-fill FAK outcome and never retries that strategy/market.
 These variants have `PaperOnly=true`, so their Live submission is disabled.

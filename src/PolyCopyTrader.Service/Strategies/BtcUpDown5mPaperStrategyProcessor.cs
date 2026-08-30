@@ -5730,11 +5730,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             var paperFakLookup = await MeasureEntryLatencyAsync(
                                 latencyMetrics,
                                 EntryLatencyPhase.OrderBook,
-                                () => GetFreshTakerOrderBookAsync(
-                                    limitSelectedOutcome.AssetId,
-                                    nowUtc,
-                                    orderBookFetchTasks,
-                                    cancellationToken));
+                                () => IsFollowMarketFakEntry(variant)
+                                    ? GetFreshFollowMarketOrderBookAsync(
+                                        limitSelectedOutcome.AssetId,
+                                        nowUtc,
+                                        orderBookFetchTasks,
+                                        cancellationToken)
+                                    : GetFreshTakerOrderBookAsync(
+                                        limitSelectedOutcome.AssetId,
+                                        nowUtc,
+                                        orderBookFetchTasks,
+                                        cancellationToken));
                             if (paperFakLookup.RejectionReason is not null)
                             {
                                 await RecordEntryRunSkippedAsync(
@@ -9043,12 +9049,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     reason));
         }
 
-        var upLookupTask = GetFreshTakerOrderBookAsync(
+        var upLookupTask = GetFreshFollowMarketOrderBookAsync(
             upOutcome.AssetId,
             nowUtc,
             orderBookFetchTasks,
             cancellationToken);
-        var downLookupTask = GetFreshTakerOrderBookAsync(
+        var downLookupTask = GetFreshFollowMarketOrderBookAsync(
             downOutcome.AssetId,
             nowUtc,
             orderBookFetchTasks,
@@ -9699,11 +9705,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
         CancellationToken cancellationToken)
     {
-        var lookup = await GetFreshTakerOrderBookAsync(
-            assetId,
-            nowUtc,
-            orderBookFetchTasks,
-            cancellationToken);
+        var lookup = IsFollowMarketFakEntry(variant)
+            ? await GetFreshFollowMarketOrderBookAsync(
+                assetId,
+                nowUtc,
+                orderBookFetchTasks,
+                cancellationToken)
+            : await GetFreshTakerOrderBookAsync(
+                assetId,
+                nowUtc,
+                orderBookFetchTasks,
+                cancellationToken);
         if (lookup.RejectionReason is not null || lookup.OrderBook is null)
         {
             var rejected = BtcInstantOpeningLimitPriceDecision.Reject(
@@ -19263,10 +19275,40 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>>? orderBookFetchTasks,
         CancellationToken cancellationToken)
     {
+        return await GetFreshTakerOrderBookAsync(
+            assetId,
+            nowUtc,
+            orderBookFetchTasks,
+            requirePositiveMinOrderSize: false,
+            cancellationToken);
+    }
+
+    private async Task<TakerOrderBookLookupResult> GetFreshFollowMarketOrderBookAsync(
+        string assetId,
+        DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>> orderBookFetchTasks,
+        CancellationToken cancellationToken)
+    {
+        return await GetFreshTakerOrderBookAsync(
+            assetId,
+            nowUtc,
+            orderBookFetchTasks,
+            requirePositiveMinOrderSize: true,
+            cancellationToken);
+    }
+
+    private async Task<TakerOrderBookLookupResult> GetFreshTakerOrderBookAsync(
+        string assetId,
+        DateTimeOffset nowUtc,
+        System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task<OrderBookFetchResult>>>? orderBookFetchTasks,
+        bool requirePositiveMinOrderSize,
+        CancellationToken cancellationToken)
+    {
         var maxAge = GetPaperTakerMaxQuoteAge();
         var lookup = marketDataCache.GetOrderBook(assetId, maxAge);
         if (lookup is { Status: OrderBookCacheLookupStatus.Fresh, Snapshot: { } cached } &&
-            HasExecutableAskDepth(cached))
+            HasExecutableAskDepth(cached) &&
+            (!requirePositiveMinOrderSize || cached.MinOrderSize is > 0m))
         {
             return TakerOrderBookLookupResult.Found(
                 cached,
@@ -19282,13 +19324,33 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             var restLookup = orderBookFetchTasks is null
                 ? await GetFreshRestTakerOrderBookAsync(assetId, nowUtc, cancellationToken)
                 : await GetFreshRestTakerOrderBookAsync(assetId, nowUtc, orderBookFetchTasks, cancellationToken);
-            return restLookup with
+            var completedLookup = restLookup with
             {
                 RestAttempted = true,
                 CacheStatus = lookup.Status,
                 CacheOrderBook = lookup.Snapshot,
                 CacheAge = lookup.Age
             };
+            return requirePositiveMinOrderSize &&
+                completedLookup.RejectionReason is null &&
+                completedLookup.OrderBook?.MinOrderSize is not > 0m
+                    ? completedLookup with { RejectionReason = "follow_market_min_order_size_unavailable" }
+                    : completedLookup;
+        }
+
+        if (requirePositiveMinOrderSize &&
+            lookup is { Status: OrderBookCacheLookupStatus.Fresh, Snapshot: { } incomplete } &&
+            HasExecutableAskDepth(incomplete) &&
+            incomplete.MinOrderSize is not > 0m)
+        {
+            return TakerOrderBookLookupResult.Reject(
+                "follow_market_min_order_size_unavailable",
+                incomplete,
+                WebSocketCacheSource,
+                lookup.Age,
+                CacheStatus: lookup.Status,
+                CacheOrderBook: incomplete,
+                CacheAge: lookup.Age);
         }
 
         return lookup.Status switch
