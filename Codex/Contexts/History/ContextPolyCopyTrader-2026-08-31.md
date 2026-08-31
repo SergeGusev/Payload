@@ -45,3 +45,17 @@ Request:
 
 Result:
 Verified Production read-only through database cutoff `2026-08-31T19:20:16.251149Z` and server-log cutoff `2026-08-31 22:21:47.545+03:00`. Service remained Running/Live on exact build `e5335ec3263032fe4e4e188c8261fd3549f26aec` with unchanged start, fresh heartbeat, NULL last error, and zero waiting locks. Paper execution was active: the latest 1000-order sample was entirely Filled, a later bounded sample contained 994 Filled and six lawful Maker-GTD expirations, and the final latest ten were all backed by fill rows. The six Maker expirations carry the mandatory `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills` classification. Longer-run evidence superseded the earlier short clean Legacy sample: the latest 1000 backfill events contained 22 cycle failures, with the last at `18:24:01.096839Z` independently traced in logs to a candidate-query Npgsql read timeout. The worker subsequently completed 30 cycles and applied 880 fills, 882 runs, 880 positions, and 880 settlements, with no later failure. Current logs showed transient general side-effect and Maker-evidence latency up to 6.63 seconds queue delay and 17.46 seconds processing respectively, but final queue metrics recovered to six general pending and zero Maker pending with zero rejected/failed work. A WebSocket disconnect and a stale SOL tick both recovered. No Production, database, service, configuration, strategy, order, deployment, or product-source state was changed.
+
+## 2026-08-31T20:04:33.3147852+00:00
+Request:
+Ок, займись дальнейшей доработкой
+
+Result:
+Locked the local-edit scope to the two residual Production findings without changing Production. Exact inspection traced the Legacy candidate failure to an unbounded order-id array passed to the legacy PaperRun parity command; current rows no longer preserve the failed snapshot's exact array size. General latency remains attributable to Paper position-mark SQL execution, while the internal phase of the 17.46-second dedicated Maker-GTD stall remains unknown. Drafted and validated contract `RC-20260831-legacy-candidate-and-market-data-latency`: bounded 500-ID parity chunks with exact candidate semantics, backlog-only coalescing of intermediate general position-mark persistence while every order/evidence event remains processed, and telemetry-only Maker-GTD phase attribution. The two behavior/coverage limits are disclosed explicitly. Semantic digest: `sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813`. Product edits are blocked pending exact user approval.
+
+## 2026-08-31T20:42:25.7635804+00:00
+Request:
+`APPROVE RC-20260831-legacy-candidate-and-market-data-latency sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813`
+
+Result:
+Recorded the user's exact approval against the unchanged semantic digest, including both disclosed deviations: backlog-coalesced intermediate unrealized position marks and telemetry-only Maker-GTD diagnosis in this change. The approved contract is ready for the mandatory separate pre-implementation Git checkpoint; no product source or Production state has changed.

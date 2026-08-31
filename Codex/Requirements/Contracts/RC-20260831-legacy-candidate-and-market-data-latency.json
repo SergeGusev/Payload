@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260831-legacy-candidate-and-market-data-latency",
+  "title": "Bound Legacy parity lookup and reduce market-data latency",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, займись дальнейшей доработкой"
+    }
+  ],
+  "scope": {
+    "goal": "Correct the two residual source problems identified by the immediately preceding Production check: prevent the Legacy candidate parity lookup from receiving an unbounded order-id array, reduce redundant intermediate Paper position-mark database writes during same-asset queue backlog, and add exact phase evidence for any future dedicated Maker-GTD stall whose cause is not yet proven.",
+    "inScope": [
+      "Split only the Legacy candidate preflight's legacy PaperRun parity lookup into deterministic chunks no larger than the existing 500-row historical candidate maximum, union the exact distinct matched order IDs inside the same repeatable-read read-only transaction, and keep every existing candidate filter, exclusion, ordering and cursor rule.",
+      "For the general market-data queue only, let a non-resolution work item with a usable best bid suppress only its final Paper position-mark persistence when a later same-asset non-resolution work item with a usable best bid is already queued; process every work item and every order, fill, expiry, settlement, fee and diagnostic side effect unchanged.",
+      "Ensure the newest queued mark-capable same-asset work item persists position marks, do not suppress across a market-resolution boundary, and retain the existing compare-and-set plus SKIP LOCKED repository semantics when persistence occurs.",
+      "Extend the existing dedicated Maker-GTD slow warning with processing-start/completion, active phase/operation, slowest phase/operation and durations from the already-populated execution trace, without changing Maker-GTD evidence admission, ordering, publication waits, fill/expiry logic or worker scheduling.",
+      "Add focused deterministic unit and real-PostgreSQL tests plus bounded README documentation for the exact changes."
+    ],
+    "outOfScope": [
+      "No change to strategy decisions, prices, stake sizes, risk controls, order admission, Paper or Live execution intent, fills, expirations, settlements, PnL, fee formulas, Dashboard calculations or Live submission.",
+      "No change to Legacy strategy ranking, preflight candidate membership, cursor, page size, cutoff, transaction isolation, read-only status, command timeout, worker cadence, retry policy, apply transaction or accounting formulas.",
+      "No dropping, reordering, coalescing or parallel processing of general order-evidence events or dedicated Maker-GTD evidence events; no change to queue capacity, worker count, drain semantics or resolution priority.",
+      "No speculative Maker-GTD scheduling or publication-priority correction until the new dedicated-lane phase evidence proves the blocking stage.",
+      "No schema/index/configuration change and no Production database command, deployment, service stop/restart, strategy/order mutation, backup or server correction by Codex."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future Legacy candidate reads and future general/dedicated Maker-GTD market-data work after user-controlled deployment; no historical replay or Production mutation by Codex.",
+    "firstVerification": "Trace the exact Production failure to its source line and transaction, inspect the complete Legacy candidate query and queue/updater call paths, and correlate current stage-attributed slow warnings with bounded read-only Production evidence before selecting the local changes."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "The Legacy candidate read must bound each legacy PaperRun parity lookup without changing the exact candidate page it returns.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "займись дальнейшей доработкой",
+      "acceptanceCriteria": [
+        "Each legacy PaperRun parity query receives at most the existing HistoricalPaperFakFeeBackfillMaxPageSize of 500 distinct candidate paper-order IDs; no command receives the current unbounded preflight ID array.",
+        "All chunk queries run in the existing repeatable-read read-only transaction with the existing ten-second command timeout, and their distinct results are unioned before the main candidate query.",
+        "The preflight fill/order membership, exact legacy parity predicate, all remaining exclusions, chronological ordering, N+1 cursor construction, page size, cutoff and reached-end behavior remain unchanged.",
+        "A real-PostgreSQL regression with more than one chunk proves exact parity exclusion across the first, middle and final chunks and equality of candidate IDs/order against an independently calculated reference result.",
+        "Existing zero-candidate, continuation, conflicting-audit and idempotency tests remain green."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused HistoricalPaperFakFeeBackfill storage and real-PostgreSQL candidate-query tests in Release against an allowlisted disposable database under the marked D:\\CodexTemp run.",
+          "expected": "A multi-chunk legacy parity set returns the exact independently calculated candidate page under the unchanged ten-second per-command timeout, and all existing candidate/cursor invariants pass.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "The general queue must avoid redundant intermediate position-mark writes during same-asset backlog while preserving every trading and evidence side effect.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "дальнейшей доработкой",
+      "acceptanceCriteria": [
+        "Every queued work item still reaches the handler in the existing per-asset order; eligible Paper orders, fills, expirations, settlement, fee accounting, diagnostics and exposure-cache mutations from those operations are neither skipped nor coalesced.",
+        "Only the final position-mark persistence phase may be suppressed, and only when the current work item is non-resolution, contains a usable best bid, and a later same-asset non-resolution work item with a usable best bid is already queued after it.",
+        "The newest queued mark-capable work item persists marks; items for another asset do not suppress it; no suppression crosses a queued market-resolution event; an item with eligible orders remains fully processed even when only its mark write is suppressed.",
+        "When mark persistence runs, mark calculations, received-time stale guard, complete expected-state CAS, deterministic FOR UPDATE SKIP LOCKED selection, returned persisted rows and exposure-cache application remain unchanged.",
+        "Focused tests prove a backlog of nonreplaceable eligible-order events performs every order-evidence evaluation but one final mark batch, while single-item, cross-asset and resolution-boundary cases preserve current mark behavior."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectHandler.cs",
+        "src/PolyCopyTrader.Service/MarketData/IPaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused MarketDataSideEffectQueue and PaperTradingMarketDataUpdater tests in Release under the marked D:\\CodexTemp run.",
+          "expected": "Every order/evidence work item is processed in order, only eligible intermediate mark batches are suppressed, the newest mark persists, and all current resolution/drain/failure and mark-CAS tests pass.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Future dedicated Maker-GTD slow warnings must identify the exact blocking phase before any Maker scheduling behavior is changed.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "займись дальнейшей доработкой",
+      "acceptanceCriteria": [
+        "The dedicated Maker-GTD worker marks trace processing start and completion and emits latency category, active phase/operation, phase duration, slowest phase/operation and slowest duration alongside existing event, asset, queue-delay, processing-duration and pending-depth fields.",
+        "The warning uses the existing execution trace already passed into ApplyMakerGtdUpdateAsync and does not log full raw market data, full RawDecisionJson, secrets or private data.",
+        "Maker-GTD admission, per-asset FIFO, cross-asset round robin, drain priority, publication wait, serialization, fill/expiry decisions and failure recording remain unchanged.",
+        "Deterministic tests prove a delayed publication wait or updater phase appears as the exact slowest Maker phase while existing dedicated-lane ordering and lifecycle tests remain green."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectDiagnostics.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run focused dedicated Maker-GTD queue trace and lifecycle tests in Release under the marked D:\\CodexTemp run.",
+          "expected": "Slow warnings expose deterministic phase evidence and every existing Maker-GTD evidence/order lifecycle behavior remains unchanged.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "The bounded local correction must be buildable, independently reviewable and safe for user-controlled deployment without Codex mutating Production.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Ок, займись",
+      "acceptanceCriteria": [
+        "README states that general backlog optimization suppresses only intermediate mark persistence, that the next mark-capable item supplies the current mark, and that Maker-GTD remains evidence-preserving with telemetry-only diagnosis in this change.",
+        "Release focused tests and solution build complete with zero task-related failures; any pre-existing unrelated failure is reported rather than represented as green.",
+        "git diff --check and WorkingTree/Staged requirement validation pass.",
+        "An independent reviewer compares the verbatim request, approved contract, complete diff and verification evidence and returns PASS with no open finding.",
+        "All disposable artifacts remain under the marked D:\\CodexTemp run and are removed before completion; Codex performs no Production mutation or deployment."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectHandler.cs",
+        "src/PolyCopyTrader.Service/MarketData/IPaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectDiagnostics.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln in Release and run the approved focused/relevant tests with outputs under the marked D:\\CodexTemp run; run diff checks, requirement gates and independent semantic review.",
+          "expected": "Build, tests, gates, cleanup and review pass with no unapproved path or behavior change.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "General position marks become backlog-coalesced: an intermediate mark-capable event can complete all of its order/evidence work without immediately persisting that event's mark when a later same-asset mark-capable event is already queued.",
+      "impact": "During backlog, the database may omit intermediate transient mark values and retain the previous mark until the newest queued eligible event persists its newer value. Orders, fills, expirations, settlements and realized PnL are unchanged; unrealized value/PNL becomes current at the final queued mark instead of at every intermediate event.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260831-legacy-candidate-and-market-data-latency sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813",
+        "semanticDigest": "sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "The dedicated Maker-GTD part adds exact phase evidence only and does not yet change the unproven scheduling/publication mechanism behind the observed 17.46-second stall.",
+      "impact": "This change can identify whether a future stall is publication wait, serialization, exposure load or evaluation/persistence, but eliminating that stall may require a later separately approved behavior change. All Maker-GTD evidence remains preserved. Results retain the mandatory classification: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260831-legacy-candidate-and-market-data-latency sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813",
+        "semanticDigest": "sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260831-legacy-candidate-and-market-data-latency sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813",
+    "semanticDigest": "sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_legacy_candidate_market_latency",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}

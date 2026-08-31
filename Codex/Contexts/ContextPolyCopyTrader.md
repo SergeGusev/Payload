@@ -1,3 +1,18 @@
+## Active Update 2026-08-31 Legacy Candidate And Market-Data Latency Contract
+Goal: Correct the residual Legacy candidate-query timeout and reduce verified general market-data latency without dropping betting evidence; obtain exact Maker-GTD phase evidence before changing its scheduling.
+Status: Exact contract approved; mandatory pre-implementation Git checkpoint in progress
+Done:
+- Traced the latest Production Legacy failure at `2026-08-31T18:24:01.096839Z` to `GetHistoricalPaperFakFeeBackfillCandidatesAsync` line 248: the preflight supplied an unbounded distinct paper-order-id array to the legacy PaperRun parity lookup, whose command hit the existing ten-second read timeout.
+- Confirmed that later Production cycles processed the affected tail, so the exact candidate-array size at the failed historical snapshot is no longer reconstructable from current rows and remains unknown.
+- Confirmed from source and Production stage logs that general side-effect latency is repeatedly dominated by `TryUpdatePaperPositionMarks/ExecuteCommand`; exact observed asset position counts reached 164 and stage duration reached multiple seconds while queues later recovered.
+- Confirmed one dedicated Maker-GTD work item blocked the sole dedicated worker for `17,456.2532ms`, followed by a 242-item backlog, but the current dedicated warning does not expose the internal phase; publication-wait causality remains unproven.
+- Drafted contract `RC-20260831-legacy-candidate-and-market-data-latency`: chunk only the Legacy parity lookup at the existing 500-item bound; suppress only redundant intermediate general position-mark persistence when a later same-asset mark-capable event is already queued; preserve every order/evidence event; and add Maker-GTD phase telemetry without changing Maker scheduling.
+- The contract explicitly discloses that intermediate unrealized marks become backlog-coalesced and that Maker-GTD receives telemetry only in this change. Contract validation passed with semantic digest `sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813`.
+- The user approved the exact unchanged digest with `APPROVE RC-20260831-legacy-candidate-and-market-data-latency sha256:2a4d373da57c60a3be1f4f5ac573f57b40d1f693137b0ab353eead2ea4f2b813`; both disclosed deviations are explicitly approved.
+Next: Validate, stage, commit and push the approval checkpoint before any product edit; then implement only the mapped paths, run focused real-PostgreSQL/queue/Maker tests plus Release build, obtain required independent semantic review, and finalize.
+Notes: Production inspection was read-only against `192.168.0.101:5432/polycopytrader` and `\\192.168.0.101\CodexLogs`; no Production, service, database, strategy, order, configuration, deployment or product-source state changed. Maker-GTD classification remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: None; product edits remain mechanically blocked until the separate approval checkpoint commit exists.
+
 ## Active Update 2026-08-31 Production Server, Betting, And Log Recheck
 Goal: Verify current Production service health, betting activity, Legacy backfill behavior, market-data queues, reference feeds, and server logs after the `e5335ec3` deployment.
 Status: Service and Paper betting are healthy; intermittent Legacy candidate-query timeouts and recoverable side-effect latency remain
