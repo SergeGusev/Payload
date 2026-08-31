@@ -2702,6 +2702,29 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
 		IReadOnlyList<PaperPositionMarkUpdate> updates,
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
+		return await TryUpdatePaperPositionMarksCoreAsync(
+			updates,
+			stageObserver: null,
+			cancellationToken);
+	}
+
+	public async Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(
+		IReadOnlyList<PaperPositionMarkUpdate> updates,
+		Action<string> stageObserver,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		ArgumentNullException.ThrowIfNull(stageObserver);
+		return await TryUpdatePaperPositionMarksCoreAsync(
+			updates,
+			stageObserver,
+			cancellationToken);
+	}
+
+	private async Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksCoreAsync(
+		IReadOnlyList<PaperPositionMarkUpdate> updates,
+		Action<string>? stageObserver,
+		CancellationToken cancellationToken)
+	{
 		if (updates.Count == 0)
 		{
 			return [];
@@ -2724,6 +2747,7 @@ WHERE copied_trader_wallet = @CopiedTraderWallet
 			net_unrealized_pnl_usd = update.NetUnrealizedPnlUsd,
 			updated_at_utc = UtcDateTime(update.UpdatedAtUtc)
 		}).ToArray();
+		stageObserver?.Invoke(PaperPositionMarkPersistenceStages.OpenConnection);
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH mark_updates AS (
@@ -2817,10 +2841,13 @@ SELECT
 FROM updated_positions
 ORDER BY copied_trader_wallet, asset_id;
 """);
+		stageObserver?.Invoke(PaperPositionMarkPersistenceStages.SerializeUpdates);
 		AddJsonbParameter(command, "PaperPositionMarkUpdatesJson", JsonSerializer.Serialize(rows));
 		List<PaperPosition> updatedPositions = [];
+		stageObserver?.Invoke(PaperPositionMarkPersistenceStages.ExecuteCommand);
 		await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
 		{
+			stageObserver?.Invoke(PaperPositionMarkPersistenceStages.ReadResults);
 			while (await reader.ReadAsync(cancellationToken))
 			{
 				updatedPositions.Add(ReadPaperPosition(reader));

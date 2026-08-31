@@ -24,3 +24,10 @@ Request:
 
 Result:
 Recorded the user's exact approval against the unchanged semantic digest, including both disclosed deviations. The approved contract is ready for its mandatory pre-implementation Git checkpoint; no product source or Production state has yet changed.
+
+## 2026-08-31T07:26:07.1573683+00:00
+Request:
+`APPROVE RC-20260831-legacy-apply-index-mark-stage-telemetry sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60`
+
+Result:
+Completed the approved bounded local correction. Added ordered non-transactional migration `0006` with the exact concurrent partial expression index and fail-closed catalog check; split only the Legacy apply parity-audit exclusion into equivalent source-specific indexed predicates; and added telemetry-only Paper mark stages through `ApplyExposureCache` without changing mark persistence, queue or trading behavior. Real PostgreSQL Release tests passed 1/1, 5/5 and 4/4; final focused tests passed 65/65; Release solution build passed with 0 errors and 126 existing warnings. Independent reviewer `agent:/root/reviewer_legacy_apply_mark_stages` returned PASS with no findings. The exact disposable database and the protected 304,392,941-byte marked temp run were removed and independently verified absent. No Production or deployment state was changed; the user controls deployment.

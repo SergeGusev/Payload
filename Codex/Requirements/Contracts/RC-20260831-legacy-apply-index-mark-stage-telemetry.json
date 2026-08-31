@@ -3,7 +3,7 @@
   "contractId": "RC-20260831-legacy-apply-index-mark-stage-telemetry",
   "title": "Fix Legacy apply timeout and expose Paper mark persistence stages",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -62,8 +62,8 @@
           "kind": "test",
           "command": "Run focused PostgresSchemaMigrationTests and HistoricalPaperFakFeeBackfill tests in Release against an allowlisted disposable PostgreSQL database, with artifacts/results under the marked D:\\CodexTemp run.",
           "expected": "Migration shape/idempotency, indexed plan, complete parity exclusion semantics, atomic apply invariants and retry behavior all pass under the unchanged ten-second product command limit.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release tests against the exact allowlisted disposable loopback PostgreSQL 17 database passed: migration-index-1.trx 1/1 (SHA-256 68cc05f3c536ebc7ba847300281d94f1883aa4a2eba3dfffa10ae67c5f2a6c1d) proved exact catalog recognition, wrong-shape rejection, idempotency and EXPLAIN index selection; legacy-apply-pg-1.trx 5/5 (SHA-256 63fa606a15c1fc9c2838870c101415f21ccc9daff2254f7f68ddc9ccdb8483ce) proved exact legacy binding exclusion, unrelated-audit non-exclusion, one-time apply and idempotent retry. The disposable database was then dropped and verified absent while local polycopytrader remained present."
         }
       ]
     },
@@ -98,8 +98,8 @@
           "kind": "test",
           "command": "Run focused Paper mark repository, settlement-concurrency, updater trace and side-effect slow-warning tests in Release under the marked D:\\CodexTemp run.",
           "expected": "Every existing mark value/CAS/cache invariant passes and the new internal stage attribution is deterministic, with no queue or persistence behavior change.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release PostgreSQL mark/settlement tests paper-marks-pg-1.trx passed 4/4 (SHA-256 57cdeb29ee603680321009e5113b947df3744641276a219a1f3cc077dc3b3c2c). The final focused storage, updater, queue, migration and backfill suite focused-unit-final.trx passed 65/65 (SHA-256 33dbd273581dac4be4d32ed883502d48ab24f936aeef750e2290df4cd3ac4a31), including deterministic slowest-stage attribution and default-interface compatibility."
         }
       ]
     },
@@ -141,8 +141,8 @@
           "kind": "build",
           "command": "Build PolyCopyTrader.sln in Release and run the approved focused/relevant tests with --artifacts-path and --results-directory under the marked D:\\CodexTemp run; run diff checks, requirement gates and independent semantic review.",
           "expected": "Build, focused tests, gates, cleanup and review pass with no unapproved path or semantic change.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release build succeeded with 0 errors and 126 pre-existing warnings. git diff --check passed. Independent reviewer agent:/root/reviewer_legacy_apply_mark_stages compared the verbatim request, approved contract, full diff from checkpoint 24c9780c and test/build evidence and returned PASS with no findings. Protected temp cleanup removed the exact marked run manual-01367533eabf4cf68dab0aa96770a878 (1,163 files, 304,392,941 bytes) and verified the run path absent. WorkingTree and Staged gate results are recorded by their required final validation commands."
         }
       ]
     }
@@ -180,8 +180,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_legacy_apply_mark_stages",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

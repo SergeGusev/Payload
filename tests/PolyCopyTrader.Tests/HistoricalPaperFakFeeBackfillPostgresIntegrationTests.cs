@@ -137,6 +137,105 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task Apply_LegacyPaperRunOrderBindingExcludesOnlyTheExactOrder()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var eligibleScenario = BackfillScenario.Create();
+        var excludedScenario = BackfillScenario.Create();
+
+        try
+        {
+            await SeedScenarioAsync(factory, repository, eligibleScenario);
+            await SeedScenarioAsync(factory, repository, excludedScenario);
+
+            var eligiblePage = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                eligibleScenario.CutoffUtc,
+                eligibleScenario.StrategyId,
+                20);
+            var excludedPage = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                excludedScenario.CutoffUtc,
+                excludedScenario.StrategyId,
+                20);
+            var eligibleCandidate = Assert.Single(
+                eligiblePage.Candidates,
+                candidate => candidate.Order.Id == eligibleScenario.TargetOrderId);
+            var excludedCandidate = Assert.Single(
+                excludedPage.Candidates,
+                candidate => candidate.Order.Id == excludedScenario.TargetOrderId);
+            var eligibleUpdate = CreateUpdate(
+                eligibleCandidate,
+                eligibleScenario.FeeCalculatedAtUtc);
+            var excludedUpdate = CreateUpdate(
+                excludedCandidate,
+                excludedScenario.FeeCalculatedAtUtc);
+
+            await InsertParityDecisionAuditAsync(
+                factory,
+                eligibleScenario.StrategyId,
+                "PaperRun",
+                Guid.NewGuid(),
+                JsonSerializer.Serialize(new
+                {
+                    paper_order_id = Guid.NewGuid().ToString("D").ToLowerInvariant()
+                }),
+                "{}");
+            await InsertParityDecisionAuditAsync(
+                factory,
+                excludedScenario.StrategyId,
+                "PaperRun",
+                Guid.NewGuid(),
+                JsonSerializer.Serialize(new
+                {
+                    paper_order_id = excludedScenario.TargetOrderId.ToString("D").ToLowerInvariant()
+                }),
+                "{}");
+
+            var eligibleApplied = await repository.ApplyHistoricalPaperFakFeeBackfillBatchAsync(
+                [eligibleUpdate]);
+            Assert.Equal(
+                new HistoricalPaperFakFeeBackfillBatchResult(
+                    Requested: 1,
+                    FullChainEligible: 1,
+                    FillsUpdated: 1,
+                    RunsUpdated: 1,
+                    PositionsUpdated: 1,
+                    SettlementsUpdated: 1),
+                eligibleApplied);
+            Assert.Equal(
+                new HistoricalPaperFakFeeBackfillBatchResult(
+                    Requested: 1,
+                    FullChainEligible: 1,
+                    FullChainAlreadyApplied: 1),
+                await repository.ApplyHistoricalPaperFakFeeBackfillBatchAsync([eligibleUpdate]));
+
+            var excludedGrossBefore = await ReadGrossSnapshotAsync(
+                factory,
+                excludedScenario.TargetOrderId);
+            var excludedAccountingBefore = await ReadAccountingSnapshotAsync(
+                factory,
+                excludedScenario.TargetOrderId);
+            Assert.Equal(
+                new HistoricalPaperFakFeeBackfillBatchResult(
+                    Requested: 1,
+                    StructuralConflicts: 1),
+                await repository.ApplyHistoricalPaperFakFeeBackfillBatchAsync([excludedUpdate]));
+            Assert.Equal(
+                excludedGrossBefore,
+                await ReadGrossSnapshotAsync(factory, excludedScenario.TargetOrderId));
+            Assert.Equal(
+                excludedAccountingBefore,
+                await ReadAccountingSnapshotAsync(factory, excludedScenario.TargetOrderId));
+        }
+        finally
+        {
+            await CleanupScenarioAsync(factory, eligibleScenario);
+            await CleanupScenarioAsync(factory, excludedScenario);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task CandidateQuery_PreservesEveryParityDecisionBindingShape()
     {
         var factory = await CreateFactoryAsync();

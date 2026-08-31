@@ -163,6 +163,42 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
     }
 
     [Fact]
+    public void ApplySql_SeparatesEveryParityBindingIntoItsExactIndexedPredicate()
+    {
+        var sql = PostgresAppRepository.HistoricalPaperFakFeeBackfillApplySql;
+        var runStructural = SliceSql(
+            sql,
+            "run_structural_chain AS MATERIALIZED (",
+            "full_chain_structural AS MATERIALIZED (");
+
+        Assert.Equal(
+            4,
+            runStructural.Split(
+                "FROM public.historical_gross_net_parity_audit parity_audit",
+                StringSplitOptions.None).Length - 1);
+        Assert.Contains(
+            "parity_audit.source_kind = 'PaperSellFill'\n            AND parity_audit.source_id = fill.id",
+            runStructural.Replace("\r\n", "\n", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "FROM public.strategy_market_paper_runs parity_run\n          WHERE parity_run.paper_order_id = fill.paper_order_id\n            AND EXISTS (",
+            runStructural.Replace("\r\n", "\n", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "parity_audit.source_kind = 'PaperRun'\n            AND parity_audit.operation_kind = 'AccountingDecision'\n            AND parity_audit.calculation_version =\n                    'historical-gross-net-parity-v1'\n            AND parity_audit.old_payload_json ->> 'paper_order_id' =\n                    lower(fill.paper_order_id::text)",
+            runStructural.Replace("\r\n", "\n", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "parity_audit.source_kind IN ('PaperPosition', 'PaperSettlement')",
+            runStructural,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "(parity_audit.source_kind = 'PaperSellFill'",
+            runStructural,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BatchResult_SeparatesItemConflictsFromWholeBatchDeferrals()
     {
         var completed = new HistoricalPaperFakFeeBackfillBatchResult(

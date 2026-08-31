@@ -5,11 +5,47 @@ using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
+using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Tests;
 
 public sealed class MarketDataSideEffectQueueTests
 {
+    [Fact]
+    public void ExecutionTrace_AttributesDelayedPositionMarkRepositoryStageExactly()
+    {
+        var enqueuedAtUtc = new DateTimeOffset(2026, 8, 31, 6, 0, 0, TimeSpan.Zero);
+        var trace = new MarketDataSideEffectExecutionTrace(
+            "PaperTradingMarketDataUpdater",
+            MarketDataEventType.Book,
+            "asset-mark-stage",
+            "condition-mark-stage",
+            enqueuedAtUtc,
+            enqueuedAtUtc);
+        trace.MarkProcessingStarted(enqueuedAtUtc);
+        EnterPositionMarkStage(trace, PaperPositionMarkPersistenceStages.OpenConnection, enqueuedAtUtc.AddMilliseconds(10));
+        EnterPositionMarkStage(trace, PaperPositionMarkPersistenceStages.SerializeUpdates, enqueuedAtUtc.AddMilliseconds(20));
+        EnterPositionMarkStage(trace, PaperPositionMarkPersistenceStages.ExecuteCommand, enqueuedAtUtc.AddMilliseconds(30));
+        EnterPositionMarkStage(trace, PaperPositionMarkPersistenceStages.ReadResults, enqueuedAtUtc.AddMilliseconds(2_030));
+        trace.EnterPhase(
+            MarketDataSideEffectPhases.ApplyPositionMarkExposureCache,
+            "ExposureSnapshotCache.ApplyPaperPosition",
+            enqueuedAtUtc.AddMilliseconds(2_040));
+        trace.MarkProcessingCompleted(enqueuedAtUtc.AddMilliseconds(2_050));
+
+        var snapshot = trace.Capture(enqueuedAtUtc.AddMilliseconds(2_050));
+
+        Assert.Equal(
+            MarketDataSideEffectPhases.PositionMarkPersistenceStage(
+                PaperPositionMarkPersistenceStages.ExecuteCommand),
+            snapshot.SlowestPhase);
+        Assert.Equal(
+            MarketDataSideEffectPhases.PositionMarkPersistenceOperation(
+                PaperPositionMarkPersistenceStages.ExecuteCommand),
+            snapshot.SlowestOperation);
+        Assert.Equal(2_000d, snapshot.SlowestPhaseDurationMilliseconds, 3);
+    }
+
     [Fact]
     public void ExecutionTrace_RetainsEarlierSlowestPhaseAndFinalActiveOperation()
     {
@@ -1430,6 +1466,17 @@ public sealed class MarketDataSideEffectQueueTests
         {
             releaseFirstUpdate.TrySetResult(true);
         }
+    }
+
+    private static void EnterPositionMarkStage(
+        MarketDataSideEffectExecutionTrace trace,
+        string stage,
+        DateTimeOffset enteredAtUtc)
+    {
+        trace.EnterPhase(
+            MarketDataSideEffectPhases.PositionMarkPersistenceStage(stage),
+            MarketDataSideEffectPhases.PositionMarkPersistenceOperation(stage),
+            enteredAtUtc);
     }
 
     private sealed class SlowPhaseHandler : IMarketDataSideEffectHandler

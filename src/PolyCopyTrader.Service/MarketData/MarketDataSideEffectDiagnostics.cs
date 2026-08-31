@@ -25,6 +25,19 @@ public static class MarketDataSideEffectPhases
     public const string ApplyMakerGtdPaperUpdate = "ApplyPaperTradingUpdate/ApplyMakerGtdPaperUpdate";
     public const string ApplyOrdinaryPaperUpdate = "ApplyPaperTradingUpdate/ApplyOrdinaryPaperUpdate";
     public const string UpdatePositionMarks = "ApplyPaperTradingUpdate/UpdatePositionMarks";
+    public const string ApplyPositionMarkExposureCache = UpdatePositionMarks + "/ApplyExposureCache";
+
+    public static string PositionMarkPersistenceStage(string stage)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stage);
+        return $"{UpdatePositionMarks}/{stage}";
+    }
+
+    public static string PositionMarkPersistenceOperation(string stage)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(stage);
+        return $"IAppRepository.TryUpdatePaperPositionMarks/{stage}";
+    }
 }
 
 public sealed record MarketDataSideEffectExecutionTraceSnapshot(

@@ -1871,6 +1871,53 @@ public sealed class StorageTests
         Assert.Contains("net_unrealized_pnl_usd = eligible_position.net_unrealized_pnl_usd", batchMarkMethod, StringComparison.Ordinal);
         Assert.Contains("expected_net_unrealized_pnl_usd numeric", batchMarkMethod, StringComparison.Ordinal);
         Assert.Contains("IS NOT DISTINCT FROM mark_update.expected_net_unrealized_pnl_usd", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionMarkPersistenceStages.OpenConnection", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionMarkPersistenceStages.SerializeUpdates", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionMarkPersistenceStages.ExecuteCommand", batchMarkMethod, StringComparison.Ordinal);
+        Assert.Contains("PaperPositionMarkPersistenceStages.ReadResults", batchMarkMethod, StringComparison.Ordinal);
+        Assert.True(
+            batchMarkMethod.IndexOf("PaperPositionMarkPersistenceStages.OpenConnection", StringComparison.Ordinal) <
+            batchMarkMethod.IndexOf("PaperPositionMarkPersistenceStages.SerializeUpdates", StringComparison.Ordinal));
+        Assert.True(
+            batchMarkMethod.IndexOf("PaperPositionMarkPersistenceStages.SerializeUpdates", StringComparison.Ordinal) <
+            batchMarkMethod.IndexOf("PaperPositionMarkPersistenceStages.ExecuteCommand", StringComparison.Ordinal));
+        Assert.True(
+            batchMarkMethod.IndexOf("PaperPositionMarkPersistenceStages.ExecuteCommand", StringComparison.Ordinal) <
+            batchMarkMethod.IndexOf("PaperPositionMarkPersistenceStages.ReadResults", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PaperPositionMarkStageAwareDefaultOverload_PreservesLegacyRepositoryBehavior()
+    {
+        var nowUtc = new DateTimeOffset(2026, 8, 31, 6, 0, 0, TimeSpan.Zero);
+        var original = new PaperPosition(
+            "asset-stage-default",
+            "condition-stage-default",
+            "Up",
+            2m,
+            0.40m,
+            0.80m,
+            0m,
+            nowUtc,
+            "wallet-stage-default");
+        var update = new PaperPositionMarkUpdate(
+            original,
+            EstimatedValueUsd: 1m,
+            UnrealizedPnlUsd: 0.20m,
+            UpdatedAtUtc: nowUtc.AddSeconds(1));
+        var legacyRepository = new TestAppRepository();
+        legacyRepository.PaperPositions.Add(original);
+        IAppRepository repository = legacyRepository;
+        var observedStages = new List<string>();
+
+        var updated = Assert.Single(await repository.TryUpdatePaperPositionMarksAsync(
+            [update],
+            observedStages.Add));
+
+        Assert.Empty(observedStages);
+        Assert.Equal(1m, updated.EstimatedValueUsd);
+        Assert.Equal(0.20m, updated.UnrealizedPnlUsd);
+        Assert.Equal(updated, Assert.Single(legacyRepository.PaperPositions));
     }
 
     [Fact]

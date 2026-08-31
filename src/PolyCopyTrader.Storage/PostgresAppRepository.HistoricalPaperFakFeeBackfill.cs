@@ -690,28 +690,43 @@ run_structural_chain AS MATERIALIZED (
       AND NOT EXISTS (
           SELECT 1
           FROM public.historical_gross_net_parity_audit parity_audit
-          WHERE parity_audit.calculation_version =
+          WHERE parity_audit.source_kind = 'PaperSellFill'
+            AND parity_audit.source_id = fill.id
+            AND parity_audit.calculation_version =
+                    'historical-gross-net-parity-v1'
+            AND parity_audit.operation_kind = 'AccountingDecision')
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.strategy_market_paper_runs parity_run
+          WHERE parity_run.paper_order_id = fill.paper_order_id
+            AND EXISTS (
+                SELECT 1
+                FROM public.historical_gross_net_parity_audit parity_audit
+                WHERE parity_audit.source_kind = 'PaperRun'
+                  AND parity_audit.source_id = parity_run.id
+                  AND parity_audit.calculation_version =
+                        'historical-gross-net-parity-v1'
+                  AND parity_audit.operation_kind = 'AccountingDecision'))
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.historical_gross_net_parity_audit parity_audit
+          WHERE parity_audit.source_kind = 'PaperRun'
+            AND parity_audit.operation_kind = 'AccountingDecision'
+            AND parity_audit.calculation_version =
+                    'historical-gross-net-parity-v1'
+            AND parity_audit.old_payload_json ->> 'paper_order_id' =
+                    lower(fill.paper_order_id::text))
+      AND NOT EXISTS (
+          SELECT 1
+          FROM public.historical_gross_net_parity_audit parity_audit
+          WHERE parity_audit.source_kind IN ('PaperPosition', 'PaperSettlement')
+            AND parity_audit.calculation_version =
                     'historical-gross-net-parity-v1'
             AND parity_audit.operation_kind = 'AccountingDecision'
-            AND (
-                (parity_audit.source_kind = 'PaperSellFill'
-                    AND parity_audit.source_id = fill.id)
-                OR
-                (parity_audit.source_kind = 'PaperRun'
-                    AND (
-                        parity_audit.old_payload_json ->> 'paper_order_id' =
-                            lower(fill.paper_order_id::text)
-                        OR EXISTS (
-                            SELECT 1
-                            FROM public.strategy_market_paper_runs parity_run
-                            WHERE parity_run.id = parity_audit.source_id
-                              AND parity_run.paper_order_id = fill.paper_order_id)))
-                OR
-                (parity_audit.source_kind IN ('PaperPosition', 'PaperSettlement')
-                    AND parity_audit.evidence_payload_json
-                            -> 'historicalGrossNetParityBindingV1'
-                            -> 'paperFillIds'
-                        ? lower(fill.id::text))))
+            AND parity_audit.evidence_payload_json
+                    -> 'historicalGrossNetParityBindingV1'
+                    -> 'paperFillIds'
+                ? lower(fill.id::text))
       AND (
           SELECT count(*)
           FROM requested sibling_request

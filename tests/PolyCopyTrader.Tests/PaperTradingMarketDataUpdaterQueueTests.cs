@@ -332,7 +332,7 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         await Task.WhenAll(firstApply, secondApply).WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(2, markCalls);
         Assert.Equal(
-            MarketDataSideEffectPhases.UpdatePositionMarks,
+            MarketDataSideEffectPhases.ApplyPositionMarkExposureCache,
             secondTrace.Capture(DateTimeOffset.UtcNow).Phase);
     }
 
@@ -435,6 +435,17 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         Assert.Equal("ApplyPaperTradingUpdate/ApplyMakerGtdPaperUpdate", MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate);
         Assert.Equal("ApplyPaperTradingUpdate/ApplyOrdinaryPaperUpdate", MarketDataSideEffectPhases.ApplyOrdinaryPaperUpdate);
         Assert.Equal("ApplyPaperTradingUpdate/UpdatePositionMarks", MarketDataSideEffectPhases.UpdatePositionMarks);
+        Assert.Equal(
+            "ApplyPaperTradingUpdate/UpdatePositionMarks/ApplyExposureCache",
+            MarketDataSideEffectPhases.ApplyPositionMarkExposureCache);
+        Assert.Equal(
+            "ApplyPaperTradingUpdate/UpdatePositionMarks/ExecuteCommand",
+            MarketDataSideEffectPhases.PositionMarkPersistenceStage(
+                PaperPositionMarkPersistenceStages.ExecuteCommand));
+        Assert.Equal(
+            "IAppRepository.TryUpdatePaperPositionMarks/ExecuteCommand",
+            MarketDataSideEffectPhases.PositionMarkPersistenceOperation(
+                PaperPositionMarkPersistenceStages.ExecuteCommand));
     }
 
     [Fact]

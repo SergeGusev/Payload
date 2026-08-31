@@ -207,6 +207,69 @@ FOR UPDATE;
 
     [Fact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task StageAwareBatchMarkUpdate_ReportsExactStagesWithoutChangingPersistedResult()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallet = $"mark-stage-{suffix}";
+        var wallets = new[] { wallet };
+        var initialUtc = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var position = Position(
+            wallet,
+            $"asset-{suffix}-stage",
+            $"condition-{suffix}",
+            "Yes",
+            4m,
+            0.25m,
+            initialUtc);
+
+        try
+        {
+            await repository.UpsertPaperPositionAsync(position);
+            var expected = Assert.IsType<PaperPosition>(
+                await repository.GetPaperPositionAsync(wallet, position.AssetId));
+            var stages = new List<string>();
+
+            var persisted = Assert.Single(await repository.TryUpdatePaperPositionMarksAsync(
+                [
+                    new PaperPositionMarkUpdate(
+                        expected,
+                        EstimatedValueUsd: 3m,
+                        UnrealizedPnlUsd: 2m,
+                        UpdatedAtUtc: initialUtc.AddSeconds(1))
+                ],
+                stages.Add));
+
+            Assert.Equal(
+                [
+                    PaperPositionMarkPersistenceStages.OpenConnection,
+                    PaperPositionMarkPersistenceStages.SerializeUpdates,
+                    PaperPositionMarkPersistenceStages.ExecuteCommand,
+                    PaperPositionMarkPersistenceStages.ReadResults
+                ],
+                stages);
+            Assert.Equal(3m, persisted.EstimatedValueUsd);
+            Assert.Equal(2m, persisted.UnrealizedPnlUsd);
+            Assert.Equal(
+                persisted,
+                await repository.GetPaperPositionAsync(wallet, position.AssetId));
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, wallets);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task SettlementBatch_FiltersMarketAndRollsBackBothTablesOnFailure()
     {
         var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");

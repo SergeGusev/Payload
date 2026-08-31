@@ -455,7 +455,8 @@ public sealed class PaperTradingMarketDataUpdater(
                     bestBid,
                     observedAtUtc,
                     receivedAtUtc,
-                    cancellationToken);
+                    cancellationToken,
+                    executionTrace);
             }
         }
         catch (OperationCanceledException)
@@ -812,7 +813,8 @@ public sealed class PaperTradingMarketDataUpdater(
         decimal bestBid,
         DateTimeOffset now,
         DateTimeOffset? receivedAtUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MarketDataSideEffectExecutionTrace? executionTrace)
     {
         var markUpdates = new List<PaperPositionMarkUpdate>();
         foreach (var position in positions.Where(position => string.Equals(position.AssetId, assetId, StringComparison.OrdinalIgnoreCase)))
@@ -847,7 +849,17 @@ public sealed class PaperTradingMarketDataUpdater(
             return;
         }
 
-        var updatedPositions = await repository.TryUpdatePaperPositionMarksAsync(markUpdates, cancellationToken);
+        var updatedPositions = await repository.TryUpdatePaperPositionMarksAsync(
+            markUpdates,
+            stage => executionTrace?.EnterPhase(
+                MarketDataSideEffectPhases.PositionMarkPersistenceStage(stage),
+                MarketDataSideEffectPhases.PositionMarkPersistenceOperation(stage),
+                DateTimeOffset.UtcNow),
+            cancellationToken);
+        executionTrace?.EnterPhase(
+            MarketDataSideEffectPhases.ApplyPositionMarkExposureCache,
+            "ExposureSnapshotCache.ApplyPaperPosition",
+            DateTimeOffset.UtcNow);
         foreach (var updatedPosition in updatedPositions)
         {
             exposureCache.ApplyPaperPosition(updatedPosition);

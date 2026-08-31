@@ -2,6 +2,14 @@ using PolyCopyTrader.Domain;
 
 namespace PolyCopyTrader.Storage;
 
+public static class PaperPositionMarkPersistenceStages
+{
+    public const string SerializeUpdates = "SerializeUpdates";
+    public const string OpenConnection = "OpenConnection";
+    public const string ExecuteCommand = "ExecuteCommand";
+    public const string ReadResults = "ReadResults";
+}
+
 public interface IAppRepository : IHistoricalGrossNetParityStore
 {
     Task<DateTimeOffset> GetDatabaseNowUtcAsync(CancellationToken cancellationToken = default)
@@ -613,6 +621,15 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
     Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(
         IReadOnlyList<PaperPositionMarkUpdate> updates,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<PaperPosition>> TryUpdatePaperPositionMarksAsync(
+        IReadOnlyList<PaperPositionMarkUpdate> updates,
+        Action<string> stageObserver,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stageObserver);
+        return TryUpdatePaperPositionMarksAsync(updates, cancellationToken);
+    }
 
     async Task UpsertPaperPositionsAsync(
         IReadOnlyList<PaperPosition> positions,

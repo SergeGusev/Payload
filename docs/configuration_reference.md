@@ -101,6 +101,16 @@ Ranking affects scheduling only: Gross PnL and the Dashboard aggregate Net PnL
 and Net ROI formulas remain unchanged. The exact phase also retains its cutoff,
 source allowlist, candidate filters, and financial formula.
 
+The conditional apply checks prior parity evidence through four source-specific
+anti-joins: exact `PaperSellFill`, current `PaperRun` linkage, legacy `PaperRun`
+`old_payload_json ->> 'paper_order_id'` linkage, and `PaperPosition` /
+`PaperSettlement` evidence. Ordered migration
+`0006-historical-parity-paper-run-order-index` creates the concurrent partial
+expression index `ix_historical_parity_paper_run_order` for that exact legacy
+lookup and validates its complete catalog shape before recording the migration.
+The split does not change the excluded rows, batch size `50`, transaction
+boundaries, timeouts, formulas, or retry behavior.
+
 The run-level phase covers historical and future `Settled` Paper runs with
 positive `stake_usd` and non-null Gross for every strategy; it has no historical
 cutoff or execution-source allowlist and never changes Live accounting. It first
@@ -824,6 +834,7 @@ diagnostic path only; it does not change strategy entry or settlement behavior.
 - `PersistOrderBookSnapshots`: writes WebSocket top-of-book snapshots to `order_book_snapshots` when true; default `false` for all-active-market monitoring.
 - `PersistMarketDataEvents`: writes generic WebSocket events to `market_data_events` when true; default `false` for all-active-market monitoring.
 - `StatusPersistIntervalSeconds`: minimum interval for unchanged `market_data_status` upserts; default `60`.
+- `SideEffectSlowProcessingMilliseconds`: queue-delay or processing threshold for a slow side-effect warning; default `1000`. Position-mark warnings report the measured persistence stage as `OpenConnection`, `SerializeUpdates`, `ExecuteCommand`, or `ReadResults`, with the subsequent in-memory update reported separately as `ApplyExposureCache`. These labels add timing evidence only; they do not change the SQL, CAS predicates, queue, or persistence behavior.
 
 The service shards all desired asset ids across multiple WebSocket connections
 instead of using one huge all-active subscription. Outcomes belonging to the

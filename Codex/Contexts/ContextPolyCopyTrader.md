@@ -1,13 +1,14 @@
 ## Active Update 2026-08-31 Legacy Apply Index And Paper Mark Stage Telemetry
 Goal: Correct the verified recurring Legacy apply timeout and expose the exact internal stage of the still-unexplained Paper position-mark persistence delay.
-Status: Requirement contract approved; approval checkpoint pending before implementation
+Status: Completed locally and independently reviewed; not deployed
 Done:
-- Production evidence tied the Legacy failure to the 50-row apply page repeatedly timing out while evaluating historical parity-audit exclusions; the relevant audit relation is about 910 MB with approximately 186 thousand decision rows, and the legacy PaperRun `old_payload_json ->> 'paper_order_id'` lookup has no matching index.
-- Current mark persistence already uses deterministic `FOR UPDATE SKIP LOCKED` selection and complete compare-and-set predicates. Bounded `pg_stat_activity` sampling did not capture an active mark query, so the remaining multi-second stage is still unknown and no speculative behavior change is authorized.
-- Drafted and machine-validated `RC-20260831-legacy-apply-index-mark-stage-telemetry` with semantic digest `sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60`.
-Next: Commit and push the approved contract checkpoint before product edits, then add the concurrent partial expression-index migration, refactor only the indexed Legacy exclusion predicates, and add mark-stage telemetry without changing persistence semantics.
-Notes: The first user-controlled deployment will wait for the one-time `CREATE INDEX CONCURRENTLY` migration; PostgreSQL table reads/writes remain available, but migration failure prevents service startup. Codex will not deploy or mutate Production.
-Blockers: None; implementation begins only after the approval checkpoint is committed.
+- Added ordered non-transactional migration `0006-historical-parity-paper-run-order-index`, which creates the exact concurrent partial expression index for Legacy PaperRun `old_payload_json ->> 'paper_order_id'` lookups and records completion only after an exact valid/ready/live/non-unique B-tree shape check.
+- Split the Legacy apply parity-audit exclusion into source-specific `PaperSellFill`, current `PaperRun`, legacy payload-bound `PaperRun`, and `PaperPosition`/`PaperSettlement` predicates. Candidate membership, all compare-and-set guards, FullChain/RunOnlyLegacy shapes, configured batch size 50, transaction boundaries, timeouts, formulas, updates, counts and retries are unchanged.
+- Added telemetry-only Paper mark persistence stages `OpenConnection`, `SerializeUpdates`, `ExecuteCommand`, `ReadResults`, and separate `ApplyExposureCache`; mark SQL, CAS, `SKIP LOCKED`, cache semantics, queue behavior and trading behavior are unchanged.
+- Updated focused tests and bounded documentation. Independent reviewer `agent:/root/reviewer_legacy_apply_mark_stages` compared the verbatim request, approved contract, full diff and evidence and returned PASS with no findings.
+Next: User-controlled deployment, then inspect the first startup migration result and read-only Production logs for Legacy apply completion plus the new exact mark slow-stage attribution.
+Notes: Approved contract `RC-20260831-legacy-apply-index-mark-stage-telemetry` digest `sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60`. Real PostgreSQL Release tests passed 1/1 for the migration index, 5/5 for Legacy apply and 4/4 for Paper mark/settlement; final focused tests passed 65/65. Release solution build passed with 0 errors and 126 existing warnings. The allowlisted disposable PostgreSQL database was dropped and verified absent while local `polycopytrader` remained present. Protected cleanup removed the exact marked 304,392,941-byte temp run and verified it absent. No Production, deployment, service, strategy, order, configuration or trading state was changed.
+Blockers: None.
 
 ## Active Update 2026-08-31 Production Health, Betting, And Log Verification
 Goal: Verify current Production service health, Paper betting, server logs, market-data queue behavior, and the longer-run result of the non-blocking position-mark deployment.

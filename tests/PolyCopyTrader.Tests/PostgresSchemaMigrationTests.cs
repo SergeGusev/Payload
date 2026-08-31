@@ -73,12 +73,13 @@ public sealed class PostgresSchemaMigrationTests
     public void DefaultCatalog_IsBoundToApprovedLegacyChecksum()
     {
         var catalog = PostgresSchemaMigrationCatalog.CreateDefault();
-        Assert.Equal(5, catalog.Count);
+        Assert.Equal(6, catalog.Count);
         var baseline = catalog[0];
         var lossDiff = catalog[1];
         var ethUp8LossDiff = catalog[2];
         var signalsTraderWalletIndex = catalog[3];
         var followMarketStrategies = catalog[4];
+        var historicalParityPaperRunOrderIndex = catalog[5];
 
         Assert.Equal(PostgresSchemaMigrationCatalog.LegacyBaselineId, baseline.Id);
         Assert.Equal(
@@ -136,6 +137,29 @@ public sealed class PostgresSchemaMigrationTests
             PostgresFollowMarketStrategySchemaMigration.SemanticChecksum,
             followMarketStrategies.SemanticChecksum);
         Assert.Null(followMarketStrategies.CompletionCheckSql);
+        Assert.Equal(
+            PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.Id,
+            historicalParityPaperRunOrderIndex.Id);
+        Assert.Equal(5, historicalParityPaperRunOrderIndex.Order);
+        Assert.False(historicalParityPaperRunOrderIndex.Transactional);
+        Assert.False(historicalParityPaperRunOrderIndex.IsLegacyBaseline);
+        Assert.Equal(
+            PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.SemanticChecksum,
+            historicalParityPaperRunOrderIndex.SemanticChecksum);
+        Assert.Equal(
+            PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.CompletionCheckSql,
+            historicalParityPaperRunOrderIndex.CompletionCheckSql);
+        Assert.Contains(
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_historical_parity_paper_run_order",
+            historicalParityPaperRunOrderIndex.Sql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "old_payload_json ->> 'paper_order_id'",
+            historicalParityPaperRunOrderIndex.Sql,
+            StringComparison.Ordinal);
+        Assert.Contains("index_metadata.indisvalid", historicalParityPaperRunOrderIndex.CompletionCheckSql, StringComparison.Ordinal);
+        Assert.Contains("index_metadata.indisready", historicalParityPaperRunOrderIndex.CompletionCheckSql, StringComparison.Ordinal);
+        Assert.Contains("index_metadata.indislive", historicalParityPaperRunOrderIndex.CompletionCheckSql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -149,6 +173,17 @@ public sealed class PostgresSchemaMigrationTests
                 actual,
                 StringComparison.Ordinal),
             $"Actual Follow Market migration checksum: {actual}");
+    }
+
+    [Fact]
+    public void HistoricalParityPaperRunOrderIndexMigration_ChecksumMatchesSql()
+    {
+        var actual = PostgresSchemaMigration.CalculateSemanticChecksum(
+            PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.Sql);
+
+        Assert.Equal(
+            PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.SemanticChecksum,
+            actual);
     }
 
     [Fact]
@@ -311,6 +346,110 @@ WHERE code LIKE '%_up_down_5m_follow_market_%'
             await ExecuteAsync(
                 connectionString,
                 "CREATE TABLE public.signals(id uuid NOT NULL, trader_wallet text NOT NULL, accepted boolean NOT NULL DEFAULT false);");
+            await ExecuteAsync(connectionString, wrongIndexStatement);
+            Assert.False(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresMigrationIntegration")]
+    public async Task HistoricalParityPaperRunOrderIndexMigration_CreatesExactShapeUsesIndexAndRejectsWrongShapes()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = CreateFactory(connectionString);
+        var baseline = new PostgresSchemaMigration(
+            0,
+            "historical-parity-index-test-baseline",
+            """
+CREATE TABLE public.historical_gross_net_parity_audit (
+    audit_id uuid PRIMARY KEY,
+    source_kind text NOT NULL,
+    operation_kind text NOT NULL,
+    calculation_version text NOT NULL,
+    old_payload_json jsonb NOT NULL
+);
+""",
+            transactional: false,
+            details: "historical parity index test baseline",
+            isLegacyBaseline: true);
+        var migration = PostgresSchemaMigrationCatalog.CreateDefault()[5];
+
+        await ResetPublicSchemaAsync(connectionString);
+        var initializer = new PostgresSchemaInitializer(factory, [baseline, migration]);
+        await initializer.InitializeAsync();
+        Assert.True(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        Assert.Equal(
+            1,
+            await ScalarAsync<int>(
+                connectionString,
+                $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+
+        await ExecuteAsync(
+            connectionString,
+            """
+INSERT INTO public.historical_gross_net_parity_audit (
+    audit_id, source_kind, operation_kind, calculation_version, old_payload_json)
+SELECT
+    gen_random_uuid(),
+    'PaperRun',
+    'AccountingDecision',
+    'historical-gross-net-parity-v1',
+    jsonb_build_object('paper_order_id', 'order-' || value::text)
+FROM generate_series(1, 1000) AS value;
+ANALYZE public.historical_gross_net_parity_audit;
+""");
+        var plan = await ReadLinesAsync(
+            connectionString,
+            """
+SET enable_seqscan = off;
+EXPLAIN (COSTS OFF)
+SELECT 1
+FROM public.historical_gross_net_parity_audit
+WHERE source_kind = 'PaperRun'
+  AND operation_kind = 'AccountingDecision'
+  AND calculation_version = 'historical-gross-net-parity-v1'
+  AND old_payload_json ->> 'paper_order_id' = 'order-500';
+""");
+        Assert.Contains(
+            plan,
+            line => line.Contains("ix_historical_parity_paper_run_order", StringComparison.Ordinal));
+
+        await initializer.InitializeAsync();
+        Assert.Equal(
+            1,
+            await ScalarAsync<int>(
+                connectionString,
+                $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+
+        await ResetPublicSchemaAsync(connectionString);
+        await new PostgresSchemaInitializer(factory, [baseline]).InitializeAsync();
+        await ExecuteAsync(connectionString, migration.Sql);
+        await new PostgresSchemaInitializer(factory, [baseline, migration]).InitializeAsync();
+        Assert.True(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        Assert.Equal(
+            1,
+            await ScalarAsync<int>(
+                connectionString,
+                $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+
+        var wrongIndexStatements = new[]
+        {
+            "CREATE UNIQUE INDEX ix_historical_parity_paper_run_order ON public.historical_gross_net_parity_audit ((old_payload_json ->> 'paper_order_id')) WHERE source_kind='PaperRun' AND operation_kind='AccountingDecision' AND calculation_version='historical-gross-net-parity-v1';",
+            "CREATE INDEX ix_historical_parity_paper_run_order ON public.historical_gross_net_parity_audit ((old_payload_json ->> 'paper_order_id'));",
+            "CREATE INDEX ix_historical_parity_paper_run_order ON public.historical_gross_net_parity_audit ((old_payload_json ->> 'wrong_id')) WHERE source_kind='PaperRun' AND operation_kind='AccountingDecision' AND calculation_version='historical-gross-net-parity-v1';",
+            "CREATE INDEX ix_historical_parity_paper_run_order ON public.historical_gross_net_parity_audit ((old_payload_json ->> 'paper_order_id')) WHERE source_kind='PaperRun' AND operation_kind='AccountingDecision' AND calculation_version='wrong-version';",
+            "CREATE INDEX ix_historical_parity_paper_run_order ON public.historical_gross_net_parity_audit ((old_payload_json ->> 'paper_order_id') DESC) WHERE source_kind='PaperRun' AND operation_kind='AccountingDecision' AND calculation_version='historical-gross-net-parity-v1';"
+        };
+
+        foreach (var wrongIndexStatement in wrongIndexStatements)
+        {
+            await ResetPublicSchemaAsync(connectionString);
+            await ExecuteAsync(connectionString, baseline.Sql);
             await ExecuteAsync(connectionString, wrongIndexStatement);
             Assert.False(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
         }
@@ -846,7 +985,7 @@ VALUES (
         Assert.Equal(0, await ScalarAsync<int>(
             connectionString,
             "SELECT sum(current_value)::integer FROM public.strategy_loss_diff_states WHERE parent_strategy_id = 'b7c50005-0000-4000-8137-000000000108';"));
-        Assert.Equal(5, await ScalarAsync<int>(
+        Assert.Equal(6, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
@@ -955,7 +1094,7 @@ JOIN pg_namespace ns ON ns.oid=cls.relnamespace
 WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
 """);
         Assert.True(relationCount > 100);
-        Assert.Equal(5, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(6, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
 
         await Task.Delay(25);
         await initializer.InitializeAsync();
@@ -963,7 +1102,7 @@ WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
         Assert.Equal(
             firstUpdatedAt,
             await ScalarAsync<DateTime>(connectionString, "SELECT max(updated_at_utc) FROM public.strategies;"));
-        Assert.Equal(5, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(6, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
 
     private static string CreateSettledLossDiffParentRunsSql(
@@ -1063,6 +1202,27 @@ GRANT ALL ON SCHEMA public TO PUBLIC;
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection) { CommandTimeout = 0 };
         await command.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<IReadOnlyList<string>> ReadLinesAsync(
+        string connectionString,
+        string sql)
+    {
+        var lines = new List<string>();
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection) { CommandTimeout = 0 };
+        await using var reader = await command.ExecuteReaderAsync();
+        do
+        {
+            while (await reader.ReadAsync())
+            {
+                lines.Add(reader.GetString(0));
+            }
+        }
+        while (await reader.NextResultAsync());
+
+        return lines;
     }
 
     private static async Task AssertAdvisoryLockAvailableAsync(NpgsqlConnection connection)

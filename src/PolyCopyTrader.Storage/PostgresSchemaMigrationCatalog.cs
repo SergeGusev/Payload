@@ -99,8 +99,33 @@ public static class PostgresSchemaMigrationCatalog
                 $"actual {followMarketStrategies.SemanticChecksum}.");
         }
 
+        var historicalParityPaperRunOrderIndex = new PostgresSchemaMigration(
+            order: 5,
+            id: PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.Id,
+            sql: PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.Sql,
+            transactional: false,
+            details: "create exact historical parity PaperRun paper-order lookup index",
+            completionCheckSql: PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.CompletionCheckSql);
+        if (!string.Equals(
+                historicalParityPaperRunOrderIndex.SemanticChecksum,
+                PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.SemanticChecksum,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"PostgreSQL migration checksum mismatch for '{PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.Id}'. " +
+                $"Expected {PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.SemanticChecksum}, " +
+                $"actual {historicalParityPaperRunOrderIndex.SemanticChecksum}.");
+        }
+
         return ValidateAndOrder(
-            [baseline, lossDiffStrategies, ethUp8LossDiffStrategies, signalsTraderWalletIndex, followMarketStrategies]);
+            [
+                baseline,
+                lossDiffStrategies,
+                ethUp8LossDiffStrategies,
+                signalsTraderWalletIndex,
+                followMarketStrategies,
+                historicalParityPaperRunOrderIndex
+            ]);
     }
 
     public static IReadOnlyList<PostgresSchemaMigration> ValidateAndOrder(
