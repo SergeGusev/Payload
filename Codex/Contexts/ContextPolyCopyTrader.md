@@ -1,3 +1,14 @@
+## Active Update 2026-08-31 Legacy Apply Index And Paper Mark Stage Telemetry
+Goal: Correct the verified recurring Legacy apply timeout and expose the exact internal stage of the still-unexplained Paper position-mark persistence delay.
+Status: Requirement contract approved; approval checkpoint pending before implementation
+Done:
+- Production evidence tied the Legacy failure to the 50-row apply page repeatedly timing out while evaluating historical parity-audit exclusions; the relevant audit relation is about 910 MB with approximately 186 thousand decision rows, and the legacy PaperRun `old_payload_json ->> 'paper_order_id'` lookup has no matching index.
+- Current mark persistence already uses deterministic `FOR UPDATE SKIP LOCKED` selection and complete compare-and-set predicates. Bounded `pg_stat_activity` sampling did not capture an active mark query, so the remaining multi-second stage is still unknown and no speculative behavior change is authorized.
+- Drafted and machine-validated `RC-20260831-legacy-apply-index-mark-stage-telemetry` with semantic digest `sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60`.
+Next: Commit and push the approved contract checkpoint before product edits, then add the concurrent partial expression-index migration, refactor only the indexed Legacy exclusion predicates, and add mark-stage telemetry without changing persistence semantics.
+Notes: The first user-controlled deployment will wait for the one-time `CREATE INDEX CONCURRENTLY` migration; PostgreSQL table reads/writes remain available, but migration failure prevents service startup. Codex will not deploy or mutate Production.
+Blockers: None; implementation begins only after the approval checkpoint is committed.
+
 ## Active Update 2026-08-31 Production Health, Betting, And Log Verification
 Goal: Verify current Production service health, Paper betting, server logs, market-data queue behavior, and the longer-run result of the non-blocking position-mark deployment.
 Status: Service and Paper betting are active; two recurring background/latency problems remain

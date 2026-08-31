@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260831-legacy-apply-index-mark-stage-telemetry",
+  "title": "Fix Legacy apply timeout and expose Paper mark persistence stages",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, делай необходимые доработки"
+    }
+  ],
+  "scope": {
+    "goal": "Correct the verified recurring Legacy historical-accounting apply timeout and obtain exact internal stage evidence for the still-unexplained multi-second Paper position-mark repository call, without changing trading, accounting, or mark-update semantics.",
+    "inScope": [
+      "Add one ordered non-transactional PostgreSQL migration that creates a concurrent partial expression index for exact historical-gross-net-parity-v1 PaperRun AccountingDecision old_payload_json paper_order_id lookups and verifies the exact valid index shape before recording migration completion.",
+      "Refactor only the Legacy apply-time parity-audit exclusion into source-specific predicates so exact source-id checks keep using the existing decision index and legacy PaperRun order bindings use the new expression index.",
+      "Preserve the complete Legacy candidate identity, structural/accounting compare-and-set guards, FullChain and RunOnlyLegacy shapes, all-or-nothing transaction for each configured batch, immutable cutoff, configured batch size and timeouts, update fields, idempotency and diagnostic counts.",
+      "Add stage-only telemetry inside PostgreSQL batch Paper position-mark persistence for update serialization, connection acquisition, command execution, result reading and exposure-cache application, surfaced through the existing market-data slow-warning trace.",
+      "Add focused migration, storage, real-PostgreSQL, market-data trace and non-regression tests plus bounded documentation updates."
+    ],
+    "outOfScope": [
+      "No change to strategy decisions, order placement, Paper or Live execution semantics, fills, settlements, PnL, fees, risk controls, Maker-GTD behavior, Live submission or Dashboard calculations.",
+      "No change to Legacy candidate membership, ranking, cursor, page size, configured BatchSize, command timeout, worker cadence, retry policy, transaction boundary or financial/accounting formulas.",
+      "No change to Paper position-mark calculation, compare-and-set predicates, SKIP LOCKED behavior, update frequency, queue topology, queue capacity, coalescing, admission, worker count, timeout or retry behavior.",
+      "No speculative position-mark performance correction before the new stage telemetry identifies whether the remaining delay is serialization, connection acquisition, SQL execution, result reading or cache application.",
+      "No Production database command, deployment, service stop/restart, strategy/order/configuration mutation, backup, deletion or manual index creation by Codex."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future Legacy exact apply batches and future batch Paper mark updates after user-controlled deployment; no historical replay or direct Production mutation by Codex.",
+    "firstVerification": "Correlate current Production read-only backfill events/logs with the exact apply SQL and audit-table/index catalog, then inspect the complete Paper mark call path and attempt bounded pg_stat_activity sampling before selecting an implementation."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "The repeatedly timing-out Legacy apply query must use an exact indexed lookup for legacy PaperRun order bindings while preserving every existing exclusion and accounting invariant.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "делай необходимые доработки",
+      "acceptanceCriteria": [
+        "A new ordered migration creates the index with CREATE INDEX CONCURRENTLY and is non-transactional, idempotently skipped only when a completion check proves the exact index is valid, ready, live, non-unique, partial and expression-equivalent.",
+        "The indexed expression and partial predicate match only source_kind PaperRun, operation_kind AccountingDecision and calculation_version historical-gross-net-parity-v1 old_payload_json paper_order_id values used by the Legacy apply guard.",
+        "The apply SQL separates PaperSellFill source-id, exact PaperRun source-id, legacy PaperRun old-payload order binding, and PaperPosition/PaperSettlement evidence exclusions without weakening any exclusion.",
+        "The apply method retains one atomic transaction for the complete configured updates batch, the 250ms lock timeout, 10-second statement/command timeout, work_mem and parallelism settings, complete CAS guards, FullChain/RunOnlyLegacy update fields, invariant checks and idempotent retry behavior.",
+        "Focused real-PostgreSQL tests prove an indexed legacy PaperRun audit binding excludes the target, an unrelated audit does not exclude it, an eligible target updates exactly once, and retry is already-applied/idempotent.",
+        "No strategy, execution, accounting formula, configured batch size, timeout, worker scheduling or direct Production state changes are present."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillPostgresIntegrationTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused PostgresSchemaMigrationTests and HistoricalPaperFakFeeBackfill tests in Release against an allowlisted disposable PostgreSQL database, with artifacts/results under the marked D:\\CodexTemp run.",
+          "expected": "Migration shape/idempotency, indexed plan, complete parity exclusion semantics, atomic apply invariants and retry behavior all pass under the unchanged ten-second product command limit.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Future slow Paper position-mark warnings must identify the exact internal repository stage without changing mark persistence behavior.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "необходимые доработки",
+      "acceptanceCriteria": [
+        "The PostgreSQL batch mark method reports ordered stage transitions for serialization, connection acquisition, SQL execution and result reading through an optional repository observer used by the market-data updater.",
+        "The updater records the exposure-cache application as a separate stage and the existing slow-warning SlowestPhase/SlowestOperation fields expose the longest completed stage.",
+        "Repositories that do not implement the optional stage-aware overload retain their current behavior through the interface default and existing callers remain source-compatible.",
+        "The mark SQL, complete expected-state CAS, deterministic FOR UPDATE SKIP LOCKED selection, returned persisted rows and cache application semantics remain byte-for-byte or observably unchanged except for telemetry calls.",
+        "Focused trace tests prove a deliberately delayed repository stage appears as the slowest stage and existing mark/settlement concurrency tests remain green."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectDiagnostics.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused Paper mark repository, settlement-concurrency, updater trace and side-effect slow-warning tests in Release under the marked D:\\CodexTemp run.",
+          "expected": "Every existing mark value/CAS/cache invariant passes and the new internal stage attribution is deterministic, with no queue or persistence behavior change.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "The bounded local correction must be buildable, reviewable and safe for user-controlled deployment without Codex mutating Production.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Ок, делай",
+      "acceptanceCriteria": [
+        "Release focused tests and solution build complete with zero task-related failures; existing unrelated baseline failures, if any, are reported rather than represented as green.",
+        "git diff --check, WorkingTree and Staged requirement validation pass.",
+        "An independent reviewer compares the verbatim request, approved contract, complete diff and verification evidence and returns PASS with no open findings.",
+        "All disposable build, test, database and diagnostic artifacts remain under the marked D:\\CodexTemp run and are removed before completion.",
+        "Only the approved migration/query, mark telemetry, focused tests and bounded documentation paths change; Codex performs no Production mutation or deployment."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectDiagnostics.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillStorageTests.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalPaperFakFeeBackfillPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "Build PolyCopyTrader.sln in Release and run the approved focused/relevant tests with --artifacts-path and --results-directory under the marked D:\\CodexTemp run; run diff checks, requirement gates and independent semantic review.",
+          "expected": "Build, focused tests, gates, cleanup and review pass with no unapproved path or semantic change.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The position-mark part of this task adds exact internal stage telemetry only; it does not claim to fix the still-unproven cause of the remaining delay.",
+      "impact": "After deployment, the next slow warning will distinguish serialization, connection acquisition, SQL execution, result reading or cache application. A later behavior/performance correction is permitted only after that evidence and a separate approved contract.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260831-legacy-apply-index-mark-stage-telemetry sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60",
+        "semanticDigest": "sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "The new exact audit index is delivered as a one-time non-transactional CREATE INDEX CONCURRENTLY startup migration.",
+      "impact": "On the first user-controlled deployment, PostgreSQL permits normal table reads/writes while the index builds, but the service host waits for migration completion before starting. The current Production audit relation is about 910 MB with approximately 186 thousand rows, so startup will be delayed by the actual concurrent index-build duration; if the migration fails, the service will fail closed instead of running without the required index.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260831-legacy-apply-index-mark-stage-telemetry sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60",
+        "semanticDigest": "sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260831-legacy-apply-index-mark-stage-telemetry sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60",
+    "semanticDigest": "sha256:a8b77cefa2e0236e740cec112d10176487548170959a149159569c78e44d6f60"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_legacy_apply_mark_stages",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
