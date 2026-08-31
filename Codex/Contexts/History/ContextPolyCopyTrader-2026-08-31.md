@@ -31,3 +31,10 @@ Request:
 
 Result:
 Completed the approved bounded local correction. Added ordered non-transactional migration `0006` with the exact concurrent partial expression index and fail-closed catalog check; split only the Legacy apply parity-audit exclusion into equivalent source-specific indexed predicates; and added telemetry-only Paper mark stages through `ApplyExposureCache` without changing mark persistence, queue or trading behavior. Real PostgreSQL Release tests passed 1/1, 5/5 and 4/4; final focused tests passed 65/65; Release solution build passed with 0 errors and 126 existing warnings. Independent reviewer `agent:/root/reviewer_legacy_apply_mark_stages` returned PASS with no findings. The exact disposable database and the protected 304,392,941-byte marked temp run were removed and independently verified absent. No Production or deployment state was changed; the user controls deployment.
+
+## 2026-08-31T07:51:47.9846800+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Verified Production read-only after deployment of exact commit `e5335ec3263032fe4e4e188c8261fd3549f26aec`. Service was Running/Live with fresh heartbeat and NULL last error; migration `0006` and its exact valid/ready/live index were confirmed. The process produced 603 Filled Paper orders with 603 matching fills and updated 863 Paper positions in the bounded post-start sample. The Legacy worker completed 15 cycles with zero failures, Error events, or query cancellations; one requested candidate was a structural conflict and no eligible apply row had yet exercised a larger update page. Logs contained zero ERR/FTL, Legacy cycle failures, or slow side-effect warnings; queue boundary samples were empty with zero rejected/failed/overflow work. Two transient BTC/SOL reference warnings recovered, independently confirmed by fresh persisted BTC/ETH/SOL ticks. No Production state was changed.

@@ -1,3 +1,19 @@
+## Active Update 2026-08-31 Legacy Apply And Mark Telemetry Post-Deploy Verification
+Goal: Verify Production service health, betting, migration `0006`, Legacy backfill, queue latency, and logs after deployment of commit `e5335ec3`.
+Status: Completed; deployment healthy in the observed post-start window
+Done:
+- At final database cutoff `2026-08-31T07:51:47.984680Z`, `PolyCopyTrader.Service` was `Running`/`Live` on exact build `e5335ec3263032fe4e4e188c8261fd3549f26aec`, started at `2026-08-31T07:38:08.288034Z`, heartbeat age was `39.246s`, and `last_error` was NULL.
+- Migration `0006-historical-parity-paper-run-order-index` was recorded at `2026-08-31T07:38:08.185063Z` with exact checksum `cf849b3359dea554f86f4f2a7d2d2ecbb5a6b1240f957f6e31d932a599db603a`. The Production index was independently confirmed valid, ready, live, non-unique, and exact in expression/predicate.
+- By cutoff `2026-08-31T07:50:42.144586Z`, the new process had created 603 Paper orders, all `Filled`, with exactly 603 distinct matching fills; the latest was `2026-08-31T07:50:30.133768Z`. A later independent latest-10 check found all ten Filled with fills through `2026-08-31T07:51:30.356090Z`.
+- 863 Paper positions had post-start updates in the bounded sample, latest `2026-08-31T07:50:30.133768Z`, confirming the mark path remained active.
+- The Legacy worker completed 15 post-start cycles through `2026-08-31T07:51:40.617377Z` with zero failed cycles, Error events, or query cancellations. One requested candidate completed as a structural conflict; no apply row had yet been eligible or updated, so the previous timeout was absent in this sample but a future larger eligible page was not exercised.
+- Post-start server logs through the checked `10:49:08+03:00` queue metric contained zero ERR/FTL, zero Legacy cycle-failure lines, and zero slow market-data side-effect warnings. General processed updates advanced from 304 to 4,219 with zero rejected, failed, or soft-limit-overflow updates and zero pending/in-flight work in both boundary samples.
+- Two transient reference warnings occurred: BTC had no first stream price at `07:38:14.516Z`, and SOL was stale by `8.41s` at `07:43:04.590Z`. An independent database check at `2026-08-31T07:49:09.223001Z` confirmed fresh BTC/ETH/SOL ticks with sampled ages `4.584..4.589s`, proving recovery.
+- No post-start Live order row was observed across the exact status allowlist. This is not evidence of a fault because no qualifying Live opportunity was established; active Paper execution was independently confirmed.
+Next: None; continue user-controlled operation.
+Notes: The new mark-stage labels were not emitted because no side effect crossed the configured one-second slow threshold, so their Production attribution branch remains unobserved rather than failed. Production SQL targeted only `192.168.0.101:5432/polycopytrader`, used `BEGIN READ ONLY`, UTC, `statement_timeout=15s`, `lock_timeout=2s`, and bounded/indexed queries. Logs were read only from `\\192.168.0.101\CodexLogs`. No Production, database, service, strategy, order, configuration, deployment, or product-source state was changed.
+Blockers: None.
+
 ## Active Update 2026-08-31 Legacy Apply Index And Paper Mark Stage Telemetry
 Goal: Correct the verified recurring Legacy apply timeout and expose the exact internal stage of the still-unexplained Paper position-mark persistence delay.
 Status: Completed locally and independently reviewed; not deployed
