@@ -1,3 +1,15 @@
+## Active Update 2026-09-01 Two Cancelled Live Shadow Orders
+Goal: Explain why the two Live orders for `ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+` were marked `Cancelled`.
+Status: Completed
+Done:
+- Identified the exact strategy `b7c50005-0000-4000-8225-000000000004` and its two Cancelled Live rows: `dcc9b573-3675-414d-a59f-af42fa7a7d9d` at `2026-08-28T16:09:30.652031Z` and `c59a3212-8649-4339-949d-8d72e5687443` at `2026-09-01T12:34:30.533545Z`.
+- Verified a shared Live-shadow lifecycle race: `TryPlacePaperLiveShadowOrderAsync` persists each FAK intent with `ExpiresAtUtc=nowUtc`, although the corresponding shadow decisions had later cancel deadlines (`16:14:00Z` and `12:39:00Z`). The open-order worker therefore treated the still-in-flight intent as immediately expired, invoked cancel-all while `order_id` was still NULL, and changed the database row to `Cancelled`.
+- Verified that the later placement-result persistence lost the row-version compare-and-swap race; both durable runtime events report `BtcUpDown5mPaperLiveShadowPersistSubmit | Error | Live order ... changed or is owned by Historical Gross/Net parity.` The linked Paper shadows were then cancelled/skipped as `paper_live_shadow_live_not_filled`.
+- Independently confirmed the newer race in the server HTTP log: cancel-all began at `2026-09-01T12:34:33.769Z`, the order POST began at `12:34:34.511Z`, and a specific order DELETE began at `12:34:44.332Z` after the persistence conflict.
+Next: A source correction is required if the user authorizes implementation; no code or Production state was changed in this diagnostic task.
+Notes: This was not a LossDiff, balance, risk, disabled-strategy, or normal FAK market rejection. Exact venue fill/non-fill for the two requests is unknown because the placement results were not persisted; later Data API aggregate-position observations are explicitly not exact per-order evidence. Production inspection used only `192.168.0.101:5432/polycopytrader` in read-only UTC sessions with bounded queries and server logs from `\\192.168.0.101\CodexLogs`.
+Blockers: None for diagnosis; implementation was not requested.
+
 ## Active Update 2026-09-01 Disabled And Dependent LowerEnter Cleanup
 Goal: Remove the exact fixed 15 disabled/dependent LowerEnter strategies, their exactly attributable Product history, and the one immutable audit trigger.
 Status: Completed

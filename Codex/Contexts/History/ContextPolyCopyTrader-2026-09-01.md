@@ -102,3 +102,10 @@ Request:
 
 Result:
 Verified deployed Product build `51348f38e27be7716eeeb80162d0164ac44d9394`, then completed the approved exact cleanup against only `192.168.0.101:5432/polycopytrader`: 836,106 target-attributable history rows and exactly 15 strategy rows were affected across 536 committed transactions. Immediate clean recheck before worker slot 1 and delayed full checks after slots `14:54:30Z` and `14:59:30Z` found zero targets, zero residuals in all 37 guarded predicates, one marker, unchanged 2,653 non-target strategies/fingerprint, healthy Running/Live service, NULL `last_error`, and zero waiting locks. Product logs contained zero ERR/FTL through `18:04:54+03:00`; independent semantic review returned PASS with no findings. No service stop/restart, backup, local-database mutation, unrelated schema/index change, VACUUM/physical compaction, or non-target deletion occurred.
+
+## 2026-09-01T19:52:16.3935552Z
+Request:
+Почему были Cancelled две живые ставки стратегии ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+ ?
+
+Result:
+Diagnosed both exact Cancelled Live-shadow FAK orders using Production database rows, durable runtime events, current implementation, and the retained server HTTP log. Both were cancelled by the same local lifecycle race: the persisted Live intent incorrectly had `ExpiresAtUtc` equal to its creation time, so the lifecycle worker ran cancel-all before the still-in-flight placement response could persist its venue order id. The later placement update then failed its row-version compare-and-swap, leaving the rows `Cancelled` and the linked Paper shadows skipped. The newer log independently shows cancel-all before the order POST and a specific DELETE after the persistence conflict. Exact venue fill/non-fill is unknown because the placement result was not persisted; aggregate Data API position evidence cannot identify an exact order. No source, Production database, service, order, strategy, or configuration was changed.
