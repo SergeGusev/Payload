@@ -117,6 +117,23 @@ public static class PostgresSchemaMigrationCatalog
                 $"actual {historicalParityPaperRunOrderIndex.SemanticChecksum}.");
         }
 
+        var historicalParityAuditTrigger = new PostgresSchemaMigration(
+            order: 6,
+            id: PostgresHistoricalParityAuditTriggerSchemaMigration.Id,
+            sql: PostgresHistoricalParityAuditTriggerSchemaMigration.Sql,
+            transactional: true,
+            details: "drop exact historical Gross-to-Net parity audit immutability trigger");
+        if (!string.Equals(
+                historicalParityAuditTrigger.SemanticChecksum,
+                PostgresHistoricalParityAuditTriggerSchemaMigration.SemanticChecksum,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"PostgreSQL migration checksum mismatch for '{PostgresHistoricalParityAuditTriggerSchemaMigration.Id}'. " +
+                $"Expected {PostgresHistoricalParityAuditTriggerSchemaMigration.SemanticChecksum}, " +
+                $"actual {historicalParityAuditTrigger.SemanticChecksum}.");
+        }
+
         return ValidateAndOrder(
             [
                 baseline,
@@ -124,7 +141,8 @@ public static class PostgresSchemaMigrationCatalog
                 ethUp8LossDiffStrategies,
                 signalsTraderWalletIndex,
                 followMarketStrategies,
-                historicalParityPaperRunOrderIndex
+                historicalParityPaperRunOrderIndex,
+                historicalParityAuditTrigger
             ]);
     }
 

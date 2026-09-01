@@ -6,9 +6,11 @@ Done:
 - Verified that the approved proposal to edit `PostgresSchema.SchemaSql` is incompatible with the current versioned initializer: that SQL is checksum-protected immutable baseline migration `0001`, and editing it would fail service startup before the requested trigger change could apply.
 - Reverted every tentative product-source edit; Product and the local database remain unmodified. Revised the contract to preserve baseline `0001`, remove the 15 targets from runtime catalogs, and remove only the exact trigger through ordered transactional migration `0007`.
 - Received exact user approval for source-stage contract `RC-20260901-stage-disabled15-service-before-history-cleanup` at digest `sha256:22301d964e9e19d49d73ae790852ef8db54a28ff4a185d17d405de52f5eb3921`.
-Next: Commit the approved source-stage checkpoint, finish verification and independent review, push the bounded service change to `master`, then await the user-controlled deployment before Product cleanup.
+- Implemented the exact 15-target runtime-catalog exclusion while preserving immutable baseline migration `0001`, and added ordered transactional migration `0007` that drops only the exact audit immutability trigger.
+- Final focused tests passed 22/22; the Release solution build completed with zero errors; `git diff --check` passed. Independent reviewer `agent:/root/progress217_semantic_review` returned `PASS` with no findings.
+Next: Commit and push the bounded service change to `master`, then await the user-controlled deployment before Product cleanup.
 Notes: The revised deviation explicitly records that a genuinely new empty database can still receive the 15 legacy seed rows from immutable baseline `0001`, although the runtime catalog cannot dispatch them. Existing Product does not replay baseline `0001`; after the later guarded cleanup it cannot reseed the targets through schema initialization.
-Blockers: None for local implementation; Product cleanup remains gated on user deployment and fresh runtime verification.
+Blockers: Product cleanup remains gated on user deployment and fresh runtime verification.
 
 ## Active Update 2026-09-01 Progress-217 Product Cleanup
 Goal: Delete the exact previously approved 217 stopped unreferenced negative-Progress strategies and all exactly attributable structured Production history.

@@ -10463,7 +10463,7 @@ END $$;
 
     private static string BuildLowerEnterPremarketStrategySeedSql()
     {
-        var variants = StrategyIds.UpDown5mStrategyVariants
+        var variants = StrategyIds.LegacyBaselineUpDown5mStrategyVariants
             .Where(variant => variant.LowerEnterSourceStrategyId is not null)
             .ToArray();
         var sql = new StringBuilder(variants.Length * 640);

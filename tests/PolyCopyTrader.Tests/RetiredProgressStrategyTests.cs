@@ -7,7 +7,7 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class RetiredProgressStrategyTests
 {
-    private static readonly (Guid SourceId, string SourceCode, Guid OwnerId, string OwnerCode)[] RetainedLowerEnterLinks =
+    private static readonly (Guid SourceId, string SourceCode, Guid OwnerId, string OwnerCode)[] LegacyBaselineRetainedLowerEnterLinks =
     [
         (
             Guid.Parse("b7c50005-0000-4000-8166-000000000003"),
@@ -26,6 +26,16 @@ public sealed class RetiredProgressStrategyTests
             "btc_up_down_5m_5_diff_real_limit_progress_lower_enter_premarket")
     ];
 
+    private static readonly (Guid SourceId, string SourceCode, Guid OwnerId, string OwnerCode)[] RemovedLowerEnterLinks =
+    [
+        .. LegacyBaselineRetainedLowerEnterLinks,
+        (
+            Guid.Parse("b7c50005-0000-4000-8182-000000000101"),
+            "btc_up_down_5m_futures_basis_bps_1_fak_premarket",
+            Guid.Parse("b7c50005-0001-4000-8182-000000000101"),
+            "btc_up_down_5m_futures_basis_bps_1_fak_lower_enter_premarket")
+    ];
+
     [Fact]
     public void StrategyIds_ExcludeExactHopelessProgressAllowlist()
     {
@@ -34,9 +44,9 @@ public sealed class RetiredProgressStrategyTests
         Assert.Equal(57, retiredCodes.Count);
         Assert.All(retiredCodes, code => Assert.Null(StrategyIds.TryGetStrategyIdByCode(code)));
 
-        Assert.NotNull(StrategyIds.TryGetStrategyIdByCode("btc_up_down_5m_3_diff_shift_progress_premarket"));
-        Assert.NotNull(StrategyIds.TryGetStrategyIdByCode("btc_up_down_5m_4_diff_real_limit_progress_premarket"));
-        Assert.NotNull(StrategyIds.TryGetStrategyIdByCode("btc_up_down_5m_5_diff_real_limit_progress_premarket"));
+        Assert.Null(StrategyIds.TryGetStrategyIdByCode("btc_up_down_5m_3_diff_shift_progress_premarket"));
+        Assert.Null(StrategyIds.TryGetStrategyIdByCode("btc_up_down_5m_4_diff_real_limit_progress_premarket"));
+        Assert.Null(StrategyIds.TryGetStrategyIdByCode("btc_up_down_5m_5_diff_real_limit_progress_premarket"));
         Assert.NotNull(StrategyIds.TryGetStrategyIdByCode("sol_up_down_5m_15_child_progress"));
         Assert.NotNull(StrategyIds.TryGetStrategyIdByCode("btc_up_down_5m_4_child_progress_roi"));
         Assert.NotNull(StrategyIds.TryGetStrategyIdByCode("eth_up_down_5m_1_child_progress_roi"));
@@ -58,10 +68,12 @@ public sealed class RetiredProgressStrategyTests
     }
 
     [Fact]
-    public void StrategyIds_ExcludeExact217NegativeProgressTargetsAndPreserveReferencedSources()
+    public void StrategyIds_ExcludeExact217AndExact15DisabledOrDependentTargets()
     {
         var targets = StrategyIds.NegativeProgressPurgeTargets;
         var targetIds = targets.Keys.ToHashSet();
+        var disabledTargets = StrategyIds.DisabledAndDependentLowerEnterPurgeTargets;
+        var disabledTargetIds = disabledTargets.Keys.ToHashSet();
 
         Assert.Equal(217, targets.Count);
         Assert.Equal(217, targets.Keys.Distinct().Count());
@@ -74,25 +86,33 @@ public sealed class RetiredProgressStrategyTests
             Assert.DoesNotContain(StrategyIds.UpDown5mStrategyVariants, variant => variant.Id == target.Key);
         });
 
-        foreach (var link in RetainedLowerEnterLinks)
+        Assert.Equal(15, disabledTargets.Count);
+        Assert.Equal(15, disabledTargets.Keys.Distinct().Count());
+        Assert.Equal(15, disabledTargets.Values.Distinct(StringComparer.Ordinal).Count());
+        Assert.All(disabledTargets, target =>
         {
-            Assert.DoesNotContain(link.SourceId, targetIds);
-            Assert.DoesNotContain(link.OwnerId, targetIds);
+            Assert.StartsWith("b7c50005-", target.Key.ToString("D"), StringComparison.Ordinal);
+            Assert.Null(StrategyIds.TryGetStrategyIdByCode(target.Value));
+            Assert.DoesNotContain(StrategyIds.UpDown5mStrategyVariants, variant => variant.Id == target.Key);
+        });
 
-            var source = Assert.Single(StrategyIds.UpDown5mStrategyVariants, variant =>
-                variant.Id == link.SourceId && variant.Code == link.SourceCode);
-            var owner = Assert.Single(StrategyIds.UpDown5mStrategyVariants, variant =>
-                variant.Id == link.OwnerId && variant.Code == link.OwnerCode);
-            Assert.Null(source.LowerEnterSourceStrategyId);
-            Assert.Equal(source.Id, owner.LowerEnterSourceStrategyId);
-        }
+        Assert.All(RemovedLowerEnterLinks, link =>
+        {
+            Assert.Contains(link.SourceId, disabledTargetIds);
+            Assert.Contains(link.OwnerId, disabledTargetIds);
+            Assert.DoesNotContain(StrategyIds.UpDown5mStrategyVariants, variant =>
+                variant.Id == link.SourceId || variant.Id == link.OwnerId);
+        });
 
         Assert.DoesNotContain(
             StrategyIds.UpDown5mStrategyVariants,
             retained =>
-                (retained.BaseSignalStrategyId is { } baseId && targetIds.Contains(baseId)) ||
-                (retained.ConfirmationSignalStrategyId is { } confirmationId && targetIds.Contains(confirmationId)) ||
-                (retained.LowerEnterSourceStrategyId is { } lowerEnterId && targetIds.Contains(lowerEnterId)));
+                (retained.BaseSignalStrategyId is { } baseId &&
+                 (targetIds.Contains(baseId) || disabledTargetIds.Contains(baseId))) ||
+                (retained.ConfirmationSignalStrategyId is { } confirmationId &&
+                 (targetIds.Contains(confirmationId) || disabledTargetIds.Contains(confirmationId))) ||
+                (retained.LowerEnterSourceStrategyId is { } lowerEnterId &&
+                 (targetIds.Contains(lowerEnterId) || disabledTargetIds.Contains(lowerEnterId))));
     }
 
     [Fact]
@@ -105,6 +125,22 @@ public sealed class RetiredProgressStrategyTests
         Assert.DoesNotContain("allowlist=217", PostgresSchema.SchemaSql, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "DISABLE TRIGGER trg_historical_gross_net_parity_audit_immutable",
+            PostgresSchema.SchemaSql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CREATE TRIGGER trg_historical_gross_net_parity_audit_immutable",
+            PostgresSchema.SchemaSql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DROP TRIGGER IF EXISTS trg_historical_gross_net_parity_audit_immutable",
+            PostgresHistoricalParityAuditTriggerSchemaMigration.Sql,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "CREATE TRIGGER",
+            PostgresHistoricalParityAuditTriggerSchemaMigration.Sql,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CREATE OR REPLACE FUNCTION public.reject_historical_gross_net_parity_immutable_change()",
             PostgresSchema.SchemaSql,
             StringComparison.Ordinal);
         Assert.Contains("lookback_hours IN (1, 2, 3, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24)", PostgresSchema.SchemaSql, StringComparison.Ordinal);
@@ -607,7 +643,7 @@ ORDER BY strategy.id;
 """, connection);
         command.Parameters.AddWithValue(
             "Ids",
-            RetainedLowerEnterLinks.Select(link => link.SourceId).ToArray());
+            LegacyBaselineRetainedLowerEnterLinks.Select(link => link.SourceId).ToArray());
         var payloads = new List<string>();
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync())

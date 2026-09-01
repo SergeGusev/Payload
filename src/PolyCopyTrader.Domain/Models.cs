@@ -1344,13 +1344,28 @@ public static class StrategyIds
 
     public static readonly IReadOnlyDictionary<Guid, string> NegativeProgressPurgeTargets =
         CreateNegativeProgressPurgeTargets();
+    public static readonly IReadOnlyDictionary<Guid, string> DisabledAndDependentLowerEnterPurgeTargets =
+        CreateDisabledAndDependentLowerEnterPurgeTargets();
+
+    private static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> LegacyBaselineBtcUpDown5mVariants =
+        CreateBtcUpDown5mVariants();
+    private static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> LegacyBaselineBtcLowerEnterPremarketVariants =
+        CreateLowerEnterPremarketVariants(LegacyBaselineBtcUpDown5mVariants);
+    private static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> LegacyBaselineCryptoUpDown5mVariants =
+        CreateCryptoUpDown5mVariants();
+    public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> LegacyBaselineUpDown5mStrategyVariants =
+        [
+            .. LegacyBaselineBtcUpDown5mVariants,
+            .. LegacyBaselineBtcLowerEnterPremarketVariants,
+            .. LegacyBaselineCryptoUpDown5mVariants
+        ];
 
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcUpDown5mVariants =
-        CreateBtcUpDown5mVariants();
+        ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineBtcUpDown5mVariants);
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcLowerEnterPremarketVariants =
-        CreateLowerEnterPremarketVariants(BtcUpDown5mVariants);
+        ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineBtcLowerEnterPremarketVariants);
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> CryptoUpDown5mVariants =
-        CreateCryptoUpDown5mVariants();
+        ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineCryptoUpDown5mVariants);
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> UpDown5mStrategyVariants =
         [
             .. BtcUpDown5mVariants,
@@ -2093,6 +2108,59 @@ public static class StrategyIds
         return string.Equals(variant.ReferenceAssetSymbol, "SOL", StringComparison.OrdinalIgnoreCase) &&
             variant.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressRoiMirror &&
             threshold is 4 or 5 or 6 or 13 or 14 or 19 or 21 or 23;
+    }
+
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> ExcludeDisabledAndDependentLowerEnterPurgeTargets(
+        IEnumerable<BtcUpDown5mStrategyVariant> variants)
+    {
+        return variants
+            .Where(variant => !DisabledAndDependentLowerEnterPurgeTargets.ContainsKey(variant.Id))
+            .ToArray();
+    }
+
+    private static IReadOnlyDictionary<Guid, string> CreateDisabledAndDependentLowerEnterPurgeTargets()
+    {
+        var targets = new Dictionary<Guid, string>
+        {
+            [Guid.Parse("b7c50005-0000-4000-8166-000000000003")] =
+                "btc_up_down_5m_3_diff_shift_progress_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8168-000000000002")] =
+                "sol_up_down_5m_2_diff_shift_progress_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8168-000000000003")] =
+                "sol_up_down_5m_3_diff_shift_progress_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8168-000000000005")] =
+                "sol_up_down_5m_5_diff_shift_progress_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8171-000000000003")] =
+                "sol_up_down_5m_3_diff_limit_progress_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8172-000000000004")] =
+                "btc_up_down_5m_4_diff_real_limit_progress_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8172-000000000005")] =
+                "btc_up_down_5m_5_diff_real_limit_progress_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8182-000000000101")] =
+                "btc_up_down_5m_futures_basis_bps_1_fak_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8184-000000000101")] =
+                "sol_up_down_5m_futures_basis_bps_1_fak_premarket",
+            [Guid.Parse("b7c50005-0000-4000-8185-000000000001")] =
+                "btc_up_down_5m_1_child",
+            [Guid.Parse("b7c50005-0000-4000-8196-000000000001")] =
+                "sol_up_down_5m_1_child_roi",
+            [Guid.Parse("b7c50005-0001-4000-8166-000000000003")] =
+                "btc_up_down_5m_3_diff_shift_progress_lower_enter_premarket",
+            [Guid.Parse("b7c50005-0001-4000-8172-000000000004")] =
+                "btc_up_down_5m_4_diff_real_limit_progress_lower_enter_premarket",
+            [Guid.Parse("b7c50005-0001-4000-8172-000000000005")] =
+                "btc_up_down_5m_5_diff_real_limit_progress_lower_enter_premarket",
+            [Guid.Parse("b7c50005-0001-4000-8182-000000000101")] =
+                "btc_up_down_5m_futures_basis_bps_1_fak_lower_enter_premarket"
+        };
+
+        if (targets.Count != 15 || targets.Values.Distinct(StringComparer.Ordinal).Count() != 15)
+        {
+            throw new InvalidOperationException(
+                "The disabled and dependent LowerEnter purge allowlist must contain exactly 15 unique strategies.");
+        }
+
+        return targets;
     }
 
     private static IReadOnlyDictionary<Guid, string> CreateNegativeProgressPurgeTargets()

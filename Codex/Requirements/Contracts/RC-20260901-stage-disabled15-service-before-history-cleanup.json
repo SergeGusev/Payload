@@ -3,7 +3,7 @@
   "contractId": "RC-20260901-stage-disabled15-service-before-history-cleanup",
   "title": "Stage the exact disabled-15 service change before Product history cleanup",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -65,8 +65,8 @@
           "kind": "test",
           "command": "Run RetiredProgressStrategyTests against the exact fixed 15 allowlist and retained-reference guards.",
           "expected": "All exact targets and references are absent from the runtime catalog while the legacy baseline checksum remains unchanged.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated focused run disabled15-focused-02 passed 22/22 with zero failures or skips. StrategyIds_ExcludeExact217AndExact15DisabledOrDependentTargets proved the exact 15 UUID/code targets and every retained BaseSignalStrategyId, ConfirmationSignalStrategyId, and LowerEnterSourceStrategyId reference are absent from the runtime catalog; DefaultCatalog_IsBoundToApprovedLegacyChecksum proved baseline 0001 remains bound to checksum 4dba8fe092057778ff146e61be43cabbb882358c679c8ee70ade832a872b00d2."
         }
       ]
     },
@@ -94,8 +94,8 @@
           "kind": "test",
           "command": "Run PostgresSchemaMigrationTests focused on the default ordered catalog, baseline checksum, and exact migration 0007 SQL/checksum.",
           "expected": "The catalog has seven checksum-bound migrations, baseline 0001 is unchanged, and 0007 contains only the exact trigger drop.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated focused run disabled15-focused-02 passed 22/22. DefaultCatalog_IsBoundToApprovedLegacyChecksum proved the seven-item ordered catalog, unchanged baseline 0001 checksum, transactional order-6 migration 0007, exact checksum b4df914154ed2cdf14c1bab3724be49c9118b1f73677fd5abbc06dfebe4bef74, exact DROP TRIGGER SQL, and absence of CREATE TRIGGER in 0007."
         }
       ]
     },
@@ -126,16 +126,16 @@
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln --configuration Release with disposable outputs under the active marked D:/CodexTemp run.",
           "expected": "Release build completes with zero errors.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final isolated Release solution build disabled15-build-02 completed with 0 errors and 126 existing warnings; every disposable output was directed under the active marked D:/CodexTemp run."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Run git diff --check, requirement validation, and independent semantic review before the implementation commit.",
           "expected": "Mechanical checks pass and the independent reviewer returns PASS with no findings.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "git diff --check passed. Independent reviewer agent:/root/progress217_semantic_review compared all verbatim requests, the approved contract and digest, the entire tracked/untracked diff, runtime and baseline call paths, exact 15 identity digest, migration 0007, focused 22/22 results, and Release build evidence; verdict PASS with no findings. Final WorkingTree and Staged requirement validators are run against this completed record before commit."
         }
       ]
     }
@@ -150,8 +150,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/progress217_semantic_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

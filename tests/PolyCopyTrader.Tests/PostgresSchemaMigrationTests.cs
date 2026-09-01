@@ -73,13 +73,14 @@ public sealed class PostgresSchemaMigrationTests
     public void DefaultCatalog_IsBoundToApprovedLegacyChecksum()
     {
         var catalog = PostgresSchemaMigrationCatalog.CreateDefault();
-        Assert.Equal(6, catalog.Count);
+        Assert.Equal(7, catalog.Count);
         var baseline = catalog[0];
         var lossDiff = catalog[1];
         var ethUp8LossDiff = catalog[2];
         var signalsTraderWalletIndex = catalog[3];
         var followMarketStrategies = catalog[4];
         var historicalParityPaperRunOrderIndex = catalog[5];
+        var historicalParityAuditTrigger = catalog[6];
 
         Assert.Equal(PostgresSchemaMigrationCatalog.LegacyBaselineId, baseline.Id);
         Assert.Equal(
@@ -160,6 +161,20 @@ public sealed class PostgresSchemaMigrationTests
         Assert.Contains("index_metadata.indisvalid", historicalParityPaperRunOrderIndex.CompletionCheckSql, StringComparison.Ordinal);
         Assert.Contains("index_metadata.indisready", historicalParityPaperRunOrderIndex.CompletionCheckSql, StringComparison.Ordinal);
         Assert.Contains("index_metadata.indislive", historicalParityPaperRunOrderIndex.CompletionCheckSql, StringComparison.Ordinal);
+        Assert.Equal(
+            PostgresHistoricalParityAuditTriggerSchemaMigration.Id,
+            historicalParityAuditTrigger.Id);
+        Assert.Equal(6, historicalParityAuditTrigger.Order);
+        Assert.True(historicalParityAuditTrigger.Transactional);
+        Assert.False(historicalParityAuditTrigger.IsLegacyBaseline);
+        Assert.Null(historicalParityAuditTrigger.CompletionCheckSql);
+        Assert.Equal(
+            PostgresHistoricalParityAuditTriggerSchemaMigration.SemanticChecksum,
+            historicalParityAuditTrigger.SemanticChecksum);
+        Assert.Equal(
+            "DROP TRIGGER IF EXISTS trg_historical_gross_net_parity_audit_immutable\nON public.historical_gross_net_parity_audit;",
+            historicalParityAuditTrigger.Sql);
+        Assert.DoesNotContain("CREATE TRIGGER", historicalParityAuditTrigger.Sql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -985,7 +1000,7 @@ VALUES (
         Assert.Equal(0, await ScalarAsync<int>(
             connectionString,
             "SELECT sum(current_value)::integer FROM public.strategy_loss_diff_states WHERE parent_strategy_id = 'b7c50005-0000-4000-8137-000000000108';"));
-        Assert.Equal(6, await ScalarAsync<int>(
+        Assert.Equal(7, await ScalarAsync<int>(
             connectionString,
             "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
@@ -1094,7 +1109,7 @@ JOIN pg_namespace ns ON ns.oid=cls.relnamespace
 WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
 """);
         Assert.True(relationCount > 100);
-        Assert.Equal(6, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(7, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
 
         await Task.Delay(25);
         await initializer.InitializeAsync();
@@ -1102,7 +1117,7 @@ WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
         Assert.Equal(
             firstUpdatedAt,
             await ScalarAsync<DateTime>(connectionString, "SELECT max(updated_at_utc) FROM public.strategies;"));
-        Assert.Equal(6, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(7, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
 
     private static string CreateSettledLossDiffParentRunsSql(
