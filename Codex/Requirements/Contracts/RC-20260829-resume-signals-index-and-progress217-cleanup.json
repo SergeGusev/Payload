@@ -3,7 +3,7 @@
   "contractId": "RC-20260829-resume-signals-index-and-progress217-cleanup",
   "title": "Execute the Progress-217 cleanup with evidence-sized batches",
   "author": "agent:/root",
-  "status": "draft",
+  "status": "approved",
   "originalRequests": [
     { "source": "user", "text": "Разрешаю. И уменьши порции для удаления" },
     { "source": "user", "text": "Давай по 1000" },
@@ -126,10 +126,10 @@
       "text": "Replace the previously approved maximum 1000-row product batch with a 10000-row initial maximum and deterministic 5000/2500/1000 downshifts when a completed relation batch exceeds 5 seconds.",
       "impact": "The known lower-bound transaction count falls from 5961 to 608 before indirect rows, reducing health-check and commit overhead. A committed batch may contain up to 10000 target-owned physical rows and cannot be globally rolled back with earlier commits; exact health, duration, identity and residual gates remain fail closed.",
       "approval": {
-        "status": "pending",
+        "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:<pending>",
-        "semanticDigest": "pending"
+        "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:3d4ec64f6d7f9d09df0d4210970518934e801b3fd3c72877bcdcd34c131f8217",
+        "semanticDigest": "sha256:3d4ec64f6d7f9d09df0d4210970518934e801b3fd3c72877bcdcd34c131f8217"
       }
     },
     {
@@ -137,18 +137,18 @@
       "text": "Remove all permanent-index and schema-migration work from this task because the user assigned it to another chat.",
       "impact": "This task cannot restore the currently stale product heartbeat or modify the deployed schema path. Product deletion waits until the separate workflow restores a healthy advancing service, then proceeds without touching any index-related file or database index.",
       "approval": {
-        "status": "pending",
+        "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:<pending>",
-        "semanticDigest": "pending"
+        "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:3d4ec64f6d7f9d09df0d4210970518934e801b3fd3c72877bcdcd34c131f8217",
+        "semanticDigest": "sha256:3d4ec64f6d7f9d09df0d4210970518934e801b3fd3c72877bcdcd34c131f8217"
       }
     }
   ],
   "approval": {
-    "status": "pending",
+    "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:<pending>",
-    "semanticDigest": "pending"
+    "evidenceText": "APPROVE RC-20260829-resume-signals-index-and-progress217-cleanup sha256:3d4ec64f6d7f9d09df0d4210970518934e801b3fd3c72877bcdcd34c131f8217",
+    "semanticDigest": "sha256:3d4ec64f6d7f9d09df0d4210970518934e801b3fd3c72877bcdcd34c131f8217"
   },
   "independentReview": {
     "reviewer": "pending",
