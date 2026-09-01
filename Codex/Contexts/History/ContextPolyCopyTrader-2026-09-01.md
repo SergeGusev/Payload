@@ -123,3 +123,17 @@ Request:
 
 Result:
 Recorded the user's exact approval of `RC-20260901-paper-live-shadow-fak-expiry-race` at the unchanged semantic digest. The mandatory approval checkpoint will be committed before any mapped product-source or test edit; Production and product behavior remain unchanged at this checkpoint.
+
+## 2026-09-01T20:12:59.5567935Z
+Request:
+`APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b`
+
+Result:
+Committed approval checkpoint `fdad36c9`, implemented the one-line linked-deadline correction, and added exact regression coverage. Exact LossDiff cases passed 2/2 and the unexpired maintenance case passed 1/1. The approved broad `PaperLiveShadow` filter then exposed two pre-existing fixture failures that select removed variant `btc_up_down_5m_middle_100_bps_45_instant` before reaching the tested lifecycle; the same mismatch exists in the approval-parent revision. No unrelated fixture repair was made. Replacement bounded suites passed: LossDiff 33 passed with three explicitly gated PostgreSQL tests skipped, and LiveProcessor 22/22 passed. The contract returned to draft solely to replace the invalid broad verification filter and explicitly exclude the unrelated stale-fixture repair; further material work awaits the revised digest approval.
+
+## 2026-09-01T20:14:44.9131631Z
+Request:
+`APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:d4ae9f0ddcd7c3cbd96f3a881e9bb40505c0dea09e341aac014ee58aaefb6eb9`
+
+Result:
+Recorded the user's exact revised approval of the bounded verification contract at semantic digest `sha256:d4ae9f0ddcd7c3cbd96f3a881e9bb40505c0dea09e341aac014ee58aaefb6eb9`. The stale removed-variant fixture repair remains explicitly out of scope; the revised approval checkpoint will be committed before final verification continues.

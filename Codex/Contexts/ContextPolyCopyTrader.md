@@ -6,8 +6,12 @@ Done:
 - Locked the correction to using the linked Paper order/decision cancel deadline for the shared Live intent, plus regression coverage that an unexpired no-order-id intent is not cancelled by maintenance.
 - Drafted and validated `RC-20260901-paper-live-shadow-fak-expiry-race` with no assumptions or deviations; semantic digest is `sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b`.
 - Received the user's exact approval `APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b`.
-Next: Commit the mandatory approval checkpoint, then implement and verify only the mapped source/test paths.
-Notes: Product code, Production/Local databases, service, deployment, strategy settings, orders, balances, and configuration remain unchanged. Pre-existing unrelated modifications in `README.md`, `StrategyDisplayCategories.cs`, and `StrategyDisplayCategoryTests.cs` are preserved and excluded.
+- Committed approval checkpoint `fdad36c9`, added the one-line runtime correction and two focused regression assertions, and verified the exact LossDiff cases 2/2 plus the unexpired maintenance case 1/1.
+- The originally approved broad name filter exposed two pre-existing fixture failures: both select removed catalog variant `btc_up_down_5m_middle_100_bps_45_instant` before executing their Paper/Live-shadow assertions. The same defect exists in the approval-parent revision and is unrelated to the expiry correction.
+- Independently verified the bounded replacement suites: LossDiff passed 33 with three explicitly gated PostgreSQL tests skipped; LiveProcessor passed 22/22.
+- Received the user's exact revised approval `APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:d4ae9f0ddcd7c3cbd96f3a881e9bb40505c0dea09e341aac014ee58aaefb6eb9`.
+Next: Commit the revised approval checkpoint, then run the remaining build/gates, independent review, and task-only commit.
+Notes: The revised contract excludes repair of the two unrelated stale fixtures and replaces only the failing broad-name filter with all current LossDiff and LiveProcessor unit tests. Production/Local databases, service, deployment, strategy settings, actual orders, balances, and configuration remain unchanged. Pre-existing unrelated modifications in `README.md`, `StrategyDisplayCategories.cs`, `StrategyDisplayCategoryTests.cs`, and the Dashboard category contract are preserved and excluded.
 Blockers: None.
 
 ## Active Update 2026-09-01 Two Cancelled Live Shadow Orders

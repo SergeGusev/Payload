@@ -26,6 +26,7 @@
       "Changing strategy signals, LossDiff state or threshold logic, selected outcome, price, size, notional, FAK order semantics, risk controls, balances, Live enablement, or market-window calculation.",
       "Changing cancellation behavior at or after the existing linked decision deadline, kill-switch cancellation, explicit pause cancellation, venue response classification, fill accounting, or Paper/Live parity semantics.",
       "Changing non-`paper_live_shadow_test` Live order creation or lifecycle paths, schema, migrations, catalog identities, Dashboard, README, or architecture documentation.",
+      "Repairing the pre-existing `ProcessAsync_PaperLiveShadowPersistSubmitFailureKeepsStrategyLive` and `ProcessAsync_PaperLiveShadowIntentFailureKeepsStrategyLive` fixtures, which select the already removed `btc_up_down_5m_middle_100_bps_45_instant` catalog variant before reaching their asserted behavior.",
       "Deploying or restarting the service, placing or cancelling an actual venue order, or mutating Local/Production databases, strategies, orders, balances, or configuration.",
       "Including or modifying the pre-existing unrelated working-tree changes in README.md, src/PolyCopyTrader.Domain/StrategyDisplayCategories.cs, or tests/PolyCopyTrader.Tests/StrategyDisplayCategoryTests.cs."
     ],
@@ -114,8 +115,8 @@
         {
           "id": "VER-003",
           "kind": "test",
-          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PaperLiveShadow",
-          "expected": "The broader Paper/Live-shadow focused suite passes with zero failures.",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiff; dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LiveProcessor",
+          "expected": "All current LossDiff and LiveProcessor unit tests pass; separately gated PostgreSQL history-backfill tests may remain skipped when their explicit environment variable is absent.",
           "result": "pending",
           "evidence": ""
         },
@@ -143,8 +144,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b",
-    "semanticDigest": "sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b"
+    "evidenceText": "APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:d4ae9f0ddcd7c3cbd96f3a881e9bb40505c0dea09e341aac014ee58aaefb6eb9",
+    "semanticDigest": "sha256:d4ae9f0ddcd7c3cbd96f3a881e9bb40505c0dea09e341aac014ee58aaefb6eb9"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_paper_live_shadow_fak_expiry_race",
