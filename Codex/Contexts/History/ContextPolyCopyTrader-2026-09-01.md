@@ -109,3 +109,17 @@ Request:
 
 Result:
 Diagnosed both exact Cancelled Live-shadow FAK orders using Production database rows, durable runtime events, current implementation, and the retained server HTTP log. Both were cancelled by the same local lifecycle race: the persisted Live intent incorrectly had `ExpiresAtUtc` equal to its creation time, so the lifecycle worker ran cancel-all before the still-in-flight placement response could persist its venue order id. The later placement update then failed its row-version compare-and-swap, leaving the rows `Cancelled` and the linked Paper shadows skipped. The newer log independently shows cancel-all before the order POST and a specific DELETE after the persistence conflict. Exact venue fill/non-fill is unknown because the placement result was not persisted; aggregate Data API position evidence cannot identify an exact order. No source, Production database, service, order, strategy, or configuration was changed.
+
+## 2026-09-01T20:02:21.7974731Z
+Request:
+Давай исправлять
+
+Result:
+Locked the source correction to the confirmed shared `paper_live_shadow_test` FAK expiry race, with no Production or database mutation. Drafted and validated requirement contract `RC-20260901-paper-live-shadow-fak-expiry-race` at semantic digest `sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b`; material product edits await the user's exact approval. Pre-existing unrelated Dashboard-category working-tree changes remain untouched and excluded.
+
+## 2026-09-01T20:07:35.2296382Z
+Request:
+`APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b`
+
+Result:
+Recorded the user's exact approval of `RC-20260901-paper-live-shadow-fak-expiry-race` at the unchanged semantic digest. The mandatory approval checkpoint will be committed before any mapped product-source or test edit; Production and product behavior remain unchanged at this checkpoint.

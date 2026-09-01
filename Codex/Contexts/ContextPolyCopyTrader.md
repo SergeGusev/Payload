@@ -1,3 +1,15 @@
+## Active Update 2026-09-01 Paper Live Shadow FAK Expiry Race Contract
+Goal: Correct the confirmed premature cancellation race for in-flight `paper_live_shadow_test` FAK Live intents.
+Status: In Progress
+Done:
+- Recovered the exact shared creation, maintenance-cancel, row-version persistence, and focused test paths without changing product code.
+- Locked the correction to using the linked Paper order/decision cancel deadline for the shared Live intent, plus regression coverage that an unexpired no-order-id intent is not cancelled by maintenance.
+- Drafted and validated `RC-20260901-paper-live-shadow-fak-expiry-race` with no assumptions or deviations; semantic digest is `sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b`.
+- Received the user's exact approval `APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b`.
+Next: Commit the mandatory approval checkpoint, then implement and verify only the mapped source/test paths.
+Notes: Product code, Production/Local databases, service, deployment, strategy settings, orders, balances, and configuration remain unchanged. Pre-existing unrelated modifications in `README.md`, `StrategyDisplayCategories.cs`, and `StrategyDisplayCategoryTests.cs` are preserved and excluded.
+Blockers: None.
+
 ## Active Update 2026-09-01 Two Cancelled Live Shadow Orders
 Goal: Explain why the two Live orders for `ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+` were marked `Cancelled`.
 Status: Completed

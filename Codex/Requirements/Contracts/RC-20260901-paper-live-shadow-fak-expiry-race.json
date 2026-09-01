@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260901-paper-live-shadow-fak-expiry-race",
+  "title": "Prevent premature cancellation of in-flight Paper/Live-shadow FAK orders",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Почему были Cancelled две живые ставки стратегии ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+ ?"
+    },
+    {
+      "source": "user",
+      "text": "Давай исправлять"
+    }
+  ],
+  "scope": {
+    "goal": "Correct the confirmed Paper/Live-shadow FAK expiry race so an in-flight Live intent is not immediately cancelled before its linked decision deadline and its placement result can be persisted normally.",
+    "inScope": [
+      "The shared `paper_live_shadow_test` FAK intent creation path used by exact strategy b7c50005-0000-4000-8225-000000000004 / eth_up_down_5m_1_diff_confirmed_average_premarket_lossdiff_4_plus and the other current callers of the same method.",
+      "Use the already persisted linked Paper order expiry, which is the decision cancel deadline, as the Live intent expiry instead of the intent creation timestamp.",
+      "Focused regression coverage for the exact LossDiff Paper-parent/Live-child path and for Live maintenance while a Paper/Live-shadow intent has a future expiry and no venue order id yet.",
+      "Repository requirement evidence, context/history bookkeeping, independent semantic review, task-only product commit, and push to the configured upstream after verification while preserving pre-existing unrelated working-tree changes."
+    ],
+    "outOfScope": [
+      "Changing strategy signals, LossDiff state or threshold logic, selected outcome, price, size, notional, FAK order semantics, risk controls, balances, Live enablement, or market-window calculation.",
+      "Changing cancellation behavior at or after the existing linked decision deadline, kill-switch cancellation, explicit pause cancellation, venue response classification, fill accounting, or Paper/Live parity semantics.",
+      "Changing non-`paper_live_shadow_test` Live order creation or lifecycle paths, schema, migrations, catalog identities, Dashboard, README, or architecture documentation.",
+      "Deploying or restarting the service, placing or cancelling an actual venue order, or mutating Local/Production databases, strategies, orders, balances, or configuration.",
+      "Including or modifying the pre-existing unrelated working-tree changes in README.md, src/PolyCopyTrader.Domain/StrategyDisplayCategories.cs, or tests/PolyCopyTrader.Tests/StrategyDisplayCategoryTests.cs."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future `paper_live_shadow_test` FAK intents after user deployment; existing orders and historical records remain unchanged.",
+    "firstVerification": "Inspect the exact Live-shadow intent construction, all callers, linked Paper/decision expiry values, Live maintenance cancellation predicate, row-version persistence path, and existing focused tests before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Persist each affected Paper/Live-shadow FAK Live intent with the same existing cancel deadline as its linked Paper order and shadow decision, not with its creation timestamp.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+",
+      "acceptanceCriteria": [
+        "For the exact LossDiff 4+ Paper-parent/Live-child flow, the Live intent exists before the venue call returns and its ExpiresAtUtc exactly equals the linked Paper order ExpiresAtUtc and decision CancelDeadlineUtc.",
+        "When the linked cancel deadline is later than creation, the Live intent ExpiresAtUtc is also later than CreatedAtUtc; the previous ExpiresAtUtc=CreatedAtUtc defect is absent.",
+        "Every current caller of the shared `TryPlacePaperLiveShadowOrderAsync` method receives the same correction through the linked Paper order without strategy-specific branching or a new deadline policy."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiffParentMirrorPaperParentCanSubmitLiveChild",
+          "expected": "Both exact LossDiff reset/positive cases pass and observe the in-flight Live intent using the linked Paper/decision cancel deadline before placement returns.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep an unexpired Paper/Live-shadow intent with no venue order id open during maintenance, while preserving existing cancellation once its linked deadline is reached.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Давай исправлять",
+      "acceptanceCriteria": [
+        "Before ExpiresAtUtc, Live maintenance sends neither cancel-all nor a specific cancel for a Submitted `paper_live_shadow_test` intent whose venue order id is not yet available, and does not change the intent to Cancelled.",
+        "The existing `now >= ExpiresAtUtc` cancellation rule remains unchanged, including the existing safety behavior after the linked deadline and kill-switch/pause behavior.",
+        "The focused regression reproduces the vulnerable in-flight state without external venue or database access."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/LiveTradingGatingTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LiveProcessorLeavesUnexpiredPendingPaperLiveShadowIntentOpen",
+          "expected": "The future-expiry/no-order-id intent remains Submitted and zero cancel-all or specific-cancel calls occur.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Make no trading-policy or Production-state change beyond the confirmed expiry correction and verify the bounded implementation before delivery.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Давай исправлять",
+      "acceptanceCriteria": [
+        "The frozen ExecutionIntent, strategy selection, LossDiff gates, FAK request, preflight/risk checks, venue result handling, Paper reconciliation, and cancellation rule at/after deadline remain unchanged.",
+        "No Production/Local database, service, deployment, strategy setting, order, wallet, balance, or configuration is mutated.",
+        "The complete solution builds with zero errors, relevant tests pass, `git diff --check` and requirement validation pass, and an independent reviewer compares both verbatim prompts, this approved contract, the exact diff, and verification evidence with no open findings.",
+        "Only task-owned files are staged and committed; the three pre-existing unrelated modified paths remain untouched and unstaged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/LiveTradingGatingTests.cs",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-09-01.md",
+        "Codex/Requirements/Contracts/RC-20260901-paper-live-shadow-fak-expiry-race.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PaperLiveShadow",
+          "expected": "The broader Paper/Live-shadow focused suite passes with zero failures.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
+          "expected": "The complete solution builds with zero errors using only the marked D:\\CodexTemp run for disposable outputs.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "git diff --check; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode Staged",
+          "expected": "Formatting, exact path mapping, approval ancestry, task-only staging, and independent semantic review all pass while pre-existing unrelated changes remain untouched.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b",
+    "semanticDigest": "sha256:1dbf7709b9686a578b71de8fce6afdbc96ac2c73cd6ada5e730cb47b58ac9e9b"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_paper_live_shadow_fak_expiry_race",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
