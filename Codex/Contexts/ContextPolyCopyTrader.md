@@ -1,6 +1,6 @@
 ## Active Update 2026-09-01 Paper Live Shadow FAK Expiry Race Contract
 Goal: Correct the confirmed premature cancellation race for in-flight `paper_live_shadow_test` FAK Live intents.
-Status: In Progress
+Status: Completed locally and independently reviewed; not deployed
 Done:
 - Recovered the exact shared creation, maintenance-cancel, row-version persistence, and focused test paths without changing product code.
 - Locked the correction to using the linked Paper order/decision cancel deadline for the shared Live intent, plus regression coverage that an unexpired no-order-id intent is not cancelled by maintenance.
@@ -10,9 +10,14 @@ Done:
 - The originally approved broad name filter exposed two pre-existing fixture failures: both select removed catalog variant `btc_up_down_5m_middle_100_bps_45_instant` before executing their Paper/Live-shadow assertions. The same defect exists in the approval-parent revision and is unrelated to the expiry correction.
 - Independently verified the bounded replacement suites: LossDiff passed 33 with three explicitly gated PostgreSQL tests skipped; LiveProcessor passed 22/22.
 - Received the user's exact revised approval `APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:d4ae9f0ddcd7c3cbd96f3a881e9bb40505c0dea09e341aac014ee58aaefb6eb9`.
-Next: Commit the revised approval checkpoint, then run the remaining build/gates, independent review, and task-only commit.
+- Committed revised approval checkpoint `7022504d`. The runtime correction changes only the Live intent expiry from `nowUtc` to the already persisted linked `paperOrder.ExpiresAtUtc`; all three shared callers therefore retain their existing decision deadline without strategy-specific branching.
+- Exact LossDiff deadline tests passed 2/2, the unexpired Submitted/no-order-id maintenance regression passed 1/1, the complete LossDiff suite passed 33 with three environment-gated PostgreSQL tests skipped, and all LiveProcessor tests passed 22/22.
+- The complete Release solution build passed with zero errors and 126 existing warnings. Task-path `git diff --check` passed.
+- Independent reviewer `agent:/root/reviewer_paper_live_shadow_fak_expiry_race` compared both verbatim prompts, the approved revised contract, exact diff, current call paths, and test/build evidence and returned PASS with no open findings.
+- Main WorkingTree validation was blocked solely by the unrelated dirty Dashboard contract. The identical gate passed in an isolated clone of approval HEAD `7022504d` with exactly the six task files applied (`governedFiles=3`, `contracts=1`); task-only staged validation also passed with the same counts. All unrelated Dashboard/category files remain untouched and unstaged.
+Next: User deploys the resulting product commit; then verify on Production that new Live-shadow intents persist the linked later deadline and no premature `BtcUpDown5mPaperLiveShadowPersistSubmit` CAS event recurs.
 Notes: The revised contract excludes repair of the two unrelated stale fixtures and replaces only the failing broad-name filter with all current LossDiff and LiveProcessor unit tests. Production/Local databases, service, deployment, strategy settings, actual orders, balances, and configuration remain unchanged. Pre-existing unrelated modifications in `README.md`, `StrategyDisplayCategories.cs`, `StrategyDisplayCategoryTests.cs`, and the Dashboard category contract are preserved and excluded.
-Blockers: None.
+Blockers: None; deployment is controlled by the user.
 
 ## Active Update 2026-09-01 Two Cancelled Live Shadow Orders
 Goal: Explain why the two Live orders for `ETH 5m 1 Diff Confirmed Average Premarket LossDiff 4+` were marked `Cancelled`.

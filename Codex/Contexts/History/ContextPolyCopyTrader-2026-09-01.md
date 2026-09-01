@@ -137,3 +137,10 @@ Request:
 
 Result:
 Recorded the user's exact revised approval of the bounded verification contract at semantic digest `sha256:d4ae9f0ddcd7c3cbd96f3a881e9bb40505c0dea09e341aac014ee58aaefb6eb9`. The stale removed-variant fixture repair remains explicitly out of scope; the revised approval checkpoint will be committed before final verification continues.
+
+## 2026-09-01T20:18:54.8633972Z
+Request:
+`APPROVE RC-20260901-paper-live-shadow-fak-expiry-race sha256:d4ae9f0ddcd7c3cbd96f3a881e9bb40505c0dea09e341aac014ee58aaefb6eb9`
+
+Result:
+Completed the approved local correction: shared `paper_live_shadow_test` FAK Live intents now persist the existing linked Paper/decision cancel deadline instead of creation time. Exact LossDiff tests passed 2/2, the unexpired maintenance regression passed 1/1, LossDiff passed 33 with three explicitly gated PostgreSQL tests skipped, LiveProcessor passed 22/22, and the Release solution build completed with zero errors and 126 existing warnings. Independent semantic review returned PASS with no open findings. No Production/Local database, service, deployment, strategy setting, actual order, balance, or configuration was changed; unrelated Dashboard/category changes and the two stale removed-variant fixtures remain untouched.

@@ -7414,6 +7414,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 ? StrategyIds.EthLossDiff13PlusPositive
                 : StrategyIds.EthLossDiff4Plus));
         TestAppRepository? persistedRepository = null;
+        PaperOrder? childPaperOrderAtPlacement = null;
+        LiveOrder? childLiveIntentAtPlacement = null;
+        PaperLiveShadowDecision? childDecisionAtPlacement = null;
         var tradingClient = new CapturingTradingClient
         {
             PlacementResult = new LiveOrderPlacementResult(
@@ -7436,6 +7439,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 Assert.Contains(repository.StrategyMarketPaperRuns, run =>
                     run.StrategyId == parent.Id &&
                     run.Status == StrategyMarketPaperRunStatuses.Entered);
+                childPaperOrderAtPlacement = Assert.Single(
+                    repository.PaperOrders,
+                    order => order.StrategyId == child.Id);
+                childLiveIntentAtPlacement = Assert.Single(
+                    repository.LiveOrders,
+                    order => order.StrategyId == child.Id);
+                childDecisionAtPlacement = Assert.Single(
+                    repository.PaperLiveShadowDecisions,
+                    decision => decision.StrategyId == child.Id);
             }
         };
         var mode = positiveMode
@@ -7461,6 +7473,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         Assert.Equal(2, result.EntriesPlaced);
         Assert.Equal(1, tradingClient.PlaceCalls);
         Assert.Equal(1, context.ClobClient.GetOrderBookCalls);
+        Assert.NotNull(childPaperOrderAtPlacement);
+        Assert.NotNull(childLiveIntentAtPlacement);
+        Assert.NotNull(childDecisionAtPlacement);
+        Assert.Equal(LiveOrderStatus.Submitted, childLiveIntentAtPlacement!.Status);
+        Assert.Null(childLiveIntentAtPlacement.OrderId);
+        Assert.Equal(childPaperOrderAtPlacement!.ExpiresAtUtc, childDecisionAtPlacement!.CancelDeadlineUtc);
+        Assert.Equal(childPaperOrderAtPlacement.ExpiresAtUtc, childLiveIntentAtPlacement.ExpiresAtUtc);
+        Assert.True(childLiveIntentAtPlacement.ExpiresAtUtc > childLiveIntentAtPlacement.CreatedAtUtc);
         var childRequest = Assert.Single(tradingClient.Requests);
         Assert.Equal(ClobV2OrderType.FAK, childRequest.OrderType);
         Assert.False(childRequest.PostOnly);

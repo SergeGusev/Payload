@@ -22488,7 +22488,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             validation.Add("Live BUY limit price is invalid.");
         }
 
-        var cancelDeadlineUtc = nowUtc;
+        var cancelDeadlineUtc = paperOrder.ExpiresAtUtc;
 
         var exposureSnapshot = await exposureCache.GetSnapshotAsync(cancellationToken);
         var openLiveOrders = exposureSnapshot.OpenLiveOrders;

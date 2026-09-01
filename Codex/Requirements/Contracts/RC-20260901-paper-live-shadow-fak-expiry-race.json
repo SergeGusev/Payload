@@ -3,7 +3,7 @@
   "contractId": "RC-20260901-paper-live-shadow-fak-expiry-race",
   "title": "Prevent premature cancellation of in-flight Paper/Live-shadow FAK orders",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -58,8 +58,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiffParentMirrorPaperParentCanSubmitLiveChild",
           "expected": "Both exact LossDiff reset/positive cases pass and observe the in-flight Live intent using the linked Paper/decision cancel deadline before placement returns.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Both theory cases passed 2/2 with zero failures. Before the runtime correction, both cases failed after observing the Live intent expiry mismatch; after the correction, the captured in-flight Submitted/no-order-id intent exactly matched both linked Paper ExpiresAtUtc and decision CancelDeadlineUtc and remained later than CreatedAtUtc. TRX: D:\\CodexTemp\\runs\\manual-28875b9af6104c8396d3b56b7bde5cca\\results\\lossdiff-expiry.trx."
         }
       ]
     },
@@ -84,8 +84,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LiveProcessorLeavesUnexpiredPendingPaperLiveShadowIntentOpen",
           "expected": "The future-expiry/no-order-id intent remains Submitted and zero cancel-all or specific-cancel calls occur.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "The focused maintenance regression passed 1/1. A future-expiry Submitted paper_live_shadow_test intent with no venue order id remained Submitted; cancel-all and specific-cancel call counts both remained zero. TRX: D:\\CodexTemp\\runs\\manual-28875b9af6104c8396d3b56b7bde5cca\\results\\maintenance-unexpired.trx."
         }
       ]
     },
@@ -117,24 +117,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LossDiff; dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~LiveProcessor",
           "expected": "All current LossDiff and LiveProcessor unit tests pass; separately gated PostgreSQL history-backfill tests may remain skipped when their explicit environment variable is absent.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "LossDiff suite: 33 passed, zero failed, three explicitly environment-gated PostgreSQL history-backfill tests skipped. LiveProcessor suite: 22/22 passed with zero failures or skips. TRX: D:\\CodexTemp\\runs\\manual-28875b9af6104c8396d3b56b7bde5cca\\results\\lossdiff-all.trx and live-processor-all.trx. The separately attempted PaperLiveShadow name filter exposed only the two approved out-of-scope stale fixtures selecting the already removed btc_up_down_5m_middle_100_bps_45_instant variant before lifecycle execution; no fixture repair was made."
         },
         {
           "id": "VER-004",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore",
           "expected": "The complete solution builds with zero errors using only the marked D:\\CodexTemp run for disposable outputs.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release restore plus --no-restore build completed with zero errors and 126 existing warnings, with TEMP/TMP/TMPDIR and all artifacts under the marked D:\\CodexTemp run."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "git diff --check; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode Staged",
           "expected": "Formatting, exact path mapping, approval ancestry, task-only staging, and independent semantic review all pass while pre-existing unrelated changes remain untouched.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Task-path and isolated-task git diff --check passed. Independent reviewer agent:/root/reviewer_paper_live_shadow_fak_expiry_race compared both verbatim prompts, the approved revised contract, all three task-file diffs, current call paths, and TRX/build evidence and returned PASS with no open findings. The main WorkingTree invocation correctly stopped on an unrelated dirty Dashboard contract whose semantics changed after its separate approval. An isolated clone of exact approval HEAD 7022504d with only the six task files applied passed WorkingTree validation (governedFiles=3, contracts=1), and the main task-only index passed Staged validation (governedFiles=3, contracts=1). Only mapped task files are staged; unrelated Dashboard/category changes remain untouched and unstaged."
         }
       ]
     }
@@ -149,8 +149,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_paper_live_shadow_fak_expiry_race",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

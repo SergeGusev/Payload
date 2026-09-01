@@ -373,6 +373,56 @@ public sealed class LiveTradingGatingTests
     }
 
     [Fact]
+    public async Task LiveProcessorLeavesUnexpiredPendingPaperLiveShadowIntentOpen()
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow;
+        await repository.AddLiveOrderAsync(new LiveOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            LiveOrderStatus.Submitted,
+            null,
+            TradeSide.Buy,
+            "asset-1",
+            "condition-1",
+            "Yes",
+            0.99m,
+            5m,
+            4.95m,
+            "FAK",
+            now,
+            now.AddMinutes(4),
+            now,
+            "intent_created",
+            0m,
+            5m,
+            string.Empty,
+            "{}",
+            string.Empty,
+            now,
+            ExecutionSource: "paper_live_shadow_test"));
+        var tradingClient = new CapturingTradingClient();
+        var processor = new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance,
+            new LiveTradingOptions(),
+            new RiskOptions(),
+            new FakeGammaClient([]),
+            tradingClient,
+            repository,
+            new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(),
+            new ServiceControlState());
+
+        var result = await processor.ProcessOpenOrdersAsync();
+
+        Assert.Equal(1, result.OpenOrdersChecked);
+        Assert.Equal(0, result.OrdersCanceled);
+        Assert.Equal(0, tradingClient.CancelAllOrdersCalls);
+        Assert.Equal(0, tradingClient.CancelOrderCalls);
+        Assert.Equal(LiveOrderStatus.Submitted, Assert.Single(repository.LiveOrders).Status);
+    }
+
+    [Fact]
     public async Task LiveProcessorTreatsSuccessfulEmptyCancelResponseAsClosed()
     {
         var repository = new TestAppRepository();
@@ -1996,6 +2046,7 @@ public sealed class LiveTradingGatingTests
     {
         public int PlaceCalls { get; private set; }
         public int CancelOrderCalls { get; private set; }
+        public int CancelAllOrdersCalls { get; private set; }
         public ClobV2OrderRequest? LastRequest { get; private set; }
         public LiveOrderPlacementResult PlacementResult { get; init; } = new(true, "0xorder", "live", null, null, null, "{}", "{}");
         public LiveOrderCancellationResult? CancelResult { get; init; }
@@ -2021,6 +2072,7 @@ public sealed class LiveTradingGatingTests
 
         public Task<LiveOrderCancellationResult> CancelAllOrdersAsync(CancellationToken ct)
         {
+            CancelAllOrdersCalls++;
             return Task.FromResult(CancelResult ?? new LiveOrderCancellationResult(true, [], new Dictionary<string, string>(), "{}"));
         }
 
