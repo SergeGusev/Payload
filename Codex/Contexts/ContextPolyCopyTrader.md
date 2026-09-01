@@ -1,3 +1,18 @@
+## Active Update 2026-09-01 Legacy Candidate And Market-Data Latency Post-Deploy Verification
+Goal: Verify the deployed Legacy candidate and market-data latency correction against current Production service, betting, database, and server-log evidence.
+Status: Completed
+Done:
+- Confirmed Production is running build `4ed1122c7c210bae48023da1c6128cc382bba1f0`, which contains product commit `83d3eb557ae1c4b6cb1a70e0e3899edede120e12`. At final database cutoff `2026-09-01T07:58:20.883581Z`, the service was `Running`/`Live`, start remained `2026-09-01T07:34:02.654275Z`, heartbeat age was `17.611s`, and `last_error` was NULL.
+- The latest 100 Paper orders through `2026-09-01T07:58:00.271583Z` were 100/100 Filled with fill rows. An independent bounded post-network sample contained 200/200 Filled orders with fill rows after `2026-09-01T07:50:20Z`; Paper positions advanced through `2026-09-01T07:58:20.854739Z`.
+- BTC, ETH, and SOL reference ticks were independently fresh at the final cutoff, with sampled ages `2.625..2.630s` and source ages `2.789..4.396s`.
+- The Legacy worker completed 10 post-start cycles through `2026-09-01T07:58:12.657017Z` with zero `CycleFailed` events. A real candidate cycle completed in `3599ms` with one requested candidate and a structural conflict; later cycles, including rank 2, completed without the former query timeout. The large multi-chunk Production case was not exercised in this observation window.
+- Server logs established a brief external network/DNS interruption from `2026-09-01T07:48:40Z` through `07:50:19Z`: Binance WebSocket disconnected and DNS resolution failed for Gamma, CLOB, and Data API hosts. Recovery was automatic. The next log file from `07:54:31Z` through at least `08:00:06Z` contained zero ERR/FTL, and post-incident orders plus fresh reference ticks independently confirmed recovery.
+- General market-data latency remains observable: post-recovery processing reached `3175.5521ms` and queue delay `3029.2567ms`, still dominated by `IAppRepository.TryUpdatePaperPositionMarks/ExecuteCommand`. The queue recovered to zero pending/in-flight at `2026-09-01T08:00:02.800Z`; rejected and failed updates remained zero, and the cumulative soft-limit-overflow counter remained 19.
+- One waiting PostgreSQL lock was observed transiently at `07:58:20Z` and independently rechecked as zero at `07:58:38Z`.
+Next: None.
+Notes: Production SQL targeted only `192.168.0.101:5432/polycopytrader`, forced `READ ONLY`, UTC, `statement_timeout=15s`, `lock_timeout=2s`, and bounded/indexed reads. Logs were read only from `\\192.168.0.101\CodexLogs`. One broad aggregate reached the mandatory 15-second timeout and was replaced by narrow indexed samples; no Production effect occurred. No Production database, service, strategy, order, configuration, deployment, or product source was changed. Dedicated Maker-GTD work was not exercised in the checked post-deploy metrics; classification remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: None.
+
 ## Active Update 2026-09-01 Legacy Candidate And Market-Data Latency Correction
 Goal: Bound the Legacy parity candidate lookup, suppress only redundant intermediate position-mark persistence during same-asset backlog, and expose exact dedicated Maker-GTD slow-phase evidence.
 Status: Completed locally and independently reviewed; not deployed
