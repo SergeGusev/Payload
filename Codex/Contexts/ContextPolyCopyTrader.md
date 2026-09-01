@@ -8,7 +8,7 @@ Done:
 - Release focused tests passed 63/63 and Maker-GTD lifecycle tests passed 46/46. The exact multi-chunk regression passed 1/1 on an isolated allowlisted PostgreSQL 18.6 loopback database with 1003 orders and first/middle/final-chunk exclusions; the database was dropped and the server stopped.
 - Release solution build passed with zero errors and existing warnings. `git diff --check` passed. Independent reviewer `agent:/root/reviewer_legacy_candidate_market_latency` compared the approved contract, complete final diff and evidence and returned PASS with no findings.
 - Protected cleanup removed the marked temp run and verified its path absent. Contract `RC-20260831-legacy-candidate-and-market-data-latency` is completed with exact evidence.
-Next: Commit and push the completed local correction; the user controls deployment and subsequent Production verification.
+Next: Product commit `83d3eb55` is pushed to `origin/master`; the user controls deployment and subsequent Production verification.
 Notes: No Production database, service, strategy, order, configuration or deployment state changed. The optional broad isolated-artifact suite was not represented as green because source-reading tests resolved repository paths beneath `D:\CodexTemp`; the approved focused current-code suites and real PostgreSQL regression passed. Maker-GTD classification remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
 Blockers: None.
 
