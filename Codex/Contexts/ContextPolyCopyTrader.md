@@ -5,7 +5,8 @@ Done:
 - Verified the fixed Product allowlist contains exactly 15 UUID/code identities: 11 disabled strategies and four enabled dependent LowerEnter strategies; the preimplementation snapshot found zero Live orders, zero external runtime-catalog references, zero active assignments, healthy Running/Live service state, and zero waiting locks.
 - Verified that the approved proposal to edit `PostgresSchema.SchemaSql` is incompatible with the current versioned initializer: that SQL is checksum-protected immutable baseline migration `0001`, and editing it would fail service startup before the requested trigger change could apply.
 - Reverted every tentative product-source edit; Product and the local database remain unmodified. Revised the contract to preserve baseline `0001`, remove the 15 targets from runtime catalogs, and remove only the exact trigger through ordered transactional migration `0007`.
-Next: Commit the approved path-only checkpoint, implement and verify the bounded source change, then await the user-controlled deployment before Product cleanup.
+- Received exact user approval for source-stage contract `RC-20260901-stage-disabled15-service-before-history-cleanup` at digest `sha256:22301d964e9e19d49d73ae790852ef8db54a28ff4a185d17d405de52f5eb3921`.
+Next: Commit the approved source-stage checkpoint, finish verification and independent review, push the bounded service change to `master`, then await the user-controlled deployment before Product cleanup.
 Notes: The revised deviation explicitly records that a genuinely new empty database can still receive the 15 legacy seed rows from immutable baseline `0001`, although the runtime catalog cannot dispatch them. Existing Product does not replay baseline `0001`; after the later guarded cleanup it cannot reseed the targets through schema initialization.
 Blockers: None for local implementation; Product cleanup remains gated on user deployment and fresh runtime verification.
 

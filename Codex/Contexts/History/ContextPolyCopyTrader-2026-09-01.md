@@ -81,3 +81,10 @@ APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:
 
 Result:
 Recorded the user's exact approval of the final path-only contract revision. Local implementation may now proceed without further scope decisions; Product remains unchanged until user deployment and fresh deletion gates pass.
+
+## 2026-09-01T13:21:20.6747927+00:00
+Request:
+APPROVE RC-20260901-stage-disabled15-service-before-history-cleanup sha256:22301d964e9e19d49d73ae790852ef8db54a28ff4a185d17d405de52f5eb3921
+
+Result:
+Recorded the user's exact approval of the bounded source-stage contract. This stage changes only the service runtime catalog, ordered trigger-drop migration, focused tests, and documentation; no Product or local database mutation, deployment, service-state change, or strategy/history deletion is included.
