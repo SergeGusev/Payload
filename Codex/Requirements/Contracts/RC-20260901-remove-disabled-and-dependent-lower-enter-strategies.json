@@ -16,14 +16,18 @@
     {
       "source": "user",
       "text": "Да вообще убери этот триггер, зачем он нужен?"
+    },
+    {
+      "source": "user",
+      "text": "Ты опять меня грузишь вещами, которые я не понимаю. Мне нужно просто удалить ненужные стратегии вместе с историей, чтобы почистить базу. Решай эту задачу."
     }
   ],
   "scope": {
     "goal": "Remove the exact 11 strategies that were disabled in the Product snapshot, the exact four enabled LowerEnter strategies shown to the user that depend on them, all exactly attributable structured Product history, and permanently remove the database trigger that makes historical Gross-to-Net parity audit rows immutable.",
     "inScope": [
       "Use the fixed 15 UUID/code Product allowlist whose sorted identity SHA-256 is 9e5a735526b47548abdbabaedc11a46c4f8dc433c196f430cd68a387bf663578: b7c50005-0000-4000-8166-000000000003 btc_up_down_5m_3_diff_shift_progress_premarket; b7c50005-0000-4000-8168-000000000002 sol_up_down_5m_2_diff_shift_progress_premarket; b7c50005-0000-4000-8168-000000000003 sol_up_down_5m_3_diff_shift_progress_premarket; b7c50005-0000-4000-8168-000000000005 sol_up_down_5m_5_diff_shift_progress_premarket; b7c50005-0000-4000-8171-000000000003 sol_up_down_5m_3_diff_limit_progress_premarket; b7c50005-0000-4000-8172-000000000004 btc_up_down_5m_4_diff_real_limit_progress_premarket; b7c50005-0000-4000-8172-000000000005 btc_up_down_5m_5_diff_real_limit_progress_premarket; b7c50005-0000-4000-8182-000000000101 btc_up_down_5m_futures_basis_bps_1_fak_premarket; b7c50005-0000-4000-8184-000000000101 sol_up_down_5m_futures_basis_bps_1_fak_premarket; b7c50005-0000-4000-8185-000000000001 btc_up_down_5m_1_child; b7c50005-0000-4000-8196-000000000001 sol_up_down_5m_1_child_roi; b7c50005-0001-4000-8166-000000000003 btc_up_down_5m_3_diff_shift_progress_lower_enter_premarket; b7c50005-0001-4000-8172-000000000004 btc_up_down_5m_4_diff_real_limit_progress_lower_enter_premarket; b7c50005-0001-4000-8172-000000000005 btc_up_down_5m_5_diff_real_limit_progress_lower_enter_premarket; b7c50005-0001-4000-8182-000000000101 btc_up_down_5m_futures_basis_bps_1_fak_lower_enter_premarket.",
-      "Remove the exact 15 identities from every runtime catalog and static or generated seed path so the deployed service cannot dispatch or recreate them.",
-      "Keep the existing DROP TRIGGER statement for trg_historical_gross_net_parity_audit_immutable but remove its CREATE TRIGGER statement, so schema initialization permanently leaves that exact trigger absent.",
+      "Remove the exact 15 identities from every runtime catalog, including generated LowerEnter variants, so the deployed Product service cannot dispatch them.",
+      "Keep immutable legacy baseline migration 0001 byte-for-byte unchanged and add ordered transactional migration 0007 that only executes DROP TRIGGER IF EXISTS public.trg_historical_gross_net_parity_audit_immutable on public.historical_gross_net_parity_audit.",
       "Keep the historical_gross_net_parity_audit table, its indexes, its insert/read/accounting behavior, and the reject_historical_gross_net_parity_immutable_change function unchanged; only the trigger enforcement is removed.",
       "After the user deploys the approved source change, verify the exact deployed build, absence of the trigger, absence of external catalog or active assignment references, zero active Live orders, stable target activity across at least two worker cycles, healthy Running/Live service state, empty service last_error, and zero waiting database locks before deletion.",
       "Delete every structured Product row exactly attributable to the fixed 15 targets, including the currently observed 24,297 historical_gross_net_parity_audit AccountingDecision rows, using short independently committed and restartable batches selected from fresh Production evidence.",
@@ -35,7 +39,8 @@
       "Deleting or modifying any strategy or history outside the fixed 15 UUID/code allowlist.",
       "Mutating the local database.",
       "Changing any trigger other than trg_historical_gross_net_parity_audit_immutable, deleting the trigger function, deleting or redesigning the audit table, changing audit insertion/read semantics, or changing historical Gross-to-Net accounting logic.",
-      "Any other PostgreSQL schema, migration, index, constraint, retention, archive, compaction, VACUUM FULL, pg_repack, REINDEX, or physical database-size operation.",
+      "Editing immutable legacy baseline migration 0001 or its static seed SQL; a genuinely new empty database can therefore still receive the 15 legacy seed rows from baseline 0001, although the runtime catalog cannot dispatch them.",
+      "Any PostgreSQL schema, migration, index, constraint, retention, archive, compaction, VACUUM FULL, pg_repack, REINDEX, or physical database-size operation other than ordered migration 0007 removing the one exact trigger.",
       "Creating a backup, dump, archive, database clone, permanent cleanup framework, reusable deletion service, new cleanup table, or new trigger.",
       "Stopping or restarting the service, deploying a build, cancelling orders, changing Live/Paper mode, or pausing unrelated strategies; deployment remains the user's action.",
       "Changing trading behavior, execution semantics, Paper/Live parity, stakes, risk controls, or strategy metrics for any retained strategy.",
@@ -48,21 +53,22 @@
   "requirements": [
     {
       "id": "REQ-001",
-      "text": "Remove exactly the fixed 11 disabled strategies and four dependent LowerEnter strategies from runtime catalog and seed paths.",
+      "text": "Remove exactly the fixed 11 disabled strategies and four dependent LowerEnter strategies from runtime catalogs used by the deployed Product service.",
       "sourceRequestIndexes": [
         0,
-        1
+        1,
+        3
       ],
-      "sourceQuote": "Удаляй дочерние стратегии тоже",
+      "sourceQuote": "Мне нужно просто удалить ненужные стратегии вместе с историей, чтобы почистить базу.",
       "acceptanceCriteria": [
         "The source catalog contains none of the exact 15 UUID/code pairs and still contains every non-target strategy identity.",
         "No retained variant has BaseSignalStrategyId, ConfirmationSignalStrategyId, LowerEnterSourceStrategyId, or other runtime-catalog reference to any exact target.",
-        "Schema seed SQL cannot insert, update, or recreate any of the exact 15 targets, while retained seed identities and behavior remain unchanged.",
+        "Immutable legacy baseline 0001 and all previously applied migration SQL/checksums remain unchanged; no new ordered migration inserts or updates any exact target.",
+        "Because Product already has baseline 0001 recorded, startup does not replay its legacy seed SQL and therefore cannot recreate a deleted target row through schema initialization.",
         "After user deployment, Product does not create a target strategy, order, run, position, assignment, or projection row during at least two complete worker cycles."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Domain/Models.cs",
-        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
         "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
         "README.md",
         "docs/configuration_reference.md"
@@ -72,7 +78,7 @@
           "id": "VER-001",
           "kind": "test",
           "command": "Run the focused RetiredProgressStrategyTests against the exact fixed 15 UUID/code allowlist and all retained-reference guards.",
-          "expected": "All 15 targets are absent from catalog and seed paths, zero retained references point to them, and every non-target identity remains.",
+          "expected": "All 15 targets are absent from runtime catalogs, zero retained references point to them, every non-target identity remains, and immutable baseline 0001 is unchanged.",
           "result": "pending",
           "evidence": ""
         },
@@ -94,14 +100,16 @@
       ],
       "sourceQuote": "убери этот триггер",
       "acceptanceCriteria": [
-        "PostgresSchema still executes DROP TRIGGER IF EXISTS trg_historical_gross_net_parity_audit_immutable but no longer contains a CREATE TRIGGER statement for it.",
+        "New ordered transactional migration 0007 executes only DROP TRIGGER IF EXISTS public.trg_historical_gross_net_parity_audit_immutable on public.historical_gross_net_parity_audit.",
+        "Immutable baseline 0001, including its historical CREATE TRIGGER statement and semantic checksum, remains byte-for-byte unchanged.",
         "After user deployment, pg_trigger contains zero non-internal triggers named trg_historical_gross_net_parity_audit_immutable on historical_gross_net_parity_audit.",
         "The audit table, indexes, insertion and read paths, accounting decisions, and reject_historical_gross_net_parity_immutable_change function remain unchanged.",
         "The approved consequence is explicit: after deployment, ordinary authorized SQL can update or delete any historical_gross_net_parity_audit row because database-level immutability is no longer enforced."
       ],
       "implementationPaths": [
-        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
-        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "src/PolyCopyTrader.Storage/PostgresHistoricalParityAuditTriggerSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
         "README.md",
         "docs/configuration_reference.md"
       ],
@@ -109,8 +117,8 @@
         {
           "id": "VER-003",
           "kind": "test",
-          "command": "Run focused schema contract tests that inspect PostgresSchema.SchemaSql.",
-          "expected": "The exact DROP remains, the exact CREATE is absent, and no other trigger or audit behavior changes.",
+          "command": "Run focused migration catalog tests for ordered migration 0007 and immutable baseline checksum validation.",
+          "expected": "Migration 0007 contains only the exact DROP, baseline 0001 remains unchanged, and no other trigger or audit behavior changes.",
           "result": "pending",
           "evidence": ""
         },
@@ -129,9 +137,10 @@
       "text": "Delete all exactly attributable structured Product history for the fixed 15 targets and then delete the exact strategy rows.",
       "sourceRequestIndexes": [
         0,
-        1
+        1,
+        3
       ],
-      "sourceQuote": "очисть историю и удали сами стратегии",
+      "sourceQuote": "удалить ненужные стратегии вместе с историей, чтобы почистить базу",
       "acceptanceCriteria": [
         "A fresh pre-delete preview verifies exactly the fixed 15 UUID/code targets, zero collisions, zero external references, zero active Live orders, stable target activity, trigger absence, healthy service, and zero waiting locks.",
         "The fresh preview reports exact target counts for every guarded direct and indirect structured relation, proposed batch size and batch count, transaction boundaries, expected lock/load profile, and durable remaining-row resume points.",
@@ -142,7 +151,6 @@
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Domain/Models.cs",
-        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
         "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs"
       ],
       "verification": [
@@ -170,9 +178,10 @@
       "sourceRequestIndexes": [
         0,
         1,
-        2
+        2,
+        3
       ],
-      "sourceQuote": "повтори ту же операцию",
+      "sourceQuote": "Решай эту задачу.",
       "acceptanceCriteria": [
         "Focused tests and the Release solution build pass with zero new failures or errors.",
         "git diff --check and requirement validation pass before commit and in staged mode.",
@@ -181,8 +190,10 @@
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Domain/Models.cs",
-        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresHistoricalParityAuditTriggerSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
         "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
         "README.md",
         "docs/configuration_reference.md"
       ],
@@ -207,12 +218,24 @@
     }
   ],
   "assumptions": [],
-  "deviations": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The earlier approved plan to edit PostgresSchema.SchemaSql and remove the 15 identities from its static seed SQL is withdrawn because that SQL is immutable migration 0001; the implementation instead leaves baseline 0001 byte-for-byte unchanged, removes the identities only from runtime catalogs, and removes the trigger through ordered migration 0007.",
+      "impact": "The existing Product database does not replay baseline 0001, so after the separate guarded Product cleanup it cannot reseed the deleted rows and migration 0007 removes the exact trigger. A genuinely new empty database still receives the 15 legacy strategy rows from baseline 0001, but the runtime catalog contains none of them and cannot dispatch them; changing that new-database legacy seed outcome would require separate explicitly approved migration behavior.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d",
+        "semanticDigest": "sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d"
+      }
+    }
+  ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:c9317839c8bc7b8db1ba2e977b1710e5b8c38b8069083ada9e979443ebfb4aee",
-    "semanticDigest": "sha256:c9317839c8bc7b8db1ba2e977b1710e5b8c38b8069083ada9e979443ebfb4aee"
+    "evidenceText": "APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d",
+    "semanticDigest": "sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_disabled_and_lower_enter_cleanup",

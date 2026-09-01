@@ -46,3 +46,24 @@ Request:
 
 Result:
 Protected temp cleanup removed the exact marked run `manual-25b73e2bc58e4024ab84717e49bd6170` (812 files / 201,984,405 bytes) and verified the path absent after durable evidence had been recorded. WorkingTree requirement validation and `git diff --check` passed; the remaining tracked change set contains only the approved contract evidence plus context/history bookkeeping.
+
+## 2026-09-01T12:56:36.2617364+00:00
+Request:
+APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:c9317839c8bc7b8db1ba2e977b1710e5b8c38b8069083ada9e979443ebfb4aee
+
+Result:
+Implementation inspection proved that the approved proposal would edit checksum-protected immutable baseline migration `0001` and therefore fail service startup. Every tentative product-source edit was reverted and neither Product nor the local database was mutated. The contract was returned to draft with a bounded correction: keep baseline `0001` byte-for-byte unchanged, remove the exact 15 targets only from runtime catalogs, and remove only the exact immutable audit trigger through ordered transactional migration `0007`. Revised semantic digest: `sha256:4903e7e41362942b00469c3d3ed126ba363c0c69790719d5e9f04abee5b3a2c9`; further product edits await exact user approval.
+
+## 2026-09-01T12:58:54.6939226+00:00
+Request:
+Ты опять меня грузишь вещами, которые я не понимаю. Мне нужно просто удалить ненужные стратегии вместе с историей, чтобы почистить базу. Решай эту задачу.
+
+Result:
+The user's clarified outcome was added verbatim to the requirement contract: remove the exact 15 unwanted Product strategies and all exactly attributable structured history. No product or database mutation was performed. The repository's mandatory gate still requires exact approval of current digest `sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d` before implementation can resume.
+
+## 2026-09-01T12:59:55.1460914+00:00
+Request:
+APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d
+
+Result:
+Recorded the user's exact approval of the revised requirement contract. The approved checkpoint preserves immutable baseline migration `0001`, removes the fixed 15 targets from runtime catalogs, uses ordered migration `0007` to remove only the exact audit trigger, and retains the later guarded Product history/strategy cleanup after user deployment and fresh verification.
