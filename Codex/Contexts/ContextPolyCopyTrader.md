@@ -1,3 +1,20 @@
+## Active Update 2026-09-01 Paper Live Shadow FAK Expiry Post-Deploy Verification
+Goal: Verify deployed fix `99cdcf08` and determine whether it also covers the last Cancelled Live order for `ETH Up or Down 5m Up 50 bps Instant`.
+Status: Deployed build healthy; shared correction applicability verified; real post-deploy Live branch not yet exercised
+Done:
+- Queried only Product PostgreSQL `192.168.0.101:5432/polycopytrader` in explicit READ ONLY UTC transactions with 15-second statement timeouts and inspected server logs under `\\192.168.0.101\CodexLogs` without changing service or trading state.
+- Verified `PolyCopyTrader.Service` is `Running`/`Live` from `2026-09-01T20:28:19.549311Z` on exact version `info=1.0.0+99cdcf080cece10b74648377f8e6db114c0c3723`, with fresh heartbeat and `last_error=NULL`.
+- Verified ordinary Paper activity continued: at `2026-09-01T20:32:42Z`, the preceding 15 minutes contained 1,018 created Paper orders and 1,018 orders already `Filled`.
+- The original LossDiff target had zero post-start runs, shadow decisions, and Live orders at the checked cutoff, so its corrected runtime branch was not exercised.
+- Resolved exact Instant strategy `b7c50005-0000-4000-8079-000000000150` / `eth_up_down_5m_up_bps_50_instant`. Its last Cancelled Live row `4316e3dd-b6a0-410c-b7f8-80daa8ff370c` used `paper_live_shadow_test` and had `ExpiresAtUtc=CreatedAtUtc=2026-09-01T18:45:01.028036Z`, while both linked Paper order `5b8dbbb9-5d7e-4f23-852e-9d3942a8584d` and shadow decision correlation `5903bf3e-5091-4c2d-988c-ebb369633a37` had the correct later cancel deadline `2026-09-01T18:49:00Z`.
+- Durable runtime event `BtcUpDown5mPaperLiveShadowPersistSubmit | Error` at `2026-09-01T18:45:10.256005Z` reports that the same Live row changed before submission persistence. This matches the previously proven shared expiry race.
+- Current implementation routes every effective non-PaperOnly Live stake through `TryPlacePaperLiveShadowOrderAsync`; commit `99cdcf08` changes that shared method to persist `paperOrder.ExpiresAtUtc`. Therefore it covers this Instant strategy's same premature-expiry mechanism without a strategy-specific branch.
+- After deployment, the Instant strategy continued receiving fresh runs, but due windows checked at `20:35Z` and `20:40Z` skipped by strategy condition and produced no Live order. Thus code-path applicability is confirmed, but a real post-deploy order has not yet independently proven the lifecycle outcome.
+- Server logs from the new process start through the checked interval contained zero ERR/FTL. Warnings comprised market-data queue latency, nine skipped crypto ticks, and two startup WebSocket reconnects; the service recovered and heartbeat remained fresh.
+Next: On the next qualifying Live entry, verify `live_orders.expires_at_utc = paper_orders.expires_at_utc = paper_live_shadow_decisions.cancel_deadline_utc`, and confirm no premature `BtcUpDown5mPaperLiveShadowPersistSubmit` conflict.
+Notes: The correction prevents only this premature local expiry/cancellation race; it does not suppress legitimate venue rejection, risk/preflight rejection, fill outcome, or cancellation at the real deadline. No Product data, service, order, strategy, configuration, or deployment state was changed during verification.
+Blockers: No qualifying post-deploy Live order was available at cutoff `2026-09-01T20:41:28.949081Z`.
+
 ## Active Update 2026-09-01 Dashboard Follow Market Categories
 Goal: Create one separate Dashboard Follow Market strategy category for each of BTC, ETH, and SOL.
 Status: Completed locally and independently reviewed; not deployed

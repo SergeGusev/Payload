@@ -151,3 +151,17 @@ Request:
 
 Result:
 Completed the approved local Dashboard presentation change: the existing 270 Follow Market strategies now resolve to separate `BTC Follow Market`, `ETH Follow Market`, and `SOL Follow Market` categories with exactly 90 variants each in all-time, 24-hour, 6-hour, and 1-hour views. The exact test passed 1/1 and the Release solution build completed with zero errors and 126 existing warnings. A detached clean-parent comparison proved the changed category test class introduced no new failure: both trees retain the same six unrelated pre-existing stale-count failures approved under DEV-001. Independent semantic review returned PASS with no findings. Trading/catalog/persistence behavior, databases, service state, deployment, and Production were not changed.
+
+## 2026-09-01T20:42:39.0380477Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified Product is running exact deployed build `99cdcf080cece10b74648377f8e6db114c0c3723` from `2026-09-01T20:28:19.549311Z`, status `Running`, mode `Live`, fresh heartbeat, and `last_error=NULL`. Ordinary Paper activity continued with 1,018 created and 1,018 Filled orders in the checked 15-minute window. No post-start Live order or shadow decision had yet exercised the corrected branch. Server logs contained zero ERR/FTL through the checked interval; warnings were market-data queue latency, skipped crypto ticks, and two recovered startup WebSocket reconnects. No Product state was changed.
+
+## 2026-09-01T20:42:39.0380477Z
+Request:
+Подтверди, что наш фикс также должен исправить отмену последней живой ставки в ETH Up or Down 5m Up 50 bps Instant
+
+Result:
+Confirmed from independent Product rows and the shared implementation path that the same fix applies. Exact strategy `b7c50005-0000-4000-8079-000000000150` had last Cancelled Live order `4316e3dd-b6a0-410c-b7f8-80daa8ff370c` with the erroneous immediate expiry `2026-09-01T18:45:01.028036Z`, while its linked Paper order and shadow decision both expired at `2026-09-01T18:49:00Z`; the durable `BtcUpDown5mPaperLiveShadowPersistSubmit` conflict followed. Commit `99cdcf08` changes the shared `TryPlacePaperLiveShadowOrderAsync` path to use that Paper expiry, so it should prevent this same premature cancellation for the Instant strategy. No qualifying post-deploy Live entry existed by `2026-09-01T20:41:28.949081Z`, so real runtime lifecycle confirmation remains pending. No Product state was changed.
