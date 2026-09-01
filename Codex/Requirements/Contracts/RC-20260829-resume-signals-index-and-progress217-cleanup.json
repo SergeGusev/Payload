@@ -63,8 +63,8 @@
           "kind": "runtime",
           "command": "Run the exact read-only preflight, delete exact target-owned history in guarded batches, and record per-batch affected and remaining counts.",
           "expected": "All exact target-owned structured history reaches zero without changing non-target identities.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Production execution against 192.168.0.101:5432/polycopytrader recorded 2548 independently committed history batches totaling 6720054 exact target-owned rows. Durable relation totals were: strategy_market_paper_runs 1685401; signals 790508; paper_fills 767601; paper_orders 767601; paper_positions 763555; paper_position_settlements 763496; dashboard_strategy_position_projection_facts 763555; strategy_market_paper_skip_tombstones 250850; strategy_child_parent_assignments 162430; strategy_paper_skip_rollups 2860; dashboard_strategy_recent_projection_states 651; dashboard_strategy_recent_performance_snapshots 651; paper_copied_trader_performance 434; dashboard_strategy_lifetime_projection_states 217; dashboard_strategy_performance_snapshots 217; crypto_up_down_5m_diff_shift_progress_states 27. Every other guarded relation and immutable audit relation was zero. Final pre-strategy-delete preview found all 37 guarded history/audit relations at zero, exact_targets=217, retained_six=6, non_target_count=2668, non_target_identity=bea4c122bfacac9994793d51ec51b1f8, active Live orders=0, active assignments=0 and marker=0."
         }
       ]
     },
@@ -91,16 +91,16 @@
           "kind": "runtime",
           "command": "Run immediate and two-worker-cycle product postchecks for exact target absence, zero residuals, one marker, retained identity presence and service health.",
           "expected": "Only the exact 217 targets and their exact structured history are absent; retained and unrelated strategy identities remain present and service health is normal.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "One serializable final transaction deleted exactly 217 allowlisted UUID/code strategy rows and inserted cleanup marker 20260819_remove_217_unreferenced_negative_progress_strategies exactly once. Total deletion was 6720054 history rows plus 217 strategies = 6720271 rows across 2549 committed transactions. Immediate postcheck passed; worker-cycle checks passed at heartbeats 2026-09-01T10:46:05.441566Z and 2026-09-01T10:47:05.451214Z. A separate fresh postcheck process then returned POSTCHECK_OK. These checks found zero exact target strategies, zero guarded residual history, marker=1, retained_six=6, non_target_count=2668, the unchanged non-target identity fingerprint bea4c122bfacac9994793d51ec51b1f8, Running/Live service state, empty last_error and zero waiting locks at the checked gates. No service stop/restart, backup, index/schema/migration, trigger bypass, vacuum, local-database mutation or unrelated strategy mutation was performed."
         },
         {
           "id": "VER-003",
           "kind": "inspection",
           "command": "Independently compare the verbatim request and approved contract with the executed statements and verification evidence.",
           "expected": "Independent review confirms exact scope and no out-of-scope mutation.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/progress217_semantic_review compared the verbatim requests, approved contract, complete tracked diff, temporary executor, full JSONL and fresh read-only database evidence. The reviewer independently reconciled 2548 history batches / 6720054 primary rows plus 217 final strategy rows, verified all remaining sequences reached zero, confirmed only allowed adaptive limits 10000 -> 5000 -> 2500 -> 1000 with no increases, checked the exact 217 UUID/code allowlist, and found no DDL/index/migration/trigger-disable/vacuum/backup/service-state/local-database or unrelated-data mutation. A fresh reviewer postcheck returned POSTCHECK_OK; a broad metadata audit found zero target residuals in all 38 applicable product base tables; local exact targets were independently confirmed zero in READ ONLY. Verdict PASS with no findings."
         }
       ]
     }
@@ -114,9 +114,9 @@
     "semanticDigest": "sha256:251574094b7f1b991a349ebe6bd84421f12bd0b8f5a69058418f71958ad54afe"
   },
   "independentReview": {
-    "reviewer": "pending",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/progress217_semantic_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

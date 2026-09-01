@@ -1,3 +1,16 @@
+## Active Update 2026-09-01 Progress-217 Product Cleanup
+Goal: Delete the exact previously approved 217 stopped unreferenced negative-Progress strategies and all exactly attributable structured Production history.
+Status: Completed
+Done:
+- Deleted 6,720,054 exact target-owned history rows in 2,548 independently committed guarded batches, then deleted exactly 217 allowlisted strategy rows and inserted cleanup marker `20260819_remove_217_unreferenced_negative_progress_strategies` in one final serializable transaction. Total deleted rows: 6,720,271 across 2,549 committed transactions.
+- Final pre-delete preview found all 37 guarded history/audit relations at zero, all 217 exact strategies still stopped, active Live orders/references zero, retained six present, non-target count 2,668, and non-target identity fingerprint `bea4c122bfacac9994793d51ec51b1f8` unchanged.
+- Immediate postcheck, two later worker-cycle checks, and a separate fresh postcheck process all passed: exact targets zero, guarded residuals zero, marker one, retained/non-target identities unchanged, service `Running`/`Live`, empty `last_error`, and clean lock gates.
+- Independent reviewer `agent:/root/progress217_semantic_review` compared the verbatim requests, approved contract, tracked diff, executor, full JSONL, fresh Product/local read-only checks, and 38-table metadata audit; verdict `PASS` with no findings.
+- No service stop/restart, backup, index/schema/migration, trigger bypass, vacuum, local-database mutation, or unrelated strategy/data mutation was performed.
+Next: None.
+Notes: Production target was only `192.168.0.101:5432/polycopytrader`. The executor used exact immutable UUID/code/wallet allowlists, short atomic batches with per-batch health/lock/identity gates, durable remaining counts, and adaptive limits `10000 -> 5000 -> 2500 -> 1000`. Durable contract evidence contains per-relation batch totals and the final runtime invariants. Focused existing tests passed 6/6 before execution; the disposable executor built with 0 warnings and 0 errors. The operational-only contract retains lifecycle status `approved` with every verification `passed` and independent review `pass`, because the mechanical gate forbids a transition to `completed` without a governed product-file diff; no fake product change was introduced. Protected cleanup removed the exact marked temp run (812 files / 201,984,405 bytes) and verified its path absent.
+Blockers: None.
+
 ## Active Update 2026-09-01 Legacy Candidate And Market-Data Latency Post-Deploy Verification
 Goal: Verify the deployed Legacy candidate and market-data latency correction against current Production service, betting, database, and server-log evidence.
 Status: Completed
