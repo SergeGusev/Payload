@@ -165,3 +165,10 @@ Request:
 
 Result:
 Confirmed from independent Product rows and the shared implementation path that the same fix applies. Exact strategy `b7c50005-0000-4000-8079-000000000150` had last Cancelled Live order `4316e3dd-b6a0-410c-b7f8-80daa8ff370c` with the erroneous immediate expiry `2026-09-01T18:45:01.028036Z`, while its linked Paper order and shadow decision both expired at `2026-09-01T18:49:00Z`; the durable `BtcUpDown5mPaperLiveShadowPersistSubmit` conflict followed. Commit `99cdcf08` changes the shared `TryPlacePaperLiveShadowOrderAsync` path to use that Paper expiry, so it should prevent this same premature cancellation for the Instant strategy. No qualifying post-deploy Live entry existed by `2026-09-01T20:41:28.949081Z`, so real runtime lifecycle confirmation remains pending. No Product state was changed.
+
+## 2026-09-01T20:50:55.2099283Z
+Request:
+Ну как там проверка?
+
+Result:
+Rechecked Product read-only. At `2026-09-01T20:50:25.192043Z`, the exact deployed build `99cdcf080cece10b74648377f8e6db114c0c3723` remained `Running`/`Live` with fresh heartbeat and `last_error=NULL`. There were still zero post-start Live orders and zero `BtcUpDown5mPaperLiveShadowPersistSubmit` events. `ETH Up or Down 5m Up 50 bps Instant` continued its five-minute evaluations; the `20:45Z` and `20:50Z` entries were correctly skipped because the observed previous-market move was below the configured 50 bps threshold. Current logs `_085` and `_086` contained zero ERR/FTL and zero persistence-conflict entries. Ordinary Paper execution remained active with 1,104 created and 1,104 Filled orders in the checked 15-minute interval. The fix is deployed and the old failure has not recurred, but a qualifying real Live entry is still needed for final runtime confirmation. No Product state was changed.

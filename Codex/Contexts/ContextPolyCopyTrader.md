@@ -1,3 +1,17 @@
+## Active Update 2026-09-01 Paper Live Shadow Fix Follow-Up
+Goal: Recheck whether the deployed expiry-race correction has been exercised by a real post-deploy Live order.
+Status: Service healthy; qualifying Live checkpoint still pending
+Done:
+- Rechecked only Product PostgreSQL `192.168.0.101:5432/polycopytrader` in explicit READ ONLY UTC transactions and the current server logs without changing any runtime state.
+- At cutoff `2026-09-01T20:50:25.192043Z`, `PolyCopyTrader.Service` remained `Running`/`Live` on exact build `99cdcf080cece10b74648377f8e6db114c0c3723`, with heartbeat age about 5 seconds and `last_error=NULL`.
+- Both exact target strategies remained enabled for Live with no pause. There were still zero Live orders after the service start `2026-09-01T20:28:19.549311Z`, including zero for the LossDiff target and zero for `eth_up_down_5m_up_bps_50_instant`.
+- `ETH Up or Down 5m Up 50 bps Instant` continued evaluating each five-minute window. The `20:45Z` and `20:50Z` windows were authoritatively skipped by `btc_previous_market_move_below_bps_threshold`; at `20:50Z`, the previous ETH reference move was about `9.1346 bps`, below the configured `50 bps` threshold.
+- Product DB contained zero post-start `BtcUpDown5mPaperLiveShadowPersistSubmit` events. Server logs `_085` and `_086` likewise contained zero ERR/FTL and zero such persistence-conflict entries through the checked interval.
+- Ordinary Paper execution remained active: the latest checked 15-minute interval had 1,104 created Paper orders and 1,104 already `Filled`.
+Next: The first qualifying Live entry is still required to confirm in runtime that all three deadlines are equal and the premature cancellation no longer occurs.
+Notes: Current absence of Live orders is explained for the repeatedly due Instant strategy by its verified threshold skips, not by the old expiry race. No Product data, service, strategy, order, or configuration was changed.
+Blockers: Market conditions have not produced a qualifying post-deploy Live entry.
+
 ## Active Update 2026-09-01 Paper Live Shadow FAK Expiry Post-Deploy Verification
 Goal: Verify deployed fix `99cdcf08` and determine whether it also covers the last Cancelled Live order for `ETH Up or Down 5m Up 50 bps Instant`.
 Status: Deployed build healthy; shared correction applicability verified; real post-deploy Live branch not yet exercised
