@@ -1,6 +1,6 @@
 ## Active Update 2026-09-01 Disabled And Dependent LowerEnter Cleanup
 Goal: Remove the exact fixed 15 disabled/dependent LowerEnter strategies, their exactly attributable Product history, and the one immutable audit trigger.
-Status: In Progress
+Status: Completed
 Done:
 - Verified the fixed Product allowlist contains exactly 15 UUID/code identities: 11 disabled strategies and four enabled dependent LowerEnter strategies; the preimplementation snapshot found zero Live orders, zero external runtime-catalog references, zero active assignments, healthy Running/Live service state, and zero waiting locks.
 - Verified that the approved proposal to edit `PostgresSchema.SchemaSql` is incompatible with the current versioned initializer: that SQL is checksum-protected immutable baseline migration `0001`, and editing it would fail service startup before the requested trigger change could apply.
@@ -8,9 +8,13 @@ Done:
 - Received exact user approval for source-stage contract `RC-20260901-stage-disabled15-service-before-history-cleanup` at digest `sha256:22301d964e9e19d49d73ae790852ef8db54a28ff4a185d17d405de52f5eb3921`.
 - Implemented the exact 15-target runtime-catalog exclusion while preserving immutable baseline migration `0001`, and added ordered transactional migration `0007` that drops only the exact audit immutability trigger.
 - Final focused tests passed 22/22; the Release solution build completed with zero errors; `git diff --check` passed. Independent reviewer `agent:/root/progress217_semantic_review` returned `PASS` with no findings.
-Next: Commit and push the bounded service change to `master`, then await the user-controlled deployment before Product cleanup.
-Notes: The revised deviation explicitly records that a genuinely new empty database can still receive the 15 legacy seed rows from immutable baseline `0001`, although the runtime catalog cannot dispatch them. Existing Product does not replay baseline `0001`; after the later guarded cleanup it cannot reseed the targets through schema initialization.
-Blockers: Product cleanup remains gated on user deployment and fresh runtime verification.
+- User deployed exact service commit `51348f38e27be7716eeeb80162d0164ac44d9394`; Product confirmed ordered migration `0007` once with the expected checksum and the exact immutable trigger absent.
+- Deleted 836,106 exact target-attributable history rows in 535 history transactions, then deleted exactly 15 strategies in the one serializable marker transaction; total affected rows were 836,121 across 536 committed transactions. The durable marker records the 836,091 rows/534 history transactions completed before its insertion, and the separately logged catchup removed 15 post-strategy dashboard projection events.
+- Immediate clean recheck before worker slot 1 and full delayed checks after worker slots `14:54:30Z` and `14:59:30Z` found target count zero, all 37 guarded residuals zero, marker one, non-target count 2,653 with fingerprint `75b563134be20c9667d6a4ba4ba9ac35`, healthy Running/Live service, NULL `last_error`, and zero waiting locks.
+- Product logs `_064` and `_065` contained zero ERR/FTL from final deletion through `2026-09-01T18:04:54+03:00`. Independent reviewer `agent:/root/progress217_semantic_review` reconciled the complete source/runtime evidence and returned `PASS` with no findings.
+Next: None.
+Notes: Product target was only `192.168.0.101:5432/polycopytrader`. No service stop/restart, backup, local-database mutation, schema/index change beyond already deployed migration `0007`, VACUUM/physical compaction, or non-target deletion occurred. The main contract remains lifecycle `approved` with completed evidence because the operational Product cleanup has no new governed product-file diff; no fake implementation change is introduced.
+Blockers: None.
 
 ## Active Update 2026-09-01 Progress-217 Product Cleanup
 Goal: Delete the exact previously approved 217 stopped unreferenced negative-Progress strategies and all exactly attributable structured Production history.

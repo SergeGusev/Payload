@@ -95,3 +95,10 @@ APPROVE RC-20260901-stage-disabled15-service-before-history-cleanup sha256:22301
 
 Result:
 Completed the approved bounded service stage: the exact 15 targets and all retained runtime references are absent from the working catalog, immutable baseline migration `0001` keeps its approved checksum, and ordered transactional migration `0007` drops only the exact audit immutability trigger. Focused tests passed 22/22, the Release solution build completed with zero errors, `git diff --check` passed, and independent semantic review returned PASS with no findings. Product and the local database were not mutated; strategy/history deletion still awaits user deployment and fresh runtime verification.
+
+## 2026-09-01T15:04:54Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified deployed Product build `51348f38e27be7716eeeb80162d0164ac44d9394`, then completed the approved exact cleanup against only `192.168.0.101:5432/polycopytrader`: 836,106 target-attributable history rows and exactly 15 strategy rows were affected across 536 committed transactions. Immediate clean recheck before worker slot 1 and delayed full checks after slots `14:54:30Z` and `14:59:30Z` found zero targets, zero residuals in all 37 guarded predicates, one marker, unchanged 2,653 non-target strategies/fingerprint, healthy Running/Live service, NULL `last_error`, and zero waiting locks. Product logs contained zero ERR/FTL through `18:04:54+03:00`; independent semantic review returned PASS with no findings. No service stop/restart, backup, local-database mutation, unrelated schema/index change, VACUUM/physical compaction, or non-target deletion occurred.
