@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260901-remove-disabled-and-dependent-lower-enter-strategies",
+  "title": "Remove the 11 disabled strategies, four dependent LowerEnter strategies, their history, and the immutable audit trigger",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Отлично теперь пройдись по всем стратегиям, у которых Enabled = False и повтори ту же операцию - очисть историю и удали сами стратегии"
+    },
+    {
+      "source": "user",
+      "text": "Удаляй дочерние стратегии тоже"
+    },
+    {
+      "source": "user",
+      "text": "Да вообще убери этот триггер, зачем он нужен?"
+    }
+  ],
+  "scope": {
+    "goal": "Remove the exact 11 strategies that were disabled in the Product snapshot, the exact four enabled LowerEnter strategies shown to the user that depend on them, all exactly attributable structured Product history, and permanently remove the database trigger that makes historical Gross-to-Net parity audit rows immutable.",
+    "inScope": [
+      "Use the fixed 15 UUID/code Product allowlist whose sorted identity SHA-256 is 9e5a735526b47548abdbabaedc11a46c4f8dc433c196f430cd68a387bf663578: b7c50005-0000-4000-8166-000000000003 btc_up_down_5m_3_diff_shift_progress_premarket; b7c50005-0000-4000-8168-000000000002 sol_up_down_5m_2_diff_shift_progress_premarket; b7c50005-0000-4000-8168-000000000003 sol_up_down_5m_3_diff_shift_progress_premarket; b7c50005-0000-4000-8168-000000000005 sol_up_down_5m_5_diff_shift_progress_premarket; b7c50005-0000-4000-8171-000000000003 sol_up_down_5m_3_diff_limit_progress_premarket; b7c50005-0000-4000-8172-000000000004 btc_up_down_5m_4_diff_real_limit_progress_premarket; b7c50005-0000-4000-8172-000000000005 btc_up_down_5m_5_diff_real_limit_progress_premarket; b7c50005-0000-4000-8182-000000000101 btc_up_down_5m_futures_basis_bps_1_fak_premarket; b7c50005-0000-4000-8184-000000000101 sol_up_down_5m_futures_basis_bps_1_fak_premarket; b7c50005-0000-4000-8185-000000000001 btc_up_down_5m_1_child; b7c50005-0000-4000-8196-000000000001 sol_up_down_5m_1_child_roi; b7c50005-0001-4000-8166-000000000003 btc_up_down_5m_3_diff_shift_progress_lower_enter_premarket; b7c50005-0001-4000-8172-000000000004 btc_up_down_5m_4_diff_real_limit_progress_lower_enter_premarket; b7c50005-0001-4000-8172-000000000005 btc_up_down_5m_5_diff_real_limit_progress_lower_enter_premarket; b7c50005-0001-4000-8182-000000000101 btc_up_down_5m_futures_basis_bps_1_fak_lower_enter_premarket.",
+      "Remove the exact 15 identities from every runtime catalog and static or generated seed path so the deployed service cannot dispatch or recreate them.",
+      "Keep the existing DROP TRIGGER statement for trg_historical_gross_net_parity_audit_immutable but remove its CREATE TRIGGER statement, so schema initialization permanently leaves that exact trigger absent.",
+      "Keep the historical_gross_net_parity_audit table, its indexes, its insert/read/accounting behavior, and the reject_historical_gross_net_parity_immutable_change function unchanged; only the trigger enforcement is removed.",
+      "After the user deploys the approved source change, verify the exact deployed build, absence of the trigger, absence of external catalog or active assignment references, zero active Live orders, stable target activity across at least two worker cycles, healthy Running/Live service state, empty service last_error, and zero waiting database locks before deletion.",
+      "Delete every structured Product row exactly attributable to the fixed 15 targets, including the currently observed 24,297 historical_gross_net_parity_audit AccountingDecision rows, using short independently committed and restartable batches selected from fresh Production evidence.",
+      "Delete the exact 15 strategy rows only after every guarded dependency reaches zero, insert one exact cleanup marker, and verify no target reseed after at least two later worker cycles.",
+      "Preserve every non-target strategy and its history by exact identity and dependency guards; the four internal LowerEnter-to-source references disappear only because both ends are in the fixed target allowlist.",
+      "Run focused catalog/schema tests, a Release build, requirement validation, exact Product prechecks/postchecks, and independent semantic review."
+    ],
+    "outOfScope": [
+      "Deleting or modifying any strategy or history outside the fixed 15 UUID/code allowlist.",
+      "Mutating the local database.",
+      "Changing any trigger other than trg_historical_gross_net_parity_audit_immutable, deleting the trigger function, deleting or redesigning the audit table, changing audit insertion/read semantics, or changing historical Gross-to-Net accounting logic.",
+      "Any other PostgreSQL schema, migration, index, constraint, retention, archive, compaction, VACUUM FULL, pg_repack, REINDEX, or physical database-size operation.",
+      "Creating a backup, dump, archive, database clone, permanent cleanup framework, reusable deletion service, new cleanup table, or new trigger.",
+      "Stopping or restarting the service, deploying a build, cancelling orders, changing Live/Paper mode, or pausing unrelated strategies; deployment remains the user's action.",
+      "Changing trading behavior, execution semantics, Paper/Live parity, stakes, risk controls, or strategy metrics for any retained strategy.",
+      "Deleting unstructured global logs or shared/global data that lacks a verified exact target owner."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "The fixed 15 UUID/code identities observed in Product at 2026-09-01T12:27:09.152978Z; all exactly attributable structured history without a time-window restriction.",
+    "firstVerification": "Re-run the fixed-identity Product preview in a REPEATABLE READ READ ONLY transaction and verify exactly 15 UUID/code matches, 11 disabled plus four enabled LowerEnter targets, zero external runtime-catalog references, zero active child-parent assignments, zero Live orders, current Paper/run states, direct dependency counts, audit-trigger definition, service health, and lock state before any implementation or Product mutation."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Remove exactly the fixed 11 disabled strategies and four dependent LowerEnter strategies from runtime catalog and seed paths.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Удаляй дочерние стратегии тоже",
+      "acceptanceCriteria": [
+        "The source catalog contains none of the exact 15 UUID/code pairs and still contains every non-target strategy identity.",
+        "No retained variant has BaseSignalStrategyId, ConfirmationSignalStrategyId, LowerEnterSourceStrategyId, or other runtime-catalog reference to any exact target.",
+        "Schema seed SQL cannot insert, update, or recreate any of the exact 15 targets, while retained seed identities and behavior remain unchanged.",
+        "After user deployment, Product does not create a target strategy, order, run, position, assignment, or projection row during at least two complete worker cycles."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run the focused RetiredProgressStrategyTests against the exact fixed 15 UUID/code allowlist and all retained-reference guards.",
+          "expected": "All 15 targets are absent from catalog and seed paths, zero retained references point to them, and every non-target identity remains.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "runtime",
+          "command": "After user deployment, run exact read-only Product identity and activity checks over at least two worker cycles.",
+          "expected": "The deployed build contains the approved source change and creates no target identity or structured target activity.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Permanently remove the exact immutable trigger from the historical Gross-to-Net parity audit table.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "убери этот триггер",
+      "acceptanceCriteria": [
+        "PostgresSchema still executes DROP TRIGGER IF EXISTS trg_historical_gross_net_parity_audit_immutable but no longer contains a CREATE TRIGGER statement for it.",
+        "After user deployment, pg_trigger contains zero non-internal triggers named trg_historical_gross_net_parity_audit_immutable on historical_gross_net_parity_audit.",
+        "The audit table, indexes, insertion and read paths, accounting decisions, and reject_historical_gross_net_parity_immutable_change function remain unchanged.",
+        "The approved consequence is explicit: after deployment, ordinary authorized SQL can update or delete any historical_gross_net_parity_audit row because database-level immutability is no longer enforced."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run focused schema contract tests that inspect PostgresSchema.SchemaSql.",
+          "expected": "The exact DROP remains, the exact CREATE is absent, and no other trigger or audit behavior changes.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "runtime",
+          "command": "After user deployment, query pg_trigger and pg_get_triggerdef in a Product READ ONLY transaction.",
+          "expected": "The exact immutable trigger count is zero and service/database health checks pass.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Delete all exactly attributable structured Product history for the fixed 15 targets and then delete the exact strategy rows.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "очисть историю и удали сами стратегии",
+      "acceptanceCriteria": [
+        "A fresh pre-delete preview verifies exactly the fixed 15 UUID/code targets, zero collisions, zero external references, zero active Live orders, stable target activity, trigger absence, healthy service, and zero waiting locks.",
+        "The fresh preview reports exact target counts for every guarded direct and indirect structured relation, proposed batch size and batch count, transaction boundaries, expected lock/load profile, and durable remaining-row resume points.",
+        "Each deletion batch is independently atomic, idempotent, bounded to exact target-owned rows, and followed by service heartbeat/error, waiting-lock, affected-count, remaining-count, and non-target identity checks.",
+        "The exact 24,297 audit rows observed at the contract snapshot are included, subject to a fresh exact count before deletion; no non-target audit row is deleted.",
+        "Every guarded structured target relation reaches zero before exactly 15 strategy rows are deleted and one exact cleanup marker is inserted.",
+        "Immediate and two-worker-cycle postchecks find zero exact target strategies, zero guarded target history, one marker, unchanged non-target identities, no reseed, Running/Live service state, empty last_error, and zero waiting locks."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "runtime",
+          "command": "After deployment gates pass, delete exact target-owned Product history in evidence-sized guarded batches and delete the 15 strategy rows only after all dependencies reach zero.",
+          "expected": "All exact target structured history and strategies reach zero without changing non-target identities or degrading service health.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Run immediate and delayed exact Product postchecks, reconcile every committed batch, and obtain independent semantic review of prompts, contract, diff, tests, and runtime evidence.",
+          "expected": "Zero residuals or reseed, exact batch reconciliation, healthy service, unchanged non-targets, and independent PASS with no findings.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Verify the exact bounded implementation and preserve every out-of-scope Product and repository object.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        2
+      ],
+      "sourceQuote": "повтори ту же операцию",
+      "acceptanceCriteria": [
+        "Focused tests and the Release solution build pass with zero new failures or errors.",
+        "git diff --check and requirement validation pass before commit and in staged mode.",
+        "Independent review confirms that the diff contains only the exact catalog/seed exclusions, exact trigger removal, focused tests, required documentation, contract, context, and history updates.",
+        "No backup, deployment, service stop/restart, local-database mutation, unrelated schema/index change, trading-behavior change, or physical compaction occurs."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-007",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln --configuration Release with all disposable outputs under the active marked D:/CodexTemp run.",
+          "expected": "The solution builds with zero errors.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-008",
+          "kind": "inspection",
+          "command": "Run git diff --check, scripts/requirements/Validate-RequirementContract.ps1 in WorkingTree and Staged modes, and independent semantic review.",
+          "expected": "All mechanical checks pass and the reviewer returns PASS with no findings.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:c9317839c8bc7b8db1ba2e977b1710e5b8c38b8069083ada9e979443ebfb4aee",
+    "semanticDigest": "sha256:c9317839c8bc7b8db1ba2e977b1710e5b8c38b8069083ada9e979443ebfb4aee"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_disabled_and_lower_enter_cleanup",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
