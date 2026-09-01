@@ -3,7 +3,7 @@
   "contractId": "RC-20260901-dashboard-follow-market-categories",
   "title": "Split Dashboard Follow Market strategies into one category per currency",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "draft",
   "originalRequests": [
     {
       "source": "user",
@@ -54,8 +54,8 @@
         {
           "id": "VER-001",
           "kind": "test",
-          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --configuration Release --filter FullyQualifiedName~StrategyDisplayCategoryTests with all disposable outputs under the active marked D:/CodexTemp run",
-          "expected": "All focused display-category tests pass, including exact three-category and 90-per-currency assertions for all 270 Follow Market variants and regression coverage for existing categories.",
+          "command": "Run the exact FollowMarketStrategiesHaveOneDisplayCategoryPerAsset test, then run the complete StrategyDisplayCategoryTests class both from the changed tree and from a detached clean approved-parent worktree, with all disposable outputs under the active marked D:/CodexTemp run.",
+          "expected": "The exact Follow Market test passes with three categories and 90 variants per asset. The complete changed-tree class adds that passing test and has no new failure compared with the clean approved parent: both runs retain only the same six pre-existing unrelated stale-count failures.",
           "result": "pending",
           "evidence": "pending"
         },
@@ -113,19 +113,31 @@
       "text": "The three visible Dashboard category labels will be exactly 'BTC Follow Market', 'ETH Follow Market', and 'SOL Follow Market'.",
       "impact": "These exact strings will appear in the existing Dashboard category selectors and will be used by the existing category filters; no strategy names or stored Category values will change.",
       "approval": {
-        "status": "approved",
+        "status": "pending",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260901-dashboard-follow-market-categories sha256:a404de0a2a76d680c765d68bd7cd8943b890e002f0a1757fef96fc9abc829085",
-        "semanticDigest": "sha256:a404de0a2a76d680c765d68bd7cd8943b890e002f0a1757fef96fc9abc829085"
+        "evidenceText": "APPROVE RC-20260901-dashboard-follow-market-categories sha256:<64 lowercase hex digits>",
+        "semanticDigest": "pending"
       }
     }
   ],
-  "deviations": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The originally planned complete StrategyDisplayCategoryTests pass is replaced by an exact new Follow Market test pass plus a before/after no-new-failures comparison for the complete class, because clean approved parent 4762d746 already fails six unrelated stale catalog-count assertions with the same actual values as the changed tree.",
+      "impact": "This task will not update or suppress the six unrelated stale-count tests. Verification will prove the new Follow Market behavior directly and prove that the category change introduces no additional class failure; fixing the six pre-existing tests remains outside this Dashboard Follow Market request.",
+      "approval": {
+        "status": "pending",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260901-dashboard-follow-market-categories sha256:<64 lowercase hex digits>",
+        "semanticDigest": "pending"
+      }
+    }
+  ],
   "approval": {
-    "status": "approved",
+    "status": "pending",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260901-dashboard-follow-market-categories sha256:a404de0a2a76d680c765d68bd7cd8943b890e002f0a1757fef96fc9abc829085",
-    "semanticDigest": "sha256:a404de0a2a76d680c765d68bd7cd8943b890e002f0a1757fef96fc9abc829085"
+    "evidenceText": "APPROVE RC-20260901-dashboard-follow-market-categories sha256:<64 lowercase hex digits>",
+    "semanticDigest": "pending"
   },
   "independentReview": {
     "reviewer": "agent:/root/dashboard_follow_market_categories_review",

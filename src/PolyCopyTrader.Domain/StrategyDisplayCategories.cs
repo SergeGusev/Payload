@@ -35,6 +35,13 @@ public static class StrategyDisplayCategories
                 : AddLowerEnterCategoryMarker(sourceCategory);
         }
 
+        var followMarketAsset = UpDownAssetSymbols.FirstOrDefault(asset =>
+            name.StartsWith(asset + " Follow Market ", StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(followMarketAsset))
+        {
+            return followMarketAsset + " Follow Market";
+        }
+
         var upDownPrefix = UpDownAssetSymbols
             .Select(asset => asset + " Up or Down ")
             .FirstOrDefault(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));

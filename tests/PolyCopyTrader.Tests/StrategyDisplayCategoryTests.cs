@@ -27,6 +27,25 @@ public sealed class StrategyDisplayCategoryTests
     }
 
     [Fact]
+    public void FollowMarketStrategiesHaveOneDisplayCategoryPerAsset()
+    {
+        var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.FollowMarketFak)
+            .ToArray();
+
+        Assert.Equal(270, variants.Length);
+
+        var categoryCounts = variants
+            .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(90, categoryCounts["BTC Follow Market"]);
+        Assert.Equal(90, categoryCounts["ETH Follow Market"]);
+        Assert.Equal(90, categoryCounts["SOL Follow Market"]);
+        Assert.Equal(3, categoryCounts.Count);
+    }
+
+    [Fact]
     public void FixedOutcomeBpsInstantStrategiesHaveDedicatedDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants

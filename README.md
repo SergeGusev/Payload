@@ -36,6 +36,8 @@ completion, not a later retry or a post-intent resize/reprice check.
 Cumulative depth is not an entry gate. Paper records the actual snapshot-based
 full, partial, or no-fill FAK outcome and never retries that strategy/market.
 These variants have `PaperOnly=true`, so their Live submission is disabled.
+The Dashboard groups them into the separate `BTC Follow Market`,
+`ETH Follow Market`, and `SOL Follow Market` strategy categories.
 
 ## Project Structure
 
