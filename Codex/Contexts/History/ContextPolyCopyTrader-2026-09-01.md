@@ -144,3 +144,10 @@ Request:
 
 Result:
 Completed the approved local correction: shared `paper_live_shadow_test` FAK Live intents now persist the existing linked Paper/decision cancel deadline instead of creation time. Exact LossDiff tests passed 2/2, the unexpired maintenance regression passed 1/1, LossDiff passed 33 with three explicitly gated PostgreSQL tests skipped, LiveProcessor passed 22/22, and the Release solution build completed with zero errors and 126 existing warnings. Independent semantic review returned PASS with no open findings. No Production/Local database, service, deployment, strategy setting, actual order, balance, or configuration was changed; unrelated Dashboard/category changes and the two stale removed-variant fixtures remain untouched.
+
+## 2026-09-01T20:36:01.8753881Z
+Request:
+Создай в Dashboard отдельные категории для FollowMarket стратегий - по одной для каждой валюты
+
+Result:
+Completed the approved local Dashboard presentation change: the existing 270 Follow Market strategies now resolve to separate `BTC Follow Market`, `ETH Follow Market`, and `SOL Follow Market` categories with exactly 90 variants each in all-time, 24-hour, 6-hour, and 1-hour views. The exact test passed 1/1 and the Release solution build completed with zero errors and 126 existing warnings. A detached clean-parent comparison proved the changed category test class introduced no new failure: both trees retain the same six unrelated pre-existing stale-count failures approved under DEV-001. Independent semantic review returned PASS with no findings. Trading/catalog/persistence behavior, databases, service state, deployment, and Production were not changed.

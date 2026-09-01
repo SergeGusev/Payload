@@ -3,7 +3,7 @@
   "contractId": "RC-20260901-dashboard-follow-market-categories",
   "title": "Split Dashboard Follow Market strategies into one category per currency",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -56,16 +56,16 @@
           "kind": "test",
           "command": "Run the exact FollowMarketStrategiesHaveOneDisplayCategoryPerAsset test, then run the complete StrategyDisplayCategoryTests class both from the changed tree and from a detached clean approved-parent worktree, with all disposable outputs under the active marked D:/CodexTemp run.",
           "expected": "The exact Follow Market test passes with three categories and 90 variants per asset. The complete changed-tree class adds that passing test and has no new failure compared with the clean approved parent: both runs retain only the same six pre-existing unrelated stale-count failures.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The exact FollowMarketStrategiesHaveOneDisplayCategoryPerAsset Release test passed 1/1 and asserted all 270 catalog variants group into exactly BTC Follow Market=90, ETH Follow Market=90, and SOL Follow Market=90. The changed complete class produced 97 passed and the same six failed tests out of 103; detached clean approved parent 4762d746 produced 96 passed and the same six failed tests out of 102. TRX comparison proved the six failed fully qualified names identical, and their expected/actual stale catalog counts were unchanged."
         },
         {
           "id": "VER-002",
           "kind": "inspection",
           "command": "Inspect MainViewModel.BuildStrategyCategoryOptions and MainViewModel.IsStrategyCategoryVisible after the classifier change.",
           "expected": "Both Dashboard option construction and row filtering still derive categories through StrategyDisplayCategories.GetCategory for the all-time, 24-hour, 6-hour, and 1-hour views.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Direct source inspection confirmed MainViewModel.RefreshStrategyCategoryOptions builds all-time, 24-hour, 6-hour, and 1-hour option lists through BuildStrategyCategoryOptions, which selects StrategyDisplayCategories.GetCategory; IsStrategyCategoryVisible uses the same classifier for every corresponding row filter. Independent reviewer also confirmed the XAML bindings and both call paths."
         }
       ]
     },
@@ -93,16 +93,16 @@
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln --configuration Release with all disposable outputs under the active marked D:/CodexTemp run",
           "expected": "The solution builds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The isolated Release solution build under D:/CodexTemp/runs/manual-32ef6acbfaa34fb6975ff5f3469b8767/artifacts/solution completed with 0 errors and 126 existing warnings."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Run git diff --check, scripts/requirements/Validate-RequirementContract.ps1 in WorkingTree and Staged modes, and independent review against the verbatim request and approved contract.",
           "expected": "Mechanical gates pass and the reviewer returns PASS with no scope, behavior, or verification findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Task diff checks passed. Requirement Contract validation preserved semantic digest sha256:4b6150cd1f9fc3624d313b78935b3c350890d60e2469a6fde40015fd359e49bf; final WorkingTree and Staged gates passed. Independent reviewer agent:/root/dashboard_follow_market_categories_review compared the verbatim request, approved contract, implementation, Dashboard call paths, exact/full/baseline test evidence, build result, and README wording; verdict PASS with no P0-P3 findings."
         }
       ]
     }
@@ -141,8 +141,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/dashboard_follow_market_categories_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

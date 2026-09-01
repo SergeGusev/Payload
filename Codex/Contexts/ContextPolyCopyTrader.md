@@ -1,3 +1,18 @@
+## Active Update 2026-09-01 Dashboard Follow Market Categories
+Goal: Create one separate Dashboard Follow Market strategy category for each of BTC, ETH, and SOL.
+Status: Completed locally and independently reviewed; not deployed
+Done:
+- Added display-category classification for the existing `BTC Follow Market M N`, `ETH Follow Market M N`, and `SOL Follow Market M N` strategy names without changing their catalog records or persisted `Category` value.
+- The existing Dashboard option and filtering path now exposes `BTC Follow Market`, `ETH Follow Market`, and `SOL Follow Market` in the all-time, 24-hour, 6-hour, and 1-hour strategy views.
+- Added exact catalog coverage proving 270 Follow Market variants split into exactly three categories with 90 strategies each.
+- Updated README with the category names and four affected Dashboard views.
+- The exact Follow Market category test passed 1/1; the Release solution build passed with zero errors and 126 existing warnings.
+- Verified the complete StrategyDisplayCategoryTests class against detached clean approved parent `4762d746`: changed tree 97 passed/6 failed of 103 versus baseline 96 passed/6 failed of 102, with the same six pre-existing stale-count failures and no new failure.
+- Independent reviewer `agent:/root/dashboard_follow_market_categories_review` confirmed the request, approved digest `sha256:4b6150cd1f9fc3624d313b78935b3c350890d60e2469a6fde40015fd359e49bf`, implementation, Dashboard call paths, test/build evidence, and scope; verdict PASS with no findings.
+Next: Restart or deploy the Dashboard build when the user wants the new category selectors visible.
+Notes: Trading logic, Follow Market M/N grids and execution, strategy identities/names, persisted Category, database/schema/migrations, service state, and Production were not changed. Six unrelated stale catalog-count tests remain outside this task under the explicitly approved DEV-001.
+Blockers: None.
+
 ## Active Update 2026-09-01 Paper Live Shadow FAK Expiry Race Contract
 Goal: Correct the confirmed premature cancellation race for in-flight `paper_live_shadow_test` FAK Live intents.
 Status: Completed locally and independently reviewed; not deployed
