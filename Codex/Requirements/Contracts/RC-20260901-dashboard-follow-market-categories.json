@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260901-dashboard-follow-market-categories",
+  "title": "Split Dashboard Follow Market strategies into one category per currency",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Создай в Dashboard отдельные категории для FollowMarket стратегий - по одной для каждой валюты"
+    }
+  ],
+  "scope": {
+    "goal": "Make the Dashboard expose the existing BTC, ETH, and SOL Follow Market strategies as three separate currency-specific categories.",
+    "inScope": [
+      "Classify every existing BTC Follow Market M N strategy as Dashboard category 'BTC Follow Market'.",
+      "Classify every existing ETH Follow Market M N strategy as Dashboard category 'ETH Follow Market'.",
+      "Classify every existing SOL Follow Market M N strategy as Dashboard category 'SOL Follow Market'.",
+      "Apply the three categories through the existing Dashboard category-option and category-filter path for the all-time, 24-hour, 6-hour, and 1-hour strategy views.",
+      "Add focused regression coverage and a concise README description of the Dashboard category split."
+    ],
+    "outOfScope": [
+      "Changing Follow Market strategy identities, names, catalog membership, M/N grids, market interval, threshold logic, order side, FAK semantics, 0.99 price cap, minimum stake, retry behavior, PaperOnly/Live state, or trading execution.",
+      "Changing the persisted strategy Category value or any database row, schema, migration, seed, or production state.",
+      "Changing categories for any non-Follow-Market strategy.",
+      "Changing Dashboard layout, controls, time windows, currency filters, metrics, ordering, or any other Dashboard behavior.",
+      "Deployment, service restart, or runtime/production mutation."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "The current exact catalog of 270 BTC/ETH/SOL Follow Market strategies: 90 per asset, with M=30..270 seconds in steps of 30 and N=50..95 cents in steps of 5; Dashboard all-time, 24-hour, 6-hour, and 1-hour strategy views.",
+    "firstVerification": "Inspect the current Follow Market strategy-name format and the exact Dashboard category derivation and filtering call path before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Expose exactly one separate Dashboard Follow Market category for each existing currency: BTC, ETH, and SOL.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "отдельные категории для FollowMarket стратегий - по одной для каждой валюты",
+      "acceptanceCriteria": [
+        "The 90 existing BTC Follow Market strategy names resolve to exactly one category, 'BTC Follow Market'.",
+        "The 90 existing ETH Follow Market strategy names resolve to exactly one category, 'ETH Follow Market'.",
+        "The 90 existing SOL Follow Market strategy names resolve to exactly one category, 'SOL Follow Market'.",
+        "Across the exact 270-strategy Follow Market catalog, category grouping has exactly three keys with exactly 90 strategies per key.",
+        "The existing Dashboard category option builders and category predicates consume these resolved names for the all-time, 24-hour, 6-hour, and 1-hour views without a separate data or persistence change."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/StrategyDisplayCategories.cs",
+        "tests/PolyCopyTrader.Tests/StrategyDisplayCategoryTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --configuration Release --filter FullyQualifiedName~StrategyDisplayCategoryTests with all disposable outputs under the active marked D:/CodexTemp run",
+          "expected": "All focused display-category tests pass, including exact three-category and 90-per-currency assertions for all 270 Follow Market variants and regression coverage for existing categories.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Inspect MainViewModel.BuildStrategyCategoryOptions and MainViewModel.IsStrategyCategoryVisible after the classifier change.",
+          "expected": "Both Dashboard option construction and row filtering still derive categories through StrategyDisplayCategories.GetCategory for the all-time, 24-hour, 6-hour, and 1-hour views.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep the change presentation-only and preserve all trading and non-Follow-Market category behavior.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Создай в Dashboard отдельные категории",
+      "acceptanceCriteria": [
+        "No Follow Market trading/catalog/persistence implementation file changes except the shared display-category classifier used by Dashboard.",
+        "No non-Follow-Market category mapping changes.",
+        "The Release solution build passes with zero errors.",
+        "git diff --check, requirement-contract WorkingTree and Staged validation, and independent semantic review pass."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/StrategyDisplayCategories.cs",
+        "tests/PolyCopyTrader.Tests/StrategyDisplayCategoryTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln --configuration Release with all disposable outputs under the active marked D:/CodexTemp run",
+          "expected": "The solution builds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Run git diff --check, scripts/requirements/Validate-RequirementContract.ps1 in WorkingTree and Staged modes, and independent review against the verbatim request and approved contract.",
+          "expected": "Mechanical gates pass and the reviewer returns PASS with no scope, behavior, or verification findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "The three visible Dashboard category labels will be exactly 'BTC Follow Market', 'ETH Follow Market', and 'SOL Follow Market'.",
+      "impact": "These exact strings will appear in the existing Dashboard category selectors and will be used by the existing category filters; no strategy names or stored Category values will change.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260901-dashboard-follow-market-categories sha256:a404de0a2a76d680c765d68bd7cd8943b890e002f0a1757fef96fc9abc829085",
+        "semanticDigest": "sha256:a404de0a2a76d680c765d68bd7cd8943b890e002f0a1757fef96fc9abc829085"
+      }
+    }
+  ],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260901-dashboard-follow-market-categories sha256:a404de0a2a76d680c765d68bd7cd8943b890e002f0a1757fef96fc9abc829085",
+    "semanticDigest": "sha256:a404de0a2a76d680c765d68bd7cd8943b890e002f0a1757fef96fc9abc829085"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/dashboard_follow_market_categories_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
