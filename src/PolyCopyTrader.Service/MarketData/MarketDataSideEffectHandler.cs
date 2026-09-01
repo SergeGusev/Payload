@@ -12,7 +12,10 @@ public sealed record MarketDataSideEffectWorkItem(
     DateTimeOffset EnqueuedAtUtc,
     IReadOnlySet<Guid>? EligiblePaperOrderIds,
     bool Replaceable,
-    MarketDataSideEffectExecutionTrace? ExecutionTrace = null);
+    MarketDataSideEffectExecutionTrace? ExecutionTrace = null)
+{
+    public bool PersistPositionMarks { get; init; } = true;
+}
 
 public interface IMarketDataSideEffectHandler
 {
@@ -86,7 +89,8 @@ public sealed class MarketDataSideEffectHandler(
                 workItem.ReceivedAtUtc,
                 workItem.EligiblePaperOrderIds,
                 cancellationToken,
-                workItem.ExecutionTrace));
+                workItem.ExecutionTrace,
+                workItem.PersistPositionMarks));
     }
 
     public Task PersistFrameDiagnosticAsync(

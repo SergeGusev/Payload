@@ -162,7 +162,8 @@ public sealed class PaperTradingMarketDataUpdater(
         DateTimeOffset? receivedAtUtc = null,
         IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
         CancellationToken cancellationToken = default,
-        MarketDataSideEffectExecutionTrace? executionTrace = null)
+        MarketDataSideEffectExecutionTrace? executionTrace = null,
+        bool persistPositionMarks = true)
     {
         if (string.IsNullOrWhiteSpace(update.AssetId))
         {
@@ -442,7 +443,7 @@ public sealed class PaperTradingMarketDataUpdater(
                 positions.Add(updatedPosition);
             }
 
-            if (update.OrderBookSnapshot?.BestBid is { } bestBid)
+            if (persistPositionMarks && update.OrderBookSnapshot?.BestBid is { } bestBid)
             {
                 EnterPhase(
                     MarketDataSideEffectPhases.UpdatePositionMarks,

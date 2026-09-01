@@ -106,9 +106,14 @@ public sealed class MarketDataSideEffectQueueTests
         Assert.Equal("FastOperation", warning.Properties["ActiveOperation"]);
         Assert.Equal(MarketDataSideEffectPhases.LoadExposureSnapshot, warning.Properties["SlowestPhase"]);
         Assert.Equal("SlowOperation", warning.Properties["SlowestOperation"]);
-        Assert.Equal("Processing", warning.Properties["LatencyCategory"]);
+        var queueDelayMilliseconds = Convert.ToDouble(warning.Properties["QueueDelayMs"]);
+        var processingDurationMilliseconds = Convert.ToDouble(warning.Properties["ProcessingDurationMs"]);
+        var expectedLatencyCategory = queueDelayMilliseconds >= 1d
+            ? "QueueDelayAndProcessing"
+            : "Processing";
+        Assert.Equal(expectedLatencyCategory, warning.Properties["LatencyCategory"]);
         Assert.True(Convert.ToDouble(warning.Properties["SlowestPhaseDurationMs"]) >= 10d);
-        Assert.True(Convert.ToDouble(warning.Properties["ProcessingDurationMs"]) >= 10d);
+        Assert.True(processingDurationMilliseconds >= 10d);
     }
 
     [Fact]
@@ -136,6 +141,48 @@ public sealed class MarketDataSideEffectQueueTests
                 string.Equals(category as string, "QueueDelay", StringComparison.Ordinal));
         Assert.True(Convert.ToDouble(queueDelayWarning.Properties["QueueDelayMs"]) >= 10d);
         Assert.True(Convert.ToDouble(queueDelayWarning.Properties["ProcessingDurationMs"]) < 10d);
+    }
+
+    [Fact]
+    public async Task DedicatedMakerSlowWarning_ContainsExactSlowestPhaseEvidence()
+    {
+        var logger = new RecordingLogger<MarketDataSideEffectQueue>();
+        var queue = CreateQueue(
+            new ControlledHandler(),
+            paperTradingMarketDataUpdater: new SlowPhaseMakerUpdater(),
+            slowProcessingMilliseconds: 1,
+            logger: logger);
+        await queue.StartAsync(CancellationToken.None);
+
+        Assert.Equal(
+            MarketDataSideEffectEnqueueOutcome.Enqueued,
+            queue.EnqueueUpdate(
+                "test-component",
+                Quote("asset-maker-slow", 0.50m),
+                null,
+                DateTimeOffset.UtcNow,
+                new HashSet<Guid>(),
+                new HashSet<Guid> { Guid.NewGuid() }));
+        await queue.StopAsync(CancellationToken.None);
+
+        var warning = Assert.Single(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Warning &&
+                entry.Message.StartsWith(
+                    "Dedicated Maker-GTD evidence processing was slow.",
+                    StringComparison.Ordinal));
+        var queueDelayMilliseconds = Convert.ToDouble(warning.Properties["QueueDelayMs"]);
+        var processingDurationMilliseconds = Convert.ToDouble(warning.Properties["ProcessingDurationMs"]);
+        var expectedLatencyCategory = queueDelayMilliseconds >= 1d
+            ? "QueueDelayAndProcessing"
+            : "Processing";
+        Assert.Equal(expectedLatencyCategory, warning.Properties["LatencyCategory"]);
+        Assert.Equal(MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate, warning.Properties["ActivePhase"]);
+        Assert.Equal("FastMakerEvaluation", warning.Properties["ActiveOperation"]);
+        Assert.Equal(MarketDataSideEffectPhases.WaitForPublication, warning.Properties["SlowestPhase"]);
+        Assert.Equal("SlowMakerPublicationWait", warning.Properties["SlowestOperation"]);
+        Assert.True(Convert.ToDouble(warning.Properties["SlowestPhaseDurationMs"]) >= 10d);
+        Assert.True(processingDurationMilliseconds >= 10d);
     }
 
     [Fact]
@@ -477,6 +524,53 @@ public sealed class MarketDataSideEffectQueueTests
     }
 
     [Fact]
+    public async Task EnqueueUpdate_SuppressesOnlyIntermediateSameAssetMarksWithoutCoalescingEvidence()
+    {
+        var handler = new ControlledHandler(blockFirstUpdate: true);
+        var queue = CreateQueue(handler);
+        await queue.StartAsync(CancellationToken.None);
+        var firstOrderId = Guid.NewGuid();
+        var secondOrderId = Guid.NewGuid();
+        var thirdOrderId = Guid.NewGuid();
+        var otherAssetOrderId = Guid.NewGuid();
+
+        try
+        {
+            Enqueue(queue, Quote("blocker", 0.10m));
+            await handler.WaitForFirstUpdateAsync();
+
+            Enqueue(queue, Quote("asset-1", 0.50m), new HashSet<Guid> { firstOrderId });
+            Enqueue(queue, Quote("asset-1", 0.51m), new HashSet<Guid> { secondOrderId });
+            Enqueue(queue, Quote("asset-1", 0.52m), new HashSet<Guid> { thirdOrderId });
+            Enqueue(queue, Quote("asset-2", 0.60m), new HashSet<Guid> { otherAssetOrderId });
+
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+
+            var assetOne = handler.ProcessedUpdates
+                .Where(item => item.Update.AssetId == "asset-1")
+                .ToArray();
+            Assert.Equal(3, assetOne.Length);
+            Assert.Equal([false, false, true], assetOne.Select(item => item.PersistPositionMarks).ToArray());
+            Assert.Equal(
+                [firstOrderId, secondOrderId, thirdOrderId],
+                assetOne.Select(item => Assert.Single(item.EligiblePaperOrderIds!)).ToArray());
+
+            var otherAsset = Assert.Single(
+                handler.ProcessedUpdates,
+                item => item.Update.AssetId == "asset-2");
+            Assert.True(otherAsset.PersistPositionMarks);
+            Assert.Equal(otherAssetOrderId, Assert.Single(otherAsset.EligiblePaperOrderIds!));
+            Assert.Equal(0, queue.GetMetrics().CoalescedUpdates);
+        }
+        finally
+        {
+            handler.ReleaseFirstUpdate();
+            await queue.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task EnqueueUpdate_SoftLimitNeverDropsNonReplaceableUpdates()
     {
         var handler = new ControlledHandler(blockFirstUpdate: true);
@@ -588,16 +682,17 @@ public sealed class MarketDataSideEffectQueueTests
             handler.ReleaseFirstUpdate();
             await queue.StopAsync(CancellationToken.None);
 
+            var processed = handler.ProcessedUpdates
+                .Where(item => item.Update.AssetId == "asset-1")
+                .ToArray();
             Assert.Equal(
                 [
                     MarketDataEventType.BestBidAsk,
                     MarketDataEventType.MarketResolved,
                     MarketDataEventType.BestBidAsk
                 ],
-                handler.ProcessedUpdates
-                    .Where(item => item.Update.AssetId == "asset-1")
-                    .Select(item => item.Update.EventType)
-                    .ToArray());
+                processed.Select(item => item.Update.EventType).ToArray());
+            Assert.All(processed, item => Assert.True(item.PersistPositionMarks));
             Assert.Equal(0, queue.GetMetrics().CoalescedUpdates);
         }
         finally
@@ -1447,7 +1542,8 @@ public sealed class MarketDataSideEffectQueueTests
             DateTimeOffset? receivedAtUtc = null,
             IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
             CancellationToken cancellationToken = default,
-            MarketDataSideEffectExecutionTrace? executionTrace = null)
+            MarketDataSideEffectExecutionTrace? executionTrace = null,
+            bool persistPositionMarks = true)
         {
             return Task.CompletedTask;
         }
@@ -1503,6 +1599,35 @@ public sealed class MarketDataSideEffectQueueTests
         public Task PersistApiErrorAsync(
             ApiError apiError,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class SlowPhaseMakerUpdater : IPaperTradingMarketDataUpdater
+    {
+        public async Task ApplyMakerGtdUpdateAsync(
+            MarketDataUpdate update,
+            DateTimeOffset receivedAtUtc,
+            IReadOnlySet<Guid> eligibleMakerGtdPaperOrderIds,
+            CancellationToken cancellationToken = default,
+            MarketDataSideEffectExecutionTrace? executionTrace = null)
+        {
+            executionTrace?.EnterPhase(
+                MarketDataSideEffectPhases.WaitForPublication,
+                "SlowMakerPublicationWait",
+                DateTimeOffset.UtcNow);
+            await Task.Delay(25, cancellationToken);
+            executionTrace?.EnterPhase(
+                MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+                "FastMakerEvaluation",
+                DateTimeOffset.UtcNow);
+        }
+
+        public Task ApplyUpdateAsync(
+            MarketDataUpdate update,
+            DateTimeOffset? receivedAtUtc = null,
+            IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
+            CancellationToken cancellationToken = default,
+            MarketDataSideEffectExecutionTrace? executionTrace = null,
+            bool persistPositionMarks = true) => Task.CompletedTask;
     }
 
     private sealed class RecordingLogger<T> : ILogger<T>

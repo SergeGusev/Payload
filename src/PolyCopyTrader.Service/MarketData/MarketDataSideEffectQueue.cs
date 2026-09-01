@@ -864,7 +864,11 @@ public sealed class MarketDataSideEffectQueue(
                 }
 
                 pendingAssetUpdates.Scheduled = false;
-                workItem = firstNode.Value;
+                workItem = ShouldSuppressIntermediatePositionMarkPersistence(
+                    firstNode.Value,
+                    firstNode.Next)
+                        ? firstNode.Value with { PersistPositionMarks = false }
+                        : firstNode.Value;
                 pendingAssetUpdates.Items.RemoveFirst();
                 pendingUpdateCount--;
                 inFlightUpdate = workItem;
@@ -1196,6 +1200,44 @@ public sealed class MarketDataSideEffectQueue(
             !update.MarketResolved &&
             (update.EventType is MarketDataEventType.Book or MarketDataEventType.PriceChange or MarketDataEventType.BestBidAsk) &&
             update.OrderBookSnapshot?.BestBid is not null;
+    }
+
+    private static bool ShouldSuppressIntermediatePositionMarkPersistence(
+        MarketDataSideEffectWorkItem current,
+        LinkedListNode<MarketDataSideEffectWorkItem>? next)
+    {
+        if (!CanPersistPositionMarks(current))
+        {
+            return false;
+        }
+
+        for (var node = next; node is not null; node = node.Next)
+        {
+            if (IsMarketResolution(node.Value))
+            {
+                return false;
+            }
+
+            if (CanPersistPositionMarks(node.Value))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool CanPersistPositionMarks(MarketDataSideEffectWorkItem workItem)
+    {
+        return workItem.PersistPositionMarks &&
+            !IsMarketResolution(workItem) &&
+            workItem.Update.OrderBookSnapshot?.BestBid is not null;
+    }
+
+    private static bool IsMarketResolution(MarketDataSideEffectWorkItem workItem)
+    {
+        return workItem.Update.MarketResolved ||
+            workItem.Update.EventType == MarketDataEventType.MarketResolved;
     }
 
     private static string GetAssetKey(string component, MarketDataUpdate update)

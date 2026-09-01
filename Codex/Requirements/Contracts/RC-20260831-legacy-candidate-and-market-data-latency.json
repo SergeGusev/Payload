@@ -3,7 +3,7 @@
   "contractId": "RC-20260831-legacy-candidate-and-market-data-latency",
   "title": "Bound Legacy parity lookup and reduce market-data latency",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -56,8 +56,8 @@
           "kind": "test",
           "command": "Run focused HistoricalPaperFakFeeBackfill storage and real-PostgreSQL candidate-query tests in Release against an allowlisted disposable database under the marked D:\\CodexTemp run.",
           "expected": "A multi-chunk legacy parity set returns the exact independently calculated candidate page under the unchanged ten-second per-command timeout, and all existing candidate/cursor invariants pass.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release storage tests are included in focused-after-review-fix.trx (63/63, SHA-256 a8507a894fade55a660ac2b91f1371a093fcb31c92282b1c7ae96c6f84146aef). The exact multi-chunk regression postgres18-legacy-multichunk-final.trx passed 1/1 (SHA-256 4c69d92509fa6d8ce67bce602c48c29202d43819fc43684bf2a5305447920e68) against PostgreSQL 18.6 server_version_num 180006 at 127.0.0.1:55432 in allowlisted disposable database pct_codex_skip_v2_20260901071445_9af3bd84. It seeded 1003 orders, excluded IDs from the first, middle and final chunks, and verified exact two-page IDs/order against the independently constructed reference. The database was dropped and the isolated server was stopped."
         }
       ]
     },
@@ -89,8 +89,8 @@
           "kind": "test",
           "command": "Run focused MarketDataSideEffectQueue and PaperTradingMarketDataUpdater tests in Release under the marked D:\\CodexTemp run.",
           "expected": "Every order/evidence work item is processed in order, only eligible intermediate mark batches are suppressed, the newest mark persists, and all current resolution/drain/failure and mark-CAS tests pass.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release focused-after-review-fix.trx passed 63/63 (SHA-256 a8507a894fade55a660ac2b91f1371a093fcb31c92282b1c7ae96c6f84146aef), including every changed MarketDataSideEffectQueue and PaperTradingMarketDataUpdater test. The tests prove all eligible-order work items remain ordered and processed, only intermediate same-asset non-resolution mark persistence is suppressed, cross-asset and resolution boundaries preserve marks, and the final eligible mark persists."
         }
       ]
     },
@@ -119,8 +119,8 @@
           "kind": "test",
           "command": "Run focused dedicated Maker-GTD queue trace and lifecycle tests in Release under the marked D:\\CodexTemp run.",
           "expected": "Slow warnings expose deterministic phase evidence and every existing Maker-GTD evidence/order lifecycle behavior remains unchanged.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The deterministic dedicated Maker-GTD trace test is included in focused-after-review-fix.trx (63/63, SHA-256 a8507a894fade55a660ac2b91f1371a093fcb31c92282b1c7ae96c6f84146aef). maker-lifecycle-final.trx passed 46/46 (SHA-256 c7bb0ea49a6f0180ccc72ae55b2958b95adad34349f3930d56ed823cc52ad85b), confirming the existing Maker-GTD lifecycle remained unchanged. Results retain the required label: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills."
         }
       ]
     },
@@ -159,8 +159,8 @@
           "kind": "build",
           "command": "Build PolyCopyTrader.sln in Release and run the approved focused/relevant tests with outputs under the marked D:\\CodexTemp run; run diff checks, requirement gates and independent semantic review.",
           "expected": "Build, tests, gates, cleanup and review pass with no unapproved path or behavior change.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.sln Release build succeeded with 0 errors and only existing warnings (126 on the full recompilation; 5 on the final incremental test-only rebuild). git diff --check passed. The optional broad isolated-artifact suite was not represented as green: its source-path-dependent harness run reported 219 failures because tests resolved repository files beneath D:\\CodexTemp, while the approved focused current-code suites passed. Independent reviewer agent:/root/reviewer_legacy_candidate_market_latency compared the verbatim request, approved contract, complete final diff and evidence and returned PASS with no open finding. Protected cleanup removed the remaining 30 files/2169713 bytes from marked run manual-6ae6de4496e441068f19bb8931e9e8d0 after stopping its Roslyn compiler lock and verified the exact run path absent. WorkingTree and Staged gate results are recorded by their required final validation commands."
         }
       ]
     }
@@ -198,8 +198,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_legacy_candidate_market_latency",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

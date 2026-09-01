@@ -507,6 +507,64 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
     }
 
     [Fact]
+    public async Task ApplyUpdateAsync_SuppressedPositionMarksStillProcessesEligibleOrderEvidence()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "0xentry",
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-1",
+            "condition-1",
+            "Yes",
+            0.50m,
+            10m,
+            5m,
+            receivedAtUtc.AddMinutes(-1),
+            receivedAtUtc.AddMinutes(1));
+        var unchangedMarkPosition = new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            receivedAtUtc.AddMinutes(-1),
+            "0xmark");
+        repository.PaperOrders.Add(order);
+        repository.PaperPositions.Add(unchangedMarkPosition);
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+
+        await updater.ApplyUpdateAsync(
+            BookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid> { order.Id },
+            CancellationToken.None,
+            executionTrace: null,
+            persistPositionMarks: false);
+
+        Assert.Single(repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(repository.PaperOrders).Status);
+        Assert.Equal(0, repository.TryUpdatePaperPositionMarksBatchCalls);
+        Assert.Contains(unchangedMarkPosition, repository.PaperPositions);
+        Assert.Contains(
+            repository.PaperPositions,
+            position => position.CopiedTraderWallet == order.CopiedTraderWallet &&
+                position.AssetId == order.AssetId &&
+                position.SizeShares == order.SizeShares);
+    }
+
+    [Fact]
     public async Task ApplyUpdateAsync_DoesNotRestorePositionSettledBeforeConditionalMarkBatchWrites()
     {
         var repository = new TestAppRepository();

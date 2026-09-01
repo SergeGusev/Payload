@@ -1,3 +1,32 @@
+## Active Update 2026-09-01 Legacy Candidate And Market-Data Latency Correction
+Goal: Bound the Legacy parity candidate lookup, suppress only redundant intermediate position-mark persistence during same-asset backlog, and expose exact dedicated Maker-GTD slow-phase evidence.
+Status: Completed locally and independently reviewed; not deployed
+Done:
+- Legacy PaperRun parity bindings are now distinct, ordinally sorted, and queried in deterministic chunks of at most the existing 500-row maximum inside the unchanged repeatable-read read-only transaction; the exact union feeds the unchanged candidate filters, order and cursor.
+- General market-data work items remain FIFO and fully process every order, fill, expiry, settlement, fee, diagnostic and exposure side effect. Only the final Paper position-mark persistence is suppressed for an intermediate non-resolution item when a later same-asset non-resolution mark-capable item is already queued; cross-asset and resolution boundaries are preserved and the newest eligible mark persists.
+- Dedicated Maker-GTD behavior is unchanged; its existing slow warning now includes latency category plus trace-derived active/slowest phase, operation and duration evidence.
+- Release focused tests passed 63/63 and Maker-GTD lifecycle tests passed 46/46. The exact multi-chunk regression passed 1/1 on an isolated allowlisted PostgreSQL 18.6 loopback database with 1003 orders and first/middle/final-chunk exclusions; the database was dropped and the server stopped.
+- Release solution build passed with zero errors and existing warnings. `git diff --check` passed. Independent reviewer `agent:/root/reviewer_legacy_candidate_market_latency` compared the approved contract, complete final diff and evidence and returned PASS with no findings.
+- Protected cleanup removed the marked temp run and verified its path absent. Contract `RC-20260831-legacy-candidate-and-market-data-latency` is completed with exact evidence.
+Next: Commit and push the completed local correction; the user controls deployment and subsequent Production verification.
+Notes: No Production database, service, strategy, order, configuration or deployment state changed. The optional broad isolated-artifact suite was not represented as green because source-reading tests resolved repository paths beneath `D:\CodexTemp`; the approved focused current-code suites and real PostgreSQL regression passed. Maker-GTD classification remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: None.
+
+## Active Update 2026-09-01 Production Server, Betting, And Log Check
+Goal: Verify current Production service health, betting activity, and server logs without changing Production.
+Status: Service and Paper betting healthy; Legacy candidate-query timeout is recurring and current source correction remains required
+Done:
+- At final database cutoff `2026-09-01T06:00:59.969965Z`, `PolyCopyTrader.Service` was `Running`/`Live` on exact build `e5335ec3263032fe4e4e188c8261fd3549f26aec`, with unchanged start `2026-08-31T07:38:08.288034Z`, heartbeat age `36.655s`, NULL `last_error`, and zero waiting PostgreSQL locks.
+- A bounded latest-1000 Paper sample covered `2026-09-01T05:44:30.675078Z..05:55:30.060043Z`; all 1000 orders were `Filled` and all 1000 had fill rows. A later independent latest-100 sample was again 100/100 Filled with fill rows and advanced through `2026-09-01T06:00:30.050232Z`.
+- BTC/ETH/SOL reference ticks were independently fresh at the first cutoff, with sampled ages `7.175..7.185s`; Paper positions advanced through `2026-09-01T05:55:35.507598Z`.
+- The current server log remained live through at least `2026-09-01T06:02:21.787Z`. No FTL or WebSocket incident was found in the checked active-file interval.
+- Legacy candidate lookup produced confirmed ERR events at `05:45:27.615Z`, `05:58:24.818Z`, and `06:01:35.841Z`. Each stack trace is the same Npgsql read timeout in `GetHistoricalPaperFakFeeBackfillCandidatesAsync` at `PostgresAppRepository.HistoricalPaperFakFeeBackfill.cs:248`; this is the exact query targeted by approved local contract `RC-20260831-legacy-candidate-and-market-data-latency` and is not resolved in deployed build `e5335ec3`.
+- The failure is isolated from current Paper execution: five completed Legacy cycles after the `05:45:27Z` failure updated 250 fills, runs, positions, and settlements before the later failures. At `06:01:57.822511Z`, no completed cycle had yet followed the newest `06:01:35.877016Z` failure.
+- In active log file `_032` (`05:40:10Z..05:57:52Z`), general side-effect warnings reached `4,350.3433ms` queue delay, `4,211.7312ms` processing, and 62 pending. There were 599 dedicated Maker-GTD slow warnings in that interval. Both queues repeatedly recovered: at `06:02:08.720Z`, general pending/in-flight was `2/1`, Maker pending/in-flight was `0/0`, and rejected/failed counters remained zero.
+Next: Resume and complete the already approved local Legacy candidate and market-data latency correction; user controls deployment.
+Notes: All SQL targeted only `192.168.0.101:5432/polycopytrader`, forced `READ ONLY`, UTC, `statement_timeout=15s`, `lock_timeout=2s`, and bounded/indexed reads. Logs were read only from `\\192.168.0.101\CodexLogs`. No Production, database, service, strategy, order, configuration, or deployment state changed. Local implementation files were preserved as-is while this check ran. Maker-GTD classification remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: The deployed build continues to hit the known Legacy candidate-query timeout until the approved local correction is completed, deployed by the user, and verified.
+
 ## Active Update 2026-08-31 Legacy Candidate And Market-Data Latency Contract
 Goal: Correct the residual Legacy candidate-query timeout and reduce verified general market-data latency without dropping betting evidence; obtain exact Maker-GTD phase evidence before changing its scheduling.
 Status: Exact contract approved; mandatory pre-implementation Git checkpoint in progress

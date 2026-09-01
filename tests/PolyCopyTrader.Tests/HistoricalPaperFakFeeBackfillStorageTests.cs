@@ -385,7 +385,7 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
             "if (preflightKeys.Count == 0)",
             StringComparison.Ordinal);
         var legacyScanStart = candidateMethod.IndexOf(
-            "await using var legacyParityCommand",
+            "foreach (var candidatePaperOrderIdBatch",
             StringComparison.Ordinal);
         var mainQueryStart = candidateMethod.IndexOf(
             "await using var command",
@@ -412,6 +412,19 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
 
         Assert.Contains("old_payload_json ->> 'paper_order_id'", legacyScan, StringComparison.Ordinal);
         Assert.Contains("ANY(@CandidatePaperOrderIds)", legacyScan, StringComparison.Ordinal);
+        Assert.Contains(
+            ".OrderBy(static paperOrderId => paperOrderId, StringComparer.Ordinal)",
+            candidateMethod,
+            StringComparison.Ordinal);
+        Assert.Contains("candidatePaperOrderIds.Chunk(", candidateMethod, StringComparison.Ordinal);
+        Assert.Contains(
+            "HistoricalPaperFakFeeBackfillMaxPageSize",
+            legacyScan,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "new HashSet<string>(StringComparer.Ordinal)",
+            candidateMethod,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("strategy_market_paper_runs", legacyScan, StringComparison.Ordinal);
         Assert.Contains("candidate_scope AS MATERIALIZED", mainQuery, StringComparison.Ordinal);
         Assert.Contains("parity_sell_fill_keys AS MATERIALIZED", mainQuery, StringComparison.Ordinal);

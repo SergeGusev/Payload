@@ -326,6 +326,87 @@ public sealed class HistoricalPaperFakFeeBackfillPostgresIntegrationTests
 
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task CandidateQuery_ChunksLegacyParityBindingsWithoutChangingReferencePages()
+    {
+        const int orderCount = 1_003;
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var scenario = BackfillScenario.Create();
+        var orders = Enumerable.Range(0, orderCount)
+            .Select(index => CreateOrder(
+                scenario,
+                Guid.NewGuid(),
+                $"chunk-asset-{index}-{scenario.Suffix}",
+                $"chunk-condition-{index}-{scenario.Suffix}",
+                scenario.BaseUtc.AddSeconds(index),
+                "btc_updown5m_fak_taker_paper"))
+            .ToArray();
+        var fills = orders
+            .Select(order => CreateLegacyFill(Guid.NewGuid(), order))
+            .ToArray();
+        var excludedIndexes = new HashSet<int> { 0, 500, 1_002 };
+        var expected = orders
+            .Where((_, index) => !excludedIndexes.Contains(index))
+            .Select(order => order.Id)
+            .ToArray();
+
+        try
+        {
+            await SeedStrategyAsync(factory, scenario);
+            await repository.AddPaperEntryPersistenceBatchAsync(new PaperEntryPersistenceBatch(
+                [],
+                orders,
+                fills,
+                [],
+                [],
+                []));
+            foreach (var excludedIndex in excludedIndexes.OrderBy(index => index))
+            {
+                await InsertParityDecisionAuditAsync(
+                    factory,
+                    scenario.StrategyId,
+                    "PaperRun",
+                    Guid.NewGuid(),
+                    JsonSerializer.Serialize(new
+                    {
+                        paper_order_id = orders[excludedIndex].Id.ToString("D").ToLowerInvariant()
+                    }),
+                    "{}");
+            }
+
+            var firstPage = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                scenario.CutoffUtc,
+                scenario.StrategyId,
+                500);
+            Assert.False(firstPage.ReachedEnd);
+            Assert.Equal(expected[..500], firstPage.Candidates.Select(candidate => candidate.Order.Id));
+
+            var secondPage = await repository.GetHistoricalPaperFakFeeBackfillCandidatesAsync(
+                scenario.CutoffUtc,
+                scenario.StrategyId,
+                500,
+                firstPage.ContinuationCursor);
+            Assert.True(secondPage.ReachedEnd);
+            Assert.Equal(expected[500..], secondPage.Candidates.Select(candidate => candidate.Order.Id));
+            Assert.Equal(
+                expected,
+                firstPage.Candidates
+                    .Concat(secondPage.Candidates)
+                    .Select(candidate => candidate.Order.Id));
+            Assert.DoesNotContain(
+                orders.Where((_, index) => excludedIndexes.Contains(index)).Select(order => order.Id),
+                excludedId => firstPage.Candidates
+                    .Concat(secondPage.Candidates)
+                    .Any(candidate => candidate.Order.Id == excludedId));
+        }
+        finally
+        {
+            await CleanupScenarioAsync(factory, scenario);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task CandidatePaging_PreservesFullTupleOrderAndCursorProgression()
     {
         var factory = await CreateFactoryAsync();

@@ -376,6 +376,7 @@ internal sealed class MakerGtdPaperMarketDataQueue(
     {
         var processingStarted = Stopwatch.GetTimestamp();
         var queueDelay = DateTimeOffset.UtcNow - workItem.EnqueuedAtUtc;
+        MarketDataSideEffectExecutionTraceSnapshot? completedTrace = null;
         if (queueDelay < TimeSpan.Zero)
         {
             queueDelay = TimeSpan.Zero;
@@ -412,6 +413,9 @@ internal sealed class MakerGtdPaperMarketDataQueue(
         }
         finally
         {
+            var completedAtUtc = DateTimeOffset.UtcNow;
+            workItem.ExecutionTrace?.MarkProcessingCompleted(completedAtUtc);
+            completedTrace = workItem.ExecutionTrace?.Capture(completedAtUtc);
             CompleteInFlight(workItem);
         }
 
@@ -419,13 +423,27 @@ internal sealed class MakerGtdPaperMarketDataQueue(
         if (queueDelay.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds ||
             processingDuration.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds)
         {
+            var queueDelayWasSlow = queueDelay.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds;
+            var processingWasSlow = processingDuration.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds;
+            var latencyCategory = queueDelayWasSlow && processingWasSlow
+                ? "QueueDelayAndProcessing"
+                : queueDelayWasSlow
+                    ? "QueueDelay"
+                    : "Processing";
             logger.LogWarning(
-                "Dedicated Maker-GTD evidence processing was slow. EventType={EventType} AssetId={AssetId} QueueDelayMs={QueueDelayMs} ProcessingDurationMs={ProcessingDurationMs} PendingMakerUpdates={PendingMakerUpdates}",
+                "Dedicated Maker-GTD evidence processing was slow. EventType={EventType} AssetId={AssetId} LatencyCategory={LatencyCategory} QueueDelayMs={QueueDelayMs} ProcessingDurationMs={ProcessingDurationMs} PendingMakerUpdates={PendingMakerUpdates} ActivePhase={ActivePhase} ActiveOperation={ActiveOperation} ActivePhaseDurationMs={ActivePhaseDurationMs} SlowestPhase={SlowestPhase} SlowestOperation={SlowestOperation} SlowestPhaseDurationMs={SlowestPhaseDurationMs}",
                 workItem.Update.EventType,
                 workItem.Update.AssetId,
+                latencyCategory,
                 queueDelay.TotalMilliseconds,
                 processingDuration.TotalMilliseconds,
-                GetMetrics().PendingUpdates);
+                GetMetrics().PendingUpdates,
+                completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing,
+                completedTrace?.Operation,
+                completedTrace?.PhaseAgeMilliseconds ?? processingDuration.TotalMilliseconds,
+                completedTrace?.SlowestPhase ?? completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing,
+                completedTrace?.SlowestOperation ?? completedTrace?.Operation,
+                completedTrace?.SlowestPhaseDurationMilliseconds ?? processingDuration.TotalMilliseconds);
         }
     }
 

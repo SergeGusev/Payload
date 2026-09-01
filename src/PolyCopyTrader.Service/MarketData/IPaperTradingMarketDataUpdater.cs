@@ -16,5 +16,6 @@ public interface IPaperTradingMarketDataUpdater
         DateTimeOffset? receivedAtUtc = null,
         IReadOnlySet<Guid>? eligiblePaperOrderIds = null,
         CancellationToken cancellationToken = default,
-        MarketDataSideEffectExecutionTrace? executionTrace = null);
+        MarketDataSideEffectExecutionTrace? executionTrace = null,
+        bool persistPositionMarks = true);
 }

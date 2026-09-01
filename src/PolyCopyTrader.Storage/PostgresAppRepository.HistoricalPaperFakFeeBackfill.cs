@@ -226,8 +226,13 @@ FROM strategy_fill_keys fill;
         var candidatePaperOrderIds = preflightKeys
             .Select(key => key.PaperOrderId.ToString("D").ToLowerInvariant())
             .Distinct(StringComparer.Ordinal)
+            .OrderBy(static paperOrderId => paperOrderId, StringComparer.Ordinal)
             .ToArray();
-        await using var legacyParityCommand = CreateCommand(connection, $$"""
+        var legacyParityPaperOrderIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var candidatePaperOrderIdBatch in candidatePaperOrderIds.Chunk(
+                     HistoricalPaperFakFeeBackfillMaxPageSize))
+        {
+            await using var legacyParityCommand = CreateCommand(connection, $$"""
 SELECT DISTINCT
     parity_audit.old_payload_json ->> 'paper_order_id' AS paper_order_id
 FROM public.historical_gross_net_parity_audit parity_audit
@@ -238,16 +243,14 @@ WHERE parity_audit.source_kind = 'PaperRun'
   AND parity_audit.old_payload_json ->> 'paper_order_id' =
         ANY(@CandidatePaperOrderIds);
 """);
-        legacyParityCommand.Transaction = transaction;
-        legacyParityCommand.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
-        legacyParityCommand.Parameters.Add(
-            "CandidatePaperOrderIds",
-            NpgsqlDbType.Array | NpgsqlDbType.Text).Value = candidatePaperOrderIds;
+            legacyParityCommand.Transaction = transaction;
+            legacyParityCommand.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;
+            legacyParityCommand.Parameters.Add(
+                "CandidatePaperOrderIds",
+                NpgsqlDbType.Array | NpgsqlDbType.Text).Value = candidatePaperOrderIdBatch;
 
-        var legacyParityPaperOrderIds = new List<string>();
-        await using (var legacyParityReader =
-                     await legacyParityCommand.ExecuteReaderAsync(cancellationToken))
-        {
+            await using var legacyParityReader =
+                await legacyParityCommand.ExecuteReaderAsync(cancellationToken);
             while (await legacyParityReader.ReadAsync(cancellationToken))
             {
                 legacyParityPaperOrderIds.Add(legacyParityReader.GetString(0));
