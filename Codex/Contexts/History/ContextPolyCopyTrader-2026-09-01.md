@@ -67,3 +67,17 @@ APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:
 
 Result:
 Recorded the user's exact approval of the revised requirement contract. The approved checkpoint preserves immutable baseline migration `0001`, removes the fixed 15 targets from runtime catalogs, uses ordered migration `0007` to remove only the exact audit trigger, and retains the later guarded Product history/strategy cleanup after user deployment and fresh verification.
+
+## 2026-09-01T13:06:52.3607232+00:00
+Request:
+APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d
+
+Result:
+The approved checkpoint was committed as `962910fc` and pushed to `origin/master`. Before product editing, call-path inspection proved that preserving immutable baseline `0001` while filtering the runtime catalog requires changing the existing baseline seed selector in `src/PolyCopyTrader.Storage/PostgresSchema.cs` without changing the generated baseline SQL or checksum. That exact path was missing from the approved implementation-path list, so no product edit was made; the contract was returned to draft with only that path added. New digest: `sha256:427b87adc4511c714b30a14bd0b0f55bba7ef850bfd7831879dc4765b4c08c9e`.
+
+## 2026-09-01T13:08:21.4817012+00:00
+Request:
+APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:427b87adc4511c714b30a14bd0b0f55bba7ef850bfd7831879dc4765b4c08c9e
+
+Result:
+Recorded the user's exact approval of the final path-only contract revision. Local implementation may now proceed without further scope decisions; Product remains unchanged until user deployment and fresh deletion gates pass.

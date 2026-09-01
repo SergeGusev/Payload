@@ -69,6 +69,7 @@
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
         "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
         "README.md",
         "docs/configuration_reference.md"
@@ -190,6 +191,7 @@
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
         "src/PolyCopyTrader.Storage/PostgresHistoricalParityAuditTriggerSchemaMigration.cs",
         "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
         "tests/PolyCopyTrader.Tests/RetiredProgressStrategyTests.cs",
@@ -226,16 +228,16 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d",
-        "semanticDigest": "sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d"
+        "evidenceText": "APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:427b87adc4511c714b30a14bd0b0f55bba7ef850bfd7831879dc4765b4c08c9e",
+        "semanticDigest": "sha256:427b87adc4511c714b30a14bd0b0f55bba7ef850bfd7831879dc4765b4c08c9e"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d",
-    "semanticDigest": "sha256:cebda594350fba6ac1324cd97d0bd11478849a84f1ac9b2cd28c6c00794f2d9d"
+    "evidenceText": "APPROVE RC-20260901-remove-disabled-and-dependent-lower-enter-strategies sha256:427b87adc4511c714b30a14bd0b0f55bba7ef850bfd7831879dc4765b4c08c9e",
+    "semanticDigest": "sha256:427b87adc4511c714b30a14bd0b0f55bba7ef850bfd7831879dc4765b4c08c9e"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer_disabled_and_lower_enter_cleanup",
