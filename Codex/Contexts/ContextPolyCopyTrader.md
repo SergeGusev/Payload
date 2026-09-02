@@ -1,3 +1,16 @@
+## Active Update 2026-09-02 Dashboard Live Price Explanation
+Goal: Explain why Dashboard Live `Price` is always `0.99` and identify the actual execution price.
+Status: Completed
+Done:
+- Traced the Live-order path read-only from Polymarket placement response through persisted `live_orders` fields to the Dashboard grid.
+- Verified that Dashboard `Price` displays the frozen FAK hard-limit price (`live_orders.price`), while `Avg fill` displays the execution VWAP (`live_orders.average_fill_price`).
+- Verified the BUY accounting formula from the authenticated placement response: `average_fill_price = makingAmount / takingAmount`, equivalently `filled_notional_usd / filled_size`.
+- Queried only Product PostgreSQL `192.168.0.101:5432/polycopytrader` in an explicit READ ONLY UTC transaction with a 15-second statement timeout. At `2026-09-02T05:27:00.397602Z`, 3,269 non-parity-owned Live rows had fills and all 3,269 had `average_fill_price`; 2,687 differed from their limit price.
+- The latest matched Product examples had limit `0.99` but actual averages `0.80`, `0.68`, `0.61`, and `0.49`; independent division of stored filled notional by filled shares matched every displayed average in the sampled rows.
+Next: None
+Notes: No code, database, service, strategy, order, balance, configuration, or deployment state was changed. No build/test was needed because this was a read-only explanation verified by code inspection and Product arithmetic.
+Blockers: None
+
 ## Active Update 2026-09-02 Production Health, Bets, Logs, And Live Cancels
 Goal: Verify current Product service health, betting activity, server logs, and Live-order cancellations after the paper/live shadow expiry correction.
 Status: Service and Paper flow healthy; expiry-cancel correction proven in real Live lifecycle; separate Live-submit and settlement-sync issues observed
