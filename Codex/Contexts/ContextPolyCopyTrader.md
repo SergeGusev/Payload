@@ -1,3 +1,18 @@
+## Active Update 2026-09-02 Paper Live Shadow Idempotency Post-Deploy Verification
+Goal: Verify deployed build `700c21d1`, current server and betting health, and recurrence of Paper/Live-shadow settlement-sync errors.
+Status: Service and Paper flow healthy; deployment proven; real post-deploy Live settlement checkpoint pending
+Done:
+- Queried only Product PostgreSQL `192.168.0.101:5432/polycopytrader` in explicit UTC `READ ONLY` transactions with `statement_timeout=15s` and read current server logs from `\\192.168.0.101\CodexLogs`.
+- At final database cutoff `2026-09-02T06:59:15.057955Z`, `PolyCopyTrader.Service` was `Running`/`Live` from `2026-09-02T06:47:18.052705Z` on exact build `700c21d1ea891570164b103394164d385708fcf5`, heartbeat age `56.669s`, and `last_error=NULL`. An earlier independent snapshot showed the same start/version and heartbeat `2026-09-02T06:50:18.291641Z`, proving heartbeat advancement without restart.
+- Since process start, 621 Paper orders were created and all 621 were `Filled`; the latest was created at `2026-09-02T06:58:30.146702Z`. A separately bounded latest-100 sample was 100/100 `Filled` with 100/100 fill rows.
+- BTC, ETH, and SOL reference ticks were fresh at the final cutoff: sampled ages `1.601..1.604s`, source ages `2.025..5.638s`. Core and critical Polymarket WebSockets were connected and not stale.
+- There were zero Live orders after process start, zero `PaperLiveShadowSettlementSync` events/errors, and zero other Live-trading Error events. Therefore the deployed implementation is identified and no recurrence occurred, but the corrected terminal-Live-fill branch has not yet been exercised by a real post-deploy Live order.
+- Current server log `polycopytrader-service-20260902_036.log` contains the new startup at `2026-09-02T06:47:17.754Z`. A full post-start ERR/FTL and settlement-sync search found zero matches. The fresh `06:51:01Z..06:53:10Z` tail contained 19 slow side-effect warnings during a market-resolution burst, with maximum observed queue delay about `2.137s` and settlement processing about `1.203s`; by `06:57:48Z`, the queue had three pending updates, zero rejected/failed updates, and the latest `06:57:31Z..06:57:53Z` tail had zero warnings/errors.
+- Four post-start API error rows recorded one automatically recovered critical WebSocket disconnect plus one initial and two briefly stale SOL reference observations. Current WebSockets and independently sampled reference ticks prove recovery. PostgreSQL had zero waiting locks.
+Next: On the next qualifying terminal Live order, verify its linked Paper shadow, Live settlement, and zero redundant `PaperLiveShadowSettlementSync` error.
+Notes: No Product row/schema, service, strategy, order, balance, configuration, deployment, or product source was changed. The first credential-parser attempt stopped before SQL because the configured profile required the repository's manual connection-string parser; all successful queries pinned the exact Product host and verified endpoint/read-only identity. Two broad live-file scans were stopped locally because the actively growing SMB file prevented bounded EOF completion; bounded tails plus indexed Product events supplied the reported evidence.
+Blockers: No post-deploy Live order exists yet, so real runtime execution of the corrected idempotency branch remains unverified.
+
 ## Active Update 2026-09-02 Paper Live Shadow Settlement Idempotency
 Goal: Remove the verified repeated Paper/Live-shadow settlement synchronization errors without changing trading or accounting behavior.
 Status: Completed locally and independently reviewed; not deployed

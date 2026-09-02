@@ -25,3 +25,10 @@ APPROVE RC-20260902-paper-live-shadow-settlement-idempotency sha256:b02dbb3d0aa8
 
 Result:
 Committed approval-parent checkpoint `12a6485d`, then implemented the approved Paper/Live-shadow settlement idempotency correction. Canonical final actual-fill evidence for the same Live order now prevents a redundant second reconciliation while shape validation, decision-link updates, and independent Live settlement remain intact; noncanonical mixed fills still reconcile. The complete LiveTradingGatingTests class passed 36/36 and the final Release solution build passed with zero errors. Independent reviewer `agent:/root/settlement_idempotency_review` returned PASS with no findings. Production and HTTP 503 handling were not changed; deployment remains with the user.
+
+## 2026-09-02T06:59:15.057955Z
+Request:
+Выложил, проверяй
+
+Result:
+Read-only Product verification confirmed exact deployed build `700c21d1ea891570164b103394164d385708fcf5`, `Running`/`Live` from `2026-09-02T06:47:18.052705Z`, advancing fresh heartbeat, and `last_error=NULL`. Since start, 621/621 Paper orders were Filled; a separate latest-100 sample had 100/100 fill rows, and BTC/ETH/SOL reference ticks were fresh. Server logs contained no post-start ERR/FTL or settlement-sync matches; one short market-resolution latency burst recovered, as did a critical WebSocket reconnect and brief SOL staleness. There were zero post-start Live orders and zero `PaperLiveShadowSettlementSync` events, so no recurrence is observed, but the corrected branch cannot be runtime-confirmed until a new terminal Live order appears. No Product or trading state was changed.
