@@ -3,7 +3,7 @@
   "contractId": "RC-20260902-reference-price-retention-48h",
   "title": "Автоматически хранить только последние 48 часов отдельных курсов BTC/ETH/SOL",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -60,8 +60,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~CryptoReferencePriceRetentionWorkerTests|FullyQualifiedName~CryptoReferencePriceAverageCacheTests|FullyQualifiedName~CryptoReferencePriceExtremaCacheTests\"",
           "expected": "Worker tests prove exact assets, 48h UTC cutoff, sequential scheduling and preservation of existing consumers; average/extrema regressions pass. No missing/skipped required cases.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final focused run passed22/22, failed0, skipped0:6 CryptoReferencePriceRetentionWorkerTests,5 average-cache and4 extrema-cache regressions plus7 SQL cases. Worker tests exercise exact BTC/ETH/SOL rotation,1000 cap,48h UTC conversion/fresh cutoff,10s post-completion spacing, no overlapping batch,60s error backoff with logging, and cancellation before work/during batch/during delay. Tests call the same RunAsync loop used by ExecuteAsync; production binding uses DateTimeOffset.UtcNow and Task.Delay. Current collector/cache/settings files are unchanged. Final TRX counters and grouped counts were independently inspected and preserved in2026-09-02 daily history before protected temp removal. Full host or deployed retention was not run."
         }
       ]
     },
@@ -92,8 +92,8 @@
           "kind": "test",
           "command": "With POLYCOPYTRADER_TEST_POSTGRES_CONNECTION pinned to a new disposable native PostgreSQL cluster under <marked-run>/db and verified not to be a user database: dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter FullyQualifiedName~CryptoReferencePriceRetentionPostgresIntegrationTests",
           "expected": "All focused real-PostgreSQL cases pass without skipping; exact pre/post UUID sets and protected rows match, batch cap and lock skipping verified. Test cluster stopped and marked artifacts protected-cleaned; no Product mutation.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "All7 real-SQL tests passed on a newly initialized isolated native PostgreSQL17.5, loopback127.0.0.1:52110, database pct_codex_skip_v2_20260902145000_b7a9f594, data_directory D:/CodexTemp/runs/manual-b7a9f594c5524265baa67637ba3798e7/db/pgdata. The fixture verifies loopback/database/marked path before writes. Compared complete JSONB row fields and exact UUID sets: strict cutoff including one microsecond before/equality/new/future/non-target symbols; order and1000 cap; repeated/restarted progress; locked-row skip/unlock; lock-timeout rollback/retry; cancellation while blocked; trigger-observed5s/250ms transaction-local limits with rollback and no setting leakage; nonpositive batch no-op. No required case skipped. Final disposable table rows0 and user triggers0; exact test instance stopped, and entire marked run removed after evidence extraction. Initial cleanup met an owned compiler lock; parent build log and loaded modules proved ownership, then only VB/C# compiler was gracefully shut down and protected cleanup succeeded (remaining12 files/884585 bytes), independent Test-Path false. No user-database mutation. Product18.3 only read-only preview and EXPLAIN without ANALYZE confirmed existing composite selection index and PK nested-loop lookup; actual Product DELETE timing/WAL remains unmeasured."
         }
       ]
     },
@@ -116,16 +116,16 @@
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <marked-run>/artifacts",
           "expected": "Service build succeeds without errors; generated output remains under the marked temporary run.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path D:/CodexTemp/runs/manual-b7a9f594c5524265baa67637ba3798e7/artifacts --verbosity quiet succeeded. Initial full build0 errors/121 warnings; final build after connection-disposal refinement0 errors/120 warnings outside new files,3.64s. Final tests reran against that source:22 passed,0 failed/skipped. TEMP/TMP/TMPDIR and explicit artifact/result paths stayed under the marked run, shared .NET/NuGet caches on D:. Disposable artifacts are removed; compact commands/results and four tested new-file SHA256s are in today's history. No user service was started or deployed."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Independent semantic review; git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; inspect master/upstream status after commit and push.",
           "expected": "No out-of-scope diff or open semantic finding; validators pass with approval parent, completed verification and independent review; intended commits reach master/upstream, Product rollout is explicitly pending user deployment.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/reference_price_retention_review compared original verbatim requests, unchanged approved digest, approval parent829c639f, all8 final governed paths including README, and final build/TRX evidence; PASS with no open findings. git diff --check passed. Approval is already committed on master before implementation. Contract is finalized with the governed implementation for mandatory WorkingTree/Staged/Range gates; their command outcomes and subsequent commit/push confirmation are recorded in2026-09-02 daily history during finalization, not asserted here as a deployed Product result. Only ordinary user deployment remains after source delivery."
         }
       ]
     }
@@ -140,8 +140,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reference_price_retention_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

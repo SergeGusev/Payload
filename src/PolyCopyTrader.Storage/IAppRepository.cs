@@ -1111,6 +1111,15 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
         return Task.FromResult<IReadOnlyList<CryptoReferencePriceTick>>([]);
     }
 
+    Task<int> CleanupCryptoReferencePriceTicksAsync(
+        string assetSymbol,
+        DateTimeOffset sampledBeforeUtc,
+        int batchSize,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Crypto reference-price retention is not implemented by this repository.");
+    }
+
     Task AddBtcOrderBookLagDiagnosticEventsAsync(
         IReadOnlyList<BtcOrderBookLagDiagnosticEvent> events,
         CancellationToken cancellationToken = default)

@@ -7,6 +7,16 @@ namespace PolyCopyTrader.Tests;
 
 internal sealed class TestAppRepository : IAppRepository
 {
+    public Func<string, DateTimeOffset, int, CancellationToken, Task<int>>? CryptoReferencePriceCleanup { get; set; }
+
+    public Task<int> CleanupCryptoReferencePriceTicksAsync(
+        string assetSymbol,
+        DateTimeOffset sampledBeforeUtc,
+        int batchSize,
+        CancellationToken cancellationToken = default) =>
+        CryptoReferencePriceCleanup?.Invoke(assetSymbol, sampledBeforeUtc, batchSize, cancellationToken)
+        ?? throw new NotSupportedException("Configure the reference-price cleanup callback for this test.");
+
     private readonly object sync = new();
     private readonly HashSet<string> leaderTradeKeys = [];
     private int polymarketGammaMarketLookupsInFlight;

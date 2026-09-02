@@ -505,6 +505,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceBtcUsdTrade
 builder.Services.AddHostedService(sp => sp.GetRequiredService<BinanceCryptoReferenceTradeStreamService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OkxExpiryFuturesReferencePriceService>());
 builder.Services.AddHostedService<CryptoReferencePriceHistoryWorker>();
+builder.Services.AddHostedService<CryptoReferencePriceRetentionWorker>();
 builder.Services.AddHostedService<ChainlinkBtcUsdCorrelationWorker>();
 builder.Services.AddHostedService<BtcUpDown5mOrderBookRefreshWorker>();
 builder.Services.AddHostedService<BtcUpDown5mDueEntryPaperStrategyWorker>();
