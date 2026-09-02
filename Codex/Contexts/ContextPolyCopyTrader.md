@@ -1,3 +1,14 @@
+## Active Update 2026-09-02 Open-Position Index Rebuild Approval
+Goal: Record the user's exact approval for the three-index Product maintenance operation without bypassing its capacity gate.
+Status: Blocked on server C: free-space evidence; approval received, no rebuild started
+Done:
+- Recalculated the draft semantic digest and verified it exactly matches the user's approval: `RC-20260902-reindex-open-paper-position-indexes`, `sha256:a9fa7f4e3946530fa9c3e6113a53ffbf9e035b790c751be3de51df8af18f632b`.
+- Recorded the verbatim approval and changed only the contract lifecycle/approval fields; requirements, exact three-index allowlist, order, limits, and execution gates are unchanged.
+- Server C: free-space evidence has not been supplied. Previous remote capacity probes returned Access is denied; no unchanged denied probe was retried and no alternate elevated access was attempted.
+Next: Obtain server-local `Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" | Select-Object DeviceID, FreeSpace, Size` output; require at least 5000000000 free bytes and fresh approved read-only identity/dependency/service/lock gates before the first rebuild.
+Notes: This turn is approval bookkeeping only. No Product connection, SQL mutation, index rebuild, service/trading action, source change, deployment, backup, or temporary diagnostic artifact. Runtime verification and independent operation review remain pending, not passed.
+Blockers: Current free bytes on server C: are unknown; user approval itself is no longer missing.
+
 ## Active Update 2026-09-02 Three Open-Position Index Rebuild Preflight
 Goal: Prepare the first bounded physical-size reduction step for the three measured Product open-Paper-position indexes.
 Status: Blocked pending exact contract approval and server C: free-space evidence; no rebuild started

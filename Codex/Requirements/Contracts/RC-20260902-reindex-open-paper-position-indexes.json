@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260902-reindex-open-paper-position-indexes",
+  "title": "Rebuild exactly three existing Product open-Paper-position indexes",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    { "source": "user", "text": "Что мы ещё можем сделать для уменьшения роста базы? Кстати, как он там движется?" },
+    { "source": "user", "text": "Теперь сервер доступен, пробуй" },
+    { "source": "user", "text": "Ок, действуй" }
+  ],
+  "scope": {
+    "goal": "As the first separately bounded database-size reduction step, physically rebuild exactly the three measured open-Paper-position indexes without deleting history or changing their logical definitions.",
+    "inScope": [
+      "Only Product PostgreSQL 192.168.0.101:5432/polycopytrader, public.paper_positions, and the following exact index allowlist.",
+      "First public.ix_paper_positions_open_updated_cover (preview OID/relfilenode 39352026, 619012096 bytes), then public.ix_paper_positions_open_condition_lookup (39708523, 806313984 bytes), then public.ix_paper_positions_open_asset_lookup (39708524, 851214336 bytes). Parent table preview OID/relfilenode is 16826.",
+      "Use one REINDEX INDEX CONCURRENTLY command per allowlisted index, sequentially, in its own autocommit connection; PostgreSQL owns the command's internal transactions. No outer all-index transaction and no parallel index builds.",
+      "Preserve index names, B-tree method, key expressions and order, INCLUDE columns, size_shares > 0 predicate, tablespace, validity, and nonunique semantics. The index OID/relfilenode change caused by the PostgreSQL swap is expected; the parent table identity must not change.",
+      "Session-only execution limits: lock_timeout=2s, statement_timeout=10min per command, maintenance_work_mem=64MB, max_parallel_maintenance_workers=0. Estimated total elapsed time is 5-15 minutes, not a guarantee; the three command time budgets can total 30 minutes plus verification.",
+      "Require fresh read-only identity/dependency/health/lock checks and user-supplied or directly verified free-space evidence for server C: showing at least 5000000000 free bytes before the first command. PostgreSQL data_directory is C:/Program Files/PostgreSQL/18/data and all targets use pg_default. Missing capacity evidence blocks mutation.",
+      "Before each next command require the prior index verified valid/ready/live with its unchanged logical definition, an advancing Running/Live heartbeat no more than 90 seconds old and NULL last_error, recent Paper activity, zero ungranted database locks, and no concurrent index build or vacuum on paper_positions. Do not cancel unrelated maintenance or backends to pass a gate.",
+      "Poll read-only PostgreSQL progress and service health while a command runs. If service health materially worsens, cancel only this task's exact command, then stop; never terminate unrelated backends.",
+      "Persist each successful index's exact command, before/after OIDs, definition, bytes, and postcheck in task evidence before starting the next. Resume only from verified successful target records; do not blindly rebuild an already completed target.",
+      "On timeout or failure, stop and inspect exact task-created _ccnew/_ccold catalog remnants. No manual DROP or automatic retry is authorized by this contract; obtain separate approval if cleanup is necessary.",
+      "Complete independent semantic review and preserve concise operational evidence in this contract and context/history. No product source changes or deployment are required."
+    ],
+    "outOfScope": [
+      "Changing, deleting, disabling, or recreating strategies, Paper/Live orders, fills, positions, settlements, signals, or historical records.",
+      "Stopping or restarting any service, changing trading mode or configuration, or placing/cancelling venue orders.",
+      "Any Skipped persistence change, archive-v2 activation, age-retention activation, or historical cleanup.",
+      "Changing index definitions, creating a new permanent index, rebuilding any other index/table/database, VACUUM FULL, CLUSTER, pg_repack, extension installation, or permanent PostgreSQL setting changes.",
+      "Backups, dumps, database clones, Docker, new infrastructure, generalized maintenance tooling, or production deployment.",
+      "Local database mutations, immutable baseline/migration edits, unrelated repository changes, or manually dropping original/temporary indexes."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "Exactly the three named existing Product indexes; their existing partial predicate is size_shares > 0. No historical date range, row deletion, or additional target.",
+    "firstVerification": "Fresh READ ONLY catalog preview of exact target OIDs/definitions/constraints/tablespaces, parent identity, index build/vacuum/lock state, advancing service heartbeat and Paper activity, plus sufficient server C: free-space evidence."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Perform the first database-size reduction step only on the exact three previously identified open-Paper-position indexes, preserving all history and logical index definitions.",
+      "sourceRequestIndexes": [0, 2],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Fresh preview resolves exactly the three allowlisted valid/ready/live, nonunique B-tree indexes on public.paper_positions with the recorded definitions and no constraint ownership or unexpected incoming dependency.",
+        "Known server C: free space is at least 5000000000 bytes before execution; missing or insufficient evidence prevents starting.",
+        "Only the three exact REINDEX INDEX CONCURRENTLY commands execute, in the stated order and with the stated session limits.",
+        "All three post-operation index definitions and validity states match the original logical contract; paper_positions OID/relfilenode and non-target index identities/definitions remain unchanged.",
+        "Measure actual bytes reclaimed separately for each index and the sum. Do not promise the entire 2276540416-byte preview allocation as guaranteed savings.",
+        "No user/history row is directly inserted, updated, or deleted by this operation, and no source/deployment/service/trading state changes."
+      ],
+      "implementationPaths": ["Codex/Requirements/Contracts/RC-20260902-reindex-open-paper-position-indexes.json"],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "runtime",
+          "command": "Run the exact read-only target/dependency/capacity/service preview before the first command and refresh dynamic gates before each next index.",
+          "expected": "All exact target, capacity, dependency, service and lock gates pass before mutation.",
+          "result": "pending",
+          "evidence": "At 2026-09-02T12:27:52.659138Z the exact three targets totalled 2276540416 bytes and matched source definitions; all were valid/ready/live/nonunique and had no pg_constraint owner or unexpected incoming dependency. Parent OID/relfilenode 16826, pg_default on server C:, 482 open positions, Running/Live build 700c21d1 with NULL error, zero waiting locks, no index build, no parent vacuum, no prepared or long transaction. At 12:30:10Z a separate live-key-payload aggregate covered 647 open rows and only 166565/213149/218325 composite payload bytes for the three definitions, excluding physical index overhead and concurrent version churn. One transient ungranted lock was then observed, so dynamic gates require a fresh check. Remote Windows CIM and C$ free-space checks returned Access is denied; server C: free bytes remain unknown. No mutation has occurred."
+        },
+        {
+          "id": "VER-002",
+          "kind": "runtime",
+          "command": "Execute and record one exact concurrent index rebuild at a time; verify each index, parent and non-target identities, byte savings, service heartbeat/activity, errors and locks before proceeding.",
+          "expected": "All three targets are valid with unchanged logical definitions and documented physical savings; all non-target/history/service invariants hold.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep the operation bounded, auditable and independently verified without starting the separate Skipped redesign or unrelated maintenance.",
+      "sourceRequestIndexes": [2],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "A durable per-index success record supports resumption without re-running a verified completed rebuild.",
+        "Failure, timeout, changed identity, insufficient capacity, or worsened health stops execution before the next target; no unapproved fallback or cleanup is performed.",
+        "An independent reviewer compares the verbatim requests, approved exact scope, actual statements and pre/post evidence and reports no open findings.",
+        "Required evidence survives protected deletion of the exact marked temporary run."
+      ],
+      "implementationPaths": ["Codex/Requirements/Contracts/RC-20260902-reindex-open-paper-position-indexes.json"],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Independent review of approved scope, complete operation transcript and before/after evidence; validate requirement record and protected temporary cleanup.",
+          "expected": "Reviewer PASS with no findings, no out-of-scope action, and retained durable evidence.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260902-reindex-open-paper-position-indexes sha256:a9fa7f4e3946530fa9c3e6113a53ffbf9e035b790c751be3de51df8af18f632b",
+    "semanticDigest": "sha256:a9fa7f4e3946530fa9c3e6113a53ffbf9e035b790c751be3de51df8af18f632b"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/open_position_index_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
