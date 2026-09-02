@@ -1,7 +1,10 @@
 using System.Numerics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
+using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
@@ -451,6 +454,300 @@ GROUP BY r.fee_usd, r.net_realized_pnl_usd, r.fee_calculation_source;
             Assert.Equal(1, reader.GetInt64(3));
             Assert.False(await reader.ReadAsync());
         }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task DirectFixedLiveDecision_UsesCanonicalHashAndAppliesOrderedBalanceOnlyOnce()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var fixture = await SeedLiveHashFixtureAsync(factory);
+        var targets = await LoadLiveHashTargetsAsync(repository, fixture.StrategyId);
+        Assert.Equal(2, targets.Count);
+        Assert.DoesNotContain(targets, target => target.SourceId == fixture.PostCutoffId);
+        var first = Assert.Single(targets, target => target.SourceId == fixture.FirstId);
+        var second = Assert.Single(targets, target => target.SourceId == fixture.SecondId);
+
+        foreach (var target in new[] { first, second })
+        {
+            var request = LiveHashAccountingRequest(target);
+            var result = await repository.TryApplyHistoricalGrossNetParityLiveAccountingAsync(request);
+            // This real reader-to-writer call failed with InvariantConflict before the hash fix.
+            Assert.True(result.Status == HistoricalGrossNetParityApplyStatus.Applied, result.Details);
+            Assert.Equal(HistoricalGrossNetParityOwnership.Pending, result.Ownership);
+            Assert.Equal(HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(target.ProvedComponents),
+                target.ComponentHash);
+            Assert.Equal(HistoricalGrossNetParityBindingV1.Compute(
+                target.TargetTupleHash, target.LineageHash, target.ComponentHash), target.BindingHash);
+            Assert.Equal(0.41092200m, request.Decision.StoredFeeUsd);
+            Assert.Equal(9.58907800m, request.Decision.NetPnlUsd);
+            Assert.Null(request.Decision.DonorDecision);
+            Assert.Equal(HistoricalGrossNetParityApplyStatus.TerminalNoOp,
+                (await repository.TryApplyHistoricalGrossNetParityLiveAccountingAsync(request)).Status);
+        }
+
+        Assert.Equal(HistoricalGrossNetParityApplyStatus.NotEarliest,
+            (await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(
+                LiveHashBalanceRequest(second))).Status);
+        foreach (var target in new[] { first, second })
+        {
+            var request = LiveHashBalanceRequest(target);
+            var result = await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(request);
+            Assert.True(result.Status == HistoricalGrossNetParityApplyStatus.Applied, result.Details);
+            Assert.Equal(HistoricalGrossNetParityOwnership.Completed, result.Ownership);
+            Assert.Equal(-0.41092200m, result.ActualAppliedDelta);
+            Assert.Equal(0m, result.ResidualUnappliedDelta);
+            Assert.Equal(HistoricalGrossNetParityApplyStatus.TerminalNoOp,
+                (await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(request)).Status);
+            Assert.Equal(HistoricalGrossNetParityApplyStatus.TerminalNoOp,
+                (await repository.TryApplyHistoricalGrossNetParityLiveAccountingAsync(
+                    LiveHashAccountingRequest(target))).Status);
+        }
+
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var verify = new NpgsqlCommand(
+            """
+SELECT strategy.live_available_balance,
+       (SELECT count(*) FROM live_orders o WHERE o.strategy_id = strategy.id
+          AND o.fee_usd = 0.410922 AND o.net_realized_pnl_usd = 9.589078
+          AND o.realized_pnl_usd = 10 AND o.filled_notional_usd = 12.34
+          AND o.historical_gross_net_parity_ownership = 'Completed'),
+       (SELECT count(*) FROM historical_gross_net_parity_audit a WHERE a.strategy_id = strategy.id
+          AND a.operation_kind = 'AccountingBaseline' AND a.baseline_effect_kind = 'LegacyGrossApplied'),
+       (SELECT count(*) FROM historical_gross_net_parity_audit a WHERE a.strategy_id = strategy.id
+          AND a.operation_kind = 'AccountingDecision' AND a.decision_kind = 'Fixed0p0333'),
+       (SELECT count(*) FROM historical_gross_net_parity_audit a WHERE a.strategy_id = strategy.id
+          AND a.operation_kind = 'InitialBalanceApplication'),
+       (SELECT sum(a.actual_applied_delta) FROM historical_gross_net_parity_audit a
+          WHERE a.strategy_id = strategy.id),
+       (SELECT net_realized_pnl_usd IS NULL AND fee_usd = 0
+               AND historical_gross_net_parity_ownership = 'None'
+          FROM live_orders WHERE id = @PostCutoffId)
+FROM strategies strategy WHERE strategy.id = @StrategyId;
+""", connection);
+        verify.Parameters.AddWithValue("StrategyId", fixture.StrategyId);
+        verify.Parameters.AddWithValue("PostCutoffId", fixture.PostCutoffId);
+        await using var reader = await verify.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(79.17815600m, reader.GetDecimal(0));
+        for (var index = 1; index <= 4; index++) Assert.Equal(2, reader.GetInt64(index));
+        Assert.Equal(-0.82184400m, reader.GetDecimal(5));
+        Assert.True(reader.GetBoolean(6));
+        Assert.False(await reader.ReadAsync());
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LiveCanonicalHash_RejectsTamperedComponentsAndStaleRowWithoutWritingAccounting()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var fixture = await SeedLiveHashFixtureAsync(factory);
+        var targets = await LoadLiveHashTargetsAsync(repository, fixture.StrategyId);
+        var target = Assert.Single(targets, value => value.SourceId == fixture.FirstId);
+        var wrongComponentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("{}")))
+            .ToLowerInvariant();
+        var tampered = target with
+        {
+            ComponentHash = wrongComponentHash,
+            BindingHash = HistoricalGrossNetParityBindingV1.Compute(
+                target.TargetTupleHash, target.LineageHash, wrongComponentHash)
+        };
+        var rejected = await repository.TryApplyHistoricalGrossNetParityLiveAccountingAsync(
+            LiveHashAccountingRequest(tampered));
+        Assert.Equal(HistoricalGrossNetParityApplyStatus.InvariantConflict, rejected.Status);
+        Assert.Contains("binding hashes", rejected.Details, StringComparison.Ordinal);
+
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using (var change = new NpgsqlCommand(
+            "UPDATE live_orders SET row_version = row_version + 1 WHERE id = @Id;", connection))
+        {
+            change.Parameters.AddWithValue("Id", target.SourceId);
+            Assert.Equal(1, await change.ExecuteNonQueryAsync());
+        }
+        var stale = await repository.TryApplyHistoricalGrossNetParityLiveAccountingAsync(
+            LiveHashAccountingRequest(target));
+        Assert.Equal(HistoricalGrossNetParityApplyStatus.DeferredCas, stale.Status);
+
+        await using var verify = new NpgsqlCommand(
+            """
+SELECT (SELECT count(*) FROM historical_gross_net_parity_audit WHERE strategy_id = @StrategyId),
+       (SELECT count(*) FROM live_orders WHERE strategy_id = @StrategyId
+          AND net_realized_pnl_usd IS NULL AND fee_usd = 0
+          AND historical_gross_net_parity_ownership = 'None'),
+       (SELECT live_available_balance FROM strategies WHERE id = @StrategyId);
+""", connection);
+        verify.Parameters.AddWithValue("StrategyId", fixture.StrategyId);
+        await using var reader = await verify.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(0, reader.GetInt64(0));
+        Assert.Equal(3, reader.GetInt64(1));
+        Assert.Equal(80m, reader.GetDecimal(2));
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LiveCanonicalHash_PreservesExactFeesAndIndependentVenueEvidence()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        foreach (var feeStatus in new[] { "Calculated", "VenueReported" })
+        {
+            var fixture = await SeedLiveHashFixtureAsync(factory, feeStatus);
+            await using var connection = factory.CreateConnection();
+            await connection.OpenAsync();
+            if (feeStatus == "VenueReported")
+            {
+                await using var venue = new NpgsqlCommand(
+                    """
+INSERT INTO historical_gross_net_parity_audit (
+    audit_id, source_kind, source_id, strategy_id, calculation_version,
+    operation_kind, evidence_version, old_payload_json, new_payload_json, evidence_payload_json)
+SELECT gen_random_uuid(), 'LiveOrder', id, strategy_id, @Version,
+       'VenueReportedRevision', 'venue-hash-regression', '{}'::jsonb, '{}'::jsonb,
+       '{"authority":"hash-regression","fee_usd":0.2}'::jsonb
+FROM live_orders WHERE strategy_id = @StrategyId;
+""", connection);
+                venue.Parameters.AddWithValue("StrategyId", fixture.StrategyId);
+                venue.Parameters.AddWithValue("Version", HistoricalGrossNetParityConstants.CalculationVersion);
+                Assert.Equal(3, await venue.ExecuteNonQueryAsync());
+            }
+
+            var targets = await LoadLiveHashTargetsAsync(repository, fixture.StrategyId);
+            Assert.Equal(2, targets.Count);
+            Assert.DoesNotContain(targets, value => value.SourceId == fixture.PostCutoffId);
+            foreach (var id in new[] { fixture.FirstId, fixture.SecondId })
+            {
+                var target = Assert.Single(targets, value => value.SourceId == id);
+                Assert.Equal(HistoricalGrossNetParityExactEligibility.ExistingExactPreserved, target.ExactEligibility);
+                Assert.Equal(HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(target.ProvedComponents),
+                    target.ComponentHash);
+                if (feeStatus == "VenueReported")
+                {
+                    using var payload = JsonDocument.Parse(target.ComponentPayloadJson);
+                    Assert.Equal("hash-regression", payload.RootElement.GetProperty("authority").GetString());
+                    var evidence = Assert.Single(target.ExactEvidenceReferences);
+                    Assert.Equal("LiveVenueReported", evidence.EvidenceKind);
+                    Assert.Equal("venue-hash-regression", evidence.EvidenceVersion);
+                    Assert.Equal(Convert.ToHexString(SHA256.HashData(
+                        Encoding.UTF8.GetBytes(target.ComponentPayloadJson))).ToLowerInvariant(), evidence.EvidenceHash);
+                    Assert.NotEqual(target.ComponentHash, evidence.EvidenceHash);
+                }
+                var decision = HistoricalGrossNetParityDecisionFactory.TryCreateExact(
+                    target, [], DateTimeOffset.UtcNow, HistoricalGrossNetParityConstants.CalculationVersion);
+                Assert.NotNull(decision);
+                Assert.Equal(HistoricalGrossNetParityDecisionKind.ExistingExactPreserved, decision.DecisionKind);
+                var request = LiveHashAccountingRequest(target) with { Decision = decision };
+                var result = await repository.TryApplyHistoricalGrossNetParityLiveAccountingAsync(request);
+                Assert.True(result.Status == HistoricalGrossNetParityApplyStatus.Applied, result.Details);
+                var balance = await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(
+                    LiveHashBalanceRequest(target));
+                Assert.True(balance.Status == HistoricalGrossNetParityApplyStatus.Applied, balance.Details);
+                Assert.Equal(0m, balance.ActualAppliedDelta);
+            }
+
+            await using var verify = new NpgsqlCommand(
+                """
+SELECT (SELECT count(*) FROM live_orders WHERE strategy_id = @StrategyId
+          AND fee_usd = 0.2 AND net_realized_pnl_usd = 9.8 AND fee_accounting_status = @Status
+          AND fee_calculated_at_utc = @FeeAt AND realized_pnl_usd = 10),
+       (SELECT live_available_balance FROM strategies WHERE id = @StrategyId),
+       (SELECT count(*) FROM historical_gross_net_parity_audit WHERE strategy_id = @StrategyId
+          AND operation_kind = 'AccountingDecision' AND decision_kind = 'ExistingExactPreserved');
+""", connection);
+            verify.Parameters.AddWithValue("StrategyId", fixture.StrategyId);
+            verify.Parameters.AddWithValue("Status", feeStatus);
+            verify.Parameters.AddWithValue("FeeAt", HistoricalGrossNetParityConstants.CutoffUtc.AddDays(-1).UtcDateTime);
+            await using var reader = await verify.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            Assert.Equal(3, reader.GetInt64(0));
+            Assert.Equal(80m, reader.GetDecimal(1));
+            Assert.Equal(2, reader.GetInt64(2));
+        }
+    }
+
+    private static HistoricalGrossNetParityLiveAccountingRequest LiveHashAccountingRequest(
+        HistoricalGrossNetParityTargetSnapshot target) => new(
+        target,
+        HistoricalGrossNetParityDecisionFactory.CreateFallback(
+            target, DateTimeOffset.UtcNow, HistoricalGrossNetParityConstants.CalculationVersion),
+        [], HistoricalGrossNetParityConstants.CutoffUtc, 50, 30, 1_000,
+        HistoricalGrossNetParityConstants.CalculationVersion);
+
+    private static HistoricalGrossNetParityLiveBalanceRequest LiveHashBalanceRequest(
+        HistoricalGrossNetParityTargetSnapshot target) => new(
+        target.StrategyId, target.SourceId, HistoricalGrossNetParityConstants.CutoffUtc,
+        30, 1_000, HistoricalGrossNetParityConstants.CalculationVersion);
+
+    private static async Task<IReadOnlyList<HistoricalGrossNetParityTargetSnapshot>> LoadLiveHashTargetsAsync(
+        PostgresAppRepository repository, Guid strategyId)
+    {
+        var selectedStrategy = await LoadRankedStrategyAsync(repository, strategyId);
+        var page = await repository.LoadHistoricalGrossNetParityCandidatePageAsync(
+            new HistoricalGrossNetParityCandidatePageRequest(
+                HistoricalGrossNetParityProcessingPhase.Exact,
+                HistoricalGrossNetParityConstants.CutoffUtc, 50, null, 30, 1_000,
+                HistoricalGrossNetParityConstants.CalculationVersion, selectedStrategy));
+        Assert.True(page.Status == HistoricalGrossNetParityReadStatus.Complete, page.Details);
+        var prepared = HistoricalGrossNetParityPaperPreparer.Prepare(page, HistoricalGrossNetParityConstants.CutoffUtc);
+        Assert.Empty(prepared.Conflicts);
+        return prepared.Targets;
+    }
+
+    private static async Task<(Guid StrategyId, Guid FirstId, Guid SecondId, Guid PostCutoffId)>
+        SeedLiveHashFixtureAsync(PostgresConnectionFactory factory, string feeStatus = "LegacyUnknown")
+    {
+        var strategyId = Guid.NewGuid();
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var seed = new NpgsqlCommand(
+            """
+INSERT INTO strategies (id, code, name, description, enabled, live_stakes,
+                        live_available_balance, created_at_utc, updated_at_utc)
+VALUES (@StrategyId, @Code, @Code, 'Live hash regression', true, false, 80, @EnteredAt, @EnteredAt);
+INSERT INTO live_orders (
+    id, signal_id, strategy_id, status, order_id, side, asset_id, condition_id,
+    outcome, price, size_shares, notional_usd, order_type, created_at_utc,
+    expires_at_utc, submitted_at_utc, response_status, filled_size, remaining_size,
+    average_fill_price, filled_notional_usd, cost_basis_usd, fee_usd,
+    fee_accounting_status, fee_liquidity_role, fee_calculation_source,
+    fee_rate, fee_exponent, fee_taker_only, fee_calculated_at_utc,
+    cancel_status, raw_response_json, validation_summary, balance_effect_applied,
+    settlement_value_usd, realized_pnl_usd, net_realized_pnl_usd,
+    settled_at_utc, winning_asset_id, winning_outcome, won, settlement_source, updated_at_utc)
+SELECT id, gen_random_uuid(), @StrategyId, 'Matched', 'hash-' || id::text,
+       'Buy', 'hash-asset', 'hash-condition', 'Yes', 0.5, 24.68, 12.34, 'FAK', @EnteredAt,
+       @Cutoff + interval '5 minutes',
+       CASE WHEN ordinal = 3 THEN @Cutoff ELSE @EnteredAt + ordinal * interval '1 second' END,
+       'ok', 24.68, 0, 0.5, 12.34, 12.34 + CASE WHEN @Exact THEN 0.2 ELSE 0 END,
+       CASE WHEN @Exact THEN 0.2 ELSE 0 END, @FeeStatus,
+       CASE WHEN @Exact THEN 'Taker' ELSE 'Unknown' END,
+       CASE WHEN @Exact THEN @ExactSource ELSE '' END,
+       CASE WHEN @Exact THEN 0.01 END, CASE WHEN @Exact THEN 2 END,
+       CASE WHEN @Exact THEN true END, CASE WHEN @Exact THEN @SettledAt END,
+       '', '{}'::jsonb, 'Live hash fixture', true, 22.34, 10,
+       CASE WHEN @Exact THEN 9.8 END,
+       CASE WHEN ordinal = 3 THEN @Cutoff + interval '1 day'
+            ELSE @SettledAt + ordinal * interval '1 second' END,
+       'hash-asset', 'Yes', true, 'integration', @SettledAt
+FROM unnest(@Ids::uuid[]) WITH ORDINALITY AS entries(id, ordinal);
+""", connection);
+        seed.Parameters.AddWithValue("StrategyId", strategyId);
+        seed.Parameters.AddWithValue("Code", "historical_live_hash_" + strategyId.ToString("N"));
+        seed.Parameters.Add("Ids", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = ids;
+        seed.Parameters.AddWithValue("FeeStatus", feeStatus);
+        seed.Parameters.AddWithValue("Exact", feeStatus != "LegacyUnknown");
+        seed.Parameters.AddWithValue("ExactSource",
+            "polymarket-clob-v2-fd-shares-rate-price-curve-round5-away-from-zero-v1");
+        seed.Parameters.AddWithValue("EnteredAt", HistoricalGrossNetParityConstants.CutoffUtc.AddDays(-2).UtcDateTime);
+        seed.Parameters.AddWithValue("SettledAt", HistoricalGrossNetParityConstants.CutoffUtc.AddDays(-1).UtcDateTime);
+        seed.Parameters.AddWithValue("Cutoff", HistoricalGrossNetParityConstants.CutoffUtc.UtcDateTime);
+        await seed.ExecuteNonQueryAsync();
+        return (strategyId, ids[0], ids[1], ids[2]);
     }
 
     private static async Task<PostgresConnectionFactory> CreateFactoryAsync()

@@ -3,7 +3,7 @@
   "contractId": "RC-20260902-historical-parity-live-component-hash-fix",
   "title": "Fix canonical component hashing in historical Live Net recalculation",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -62,8 +62,8 @@
           "kind": "test",
           "command": "Set POLYCOPYTRADER_TEST_POSTGRES_CONNECTION to a new isolated native PostgreSQL instance/database owned by the marked D:/CodexTemp run, never to Production or the user's existing database. Set POLYCOPYTRADER_REPOSITORY_ROOT to the current repository and TEMP/TMP/TMPDIR to the run temp directory. Run dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path <runPath>/artifacts --results-directory <runPath>/results --filter \"FullyQualifiedName~HistoricalGrossNetParity|FullyQualifiedName~HistoricalParity\" -p:UseSharedCompilation=false. First run the new regression against unchanged source, then rerun after correction; the real PostgreSQL regression must execute rather than skip.",
           "expected": "The new real-path regression initially demonstrates the original mismatch, then all focused tests pass, including fixed Live accounting/reconciliation, exact preservation, cutoff exclusion, unchanged Paper behavior, tamper/CAS rejection and idempotence. Only synthetic disposable data is written.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "On isolated native PostgreSQL17.5 at127.0.0.1:52124, database pct_codex_skip_v2_20260902205500_53bb77e0 under marked run manual-53bb77e0e9364f228bf89864ca998143, the real DirectFixedLiveDecision_UsesCanonicalHashAndAppliesOrderedBalanceOnlyOnce regression failed before the source edit with 'The target binding hashes do not reproduce their canonical payloads.' After correction, the approved HistoricalGrossNetParity|HistoricalParity filter executed38 tests:38 passed,0 failed,0 skipped (8s). The three new integration methods cover fixed accounting, ordered balance gating, retries, exact Calculated and VenueReported preservation with independent payload hash, post-cutoff exclusion and tamper/stale-row rejection. A separate read-only test-database query confirmed fixture strategy e5123694-63b6-4e96-927a-3fdad1e56b93 has2 completed fixed orders, fee sum0.82184400, Net sum19.17815600 and balance79.17815600 from80; exact-fee fixtures stayed at80 and rejected fixtures had0 completed rows. Initial new-test compilation needed the missing Domain using; the corrected pre-fix run then reproduced the actual defect. Full test compilation emitted existing warnings outside task files. No Production test writes. Final source SHA256 a54dcf2ca34c730c2f1b58172609fd6807bd2f52cf2a37fc493a00677a930a9c and test SHA256 c5c4ea1f52c8d894e47861aa7a5ded70df2d9c0ae90f5972e32f43ae461212bf."
         }
       ]
     },
@@ -90,8 +90,8 @@
           "kind": "build",
           "command": "With TEMP/TMP/TMPDIR and all outputs inside the marked run, execute dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <runPath>/artifacts -p:UseSharedCompilation=false. Inspect the scoped task diff, run git diff --check and scripts/requirements/Validate-RequirementContract.ps1 in WorkingTree and Staged modes as applicable, obtain independent semantic review, and verify scoped master commit/push plus protected temporary-run cleanup.",
           "expected": "Service build and required gates pass; the exact approved task diff has no financial/scheduling/operational expansion, no unrelated committed edits and no open review finding. Cleanup succeeds. Local delivery is not described as verified deployed recalculation.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Explicit final service build passed with0 warnings/0 errors. Independent reviewer agent:/root/historical_live_hash_reviewer compared all3 original prompts, full contract/digest, approval checkpoint94c0b425, scoped source/test/README diff, before/after TRX and build output, independently recalculated fixture amounts and returned PASS with no findings. Source correction is limited to the Live loader; validator remains unchanged. Preserved and excluded the other task's LossDiff README hunk and source/tests. Protected cleanup stopped only isolated PostgreSQL at127.0.0.1:52124, removed exact marked run manual-53bb77e0e9364f228bf89864ca998143 (2391 files,183747816 bytes), and independently confirmed run and listener absent. No Production mutation, service command or deployment. Contract completion records verified local implementation; strict WorkingTree/Staged gates and scoped Git delivery are finalization steps, with their actual outcome recorded in exempt context/history after execution. Shared index access is coordinated with the concurrent task."
         }
       ]
     }
@@ -106,8 +106,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/historical_live_hash_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

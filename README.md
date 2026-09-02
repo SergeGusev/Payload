@@ -1254,6 +1254,11 @@ revalidate donor selection. Live prefers already-associated `VenueReported`
 evidence and does not add an on-chain fee matcher. Its historical balance
 correction is audited and does not toggle Live or modify loss counters.
 
+Historical Live candidates use the same canonical component-graph hash as the
+accounting validator, including when the component list is empty. Associated
+`VenueReported` evidence retains its separate payload hash; this compatibility
+fix does not change fees, the historical cutoff, or ordinary new-bet accounting.
+
 With `HistoricalGrossNetParity:Enabled=true`, the service does the work itself
 in bounded background cycles. It selects the unfinished strategy with the
 greatest current Dashboard Gross and keeps that strategy active through its

@@ -3214,7 +3214,8 @@ ORDER BY live_order.strategy_id, live_order.settled_at_utc, lower(live_order.id:
             var componentPayload = venuePayload ?? "{}";
             var targetHash = HashHistoricalGrossNetParityPayload(canonicalPayload);
             var lineageHash = HashHistoricalGrossNetParityPayload(lineagePayload);
-            var componentHash = HashHistoricalGrossNetParityPayload(componentPayload);
+            IReadOnlyList<HistoricalGrossNetParityComponentAllocationV1> provedComponents = [];
+            var componentHash = HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(provedComponents);
             var bindingHash = HistoricalGrossNetParityBindingV1.Compute(
                 targetHash,
                 lineageHash,
@@ -3233,7 +3234,7 @@ ORDER BY live_order.strategy_id, live_order.settled_at_utc, lower(live_order.id:
             if (venueAuthoritative)
             {
                 exactEvidence.Add(new HistoricalGrossNetParityEvidenceReferenceV1(
-                    "LiveVenueReported", venueVersion!, componentHash,
+                    "LiveVenueReported", venueVersion!, HashHistoricalGrossNetParityPayload(componentPayload),
                     HistoricalGrossNetParitySourceKind.LiveOrder, id));
             }
             else if (localAuthoritative)
@@ -3283,7 +3284,7 @@ ORDER BY live_order.strategy_id, live_order.settled_at_utc, lower(live_order.id:
                 feeTakerOnly, feeCalculatedAt, net, balanceApplied, ownership,
                 targetHash, lineageHash, componentHash, eligibility,
                 venueAuthoritative || localAuthoritative ? fee : null,
-                exactEvidence, null, null, 0m, [], baselineKind,
+                exactEvidence, null, null, 0m, provedComponents, baselineKind,
                 reader.IsDBNull(34) ? null : reader.GetDecimal(34),
                 reader.IsDBNull(35) ? null : reader.GetDecimal(35),
                 canonicalPayload, lineagePayload, componentPayload, bindingHash,
