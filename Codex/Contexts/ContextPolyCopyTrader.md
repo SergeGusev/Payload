@@ -1,6 +1,6 @@
 ## Active Update 2026-09-02 Reference Price 48h Retention Implementation
 Goal: Implement exactly approved48h standalone BTC/ETH/SOL retention in the existing service, for user deployment from master.
-Status: Source implementation and protected cleanup complete; Git delivery in finalization; user deployment pending
+Status: Completed source implementation, verification, protected cleanup and master delivery; user deployment pending
 Done:
 - User supplied `APPROVE RC-20260902-reference-price-retention-48h sha256:9b053d3d3d5c944d2bb6c302baa04f2f2364c9a5838b39b7c63d7eabc59007c8`; recomputed digest matches. Only lifecycle approval fields changed; semantic payload unchanged.
 - Approval-parent commit829c639f predates all product edits. Implemented only eight governed paths: new CryptoReferencePriceRetentionWorker, new repository partial, IAppRepository method, Program registration, TestAppRepository callback, two focused test files and README.
@@ -8,9 +8,10 @@ Done:
 - Final service build passed0 errors/120 warnings outside new files (initial full build121 warnings); final tests22/22 passed,0 skipped/failed:6 worker,7 real-PostgreSQL retention,5 average and4 extrema. Tests use a new isolated native PostgreSQL17.5 on127.0.0.1:52110, named pct_codex_skip_v2_20260902145000_b7a9f594. Product18.3 was not used for integration writes. Initial test port55492 was in a Windows-reserved range, confirmed by netsh; only test listener port changed.
 - Independent reviewer agent:/root/reference_price_retention_review compared original words, unchanged approved digest, approval parent, all8 paths including README and final build/TRX:PASS, no findings. SQL-only Product EXPLAIN14:57:19Z (without ANALYZE, transaction_read_only=on) confirmed bounded composite-index selection and primary-key nested-loop deletion lookup; no DELETE executed.
 - Required compact evidence is in today's history. Test table had0 residual rows and0 user triggers; isolated PostgreSQL stopped successfully14:58:51Z. Initial protected cleanup hit a loaded analyzer DLL; loaded modules and own build PID40404 -> node80472 -> compiler7352 independently proved ownership. Gracefully shut down only VB/C# compiler, then protected cleanup removed the remaining12 files/884585 bytes and independent Test-Path confirmed entire marked run absent.16 unrelated invalid-marker stale runs and unrelated user MSBuild processes were not touched.
-Next: Complete final gates/commit/push, then user deploys ordinary service from master. A later read-only runtime check must establish actual retention startup/progress before claiming Product history cleanup.
+- Completed Contract/WorkingTree/Staged/Range validation with unchanged digest. Product commit b651dc53c3d03ab814618bc4fa94f67c5f2d7b38 is pushed to origin/master; independent ls-remote matches and local divergence0/0. Completed contract stays immutable; this final bookkeeping records the actual delivery outcome.
+Next: User deploys ordinary service from master. A later read-only runtime check must establish actual retention startup/progress before claiming Product history cleanup.
 Notes: No manual user-database deletion, deployment, user-service restart/stop, Product schema/index or trading change. Source completion is separate from rollout and physical disk reclamation. Current Product standalone old48h candidates1676382 at14:45:13Z; no source test proves deployed retention behavior.
-Blockers: None for source implementation; Git finalization pending, deployment remains user's step.
+Blockers: None for the completed source task; deployment remains user's step.
 
 ## Active Update 2026-09-02 Reference Price 48h Retention Draft
 Goal: Prepare the confirmed 48-hour automatic retention of standalone BTC/ETH/SOL reference prices for exact requirement approval.
