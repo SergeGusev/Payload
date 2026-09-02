@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260902-paper-live-shadow-settlement-idempotency",
+  "title": "Stop redundant Paper Live-shadow reconciliation after final fill synchronization",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Проверь сервер, ставки, логи и канселы живых ставок"
+    },
+    {
+      "source": "user",
+      "text": "Ок, исправь, что нужно"
+    }
+  ],
+  "scope": {
+    "goal": "Remove the verified repeated Paper/Live-shadow settlement synchronization errors without changing order placement, fill accounting, settlement accounting, or Live cancellation behavior.",
+    "inScope": [
+      "In LiveTradingProcessor, keep the existing Paper/Live shape validation and recognize a Paper shadow whose execution_source is already paper_live_shadow_actual_fill as already synchronized for a positive terminal Live fill.",
+      "Do not call PaperLiveShadowFillReconciler again for that already-synchronized final fill; continue the existing decision-link update and independent Live settlement path.",
+      "Update focused unit coverage so an already-synchronized and already-settled Paper shadow produces no PaperLiveShadowSettlementSync Error, performs no second fill reconciliation, leaves Paper fill/position accounting unchanged, and still applies the Live settlement exactly once.",
+      "Run focused Live-trading tests and a Release solution build using only the marked D:/CodexTemp run for disposable outputs."
+    ],
+    "outOfScope": [
+      "Changing the frozen execution intent, Live/Paper order side, size, price, notional, order type, time-in-force, fill inference, fees, PnL, balance settlement, lost-counter behavior, expiry, cancellation, or risk rules.",
+      "Suppressing shape mismatches, missing Paper shadows, unsynchronized fills, copied-leader exit conflicts, or any other genuine reconciliation failure.",
+      "Retrying, bypassing, or otherwise changing handling of the Polymarket CLOB response HTTP 503: trading is disabled; no local request-construction or dispatch defect was established for those responses.",
+      "Changing Binance/OKX/Polymarket market-data behavior, PostgreSQL deadlock handling, queue scheduling, schema, migrations, database rows, strategies, orders, configuration, service state, deployment, or Production."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "The shared Paper/Live-shadow synchronization path for Live orders whose linked Paper order is already durably marked paper_live_shadow_actual_fill; runtime evidence is the two successful post-deploy Live orders observed on 2026-09-01/02 UTC.",
+    "firstVerification": "Trace the exact Product error rows through LiveTradingProcessor.TrySyncPaperShadowBeforeLiveSettlementAsync, SyncPaperShadowAsync, PaperLiveShadowFillReconciler, and the repository settled-position guard before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Eliminate redundant reconciliation errors for Paper shadows that have already copied the final Live fill, while preserving all genuine reconciliation checks and Live settlement behavior.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "исправь, что нужно",
+      "acceptanceCriteria": [
+        "SyncPaperShadowAsync still validates the linked Paper and Live order shape before deciding that synchronization is already complete.",
+        "When the Live order has a positive filled size and the linked Paper order execution_source is paper_live_shadow_actual_fill, PaperLiveShadowFillReconciler is not called again.",
+        "The already-synchronized path still updates the existing Paper/Live-shadow decision links and does not alter the Paper order, fill, position, or settlement rows.",
+        "A matched Live order whose Paper shadow was already synchronized and settled still receives its Live balance settlement exactly once and produces no PaperLiveShadowSettlementSync Error event.",
+        "Paper shadows not durably marked paper_live_shadow_actual_fill retain the existing reconciliation behavior and existing genuine failures remain visible."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs",
+        "tests/PolyCopyTrader.Tests/LiveTradingGatingTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --configuration Release --filter FullyQualifiedName~LiveTradingGatingTests using --artifacts-path and --results-directory below the active marked D:/CodexTemp run",
+          "expected": "All focused LiveTradingGatingTests pass, including the already-synchronized settled-shadow regression and existing reconciliation/shape/cancellation coverage.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln --configuration Release using --artifacts-path below the active marked D:/CodexTemp run",
+          "expected": "The Release solution build completes with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Inspect the final diff, run git diff --check, run requirement-contract WorkingTree and Staged validation, and obtain independent semantic review against both verbatim prompts, the approved contract, implementation, and verification evidence.",
+          "expected": "Only the approved processor/test behavior changes; mechanical gates pass and the independent reviewer returns PASS with no findings.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260902-paper-live-shadow-settlement-idempotency sha256:b02dbb3d0aa848cbe36b0cc2686df59ca0ec7862be1bd99b2145287bd1a3bba7",
+    "semanticDigest": "sha256:b02dbb3d0aa848cbe36b0cc2686df59ca0ec7862be1bd99b2145287bd1a3bba7"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}

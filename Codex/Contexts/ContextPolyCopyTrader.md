@@ -1,3 +1,16 @@
+## Active Update 2026-09-02 Paper Live Shadow Settlement Idempotency
+Goal: Remove the verified repeated Paper/Live-shadow settlement synchronization errors without changing trading or accounting behavior.
+Status: Blocked pending exact requirement-contract approval
+Done:
+- Traced the 89 Product `PaperLiveShadowSettlementSync` errors through `LiveTradingProcessor.TrySyncPaperShadowBeforeLiveSettlementAsync`, `SyncPaperShadowAsync`, `PaperLiveShadowFillReconciler`, and the PostgreSQL settled-position guard.
+- Verified the linked Paper orders were already durably marked `paper_live_shadow_actual_fill`; nevertheless, each Live settlement poll invoked fill reconciliation again, and the repository correctly refused to mutate an already-settled Paper position.
+- Verified the narrow correction: preserve shape validation and decision-link updates, but do not invoke the reconciler again when a positive Live fill already has the final `paper_live_shadow_actual_fill` marker. This leaves initial/partial reconciliation and all genuine failures unchanged.
+- Inspected the three `HTTP 503: trading is disabled` responses. The current client correctly preserved the explicit CLOB response and rejected/cancelled the Paper shadow; no local request-construction or dispatch defect was established, so retry/bypass behavior is excluded from this correction.
+- Drafted and mechanically validated `RC-20260902-paper-live-shadow-settlement-idempotency` with semantic digest `sha256:b02dbb3d0aa848cbe36b0cc2686df59ca0ec7862be1bd99b2145287bd1a3bba7`.
+Next: Obtain the user's exact approval, commit the approved contract as the required parent checkpoint, then implement and verify the two-file correction.
+Notes: Only read-only source/runtime inspection, the draft contract, and required context/history bookkeeping were performed. No product source, Product database, service, strategy, order, configuration, or deployment was changed.
+Blockers: Exact approval required: `APPROVE RC-20260902-paper-live-shadow-settlement-idempotency sha256:b02dbb3d0aa848cbe36b0cc2686df59ca0ec7862be1bd99b2145287bd1a3bba7`.
+
 ## Active Update 2026-09-02 Dashboard Live Price Explanation
 Goal: Explain why Dashboard Live `Price` is always `0.99` and identify the actual execution price.
 Status: Completed
