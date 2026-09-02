@@ -1,3 +1,13 @@
+## Active Update 2026-09-02 Reference Price 48h Retention Implementation
+Goal: Implement exactly approved48h standalone BTC/ETH/SOL retention in the existing service, for user deployment from master.
+Status: In Progress; exact approval verified, approval-parent checkpoint being committed before source edits
+Done:
+- User supplied `APPROVE RC-20260902-reference-price-retention-48h sha256:9b053d3d3d5c944d2bb6c302baa04f2f2364c9a5838b39b7c63d7eabc59007c8`; recomputed digest matches. Only lifecycle approval fields changed; semantic payload unchanged.
+- Confirmed master/origin/master0/0 at5bc96572 and no unrelated working-tree edits. Prepared marked temporary session `D:/CodexTemp/runs/manual-b7a9f594c5524265baa67637ba3798e7` for isolated native PostgreSQL tests/builds, with required protected cleanup at end.16 unrelated invalid/missing-marker stale runs were not removed.
+Next: Commit approval, repeat scoped Product read-only preview, implement exact listed files, build/focused tests, independent semantic review, then commit/push master and protected-clean scratch.
+Notes: No manual user-database cleanup, deployment, service restart/stop, schema/index or trading changes are authorized. Product mutation remains out of scope; automatic deletion begins only when user deploys updated service. Estimate30-45min for local implementation/verification.
+Blockers: None; evidence and implementation verification pending.
+
 ## Active Update 2026-09-02 Reference Price 48h Retention Draft
 Goal: Prepare the confirmed 48-hour automatic retention of standalone BTC/ETH/SOL reference prices for exact requirement approval.
 Status: Awaiting digest-bound approval; no product implementation or database mutation

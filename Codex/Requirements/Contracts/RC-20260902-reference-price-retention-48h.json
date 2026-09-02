@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260902-reference-price-retention-48h",
+  "title": "Автоматически хранить только последние 48 часов отдельных курсов BTC/ETH/SOL",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Продолжай. Нам нужно быть уверенным, что мы не храним лишние данные. Например, курсы валют - они же нам не нужны старые, правильно?"
+    },
+    {
+      "source": "user",
+      "text": "Подтверждаю"
+    }
+  ],
+  "scope": {
+    "goal": "Реализовать подтверждённое предложение: хранить последние 48 часов отдельной истории курсов BTC/ETH/SOL и автоматически удалять более старые записи. Подтверждение относится к вопросу: «Подтверждаешь хранение курсов за последние 48 часов с автоматической очисткой остального?»; точная реализация ниже требует отдельного APPROVE этого digest.",
+    "inScope": [
+      "Только public.crypto_reference_price_ticks, точные asset_symbol BTC, ETH, SOL, возраст по sampled_at_utc. Product preview: 192.168.0.101:5432/polycopytrader, OID 31746336; изменение приложения будет работать с этой таблицей в базе, настроенной для соответствующего экземпляра сервиса, включая локальный после его обновления.",
+      "Небольшой C# BackgroundService внутри существующего PolyCopyTrader.Service, узкий метод PostgreSQL-репозитория, регистрация в текущем Program.cs, целевые тесты и краткое описание хранения в README.md.",
+      "Фиксированные 48 часов хранения, автоматическая очистка после выкладки пользователем. Тот же механизм постепенно убирает существующий старый объём и затем продолжает ограничивать историю. Он не зависит от включения записи новых reference ticks; другие настройки записи и расчётных окон не меняются.",
+      "Одна порция не более 1000 строк одного точного актива, отдельная короткая транзакция, последовательное чередование BTC/ETH/SOL и пауза не менее 10 секунд между порциями. Существующий индекс (asset_symbol, sampled_at_utc) используется без изменения схемы.",
+      "Локальная сборка, unit-тесты и PostgreSQL integration-тесты только в одноразовом изолированном native PostgreSQL под отмеченным D:/CodexTemp/runs, без Docker и без подключения тестов к пользовательским базам. Изменения и approval lifecycle остаются в master, из которого пользователь выкладывает сервис."
+    ],
+    "outOfScope": [
+      "btc_up_down_5m_odds_ticks, crypto_up_down_5m_odds_ticks, btc_usd_reference_correlation_samples, order_book_snapshots и любые другие таблицы; ордера, сделки, стратегии, результаты, история PnL, Skipped и рыночные тики.",
+      "Изменение расчётных окон, алгоритмов цены/средних/экстремумов, торгового поведения, live-ордеров, Dashboard или любых не относящихся к retention параметров.",
+      "Ручная очистка Product или локальной пользовательской базы в ходе реализации; выкладка, остановка или рестарт пользовательского сервиса агентом; серверные DDL, миграции, новые индексы, VACUUM FULL, REINDEX, резервная копия или архивирование.",
+      "Новая внешняя программа, sidecar, Docker, универсальная система очистки, отдельные таблицы прогресса, расширение аудита на другие данные или обещание немедленного уменьшения файлов PostgreSQL на диске."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Для каждой порции T = DateTimeOffset.UtcNow в UTC; удаляются только asset_symbol IN ('BTC','ETH','SOL') AND sampled_at_utc < T - 48 hours. Ровно на границе, более новые и будущие записи сохраняются. Из-за порционной обработки старые строки могут временно оставаться до очереди очистки.",
+    "firstVerification": "Перед редактированием проверить approval-parent commit, текущий worker/repository/регистрацию и отсутствие конфликтующих изменений. Read-only preview 2026-09-02T14:35:48.823142Z: BTC 570528, ETH 561337, SOL 544346 старых строк, независимо подтверждено 1676211 всего. LIMIT 1000 по BTC прочитал 1001 запись существующим ix_crypto_reference_price_ticks_asset_sampled, 5.487 ms; это время SELECT, не измерение DELETE. Текущий сервис Running/Live, last_error NULL, waiting locks 0; ранее независимо подтверждено загрузкой сервиса окно 24 часа. После approval повторно проверить эти предпосылки read-only, без Production DML."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Реализовать подтверждённые 48 часов хранения только для отдельной истории курсов BTC/ETH/SOL без изменения её текущих потребителей и остальных данных.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "Подтверждаю",
+      "acceptanceCriteria": [
+        "Новый CryptoReferencePriceRetentionWorker зарегистрирован в PolyCopyTrader.Service. Он работает независимо от сборщика котировок, использует точный закрытый список BTC/ETH/SOL и cutoff nowUtc.ToUniversalTime().AddHours(-48). Пользовательская выкладка обновлённого сервиса включает эту очистку без отдельной команды.",
+        "StartupLookbackHours, WindowMinutes, WriteIntervalSeconds, существующие caches, загрузка последних 24 часов и торговые расчёты не меняются. 48 часов — фиксированная политика хранения, а не автоматически расширяемый срок при изменении расчётных настроек.",
+        "Для T=2026-09-02T12:00:00Z строка BTC от 2026-08-31T11:59:59.999999Z допускается к удалению; строка ровно от 2026-08-31T12:00:00Z и более новые сохраняются. То же для ETH/SOL; любой иной asset_symbol, включая похожие написания, не удаляется.",
+        "Focused regression tests средних и экстремумов проходят; отсутствуют изменения в остальных рыночных историях, ордерах и стратегиях."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/ExternalPrices/CryptoReferencePriceRetentionWorker.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.CryptoReferencePriceRetention.cs",
+        "tests/PolyCopyTrader.Tests/CryptoReferencePriceRetentionWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/CryptoReferencePriceRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~CryptoReferencePriceRetentionWorkerTests|FullyQualifiedName~CryptoReferencePriceAverageCacheTests|FullyQualifiedName~CryptoReferencePriceExtremaCacheTests\"",
+          "expected": "Worker tests prove exact assets, 48h UTC cutoff, sequential scheduling and preservation of existing consumers; average/extrema regressions pass. No missing/skipped required cases.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Удалять накопленные старые курсы и затем поддерживать срок хранения небольшими автоматически повторяющимися порциями внутри сервиса.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "Подтверждаю",
+      "acceptanceCriteria": [
+        "Одна порция выбирает не более 1000 точных UUID старых записей одного разрешённого актива в порядке sampled_at_utc, id. Выборка и DELETE выполняются атомарно в одной ограниченной транзакции; DELETE ограничен выбранными UUID и повторно проверяет актив/возраст. FOR UPDATE SKIP LOCKED пропускает занятые строки, не ожидая их разблокировки.",
+        "Транзакционные ограничения statement_timeout не более 5s и lock_timeout не более 250ms; отмена и ошибки откатывают текущую порцию. Нет одной транзакции на весь накопленный объём и нет явной широкой блокировки таблицы. Уже завершённые порции сохраняются.",
+        "Обработчик чередует BTC, ETH, SOL, запускает только одну порцию за раз и выдерживает минимум 10 секунд до следующей. При ошибке не запускает немедленно следующую порцию: пишет ошибку в существующий ILogger и выдерживает минимум 60 секунд. Отмена останавливает обработчик; сборщик новых цен не вызывается и не задерживается этим worker непосредственно.",
+        "Идемпотентный прогресс — уже отсутствующие после commit UUID в самой таблице; после рестарта вновь выбираются оставшиеся старые записи. Для аудита журналируются точный актив, UTC cutoff, фактическое число удалённых строк и длительность порции. Новая таблица журнала/прогресса или запись retention-событий в api_errors не добавляется.",
+        "Read-only preview даёт 1676211 кандидатов и 1678 непустых порций при размере 1000 по активам. При равномерном чередовании первоначальный объём требует до 1713 вызовов, примерно 4ч46м пауз плюс время SQL, новые стареющие строки и возможные ошибки; это оценка, не обещание срока. Отдельный ускоренный ручной DELETE не выполняется.",
+        "Integration-тесты на изолированном локальном PostgreSQL подтверждают лимит, точный набор удалённых UUID, сохранность границы/новых/будущих/нецелевых строк, повторный вызов, продолжение после частичной очистки и пропуск заблокированной строки. Сравниваются исходные и конечные строки, а не только возвращённое число."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/ExternalPrices/CryptoReferencePriceRetentionWorker.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.CryptoReferencePriceRetention.cs",
+        "tests/PolyCopyTrader.Tests/CryptoReferencePriceRetentionWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/CryptoReferencePriceRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "With POLYCOPYTRADER_TEST_POSTGRES_CONNECTION pinned to a new disposable native PostgreSQL cluster under <marked-run>/db and verified not to be a user database: dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter FullyQualifiedName~CryptoReferencePriceRetentionPostgresIntegrationTests",
+          "expected": "All focused real-PostgreSQL cases pass without skipping; exact pre/post UUID sets and protected rows match, batch cap and lock skipping verified. Test cluster stopped and marked artifacts protected-cleaned; no Product mutation.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Подготовить проверенное изменение существующего сервиса для обычной выкладки пользователем из master, без отдельной программы очистки и без изменения других данных.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "Продолжай.",
+      "acceptanceCriteria": [
+        "Изменены только перечисленные пути. README кратко описывает 48h, точную таблицу/активы, размер и интервал порций, запуск через обычную выкладку, целевые команды проверки, постепенную очистку старого объёма и отсутствие обещания немедленного возврата места ОС.",
+        "Сборка сервиса и требуемые тесты проходят. Независимый reviewer сравнил буквальные запросы, approved contract, actual diff и доказательства; verdict pass без открытых замечаний. Approval commit предшествует реализации; contract validators проходят.",
+        "Изменения проверены, закоммичены и отправлены в master. Completion означает готовность исходников к выкладке, не доказанную работу нового retention на Product. Агент не выкладывает, не перезапускает сервис и не выполняет ручной Product DELETE."
+      ],
+      "implementationPaths": [
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <marked-run>/artifacts",
+          "expected": "Service build succeeds without errors; generated output remains under the marked temporary run.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Independent semantic review; git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; inspect master/upstream status after commit and push.",
+          "expected": "No out-of-scope diff or open semantic finding; validators pass with approval parent, completed verification and independent review; intended commits reach master/upstream, Product rollout is explicitly pending user deployment.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260902-reference-price-retention-48h sha256:9b053d3d3d5c944d2bb6c302baa04f2f2364c9a5838b39b7c63d7eabc59007c8",
+    "semanticDigest": "sha256:9b053d3d3d5c944d2bb6c302baa04f2f2364c9a5838b39b7c63d7eabc59007c8"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reference_price_retention_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
