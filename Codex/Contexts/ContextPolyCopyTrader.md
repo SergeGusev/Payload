@@ -1,3 +1,18 @@
+## Active Update 2026-09-02 Open-Position Index Rebuild Execution
+Goal: Rebuild the three approved Product indexes without history deletion or service interruption.
+Status: Completed database operation; independently reviewed and temporary artifacts removed
+Done:
+- User confirmed the missing server C: minimum free-space condition: `Подтверждаю, есть там 5Gb`. Approval-parent checkpoint is `5144e74b`; the approved semantic digest is unchanged.
+- Fresh catalog/health preview matched the exact allowlist and definitions. A transient waiting lock cleared before the first command; no unrelated backend was cancelled.
+- `REINDEX INDEX CONCURRENTLY public.ix_paper_positions_open_updated_cover;` succeeded at 13:32:07Z. Postcheck OID/filenode is 50554578 (formerly 39352026), bytes 1654784 (formerly 619012096), definition and validity unchanged. Parent and all other indexes unchanged; Running/Live heartbeat advanced with NULL error and zero waiting locks.
+- Condition index succeeded at 13:33:41Z (39708523->50554646). Another transient service transaction wait blocked starting target 3 until a fresh clean 13:35:28Z check. Asset index succeeded at 13:35:43Z (39708524->50554917). No command failed/retried and no unrelated backend was cancelled.
+- Final single-query size snapshot `2026-09-02T13:36:17.983339Z`: cover 13713408, condition 10592256, asset 2383872 bytes; total 26689536 versus 2276540416 before, reclaiming 2249850880 bytes (2.24985088 decimal GB). SQL totals independently matched PowerShell and JavaScript sums. Earlier per-index post-sizes are not summed because writes continued.
+- All eight index definitions/states and parent identity matched baseline; only the exact three rebuilt physical identities changed. Five non-target indexes were unchanged. Final 13:36:43Z heartbeat advanced, Running/Live build/start unchanged, NULL last_error, fresh Filled Paper orders, zero waiting locks/build/vacuum/remnants/task backends.
+- Independent reviewer `agent:/root/open_position_index_review` compared the original requests, approved scope, actual statements, raw pre/post evidence, current diff and independent arithmetic: PASS, no open operational/semantic findings. Protected cleanup removed the exact marked run (19 files, 67073 bytes); subsequent path check confirmed absence.
+Next: None for these three indexes; do not rebuild them again from this record.
+Notes: Exact per-index SQL, identities, bytes, definitions, and health checks are recorded in the approved contract. No source/deployment/history/trading/service-state change. This is one-time physical reclamation, not a change to ongoing persistence. The validator's metadata-only path requires status approved (completed is unsupported without a governed product diff); operational results are recorded in VER evidence without adding fake product edits or changing the gate.
+Blockers: None for the completed database operation. Metadata limitation: formal completed contract lifecycle is unsupported for this operational-only change set; the record stays approved with passing verification/review.
+
 ## Active Update 2026-09-02 Open-Position Index Rebuild Approval
 Goal: Record the user's exact approval for the three-index Product maintenance operation without bypassing its capacity gate.
 Status: Blocked on server C: free-space evidence; approval received, no rebuild started

@@ -91,3 +91,35 @@ APPROVE RC-20260902-reindex-open-paper-position-indexes sha256:a9fa7f4e3946530fa
 
 Result:
 Recomputed the draft semantic digest and matched the user's exact approval. Recorded the approval verbatim and transitioned the contract to approved without changing its semantic scope, allowlist, execution limits, or acceptance criteria. Only approval/context/history bookkeeping was performed. Server C: capacity remains unknown: the user has not yet supplied the requested server-local disk-query output, and the previous access-denied remote probes were not retried or bypassed. The approved minimum of 5000000000 free bytes therefore still blocks execution. No Product connection, index rebuild, SQL mutation, service/trading action, source/deployment change, backup, or temporary diagnostic artifact occurred. Runtime evidence and independent review remain pending until execution; no reindex success or space reclamation is claimed.
+
+## 2026-09-02T13:36:43.2501860Z
+Request:
+Подтверждаю, есть там 5Gb
+
+Result:
+Accepted the user's statement as the server C: minimum-capacity evidence explicitly permitted by the unchanged approved contract; it is not an exact remotely measured free-byte reading or a new requirement. Verified approval-parent `5144e74b` and exact approved digest before work. Read-only preflight at `13:30:58.575132Z` confirmed Product `192.168.0.101:5432/polycopytrader`, PostgreSQL18.3, server C: data directory, exact original target identities/definitions and 2276540416 bytes, parent16826, no target constraint owner or unexpected dependency. Initial open count381. A transient wait cleared before first execution; no unrelated backend was cancelled.
+
+Executed exactly these commands sequentially, each in its own autocommit connection, with session-only lock_timeout=2s, statement_timeout=10min, maintenance_work_mem=64MB and max_parallel_maintenance_workers=0. Every command returned REINDEX and exit0; no automatic retry, DROP, outer transaction, or additional maintenance was performed:
+
+1. `REINDEX INDEX CONCURRENTLY public.ix_paper_positions_open_updated_cover;` PID14392 at13:32:02.155474Z, client completion13:32:07.0904700Z; OID/filenode39352026->50554578. First postcheck1654784 bytes versus619012096. It finished before the first tool yield, so no in-flight snapshot was available; fresh pre/post checks passed. Its verified success was saved in the contract before command2.
+2. `REINDEX INDEX CONCURRENTLY public.ix_paper_positions_open_condition_lookup;` PID12072 at13:33:38.258071Z, completion13:33:41.4588531Z; OID/filenode39708523->50554646. In-flight scan158490/164994 blocks, own ccnew only, healthy service/locks0. First postcheck4653056 bytes versus806313984. One service transactionid wait at13:34:32Z blocked proceeding; read-only13:35:28Z recheck proved it cleared. Both successful targets were recorded before command3.
+3. `REINDEX INDEX CONCURRENTLY public.ix_paper_positions_open_asset_lookup;` PID9576 at13:35:39.621172Z, completion13:35:43.8593539Z; OID/filenode39708524->50554917. In-flight scan73475/164994 blocks, own ccnew only, healthy service/locks0. All final postchecks passed.
+
+All three exact unchanged CREATE INDEX definitions are preserved in contract VER-002. A local independent comparison matched all eight index definitions, B-tree/unique/primary/exclusion/tablespace/valid/ready/live states. Only three approved physical identities changed; parent OID/filenode16826 and five other index OIDs46377276,33944846,46219298,133759,133988 remained unchanged. No constraint owner, incoming dependency, failed index remnant, active build, or leftover task backend remained.
+
+Final materialized size snapshot at `2026-09-02T13:36:17.983339Z` (bytes):
+
+| Exact index | Before | Final | Reclaimed |
+| --- | ---: | ---: | ---: |
+| ix_paper_positions_open_updated_cover | 619012096 | 13713408 | 605298688 |
+| ix_paper_positions_open_condition_lookup | 806313984 | 10592256 | 795721728 |
+| ix_paper_positions_open_asset_lookup | 851214336 | 2383872 | 848830464 |
+| Total | 2276540416 | 26689536 | 2249850880 |
+
+Reproduction: `WITH sizes AS MATERIALIZED (SELECT c.relname AS name,c.oid,c.relfilenode,pg_relation_size(c.oid) AS bytes FROM pg_class c WHERE c.oid IN ('public.ix_paper_positions_open_updated_cover'::regclass,'public.ix_paper_positions_open_condition_lookup'::regclass,'public.ix_paper_positions_open_asset_lookup'::regclass)) SELECT jsonb_agg(sizes ORDER BY name),sum(bytes),2276540416-sum(bytes) FROM sizes;` Independent PowerShell Measure-Object and JavaScript raw-row sums matched SQL exactly. Writes continued, so final savings use this common snapshot rather than summing earlier post-rebuild readings. Overall database allocation was113929049791 bytes at13:30:58Z and111681066687 at13:36:15Z; its net2247983104-byte decrease is not identical to isolated target savings because the database remained active.
+
+Final13:36:43Z service was Running/Live on unchanged build700c21d1 and start06:47:18.052705Z, heartbeat advanced13:36:22.538780Z (20.71s old), last_errorNULL, Filled Paper orders advanced13:36:30.355108Z, zero waiting locks/parent vacuum/builds/long or prepared transactions/remnants. No history/user DML, strategy/trading/service-state change, source edit, deployment, backup, extension, or Skipped redesign occurred. This is one-time physical reclamation; ongoing persistence rules did not change. Independent review and protected scratch cleanup follow. Validator inspection proves its metadata-only branch accepts approved records but rejects completed without a governed product diff; operational success is recorded in VER evidence while preserving approved status, without fabricating a product edit or broadening the task to gate changes.
+
+Final independent review by `agent:/root/open_position_index_review`: PASS with no open operational/semantic findings after comparing original prompts, exact approval/capacity evidence, actual statements, all raw pre/during/post observations, durable diff and independent savings arithmetic. The reviewer confirmed no scratch evidence was still needed. Protected cleanup then removed exact marked run `manual-ed92d2caab5c4c52a13f093e499fd1cc`, 19 files/67073 bytes with zero referencing processes; a separate Test-Path confirmed absence. No source build/tests were applicable; production verification used exact catalog/definition comparisons, statement outcomes, fresh heartbeat/Paper activity/lock checks and independent sums. All VER items and independent review are now passed; contract metadata remains approved for the explicitly documented validator limitation, not because database work is pending.
+
+An unflagged Contract-mode final check stopped with `CONTRACT_STATUS` because that mode requires completed; no Git commit/push or Product action followed that failed check. The supported Contract-mode check uses `-AllowPendingEvidence` to accept approved metadata even though all actual VER results are passed; WorkingTree/Staged separately validate the metadata-only change set. No validator or product source was changed to bypass the limitation.
