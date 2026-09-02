@@ -1,0 +1,348 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260902-eth-lossdiff-positive-progress-34",
+  "title": "34 ETH Up4/Up8 LossDiff Positive Progress children; capped sizing; zero rollout; history excluded",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Сделай `LossDiff Positive`  Progress стратегии, которые мы моделировали, для обоих стратегий"
+    },
+    {
+      "source": "user",
+      "text": "Все 34 варианта"
+    },
+    {
+      "source": "user",
+      "text": "Начинаем с нуля, потом восстановим историю отдельной командой"
+    },
+    {
+      "source": "user",
+      "text": "Смоделируй Progress стратегию для Loss Diff Positive для ETH Up or Down 5m Up 4 bps Reference Average Premarket, при которой размер ставки умножается на текущий Loss Diff.  Учитывай именно Net Pnl, то есть с комиссией Polymarket "
+    },
+    {
+      "source": "user",
+      "text": "Теперь для той же стратегии повтори эти же рассчёты для N случаев, где N от 1 до 15 (для 16 у нас уже есть) и N - это ограничитель максимального коэффициента. То есть при N = 5 и LossDiff = 12, умножаем всё равно на 5"
+    },
+    {
+      "source": "user",
+      "text": "Теперь повтори это для второй стратегии, только N до 18"
+    },
+    {
+      "source": "user",
+      "text": "Да, имею в виду её"
+    }
+  ],
+  "scope": {
+    "goal": "Подготовить код и новую миграцию ровно 34 LossDiff Positive Progress стратегий: Up4 cap 1..16 и Up8 cap 1..18, с нулевым стартом после выкладки; создание и восстановление исторических сделок не выполнять.",
+    "inScope": [
+      "Exact parent Up4: b7c50005-0000-4000-8137-000000000104 / eth_up_down_5m_up_bps_4_fak_premarket / ETH Up or Down 5m Up 4 bps Reference Average Premarket.",
+      "Exact parent Up8: b7c50005-0000-4000-8137-000000000108 / eth_up_down_5m_up_bps_8_fak_premarket / ETH Up or Down 5m Up 8 bps Reference Average Premarket.",
+      "Only the 34 exact new child identities enumerated in REQ-001; native C# catalog, existing child dispatch, bounded state reconciliation, new metadata seed migration, focused tests, exact-family parity documentation and README.",
+      "Implementation after approval is estimated at 1–2 hours including focused tests and independent semantic review. No single resource-intensive operation exceeding 15 minutes is preauthorized. Build/test outputs and any disposable local test database must remain inside a validated, marked D:/CodexTemp/runs session; use codex-temp-lifecycle and set TEMP/TMP/TMPDIR. $runRoot in verification commands is that validated session root, not a user or Production directory."
+    ],
+    "outOfScope": [
+      "Changing either parent, the four existing fixed LossDiff children, any unrelated strategy, historical data, global risk/fee/ROI rules, Dashboard behavior, or existing migration checksums.",
+      "Production or user-database writes during this task; applying migrations to Production; deployment; service start/stop/restart; placing/cancelling Live orders; enabling Live; balance funding; automation.",
+      "History backfill, history import, historical counter seeding, implementing a backfill command, or re-running simulations/charts. These require a later separate command and approval.",
+      "Generalized migration/batching frameworks, new permanent tables/indexes, backups, sidecars, Python/Node/TypeScript, repository-wide refactoring and unrelated test repairs."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Runtime, UTC. One persisted rollout timestamp T0 for the new family when its seed migration is first applied. Start every new counter at zero; only exact-parent entries with entered_at_utc >= T0 qualify, and only their valid settlements strictly before the candidate parent entry are known to that decision. No end date and no historical last-zero analysis cutoff. Existing states and T0 survive restarts.",
+    "firstVerification": "Read-only preview on 192.168.0.101:5432/polycopytrader, UTC, default_transaction_read_only=on, statement_timeout=15s, lock_timeout=2s: identify both parents, their settings and active assignments; check the exact 34 proposed child/assignment IDs, codes and names against strategies, strategy_child_parent_assignments and strategy_loss_diff_states; inspect indexed access and waiting locks. Then inspect actual catalog-to-processor-to-repository execution paths. Preflight confirmed 34 proposals and zero strategy/assignment/state conflicts at 2026-09-02T20:24:10.851650Z; no DML/DDL was executed."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Добавить ровно 34 отдельных варианта с фиксированными потолками множителя, а не 34 порогами входа.",
+      "sourceRequestIndexes": [
+        1,
+        4,
+        5
+      ],
+      "sourceQuote": "Все 34 варианта",
+      "acceptanceCriteria": [
+        "Catalog delta is exactly 34: 16 Up4 variants with caps 1..16 and 18 Up8 variants with caps 1..18. No uncapped 35th variant and no missing/duplicate cap.",
+        "Each new variant has its exact parent and an explicit maximum-progress cap. The entry threshold is 1 for all 34; cap is not stored or interpreted as that threshold.",
+        "Up4 cap 1: child=b7c50005-0000-4000-8236-000000000001; assignment=b7c50005-0000-4000-8238-000000000001; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_1; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1.",
+        "Up4 cap 2: child=b7c50005-0000-4000-8236-000000000002; assignment=b7c50005-0000-4000-8238-000000000002; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_2; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 2.",
+        "Up4 cap 3: child=b7c50005-0000-4000-8236-000000000003; assignment=b7c50005-0000-4000-8238-000000000003; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_3; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 3.",
+        "Up4 cap 4: child=b7c50005-0000-4000-8236-000000000004; assignment=b7c50005-0000-4000-8238-000000000004; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_4; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 4.",
+        "Up4 cap 5: child=b7c50005-0000-4000-8236-000000000005; assignment=b7c50005-0000-4000-8238-000000000005; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_5; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 5.",
+        "Up4 cap 6: child=b7c50005-0000-4000-8236-000000000006; assignment=b7c50005-0000-4000-8238-000000000006; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_6; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 6.",
+        "Up4 cap 7: child=b7c50005-0000-4000-8236-000000000007; assignment=b7c50005-0000-4000-8238-000000000007; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_7; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 7.",
+        "Up4 cap 8: child=b7c50005-0000-4000-8236-000000000008; assignment=b7c50005-0000-4000-8238-000000000008; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_8; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 8.",
+        "Up4 cap 9: child=b7c50005-0000-4000-8236-000000000009; assignment=b7c50005-0000-4000-8238-000000000009; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_9; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 9.",
+        "Up4 cap 10: child=b7c50005-0000-4000-8236-000000000010; assignment=b7c50005-0000-4000-8238-000000000010; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_10; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 10.",
+        "Up4 cap 11: child=b7c50005-0000-4000-8236-000000000011; assignment=b7c50005-0000-4000-8238-000000000011; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_11; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 11.",
+        "Up4 cap 12: child=b7c50005-0000-4000-8236-000000000012; assignment=b7c50005-0000-4000-8238-000000000012; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_12; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 12.",
+        "Up4 cap 13: child=b7c50005-0000-4000-8236-000000000013; assignment=b7c50005-0000-4000-8238-000000000013; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_13; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 13.",
+        "Up4 cap 14: child=b7c50005-0000-4000-8236-000000000014; assignment=b7c50005-0000-4000-8238-000000000014; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_14; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 14.",
+        "Up4 cap 15: child=b7c50005-0000-4000-8236-000000000015; assignment=b7c50005-0000-4000-8238-000000000015; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_15; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 15.",
+        "Up4 cap 16: child=b7c50005-0000-4000-8236-000000000016; assignment=b7c50005-0000-4000-8238-000000000016; parent=b7c50005-0000-4000-8137-000000000104; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_16; name=ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 16.",
+        "Up8 cap 1: child=b7c50005-0000-4000-8237-000000000001; assignment=b7c50005-0000-4000-8239-000000000001; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_1; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 1.",
+        "Up8 cap 2: child=b7c50005-0000-4000-8237-000000000002; assignment=b7c50005-0000-4000-8239-000000000002; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_2; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 2.",
+        "Up8 cap 3: child=b7c50005-0000-4000-8237-000000000003; assignment=b7c50005-0000-4000-8239-000000000003; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_3; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 3.",
+        "Up8 cap 4: child=b7c50005-0000-4000-8237-000000000004; assignment=b7c50005-0000-4000-8239-000000000004; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_4; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 4.",
+        "Up8 cap 5: child=b7c50005-0000-4000-8237-000000000005; assignment=b7c50005-0000-4000-8239-000000000005; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_5; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 5.",
+        "Up8 cap 6: child=b7c50005-0000-4000-8237-000000000006; assignment=b7c50005-0000-4000-8239-000000000006; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_6; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 6.",
+        "Up8 cap 7: child=b7c50005-0000-4000-8237-000000000007; assignment=b7c50005-0000-4000-8239-000000000007; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_7; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 7.",
+        "Up8 cap 8: child=b7c50005-0000-4000-8237-000000000008; assignment=b7c50005-0000-4000-8239-000000000008; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_8; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 8.",
+        "Up8 cap 9: child=b7c50005-0000-4000-8237-000000000009; assignment=b7c50005-0000-4000-8239-000000000009; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_9; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 9.",
+        "Up8 cap 10: child=b7c50005-0000-4000-8237-000000000010; assignment=b7c50005-0000-4000-8239-000000000010; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_10; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 10.",
+        "Up8 cap 11: child=b7c50005-0000-4000-8237-000000000011; assignment=b7c50005-0000-4000-8239-000000000011; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_11; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 11.",
+        "Up8 cap 12: child=b7c50005-0000-4000-8237-000000000012; assignment=b7c50005-0000-4000-8239-000000000012; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_12; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 12.",
+        "Up8 cap 13: child=b7c50005-0000-4000-8237-000000000013; assignment=b7c50005-0000-4000-8239-000000000013; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_13; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 13.",
+        "Up8 cap 14: child=b7c50005-0000-4000-8237-000000000014; assignment=b7c50005-0000-4000-8239-000000000014; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_14; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 14.",
+        "Up8 cap 15: child=b7c50005-0000-4000-8237-000000000015; assignment=b7c50005-0000-4000-8239-000000000015; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_15; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 15.",
+        "Up8 cap 16: child=b7c50005-0000-4000-8237-000000000016; assignment=b7c50005-0000-4000-8239-000000000016; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_16; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 16.",
+        "Up8 cap 17: child=b7c50005-0000-4000-8237-000000000017; assignment=b7c50005-0000-4000-8239-000000000017; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_17; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 17.",
+        "Up8 cap 18: child=b7c50005-0000-4000-8237-000000000018; assignment=b7c50005-0000-4000-8239-000000000018; parent=b7c50005-0000-4000-8137-000000000108; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_18; name=ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 18.",
+        "Unrelated catalog identities and the four pre-existing fixed LossDiff variants retain their names, IDs, metadata and behavior."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "tests/PolyCopyTrader.Tests/LossDiffPositiveProgressStrategyTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressStrategyTests\" --logger \"trx;LogFileName=positive-progress-catalog.trx\"",
+          "expected": "Enumerate all 34 exact child/cap/parent/code/name tuples independently; compare new catalog delta and unchanged old variants.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Все новые счётчики начинают с нуля; последующую историю восстанавливать только отдельной будущей командой.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "Начинаем с нуля, потом восстановим историю отдельной командой",
+      "acceptanceCriteria": [
+        "At first seed each new current_value=0 and started_at_utc=T0. Migration inserts no parent-outcome event, Paper run, order, fill, position, settlement or historical PnL.",
+        "Parent entries before T0 never change these counters, even if they settle after T0. Entry exactly at T0 qualifies. No on-first-run full-history recovery.",
+        "After rollout, a valid settled parent loss adds 1; a win subtracts 1 with floor zero. A win does not fully reset a positive counter. These updates use all qualifying parent results, including when the child skipped or did not fill.",
+        "Before a candidate entry, use only parent settlements strictly before that entry, not its eventual outcome or outcomes still open/equal/later. Apply the explicit ASM-002 ordering/neutral-result convention.",
+        "Duplicate reconciliation, restart and repeated migration application cannot double-count events, reset progressed counters or move T0. Missing/mismatched parent state cannot authorize a trade; preserve existing explicit diagnostic handling.",
+        "Read qualifying outcomes once per exact parent per reconciliation, then apply all relevant new states; do not initiate 34 full-history scans. Preserve old fixed-child calculation semantics."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresLossDiffPositiveProgressStrategySchemaMigration.cs",
+        "tests/PolyCopyTrader.Tests/LossDiffPositiveProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/LossDiffPositiveProgressPostgresTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressStrategyTests\" --logger \"trx;LogFileName=positive-progress-counter.trx\"",
+          "expected": "Cases loss/loss/win =>1,2,1; win at0 stays0; pre-rollout entry excluded; equality boundaries; out-of-order entry/settlement; neutral outcomes; duplicate/restart stability; old-child regression.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressPostgresTests\" --logger \"trx;LogFileName=positive-progress-postgres.trx\"",
+          "expected": "Use only an independently verified disposable local PostgreSQL database under the marked run. Exercise actual seed/reconciliation SQL and compare raw parent events against a separate in-memory reference; no skipped required integration tests.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "При положительном текущем LossDiff размер заявки потомка масштабируется через min(LossDiff,N); при нуле вход пропускается.",
+      "sourceRequestIndexes": [
+        0,
+        3,
+        4
+      ],
+      "sourceQuote": "N - это ограничитель максимального коэффициента",
+      "acceptanceCriteria": [
+        "Let k be the eligible current Positive counter before the parent entry and N the child's cap. k=0 => skip; k>0 => multiplier m=min(k,N). For k=12,N=5, m=5; for k=3,N=5, m=3; N=1 always uses m=1 on positive k.",
+        "Child eligibility requires an actual positive-fill same-market entry by its exact parent. A parent signal, acceptance acknowledgement, delayed status, rejection or no-fill is insufficient. Parent Paper/live transport is not itself a child eligibility condition (ASM-001).",
+        "Use parent actual invested entry notional, excluding fees, as base S; child requested notional=S*m. Do not multiply a UI minimum-stake setting instead of S, add the child's legacy lost coefficient, use cap as a minimum gate, or size from the child's own wins/losses. Freeze amount once per child decision; no second change during submission.",
+        "Keep parent's market/token, outcome BUY side, original hard price cap, FAK semantics, tick/minimum constraints and snapshot reference. Native existing amount normalization and existing pre-submit controls remain in force and auditable; do not introduce a new risk cap or silently reduce m beyond min(k,N).",
+        "Implement DEV-001: simulate increased Paper amount against the frozen snapshot depth rather than cloning/scaling a parent fill. Full/partial/no-fill and cancellation of unfilled remainder follow FAK. Live, if later manually enabled by the user, consumes the same frozen child intent; no fresh post-freeze book fetch or reprice/resize.",
+        "Each of the 34 strategies represents its own independent portfolio/intent, not a single shared order or ladder across cap variants. Existing child pause/enable/live controls remain respected. No order is retried or enlarged merely because the initial FAK was partially filled."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/LossDiffPositiveProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressStrategyTests|(FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~LossDiff)|FullyQualifiedName~FakBuyExecutionParityTests\" --logger \"trx;LogFileName=positive-progress-execution.trx\"",
+          "expected": "Focused same-market actual-parent-entry, parent Paper/child mocked Live, frozen intent, min-cap math, zero skip, normalization, depth full/partial/zero, own controls, no double scaling and unchanged old fixed-child behavior tests all pass without external order submission.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Подготовить новую миграцию создания этих 34 стратегий и только их начальных связей/состояний.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        2
+      ],
+      "sourceQuote": "Сделай `LossDiff Positive`  Progress стратегии",
+      "acceptanceCriteria": [
+        "Append immutable ordered migration 0008-eth-lossdiff-positive-progress-34 after the existing 0001..0007, without editing those migrations.",
+        "First application to a clean exact allowlist creates 34 strategies +34 strategy_child_parent_assignments +34 strategy_loss_diff_states =102 business rows, plus the migration runner's normal journal record. No history events or trades. Apply ASM-001 initial settings.",
+        "Use existing Positive state mode with threshold1 and the explicit new variant cap metadata. No permanent schema object or generalized migration infrastructure is needed.",
+        "This is one bounded atomic metadata-seed batch (102 business rows), not an all-history transaction. Use the existing ordered migration journal as durable completion/resume point; rollback this small seed on failure. Do not lock historical run/fill/order tables or read old outcome history. Startup application/deployment is performed later by the user, not by this task.",
+        "Reject unexpected identity conflicts instead of replacing existing strategies. Reapplication does not modify enabled/paused/live/balance values, assignments, T0 or progressed counters. Tests snapshot unchanged parents, fixed children and unrelated rows before/after."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresLossDiffPositiveProgressStrategySchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/LossDiffPositiveProgressPostgresTests.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressPostgresTests|FullyQualifiedName~PostgresSchemaMigrationTests.DefaultCatalog\" --logger \"trx;LogFileName=positive-progress-migration.trx\"",
+          "expected": "Exact 102-row delta, identities, default flags, zero-state/no-history, conflict rollback, idempotence and unchanged unrelated rows verified in disposable local PostgreSQL; existing checksums stay identical.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Использовать учёт Net PnL с комиссией Polymarket для фактического исполнения новых стратегий и сохранять проверяемые основания решения.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Учитывай именно Net Pnl, то есть с комиссией Polymarket",
+      "acceptanceCriteria": [
+        "Persist child parent-run/assignment references, calculation cutoff, current counter, N, multiplier, base notional, requested and normalized intent, frozen snapshot reference, actual fills and outcome through existing audit/storage fields.",
+        "Feed actual child filled size and execution price into the existing fee/accounting pipeline. Net PnL is child realized Gross minus the child's accounted Polymarket fee; never multiply an already-rounded parent fee or assume parent and child executions have identical prices.",
+        "Keep fee schedule/source/status and actual child settlements auditable. No fee-model replacement, global reporting formula change, historical repair or claim that the research ROI is reproduced by runtime fills.",
+        "Document exact-family intent parity and its real FAK equivalent using https://docs.polymarket.com/trading/place-orders and https://docs.polymarket.com/trading/fees; do not extend the closed optimistic Maker-GTD exception."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/LossDiffPositiveProgressStrategyTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-006",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressStrategyTests|FullyQualifiedName~FakBuyExecutionParityTests\" --logger \"trx;LogFileName=positive-progress-net-audit.trx\"",
+          "expected": "Independently recompute expected fee and Net from actual child full/partial fills, including fee rounding; verify persisted decision fields and no doubled inherited fee.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "text": "Завершить только код, миграцию и их проверку; не выполнять выкладку или историю.",
+      "sourceRequestIndexes": [
+        0,
+        2
+      ],
+      "sourceQuote": "потом восстановим историю отдельной командой",
+      "acceptanceCriteria": [
+        "README and exact-family parity notes state the 34 cap ranges, formula, zero rollout boundary, default Paper mode, no automatic historical seeding, actual-depth fill caveat, standard deployment and focused verification instructions. No standalone new manual backfill tool.",
+        "Service build and focused unit/integration checks pass. Independent reviewer compares the verbatim requests, exact approved digest, diff and test evidence with no open findings.",
+        "Record context/history, validate the completed requirement contract and task-only changes; commit approved contract before product changes, then deliver tested task-only implementation through the configured Git workflow. Preserve unrelated worktree changes.",
+        "No Production migration, actual Live order, service action or history write occurs in this implementation task."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "tests/PolyCopyTrader.Tests/LossDiffPositiveProgressStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/LossDiffPositiveProgressPostgresTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-007",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
+          "expected": "Build exits0; record exact warnings/errors, without claiming deployment.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-008",
+          "kind": "inspection",
+          "command": "git diff --check; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode Contract -ContractPath Codex/Requirements/Contracts/RC-20260902-eth-lossdiff-positive-progress-34.json; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree",
+          "expected": "Independent semantic review passes; task files all mapped; exact approval-parent checkpoint verified; no unrelated mutation included. Validate staged/range gates at delivery.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "Предлагаемые настройки новых стратегий, требующие отдельного подтверждения: enabled=true, paused=false, auto_live_paused=false, live_stakes=false, live_enabled_at_utc=null; стартовые paper/live_stake_amount=1, paper/live_lost_coeff=1, paper/live_lost_counter=0, live_available_balance=100 USD. Настройки принадлежат каждому ребёнку отдельно. Размер Progress рассчитывается от фактической суммы входа родителя, а не от этих UI-полей. Реализовать совместимость с существующим Live-путём для будущего ручного включения: PaperOnly=false; Paper-родитель не запрещает Live ребёнку. В этой задаче Live не включать и ордера не отправлять.",
+      "impact": "Пользователь ещё не задал начальный режим и эти настройки именно для новых34. После будущей выкладки они начнут обычную Paper-работу; реальная торговля возможна только после отдельного ручного включения пользователем. Начальный balance является внутренней настройкой, не переводом или пополнением денег.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260902-eth-lossdiff-positive-progress-34 sha256:7c5d42aec1579887f699d60f1d7deca5e2c66842633d23c37c7edbd66c851e55",
+        "semanticDigest": "sha256:7c5d42aec1579887f699d60f1d7deca5e2c66842633d23c37c7edbd66c851e55"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "Предлагаемая точная трактовка событий для новых34, требующая отдельного подтверждения: исходы родителя обрабатывать по settled_at_utc, затем entered_at_utc и id; учитывать только Settled с entered_at_utc>=T0 и settled_at_utc<времени кандидатного входа. Gross>0 означает выигрыш, Gross<0 проигрыш; нулевые/отсутствующие исходы не меняют счётчик. LossDiff определяется исходами родительских ставок, тогда как финансовый результат ребёнка учитывается по Net. При частичном исполнении родителя базовая сумма S равна его фактически инвестированному объёму без комиссии; целевой объём ребёнка до нормализации=S*min(k,N).",
+      "impact": "Фиксирует причинно доступный порядок расчёта, включая редкое расхождение порядка входа и завершения. У существующих фиксированных детей проверенный код пересчитывает в порядке входа; менять их порядок запрещено. Время T0 фиксируется при первой миграции, поэтому даже поздний settlement старой ставки не подтягивает дороллаутную историю.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260902-eth-lossdiff-positive-progress-34 sha256:7c5d42aec1579887f699d60f1d7deca5e2c66842633d23c37c7edbd66c851e55",
+        "semanticDigest": "sha256:7c5d42aec1579887f699d60f1d7deca5e2c66842633d23c37c7edbd66c851e55"
+      }
+    }
+  ],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Отличие от исторического ResearchOnly масштабирования: реальная новая Paper/Live-стратегия не получает гарантированно цену и полный объём родительского fill. После фактического входа родителя новый увеличенный FAK intent рассчитывается заранее и Paper исполняется по доступной глубине того же зафиксированного снимка с ценовым лимитом родителя; Live отправляет тот же intent и получает результат площадки. Допускаются частичное или нулевое исполнение и отмена остатка.",
+      "impact": "Механика LossDiff и потолка остаётся прежней, но число и финансовый результат реально исполненных детских ставок могут отличаться от исторического моделирования. Умножение готового родительского fill без проверки глубины не удовлетворяет обязательной Paper/Live parity и не будет выдаваться за обычный Paper. Это отличие требует отдельного явного подтверждения пользователя.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260902-eth-lossdiff-positive-progress-34 sha256:7c5d42aec1579887f699d60f1d7deca5e2c66842633d23c37c7edbd66c851e55",
+        "semanticDigest": "sha256:7c5d42aec1579887f699d60f1d7deca5e2c66842633d23c37c7edbd66c851e55"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260902-eth-lossdiff-positive-progress-34 sha256:7c5d42aec1579887f699d60f1d7deca5e2c66842633d23c37c7edbd66c851e55",
+    "semanticDigest": "sha256:7c5d42aec1579887f699d60f1d7deca5e2c66842633d23c37c7edbd66c851e55"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/lossdiff_positive_progress_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
