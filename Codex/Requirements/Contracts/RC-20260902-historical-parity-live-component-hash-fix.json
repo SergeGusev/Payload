@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260902-historical-parity-live-component-hash-fix",
+  "title": "Fix canonical component hashing in historical Live Net recalculation",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Проверь, как идёт пересчёт"
+    },
+    {
+      "source": "user",
+      "text": "Давай исправим"
+    },
+    {
+      "source": "user",
+      "text": "ВСЕГДА пиши сразу в master"
+    }
+  ],
+  "scope": {
+    "goal": "Fix the verified historical Live candidate component-hash mismatch that prevents Net accounting from being saved, without changing financial rules or scheduling; deliver the focused correction and regression verification on master for user deployment.",
+    "inScope": [
+      "LoadHistoricalGrossNetParityPageLiveTargetsAsync in PostgresAppRepository.HistoricalGrossNetParity.cs: derive Live ComponentHash from the same canonical ProvedComponents representation used by ValidateHistoricalGrossNetParityTargetBindingAsync, and derive BindingHash from that corrected component hash.",
+      "Keep the already-associated VenueReported payload and its evidence-reference SHA-256 independently bound to the original normalized payload, rather than replacing that evidence hash with the empty component-graph hash.",
+      "The existing common historical Live accounting path, including priority strategy b7c50005-0000-4000-8079-000000000150 / ETH Up or Down 5m Up 50 bps Instant and other already-eligible Live targets processed later by the unchanged worker.",
+      "Focused regression tests of the actual PostgreSQL candidate-load, preparation, Live accounting and existing reconciliation path; preservation, tamper/CAS rejection and retry-idempotence checks on synthetic fixtures only.",
+      "A concise README note in the existing historical-parity section, required context/history bookkeeping, contract validation, affected service build, focused tests, independent semantic review and scoped Git delivery on master."
+    ],
+    "outOfScope": [
+      "Any change to Fee = ROUND_AWAY_8(B * 0.0333), Net = Gross - Fee, the 3.33-percentage-point ROI fallback, exact-fee precedence, donor removal, Gross amounts or ROI bases.",
+      "Any change to historical eligibility, the strict 2026-08-10T00:00:00Z originating-entry cutoff, priority strategy identity, descending current-Gross ordering, strategy completion gates, batch sizes, timeouts, foreground yielding, retry scheduling or accounting/reconciliation transaction semantics.",
+      "Any change to ordinary new Paper/Live accounting, execution, orders, fills, settlements, strategy settings, counters, schemas, migrations, indexes, APIs, on-chain fee matching or Paper target hash construction.",
+      "Rewriting completed historical fee/Net values, resetting audits or checkpoints, manually recalculating Production rows, running donor calculations, or adding a new backfill/diagnostic framework or new logging behavior.",
+      "Production mutations, backups, deployment, service stop/restart, configuration changes or live-trading actions. The user deploys the finished service; the existing worker then resumes automatically.",
+      "Any edits or commits belonging to the concurrent LossDiff Positive Progress task. No new branch, worktree, stash, reset or unrelated cleanup."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Existing historical Gross-counted settled Live contributions with a proved originating entry strictly before 2026-08-10T00:00:00Z UTC. Verified priority preview at 2026-09-02T20:47:29.175405Z: 405 historical Live targets, 403 LegacyUnknown/Net-missing and 2 exact/Net-complete, no Live parity audit and ownership None; service Running with fresh heartbeat and zero waiting locks. This is not an assertion of the entire multi-strategy backlog count.",
+    "firstVerification": "Recheck the current master/worktree and exact reader-to-validator call path, preserve concurrent unrelated edits, and compare a forced-read-only Production target preview with the prior evidence before product edits. Reproduce the current mismatch through a synthetic PostgreSQL regression before applying the source correction."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Correct the identified historical Live component-hash incompatibility so unchanged eligible Live targets can pass existing binding validation and persist their existing-policy Net accounting.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "Давай исправим",
+      "acceptanceCriteria": [
+        "Every Live snapshot produced by the affected reader has ComponentHash equal to HistoricalGrossNetParityComponentGraphV1.ComputeComponentHash(snapshot.ProvedComponents), including the empty component list; its BindingHash uses that same value.",
+        "VenueReported component payload and exact evidence-reference hash remain a SHA-256 binding to the original normalized venue evidence payload; changing the target component hash does not discard or substitute venue evidence identity.",
+        "A synthetic pre-cutoff settled LegacyUnknown Live order with balance_effect_applied=true, ownership None and no prior audit is loaded through the real candidate page and preparer, then successfully applies the unchanged direct-fixed accounting decision without donor candidates. Stored fee, Net, baseline/audit and ordered balance reconciliation match the existing policy.",
+        "The regression fails against the original source with the observed hash conflict and passes after the focused correction. Repeating completed accounting/reconciliation does not duplicate audit decisions or financial balance effects.",
+        "Already exact Live fees and correct Net are preserved; post-cutoff fixtures are excluded; tampered binding or a concurrent row-version change still fails closed without an accounting write. Existing focused Paper and strategy-order tests continue to pass."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Set POLYCOPYTRADER_TEST_POSTGRES_CONNECTION to a new isolated native PostgreSQL instance/database owned by the marked D:/CodexTemp run, never to Production or the user's existing database. Set POLYCOPYTRADER_REPOSITORY_ROOT to the current repository and TEMP/TMP/TMPDIR to the run temp directory. Run dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path <runPath>/artifacts --results-directory <runPath>/results --filter \"FullyQualifiedName~HistoricalGrossNetParity|FullyQualifiedName~HistoricalParity\" -p:UseSharedCompilation=false. First run the new regression against unchanged source, then rerun after correction; the real PostgreSQL regression must execute rather than skip.",
+          "expected": "The new real-path regression initially demonstrates the original mismatch, then all focused tests pass, including fixed Live accounting/reconciliation, exact preservation, cutoff exclusion, unchanged Paper behavior, tamper/CAS rejection and idempotence. Only synthetic disposable data is written.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep the fix limited to historical Live hash compatibility and deliver it directly on master with required verification, without operational or financial-rule changes.",
+      "sourceRequestIndexes": [1, 2],
+      "sourceQuote": "ВСЕГДА пиши сразу в master",
+      "acceptanceCriteria": [
+        "The only changed product behavior is canonical historical Live component/binding hashing; source payload, lineage, venue authority, financial rules, cutoffs, candidate ordering, balances' existing application rules and completed-value preservation remain intact.",
+        "The service project builds; focused tests execute successfully on isolated data; an independent reviewer compares the original prompts, approved contract, exact task diff and verification evidence and returns pass without open findings.",
+        "README documents only the corrected hash consistency in its existing historical-parity section. Context/history record exact verification and the separation between local delivery and later user deployment.",
+        "All temporary build/test/database outputs stay under a marked D:/CodexTemp run and are removed by protected cleanup after its processes stop. No Production write, deployment or service action occurs.",
+        "After the later exact user approval, record and commit the approval checkpoint before product edits, then commit and push only this task's approved files to master; unrelated concurrent work is preserved and excluded."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "With TEMP/TMP/TMPDIR and all outputs inside the marked run, execute dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <runPath>/artifacts -p:UseSharedCompilation=false. Inspect the scoped task diff, run git diff --check and scripts/requirements/Validate-RequirementContract.ps1 in WorkingTree and Staged modes as applicable, obtain independent semantic review, and verify scoped master commit/push plus protected temporary-run cleanup.",
+          "expected": "Service build and required gates pass; the exact approved task diff has no financial/scheduling/operational expansion, no unrelated committed edits and no open review finding. Cleanup succeeds. Local delivery is not described as verified deployed recalculation.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260902-historical-parity-live-component-hash-fix sha256:be7f4d87eb035c4be1bd8ec6ce27b63962b60490255b5dbc03491af25d0ebbb1",
+    "semanticDigest": "sha256:be7f4d87eb035c4be1bd8ec6ce27b63962b60490255b5dbc03491af25d0ebbb1"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/historical_live_hash_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
