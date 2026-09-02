@@ -5207,6 +5207,14 @@ FOR UPDATE;
 		}
 
 		await using (NpgsqlCommand insertEventsCommand = CreateCommand(connection, """
+WITH parent_runs AS MATERIALIZED (
+    SELECT id, strategy_id, entered_at_utc, settled_at_utc, realized_pnl_usd
+    FROM strategy_market_paper_runs
+    WHERE strategy_id = @ParentStrategyId AND status = @SettledStatus
+      AND entered_at_utc >= (SELECT min(started_at_utc) FROM strategy_loss_diff_states WHERE parent_strategy_id = @ParentStrategyId)
+      AND settled_at_utc < @SettledBeforeUtc
+      AND realized_pnl_usd IS NOT NULL AND realized_pnl_usd <> 0
+)
 INSERT INTO strategy_loss_diff_parent_events (
     child_strategy_id,
     parent_run_id,
@@ -5223,10 +5231,9 @@ SELECT
     run.realized_pnl_usd > 0,
     clock_timestamp()
 FROM strategy_loss_diff_states state
-INNER JOIN strategy_market_paper_runs run
+INNER JOIN parent_runs run
     ON run.strategy_id = state.parent_strategy_id
 WHERE state.parent_strategy_id = @ParentStrategyId
-  AND run.status = @SettledStatus
   AND run.entered_at_utc IS NOT NULL
   AND run.entered_at_utc >= state.started_at_utc
   AND run.settled_at_utc IS NOT NULL
@@ -5246,14 +5253,22 @@ ON CONFLICT (child_strategy_id, parent_run_id) DO NOTHING;
 		var eventsByChild = states.ToDictionary(
 			state => state.ChildStrategyId,
 			_ => new List<(Guid ParentRunId, DateTimeOffset ParentEnteredAtUtc, bool Won)>());
+		var progressIds = StrategyIds.UpDown5mStrategyVariants
+			.Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveProgressMirror)
+			.Select(variant => variant.Id).ToArray();
 		await using (NpgsqlCommand readEventsCommand = CreateCommand(connection, """
 SELECT child_strategy_id, parent_run_id, parent_entered_at_utc, won
 FROM strategy_loss_diff_parent_events
 WHERE child_strategy_id = ANY(@ChildStrategyIds)
-ORDER BY child_strategy_id ASC, parent_entered_at_utc ASC, parent_run_id ASC;
+  AND (NOT (child_strategy_id = ANY(@ProgressIds)) OR parent_settled_at_utc < @SettledBeforeUtc)
+ORDER BY child_strategy_id ASC,
+         CASE WHEN child_strategy_id = ANY(@ProgressIds) THEN parent_settled_at_utc ELSE parent_entered_at_utc END ASC,
+         parent_entered_at_utc ASC, parent_run_id ASC;
 """))
 		{
 			readEventsCommand.Transaction = transaction;
+			readEventsCommand.Parameters.AddWithValue("ProgressIds", progressIds);
+			readEventsCommand.Parameters.AddWithValue("SettledBeforeUtc", UtcDateTime(settledBeforeUtc));
 			readEventsCommand.Parameters.Add("ChildStrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value =
 				states.Select(state => state.ChildStrategyId).ToArray();
 			await using NpgsqlDataReader reader = await readEventsCommand.ExecuteReaderAsync(cancellationToken);
@@ -10157,7 +10172,7 @@ FROM claimed;
 			return run.SkipDiagnosticsJson;
 		}
 
-		return IsMakerGtdPlacementSkipDiagnostics(run) || IsLossDiffPlacementSkipDiagnostics(run)
+		return IsMakerGtdPlacementSkipDiagnostics(run) || IsLossDiffPlacementSkipDiagnostics(run) || IsPositiveProgressSkipDiagnostics(run)
 			? run.SkipDiagnosticsJson
 			: null;
 	}
@@ -10212,6 +10227,28 @@ FROM claimed;
 		{
 			return false;
 		}
+	}
+
+	private static bool IsPositiveProgressSkipDiagnostics(StrategyMarketPaperRun run)
+	{
+		var variant = StrategyIds.UpDown5mStrategyVariants.FirstOrDefault(v =>
+			v.Id == run.StrategyId && v.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveProgressMirror);
+		if (variant is null || run.SkipReason is not ("parent_lossdiff_below_threshold" or "positive_progress_fak_no_fill") ||
+			string.IsNullOrWhiteSpace(run.SkipDiagnosticsJson)) return false;
+		try
+		{
+			using var document = JsonDocument.Parse(run.SkipDiagnosticsJson);
+			var root = document.RootElement;
+			return root.TryGetProperty("child_strategy_id", out var child) && child.TryGetGuid(out var childId) && childId == variant.Id &&
+				root.TryGetProperty("parent_strategy_id", out var parent) && parent.TryGetGuid(out var parentId) && parentId == variant.ParentStrategyId &&
+				root.TryGetProperty("parent_run_id", out var parentRun) && parentRun.TryGetGuid(out _) &&
+				root.TryGetProperty("loss_diff", out var state) && state.ValueKind == JsonValueKind.Object &&
+				state.TryGetProperty("pre_entry_value", out var value) && value.TryGetInt32(out var current) && current >= 0 &&
+				(run.SkipReason == "parent_lossdiff_below_threshold"
+					? current == 0 && state.TryGetProperty("gate_passed", out var gate) && gate.ValueKind == JsonValueKind.False
+					: current > 0 && root.TryGetProperty("positive_progress", out var progress) && progress.ValueKind == JsonValueKind.Object);
+		}
+		catch (JsonException) { return false; }
 	}
 
 	private static bool IsMakerGtdPlacementSkipDiagnostics(StrategyMarketPaperRun run)

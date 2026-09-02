@@ -134,6 +134,17 @@ public static class PostgresSchemaMigrationCatalog
                 $"actual {historicalParityAuditTrigger.SemanticChecksum}.");
         }
 
+        var positiveProgress = new PostgresSchemaMigration(
+            order: 7,
+            id: PostgresLossDiffPositiveProgressStrategySchemaMigration.Id,
+            sql: PostgresLossDiffPositiveProgressStrategySchemaMigration.Sql,
+            transactional: true,
+            details: "seed 34 capped ETH Positive Progress children with zero rollout states; no history");
+        if (positiveProgress.SemanticChecksum != PostgresLossDiffPositiveProgressStrategySchemaMigration.SemanticChecksum)
+        {
+            throw new InvalidOperationException("LossDiff Positive Progress migration checksum mismatch.");
+        }
+
         return ValidateAndOrder(
             [
                 baseline,
@@ -142,7 +153,8 @@ public static class PostgresSchemaMigrationCatalog
                 signalsTraderWalletIndex,
                 followMarketStrategies,
                 historicalParityPaperRunOrderIndex,
-                historicalParityAuditTrigger
+                historicalParityAuditTrigger,
+                positiveProgress
             ]);
     }
 

@@ -1365,7 +1365,8 @@ public static class StrategyIds
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcLowerEnterPremarketVariants =
         ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineBtcLowerEnterPremarketVariants);
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> CryptoUpDown5mVariants =
-        ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineCryptoUpDown5mVariants);
+        [.. ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineCryptoUpDown5mVariants),
+         .. CreateEthLossDiffPositiveProgressVariants(LegacyBaselineCryptoUpDown5mVariants)];
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> UpDown5mStrategyVariants =
         [
             .. BtcUpDown5mVariants,
@@ -3148,6 +3149,35 @@ public static class StrategyIds
         ];
     }
 
+    private static IReadOnlyList<BtcUpDown5mStrategyVariant> CreateEthLossDiffPositiveProgressVariants(
+        IReadOnlyCollection<BtcUpDown5mStrategyVariant> registeredVariants)
+    {
+        var result = new List<BtcUpDown5mStrategyVariant>(34);
+        foreach (var (bps, maximumCap, group) in new[] { (4, 16, 8236), (8, 18, 8237) })
+        {
+            var parent = registeredVariants.Single(variant =>
+                variant.Id == Guid.Parse($"b7c50005-0000-4000-8137-{100 + bps:000000000000}") &&
+                variant.Code == $"eth_up_down_5m_up_bps_{bps}_fak_premarket");
+            for (var cap = 1; cap <= maximumCap; cap++)
+            {
+                result.Add(new BtcUpDown5mStrategyVariant(
+                    Guid.Parse($"b7c50005-0000-4000-{group}-{cap:000000000000}"),
+                    $"eth_up_down_5m_up_bps_{bps}_fak_premarket_lossdiff_positive_progress_cap_{cap}",
+                    $"ETH 5m Up {bps} bps Reference Average Premarket LossDiff Positive Progress Cap {cap}",
+                    $"After an actual same-market entry of {parent.Name}, place a FAK BUY with its hard price limit and actual invested notional times min(Positive LossDiff,{cap}). Zero skips. Post-rollout parent losses add one; wins subtract one with a zero floor, in settlement order. Increased size executes independently against available depth. Starts at zero without historical recovery; Live requires manual enablement and does not require a Live parent.",
+                    BtcUpDown5mStrategyDirection.Dynamic,
+                    parent.EntryDelaySeconds,
+                    BtcUpDown5mStrategyBehavior.LossDiffPositiveProgressMirror,
+                    DecisionDepth: 1,
+                    Category: "ETH Up/Down 5m LossDiff Positive Progress",
+                    ReferenceAssetSymbol: "ETH",
+                    ParentStrategyId: parent.Id,
+                    LossDiffProgressCap: cap));
+            }
+        }
+        return result;
+    }
+
     private static BtcUpDownFixedOutcome GetOppositeFixedOutcome(BtcUpDownFixedOutcome outcome)
     {
         return outcome == BtcUpDownFixedOutcome.Up
@@ -3967,7 +3997,8 @@ public enum BtcUpDown5mStrategyBehavior
     ThreeHourReferenceAverageBpsThresholdFakPremarket,
     ThreeHourLowEnterReferenceAverageBpsThresholdFakPremarket,
     ReferenceAverageBpsThresholdMakerGtdPremarket,
-    FollowMarketFak
+    FollowMarketFak,
+    LossDiffPositiveProgressMirror
 }
 
 public sealed record BtcUpDown5mStrategyVariant(
@@ -3997,7 +4028,8 @@ public sealed record BtcUpDown5mStrategyVariant(
     Guid? LowerEnterSourceStrategyId = null,
     decimal? MakerMaximumOrderPrice = null,
     Guid? ParentStrategyId = null,
-    int FollowMarketThresholdCents = 0)
+    int FollowMarketThresholdCents = 0,
+    int LossDiffProgressCap = 0)
 {
     public string CopiedTraderWallet => "strategy:" + Code;
 }

@@ -3,7 +3,7 @@
   "contractId": "RC-20260902-eth-lossdiff-positive-progress-34",
   "title": "34 ETH Up4/Up8 LossDiff Positive Progress children; capped sizing; zero rollout; history excluded",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -111,8 +111,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressStrategyTests\" --logger \"trx;LogFileName=positive-progress-catalog.trx\"",
           "expected": "Enumerate all 34 exact child/cap/parent/code/name tuples independently; compare new catalog delta and unchanged old variants.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final positive-progress-final-v2.trx:49/49 passed, including Catalog_Exact34... in 14 standalone tests and DefaultCatalog legacy checksum binding. Independent reviewer separately compared all34 exact contract child/assignment/parent/code/name tuples with SQL:34 matches,0 discrepancies. Approval85a3b0d9 precedes edits."
         }
       ]
     },
@@ -145,16 +145,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressStrategyTests\" --logger \"trx;LogFileName=positive-progress-counter.trx\"",
           "expected": "Cases loss/loss/win =>1,2,1; win at0 stays0; pre-rollout entry excluded; equality boundaries; out-of-order entry/settlement; neutral outcomes; duplicate/restart stability; old-child regression.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final49/49 passed:14 standalone counter/intent/fee cases plus25 processor tests; zero floor, strict entry/settlement cutoffs, pre-rollout exclusion, neutral/deduplicated outcomes, settlement-order and old-child regressions verified. Real SQL causal order and earlier-cutoff replay also passed."
         },
         {
           "id": "VER-003",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressPostgresTests\" --logger \"trx;LogFileName=positive-progress-postgres.trx\"",
           "expected": "Use only an independently verified disposable local PostgreSQL database under the marked run. Exercise actual seed/reconciliation SQL and compare raw parent events against a separate in-memory reference; no skipped required integration tests.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Real isolated PostgreSQL17.5 at127.0.0.1:65220/pct_codex_skip_v2_20260902204500_678e6052, independently checked data_directory under marked D:/CodexTemp run before writes. Final TRX3/3 Postgres tests passed, no skips. Actual event counts36/72, new counter0/2, old positive counter1, restart and earlier cutoff verified. No Production writes."
         }
       ]
     },
@@ -188,8 +188,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressStrategyTests|(FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests&FullyQualifiedName~LossDiff)|FullyQualifiedName~FakBuyExecutionParityTests\" --logger \"trx;LogFileName=positive-progress-execution.trx\"",
           "expected": "Focused same-market actual-parent-entry, parent Paper/child mocked Live, frozen intent, min-cap math, zero skip, normalization, depth full/partial/zero, own controls, no double scaling and unchanged old fixed-child behavior tests all pass without external order submission.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final49/49 passed:25 processor cases,14 standalone,6 FAK parity,3 PG,1 catalog. Mocked Live with Paper/Live parent, actual partial-parent base, same frozen snapshot (1 book fetch), capped intent, partial/no-fill, disabled/paused/zero/no-parent and no duplicate entries verified. Old4 partial-Live-parent skipped fields regression passed after review fix."
         }
       ]
     },
@@ -221,8 +221,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressPostgresTests|FullyQualifiedName~PostgresSchemaMigrationTests.DefaultCatalog\" --logger \"trx;LogFileName=positive-progress-migration.trx\"",
           "expected": "Exact 102-row delta, identities, default flags, zero-state/no-history, conflict rollback, idempotence and unchanged unrelated rows verified in disposable local PostgreSQL; existing checksums stay identical.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final3/3 real PG plus DefaultCatalog passed:34+34+34=102 business rows, common zero start/default flags, no history/events, strict pre-rollout exclusion, conflict rollback, repeated seed/initializer preserves flags/state and unrelated whole-row fingerprints. Immutable baseline checksum unchanged; new SQL checksum e224535a4b826e61410fbbe13b55f9a2db357109689ff7d6c66e66fa627daa82."
         }
       ]
     },
@@ -251,8 +251,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~LossDiffPositiveProgressStrategyTests|FullyQualifiedName~FakBuyExecutionParityTests\" --logger \"trx;LogFileName=positive-progress-net-audit.trx\"",
           "expected": "Independently recompute expected fee and Net from actual child full/partial fills, including fee rounding; verify persisted decision fields and no doubled inherited fee.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final standalone14/14 and FAK parity6/6 passed. Full/partial actual child execution passed through existing PolymarketFeeAccountingService; independent decimal fee-rounding and Net=Gross-fee assertions passed, audit fields and no inherited multiplied fee verified. No fee-model replacement."
         }
       ]
     },
@@ -282,16 +282,16 @@
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
           "expected": "Build exits0; record exact warnings/errors, without claiming deployment.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Service dotnet build with explicit marked run --artifacts-path, UseSharedCompilation=false,nodeReuse=false exited0. Initial full build121 warnings/0errors; final incremental build0warnings/0errors,1.89s. Test compilation/execution also exited0:49/49,0 failed/notExecuted. No deployment claim."
         },
         {
           "id": "VER-008",
           "kind": "inspection",
           "command": "git diff --check; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode Contract -ContractPath Codex/Requirements/Contracts/RC-20260902-eth-lossdiff-positive-progress-34.json; .\\scripts\\requirements\\Validate-RequirementContract.ps1 -Mode WorkingTree",
           "expected": "Independent semantic review passes; task files all mapped; exact approval-parent checkpoint verified; no unrelated mutation included. Validate staged/range gates at delivery.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/lossdiff_positive_progress_review compared original prompts, unchanged approved digest, approval-parent85a3b0d9, exact34 tuples, task-only diff/docs and finalTRX/build:PASS,no open findings. Review P2 corrected and regression passed. git diff --check exited0. Unrelated HistoricalGrossNetParity source/tests/README hunk excluded from task staging. Test cluster stopped; protected cleanup removed2380 files/176221096 bytes; marked run independently absent."
         }
       ]
     }
@@ -341,8 +341,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/lossdiff_positive_progress_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

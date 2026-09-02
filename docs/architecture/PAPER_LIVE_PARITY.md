@@ -35,6 +35,47 @@ Therefore the supported Live equivalent for a capped Paper FAK BUY is:
 maximum order price. Paper may fill only snapshot asks at or below that price;
 it must mark an unfilled remainder cancelled immediately.
 
+### ETH capped LossDiff Positive Progress family
+
+The 34 children of exact ETH Up4/Up8 parents
+`b7c50005-0000-4000-8137-000000000104` and
+`b7c50005-0000-4000-8137-000000000108` use caps 1..16 and 1..18 respectively.
+They are ordinary depth-based FAK strategies, not descendants of the optimistic
+Maker-GTD exception. Zero skips; positive k freezes a separate child cash request
+`parent actual invested notional * min(k,cap)`. A parent's actual fill may inform
+this later child decision; it never changes the already executed parent intent.
+The child retains the parent's token, BUY side and original worst-price limit;
+the existing amount calculator normalizes the request before it is frozen.
+
+Paper consumes that child intent and the parent's captured book, not a scaled
+copy of the parent's fill. It may fill partially or not at all; the remaining
+FAK amount is cancelled immediately. Live consumes the same normalized cash
+amount, limit, tick/minimum-size and negative-risk fields with `FAK` and
+`postOnly=false`, without a fresh book fetch after freezing. A simulated fill
+does not authorize or reject Live submission. Actual venue fills replace the
+Live-shadow accounting through the existing reconciler. Initial Live flags are
+off; later manual enabling is independent of the parent's Paper/Live transport.
+
+The durable decision includes parent run/order/signal and assignment references,
+state cutoff/current value, cap/multiplier/base notional, child requested and
+normalized intent, frozen book and Paper fill estimate. No-fill and zero-gate
+diagnostics remain durable. Filled child records flow through existing fee/Net
+accounting using the child's actual size and execution price; the parent fee is
+not scaled. The existing aggregate-VWAP fee approximation and unavailable-fee
+limitations documented below still apply. Simultaneous cap variants represent
+separate portfolios and do not reserve depth from one shared Paper book.
+
+Rollout seeds zero states and no history. Only post-rollout parent entries and
+outcomes settled strictly before the candidate entry participate, in settlement,
+entry and UUID order. Gross-positive/negative defines the parent's win/loss;
+Net remains the child's financial result. Existing fixed LossDiff state ordering
+and execution are unchanged. Historical scaled-fill research is not a promise
+of these executable results.
+
+Current venue references checked for this implementation:
+[Place Orders](https://docs.polymarket.com/trading/place-orders) and
+[Fees](https://docs.polymarket.com/trading/fees).
+
 ### Follow Market FAK family
 
 The BTC, ETH, and SOL `Follow Market M N` catalog family applies only to

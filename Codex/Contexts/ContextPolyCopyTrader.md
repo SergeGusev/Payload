@@ -1,3 +1,15 @@
+## Active Update 2026-09-02 Positive Progress34 Approved Implementation
+Goal: Deliver exactly34 zero-start capped Positive Progress children for the exact ETH Up4/Up8 parents.
+Status: Implementation, independent review and protected cleanup passed; Git delivery in progress
+Done:
+- Exact APPROVE7c5d42ae...c851e55 plus explicit ASM-001/ASM-002/DEV-001 accepted; approval-parent85a3b0d9 precedes material edits. Up4 caps1..16 and Up8 caps1..18, child groups8236/8237, assignments8238/8239.
+- min(k,N) * actual parent invested notional excluding fees; k0 skip. New0008 seeds102 metadata rows with zero/common rollout boundary; enabled Paper, unpaused, Live off, no trades/events/history. New counters use causal settlement ordering; existing parents/old4 and immutable migrations unchanged.
+- Independent scaled FAK depth execution/audited immutable intent, partial/no-fill cancellation, existing actual-child fee/Net pipeline and future manually enabled child Live with Paper parent. No Product, service, rollout or Live action.
+- Final focused49/49 passed,0 failed/skipped:25 processor,14 standalone,6 parity,3 real disposable PostgreSQL,1 catalog. Initial service build121warnings/0errors; final incremental0/0. Independent reviewer PASS/no findings; old4 partial-parent skip regression covers closed P2.
+Next: Complete scoped master commit/push. User deployment and history remain separate.
+Notes: Full evidence and verbatim approval in today's history. Native isolated PostgreSQL stopped; protected cleanup removed2380 files/176221096 bytes, and the marked run was independently absent. Preserve concurrent HistoricalGrossNetParity source/tests/README and unrelated context/history edits.
+Blockers: None for implementation.
+
 ## Active Update 2026-09-02 Reference Price Retention Deployment Verified
 Goal: Verify the user's deployment and actual automatic48h reference-price cleanup without operational mutations.
 Status: Deployment and initial cleanup verified; old backlog still draining automatically

@@ -790,12 +790,14 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
 
             var currentValue = 0;
             StrategyMarketPaperRun? lastRun = null;
-            foreach (var run in runs
+            var qualifyingRuns = runs
                 .Where(run => run.EnteredAtUtc is { } enteredAt && enteredAt >= assignment.AssignedAtUtc)
                 .Where(run => run.SettledAtUtc is { } settledAt && settledAt < settledBeforeUtc)
-                .Where(run => run.RealizedPnlUsd is not null and not 0m)
-                .OrderBy(run => run.EnteredAtUtc)
-                .ThenBy(run => run.Id))
+                .Where(run => run.RealizedPnlUsd is not null and not 0m);
+            var orderedRuns = childVariant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveProgressMirror
+                ? qualifyingRuns.DistinctBy(run => run.Id).OrderBy(run => run.SettledAtUtc).ThenBy(run => run.EnteredAtUtc).ThenBy(run => run.Id)
+                : qualifyingRuns.OrderBy(run => run.EnteredAtUtc).ThenBy(run => run.Id);
+            foreach (var run in orderedRuns)
             {
                 var won = run.RealizedPnlUsd > 0m;
                 currentValue = assignment.ChildMode switch

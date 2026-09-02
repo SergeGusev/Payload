@@ -15631,7 +15631,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         CapturingTradingClient? tradingClient = null,
         bool useIncompleteReferenceAverages = false,
         Action<TestAppRepository, DateTimeOffset>? configureRepository = null,
-        IReadOnlyCollection<string>? liveStrategyCodes = null)
+        IReadOnlyCollection<string>? liveStrategyCodes = null,
+        decimal maximumLiveOrderNotionalUsd = 10m,
+        decimal? currentAskDepth = null)
     {
         var marketStartUtc = new DateTimeOffset(2026, 6, 8, 12, 35, 0, TimeSpan.Zero);
         var previousMarketStartUtc = marketStartUtc.AddMinutes(-5);
@@ -15724,6 +15726,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             OrderBook("eth-confirmed-current-up", bestBid: 0.54m, bestAsk: 0.55m, now),
             OrderBook("eth-confirmed-current-down", bestBid: 0.44m, bestAsk: 0.45m, now)
         };
+        if (currentAskDepth is { } depth)
+        {
+            orderBooks = orderBooks.Select(book => book with { Asks = book.Asks.Select(level => level with { Size = depth }).ToArray() }).ToArray();
+        }
         var clobClient = new FakeClobClient(orderBooks);
         var processor = CreateProcessorCoreWithOptions(
             repository,
@@ -15748,10 +15754,160 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             timeProvider: new ManualTimeProvider(now),
             liveTradingOptions: tradingClient is null
                 ? null
-                : new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 10m },
+                : new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = maximumLiveOrderNotionalUsd },
             cryptoReferencePriceAverageProvider: averageProvider);
 
         return (processor, repository, clobClient);
+    }
+
+    [Theory]
+    [InlineData(4, 5, 12)]
+    [InlineData(8, 18, 20)]
+    public async Task LossDiffPositiveProgress_PaperDispatchCapsActualParentStake(int bps, int cap, int losses)
+    {
+        var child = LossDiffPositiveProgressStrategyTests.Child(bps, cap);
+        var parent = StrategyIds.UpDown5mStrategyVariants.Single(v => v.Id == child.ParentStrategyId);
+        var context = CreateEthConfirmedAverageTestContext(2020m, [parent.Code, child.Code],
+            configureRepository: (repo, now) => ConfigureLossDiffChild(repo, child, "LossDiffPositive", 1, now,
+                Enumerable.Repeat(false, losses).ToArray()));
+        var result = await context.Processor.ProcessAsync();
+        Assert.Equal(2, result.EntriesPlaced);
+        var parentOrder = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == parent.Id);
+        var order = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == child.Id);
+        using var json = JsonDocument.Parse(order.RawDecisionJson!);
+        var progress = json.RootElement.GetProperty("positive_progress");
+        Assert.Equal(Math.Min(losses, cap), progress.GetProperty("multiplier").GetInt32());
+        Assert.Equal(parentOrder.NotionalUsd * Math.Min(losses, cap), progress.GetProperty("execution_intent").GetProperty("RequestedNotionalUsd").GetDecimal());
+        Assert.Equal(order.NotionalUsd, progress.GetProperty("fill_estimate").GetProperty("NotionalUsd").GetDecimal());
+        Assert.Empty(context.Repository.LiveOrders);
+        var second = await context.Processor.ProcessAsync();
+        Assert.Equal(0, second.EntriesPlaced);
+        Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == child.Id);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LossDiffPositiveProgress_LiveChildUsesActualPaperOrLiveParentNotional(bool liveParent)
+    {
+        var child = LossDiffPositiveProgressStrategyTests.Child(8, 2);
+        var parent = StrategyIds.UpDown5mStrategyVariants.Single(v => v.Id == child.ParentStrategyId);
+        var trading = new CapturingTradingClient
+        {
+            PlacementResult = new LiveOrderPlacementResult(true, "0xprogress", "matched", null, "0.80", "1.25",
+                "{\"status\":\"matched\",\"makingAmount\":\"0.80\",\"takingAmount\":\"1.25\"}", "{}")
+        };
+        var context = CreateEthConfirmedAverageTestContext(2020m, [parent.Code, child.Code], trading,
+            configureRepository: (repo, now) => ConfigureLossDiffChild(repo, child, "LossDiffPositive", 1, now, [false, false, false]),
+            liveStrategyCodes: liveParent ? [parent.Code, child.Code] : [child.Code], maximumLiveOrderNotionalUsd: 100m);
+        await context.Processor.ProcessAsync();
+        Assert.Equal(liveParent ? 2 : 1, trading.PlaceCalls);
+        var childOrder = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == child.Id);
+        var parentOrder = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == parent.Id);
+        var live = Assert.Single(context.Repository.LiveOrders, o => o.StrategyId == child.Id);
+        using var json = JsonDocument.Parse(childOrder.RawDecisionJson!);
+        var intent = json.RootElement.GetProperty("positive_progress").GetProperty("execution_intent");
+        Assert.Equal(parentOrder.NotionalUsd * 2, intent.GetProperty("RequestedNotionalUsd").GetDecimal());
+        Assert.Equal(intent.GetProperty("TargetNotionalUsd").GetDecimal(), trading.Requests.Last().MarketBuyAmountUsd);
+        Assert.Equal(intent.GetProperty("MaximumOrderPrice").GetDecimal(), live.Price);
+        Assert.Equal(1, context.ClobClient.GetOrderBookCalls);
+    }
+
+    [Theory]
+    [InlineData(5, 1.5, false)]
+    [InlineData(1, 1, true)]
+    public async Task LossDiffPositiveProgress_PartialParentDepthIsNotMultipliedIntoChildFill(int cap, decimal depth, bool noChildFill)
+    {
+        var child = LossDiffPositiveProgressStrategyTests.Child(4, cap);
+        var parent = StrategyIds.UpDown5mStrategyVariants.Single(v => v.Id == child.ParentStrategyId);
+        var context = CreateEthConfirmedAverageTestContext(2020m, [parent.Code, child.Code],
+            configureRepository: (repo, now) => ConfigureLossDiffChild(repo, child, "LossDiffPositive", 1, now, [false, false, false, false, false]),
+            currentAskDepth: depth);
+        await context.Processor.ProcessAsync();
+        var parentOrder = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == parent.Id);
+        if (noChildFill)
+        {
+            Assert.DoesNotContain(context.Repository.PaperOrders, o => o.StrategyId == child.Id);
+            var skipped = Assert.Single(context.Repository.StrategyMarketPaperRuns, r => r.StrategyId == child.Id);
+            Assert.Equal("positive_progress_fak_no_fill", skipped.SkipReason);
+            Assert.NotNull(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped));
+        }
+        else
+        {
+            var order = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == child.Id);
+            Assert.Equal(parentOrder.NotionalUsd, order.NotionalUsd);
+            Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, order.Status);
+            Assert.NotNull(order.CancelledAtUtc);
+            using var json = JsonDocument.Parse(order.RawDecisionJson!);
+            Assert.Equal(parentOrder.NotionalUsd * cap, json.RootElement.GetProperty("positive_progress").GetProperty("execution_intent").GetProperty("RequestedNotionalUsd").GetDecimal());
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LossDiffPositiveProgress_ZeroOrNoActualParentDoesNotEnter(bool zeroCounter)
+    {
+        var child = LossDiffPositiveProgressStrategyTests.Child(8, 18);
+        var parent = StrategyIds.UpDown5mStrategyVariants.Single(v => v.Id == child.ParentStrategyId);
+        var context = CreateEthConfirmedAverageTestContext(zeroCounter ? 2020m : 2000m, [parent.Code, child.Code],
+            configureRepository: (repo, now) => ConfigureLossDiffChild(repo, child, "LossDiffPositive", 1, now,
+                zeroCounter ? [] : [false]));
+        await context.Processor.ProcessAsync();
+        Assert.DoesNotContain(context.Repository.PaperOrders, o => o.StrategyId == child.Id);
+        Assert.Empty(context.Repository.LiveOrders);
+        if (zeroCounter)
+        {
+            var skipped = Assert.Single(context.Repository.StrategyMarketPaperRuns, r => r.StrategyId == child.Id);
+            Assert.Equal("parent_lossdiff_below_threshold", skipped.SkipReason);
+            Assert.NotNull(PostgresAppRepository.GetPersistedSkipDiagnosticsJson(skipped));
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task LossDiffPositiveProgress_RespectsChildDisabledOrPaused(bool enabled, bool paused)
+    {
+        var child = LossDiffPositiveProgressStrategyTests.Child(4, 5);
+        var parent = StrategyIds.UpDown5mStrategyVariants.Single(v => v.Id == child.ParentStrategyId);
+        var context = CreateEthConfirmedAverageTestContext(2020m, [parent.Code, child.Code],
+            configureRepository: (repo, now) =>
+            {
+                ConfigureLossDiffChild(repo, child, "LossDiffPositive", 1, now, [false, false]);
+                repo.StrategyEnabledStates[child.Id] = enabled;
+                repo.StrategySettings[child.Id] = StrategyRuntimeSettings.Default(child.Id) with { Enabled = enabled, Paused = paused };
+            });
+        await context.Processor.ProcessAsync();
+        Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == parent.Id);
+        Assert.DoesNotContain(context.Repository.PaperOrders, o => o.StrategyId == child.Id);
+    }
+
+    [Fact]
+    public async Task LossDiffFixedChild_LiveParentPartialFillPreservesOriginalSkippedRunFields()
+    {
+        var child = StrategyIds.UpDown5mStrategyVariants.Single(v => v.Id == StrategyIds.EthUp8BpsLossDiff3Plus);
+        var parent = StrategyIds.UpDown5mStrategyVariants.Single(v => v.Id == child.ParentStrategyId);
+        var paperContext = CreateEthConfirmedAverageTestContext(2020m, [parent.Code, child.Code],
+            configureRepository: (repo, now) => ConfigureLossDiffChild(repo, child, "LossDiffReset", 3, now, []));
+        await paperContext.Processor.ProcessAsync();
+        var originalSkip = Assert.Single(paperContext.Repository.StrategyMarketPaperRuns, r => r.StrategyId == child.Id);
+        var trading = new CapturingTradingClient
+        {
+            PlacementResult = new LiveOrderPlacementResult(true, "0xfixed-parent", "matched", null, "0.80", "1.25",
+                "{\"status\":\"matched\",\"makingAmount\":\"0.80\",\"takingAmount\":\"1.25\"}", "{}")
+        };
+        var liveContext = CreateEthConfirmedAverageTestContext(2020m, [parent.Code, child.Code], trading,
+            configureRepository: (repo, now) => ConfigureLossDiffChild(repo, child, "LossDiffReset", 3, now, []),
+            liveStrategyCodes: [parent.Code]);
+        await liveContext.Processor.ProcessAsync();
+        var skip = Assert.Single(liveContext.Repository.StrategyMarketPaperRuns, r => r.StrategyId == child.Id);
+        var liveParent = Assert.Single(liveContext.Repository.LiveOrders);
+        Assert.Equal("parent_lossdiff_below_threshold", skip.SkipReason);
+        Assert.Equal(originalSkip.StakeUsd, skip.StakeUsd);
+        Assert.Equal(originalSkip.EntryPrice, skip.EntryPrice);
+        Assert.Equal(originalSkip.SizeShares, skip.SizeShares);
+        Assert.NotEqual(liveParent.FilledNotionalUsd, skip.StakeUsd);
     }
 
     private static void ConfigureLossDiffChild(

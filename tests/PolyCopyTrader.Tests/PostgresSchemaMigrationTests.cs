@@ -73,7 +73,7 @@ public sealed class PostgresSchemaMigrationTests
     public void DefaultCatalog_IsBoundToApprovedLegacyChecksum()
     {
         var catalog = PostgresSchemaMigrationCatalog.CreateDefault();
-        Assert.Equal(7, catalog.Count);
+        Assert.Equal(8, catalog.Count);
         var baseline = catalog[0];
         var lossDiff = catalog[1];
         var ethUp8LossDiff = catalog[2];
@@ -81,6 +81,10 @@ public sealed class PostgresSchemaMigrationTests
         var followMarketStrategies = catalog[4];
         var historicalParityPaperRunOrderIndex = catalog[5];
         var historicalParityAuditTrigger = catalog[6];
+        Assert.Equal(PostgresLossDiffPositiveProgressStrategySchemaMigration.Id, catalog[7].Id);
+        Assert.Equal(7, catalog[7].Order);
+        Assert.True(catalog[7].Transactional);
+        Assert.Equal(PostgresLossDiffPositiveProgressStrategySchemaMigration.SemanticChecksum, catalog[7].SemanticChecksum);
 
         Assert.Equal(PostgresSchemaMigrationCatalog.LegacyBaselineId, baseline.Id);
         Assert.Equal(
@@ -1109,7 +1113,7 @@ JOIN pg_namespace ns ON ns.oid=cls.relnamespace
 WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
 """);
         Assert.True(relationCount > 100);
-        Assert.Equal(7, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(8, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
 
         await Task.Delay(25);
         await initializer.InitializeAsync();
@@ -1117,7 +1121,7 @@ WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
         Assert.Equal(
             firstUpdatedAt,
             await ScalarAsync<DateTime>(connectionString, "SELECT max(updated_at_utc) FROM public.strategies;"));
-        Assert.Equal(7, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(8, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
 
     private static string CreateSettledLossDiffParentRunsSql(

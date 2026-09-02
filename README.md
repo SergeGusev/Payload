@@ -267,6 +267,48 @@ confirmed during the May 14 API scan. Gamma API batching can be tuned with
 `--btc-5m-history-gamma-delay-ms <n>`. This command does not place or cancel
 orders and exits before the normal service host starts.
 
+### ETH Up4 / Up8 LossDiff Positive Progress
+
+The exact ETH `Up 4 bps Reference Average Premarket` parent
+`b7c50005-0000-4000-8137-000000000104` has 16 independent children, caps 1..16;
+the exact Up 8 bps parent `b7c50005-0000-4000-8137-000000000108` has 18,
+caps 1..18. Names end in `LossDiff Positive Progress Cap N`. Child UUID groups
+are 8236 (Up4) and 8237 (Up8), with N as the twelve-digit suffix.
+
+Each counter starts at zero at migration rollout, not from existing history.
+Only parent entries at/after that UTC cutoff qualify. Before a candidate entry,
+only already completed parent outcomes participate, ordered by settlement time,
+entry time and run UUID: a loss adds one, a win subtracts one with a zero floor,
+and a neutral result is ignored. At zero the child skips. Otherwise its requested
+amount is the parent's actual invested notional, excluding fees, multiplied by
+`min(current LossDiff, N)`. N is a maximum multiplier, not an entry threshold;
+the child's legacy lost coefficient/UI minimum stake is not another multiplier.
+
+The child requires an actual same-market parent entry and inherits its token,
+side, hard price limit and FAK semantics. Increased size executes independently
+against the frozen parent snapshot in Paper, with full/partial/no-fill outcomes;
+it does not multiply an already observed parent fill. Consequently its price,
+filled amount and performance can differ from the historical research replay.
+Existing accounting computes Net from actual child Gross minus its own fee;
+incomplete fee evidence remains unknown, not zero.
+
+Deploy the normal updated service to apply ordered migration
+`0008-eth-lossdiff-positive-progress-34`. It seeds only 34 strategies, 34 fixed
+assignments and 34 zero states, without trades or history. Initial mode is enabled
+Paper, unpaused, Live off; configured stake fields are $1 and internal Live balance
+is $100. Later manual child Live enablement uses the same frozen intent and does
+not require the parent to be Live. Existing controls still apply; the balance
+setting does not transfer funds. Restarts preserve state and rollout time.
+
+Focused verification: service `dotnet build`, and `dotnet test` filters
+`LossDiffPositiveProgressStrategyTests`, `LossDiffPositiveProgressPostgresTests`,
+`BtcUpDown5mPaperStrategyProcessorTests` with `LossDiff`, `FakBuyExecutionParityTests`
+and `PostgresSchemaMigrationTests.DefaultCatalog`. Supply explicit marked
+`D:\CodexTemp` artifact/results directories. The PostgreSQL tests require a
+guarded disposable loopback database, never Production. These children have no
+automatic or manual history-import command in this change; restoration is a
+separately approved future task. Existing fixed LossDiff children are unchanged.
+
 ### ETH LossDiff History Backfill
 
 The service contains one bounded, one-time history command for exact parent
