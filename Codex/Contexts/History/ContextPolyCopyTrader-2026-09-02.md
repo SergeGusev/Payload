@@ -32,3 +32,10 @@ Request:
 
 Result:
 Read-only Product verification confirmed exact deployed build `700c21d1ea891570164b103394164d385708fcf5`, `Running`/`Live` from `2026-09-02T06:47:18.052705Z`, advancing fresh heartbeat, and `last_error=NULL`. Since start, 621/621 Paper orders were Filled; a separate latest-100 sample had 100/100 fill rows, and BTC/ETH/SOL reference ticks were fresh. Server logs contained no post-start ERR/FTL or settlement-sync matches; one short market-resolution latency burst recovered, as did a critical WebSocket reconnect and brief SOL staleness. There were zero post-start Live orders and zero `PaperLiveShadowSettlementSync` events, so no recurrence is observed, but the corrected branch cannot be runtime-confirmed until a new terminal Live order appears. No Product or trading state was changed.
+
+## 2026-09-02T11:51:33.0000000Z
+Request:
+Что мы ещё можем сделать для уменьшения роста базы? Кстати, как он там движется?
+
+Result:
+Attempted only bounded read-only inspection of Product `192.168.0.101:5432/polycopytrader`; PostgreSQL connection timed out and independent TCP probes found ports 5432 and 445 unreachable from this workstation. No SQL snapshot was obtained, so current size, growth rate, leading relations, vacuum state, and realized savings remain unknown; this does not prove service downtime. Current source/configuration and its configuration-test assertions identify two concrete candidates: avoid the full raw update before existing no-bet runs are compacted, and separately preview dependency-qualified old Paper-only Skipped cleanup, whose checked-in age-retention gates remain disabled. Reviewed official PostgreSQL 18 documentation to distinguish freeing reusable space from physically shrinking files. No Product data/schema/configuration/service/trading state or product code changed. No present-day rate or savings estimate was invented; a fresh measurement requires restored access.

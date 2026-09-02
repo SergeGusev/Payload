@@ -1,3 +1,16 @@
+## Active Update 2026-09-02 Database Growth Read-Only Assessment
+Goal: Report current Product database growth and identify bounded options for reducing it.
+Status: Source assessment completed; current Product size and growth remain unverified because the endpoint is unreachable
+Done:
+- At `2026-09-02T11:48Z..11:51Z`, attempted only read-only PostgreSQL inspection of `192.168.0.101:5432/polycopytrader`, with a 10-second connection limit and read-only/UTC/15-second statement settings. The connection timed out before returning any SQL result. Independent bounded TCP probes returned no connection on ports 5432 and 445. This proves lack of access from this workstation, not that the server or service is stopped.
+- Did not infer current database size, GB/day, largest relations, deployed retention settings, autovacuum health, or realized savings from old measurements or local source. No current Product snapshot was obtained.
+- Verified the current local no-bet finalization dispatch and repository path: direct compaction is enabled in checked-in configuration, but existing runs still call `UpdateStrategyMarketPaperRunsBatchAsync` before `CompactDirectPaperSkippedRunsAsync`. Avoiding this redundant full-row update is a concrete candidate for reducing write amplification; its production storage benefit is not quantified.
+- Verified checked-in age-based retention `Enabled=false` and `ApplyEnabled=false`, independently reflected by the configuration contract test. Cleanup of dependency-free old Paper-only Skipped runs is a separate candidate; no candidate count or eligibility preview could be obtained now. Current Product environment overrides remain unknown.
+- Reviewed PostgreSQL 18 official vacuum documentation: DELETE does not immediately return relation space to the OS; ordinary vacuum makes dead-row space reusable, whereas VACUUM FULL rewrites and exclusively locks the relation. No vacuum, schema change, automatic cleanup activation, service action, or data mutation was performed.
+Next: Restore access to the existing Product endpoint, then collect bounded size/table/statistics snapshots before ranking optimizations or proposing an execution contract.
+Notes: Scope was read-only source/config/test inspection and bounded connection diagnostics. No build/test execution was required because no product code changed. Historical measurements are not presented as a current growth rate. Temporary diagnostics use a marked codex-temp-lifecycle run and are removed before handoff.
+Blockers: Product ports 5432 and 445 are unreachable from this workstation; current size and growth cannot be verified.
+
 ## Active Update 2026-09-02 Paper Live Shadow Idempotency Post-Deploy Verification
 Goal: Verify deployed build `700c21d1`, current server and betting health, and recurrence of Paper/Live-shadow settlement-sync errors.
 Status: Service and Paper flow healthy; deployment proven; real post-deploy Live settlement checkpoint pending
