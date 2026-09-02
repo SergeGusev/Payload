@@ -588,7 +588,8 @@ public sealed class LiveTradingProcessor(
         }
 
         var targetFilledShares = Math.Min(liveOrder.FilledSize, paperOrder.SizeShares);
-        if (targetFilledShares > FillSizeTolerance)
+        if (targetFilledShares > FillSizeTolerance &&
+            !IsFinalPaperShadowFillAlreadySynchronized(paperOrder, liveOrder))
         {
             var reconciliation = await shadowFillReconciler.ReconcileAsync(
                 paperOrder.Id,
@@ -619,6 +620,75 @@ public sealed class LiveTradingProcessor(
             "live_status_synced",
             now,
             cancellationToken);
+    }
+
+    private static bool IsFinalPaperShadowFillAlreadySynchronized(
+        PaperOrder paperOrder,
+        LiveOrder liveOrder)
+    {
+        if (!string.Equals(
+                paperOrder.ExecutionSource,
+                PaperLiveShadowActualFillSource,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (paperOrder.Status is not (PaperOrderStatus.Filled or PaperOrderStatus.PartiallyFilledExpired) ||
+            liveOrder.FilledSize <= FillSizeTolerance ||
+            liveOrder.Status is not (LiveOrderStatus.Matched or
+                LiveOrderStatus.Cancelled or
+                LiveOrderStatus.CancelFailed or
+                LiveOrderStatus.Rejected or
+                LiveOrderStatus.Error))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(paperOrder.RawDecisionJson ?? string.Empty);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("paper_live_shadow_actual_fill", out var actualFill) ||
+                actualFill.ValueKind is not JsonValueKind.True ||
+                !root.TryGetProperty("paper_fill_model", out var fillModel) ||
+                fillModel.ValueKind != JsonValueKind.String ||
+                !string.Equals(fillModel.GetString(), "live_order_actual_fill_v1", StringComparison.Ordinal) ||
+                !root.TryGetProperty("live_order_id", out var liveOrderId) ||
+                liveOrderId.ValueKind != JsonValueKind.String ||
+                !Guid.TryParse(liveOrderId.GetString(), out var synchronizedLiveOrderId) ||
+                synchronizedLiveOrderId != liveOrder.Id ||
+                !TryGetDecimal(root, "actual_fill_price", out var synchronizedFillPrice) ||
+                !TryGetDecimal(root, "actual_fill_size_shares", out var synchronizedFillSize) ||
+                !TryGetDecimal(root, "actual_fill_notional_usd", out var synchronizedFillNotional))
+            {
+                return false;
+            }
+
+            var liveFillNotional = liveOrder.FilledNotionalUsd > 0m
+                ? liveOrder.FilledNotionalUsd
+                : (liveOrder.AverageFillPrice ?? liveOrder.Price) * liveOrder.FilledSize;
+            var liveFillPrice = liveFillNotional / liveOrder.FilledSize;
+            return Math.Abs(synchronizedFillPrice - liveFillPrice) <= ShadowPriceTolerance &&
+                Math.Abs(synchronizedFillSize - liveOrder.FilledSize) <= FillSizeTolerance &&
+                Math.Abs(synchronizedFillNotional - liveFillNotional) <= ShadowPriceTolerance &&
+                Math.Abs(paperOrder.Price - liveFillPrice) <= ShadowPriceTolerance &&
+                Math.Abs(paperOrder.SizeShares - liveOrder.FilledSize) <= FillSizeTolerance &&
+                Math.Abs(paperOrder.NotionalUsd - liveFillNotional) <= ShadowPriceTolerance;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetDecimal(JsonElement root, string propertyName, out decimal value)
+    {
+        value = 0m;
+        return root.TryGetProperty(propertyName, out var property) &&
+            property.ValueKind == JsonValueKind.Number &&
+            property.TryGetDecimal(out value);
     }
 
     private static bool IsPaperLiveShadowOrder(LiveOrder order)

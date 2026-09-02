@@ -18,3 +18,10 @@ Request:
 
 Result:
 Read-only diagnosis proved the repeated settlement-sync errors are caused by `SyncPaperShadowAsync` invoking fill reconciliation again after the linked Paper order is already durably marked `paper_live_shadow_actual_fill`; the repository then correctly refuses to mutate the already-settled Paper position. Drafted and mechanically validated the narrow idempotency contract `RC-20260902-paper-live-shadow-settlement-idempotency`, digest `sha256:b02dbb3d0aa848cbe36b0cc2686df59ca0ec7862be1bd99b2145287bd1a3bba7`, preserving shape validation, initial reconciliation, decision links, Live settlement, and accounting. The three explicit CLOB `HTTP 503: trading is disabled` responses have no established local request defect and are excluded from retry/bypass changes. Product code remains unchanged pending the required exact user approval.
+
+## 2026-09-02T05:42:00.4239762Z
+Request:
+APPROVE RC-20260902-paper-live-shadow-settlement-idempotency sha256:b02dbb3d0aa848cbe36b0cc2686df59ca0ec7862be1bd99b2145287bd1a3bba7
+
+Result:
+Committed approval-parent checkpoint `12a6485d`, then implemented the approved Paper/Live-shadow settlement idempotency correction. Canonical final actual-fill evidence for the same Live order now prevents a redundant second reconciliation while shape validation, decision-link updates, and independent Live settlement remain intact; noncanonical mixed fills still reconcile. The complete LiveTradingGatingTests class passed 36/36 and the final Release solution build passed with zero errors. Independent reviewer `agent:/root/settlement_idempotency_review` returned PASS with no findings. Production and HTTP 503 handling were not changed; deployment remains with the user.

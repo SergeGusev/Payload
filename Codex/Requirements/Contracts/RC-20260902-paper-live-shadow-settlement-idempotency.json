@@ -3,7 +3,7 @@
   "contractId": "RC-20260902-paper-live-shadow-settlement-idempotency",
   "title": "Stop redundant Paper Live-shadow reconciliation after final fill synchronization",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -57,24 +57,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --configuration Release --filter FullyQualifiedName~LiveTradingGatingTests using --artifacts-path and --results-directory below the active marked D:/CodexTemp run",
           "expected": "All focused LiveTradingGatingTests pass, including the already-synchronized settled-shadow regression and existing reconciliation/shape/cancellation coverage.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The complete LiveTradingGatingTests class passed 36/36. The settled-shadow regression proves zero second reconciliation calls and no PaperLiveShadowSettlementSync event while Live settlement is applied; the mixed-shadow regression proves noncanonical prior fills still invoke reconciliation exactly once."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln --configuration Release using --artifacts-path below the active marked D:/CodexTemp run",
           "expected": "The Release solution build completes with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The final Release solution build completed with 0 errors and 5 warnings in untouched test files."
         },
         {
           "id": "VER-003",
           "kind": "inspection",
           "command": "Inspect the final diff, run git diff --check, run requirement-contract WorkingTree and Staged validation, and obtain independent semantic review against both verbatim prompts, the approved contract, implementation, and verification evidence.",
           "expected": "Only the approved processor/test behavior changes; mechanical gates pass and the independent reviewer returns PASS with no findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "The final diff changes only LiveTradingProcessor and LiveTradingGatingTests product behavior plus required contract/context bookkeeping. git diff --check and requirement-contract WorkingTree/Staged gates passed. Independent reviewer agent:/root/settlement_idempotency_review compared both verbatim prompts, the approved contract, current call paths, final diff, tests, and build and returned PASS with no findings."
         }
       ]
     }
@@ -88,9 +88,9 @@
     "semanticDigest": "sha256:b02dbb3d0aa848cbe36b0cc2686df59ca0ec7862be1bd99b2145287bd1a3bba7"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/settlement_idempotency_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

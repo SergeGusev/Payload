@@ -788,6 +788,7 @@ public sealed class LiveTradingGatingTests
 
         await processor.ProcessOpenOrdersAsync();
 
+        Assert.Equal(1, repository.PaperLiveShadowFillReconciliationCalls);
         var paperOrder = Assert.Single(repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, paperOrder.Status);
         Assert.Null(paperOrder.FilledAtUtc);
@@ -1496,7 +1497,7 @@ public sealed class LiveTradingGatingTests
             now.AddMinutes(-5),
             FilledAtUtc: now.AddMinutes(-9),
             StrategyId: strategyId,
-            RawDecisionJson: "{\"paper_live_shadow_test\":true,\"execution_intent_maximum_order_price\":0.99,\"execution_intent_target_notional_usd\":3.96}",
+            RawDecisionJson: $$"""{"paper_live_shadow_test":true,"execution_intent_maximum_order_price":0.99,"execution_intent_target_notional_usd":3.96,"paper_live_shadow_actual_fill":true,"paper_fill_model":"live_order_actual_fill_v1","live_order_id":"{{liveOrderId}}","actual_fill_price":0.50,"actual_fill_size_shares":4.0,"actual_fill_notional_usd":2.0}""",
             CorrelationId: correlationId,
             ExecutionSource: "paper_live_shadow_actual_fill"));
         repository.PaperFills.Add(new PaperFill(
@@ -1588,9 +1589,10 @@ public sealed class LiveTradingGatingTests
         Assert.True(liveOrder.BalanceEffectApplied);
         Assert.Equal(4m, liveOrder.SettlementValueUsd);
         Assert.Equal(2m, liveOrder.RealizedPnlUsd);
-        Assert.Single(
+        Assert.Equal(0, repository.PaperLiveShadowFillReconciliationCalls);
+        Assert.DoesNotContain(
             repository.LiveTradingEvents,
-            item => item.Action == "PaperLiveShadowSettlementSync" && item.Status == "Error");
+            item => item.Action == "PaperLiveShadowSettlementSync");
         Assert.Single(repository.PaperFills);
         Assert.Equal(0m, Assert.Single(repository.PaperPositions).SizeShares);
     }
