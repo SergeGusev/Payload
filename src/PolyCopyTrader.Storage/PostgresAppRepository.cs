@@ -1342,17 +1342,8 @@ RETURNING id;
 		await transaction.CommitAsync(cancellationToken);
 	}
 
-	private static async Task AddSignalsBatchAsync(
-		NpgsqlConnection connection,
-		NpgsqlTransaction transaction,
-		IReadOnlyList<Signal> signals,
-		CancellationToken cancellationToken)
+	private static string PrepareSignalsJson(IReadOnlyList<Signal> signals)
 	{
-		if (signals.Count == 0)
-		{
-			return;
-		}
-
 		var rows = signals.Select(signal => new
 		{
 			id = signal.Id,
@@ -1370,6 +1361,21 @@ RETURNING id;
 			created_at_utc = UtcDateTime(signal.CreatedAtUtc),
 			raw_context_json = (string?)null
 		});
+		return JsonSerializer.Serialize(rows);
+	}
+
+	private static async Task AddSignalsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<Signal> signals,
+		CancellationToken cancellationToken,
+		string? preparedJson = null)
+	{
+		if (signals.Count == 0)
+		{
+			return;
+		}
+
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO signals (
     id, leader_trade_id, trader_wallet, condition_id, asset_id, outcome, leader_price,
@@ -1399,21 +1405,12 @@ FROM jsonb_to_recordset(CAST(@SignalsJson AS jsonb)) AS signal(
 );
 """);
 		command.Transaction = transaction;
-		AddJsonbParameter(command, "SignalsJson", JsonSerializer.Serialize(rows));
+		AddJsonbParameter(command, "SignalsJson", preparedJson ?? PrepareSignalsJson(signals));
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
-	private static async Task AddPaperOrdersBatchAsync(
-		NpgsqlConnection connection,
-		NpgsqlTransaction transaction,
-		IReadOnlyList<PaperOrder> orders,
-		CancellationToken cancellationToken)
+	private static string PreparePaperOrdersJson(IReadOnlyList<PaperOrder> orders)
 	{
-		if (orders.Count == 0)
-		{
-			return;
-		}
-
 		var rows = orders.Select(order => new
 		{
 			id = order.Id,
@@ -1436,6 +1433,21 @@ FROM jsonb_to_recordset(CAST(@SignalsJson AS jsonb)) AS signal(
 			correlation_id = order.CorrelationId,
 			execution_source = order.ExecutionSource ?? string.Empty
 		});
+		return JsonSerializer.Serialize(rows);
+	}
+
+	private static async Task AddPaperOrdersBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperOrder> orders,
+		CancellationToken cancellationToken,
+		string? preparedJson = null)
+	{
+		if (orders.Count == 0)
+		{
+			return;
+		}
+
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO paper_orders (
     id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price,
@@ -1475,21 +1487,12 @@ ORDER BY
     paper_order.id;
 """);
 		command.Transaction = transaction;
-		AddJsonbParameter(command, "PaperOrdersJson", JsonSerializer.Serialize(rows));
+		AddJsonbParameter(command, "PaperOrdersJson", preparedJson ?? PreparePaperOrdersJson(orders));
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
-	private static async Task AddPaperFillsBatchAsync(
-		NpgsqlConnection connection,
-		NpgsqlTransaction transaction,
-		IReadOnlyList<PaperFill> fills,
-		CancellationToken cancellationToken)
+	private static string PreparePaperFillsJson(IReadOnlyList<PaperFill> fills)
 	{
-		if (fills.Count == 0)
-		{
-			return;
-		}
-
 		var rows = fills.Select(fill => new
 		{
 			id = fill.Id,
@@ -1509,6 +1512,21 @@ ORDER BY
 			fee_calculated_at_utc = fill.FeeCalculatedAtUtc.HasValue ? UtcDateTime(fill.FeeCalculatedAtUtc.Value) : (DateTime?)null,
 			net_realized_pnl_usd = fill.NetRealizedPnlUsd
 		});
+		return JsonSerializer.Serialize(rows);
+	}
+
+	private static async Task AddPaperFillsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperFill> fills,
+		CancellationToken cancellationToken,
+		string? preparedJson = null)
+	{
+		if (fills.Count == 0)
+		{
+			return;
+		}
+
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO paper_fills (
     id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd,
@@ -1547,21 +1565,12 @@ ORDER BY
     fill.id;
 """);
 		command.Transaction = transaction;
-		AddJsonbParameter(command, "PaperFillsJson", JsonSerializer.Serialize(rows));
+		AddJsonbParameter(command, "PaperFillsJson", preparedJson ?? PreparePaperFillsJson(fills));
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
-	private static async Task UpsertPaperPositionsBatchAsync(
-		NpgsqlConnection connection,
-		NpgsqlTransaction transaction,
-		IReadOnlyList<PaperPosition> positions,
-		CancellationToken cancellationToken)
+	private static string PreparePaperPositionsJson(IReadOnlyList<PaperPosition> positions)
 	{
-		if (positions.Count == 0)
-		{
-			return;
-		}
-
 		var rows = positions.Select(position => new
 		{
 			id = Guid.NewGuid(),
@@ -1584,6 +1593,21 @@ ORDER BY
 			net_unrealized_pnl_usd = position.NetUnrealizedPnlUsd,
 			updated_at_utc = UtcDateTime(position.UpdatedAtUtc)
 		});
+		return JsonSerializer.Serialize(rows);
+	}
+
+	private static async Task UpsertPaperPositionsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperPosition> positions,
+		CancellationToken cancellationToken,
+		string? preparedJson = null)
+	{
+		if (positions.Count == 0)
+		{
+			return;
+		}
+
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO paper_positions (
     id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares, average_price,
@@ -1642,7 +1666,7 @@ ON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 """);
 		command.Transaction = transaction;
-		AddJsonbParameter(command, "PaperPositionsJson", JsonSerializer.Serialize(rows));
+		AddJsonbParameter(command, "PaperPositionsJson", preparedJson ?? PreparePaperPositionsJson(positions));
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
@@ -1736,23 +1760,29 @@ ORDER BY lock_key;
 		}
 	}
 
-	private static async Task ActivatePaperCopiedLeaderPositionsBatchAsync(
-		NpgsqlConnection connection,
-		NpgsqlTransaction transaction,
-		IReadOnlyList<PaperCopiedLeaderPositionActivation> activations,
-		CancellationToken cancellationToken)
+	private static string PrepareActivationsJson(IReadOnlyList<PaperCopiedLeaderPositionActivation> activations)
 	{
-		if (activations.Count == 0)
-		{
-			return;
-		}
-
 		var rows = activations.Select(activation => new
 		{
 			entry_paper_order_id = activation.EntryPaperOrderId,
 			copied_initial_size_shares = activation.CopiedInitialSizeShares,
 			filled_at_utc = UtcDateTime(activation.FilledAtUtc)
 		});
+		return JsonSerializer.Serialize(rows);
+	}
+
+	private static async Task ActivatePaperCopiedLeaderPositionsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<PaperCopiedLeaderPositionActivation> activations,
+		CancellationToken cancellationToken,
+		string? preparedJson = null)
+	{
+		if (activations.Count == 0)
+		{
+			return;
+		}
+
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH activation_rows AS (
     SELECT
@@ -1780,21 +1810,12 @@ WHERE position.entry_paper_order_id = activation_rows.entry_paper_order_id
   AND position.status IN ('PendingEntry', 'Active');
 """);
 		command.Transaction = transaction;
-		AddJsonbParameter(command, "ActivationsJson", JsonSerializer.Serialize(rows));
+		AddJsonbParameter(command, "ActivationsJson", preparedJson ?? PrepareActivationsJson(activations));
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 
-	private static async Task UpdateStrategyMarketPaperRunsBatchAsync(
-		NpgsqlConnection connection,
-		NpgsqlTransaction transaction,
-		IReadOnlyList<StrategyMarketPaperRun> runs,
-		CancellationToken cancellationToken)
+	private static string PrepareStrategyRunsJson(IReadOnlyList<StrategyMarketPaperRun> runs)
 	{
-		if (runs.Count == 0)
-		{
-			return;
-		}
-
 		var rows = runs.Select(run => new
 		{
 			id = run.Id,
@@ -1835,6 +1856,21 @@ WHERE position.entry_paper_order_id = activation_rows.entry_paper_order_id
 			fee_calculated_at_utc = run.FeeCalculatedAtUtc.HasValue ? UtcDateTime(run.FeeCalculatedAtUtc.Value) : (DateTime?)null,
 			net_realized_pnl_usd = run.NetRealizedPnlUsd
 		});
+		return JsonSerializer.Serialize(rows);
+	}
+
+	private static async Task UpdateStrategyMarketPaperRunsBatchAsync(
+		NpgsqlConnection connection,
+		NpgsqlTransaction transaction,
+		IReadOnlyList<StrategyMarketPaperRun> runs,
+		CancellationToken cancellationToken,
+		string? preparedJson = null)
+	{
+		if (runs.Count == 0)
+		{
+			return;
+		}
+
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH run_rows AS (
     SELECT *
@@ -1997,7 +2033,7 @@ ON CONFLICT (strategy_id, market_id) DO UPDATE SET
     net_realized_pnl_usd = excluded.net_realized_pnl_usd;
 """);
 		command.Transaction = transaction;
-		AddJsonbParameter(command, "StrategyRunsJson", JsonSerializer.Serialize(rows));
+		AddJsonbParameter(command, "StrategyRunsJson", preparedJson ?? PrepareStrategyRunsJson(runs));
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
 

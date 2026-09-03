@@ -57,6 +57,37 @@ tests/
 
 ## Build
 
+### Paper storage lock contention correction
+
+The existing direct-skip-compaction path keeps each original compacting queue
+batch in its own atomic transaction; noncompacting batches still merge. Pure JSON
+preparation precedes the retention gate, while wallet-lock order, dependency
+checks and archive/rollup writes remain protected. Actual new v1 archive data
+refreshes the reconciliation request version, even when its priority is unchanged.
+
+Dashboard consumers retain their shared consumer-serialization protocol but do
+not hold coalesced position/request row locks throughout projection calculation.
+Acknowledgement preserves newer versions; a rebuild's position/request conflict
+is handled only at its bounded final acknowledgement. Already-accounted
+append-only events are still removed, avoiding double counting. Event selection
+locks only rows that fit the batch and seeks past locked rows within a fixed scan
+boundary. Ordinary short PostgreSQL locks remain possible.
+
+No new option, migration, trading/accounting rule, Production operation or history
+import is part of this correction. It takes effect through the existing service
+paths after a separately performed deployment; the history importer's existing
+health/lock guard is unchanged.
+
+Verification uses a guarded disposable loopback PostgreSQL 18 database, with
+`TEMP`, `TMP`, `TMPDIR`, `--artifacts-path` and `--results-directory` under a marked
+`D:\CodexTemp\runs` directory. Build `src/PolyCopyTrader.Service`; run test filters
+`PaperEntryPersistenceQueueTests|StrategyRunRetentionPostgresIntegrationTests.DirectCompaction_`
+and `DashboardIncrementalProjectionIntegrationTests|DashboardSnapshotTests`.
+Set `POLYCOPYTRADER_REPOSITORY_ROOT` to the verified checkout for source-reading tests.
+Tests cover FIFO/retry, real batch commit/rollback and gate release, dependency
+races, queue versions, position rebinding, missing facts and projection totals.
+These local tests do not establish a numerical Production latency improvement.
+
 ```powershell
 dotnet build
 ```

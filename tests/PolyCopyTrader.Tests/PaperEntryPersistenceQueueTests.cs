@@ -8,6 +8,106 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class PaperEntryPersistenceQueueTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task LockContention_CompactingBatchesRemainIndependentAndOthersStillMerge(bool compact)
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = new List<Guid[]>();
+        var ids = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToArray();
+        var repository = new TestAppRepository
+        {
+            BeforePaperEntryPersistenceBatch = async batch =>
+            {
+                calls.Add(batch.StrategyRuns.Select(run => run.Id).ToArray());
+                if (calls.Count == 1)
+                {
+                    entered.SetResult();
+                    await release.Task;
+                }
+            }
+        };
+        var queue = CreateQueue(repository);
+        await queue.StartAsync(CancellationToken.None);
+        try
+        {
+            await queue.EnqueueAsync(CreateBatch(ids[0], true));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            foreach (var id in ids.Skip(1))
+            {
+                var batch = CreateBatch(id, true);
+                if (!compact)
+                {
+                    batch = batch with
+                    {
+                        StrategyRuns = batch.StrategyRuns.Select(run => run with
+                        {
+                            Status = StrategyMarketPaperRunStatuses.Observed
+                        }).ToArray()
+                    };
+                }
+                await queue.EnqueueAsync(batch);
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+            await queue.StopAsync(CancellationToken.None);
+        }
+        Assert.Equal(compact ? 4 : 2, calls.Count);
+        Assert.Equal(ids, calls.SelectMany(call => call).ToArray());
+        Assert.Equal(0, queue.PendingBatches);
+    }
+
+    [Fact]
+    public async Task LockContention_RetryDoesNotRepeatCommittedCompactionOrOvertakeFailedBatch()
+    {
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var ids = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToArray();
+        var attempts = new List<Guid>();
+        var failed = false;
+        var repository = new TestAppRepository
+        {
+            BeforePaperEntryPersistenceBatch = async batch =>
+            {
+                var id = Assert.Single(batch.StrategyRuns).Id;
+                attempts.Add(id);
+                if (id == ids[0])
+                {
+                    entered.SetResult();
+                    await release.Task;
+                }
+                if (id == ids[2] && !failed)
+                {
+                    failed = true;
+                    throw new InvalidOperationException("One original batch fails once.");
+                }
+            }
+        };
+        var queue = CreateQueue(repository);
+        await queue.StartAsync(CancellationToken.None);
+        try
+        {
+            await queue.EnqueueAsync(CreateBatch(ids[0], true));
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            foreach (var id in ids.Skip(1))
+            {
+                await queue.EnqueueAsync(CreateBatch(id, true));
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+            await queue.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        Assert.Equal(new[] { ids[0], ids[1], ids[2], ids[2], ids[3] }, attempts);
+        Assert.Equal(4, repository.PaperEntryPersistenceBatchCalls);
+        Assert.Equal(0, queue.PendingBatches);
+    }
+
     [Fact]
     public async Task StopAsync_WaitsForQueuedBatchToPersist()
     {

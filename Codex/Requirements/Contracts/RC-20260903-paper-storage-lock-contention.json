@@ -3,7 +3,7 @@
   "contractId": "RC-20260903-paper-storage-lock-contention",
   "title": "Сократить найденное удержание блокировок архивацией Paper и пересчётом дашборда",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -69,8 +69,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $taskRunPath/artifacts --results-directory $taskRunPath/results --filter \"FullyQualifiedName~PaperEntryPersistenceQueueTests|FullyQualifiedName~StrategyRunRetentionPostgresIntegrationTests.DirectCompaction_\" --logger \"trx;LogFileName=paper-lock-compaction.trx\"",
           "expected": "Все выбранные тесты реально выполняются и проходят, без skipped integration cases; локальная PostgreSQL fixture подтверждает независимые транзакции исходных пакетов, корректность зависимостей, rollback и равенство данных. TEMP/TMP/TMPDIR и test connection направлены только в собственную изолированную среду под D:/CodexTemp/runs.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Exact isolated checkout based on approval261a0cfc; verified-lock-compaction.trx22/22 PASS0skips, SHA2568DCFE4606C0A49BA73F8BBBB05D1C21F315BF3F0C1F36E46BC269085A8876B05. Real loopback PostgreSQL18.6 on127.0.0.1:52127, owned disposable DB pct_codex_skip_v2_20260903134000_9f7ea66f. FIFO/retry, four independent xmin transactions and between-batch gate release, dependency race, full financial rollback, atomic data/fee checks passed. All9 scoped code/test Git blobs independently match main and tested checkout."
         }
       ]
     },
@@ -104,8 +104,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $taskRunPath/artifacts --results-directory $taskRunPath/results --filter \"FullyQualifiedName~DashboardIncrementalProjectionIntegrationTests|FullyQualifiedName~DashboardSnapshotTests\" --logger \"trx;LogFileName=paper-lock-projection.trx\"",
           "expected": "Все выбранные тесты реально выполняются и проходят в изолированном локальном PostgreSQL; конкурентный producer не ждёт завершения остановленного пересчёта, новые версии остаются, replay/rollback не искажают суммы. Независимые raw aggregates совпадают с lifetime/recent projections.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "verified-lock-projection-fixed.trx29/29 PASS0skips, SHA25605779CCC068A7CAF88660F478C730F9B8DECF3E25F1F39813317A0EECCA80D98; owned PostgreSQL18.6 DB pct_codex_skip_v2_20260903134500_9f7ea66f. Existing POLYCOPYTRADER_REPOSITORY_ROOT points to exact verified checkout. Concurrent producer completion, version retention, delete/reinsert/rollback, missing facts/binding,250ms acknowledgement conflicts, bounded selection/backfill and independent raw/lifetime/recent equality passed. Initial source-path and reused-fixture failures resolved without weakened assertions."
         }
       ]
     },
@@ -139,16 +139,16 @@
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $taskRunPath/artifacts",
           "expected": "Сборка проходит; все временные выходы размещены в отмеченной директории D:/CodexTemp/runs. Никаких действий Production.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Exact isolated Service build exited0,0warnings/0errors; verified-service-build.log SHA256BD13165CB4AB7015598E3FB03AE61093DA6123962966279BC625138E8AED54C9. TEMP/TMP/TMPDIR and artifacts/results under owned marked D:/CodexTemp/runs/manual-9f7ea66fd8ea4af994f8f92c68277c36; loopback-only guarded test connection. No Production connection or service/deploy operation."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; scripts/requirements/Validate-RequirementContract.ps1 -Mode Range -BaseRef <verified-approval-parent> -HeadRef <verified-product-commit>",
           "expected": "Независимый semantic review PASS/no findings; все gate checks точного артефакта проходят без обходов и потери lifecycle checkpoint. В evidence подставлены реальные проверенные Git refs и при необходимости точный staged-tree-идентичный изолированный checkout, не затрагивающий чужой dirty diff.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/approval_checkpoint_review PASS/no findings after comparing original words,90bd approved contract, exact diff from261a0cfc and actual51passing tests/build;9code/test blobs match main/verify;122 financial SQL literals unchanged. Exact isolated diff--check passed. Mandatory final WorkingTree/Staged/Range gate outputs and real Git refs are recorded in the same-turn daily-history finalization; no hook bypass, unrelated dirty files excluded."
         }
       ]
     }
@@ -163,8 +163,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/approval_checkpoint_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

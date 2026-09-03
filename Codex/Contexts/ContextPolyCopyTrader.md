@@ -1,3 +1,16 @@
+## Active Update 2026-09-03 Approved Paper Storage Lock Correction Verified
+Goal: Complete only the approved local Paper storage/dashboard lock correction.
+Status: In Progress; implementation and independent review passed, final gates/cleanup/commit pending
+Done:
+- Latest exact user approval90bd2486b955e8d4077f4c94bc75ab1c03656d00998e1031b3e1d8a4e69f87db recorded in separate approval-only commit261a0cfc. Scope/assumptions/deviations unchanged; preserved unrelated native-history changes.
+- Original compacting queue batches remain separate, FIFO/retry and financial atomicity preserved; pure payload preparation precedes wallet/gate critical work. Two active v1 archive producers refresh request versions only for actual new data.
+- Dashboard position/request consumption no longer holds their queue rows through calculation; version-aware acknowledgement preserves newer work, bounded conflict handling retains only idempotent position events. Append-only contributions do not replay. Event selection locks only selected nonposition rows and seeks past locked rows.
+- Exact isolated checkout based on261a0cfc matches all9 final code/test blobs. Compaction/queue22/22 PASS; projection/snapshot29/29 PASS;0skips. Service build PASS0warnings/0errors. Separate reviewer agent:/root/approval_checkpoint_review compared verbatim requests, approved contract, actual diff and evidence: PASS/no findings.
+Next: Finish exact-artifact WorkingTree/Staged/Range gates, protected temporary cleanup, normal commit/push. No deployment or history resume under this contract.
+Notes: PostgreSQL18.6 was owned loopback127.0.0.1:52127 under marked run manual-9f7ea66fd8ea4af994f8f92c68277c36; verified exact data_directory and stopped it, pg_ctl confirms no server. Detailed commands/hashes in daily history. No Production query/write, Live/fee/trading/schema/service change. Import command hash remains0548EDEFF81E29897D40EB543F402D869FB0BC7FADD3266FD55AA314B4A25E5B; original history remains last verified16/31612, not resumed or rechecked. Normal short PostgreSQL locks and importer guard remain.
+Blockers: None identified; finalization checks still required.
+
+
 ## Active Update 2026-09-03 Progress34 Native History Contract Ready
 Goal: Restore all34 modeled Positive Progress histories into native application history and ordinary Paper metrics, then separately report excluded ResearchOnly trades.
 Status: Replacement draft validated; awaiting exact digest-bound approval and ASM-001/002/003 confirmation

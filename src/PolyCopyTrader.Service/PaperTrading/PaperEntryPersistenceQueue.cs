@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using PolyCopyTrader.Domain;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
@@ -126,8 +127,17 @@ public sealed class PaperEntryPersistenceQueue(
 
     private PersistenceWorkItem DrainAvailableBatches(PaperEntryPersistenceBatch firstBatch)
     {
+        // A compacting batch holds the global retention gate. Do not extend that
+        // critical section by merging independently queued financial batches.
+        if (RequiresDirectCompaction(firstBatch))
+        {
+            return new PersistenceWorkItem(firstBatch, 1);
+        }
+
         var batches = new List<PaperEntryPersistenceBatch> { firstBatch };
         while (batches.Count < MaxBatchesPerFlush &&
+               channel.Reader.TryPeek(out var nextBatch) &&
+               !RequiresDirectCompaction(nextBatch) &&
                channel.Reader.TryRead(out PaperEntryPersistenceBatch? batch))
         {
             batches.Add(batch);
@@ -140,6 +150,10 @@ public sealed class PaperEntryPersistenceQueue(
 
         return new PersistenceWorkItem(MergeBatches(batches), batches.Count);
     }
+
+    private static bool RequiresDirectCompaction(PaperEntryPersistenceBatch batch) =>
+        batch.DirectPaperSkipCompactionEnabled && batch.StrategyRuns.Any(run =>
+            string.Equals(run.Status, StrategyMarketPaperRunStatuses.Skipped, StringComparison.OrdinalIgnoreCase));
 
     private async Task PersistWithRetryAsync(PersistenceWorkItem workItem)
     {

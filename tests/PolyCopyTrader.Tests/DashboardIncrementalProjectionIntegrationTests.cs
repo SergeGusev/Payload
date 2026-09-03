@@ -1,6 +1,7 @@
 using Npgsql;
 using NpgsqlTypes;
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Tests;
@@ -10,13 +11,536 @@ public sealed class DashboardIncrementalProjectionIntegrationTests
 {
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_PositionProducerCommitsDuringProjectionAndNewVersionSurvives()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var strategyId = Guid.NewGuid();
+        await InsertStrategyAsync(factory, strategyId);
+        var positionId = await InsertPaperPositionAsync(
+            factory, $"projection_test_{strategyId:N}", DateTimeOffset.UtcNow);
+        await projection.BootstrapAsync();
+        await UpdatePaperPositionAsync(factory, positionId, 1m, DateTimeOffset.UtcNow);
+
+        await RunWhileProjectionPausedAsync(
+            factory,
+            strategyId,
+            async consumer => Assert.Equal(1, (await consumer.ApplyPendingEventsAsync(1000)).EventsApplied),
+            () => UpdatePaperPositionAsync(
+                WithApplicationName(factory, "position_producer", "-c lock_timeout=250ms -c statement_timeout=2000"),
+                positionId, 2m, DateTimeOffset.UtcNow));
+
+        Assert.Equal(1, await ReadPaperPositionEventCountAsync(factory, positionId));
+        Assert.Equal(1, (await projection.ApplyPendingEventsAsync(1000)).EventsApplied);
+        Assert.Equal(0, await ReadPaperPositionEventCountAsync(factory, positionId));
+        Assert.Equal(0, (await projection.ApplyPendingEventsAsync(1000)).EventsApplied);
+        var actual = await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId);
+        var expected = (await new PostgresAppRepository(factory).GetStrategyPerformanceAsync())
+            .Single(row => row.StrategyId == strategyId);
+        AssertStrategyMetricsEqual(expected, actual);
+        Assert.Equal(2m, actual.UnrealizedPnlUsd);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_ReconciliationProducerCommitsDuringRebuildAndNewRequestSurvives()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var strategyId = Guid.NewGuid();
+        await InsertStrategyAsync(factory, strategyId);
+        await projection.BootstrapAsync();
+        await QueueReconciliationAsync(factory, strategyId);
+
+        await RunWhileProjectionPausedAsync(
+            factory,
+            strategyId,
+            async consumer =>
+            {
+                var result = await consumer.ReconcileNextStrategyAsync();
+                Assert.Null(result.Error);
+                Assert.True(result.Reconciled);
+                Assert.Equal(strategyId, result.StrategyId);
+            },
+            () => QueueReconciliationAsync(
+                WithApplicationName(factory, "reconciliation_producer", "-c lock_timeout=250ms -c statement_timeout=2000"),
+                strategyId));
+
+        Assert.Equal(1, await ReadReconciliationRequestCountAsync(factory, strategyId));
+        var next = await projection.ReconcileNextStrategyAsync();
+        Assert.Null(next.Error);
+        Assert.Equal(strategyId, next.StrategyId);
+        Assert.Equal(0, await ReadReconciliationRequestCountAsync(factory, strategyId));
+        var actual = await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId);
+        var expected = (await new PostgresAppRepository(factory).GetStrategyPerformanceAsync())
+            .Single(row => row.StrategyId == strategyId);
+        AssertStrategyMetricsEqual(expected, actual);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_PositionDeleteReinsertAndConsumerRollbackPreserveLatestState()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        foreach (var scenario in new[] { "delete", "reinsert", "rollback" })
+        {
+            var projection = new PostgresDashboardProjectionRepository(factory);
+            var strategyId = Guid.NewGuid();
+            await InsertStrategyAsync(factory, strategyId);
+            var positionId = await InsertPaperPositionAsync(
+                factory, $"projection_test_{strategyId:N}", DateTimeOffset.UtcNow);
+            await projection.BootstrapAsync();
+            await UpdatePaperPositionAsync(factory, positionId, 1m, DateTimeOffset.UtcNow);
+
+            await RunWhileProjectionPausedAsync(factory, strategyId,
+                async consumer =>
+                {
+                    if (scenario == "rollback")
+                    {
+                        var error = await Assert.ThrowsAsync<PostgresException>(
+                            () => consumer.ApplyPendingEventsAsync(1000));
+                        Assert.Equal(PostgresErrorCodes.RaiseException, error.SqlState);
+                    }
+                    else
+                    {
+                        Assert.Equal(1, (await consumer.ApplyPendingEventsAsync(1000)).EventsApplied);
+                    }
+                },
+                async () =>
+                {
+                    var producer = WithApplicationName(factory, "position_edge_producer",
+                        "-c lock_timeout=250ms -c statement_timeout=2000");
+                    if (scenario == "rollback")
+                    {
+                        await UpdatePaperPositionAsync(producer, positionId, 3m, DateTimeOffset.UtcNow);
+                        return;
+                    }
+                    await using var connection = producer.CreateConnection();
+                    await connection.OpenAsync();
+                    await using var transaction = await connection.BeginTransactionAsync();
+                    await using (var delete = new NpgsqlCommand(
+                        "DELETE FROM paper_positions WHERE id = @Id;", connection, transaction))
+                    {
+                        delete.Parameters.AddWithValue("Id", positionId);
+                        Assert.Equal(1, await delete.ExecuteNonQueryAsync());
+                    }
+                    if (scenario == "reinsert")
+                    {
+                        await using var insert = new NpgsqlCommand("""
+INSERT INTO paper_positions (
+    id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares,
+    average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc)
+VALUES (@Id, @Wallet, @Asset, @Condition, 'Up', 3, 0.5, 4.5, 3, clock_timestamp());
+""", connection, transaction);
+                        insert.Parameters.AddWithValue("Id", positionId);
+                        insert.Parameters.AddWithValue("Wallet", $"strategy:projection_test_{strategyId:N}");
+                        insert.Parameters.AddWithValue("Asset", $"reinsert-{positionId:N}");
+                        insert.Parameters.AddWithValue("Condition", $"reinsert-{positionId:N}");
+                        Assert.Equal(1, await insert.ExecuteNonQueryAsync());
+                    }
+                    await transaction.CommitAsync();
+                },
+                failConsumer: scenario == "rollback");
+
+            Assert.Equal(1, await ReadPaperPositionEventCountAsync(factory, positionId));
+            await projection.ApplyPendingEventsAsync(1000);
+            Assert.Equal(0, await ReadPaperPositionEventCountAsync(factory, positionId));
+            Assert.Equal(0, (await projection.ApplyPendingEventsAsync(1000)).EventsApplied);
+            var actual = await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId);
+            var expected = (await new PostgresAppRepository(factory).GetStrategyPerformanceAsync())
+                .Single(row => row.StrategyId == strategyId);
+            AssertStrategyMetricsEqual(expected, actual);
+            Assert.Equal(scenario == "delete" ? 0m : 3m, actual.UnrealizedPnlUsd);
+        }
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_CursorReconciliationDoesNotDeleteRequestCreatedDuringRebuild()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        await projection.BootstrapAsync();
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        // Reset only this isolated integration fixture's queue/cursor.
+        await using var setup = new NpgsqlCommand("""
+DELETE FROM dashboard_projection_reconciliation_queue;
+UPDATE dashboard_projection_control SET reconciliation_cursor_strategy_id = NULL WHERE singleton_id = 1;
+SELECT id FROM strategies ORDER BY id LIMIT 1;
+""", connection);
+        var strategyId = (Guid)(await setup.ExecuteScalarAsync())!;
+        await RunWhileProjectionPausedAsync(factory, strategyId,
+            async consumer =>
+            {
+                var result = await consumer.ReconcileNextStrategyAsync();
+                Assert.Null(result.Error);
+                Assert.Equal(strategyId, result.StrategyId);
+            },
+            () => QueueReconciliationAsync(
+                WithApplicationName(factory, "cursor_request_producer", "-c lock_timeout=250ms -c statement_timeout=2000"),
+                strategyId));
+        Assert.Equal(1, await ReadReconciliationRequestCountAsync(factory, strategyId));
+        Assert.Equal(strategyId, (await projection.ReconcileNextStrategyAsync()).StrategyId);
+        Assert.Equal(0, await ReadReconciliationRequestCountAsync(factory, strategyId));
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_ReconciliationPreservesPositionEventUpdatedDuringRebuild()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var strategyId = Guid.NewGuid();
+        await InsertStrategyAsync(factory, strategyId);
+        var positionId = await InsertPaperPositionAsync(
+            factory, $"projection_test_{strategyId:N}", DateTimeOffset.UtcNow);
+        await projection.BootstrapAsync();
+        // This append-only delta is already included in the rebuilt snapshot;
+        // retaining it when the position acknowledgement conflicts doubles it.
+        var orderId = Guid.NewGuid();
+        await InsertPaperOrderAsync(factory, orderId, strategyId, DateTimeOffset.UtcNow);
+        await UpdatePaperPositionAsync(factory, positionId, 1m, DateTimeOffset.UtcNow);
+        await QueueReconciliationAsync(factory, strategyId);
+        await RunWhileProjectionPausedAsync(factory, strategyId,
+            async consumer =>
+            {
+                var result = await consumer.ReconcileNextStrategyAsync();
+                Assert.Null(result.Error);
+                Assert.Equal(strategyId, result.StrategyId);
+            },
+            () => UpdatePaperPositionAsync(
+                WithApplicationName(factory, "rebuild_position_producer", "-c lock_timeout=250ms -c statement_timeout=2000"),
+                positionId, 2m, DateTimeOffset.UtcNow));
+        Assert.Equal(1, await ReadPaperPositionEventCountAsync(factory, positionId));
+        await projection.ApplyPendingEventsAsync(1000);
+        Assert.Equal(0, await ReadPaperPositionEventCountAsync(factory, positionId));
+        var actual = await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId);
+        var expected = (await new PostgresAppRepository(factory).GetStrategyPerformanceAsync())
+            .Single(row => row.StrategyId == strategyId);
+        AssertStrategyMetricsEqual(expected, actual);
+        Assert.Equal(1, actual.OrdersCount);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_MissingPositionFactAndConcurrentBindingChangeAreReplayedOnce()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var originalStrategy = Guid.NewGuid();
+        var nextStrategy = Guid.NewGuid();
+        await InsertStrategyAsync(factory, originalStrategy);
+        await InsertStrategyAsync(factory, nextStrategy);
+        await projection.BootstrapAsync();
+        // The insert has no stored fact when the consumer reads it.
+        var positionId = await InsertPaperPositionAsync(
+            factory, $"projection_test_{originalStrategy:N}", DateTimeOffset.UtcNow);
+        await RunWhileProjectionPausedAsync(factory, originalStrategy,
+            async consumer => Assert.Equal(1, (await consumer.ApplyPendingEventsAsync(1000)).EventsApplied),
+            async () =>
+            {
+                var producer = WithApplicationName(factory, "binding_producer",
+                    "-c lock_timeout=250ms -c statement_timeout=2000");
+                await UpdatePaperPositionAsync(producer, positionId, 2m, DateTimeOffset.UtcNow);
+                await using var connection = producer.CreateConnection();
+                await connection.OpenAsync();
+                await using var command = new NpgsqlCommand("""
+UPDATE paper_positions SET copied_trader_wallet = @Wallet, unrealized_pnl_usd = 3,
+    updated_at_utc = clock_timestamp() WHERE id = @Id;
+""", connection);
+                command.Parameters.AddWithValue("Wallet", $"strategy:projection_test_{nextStrategy:N}");
+                command.Parameters.AddWithValue("Id", positionId);
+                Assert.Equal(1, await command.ExecuteNonQueryAsync());
+            });
+        Assert.Equal(1, await ReadPaperPositionEventCountAsync(factory, positionId));
+        Assert.Equal(0, (await projection.ApplyPendingEventsAsync(1000)).EventsApplied);
+        Assert.Equal(1, await ReadReconciliationRequestCountAsync(factory, originalStrategy));
+        Assert.Equal(1, await ReadReconciliationRequestCountAsync(factory, nextStrategy));
+        var reconciled = new HashSet<Guid>();
+        for (var i = 0; i < 2; i++)
+        {
+            var result = await projection.ReconcileNextStrategyAsync();
+            Assert.Null(result.Error);
+            reconciled.Add(result.StrategyId!.Value);
+        }
+        Assert.True(reconciled.SetEquals([originalStrategy, nextStrategy]));
+        Assert.Equal(0, (await projection.ApplyPendingEventsAsync(1000)).EventsApplied);
+        var raw = await new PostgresAppRepository(factory).GetStrategyPerformanceAsync();
+        var snapshots = new PostgresDashboardSnapshotRepository(factory);
+        foreach (var strategyId in new[] { originalStrategy, nextStrategy })
+        {
+            AssertStrategyMetricsEqual(raw.Single(row => row.StrategyId == strategyId),
+                await ReadSnapshotAsync(snapshots, strategyId));
+        }
+        Assert.Equal(0m, (await ReadSnapshotAsync(snapshots, originalStrategy)).UnrealizedPnlUsd);
+        Assert.Equal(3m, (await ReadSnapshotAsync(snapshots, nextStrategy)).UnrealizedPnlUsd);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_ReconciliationAcknowledgementsRespectLockTimeoutWithoutLosingWork()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        foreach (var positionConflict in new[] { false, true })
+        {
+            var projection = new PostgresDashboardProjectionRepository(factory);
+            var strategyId = Guid.NewGuid();
+            await InsertStrategyAsync(factory, strategyId);
+            var positionId = await InsertPaperPositionAsync(
+                factory, $"projection_test_{strategyId:N}", DateTimeOffset.UtcNow);
+            await projection.BootstrapAsync();
+            await UpdatePaperPositionAsync(factory, positionId, 1m, DateTimeOffset.UtcNow);
+            await QueueReconciliationAsync(factory, strategyId);
+            await using var producer = factory.CreateConnection();
+            await producer.OpenAsync();
+            await using var producerTransaction = await producer.BeginTransactionAsync();
+            await RunWhileProjectionPausedAsync(factory, strategyId,
+                async consumer =>
+                {
+                    var result = await consumer.ReconcileNextStrategyAsync();
+                    Assert.Null(result.Error);
+                    Assert.True(result.Reconciled);
+                    Assert.Equal(strategyId, result.StrategyId);
+                },
+                async () =>
+                {
+                    await using var command = new NpgsqlCommand(positionConflict
+                        ? "UPDATE paper_positions SET unrealized_pnl_usd = 2, updated_at_utc = clock_timestamp() WHERE id = @Id;"
+                        : "UPDATE dashboard_projection_reconciliation_queue SET reason = 'pending_producer' WHERE strategy_id = @Id;",
+                        producer, producerTransaction) { CommandTimeout = 2 };
+                    command.Parameters.AddWithValue("Id", positionConflict ? positionId : strategyId);
+                    Assert.Equal(1, await command.ExecuteNonQueryAsync());
+                    // Keep this producer's tuple lock until AFTER the consumer
+                    // commits. Its real 250ms acknowledgement timeout must apply.
+                });
+            Assert.Equal(1m, (await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId)).UnrealizedPnlUsd);
+            await producerTransaction.CommitAsync();
+            if (positionConflict)
+            {
+                Assert.Equal(1, await ReadPaperPositionEventCountAsync(factory, positionId));
+                await projection.ApplyPendingEventsAsync(1000);
+                Assert.Equal(0, await ReadPaperPositionEventCountAsync(factory, positionId));
+            }
+            else
+            {
+                Assert.Equal(1, await ReadReconciliationRequestCountAsync(factory, strategyId));
+                Assert.Null((await projection.ReconcileNextStrategyAsync()).Error);
+                Assert.Equal(0, await ReadReconciliationRequestCountAsync(factory, strategyId));
+            }
+            var expected = (await new PostgresAppRepository(factory).GetStrategyPerformanceAsync())
+                .Single(row => row.StrategyId == strategyId);
+            AssertStrategyMetricsEqual(expected,
+                await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId));
+        }
+    }
+
+    // A test-only trigger pauses the real consumer after it has read its queue,
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_EventLimitDoesNotLockUnselectedRowsAndBackfillsLockedRows()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var strategyId = Guid.NewGuid();
+        await InsertStrategyAsync(factory, strategyId);
+        var positionId = await InsertPaperPositionAsync(factory, $"projection_test_{strategyId:N}", DateTimeOffset.UtcNow);
+        await projection.BootstrapAsync();
+        await UpdatePaperPositionAsync(factory, positionId, 1m, DateTimeOffset.UtcNow);
+        var orderId = Guid.NewGuid();
+        await InsertPaperOrderAsync(factory, orderId, strategyId, DateTimeOffset.UtcNow);
+        await using var observer = factory.CreateConnection();
+        await observer.OpenAsync();
+        await RunWhileProjectionPausedAsync(factory, strategyId,
+            async consumer => Assert.Equal(1, (await consumer.ApplyPendingEventsAsync(1)).EventsApplied),
+            async () =>
+            {
+                await using var command = new NpgsqlCommand("""
+SELECT id FROM dashboard_projection_events
+WHERE source_kind = 'PaperOrder' AND source_id = @Id FOR UPDATE NOWAIT;
+""", observer);
+                command.Parameters.AddWithValue("Id", orderId);
+                Assert.IsType<long>(await command.ExecuteScalarAsync());
+            });
+        await UpdatePaperPositionAsync(factory, positionId, 2m, DateTimeOffset.UtcNow);
+        await using (var transaction = await observer.BeginTransactionAsync())
+        {
+            await using var command = new NpgsqlCommand("""
+SELECT id FROM dashboard_projection_events
+WHERE source_kind = 'PaperOrder' AND source_id = @Id FOR UPDATE;
+""", observer, transaction);
+            command.Parameters.AddWithValue("Id", orderId);
+            Assert.IsType<long>(await command.ExecuteScalarAsync());
+            var result = await projection.ApplyPendingEventsAsync(1).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(1, result.EventsApplied);
+            Assert.Equal(0, await ReadPaperPositionEventCountAsync(factory, positionId));
+            await transaction.CommitAsync();
+        }
+        Assert.Equal(1, (await projection.ApplyPendingEventsAsync(1)).EventsApplied);
+        Assert.Equal(0, (await projection.ApplyPendingEventsAsync(1)).EventsApplied);
+        var expected = (await new PostgresAppRepository(factory).GetStrategyPerformanceAsync()).Single(row => row.StrategyId == strategyId);
+        AssertStrategyMetricsEqual(expected, await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId));
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_MissingExistingPositionFactReconcilesWithConcurrentUpdate()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var projection = new PostgresDashboardProjectionRepository(factory);
+        var strategyId = Guid.NewGuid();
+        await InsertStrategyAsync(factory, strategyId);
+        var positionId = await InsertPaperPositionAsync(factory, $"projection_test_{strategyId:N}", DateTimeOffset.UtcNow);
+        await projection.BootstrapAsync();
+        await using (var connection = factory.CreateConnection())
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(
+                "DELETE FROM dashboard_strategy_position_projection_facts WHERE source_id = @Id;", connection);
+            command.Parameters.AddWithValue("Id", positionId);
+            Assert.Equal(1, await command.ExecuteNonQueryAsync());
+        }
+        await UpdatePaperPositionAsync(factory, positionId, 1m, DateTimeOffset.UtcNow);
+        Assert.Equal(0, (await projection.ApplyPendingEventsAsync(1000)).EventsApplied);
+        Assert.Equal(1, await ReadReconciliationRequestCountAsync(factory, strategyId));
+        await RunWhileProjectionPausedAsync(factory, strategyId,
+            async consumer => Assert.Null((await consumer.ReconcileNextStrategyAsync()).Error),
+            () => UpdatePaperPositionAsync(factory, positionId, 2m, DateTimeOffset.UtcNow));
+        await projection.ApplyPendingEventsAsync(1000);
+        var expected = (await new PostgresAppRepository(factory).GetStrategyPerformanceAsync()).Single(row => row.StrategyId == strategyId);
+        AssertStrategyMetricsEqual(expected, await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId));
+    }
+
+    // A test-only trigger pauses the real consumer after it has read its queue,
+    // during snapshot persistence. The producer must commit before this barrier
+    // is released. No product test hook or timing-only synchronization is used.
+    internal static async Task RunWhileProjectionPausedAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        Func<PostgresDashboardProjectionRepository, Task> consume,
+        Func<Task> produce,
+        bool failConsumer = false)
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        var functionName = $"pct_lock_test_{suffix}";
+        var consumerName = $"projection_consumer_{suffix}";
+        var lockKey = BitConverter.ToInt32(Guid.NewGuid().ToByteArray());
+        await using var barrier = factory.CreateConnection();
+        await barrier.OpenAsync();
+        await using (var setup = new NpgsqlCommand($$"""
+CREATE FUNCTION public.{{functionName}}() RETURNS trigger LANGUAGE plpgsql AS $test$
+DECLARE previous_lock_timeout text := current_setting('lock_timeout');
+BEGIN
+    PERFORM set_config('lock_timeout', '0', true);
+    PERFORM pg_advisory_xact_lock(1809202603, {{lockKey}});
+    PERFORM set_config('lock_timeout', previous_lock_timeout, true);
+    {{(failConsumer ? "RAISE EXCEPTION 'Injected snapshot rollback';" : string.Empty)}}
+    RETURN NEW;
+END;
+$test$;
+CREATE TRIGGER {{functionName}}
+BEFORE INSERT OR UPDATE ON public.dashboard_strategy_performance_snapshots
+FOR EACH ROW WHEN (NEW.strategy_id = '{{strategyId}}'::uuid)
+EXECUTE FUNCTION public.{{functionName}}();
+SELECT pg_advisory_lock(1809202603, {{lockKey}});
+""", barrier))
+        {
+            await setup.ExecuteNonQueryAsync();
+        }
+
+        Task? consumerTask = null;
+        try
+        {
+            consumerTask = consume(new PostgresDashboardProjectionRepository(
+                WithApplicationName(factory, consumerName)));
+            await using var observer = factory.CreateConnection();
+            await observer.OpenAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (true)
+            {
+                await using var check = new NpgsqlCommand("""
+SELECT EXISTS (
+    SELECT 1 FROM pg_stat_activity
+    WHERE application_name = @Name AND @Blocker = ANY(pg_blocking_pids(pid)));
+""", observer);
+                check.Parameters.AddWithValue("Name", consumerName);
+                check.Parameters.AddWithValue("Blocker", barrier.ProcessID);
+                if ((bool)(await check.ExecuteScalarAsync(timeout.Token))!)
+                {
+                    break;
+                }
+                if (consumerTask.IsCompleted)
+                {
+                    await consumerTask;
+                    Assert.Fail("Consumer completed without reaching the snapshot barrier.");
+                }
+                await Task.Delay(10, timeout.Token);
+            }
+            await produce().WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.False(consumerTask.IsCompleted);
+        }
+        finally
+        {
+            await using (var release = new NpgsqlCommand(
+                $"SELECT pg_advisory_unlock(1809202603, {lockKey});", barrier))
+            {
+                await release.ExecuteScalarAsync();
+            }
+            try
+            {
+                if (consumerTask is not null)
+                {
+                    await consumerTask.WaitAsync(TimeSpan.FromSeconds(10));
+                }
+            }
+            finally
+            {
+                await using var cleanup = new NpgsqlCommand($"""
+DROP TRIGGER {functionName} ON public.dashboard_strategy_performance_snapshots;
+DROP FUNCTION public.{functionName}();
+""", barrier);
+                await cleanup.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    private static PostgresConnectionFactory WithApplicationName(
+        PostgresConnectionFactory factory, string applicationName, string? options = null)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(factory.ConnectionString)
+        {
+            ApplicationName = applicationName
+        };
+        if (options is not null)
+        {
+            builder.Options = options;
+        }
+        return new PostgresConnectionFactory(new StorageOptions { ConnectionString = builder.ConnectionString });
+    }
+
+    private static async Task<int> ReadReconciliationRequestCountAsync(
+        PostgresConnectionFactory factory, Guid strategyId)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*)::integer FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @Id;",
+            connection);
+        command.Parameters.AddWithValue("Id", strategyId);
+        return (int)(await command.ExecuteScalarAsync())!;
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task Projection_BootstrapDeltaAndReconciliation_MatchRawAggregates()
     {
         var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
         var projection = new PostgresDashboardProjectionRepository(factory);
         var snapshots = new PostgresDashboardSnapshotRepository(factory);
         var rawRepository = new PostgresAppRepository(factory);
-        var (strategyId, strategyCode) = await ReadFirstStrategyAsync(factory);
+        var strategyId = Guid.NewGuid();
+        var strategyCode = $"projection_test_{strategyId:N}";
+        await InsertStrategyAsync(factory, strategyId);
         var runId = Guid.NewGuid();
         var paperOrderId = Guid.NewGuid();
         var marketId = $"projection-test-{Guid.NewGuid():N}";
@@ -672,23 +1196,6 @@ ORDER BY source_id;
         long RecentFacts,
         long RunActivityFacts,
         long RunSkippedFacts);
-
-    private static async Task<(Guid StrategyId, string StrategyCode)> ReadFirstStrategyAsync(
-        PostgresConnectionFactory factory)
-    {
-        await using var connection = factory.CreateConnection();
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            "SELECT id, code FROM strategies ORDER BY id LIMIT 1;",
-            connection);
-        await using var reader = await command.ExecuteReaderAsync();
-        if (!await reader.ReadAsync())
-        {
-            throw new InvalidOperationException("No strategy row.");
-        }
-
-        return (reader.GetGuid(0), reader.GetString(1));
-    }
 
     private static async Task InsertPaperOrderAsync(
         PostgresConnectionFactory factory,

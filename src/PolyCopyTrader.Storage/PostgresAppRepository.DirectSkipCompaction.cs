@@ -635,11 +635,6 @@ queued AS (
             existing_queue.next_attempt_at_utc,
             EXCLUDED.next_attempt_at_utc),
         last_error = NULL
-    WHERE existing_queue.priority < EXCLUDED.priority
-       OR existing_queue.reason IS DISTINCT FROM EXCLUDED.reason
-       OR existing_queue.requested_at_utc > EXCLUDED.requested_at_utc
-       OR existing_queue.next_attempt_at_utc > EXCLUDED.next_attempt_at_utc
-       OR existing_queue.last_error IS NOT NULL
     RETURNING 1
 )
 SELECT
@@ -1143,40 +1138,40 @@ FROM tombstones tombstone;
 
         EnsureUnambiguousDirectPaperSkipInput(runs);
 
+        // Pure input work must not lengthen the global archive/dependency gate.
+        // The same frozen JSON is consumed by both archive and native insert.
+        var preparedBatches = new List<PreparedDirectRunBatch>();
+        foreach (var inputBatch in runs.Chunk(StrategyMarketPaperRunInsertBatchSize))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var batch = inputBatch.Select(run => run with
+            {
+                StrategyId = StrategyIds.Normalize(run.StrategyId),
+                SkipDiagnosticsJson = GetPersistedSkipDiagnosticsJson(run)
+            }).ToArray();
+            preparedBatches.Add(new PreparedDirectRunBatch(
+                batch,
+                batch.Where(IsSkippedRun).Select(run => run.Id).ToHashSet(),
+                JsonSerializer.Serialize(batch, BulkInsertJsonOptions)));
+        }
+
         return await ExecuteWithExclusiveStrategyRunRetentionGateAsync(
             async (connection, transaction, token) =>
             {
                 var insertedIds = new HashSet<Guid>();
-                for (var offset = 0; offset < runs.Count; offset += StrategyMarketPaperRunInsertBatchSize)
+                foreach (var prepared in preparedBatches)
                 {
-                    var count = Math.Min(StrategyMarketPaperRunInsertBatchSize, runs.Count - offset);
-                    var batch = new StrategyMarketPaperRun[count];
-                    var skippedIds = new HashSet<Guid>();
-                    for (var index = 0; index < count; index++)
-                    {
-                        var run = runs[offset + index];
-                        batch[index] = run with
-                        {
-                            StrategyId = StrategyIds.Normalize(run.StrategyId),
-                            SkipDiagnosticsJson = GetPersistedSkipDiagnosticsJson(run)
-                        };
-                        if (IsSkippedRun(run))
-                        {
-                            skippedIds.Add(run.Id);
-                        }
-                    }
-
                     var archivedIds = await ArchiveNewDirectPaperSkippedRunsAsync(
                         connection,
                         transaction,
-                        batch,
-                        token);
+                        prepared.Runs,
+                        token,
+                        prepared.Json);
                     insertedIds.UnionWith(archivedIds);
 
                     await using var command = CreateCommand(connection, DirectStrategyRunInsertSql);
                     command.Transaction = transaction;
-                    command.Parameters.Add("RunsJson", NpgsqlDbType.Jsonb).Value =
-                        JsonSerializer.Serialize(batch, BulkInsertJsonOptions);
+                    command.Parameters.Add("RunsJson", NpgsqlDbType.Jsonb).Value = prepared.Json;
                     var insertedSkippedIds = new List<Guid>();
                     await using (var reader = await command.ExecuteReaderAsync(token))
                     {
@@ -1184,7 +1179,7 @@ FROM tombstones tombstone;
                         {
                             var insertedId = reader.GetGuid(0);
                             insertedIds.Add(insertedId);
-                            if (skippedIds.Contains(insertedId))
+                            if (prepared.SkippedIds.Contains(insertedId))
                             {
                                 insertedSkippedIds.Add(insertedId);
                             }
@@ -1202,6 +1197,9 @@ FROM tombstones tombstone;
             },
             cancellationToken);
     }
+
+    private sealed record PreparedDirectRunBatch(
+        StrategyMarketPaperRun[] Runs, HashSet<Guid> SkippedIds, string Json);
 
     private static void EnsureUnambiguousDirectPaperSkipInput(
         IReadOnlyList<StrategyMarketPaperRun> runs)
@@ -1231,7 +1229,8 @@ FROM tombstones tombstone;
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         IReadOnlyList<StrategyMarketPaperRun> runs,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? preparedRunsJson = null)
     {
         if (!runs.Any(IsSkippedRun))
         {
@@ -1242,7 +1241,7 @@ FROM tombstones tombstone;
         command.Transaction = transaction;
         command.CommandTimeout = StrategyRunRetentionCommandTimeoutSeconds;
         command.Parameters.Add("RunsJson", NpgsqlDbType.Jsonb).Value =
-            JsonSerializer.Serialize(runs, BulkInsertJsonOptions);
+            preparedRunsJson ?? JsonSerializer.Serialize(runs, BulkInsertJsonOptions);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -1325,14 +1324,16 @@ FROM tombstones tombstone;
             return;
         }
 
+        var runsJson = PrepareStrategyRunsJson(runs);
+        var skippedIds = runs.Where(IsSkippedRun).Select(run => run.Id).Distinct().ToArray();
         await ExecuteWithExclusiveStrategyRunRetentionGateAsync(
             async (connection, transaction, token) =>
             {
-                await UpdateStrategyMarketPaperRunsBatchAsync(connection, transaction, runs, token);
+                await UpdateStrategyMarketPaperRunsBatchAsync(connection, transaction, runs, token, runsJson);
                 await CompactDirectPaperSkippedRunsAsync(
                     connection,
                     transaction,
-                    runs.Where(IsSkippedRun).Select(run => run.Id).Distinct().ToArray(),
+                    skippedIds,
                     token);
                 return true;
             },
@@ -1349,33 +1350,40 @@ FROM tombstones tombstone;
                 "Compact skipped-run archive v2 product writes are not supported by this compatibility build.");
         }
 
+        // Freeze only pure input payloads here. All dependency checks and writes
+        // remain inside the original atomic wallet-lock -> retention-gate scope.
+        var signalsJson = PrepareSignalsJson(batch.Signals);
+        var positionsJson = PreparePaperPositionsJson(batch.PaperPositions);
+        var ordersJson = PreparePaperOrdersJson(batch.PaperOrders);
+        var fillsJson = PreparePaperFillsJson(batch.PaperFills);
+        var activationsJson = PrepareActivationsJson(batch.CopiedLeaderPositionActivations);
+        var runsJson = PrepareStrategyRunsJson(batch.StrategyRuns);
+        var skippedIds = batch.StrategyRuns.Where(IsSkippedRun).Select(run => run.Id).Distinct().ToArray();
         await ExecuteWithPaperPositionLocksAndExclusiveStrategyRunRetentionGateAsync(
             batch.PaperPositions,
             batch.PaperOrders.Select(order => order.CopiedTraderWallet).ToArray(),
             async (connection, transaction, token) =>
             {
-                await AddSignalsBatchAsync(connection, transaction, batch.Signals, token);
-                await UpsertPaperPositionsBatchAsync(connection, transaction, batch.PaperPositions, token);
-                await AddPaperOrdersBatchAsync(connection, transaction, batch.PaperOrders, token);
-                await AddPaperFillsBatchAsync(connection, transaction, batch.PaperFills, token);
+                await AddSignalsBatchAsync(connection, transaction, batch.Signals, token, signalsJson);
+                await UpsertPaperPositionsBatchAsync(connection, transaction, batch.PaperPositions, token, positionsJson);
+                await AddPaperOrdersBatchAsync(connection, transaction, batch.PaperOrders, token, ordersJson);
+                await AddPaperFillsBatchAsync(connection, transaction, batch.PaperFills, token, fillsJson);
                 await ActivatePaperCopiedLeaderPositionsBatchAsync(
                     connection,
                     transaction,
                     batch.CopiedLeaderPositionActivations,
-                    token);
+                    token,
+                    activationsJson);
                 await UpdateStrategyMarketPaperRunsBatchAsync(
                     connection,
                     transaction,
                     batch.StrategyRuns,
-                    token);
+                    token,
+                    runsJson);
                 await CompactDirectPaperSkippedRunsAsync(
                     connection,
                     transaction,
-                    batch.StrategyRuns
-                        .Where(IsSkippedRun)
-                        .Select(run => run.Id)
-                        .Distinct()
-                        .ToArray(),
+                    skippedIds,
                     token);
                 return true;
             },
@@ -1633,11 +1641,6 @@ queued AS (
             existing_queue.next_attempt_at_utc,
             EXCLUDED.next_attempt_at_utc),
         last_error = NULL
-    WHERE existing_queue.priority < EXCLUDED.priority
-       OR existing_queue.reason IS DISTINCT FROM EXCLUDED.reason
-       OR existing_queue.requested_at_utc > EXCLUDED.requested_at_utc
-       OR existing_queue.next_attempt_at_utc > EXCLUDED.next_attempt_at_utc
-       OR existing_queue.last_error IS NOT NULL
     RETURNING 1
 )
 SELECT

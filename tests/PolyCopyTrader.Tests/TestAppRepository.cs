@@ -95,6 +95,8 @@ internal sealed class TestAppRepository : IAppRepository
 
     public TimeSpan PaperEntryPersistenceBatchDelay { get; set; } = TimeSpan.Zero;
 
+    public Func<PaperEntryPersistenceBatch, Task>? BeforePaperEntryPersistenceBatch { get; set; }
+
     public Queue<HistoricalPaperFakFeeBackfillPage> HistoricalPaperFakFeeBackfillPages { get; } = [];
 
     public List<HistoricalPaperFakFeeBackfillStrategyRank> HistoricalPaperFakFeeBackfillStrategyRanks { get; } = [];
@@ -1361,6 +1363,10 @@ internal sealed class TestAppRepository : IAppRepository
         PaperEntryPersistenceBatch batch,
         CancellationToken cancellationToken)
     {
+        if (BeforePaperEntryPersistenceBatch is not null)
+        {
+            await BeforePaperEntryPersistenceBatch(batch);
+        }
         if (PaperEntryPersistenceBatchDelay > TimeSpan.Zero)
         {
             await Task.Delay(PaperEntryPersistenceBatchDelay, cancellationToken);

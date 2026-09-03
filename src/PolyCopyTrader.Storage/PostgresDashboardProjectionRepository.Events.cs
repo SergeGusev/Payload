@@ -25,7 +25,7 @@ public sealed partial class PostgresDashboardProjectionRepository
             return new DashboardProjectionBatchResult(0, 0, 0, 0, 0);
         }
 
-        var events = await ReadPendingEventsAsync(connection, transaction, limit, cancellationToken);
+        var (events, positionEventVersions) = await ReadPendingEventsAsync(connection, transaction, limit, cancellationToken);
         if (events.Count == 0)
         {
             await transaction.CommitAsync(cancellationToken);
@@ -384,6 +384,7 @@ public sealed partial class PostgresDashboardProjectionRepository
                 connection,
                 transaction,
                 processedEventIds,
+                positionEventVersions,
                 cancellationToken);
         }
 
@@ -415,47 +416,82 @@ FOR UPDATE;
         return (bool)(await command.ExecuteScalarAsync(cancellationToken) ?? false);
     }
 
-    private static async Task<List<DashboardProjectionEvent>> ReadPendingEventsAsync(
+    private static async Task<(List<DashboardProjectionEvent> Events, Dictionary<long, string> PositionVersions)> ReadPendingEventsAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         int limit,
         CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(
-            """
-SELECT id,
-       source_kind,
-       source_id,
-       strategy_id,
-       operation,
-       old_payload::text,
-       new_payload::text,
-       created_at_utc
-FROM dashboard_projection_events
-ORDER BY id
-LIMIT @Limit
-FOR UPDATE SKIP LOCKED;
-""",
-            connection,
-            transaction);
-        command.Parameters.AddWithValue("Limit", limit);
+        // Bound the scan before taking any row locks. Seek past locked rows to
+        // preserve SKIP LOCKED backfill, but never lock a row outside a window
+        // that can still fit into this batch.
+        await using var upperCommand = new NpgsqlCommand(
+            "SELECT COALESCE(max(id), 0) FROM dashboard_projection_events;", connection, transaction);
+        var upperId = (long)(await upperCommand.ExecuteScalarAsync(cancellationToken))!;
+        var afterId = 0L;
         var results = new List<DashboardProjectionEvent>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        var positionVersions = new Dictionary<long, string>();
+        while (afterId < upperId && results.Count < limit)
         {
-            results.Add(new DashboardProjectionEvent(
-                reader.GetInt64(0),
-                reader.GetString(1),
-                reader.GetGuid(2),
-                reader.IsDBNull(3) ? null : reader.GetGuid(3),
-                reader.GetString(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5),
-                reader.IsDBNull(6) ? null : reader.GetString(6),
-                false,
-                UtcNow(reader.GetDateTime(7))));
-        }
+            await using var command = new NpgsqlCommand(
+                """
+WITH candidates AS MATERIALIZED (
+    SELECT id, source_kind, source_id, strategy_id, operation,
+           old_payload, new_payload, created_at_utc, xmin::text AS row_version
+    FROM dashboard_projection_events
+    WHERE id > @AfterId AND id <= @UpperId
+    ORDER BY id
+    LIMIT @Limit
+), locked_events AS (
+    SELECT pending.id, pending.source_kind, pending.source_id, pending.strategy_id, pending.operation,
+           pending.old_payload, pending.new_payload, pending.created_at_utc, pending.xmin::text AS row_version
+    FROM dashboard_projection_events pending
+    INNER JOIN candidates candidate ON candidate.id = pending.id
+    WHERE pending.source_kind <> 'PaperPosition'
+    ORDER BY pending.id
+    FOR UPDATE OF pending SKIP LOCKED
+), eligible AS (
+    SELECT * FROM locked_events
+    UNION ALL
+    SELECT * FROM candidates WHERE source_kind = 'PaperPosition'
+)
+SELECT eligible.id, eligible.source_kind, eligible.source_id, eligible.strategy_id, eligible.operation,
+       eligible.old_payload::text, eligible.new_payload::text, eligible.created_at_utc,
+       eligible.row_version, scanned.last_id
+FROM eligible
+RIGHT JOIN (SELECT max(id) AS last_id FROM candidates) scanned ON true
+ORDER BY eligible.id;
+""", connection, transaction);
+            command.Parameters.AddWithValue("AfterId", afterId);
+            command.Parameters.AddWithValue("UpperId", upperId);
+            command.Parameters.AddWithValue("Limit", limit - results.Count);
+            var lastId = afterId;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (!reader.IsDBNull(9))
+                    lastId = reader.GetInt64(9);
+                if (reader.IsDBNull(0))
+                    continue;
 
-        return results;
+                results.Add(new DashboardProjectionEvent(
+                    reader.GetInt64(0),
+                    reader.GetString(1),
+                    reader.GetGuid(2),
+                    reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                    reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetString(6),
+                    false,
+                    UtcNow(reader.GetDateTime(7))));
+                if (reader.GetString(1) == DashboardProjectionSourceKinds.PaperPosition)
+                    positionVersions.Add(reader.GetInt64(0), reader.GetString(8));
+            }
+            if (lastId == afterId)
+                break;
+            afterId = lastId;
+        }
+        return (results, positionVersions);
     }
 
     private static async Task<Dictionary<Guid, DashboardStrategyDescriptor>> ReadStrategyDescriptorBatchAsync(
@@ -980,7 +1016,8 @@ ON CONFLICT (strategy_id) DO UPDATE SET
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         Guid strategyId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool deleteReconciliationRequest = true)
     {
         await using var command = new NpgsqlCommand(
             """
@@ -990,11 +1027,12 @@ DELETE FROM dashboard_strategy_recent_projection_states WHERE strategy_id = @Str
 DELETE FROM dashboard_strategy_lifetime_projection_states WHERE strategy_id = @StrategyId;
 DELETE FROM dashboard_strategy_recent_performance_snapshots WHERE strategy_id = @StrategyId;
 DELETE FROM dashboard_strategy_performance_snapshots WHERE strategy_id = @StrategyId;
-DELETE FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @StrategyId;
+DELETE FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @StrategyId AND @DeleteReconciliationRequest;
 """,
             connection,
             transaction);
         command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("DeleteReconciliationRequest", deleteReconciliationRequest);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -1002,13 +1040,25 @@ DELETE FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @Strat
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         IReadOnlyCollection<long> eventIds,
+        IReadOnlyDictionary<long, string> positionEventVersions,
         CancellationToken cancellationToken)
     {
         await using var command = new NpgsqlCommand(
-            "DELETE FROM dashboard_projection_events WHERE id = ANY(@EventIds);",
+            """
+DELETE FROM dashboard_projection_events AS pending
+WHERE pending.id = ANY(@EventIds)
+  AND (pending.source_kind <> 'PaperPosition' OR EXISTS (
+      SELECT 1 FROM unnest(@PositionEventIds, @PositionEventVersions) AS processed(id, row_version)
+      WHERE processed.id = pending.id AND processed.row_version = pending.xmin::text));
+""",
             connection,
             transaction);
         command.Parameters.AddWithValue("EventIds", eventIds.ToArray());
+        // A producer can coalesce a new payload into the same ID during the
+        // calculation. Only the version actually applied may be acknowledged.
+        var versions = positionEventVersions.ToArray();
+        command.Parameters.AddWithValue("PositionEventIds", versions.Select(pair => pair.Key).ToArray());
+        command.Parameters.AddWithValue("PositionEventVersions", versions.Select(pair => pair.Value).ToArray());
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

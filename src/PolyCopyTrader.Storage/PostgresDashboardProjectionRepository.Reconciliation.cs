@@ -97,12 +97,15 @@ public sealed partial class PostgresDashboardProjectionRepository
                     connection,
                     transaction,
                     selectedStrategyId.Value,
-                    cancellationToken);
+                    cancellationToken,
+                    deleteReconciliationRequest: false);
                 await DeleteVisibleStrategyEventsAsync(
                     connection,
                     transaction,
                     selectedStrategyId.Value,
                     cancellationToken);
+                await AcknowledgeReconciliationRequestAsync(
+                    connection, transaction, selectedStrategyId.Value, candidate.Value.RequestVersion, cancellationToken);
                 await UpdateReconciliationControlAsync(
                     connection,
                     transaction,
@@ -165,14 +168,8 @@ public sealed partial class PostgresDashboardProjectionRepository
                 transaction,
                 selectedStrategyId.Value,
                 cancellationToken);
-            await using (var deleteQueue = new NpgsqlCommand(
-                "DELETE FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @StrategyId;",
-                connection,
-                transaction))
-            {
-                deleteQueue.Parameters.AddWithValue("StrategyId", selectedStrategyId.Value);
-                await deleteQueue.ExecuteNonQueryAsync(cancellationToken);
-            }
+            await AcknowledgeReconciliationRequestAsync(
+                connection, transaction, selectedStrategyId.Value, candidate.Value.RequestVersion, cancellationToken);
 
             await UpdateReconciliationControlAsync(
                 connection,
@@ -241,20 +238,19 @@ SET LOCAL statement_timeout = '15s';
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task<(Guid StrategyId, string StrategyCode)?> ReadNextReconciliationCandidateAsync(
+    private static async Task<(Guid StrategyId, string StrategyCode, string? RequestVersion)?> ReadNextReconciliationCandidateAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         CancellationToken cancellationToken)
     {
         await using (var queuedCommand = new NpgsqlCommand(
             """
-SELECT queue.strategy_id, strategy.code
+SELECT queue.strategy_id, strategy.code, queue.xmin::text
 FROM dashboard_projection_reconciliation_queue queue
 INNER JOIN strategies strategy ON strategy.id = queue.strategy_id
 WHERE queue.next_attempt_at_utc <= clock_timestamp()
 ORDER BY queue.priority DESC, queue.requested_at_utc, queue.strategy_id
-LIMIT 1
-FOR UPDATE OF queue SKIP LOCKED;
+LIMIT 1;
 """,
             connection,
             transaction))
@@ -262,7 +258,7 @@ FOR UPDATE OF queue SKIP LOCKED;
             await using var queuedReader = await queuedCommand.ExecuteReaderAsync(cancellationToken);
             if (await queuedReader.ReadAsync(cancellationToken))
             {
-                return (queuedReader.GetGuid(0), queuedReader.GetString(1));
+                return (queuedReader.GetGuid(0), queuedReader.GetString(1), queuedReader.GetString(2));
             }
         }
 
@@ -295,9 +291,50 @@ SELECT id, code FROM wrapped;
             transaction);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken)
-            ? (reader.GetGuid(0), reader.GetString(1))
+            ? (reader.GetGuid(0), reader.GetString(1), null)
             : null;
     }
+
+    private static async Task AcknowledgeReconciliationRequestAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid strategyId,
+        string? requestVersion,
+        CancellationToken cancellationToken)
+    {
+        // A cursor-selected rebuild did not consume a queued request. In
+        // particular it must not delete one inserted while the rebuild ran.
+        if (requestVersion is null)
+        {
+            return;
+        }
+
+        const string savepoint = "reconciliation_request_ack";
+        await transaction.SaveAsync(savepoint, cancellationToken);
+        try
+        {
+            await using var command = new NpgsqlCommand("""
+DELETE FROM dashboard_projection_reconciliation_queue
+WHERE strategy_id = @StrategyId AND xmin::text = @RequestVersion;
+""", connection, transaction);
+            command.Parameters.AddWithValue("StrategyId", strategyId);
+            command.Parameters.AddWithValue("RequestVersion", requestVersion);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (PostgresException exception) when (IsAcknowledgementConflict(exception))
+        {
+            // RepeatableRead still sees the old request version. A concurrent
+            // producer updating it makes DELETE raise 40001, not return zero.
+            // An uncommitted producer can instead hit the bounded lock timeout.
+            // Keep the new request and commit the consistent rebuilt snapshot;
+            // only this acknowledgement is rolled back, with no retry loop.
+            await transaction.RollbackAsync(savepoint, cancellationToken);
+        }
+        await transaction.ReleaseAsync(savepoint, cancellationToken);
+    }
+
+    private static bool IsAcknowledgementConflict(PostgresException exception) =>
+        exception.SqlState is PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.LockNotAvailable;
 
     private static async Task ReplaceStrategyFactsAsync(
         NpgsqlConnection connection,
@@ -425,12 +462,34 @@ FROM STDIN (FORMAT BINARY)
         Guid strategyId,
         CancellationToken cancellationToken)
     {
-        await using var command = new NpgsqlCommand(
-            "DELETE FROM dashboard_projection_events WHERE strategy_id = @StrategyId;",
-            connection,
-            transaction);
-        command.Parameters.AddWithValue("StrategyId", strategyId);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        // Append-only deltas included in the rebuild MUST be acknowledged even
+        // if a coalesced position changes: replaying them would double-count.
+        await using (var command = new NpgsqlCommand(
+                         "DELETE FROM dashboard_projection_events WHERE strategy_id = @StrategyId AND source_kind <> 'PaperPosition';",
+                         connection, transaction))
+        {
+            command.Parameters.AddWithValue("StrategyId", strategyId);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        const string savepoint = "reconciliation_position_ack";
+        await transaction.SaveAsync(savepoint, cancellationToken);
+        try
+        {
+            // RepeatableRead deletes only its visible versions. A changed row
+            // causes 40001; keep those position events for idempotent replay
+            // against the position facts just rebuilt from the same snapshot.
+            await using var command = new NpgsqlCommand(
+                "DELETE FROM dashboard_projection_events WHERE strategy_id = @StrategyId AND source_kind = 'PaperPosition';",
+                connection, transaction);
+            command.Parameters.AddWithValue("StrategyId", strategyId);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        catch (PostgresException exception) when (IsAcknowledgementConflict(exception))
+        {
+            await transaction.RollbackAsync(savepoint, cancellationToken);
+        }
+        await transaction.ReleaseAsync(savepoint, cancellationToken);
     }
 
     private static async Task UpdateReconciliationControlAsync(
