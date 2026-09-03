@@ -19,8 +19,10 @@
     "inScope": [
       "Общий путь PaperEntryPersistenceQueue → AddPaperEntryPersistenceBatchAsync с включённой прямой компактацией и фактическими Skipped runs: сохранить границы исходных пакетов вместо объединения независимых пакетов в одну транзакцию с эксклюзивным retention gate.",
       "PostgresAppRepository.DirectSkipCompaction: вынести чистую подготовку и сериализацию входных данных до захвата общего gate; проверки зависимостей, изменения runs/tombstones/rollups и commit оставить защищёнными существующим протоколом.",
+      "PostgresAppRepository.cs: изменить только подготовку JSON payload и передачу готовых payload в существующие batch-helper методы signals/positions/orders/fills/activations/strategy runs, вызываемые direct-compaction финансовым пакетом; их SQL, данные, порядок записи и атомарность не меняются. Этот файл необходим, поскольку сама сериализация этих helper методов находится в нём, а не в partial-файле DirectSkipCompaction.",
       "PostgresDashboardProjectionRepository.ApplyPendingEventsAsync: снять длительное удержание строк coalesced PaperPosition events при вычислении и записи проекций; подтверждать обработку только прочитанной версии события.",
       "PostgresDashboardProjectionRepository.ReconcileNextStrategyAsync: не держать выбранную строку dashboard_projection_reconciliation_queue заблокированной во время полного пересчёта; не удалять поступивший или обновлённый конкурентно запрос.",
+      "Два действующих v1 producer пути direct-compaction в PostgresAppRepository.DirectSkipCompaction.cs: при фактическом добавлении новых архивных данных обновлять существующую строку reconciliation request даже при прежних priority/reason/timestamps, чтобы version-checked acknowledgement отличал новый запрос. Только этот прежний no-op заменяется обновлением версии; при отсутствии новых архивных данных запрос не создаётся заново. Dormant v2 пути и периодический retention не меняются.",
       "Изменения общих путей хранения действуют на их существующих вызывающих, а не только на 34 Progress-стратегии. Каталог, параметры и торговые решения стратегий не меняются.",
       "Сфокусированные unit/concurrency/integration-тесты в отдельном локальном PostgreSQL, сборка, независимое сравнение исходного запроса с diff, краткая документация и обязательные requirement/context/history записи."
     ],
@@ -55,6 +57,7 @@
       "implementationPaths": [
         "src/PolyCopyTrader.Service/PaperTrading/PaperEntryPersistenceQueue.cs",
         "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
         "tests/PolyCopyTrader.Tests/PaperEntryPersistenceQueueTests.cs",
         "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
         "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
@@ -81,14 +84,17 @@
         "Для PaperPosition прочитываются payload и идентификатор версии одной видимой строки. Финальное подтверждение удаляет только действительно обработанную версию; конкурентно обновлённая или заново вставленная запись остаётся для следующего прохода. Новая схема, колонка версии и замена coalescing на неограниченный append-only поток не вводятся.",
         "Сценарии insert/update/delete/reinsert, нескольких обновлений одной позиции, изменения strategy binding, отсутствующего position fact и rollback не теряют итоговое состояние. Повторная обработка оставшейся версии не удваивает вклад: проекция сверяется с сохранённым position fact и независимым raw aggregate.",
         "ReconcileNextStrategyAsync не блокирует выбранный queue request на протяжении BuildProjection/WriteProjection. Подтверждается только та версия запроса, которую этот пересчёт обслужил; новый/обновлённый запрос, в том числе появившийся при выборе стратегии через cursor, не удаляется.",
+        "Новые фактически архивированные runs в действующих v1 direct-compaction путях обязательно меняют MVCC-версию существующего reconciliation request, в том числе при эквивалентных priority/reason/timestamps. Прежний тест DirectCompaction_EquivalentQueueRequestDoesNotRewriteRow заменяется проверкой изменения версии без изменения правил priority, самого раннего requested/next-attempt времени, attempt_count и восстановления после ошибки. Отдельный concurrency test совмещает реальную direct-compaction запись с остановленным пересчётом и доказывает, что запрос не теряется. Это добавляет короткий UPDATE строки очереди при каждом таком поступлении новых данных; не вводит колонок, новых очередей или дополнительной операции на каждый run.",
         "Сохраняются согласованный RepeatableRead snapshot пересчёта, общая блокировка consumer, порядок priority/requested time, текущая обработка реальных ошибок и отсутствие нового бесконечного retry. Конкурентное обновление запроса при финальном version-checked acknowledgement не теряет запрос и не требует отката уже корректно рассчитанной проекции; обработка конфликтов acknowledgement ограничена этим участком.",
         "Короткая финальная запись/acknowledgement остаётся транзакционно защищённой; не обещается отсутствие обычных кратковременных row locks. События других source kinds, формулы fee/Net PnL/ROI, lifetime/recent окна и исходные Paper данные сохраняют прежнюю семантику.",
         "Детерминированные PostgreSQL concurrency tests удерживают consumer в фазе пересчёта, проверяют завершение producer записи до снятия этой остановки, затем возобновляют consumer и подтверждают сохранение нового события/запроса и итоговое равенство raw/projection metrics. Воспроизводится как PaperPosition coalescing, так и same-strategy reconciliation request upsert.",
         "Исходные Production transactionid samples не объявляются доказательством точного конфликтующего tuple; точный изменяемый механизм подтверждается отдельным локальным воспроизведением до и после исправления."
       ],
       "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
         "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Events.cs",
         "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Reconciliation.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
         "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs",
         "README.md"
       ],
@@ -118,6 +124,7 @@
       "implementationPaths": [
         "src/PolyCopyTrader.Service/PaperTrading/PaperEntryPersistenceQueue.cs",
         "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
         "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Events.cs",
         "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Reconciliation.cs",
         "tests/PolyCopyTrader.Tests/PaperEntryPersistenceQueueTests.cs",
@@ -151,8 +158,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260903-paper-storage-lock-contention sha256:f4fe3915b336f8e4c7a8436b977dc767e7c974618934ddb375baf27e921df8a8",
-    "semanticDigest": "sha256:f4fe3915b336f8e4c7a8436b977dc767e7c974618934ddb375baf27e921df8a8"
+    "evidenceText": "APPROVE RC-20260903-paper-storage-lock-contention sha256:90bd2486b955e8d4077f4c94bc75ab1c03656d00998e1031b3e1d8a4e69f87db",
+    "semanticDigest": "sha256:90bd2486b955e8d4077f4c94bc75ab1c03656d00998e1031b3e1d8a4e69f87db"
   },
   "independentReview": {
     "reviewer": "agent:/root/approval_checkpoint_review",
