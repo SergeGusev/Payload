@@ -69,3 +69,49 @@ Past input UUID arrays were not logged: log_parameter_max_length_on_error=0, log
 Fresh bounded SMB logs independently establish resumption: log031 at06:00:20.103Z selected priority b7c50005-0000-4000-8079-000000000150 (actual Gross rank243, Gross322.29903090,probed1). Log032 at06:15:19.239Z completed Exact page Candidates50,Applied0,TerminalNoOps0,FallbackEligible50,Deferred0,LookupAttempts0,DonorTargets0,LiveBalancesApplied0,ReachedBoundaryfalse. Final SQL06:19:58.440296Z: Running heartbeat06:19:53.170901Z, NULL error;2687 strategies/0 missing snapshotGross. Exact priority historical settled Live, strict origin coalesce(submitted_at_utc,min linked paper fill,created_at_utc) before2026-08-10T00:00:00Z:405 rows,403 NULL Net; grouped audit still only408 PaperRun entries/latest2026-08-29T08:54:28.019924Z. Current ranking has advanced, but new financial writes are not yet observed.
 
 No builds/tests, disposable artifacts, temporary database, automation or new requirement contract. All diagnostic results held in memory; only this exempt context/history evidence persisted. A tool-memory serialization mistake and Windows rg wildcard-path error were corrected before their intended reads; no system/data mutation. Prior dirty context andSeptember2 history remain outside scoped bookkeeping.
+
+## 2026-09-03T06:24:35.0000000Z
+Request:
+Восстанови историю по всем добавленным Loss Diff Progress стратегиям
+
+Result:
+Read-only preflight only; no historical rows written, no new backfill implementation/contract yet. Scope is exactly34 new variants, not the older four fixed LossDiff children: Up4 parent b7c50005-0000-4000-8137-000000000104 / eth_up_down_5m_up_bps_4_fak_premarket -> child group8236 caps1..16; Up8 parent b7c50005-0000-4000-8137-000000000108 / eth_up_down_5m_up_bps_8_fak_premarket -> group8237 caps1..18. Read literal exact child/assignment/code/name/cap tuples from src/PolyCopyTrader.Storage/PostgresLossDiffPositiveProgressStrategySchemaMigration.cs, verified34 tuples against Production. Creation contract RC-20260902-eth-lossdiff-positive-progress-34/7c5d42ae explicitly excluded history and any new backfill command; its prior approval is not applied to this task.
+
+All sessions connected explicitly to192.168.0.101:5432/polycopytrader using existing env credentials without output, native psql -X -w/ON_ERROR_STOP=1, PGOPTIONS default_transaction_read_only=on/timezoneUTC/statement_timeout15000/lock_timeout2000 and READ ONLY transactions. At06:15:56.209840Z exact34 were enabled/unpaused Paper, all Positive current_value0, common rollout T0=2026-09-03T05:32:51.200614Z; existing organic Skipped runs2 per Up4 child and1 per Up8 child, no entered timestamp. Running deployed info=1.0.0+3548a5736cba95661b0284613ac228c600d0a5b1, started05:32:51.854919Z, heartbeat06:15:53.145466Z age3.064374s, last_errorNULL,waitinglocks0. These are time-bounded observations, not a claim that runtime state is frozen.
+
+Provisional pre-rollout source filter: exact parents, status Settled, entered_at_utc strictly before T0; all available history, not last-zero cutoff. Up4 source1749=1003W+746L from2026-07-03T06:34:42.611438Z to2026-09-03T05:04:30.510737Z; Up8 source1081=610W+471L from2026-07-03T07:49:30.243618Z to2026-09-03T04:59:30.819514Z. Missing linked order/Net/settled timestamp/neutral outcomes0; all2830 fee-accounting complete (Calculated or VenueReported),0 Net!=Gross-fee. Embedded execution_intent_order_book_snapshot exists812 Up4/521 Up8, absent937/560. Presence alone has not passed complete book/intent/fee-chain replay validation.
+
+Actual membership read at06:21:50.694956Z, used for the in-memory calculation:
+```sql
+SELECT jsonb_build_object(
+ 'parent_id',r.strategy_id,'run_id',r.id,
+ 'entered_us',round(extract(epoch FROM r.entered_at_utc)*1000000)::bigint::text,
+ 'settled_us',round(extract(epoch FROM r.settled_at_utc)*1000000)::bigint::text,
+ 'entered_utc',r.entered_at_utc,'settled_utc',r.settled_at_utc,
+ 'event_rank',row_number() OVER(PARTITION BY r.strategy_id ORDER BY r.settled_at_utc,r.entered_at_utc,r.id),
+ 'gross_sign',sign(r.realized_pnl_usd),'embedded_book',o.raw_decision_json ? 'execution_intent_order_book_snapshot',
+ 'archive_for_asset',CASE WHEN o.raw_decision_json ? 'execution_intent_order_book_snapshot' THEN NULL ELSE EXISTS(SELECT 1 FROM order_book_snapshots b WHERE b.asset_id=o.asset_id LIMIT 1) END,
+ 'book_has_asks',jsonb_typeof(o.raw_decision_json #> '{execution_intent_order_book_snapshot,asks}')='array',
+ 'order_id',o.id
+)::text
+FROM strategy_market_paper_runs r
+JOIN paper_orders o ON o.id=r.paper_order_id
+WHERE r.strategy_id IN ('b7c50005-0000-4000-8137-000000000104','b7c50005-0000-4000-8137-000000000108')
+ AND r.status='Settled' AND r.entered_at_utc < '2026-09-03T05:32:51.200614Z'::timestamptz
+ORDER BY r.strategy_id,r.entered_at_utc,r.id;
+```
+
+Calculation held in PowerShell memory, no files: per parent, traverse returned entries and events ordered by event_rank; before each entry consume only events with settled_us < entered_us. delta=-gross_sign; iterative counter=max(0,counter+delta). Independent cross-check at every event uses cumulative sum minus its minimum prefix including initial0. All comparisons passed and independent client W/L counts match SQL. Eligible counter>0: Up4 1132, with570 embedded books and562 missing;617 zero skips. Up8 750, with403 embedded books and347 missing;331 zero skips. Max counter at entry16/18. All embedded entries have asks arrays, but no claim yet that every array/intent is sufficient for every cap. No candidate fill, fee, PnL or affected DB row totals have been fabricated.
+
+Corrected archive match at06:20:31.059105Z used same asset and snapshot_at_utc = NULLIF(o.raw_decision_json->>'paper_fak_snapshot_at_utc','')::timestamptz. All937/560 missing-book source rows have the source timestamp;0 have an exact archived match. Any archive for same asset exists934/558, but a different-time book is not the original frozen execution evidence. Initial diagnostic used the nonexistent JSON key paper_fak_order_book_snapshot_at_utc and returned nulls; those timestamp/match results were discarded and replaced after actual serializer/key inspection. At06:24:09.972385Z both exact parents have0 paper_live_shadow_decisions before T0; all937/560 missing-book rows have no positive fak_executable_ask_shares_at_worst_price and no nonnull fak_executable_ask_vwap_at_worst_price. This is absence of usable summary evidence, NOT proof there was no liquidity.
+
+Four eligible examples independently re-read by primary ID have no embedded book and no order_book_snapshots row for the asset at any time:
+- Up4 run22513c72-50fd-4c51-9432-ce6f5b4605ce/order52847b8e-42e5-4ccf-b3a2-4aa19d6084d2 at2026-07-03T20:49:30.671614Z,k5.
+- Up4 runc9a1b81d-4eb6-4421-a825-b7efec9d4a6e/order2b904431-8029-45a3-8ac0-f4ee04d07199 at2026-07-10T10:24:31.675891Z,k5.
+- Up8 runbf994d8d-5204-4513-8deb-32eb8d870e73/orderc4542586-c8c7-4b6d-b359-0ea764a35fd9 at2026-07-03T20:49:30.673874Z,k2.
+- Up8 run04087689-aa7c-4414-be73-fe822c2acf78/order04e10dbd-f9cc-4198-aa5b-46c3a6ac1ed1 at2026-07-10T10:24:31.734206Z,k4.
+Their raw decisions have original cap0.99 and actual base notional6.0093, best asks0.54/0.55, parent average fills0.54/0.5522347303816994322097869966, respectively1/2 fill levels; aggregate executable shares0 and VWAPnull do not establish additional depth for multipliers>1. Separate archive samples for two other parent runs did contain full Asks/Bids at later times, despite current AddOrderBookSnapshotAsync assigning raw_jsonNULL; historical archive contents therefore must not be inferred from the current writer. No alternate-time book or synthetic depth was substituted.
+
+Deployed-matching source distinguishes actual new34 path CreateLossDiffPositiveProgressIntent/AddPositiveProgressPaperEntry/AttachPositiveProgressJson: multiplier min(k,cap)*actual parent invested notional excluding fees, own frozen-depth FAK full/partial/no-fill and own fee/Net. ReconcileStrategyLossDiffStatesAsync sorts new34 events by settlement/entry/UUID with strict causal settlement cutoff. The two Startup history commands found are only the closed old fixed-child profiles --backfill-eth-lossdiff-history and --backfill-eth-up8-lossdiff-history; neither was executed or extended.
+
+Task is blocked on missing original execution evidence for full enlarged historical fills, not on service deployment. Ask the user whether partial restoration restricted to verifiable execution evidence is acceptable; no silent skipped-history fallback, parent-price multiplication, ResearchOnly/ordinary-Paper reclassification, runtime state rewind or cutoff change. Final scope/counter policy, candidate counts, gentle per-chain batches and new requirement digest still need agreement before product/DB writes. All user data and settings remain untouched by this task. No builds/tests, downloads, temporary files/run, deployment, backup, service command, Live order or automation. Only exempt context/history evidence persisted; preserve unrelated dirty context/September2 history and concurrent historical-parity work.
