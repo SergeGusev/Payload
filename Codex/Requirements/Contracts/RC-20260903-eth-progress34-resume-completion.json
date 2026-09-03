@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260903-eth-progress34-resume-completion",
+  "title": "Finish the approved Progress34 native history with read-only transient-lock waiting",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Мне нужно, чтобы задача была сделана. Делай то, что необходимо для её завершения"
+    },
+    {
+      "source": "user",
+      "text": "Восстанови историю по всем добавленным Loss Diff Progress стратегиям"
+    },
+    {
+      "source": "user",
+      "text": "Все 34 варианта"
+    },
+    {
+      "source": "user",
+      "text": "Да, восстановленные сделки должны также входить в обычные показатели. И потом отдельно расскажи мне, сколько у нас `ResearchOnly` сделок, которые сейчас не входят в статистику"
+    },
+    {
+      "source": "user",
+      "text": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша."
+    }
+  ],
+  "scope": {
+    "goal": "Завершить ранее одобренное восстановление всех31612 исторических Paper-сделок ровно34 Progress-стратегий, заменив прекращение команды при временных блокировках щадящим ожиданием и безопасным продолжением.",
+    "inScope": [
+      "This is an operational continuation of RC-20260903-eth-progress34-native-history at immutable semantic digest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2. Its REQ-001 through REQ-006 and already user-approved ASM-001 through ASM-003 remain unchanged. This contract changes only transient-lock handling and authorizes completing the same implementation, tests, Production import, verification and required finalization. It does not reclassify any additional history.",
+      "Production192.168.0.101:5432/polycopytrader; literal34 allowlist in original REQ-001 independently matched to PostgresLossDiffPositiveProgressStrategySchemaMigration. Up4 parent b7c50005-0000-4000-8137-000000000104 with children b7c50005-0000-4000-8236-{cap:12 digits}, caps1..16; Up8 parent b7c50005-0000-4000-8137-000000000108 with children b7c50005-0000-4000-8237-{cap:12 digits}, caps1..18. No wildcard SQL mutation targets.",
+      "Modify only the existing native C# backfill command, focused tests and its short README instructions for the waiting policy. Preserve the preexisting approved product/document diff. Update required context/history and completion evidence for both contracts without changing original semantic digest or approval evidence.",
+      "Retain source sha256:3048d1e890a5f605e9d7c4107731477f11dd98e0f62521880f1d263f41ac6533 and plan sha256:966103194019979106007e3659316bd41e6938f4dc4e4076636a2fb086e66817. Last full plan has2830 parent outcomes,1882 positive parent entries,31612 child trades:18112 Up4 and13500 Up8. Fresh read-only preview11:38:25UTC confirms16 Up4 imported and0 Up8, corroborated by16 native orders/fills/signals. Thus expected remaining31596 trades in1881 one-parent batches,189576 primary rows plus the original final marker; normal trigger dependencies are additional writes.",
+      "One parent per independently atomic READ COMMITTED transaction:16 or18 trades,96 or108 primary rows. Minimum1s outside transactions, own dashboard-event and wallet-refresh/inflight drain before each following write. Existing sixteen records are verified byte/accounting/provenance-equivalent and skipped, never rewritten. No increased batch size or parallel writers.",
+      "Estimated local change/build/focused tests30-60minutes. Production completion time depends on observed downstream processing and lock waits; no reliable fixed ETA from the one completed batch. Measure subsequent batches and report revised ETA, continuing within this same scope and resource profile despite elapsed time. Waiting itself is not completion or a reason to request renewed authorization.",
+      "Required finalization preserves unrelated dirty files and obsolete unapproved drafts. If main WorkingTree validation is contaminated by unrelated draft contracts, a disposable local worktree under a marked D:\\CodexTemp run may validate the exact final staged artifact only after proving its staged Git tree equals the main staged tree. Main Staged and committed Range validation must also pass; no hook bypass, rule/validator edits, ignored failures, published-history rewrite or deletion of unrelated drafts. Approval-only checkpoint precedes this amendment's material edits."
+    ],
+    "outOfScope": [
+      "Any different strategy, timeframe, historical source, multiplier, average price, fee, financial formula, ResearchOnly accounting exception, deterministic ID, original embedded audit approval digest or final marker payload.",
+      "Live/shadow orders, external trading, strategy flags/settings/current balances or counters, post-rollout organic records, historical counter reseeding, service restart/deployment, schema changes, backups, trigger bypass, consumer repair or unrelated cleanup.",
+      "Ignoring locks, swallowing arbitrary errors, retrying unknown-outcome writes blindly, increasing timeouts, waiting inside a write transaction, general retry infrastructure, broader batching optimization or concurrent Production writers.",
+      "Treating source/plan/build/schema/identity/settings/accounting drift, unhealthy heartbeat/errors or broken projections as transient lock waits; these remain fail-closed blockers. No guessed global zero for ResearchOnly trades."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "UTC; original exact-parent Settled entries strictly before2026-09-03T05:32:51.200614Z, all retained history, historical initialk0, strict prior-settlement causal ordering, PositiveLossDiff loss+1/win max(0,k-1), entry onlyk>0, multiplier min(k,cap). No last-zero truncation; current state/post-cutoff records unchanged. Separate bounded ResearchOnly finding uses an explicitly captured fresh cutoff as original REQ-006 specifies.",
+    "firstVerification": "Fresh READ ONLY/UTC/15s statement/2s lock preview2026-09-03T11:38:25.156935Z verified exact Production endpoint. Service Running/Live, expected info=1.0.0+3548a5736cba95661b0284613ac228c600d0a5b1; assembly=1.0.0.0; mvid=d42f178b96b1, heartbeat age28.81s,last_errorNULL; waitinglocks0; exact34 children enabled/unpaused/not-auto-paused/Livefalse; own wallet queued/inflight0; finalmarker0. These are time-specific observations, not preauthorization to skip the full frozen-plan, identity, dependency, archive and protected-state preview before resumed apply. Git HEAD0aa85850 tracks origin/master with0/0 divergence."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Пережидать временные блокировки без записей и продолжать ту же операцию после успешной повторной проверки.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "Делай то, что необходимо для её завершения",
+      "acceptanceCriteria": [
+        "Only this backfill command changes: an observed waiting-lock count greater than0 causes a cancellable read-only wait rather than termination. At startup, before/after batches and during projection/final reconciliation waiting, dispose readers/transactions before pausing; use5s polling and at most one unchanged waiting log per30s. No arbitrary attempt/time limit terminates an otherwise healthy waiting operation.",
+        "Evaluate all other existing health and baseline conditions even when locks are present. Before any new write require zero waitinglocks and all unchanged source/plan/schema/identity/settings/heartbeat/projection invariants. Never treat unrelated fatal guard failures as transient or silently advance the baseline.",
+        "If the same lock guard races inside a batch, first roll back and dispose that entire uncommitted batch, then wait outside the transaction and revalidate before retrying it. PostgreSQL lock_timeout55P03 or deadlock40P01 may likewise retry only after confirmed full rollback. Any unknown commit outcome requires deterministic persisted-chain verification before any further write, never a blind replay. Other SQL/timeouts/connections/accounting errors are not automatically reclassified as transient locks.",
+        "Preserve already committed batches. Retry only the same complete parent batch after checking its source fingerprint and all six deterministic target identities; exact complete chains skip, partial/conflicting chains fail closed. Do not sleep while holding the retention dependency transaction lock or any batch write transaction.",
+        "The original apply approval digest and audit/marker semantics remain d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2. Before executing the modified command verify that both the original approval and this separate operational amendment have committed, valid user approval records. This draft alone does not authorize material edits or resumed Production writes."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill\" --logger \"trx;LogFileName=progress34-resume.trx\"; use real owned isolated PostgreSQL, never Production for tests.",
+          "expected": "Lock waits cause0writes until clear; fatal guards still fail with concurrent locks; transaction races/55P03/40P01 roll back fully before waiting/retry; cancellation leaves no transaction/partial batch; committed-batch resume skips duplicates; final reconciliation waits correctly. All existing native-history tests pass without skipped required integration tests.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Завершить прежний точный объём восстановления, включить его в обычные показатели и проверить результат.",
+      "sourceRequestIndexes": [0,1,2,3],
+      "sourceQuote": "Мне нужно, чтобы задача была сделана.",
+      "acceptanceCriteria": [
+        "Before apply rebuild and run required original focused regression tests plus new waiting tests on a marked D:\\CodexTemp environment. Obtain independent pre-apply semantic review of both literal contracts, actual diff and fresh evidence, then run complete read-only frozen source/plan/native/archive/protected-state preview. No full Production tests or service host startup.",
+        "Resume all31612 planned native trades with expected existing16 and remaining31596. Independently verify every subsequent committed parent batch, health and its normal dependent queues before another write. Do not end the work merely because transient locks or normal downstream queues require waiting; retain the same bounded mode and report progress/ETA changes.",
+        "Complete only when all31612 six-record chains and per-cap count/wins/losses/stake/payout/own-fee/Gross/Net/fee-inclusiveROI reconcile independently, ordinary projections include them once alongside separately accounted organic trades, protected current/Live state is unchanged by the command, original final marker is written last and repeat apply verifies writes0.",
+        "Deliver the original separate ResearchOnly exclusion finding with fresh bounded evidence. If there is no authoritative persisted registry/filter, state count untracked/unverified, not zero. Preserve ResearchOnly provenance with ordinary_paper_metrics_included=true for these modeled histories, not claims of proven historical depth or Live equivalence.",
+        "Finish required original build/regressions, independent final semantic review and both contracts' completion evidence only after actual import completion. Keep the original contract's semantic content/assumption approvals immutable. Verify WorkingTree/exact-artifact equivalence where needed, main Staged and committed Range, commit/push only scoped changes, preserve unrelated edits. Extract compact evidence and stop owned test processes before protected temporary cleanup; no completion with a surviving marked run."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md",
+        "Codex/Requirements/Contracts/RC-20260903-eth-progress34-native-history.json",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-09-03.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"; execute original contract's focused regression filters in isolated databases as required.",
+          "expected": "Build and required existing/new tests pass; no runtime strategy/accounting changes outside the approved historical command.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "runtime",
+          "command": "Reviewed compiled command --backfill-eth-progress34-history read-only preview, then --apply --approved-contract-digest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2 after both approval checkpoints; independent read-only native/projection checks and repeat apply.",
+          "expected": "31612 total/31596 newly remaining verified against actual preview,1881 remaining parent batches, all per-cap financial/projection totals correct, no command-caused protected/Live mutation, original finalmarker last, repeat0; waiting states do not terminate healthy work.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Independent reviewer examines both verbatim contracts, actual source/doc diff, test and Production evidence; original REQ-006 bounded follow-up; Validate-RequirementContract WorkingTree/Staged/Range; exact staged-tree comparison if isolated artifact validation is needed; protected temp cleanup.",
+          "expected": "PASS/no open findings, supported ResearchOnly finding, both contracts truly completed, unchanged original semantic digest, approval-before-edit ordering, preserved unrelated files and no surviving temp run.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "pending",
+    "approvedBy": "user",
+    "evidenceText": "pending",
+    "semanticDigest": "pending"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/approval_checkpoint_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}

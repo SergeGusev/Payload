@@ -1,0 +1,325 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260903-eth-progress34-partial-history-backfill",
+  "title": "Partial evidence-backed history for exact34 ETH Up4/Up8 Positive Progress children",
+  "author": "agent:/root",
+  "status": "draft",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Восстанови историю по всем добавленным Loss Diff Progress стратегиям"
+    },
+    {
+      "source": "user",
+      "text": "разрешаю"
+    },
+    {
+      "source": "user",
+      "text": "Все 34 варианта"
+    },
+    {
+      "source": "user",
+      "text": "Начинаем с нуля, потом восстановим историю отдельной командой"
+    },
+    {
+      "source": "user",
+      "text": "Смоделируй Progress стратегию для Loss Diff Positive для ETH Up or Down 5m Up 4 bps Reference Average Premarket, при которой размер ставки умножается на текущий Loss Diff.  Учитывай именно Net Pnl, то есть с комиссией Polymarket "
+    },
+    {
+      "source": "user",
+      "text": "Теперь для той же стратегии повтори эти же рассчёты для N случаев, где N от 1 до 15 (для 16 у нас уже есть) и N - это ограничитель максимального коэффициента. То есть при N = 5 и LossDiff = 12, умножаем всё равно на 5"
+    },
+    {
+      "source": "user",
+      "text": "Теперь повтори это для второй стратегии, только N до 18"
+    },
+    {
+      "source": "user",
+      "text": "Да, имею в виду её"
+    }
+  ],
+  "scope": {
+    "goal": "Восстановить только подтверждаемую часть Paper-истории ровно34 уже созданных LossDiff Positive Progress стратегий; неподтверждаемые сделки оставить невосстановленными.",
+    "inScope": [
+      "Production PostgreSQL192.168.0.101:5432/polycopytrader; exact34 child IDs/codes/wallets/caps and exact2 parents enumerated in REQ-001. New command runs locally against this explicit endpoint and exits before service host construction; no deployment needed to execute it.",
+      "Native C# one-off command --backfill-eth-progress34-history, default read-only preview, apply only with this exact approved semantic digest. Add only its early Program dispatch, focused tests, concise README and exact-family parity/audit documentation.",
+      "Direct inserts only into signals, paper_orders, paper_fills, strategy_market_paper_runs, paper_positions and paper_position_settlements for exact newly reconstructed child entries; one exact final schema_data_migrations marker 20260903_eth_progress34_partial_history_v1. Valid no-fill decisions use the existing child Skipped-run shape without invented fills. Existing completed batches are read/verified, never updated or deleted.",
+      "Keep enabled existing schema triggers. Their normal dashboard projection, copied-trader performance refresh, retention coordination and derived target metrics are in scope as necessary dependencies, not new mechanisms. Primary row counts are not total physical writes; projection events and coalesced refresh work add timing-dependent load.",
+      "Preparation/build/focused tests/independent review estimated1–2hours after approval; gentle apply estimated20–40minutes if health gates remain clear, possibly longer while yielding to Production. This request/approval covers that exact bounded import, not any backup, new index/schema mechanism or unrelated optimization. All disposable artifacts and isolated test PostgreSQL stay inside a codex-temp-lifecycle marked D:/CodexTemp/runs directory with TEMP/TMP/TMPDIR and explicit build/test outputs; clean it before completion."
+    ],
+    "outOfScope": [
+      "Parent data changes; the four older fixed LossDiff children; other strategies; all Live orders, fills, settings, funding and balances; enabling/disabling/pausing strategies; service start/stop/restart or deployment; scheduled automation.",
+      "Rewinding runtime LossDiff states, changing their rollout timestamps, importing parent-event rows, changing assignments or retroactively changing post-rollout organic trades. ASM-001 defines the proposed historical-only boundary explicitly.",
+      "Inventing books, using nearest/newer market snapshots, scaling a parent fill/fee/PnL instead of simulating the child, donor/fixed-ROI fee fallbacks, filling an unknown fee with zero, or calling modeled fees VenueReported.",
+      "Changing current runtime strategy, fee, amount normalization, spread/risk, reporting or retention rules; editing existing completed contracts/migration checksums/old backfill profiles; generalized batching/replay infrastructure, new tables/indexes/triggers, trigger bypass, broad table locks, backups or destructive cleanup."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "UTC. Proposed historical-only boundary ASM-001: exact-parent status='Settled', entered_at_utc strictly before common rollout2026-09-03T05:32:51.200614Z, valid settled_at_utc/gross outcome. Read all available such parent outcomes starting with the earliest retained entry; no last-zero truncation. The historical counter starts0 before that first retained outcome, consumes settlements strictly before each candidate entry in settlement/entry/UUID order, and is NOT written to runtime state. Missing child execution evidence does not remove the parent's known outcome from the historical counter.",
+    "firstVerification": "Forced READ ONLY/UTC/statement_timeout15s/lock_timeout2s preview. At2026-09-03T06:34:51.386612Z exact34 present (16+18), Live off/enabled/unpaused, zero pre-T0 entered child runs, T0 unchanged; current organic counters all1. Deployed exact info=1.0.0+3548a5736cba95661b0284613ac228c600d0a5b1; assembly=1.0.0.0; mvid=d42f178b96b1, Running, last_errorNULL, heartbeat06:33:53.279576Z, waitinglocks0. At06:35:41.254466Z read2830 exact-parent source rows: Up4 1749=1003W+746L; Up8 1081=610W+471L. Positive pre-entry membership1132/750; embedded-book membership570/403, missing-book562/347. Each of the973 retained candidates has exact parent/asset/condition intent and book identity, one linked signal/fill/position/settlement, Filled parent FAK source and complete stored Taker fee fields; sanity mismatches0. This is a candidate ceiling, not a claim that full replay has passed."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Восстановить историю всех34 точных добавленных вариантов, но только там, где достаточно подтверждённых данных.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        2
+      ],
+      "sourceQuote": "Восстанови историю по всем добавленным Loss Diff Progress стратегиям",
+      "acceptanceCriteria": [
+        "The user's 'разрешаю' is the answer to the exact immediately preceding question: 'Разрешаешь восстановить для всех 34 стратегий только подтверждаемую часть истории, оставив сделки без необходимых данных невосстановленными?' This permits evidence exclusions, not fabricated execution or ordinary-Paper exemptions.",
+        "Exact closed allowlist follows. Match IDs AND current codes/parent assignments/catalog caps; never target by an unbounded name pattern.",
+        "child=b7c50005-0000-4000-8236-000000000001; parent=b7c50005-0000-4000-8137-000000000104; cap=1; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_1; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_1.",
+        "child=b7c50005-0000-4000-8236-000000000002; parent=b7c50005-0000-4000-8137-000000000104; cap=2; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_2; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_2.",
+        "child=b7c50005-0000-4000-8236-000000000003; parent=b7c50005-0000-4000-8137-000000000104; cap=3; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_3; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_3.",
+        "child=b7c50005-0000-4000-8236-000000000004; parent=b7c50005-0000-4000-8137-000000000104; cap=4; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_4; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_4.",
+        "child=b7c50005-0000-4000-8236-000000000005; parent=b7c50005-0000-4000-8137-000000000104; cap=5; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_5; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_5.",
+        "child=b7c50005-0000-4000-8236-000000000006; parent=b7c50005-0000-4000-8137-000000000104; cap=6; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_6; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_6.",
+        "child=b7c50005-0000-4000-8236-000000000007; parent=b7c50005-0000-4000-8137-000000000104; cap=7; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_7; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_7.",
+        "child=b7c50005-0000-4000-8236-000000000008; parent=b7c50005-0000-4000-8137-000000000104; cap=8; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_8; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_8.",
+        "child=b7c50005-0000-4000-8236-000000000009; parent=b7c50005-0000-4000-8137-000000000104; cap=9; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_9; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_9.",
+        "child=b7c50005-0000-4000-8236-000000000010; parent=b7c50005-0000-4000-8137-000000000104; cap=10; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_10; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_10.",
+        "child=b7c50005-0000-4000-8236-000000000011; parent=b7c50005-0000-4000-8137-000000000104; cap=11; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_11; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_11.",
+        "child=b7c50005-0000-4000-8236-000000000012; parent=b7c50005-0000-4000-8137-000000000104; cap=12; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_12; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_12.",
+        "child=b7c50005-0000-4000-8236-000000000013; parent=b7c50005-0000-4000-8137-000000000104; cap=13; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_13; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_13.",
+        "child=b7c50005-0000-4000-8236-000000000014; parent=b7c50005-0000-4000-8137-000000000104; cap=14; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_14; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_14.",
+        "child=b7c50005-0000-4000-8236-000000000015; parent=b7c50005-0000-4000-8137-000000000104; cap=15; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_15; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_15.",
+        "child=b7c50005-0000-4000-8236-000000000016; parent=b7c50005-0000-4000-8137-000000000104; cap=16; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_16; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_16.",
+        "child=b7c50005-0000-4000-8237-000000000001; parent=b7c50005-0000-4000-8137-000000000108; cap=1; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_1; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_1.",
+        "child=b7c50005-0000-4000-8237-000000000002; parent=b7c50005-0000-4000-8137-000000000108; cap=2; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_2; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_2.",
+        "child=b7c50005-0000-4000-8237-000000000003; parent=b7c50005-0000-4000-8137-000000000108; cap=3; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_3; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_3.",
+        "child=b7c50005-0000-4000-8237-000000000004; parent=b7c50005-0000-4000-8137-000000000108; cap=4; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_4; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_4.",
+        "child=b7c50005-0000-4000-8237-000000000005; parent=b7c50005-0000-4000-8137-000000000108; cap=5; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_5; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_5.",
+        "child=b7c50005-0000-4000-8237-000000000006; parent=b7c50005-0000-4000-8137-000000000108; cap=6; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_6; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_6.",
+        "child=b7c50005-0000-4000-8237-000000000007; parent=b7c50005-0000-4000-8137-000000000108; cap=7; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_7; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_7.",
+        "child=b7c50005-0000-4000-8237-000000000008; parent=b7c50005-0000-4000-8137-000000000108; cap=8; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_8; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_8.",
+        "child=b7c50005-0000-4000-8237-000000000009; parent=b7c50005-0000-4000-8137-000000000108; cap=9; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_9; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_9.",
+        "child=b7c50005-0000-4000-8237-000000000010; parent=b7c50005-0000-4000-8137-000000000108; cap=10; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_10; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_10.",
+        "child=b7c50005-0000-4000-8237-000000000011; parent=b7c50005-0000-4000-8137-000000000108; cap=11; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_11; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_11.",
+        "child=b7c50005-0000-4000-8237-000000000012; parent=b7c50005-0000-4000-8137-000000000108; cap=12; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_12; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_12.",
+        "child=b7c50005-0000-4000-8237-000000000013; parent=b7c50005-0000-4000-8137-000000000108; cap=13; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_13; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_13.",
+        "child=b7c50005-0000-4000-8237-000000000014; parent=b7c50005-0000-4000-8137-000000000108; cap=14; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_14; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_14.",
+        "child=b7c50005-0000-4000-8237-000000000015; parent=b7c50005-0000-4000-8137-000000000108; cap=15; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_15; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_15.",
+        "child=b7c50005-0000-4000-8237-000000000016; parent=b7c50005-0000-4000-8137-000000000108; cap=16; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_16; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_16.",
+        "child=b7c50005-0000-4000-8237-000000000017; parent=b7c50005-0000-4000-8137-000000000108; cap=17; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_17; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_17.",
+        "child=b7c50005-0000-4000-8237-000000000018; parent=b7c50005-0000-4000-8137-000000000108; cap=18; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_18; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_18.",
+        "Parents are ETH Up or Down 5m Up 4 bps Reference Average Premarket / eth_up_down_5m_up_bps_4_fak_premarket and ETH Up or Down 5m Up 8 bps Reference Average Premarket / eth_up_down_5m_up_bps_8_fak_premarket. Resolve all six target chain IDs deterministically from the contract's exact child ID, parent run ID and entity role before mutation; detect any collision including raw runs, retained skip archives and deletion/dedup markers.",
+        "Initial maximum candidate population is570*16+403*18=16374 child decisions from973 parent entries. At most98244 primary execution/accounting rows plus one final marker if all candidates fill and none fail evidence checks; valid no-fill decisions write fewer rows. Report actual per-cap fill/partial/no-fill and evidence-excluded counts before any write. No claim that all16374 necessarily fill.",
+        "Exclude missing/incomplete/unbound book or intent, unproved settlement/fee inputs and invalid parent dependency chains with exact reason and source identifier. Do not create fictional Skipped decisions for missing evidence. Record exclusions durably in the final marker's compact manifest and task evidence; zero-gate non-entries have separate counts. A surprising identity/source/count mismatch, corruption or a need for new fallback stops the task.",
+        "Complete metadata/chain/fee checks and replay before apply, freeze the exact candidate/target manifest with source/intent/book/fee/counter/membership/plan digests. Revalidate relevant source bindings within each batch; detect source or plan drift rather than silently alter the plan. Preview defaults READ ONLY and never writes a marker."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests\" --logger \"trx;LogFileName=progress34-history.trx\"",
+          "expected": "Exact34 allowlist and caps, two exact parents, deterministic IDs, UTC cutoff, missing-book exclusion, fee/identity/dependency exclusions, invalid arguments and no preview writes; old fixed-child profiles remain unchanged.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "New command --backfill-eth-progress34-history (no --apply); native psql exact-ID preview with READ ONLY/UTC/15s/2s.",
+          "expected": "Freeze actual per-cap membership, exclusions, dependency counts, source/plan digests, collisions/archives, deployed version and complete execution settings; compare against the2830 source/16374 candidate ceiling. Required unknown execution input blocks affected reconstruction, never substitutes a default.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Повторить исходную причинную Positive Progress логику и самостоятельно исполнить увеличенную FAK-ставку по сохранённому стакану.",
+      "sourceRequestIndexes": [
+        0,
+        4,
+        5,
+        6,
+        7
+      ],
+      "sourceQuote": "размер ставки умножается на текущий Loss Diff",
+      "acceptanceCriteria": [
+        "Compute historical k from ALL valid exact-parent outcomes, including outcomes of entries whose child trades lack a snapshot and will be omitted. Settlement must be strictly earlier than candidate entry. Ordering is settled_at_utc, entered_at_utc, UUID; win uses gross>0 -> max(0,k-1), loss gross<0 -> k+1, neutral does not change k. Do not start k anew at the first snapshot-bearing entry.",
+        "k=0 creates no historical bet; k>0 requested child cash = parent's actual invested notional excluding fees * min(k,cap). Example k12/cap5 ->5; cap1 ->1 for any positive k. Caps are not entry thresholds. Each cap has an independent portfolio; do not deplete one shared book across different child strategies.",
+        "Reuse the existing FakBuyExecutionIntent.Create, OrderAmountCalculator and FakBuyExecutionParity.SimulatePaper/TakerBuyFillEstimator semantics. Preserve parent's original BUY/token/condition/hard price limit, immutable original captured depth, tick/minimum/negative-risk constraints and verified execution settings. Compare relevant configured execution inputs against deployed startup/configuration evidence before apply; unknown or conflicting configuration is a blocker, not authority to choose defaults.",
+        "Historical replay uses the current approved new34 execution model on the recorded parent entries/books. Child fill price, shares, spent notional and cancelled remainder come from the child's own normalized depth sweep. Never copy or proportionally scale parent filled price/size to force a full fill; never fetch a present or later book.",
+        "Persist full requested/effective child intent, original snapshot and timestamp, parent signal/order/run/fill/settlement linkage, pre-entry k/cap/multiplier/base amount, replay model/version, child fill and cancellation outcome. Validate timestamps at PostgreSQL microsecond precision and the documented atomic REST-fallback timestamp case without inventing an earlier snapshot.",
+        "For a positive fill write one consistent closed six-row signal/order/fill/run/zero-size-position/settlement chain; a partial fill is PartiallyFilledExpired with remainder cancelled, no retry. Valid no-fill follows the current Positive Progress Skipped-run path with durable intent/book/reason and no accounting rows. Use proved parent settlement outcome/time to settle the actual child shares, not parent financial totals.",
+        "Read-only venue reference checks2026-09-03: https://docs.polymarket.com/trading/place-orders defines FAK immediate available-liquidity fill and unfilled-remainder cancellation, BUY cash amount and hard maximum price. This command must never sign, place, cancel or query private Live orders."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests\" --logger \"trx;LogFileName=progress34-history.trx\"",
+          "expected": "Reference counter recurrence and independent reflected-prefix calculation; out-of-order settlements/equality boundary, missing-book outcomes still affect k; all34 caps including k12/cap5, full/partial/no-fill, normalization, snapshot binding and no lookahead.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests\" --logger \"trx;LogFileName=progress34-history.trx\"",
+          "expected": "Focused executable parity compares replay intents/fills with the current deployed-matching new34 shared implementation and independent hand-calculated multi-level examples. Same immutable input; no post-fill acceptance/repricing and no network order operation.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Пересчитать собственную комиссию и Net PnL каждой восстановленной дочерней сделки.",
+      "sourceRequestIndexes": [
+        0,
+        4
+      ],
+      "sourceQuote": "Учитывай именно Net Pnl, то есть с комиссией Polymarket",
+      "acceptanceCriteria": [
+        "Use the persisted complete parent market fee schedule/provenance for the SAME condition and the child's actual simulated filled shares/VWAP with PolymarketFeeCalculator. Recalculate the amount; never multiply the parent's rounded fee, Gross or Net. ASM-002 explicitly covers145 retained parent entries whose recorded fee schedule was applied retrospectively under the Paper model.",
+        "Initial retained973 candidates all carry r=0.07,e=1,taker_only=true,roleTaker,statusCalculated. Of these,102 Up4+43 Up8 have fee source historical-current-paper-model-v1:polymarket-clob-v2-fd-shares-rate-price-curve-round5-away-from-zero-v1;468 Up4+360 Up8 have the unprefixed exact calculator source. These are modeled Paper fees, not authoritative venue historical charges.",
+        "Preserve the distinction in durable parent-fee provenance and child calculation evidence. Newly modeled child fees are Calculated, never VenueReported. Existing aggregate-VWAP/rounding limitations remain explicit. No donor ratio, fixed3.33-point fallback, zero-unknown fee or fetching today's fee schedule to replace recorded inputs.",
+        "Fee formula/rounding follow existing calculator: shares*rate*(p*(1-p))^exponent, round5 AwayFromZero, then persisted accounting precision. Net equals child settlement payout minus child spent notional minus the recalculated fee. Net ROI, when reported, uses fee-inclusive outlay. All run/fill/position/settlement accounting must reconcile after database numeric rounding.",
+        "Cross-check independent per-cap SQL totals against the frozen plan for source membership, trade counts, stake, Gross, fee and Net. Publish only actual verified partial-history results with coverage; do not generalize to full history or expected Live profitability."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests\" --logger \"trx;LogFileName=progress34-history.trx\"",
+          "expected": "Fee curve and midpoint/precision examples independently recalculated; own fee differs from multiplied rounded parent fee; complete/provenance-invalid inputs, partial fills, wins/losses, no-fill and all ledger consistency equations.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Native psql READ ONLY exact-manifest per-cap aggregates and six-chain joins after apply; compare with frozen replay and independent decimal calculation.",
+          "expected": "Every inserted accounting chain reconciles, exact intended membership, no fabricated missing-data history, partial coverage and historical fee provenance disclosed; repeat apply writes0.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Записать подтверждённую историю щадящими возобновляемыми порциями, не меняя текущую торговлю.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        3
+      ],
+      "sourceQuote": "восстановим историю отдельной командой",
+      "acceptanceCriteria": [
+        "Before apply require this exact later approved semantic digest, passing focused tests and independent semantic review, exact target/schema/source/manifest preview, absent-or-exact completion marker, verified deployed execution version/settings and healthy baseline. Initial accepted deployed build is exactly info=1.0.0+3548a5736cba95661b0284613ac228c600d0a5b1; assembly=1.0.0.0; mvid=d42f178b96b1. A changed build or required new execution policy must be inspected and approved before apply; no deployment performed here.",
+        "Proposed batching based on973 source markets, two families16/18 caps and max observed serialized asks1808bytes: one historical parent run per transaction, at most16 or18 child decisions and96/108 primary rows, up to973 batches. Never one transaction covering the whole history. Begin with one such batch, verify it, then continue within the same bound; pause at least1second outside each transaction.",
+        "All preview/health sessions READ ONLY,UTC,15s statement timeout,2s lock timeout. Only the exact apply connection has bounded READ WRITE transactions with the same timeouts. No schema migration execution, broad table lock, trigger bypass, synchronous backup or service manipulation.",
+        "Before/after each batch check exact target settings/assignments and rollout boundary, fresh Running service heartbeat age<=120s, NULL last_error, waitinglocks0, relevant queued workload and actual target counts/invariants. Stop before the next batch on health/load deterioration, unexpected scope/source/target changes or partial/colliding chains. Existing normal organic post-T0 events/runs/counter advances are not a reason to rewrite them; ASM-001 preserves their independent runtime.",
+        "Each batch independently atomic and idempotent with deterministic IDs and embedded parent/contract/plan/source provenance. A failed current batch rolls back only itself; completed verified batches remain. Resume from existing verified exact chains/no-fill records without updating them or duplicating rows; if the existing contents conflict, stop. Do not delete completed history for rollback without separate authorization.",
+        "Keep every existing trigger enabled. Current Production preview found dashboard events on five chain table types, copied-trader refresh work, retention coordination and restore/dedup gates. Count/monitor these normal effects; they make physical writes exceed primary-row counts. Do not claim that only98244 physical rows can change. Check raw/archived/deleted target collisions before inserts; do not restore or remove user-deleted/archived records.",
+        "After all accepted candidates/exclusions reconcile, insert only marker20260903_eth_progress34_partial_history_v1 in existing schema_data_migrations, with exact IDs/caps/cutoff/version/digests/counts/per-cap financial totals and compact exact excluded parent IDs/reasons. Marker is final only after complete verified partial-scope coverage. Retry with marker verifies and writes0. Do not update runtime states/events, strategy balances/settings, parents, old children or post-T0 history.",
+        "Final verification covers intended exact chains, absence of out-of-allowlist command writes, untouched protected entities by this command, healthy service and normal target projection convergence. Distinguish organic concurrent service activity from command-attributable changes. Do not directly rewrite projections or repair unrelated queues.",
+        "Build and run only relevant new-command/family/parity/old-history regression tests plus real isolated PostgreSQL integration tests, no skipped required integration tests. Independent reviewer compares user words, approved contract, actual diff, tests, manifest and post-apply evidence. Remove marked disposable test/build artifacts after extracting compact durable evidence."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-007",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests\" --logger \"trx;LogFileName=progress34-history.trx\"",
+          "expected": "Isolated native PostgreSQL proves full six-row chains and normal triggers, exact allowlist, duplicate/idempotent retry, cancellation/partial-batch rollback/resume, collision rejection, preserved parent/runtime/post-T0 rows, no marker on incomplete work, exact final marker/no-op.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-008",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
+          "expected": "Relevant service build succeeds without unrelated repairs.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-009",
+          "kind": "runtime",
+          "command": "Before Production apply: exact manifest/trigger/lock/heartbeat/settings preview; after first batch and each later batch: same bounded health and target verification; after final marker: repeat command apply with approved digest.",
+          "expected": "Only authorized exact records and normal trigger dependencies, all actual counts/financial totals match, zero partial chains, source/plan stable, repeat writes0. Any mismatch stops before further writes.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-010",
+          "kind": "inspection",
+          "command": "Independent semantic review of verbatim requests, this approved contract, scoped diff, focused TRX/build, frozen plan and read-only post-operation evidence.",
+          "expected": "PASS with no open findings before completion; local code approval gates precede edits and no Production apply before the pre-apply portion passes.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "Историю дополняем только до2026-09-03T05:32:51.200614Z; текущие LossDiff-счётчики, их T0 и события не пересчитываем и не объединяем с исторической серией. Исторический k отдельно считается по всей доступной причинной истории родителя, даже для пропущенных из импорта сделок.",
+      "impact": "Новые органические сделки и продолжение торговли сохраняют нулевой старт при выкладке. Историческая и пост-выкладочная серии не становятся одной непрерывной цепочкой счётчика. Это предлагаемый режим исторического дополнения, требующий отдельного подтверждения с текущим digest.",
+      "approval": {
+        "status": "pending",
+        "approvedBy": "user",
+        "evidenceText": "pending",
+        "semanticDigest": "sha256:d7e428ae9bbab071e995d8c05995b1c98d9e6b578b7eeddfd8f42dc363f1e8c6"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "Для145 выбранных родительских входов (102 Up4 и43 Up8) допускаем сохранённую ретроспективную Paper-модель комиссии historical-current-paper-model-v1 при собственном пересчёте комиссии увеличенной ставки. Для остальных используем их записанные параметры того же калькулятора. Сохраняем эту provenance и не называем комиссии фактически сообщёнными биржей.",
+      "impact": "Можно восстановить подтверждённое по стакану Paper-исполнение этих145 входов, но их Net является результатом явно указанной модели комиссии, а не доказательством фактически действовавшего/списанного исторического тарифа. Если пользователь этого не подтверждает, эти входы требуют исключения и нового digest; тихой подмены нет.",
+      "approval": {
+        "status": "pending",
+        "approvedBy": "user",
+        "evidenceText": "pending",
+        "semanticDigest": "sha256:d7e428ae9bbab071e995d8c05995b1c98d9e6b578b7eeddfd8f42dc363f1e8c6"
+      }
+    }
+  ],
+  "deviations": [],
+  "approval": {
+    "status": "pending",
+    "approvedBy": "user",
+    "evidenceText": "pending",
+    "semanticDigest": "sha256:d7e428ae9bbab071e995d8c05995b1c98d9e6b578b7eeddfd8f42dc363f1e8c6"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/progress34_history_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}

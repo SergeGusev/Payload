@@ -27,6 +27,15 @@ using PolyCopyTrader.Strategy;
 using Serilog;
 using Serilog.Events;
 
+if (args.Contains(EthLossDiffPositiveProgressHistoryBackfillCommand.CommandFlag, StringComparer.Ordinal))
+{
+    var commandConfiguration = LoadCommandConfiguration();
+    AppOptionsValidator.ValidateAndThrow(commandConfiguration);
+    Environment.ExitCode = await EthLossDiffPositiveProgressHistoryBackfillCommand.ExecuteAsync(
+        commandConfiguration, args, Console.Out, CancellationToken.None);
+    return;
+}
+
 if (args.Contains(EthUp8LossDiffHistoryBackfillCommand.CommandFlag, StringComparer.OrdinalIgnoreCase))
 {
     var commandConfiguration = LoadCommandConfiguration();

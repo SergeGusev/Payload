@@ -70,16 +70,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-resume-build.trx\"",
           "expected": "Original financial/counter/cap/deterministic-ID tests and isolated PostgreSQL lifecycle tests pass, including exact new-build acceptance and mismatched-build refusal before writes.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final 64 distinct selected tests passed, zero skipped: history11, progress27, legacy19, dashboard7. Same original selection partitioned across fresh owned loopback PostgreSQL fixtures; legacy connection explicitly UTC. XML name union independently matches the original64 cases. Initial combined57/64 and intermediate legacy17/19 failures are retained in daily history; no legacy assertion/product changes. Reviewer independently checked final TRX files. Detailed commands and hashes: Codex/Contexts/History/ContextPolyCopyTrader-2026-09-03.md, approval entry2026-09-03T14:36:46.8703605Z."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
           "expected": "Service build passes with disposable artifacts only in a marked D:/CodexTemp run.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Service build exit0, zero errors and121 warnings in unchanged sources. Tests build exit0, zero errors and5 warnings. All outputs in marked manual-a6cd054f9f014195946b383ba2ecfdc7. Service DLL SHA25656A8665757174D42D9238FC60E5712077BE5F9E7FE699645EB4371C63E476D9A; tests DLL SHA2565D39478D4255C3E4C1714E3C95BF84C2EEB6E25E7F474FE57E74D493ACFE72F0."
         },
         {
           "id": "VER-003",
@@ -87,7 +87,7 @@
           "command": "Compare command to pre-amendment SHA2560548EDEFF81E29897D40EB543F402D869FB0BC7FADD3266FD55AA314B4A25E5B; independent semantic review and requirements WorkingTree/Staged/Range gates.",
           "expected": "Only ServiceVersion changes in the importer; no changed financial/source/plan/guard/argument behavior; reviewerPASS/no findings and mechanical gates pass.",
           "result": "pending",
-          "evidence": ""
+          "evidence": "Main and independent reviewer proved reverse replacement in memory recovers exact original0548EDEF...A25E5B; new file SHA256F93765AD490985D7D48C74D2F1EAB512AC5E2B67E64857A887B759F0BFF5670E. Approval-only commit4702cb19befd1f4b2ed48e9ad943d35f247f477b passed Staged before product edits. Reviewer has no local code/scope findings, but no pre-apply or completion PASS due operational health blocker. Final WorkingTree/Staged/Range completion gates remain pending; task not completed."
         }
       ]
     },
@@ -118,8 +118,8 @@
           "kind": "inspection",
           "command": "Locally run the rebuilt service executable with --backfill-eth-progress34-history (read-only default); independently query exact Production IDs and health using native psql with READ ONLY/UTC/statement15s/lock2s.",
           "expected": "Original source2830/eligible1882/child31612 and frozen source/plan digests unchanged, exact resume point independently agrees, no preview writes; protected state and dependencies pass.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Read-only CLI exit0/PREVIEW_OK, preview cutoff2026-09-03T14:28:17.769302Z:2830 sources,1882 batches,31612 trades,16 verified existing,writes0. Original full source3048d1e890a5f605e9d7c4107731477f11dd98e0f62521880f1d263f41ac6533 and plan966103194019979106007e3659316bd41e6938f4dc4e4076636a2fb086e66817 unchanged; native collisions/state/schema checks passed. Preview log SHA2561319FCEABEB095CBC962968910626E608A3F7C2E691150E8FCB41702D67E6620 independently reviewed. Subsequent14:30:07.441179Z health failed with18 waiting locks and new Dashboard deadlock; this preview PASS does not authorize apply."
         },
         {
           "id": "VER-005",
@@ -127,7 +127,7 @@
           "command": "After approved preview, locally run the existing --backfill-eth-progress34-history --apply --approved-contract-digest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2; perform original independent postchecks and repeat zero-write verification.",
           "expected": "Missing batches only, all31612verified native histories and ordinary Paper metrics, correct final marker, no unintended modifications; real completion or exact guarded stop reported.",
           "result": "pending",
-          "evidence": ""
+          "evidence": "BLOCKED before apply; no Production writes this turn. Pre-apply snapshot2026-09-03T14:30:07.441179Z observed18 waiting Lock backends and new Dashboard deadlock14:28:23.156430Z. Independently read raw error5f639752-2cf4-4ca4-8830-3ed271899af2 at14:31:28.672906Z. Later waiter snapshot0 does not erase the observed failed guard/new error; subsequent bounded count query timed out15s and was not retried. Last complete verified state16/31612,remaining31596/1881batches. No retry-policy change, broad diagnosis, service operation or apply was performed; original and amendment contracts remain approved, not completed."
         }
       ]
     }
@@ -142,7 +142,7 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/approval_checkpoint_review",
-    "comparedOriginalRequests": false,
+    "comparedOriginalRequests": true,
     "verdict": "pending",
     "findings": []
   }

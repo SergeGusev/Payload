@@ -354,8 +354,46 @@ Focused verification: service `dotnet build`, and `dotnet test` filters
 and `PostgresSchemaMigrationTests.DefaultCatalog`. Supply explicit marked
 `D:\CodexTemp` artifact/results directories. The PostgreSQL tests require a
 guarded disposable loopback database, never Production. These children have no
-automatic or manual history-import command in this change; restoration is a
-separately approved future task. Existing fixed LossDiff children are unchanged.
+automatic history import. Existing fixed LossDiff children are unchanged.
+
+#### Approved exact34 modeled native history
+
+`--backfill-eth-progress34-history` restores only the above34 children before
+`2026-09-03T05:32:51.200614Z`, using historical k from zero and
+`min(pre-entry k,cap)`. It scales the parent's actual spent amount and shares,
+assumes enough depth at their full-precision average price, and recalculates the
+child's own fee from the recorded schedule. Net=payout-spent-fee;
+Net ROI=100*sum(Net)/sum(spent+fee). Retrospective fee profiles are modeled, not
+confirmed historical venue fees. Internal `ResearchOnly`/reconstruction evidence
+is retained, with ordinary native Paper history and statistics inclusion explicitly
+approved under `RC-20260903-eth-progress34-native-history`. Current counters,
+post-rollout trades, balances and Paper/Live execution are unchanged.
+
+Build the service with explicit marked `D:\CodexTemp` artifact paths, then run its
+built DLL with `--backfill-eth-progress34-history` for a READ ONLY preview against
+the configured `polycopytrader` database at the fixed Production endpoint
+`192.168.0.101:5432`. The command exits before service/worker/schema startup.
+Apply adds `--apply --approved-contract-digest
+sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2` only after
+the approved preview, tests and independent review pass. It writes one parent
+entry per transaction (16/18 native trade chains), waits at least1s plus normal
+projection/refresh completion, and stops on health, identity, source or collision
+drift. Exact IDs/evidence are the resume point; repeat runs verify/skip complete
+batches without overwriting. The final existing migration marker is written only
+after accounting/projection verification; there is no automatic deletion rollback.
+
+Test filters: `EthLossDiffPositiveProgressHistoryBackfill`,
+`LossDiffPositiveProgress`, `EthLossDiffHistoryBackfillCommandTests` and
+`DashboardProjectionCalculatorTests`, with explicit artifact/results paths and
+`POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` pointing to a marked disposable loopback
+database. These modeled fills do not establish historical depth or Live returns.
+
+Continuation after the Paper lock correction is approved separately under
+`RC-20260903-eth-progress34-resume-deployed-build`. The command requires exactly
+`info=1.0.0+9aeb7447318ea244028fbc9d8b05c1c3529006af; assembly=1.0.0.0; mvid=d5191846ec8f`.
+The original apply digest, frozen history manifest and batching are unchanged;
+another build or a waiting-lock guard still stops the operation before the next
+batch. This does not enable the separate, unapproved transient-lock retry draft.
 
 ### ETH LossDiff History Backfill
 

@@ -121,6 +121,26 @@ failing parity test is a completion blocker, not a documentation caveat. A predi
 mismatch, missing mandatory label, enabled Live path, or failing exception contract
 test is likewise a completion blocker for the exception.
 
+Closed historical accounting exception approved by
+`RC-20260903-eth-progress34-native-history`, digest
+`d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2`:
+only children `b7c50005-0000-4000-8236-{cap:12 digits}` caps1..16 of parent
+`b7c50005-0000-4000-8137-000000000104`, and
+`b7c50005-0000-4000-8237-{cap:12 digits}` caps1..18 of parent
+`b7c50005-0000-4000-8137-000000000108`, entered strictly before
+`2026-09-03T05:32:51.200614Z`, source
+`eth_lossdiff_positive_progress_history_research_paper`, evidence
+`eth_progress34_parent_average_full_fill_history_v1`. This command's
+sufficient-depth, parent-average full-fill model retains `ResearchOnly`
+provenance with `ordinary_paper_metrics_included=true` and enters native Paper
+history/counts/WinRate/Net PnL/fee-inclusive Net ROI. Own fees use recorded
+schedules, including explicitly accepted retrospective modeled schedules, not
+claimed historical venue charges. This exception overrides separation only for
+those imported records; it proves neither depth nor Live equivalence. Current
+counters, post-rollout trades and actual-depth Paper/Live execution stay unchanged.
+No clone, future trade or other strategy inherits it; the existing28-family
+exception and every other parity rule remain unchanged.
+
 ## 4. Task Finalization
 
 After every completed non-`start` task:
