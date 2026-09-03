@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260903-paper-storage-lock-contention",
+  "title": "Сократить найденное удержание блокировок архивацией Paper и пересчётом дашборда",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "А ты не можешь разобраться с причинами этих блокировок и сделать так, чтобы их не было?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, исправь то, что уже найдено"
+    }
+  ],
+  "scope": {
+    "goal": "Исправить подтверждённые механизмы лишнего удержания блокировок при прямой архивации Skipped/PaperOnly runs и обработке очередей дашборда, сохранив данные и финансовые результаты.",
+    "inScope": [
+      "Общий путь PaperEntryPersistenceQueue → AddPaperEntryPersistenceBatchAsync с включённой прямой компактацией и фактическими Skipped runs: сохранить границы исходных пакетов вместо объединения независимых пакетов в одну транзакцию с эксклюзивным retention gate.",
+      "PostgresAppRepository.DirectSkipCompaction: вынести чистую подготовку и сериализацию входных данных до захвата общего gate; проверки зависимостей, изменения runs/tombstones/rollups и commit оставить защищёнными существующим протоколом.",
+      "PostgresDashboardProjectionRepository.ApplyPendingEventsAsync: снять длительное удержание строк coalesced PaperPosition events при вычислении и записи проекций; подтверждать обработку только прочитанной версии события.",
+      "PostgresDashboardProjectionRepository.ReconcileNextStrategyAsync: не держать выбранную строку dashboard_projection_reconciliation_queue заблокированной во время полного пересчёта; не удалять поступивший или обновлённый конкурентно запрос.",
+      "Изменения общих путей хранения действуют на их существующих вызывающих, а не только на 34 Progress-стратегии. Каталог, параметры и торговые решения стратегий не меняются.",
+      "Сфокусированные unit/concurrency/integration-тесты в отдельном локальном PostgreSQL, сборка, независимое сравнение исходного запроса с diff, краткая документация и обязательные requirement/context/history записи."
+    ],
+    "outOfScope": [
+      "Любые записи в Production 192.168.0.101:5432/polycopytrader; применение миграций, изменение схемы или индексов, настроек PostgreSQL, сервисов, деплой, перезапуск, остановка, отмена чужих запросов и резервное копирование.",
+      "Возобновление или изменение команды импорта Progress34, её проверок здоровья, frozen source/plan, количества исторических сделок и уже записанных 16 сделок. RC-20260903-eth-progress34-resume-completion остаётся отдельным неподтверждённым контрактом.",
+      "Изменение Live, enabled/paused, ставок, LossDiff, fee accounting, Net PnL/ROI, правил исполнения, параметров стратегий или их истории.",
+      "Удаление общего retention gate, обход триггеров, изменение порядка wallet-lock → retention-gate, перенос проверок зависимостей за пределы защищённой транзакции.",
+      "Новый механизм архивирования, отложенная архивная очередь, fallback записи вместо архивирования, активация dormant v2 writer, изменение периодического retention worker или его сроков/лимитов.",
+      "Обобщённая инфраструктура блокировок/очередей, рефакторинг смежных компонентов, изменение пользовательских показателей или обещание отсутствия любых штатных PostgreSQL-блокировок.",
+      "Изменение или включение в этот diff существующих незавершённых правок импорта, других контрактов и несвязанных пользовательских изменений."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Код текущего checkout D:/My/Business/PolyMarket, стартовый HEAD 0aa85850986b80a3d3bf2595d17f9c885eb9c14c. Основание диагностики: Production snapshots 2026-09-03 11:49–11:56 UTC и относящиеся к ним исходники, совпадающие с deployed commit 3548a5736cba95661b0284613ac228c600d0a5b1. Исторический анализ и изменение Production не выполняются. Проверка поведения — только на локальных явно созданных тестовых данных.",
+    "firstVerification": "Повторно проверить git status, точные dispatch paths и существующие транзакционные границы; воспроизвести каждую изменяемую конкуренцию на исходном коде в изолированном PostgreSQL и подтвердить блокирующий backend/lock. После изменения повторить тот же сценарий и независимо сверить записи/проекции с исходными агрегатами."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Уменьшить лишнюю работу под общим замком прямой архивации, не снимая защиту согласованности данных.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "исправь то, что уже найдено",
+      "acceptanceCriteria": [
+        "Если исходный пакет очереди имеет DirectPaperSkipCompactionEnabled=true и содержит Skipped run, он передаётся репозиторию отдельно от остальных исходных пакетов; соседние независимые пакеты не удлиняют его эксклюзивную транзакцию. Пакеты без фактической прямой компактации сохраняют существующее объединение.",
+        "Порядок FIFO, materialization непосредственно перед записью, retry неуспешного пакета, pending count, обновление exposure cache после успешной записи и ожидание drain при Stop сохраняются. Поздний пакет не обгоняет неуспешный ранний пакет.",
+        "Атомарность каждого исходного PaperEntryPersistenceBatch сохраняется: связанные signal/order/fill/position/activation/run записываются совместно. Ранее успешно записанный отдельный пакет не повторяется при ошибке следующего.",
+        "Чистая нормализация и сериализация данных direct-compaction выполняются до захвата общего gate; сериализация одного подготовленного payload повторно под gate не выполняется. Итоговые записанные значения и возвращаемые ID не меняются.",
+        "Общий advisory gate (1346589778,1), порядок wallet-lock → exclusive gate, транзакционная защита проверок зависимостей/архива/rollup и освобождение gate в finally остаются. Метод репозитория не расщепляет один свой исходный атомарный финансовый пакет.",
+        "Тесты подтверждают, что последовательные исходные пакеты не владеют одним непрерывным gate через весь объединённый flush; конкурентная запись зависимости не даёт потерять run, создать дубликат tombstone или дважды увеличить rollup. Ошибка в одном пакете оставляет его целиком откатанным.",
+        "Не заявлять, что в наблюдённых Production эпизодах размер объединения был именно 64 или 25000: точный runtime размер не установлен. Проверяемое улучшение — устранение описанного удлинения критического участка, а не гарантия нулевого ожидания или конкретной Production latency."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperEntryPersistenceQueue.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "tests/PolyCopyTrader.Tests/PaperEntryPersistenceQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $taskRunPath/artifacts --results-directory $taskRunPath/results --filter \"FullyQualifiedName~PaperEntryPersistenceQueueTests|FullyQualifiedName~StrategyRunRetentionPostgresIntegrationTests.DirectCompaction_\" --logger \"trx;LogFileName=paper-lock-compaction.trx\"",
+          "expected": "Все выбранные тесты реально выполняются и проходят, без skipped integration cases; локальная PostgreSQL fixture подтверждает независимые транзакции исходных пакетов, корректность зависимостей, rollback и равенство данных. TEMP/TMP/TMPDIR и test connection направлены только в собственную изолированную среду под D:/CodexTemp/runs.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Устранить удержание изменяемых строк очередей дашборда на протяжении пересчёта, сохранив конкурентные обновления и точность показателей.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "исправь то, что уже найдено",
+      "acceptanceCriteria": [
+        "ApplyPendingEventsAsync не удерживает PaperPosition event row lock на всём участке чтения фактов, расчёта и записи snapshots. Существующая сериализация самих projection consumers через advisory lock остаётся.",
+        "Для PaperPosition прочитываются payload и идентификатор версии одной видимой строки. Финальное подтверждение удаляет только действительно обработанную версию; конкурентно обновлённая или заново вставленная запись остаётся для следующего прохода. Новая схема, колонка версии и замена coalescing на неограниченный append-only поток не вводятся.",
+        "Сценарии insert/update/delete/reinsert, нескольких обновлений одной позиции, изменения strategy binding, отсутствующего position fact и rollback не теряют итоговое состояние. Повторная обработка оставшейся версии не удваивает вклад: проекция сверяется с сохранённым position fact и независимым raw aggregate.",
+        "ReconcileNextStrategyAsync не блокирует выбранный queue request на протяжении BuildProjection/WriteProjection. Подтверждается только та версия запроса, которую этот пересчёт обслужил; новый/обновлённый запрос, в том числе появившийся при выборе стратегии через cursor, не удаляется.",
+        "Сохраняются согласованный RepeatableRead snapshot пересчёта, общая блокировка consumer, порядок priority/requested time, текущая обработка реальных ошибок и отсутствие нового бесконечного retry. Конкурентное обновление запроса при финальном version-checked acknowledgement не теряет запрос и не требует отката уже корректно рассчитанной проекции; обработка конфликтов acknowledgement ограничена этим участком.",
+        "Короткая финальная запись/acknowledgement остаётся транзакционно защищённой; не обещается отсутствие обычных кратковременных row locks. События других source kinds, формулы fee/Net PnL/ROI, lifetime/recent окна и исходные Paper данные сохраняют прежнюю семантику.",
+        "Детерминированные PostgreSQL concurrency tests удерживают consumer в фазе пересчёта, проверяют завершение producer записи до снятия этой остановки, затем возобновляют consumer и подтверждают сохранение нового события/запроса и итоговое равенство raw/projection metrics. Воспроизводится как PaperPosition coalescing, так и same-strategy reconciliation request upsert.",
+        "Исходные Production transactionid samples не объявляются доказательством точного конфликтующего tuple; точный изменяемый механизм подтверждается отдельным локальным воспроизведением до и после исправления."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Events.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Reconciliation.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $taskRunPath/artifacts --results-directory $taskRunPath/results --filter \"FullyQualifiedName~DashboardIncrementalProjectionIntegrationTests|FullyQualifiedName~DashboardSnapshotTests\" --logger \"trx;LogFileName=paper-lock-projection.trx\"",
+          "expected": "Все выбранные тесты реально выполняются и проходят в изолированном локальном PostgreSQL; конкурентный producer не ждёт завершения остановленного пересчёта, новые версии остаются, replay/rollback не искажают суммы. Независимые raw aggregates совпадают с lifetime/recent projections.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Проверить и передать только локальное исправление найденных механизмов, не подменяя им выполнение незавершённого импорта или изменение Production.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Ок, исправь то, что уже найдено",
+      "acceptanceCriteria": [
+        "До продуктовых правок имеется последующее точное пользовательское APPROVE этого semantic digest и отдельный committed approval checkpoint. Существующие несвязанные изменения не перезаписываются и не включаются в исправление.",
+        "Сборка Service и целевые unit/PostgreSQL-тесты проходят. Для тестов создаётся только собственная loopback PostgreSQL среда под отмеченной директорией D:/CodexTemp/runs; тесты никогда не используют Production connection. По завершении собственные процессы остановлены и защищённая cleanup завершена.",
+        "Независимый reviewer сравнивает дословные запросы, утверждённый контракт, точный diff и результаты тестов; отсутствуют открытые findings. Requirement WorkingTree/Staged/Range validation проверяет точный артефакт исправления, не обходя hooks и не присваивая ему чужие незавершённые изменения.",
+        "README/context/history кратко фиксируют изменённые критические участки, команды проверки и ограничения. Результат явно различает исправленный и проверенный локальный код от ещё не выложенного Production поведения.",
+        "Никакие SQL mutation, rollout, service restart, история Progress34 или Live-действия в рамках этого контракта не выполняются. Наличие обычных коротких блокировок и отдельного прежнего importer guard не скрывается как якобы устранённое этим diff."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperEntryPersistenceQueue.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.DirectSkipCompaction.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Events.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Reconciliation.cs",
+        "tests/PolyCopyTrader.Tests/PaperEntryPersistenceQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $taskRunPath/artifacts",
+          "expected": "Сборка проходит; все временные выходы размещены в отмеченной директории D:/CodexTemp/runs. Никаких действий Production.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; scripts/requirements/Validate-RequirementContract.ps1 -Mode Range -BaseRef <verified-approval-parent> -HeadRef <verified-product-commit>",
+          "expected": "Независимый semantic review PASS/no findings; все gate checks точного артефакта проходят без обходов и потери lifecycle checkpoint. В evidence подставлены реальные проверенные Git refs и при необходимости точный staged-tree-идентичный изолированный checkout, не затрагивающий чужой dirty diff.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260903-paper-storage-lock-contention sha256:f4fe3915b336f8e4c7a8436b977dc767e7c974618934ddb375baf27e921df8a8",
+    "semanticDigest": "sha256:f4fe3915b336f8e4c7a8436b977dc767e7c974618934ddb375baf27e921df8a8"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/approval_checkpoint_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
