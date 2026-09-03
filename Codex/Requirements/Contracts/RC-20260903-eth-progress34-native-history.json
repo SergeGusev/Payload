@@ -1,0 +1,433 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260903-eth-progress34-native-history",
+  "title": "Exact34 Positive Progress modeled history included in native Paper statistics",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Восстанови историю по всем добавленным Loss Diff Progress стратегиям"
+    },
+    {
+      "source": "user",
+      "text": "разрешаю"
+    },
+    {
+      "source": "user",
+      "text": "Все 34 варианта"
+    },
+    {
+      "source": "user",
+      "text": "Начинаем с нуля, потом восстановим историю отдельной командой"
+    },
+    {
+      "source": "user",
+      "text": "Смоделируй Progress стратегию для Loss Diff Positive для ETH Up or Down 5m Up 4 bps Reference Average Premarket, при которой размер ставки умножается на текущий Loss Diff.  Учитывай именно Net Pnl, то есть с комиссией Polymarket "
+    },
+    {
+      "source": "user",
+      "text": "Теперь для той же стратегии повтори эти же рассчёты для N случаев, где N от 1 до 15 (для 16 у нас уже есть) и N - это ограничитель максимального коэффициента. То есть при N = 5 и LossDiff = 12, умножаем всё равно на 5"
+    },
+    {
+      "source": "user",
+      "text": "Теперь повтори это для второй стратегии, только N до 18"
+    },
+    {
+      "source": "user",
+      "text": "Да, имею в виду её"
+    },
+    {
+      "source": "user",
+      "text": "Делаем допущение, что стакан был достаточно глубокий, чтобы вся ставка была сделана по одинаковой цене. Это решит проблему?"
+    },
+    {
+      "source": "user",
+      "text": "Что такое `ResearchOnly`  ? Мы сможем рассчитать Net Pnl и Net Roi ?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, действуем в режиме ResearchOnly"
+    },
+    {
+      "source": "user",
+      "text": "Мне нужна история в приложении в том виде, как будто это родная история, а не восстановленная"
+    },
+    {
+      "source": "user",
+      "text": "Да, восстановленные сделки должны также входить в обычные показатели. И потом отдельно расскажи мне, сколько у нас `ResearchOnly` сделок, которые сейчас не входят в статистику"
+    }
+  ],
+  "scope": {
+    "goal": "Восстановить исторические сделки ровно34 существующих Positive Progress стратегий по согласованной модели достаточной глубины/средней цены родителя, показать их в родной истории приложения и включить в обычные Paper показатели; затем отдельно сообщить проверенное количество ResearchOnly сделок, исключённых из статистики.",
+    "inScope": [
+      "Production PostgreSQL 192.168.0.101:5432/polycopytrader. Only exact34 child IDs/codes/wallets/caps and two exact parent read sources in REQ-001. Proposed historic period/state policy is explicit ASM-001; modeled price/amount precision is ASM-002; recorded historical fee provenance is ASM-003.",
+      "One small native C# command --backfill-eth-progress34-history, read-only preview by default; --apply requires this exact later user-approved semantic digest. Early Program dispatch exits before host/schema/service/worker construction. Run locally against the explicit Production endpoint after focused tests/review; no service deployment needed for the command.",
+      "Insert native signals/paper_orders/paper_fills/strategy_market_paper_runs/closed paper_positions/paper_position_settlements and one final marker in existing schema_data_migrations. No new tables, indexes, triggers, schema migration or research subsystem. Existing normal projections, history UI and export consume these native records without separate tabs, reports or synthetic UI-only balances.",
+      "A narrowly closed ordinary-Paper accounting exception for this backfill only, retained as ResearchOnly provenance with ordinary_paper_metrics_included=true; update only the exact exception paragraphs in AGENTS.md, Workflow.md, CodingRules.md and PAPER_LIVE_PARITY.md, plus the command's short README instructions. No change to the old28-strategy exception or the general rule for every other entity.",
+      "Read-only follow-up specifically counts existing Production trades excluded because of ResearchOnly classification, with an explicit cutoff and verified classification/filter. It does not import/reclassify or repair those other trades.",
+      "Scale preview2026-09-03T08:00:47.205755Z: 2830 parent source outcomes; 1882 positive-counter parent entries; 31612 child trade candidates (18112 Up4 +13500 Up8), six primary records each =189672 primary records plus final marker. Standard projection/retention/performance triggers add normal dependent writes; this is not a physical-write ceiling.",
+      "Estimated implementation and focused verification1–2h; Production apply45–75min initially, extending only within the same approved gentle mode as necessary. One parent entry per transaction,16/18 child trades,96/108 primary rows,1882 batches, at least1s outside transactions and additional projection-drain backpressure. No parallel Production writers."
+    ],
+    "outOfScope": [
+      "Changing existing parent or child strategy definitions, descriptions, settings, balances, Live flags, assignments, current counters, rollout timestamps or parent-event state; no new strategies or automatic historical counter reconciliation.",
+      "Changing, replacing, deleting or duplicating any organic post-rollout trades; reopening positions; Live/shadow order creation, submission, cancellation, signing, service stop/restart/deployment or automation.",
+      "Extending old fixed-child backfill commands/approvals, editing completed contracts or migration checksums, executing migrations, backup, trigger bypass, table-wide locks, generalized batching/replay/audit infrastructure, new UI/reporting subsystem or unrelated accounting repair.",
+      "Claiming confirmed historical depth, actual venue execution, guaranteed Live performance or venue-reported historical fees; suppressing the reconstruction/model provenance; substituting unknown fees with zero, parent Net multiplication, donors or fixed ROI offsets.",
+      "Silently switching to last-zero truncation, omitting missing-book entries, deleting unrelated ResearchOnly data, or bulk scanning all large JSON/financial tables merely to obtain an unsupported global zero."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "UTC; ASM-001 proposes exact-parent status='Settled', entered_at_utc < 2026-09-03T05:32:51.200614Z, all retained history beginning July3. Historical k starts0 and uses only parent settlements strictly before each entry, ordered by settlement timestamp, entry timestamp, UUID; loss+1/win max(0,k-1). No last-zero truncation. Only k>0 creates a child trade. Current runtime state and all post-T0 records remain untouched. The separate ResearchOnly count covers current retained Production trade records at a later explicitly captured cutoff, not local simulation files or research-only price ticks.",
+    "firstVerification": "Fresh forced READ ONLY/UTC/15s statement/2s lock preview at07:59:21.215613Z: exact34 identities/assignments/states match,16+18 enabled/unpaused Paper, Live orders0, pre-T0 entered child runs0, common T0 unchanged, current k1. Organic Settled80 Up4+18 Up8. Production Service Running/Live info=1.0.0+3548a5736cba95661b0284613ac228c600d0a5b1; assembly=1.0.0.0; mvid=d42f178b96b1; last_errorNULL, heartbeat age27.19s, waitinglocks0. At08:00:47 source1749/1081 and eligible1132/750; independent SQL/client totals and iterative/reflected-prefix k agree. One incomplete-fee parent row is the first Up4 win50ce8590-8d87-44b2-8212-64c91f948fc6 at k0 and creates no child trade; no candidate fee substitution is needed. At08:05:25.961553Z projections Running/NULL error, dashboard queue4954 and wallet refresh queue568 (bounded counts below10001). These are preview facts, not frozen runtime guarantees; recheck before apply."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Восстановить историю ровно34 добавленных вариантов в обычных таблицах приложения.",
+      "sourceRequestIndexes": [
+        0,
+        2,
+        11
+      ],
+      "sourceQuote": "Все 34 варианта",
+      "acceptanceCriteria": [
+        "Exact closed allowlist below must independently match the immutable creation migration literal tuples and current Production catalog/assignments. Do not target names by pattern or infer future clones.",
+        "child=b7c50005-0000-4000-8236-000000000001; parent=b7c50005-0000-4000-8137-000000000104; cap=1; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_1; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_1.",
+        "child=b7c50005-0000-4000-8236-000000000002; parent=b7c50005-0000-4000-8137-000000000104; cap=2; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_2; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_2.",
+        "child=b7c50005-0000-4000-8236-000000000003; parent=b7c50005-0000-4000-8137-000000000104; cap=3; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_3; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_3.",
+        "child=b7c50005-0000-4000-8236-000000000004; parent=b7c50005-0000-4000-8137-000000000104; cap=4; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_4; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_4.",
+        "child=b7c50005-0000-4000-8236-000000000005; parent=b7c50005-0000-4000-8137-000000000104; cap=5; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_5; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_5.",
+        "child=b7c50005-0000-4000-8236-000000000006; parent=b7c50005-0000-4000-8137-000000000104; cap=6; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_6; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_6.",
+        "child=b7c50005-0000-4000-8236-000000000007; parent=b7c50005-0000-4000-8137-000000000104; cap=7; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_7; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_7.",
+        "child=b7c50005-0000-4000-8236-000000000008; parent=b7c50005-0000-4000-8137-000000000104; cap=8; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_8; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_8.",
+        "child=b7c50005-0000-4000-8236-000000000009; parent=b7c50005-0000-4000-8137-000000000104; cap=9; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_9; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_9.",
+        "child=b7c50005-0000-4000-8236-000000000010; parent=b7c50005-0000-4000-8137-000000000104; cap=10; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_10; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_10.",
+        "child=b7c50005-0000-4000-8236-000000000011; parent=b7c50005-0000-4000-8137-000000000104; cap=11; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_11; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_11.",
+        "child=b7c50005-0000-4000-8236-000000000012; parent=b7c50005-0000-4000-8137-000000000104; cap=12; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_12; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_12.",
+        "child=b7c50005-0000-4000-8236-000000000013; parent=b7c50005-0000-4000-8137-000000000104; cap=13; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_13; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_13.",
+        "child=b7c50005-0000-4000-8236-000000000014; parent=b7c50005-0000-4000-8137-000000000104; cap=14; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_14; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_14.",
+        "child=b7c50005-0000-4000-8236-000000000015; parent=b7c50005-0000-4000-8137-000000000104; cap=15; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_15; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_15.",
+        "child=b7c50005-0000-4000-8236-000000000016; parent=b7c50005-0000-4000-8137-000000000104; cap=16; code=eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_16; wallet=strategy:eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_16.",
+        "child=b7c50005-0000-4000-8237-000000000001; parent=b7c50005-0000-4000-8137-000000000108; cap=1; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_1; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_1.",
+        "child=b7c50005-0000-4000-8237-000000000002; parent=b7c50005-0000-4000-8137-000000000108; cap=2; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_2; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_2.",
+        "child=b7c50005-0000-4000-8237-000000000003; parent=b7c50005-0000-4000-8137-000000000108; cap=3; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_3; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_3.",
+        "child=b7c50005-0000-4000-8237-000000000004; parent=b7c50005-0000-4000-8137-000000000108; cap=4; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_4; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_4.",
+        "child=b7c50005-0000-4000-8237-000000000005; parent=b7c50005-0000-4000-8137-000000000108; cap=5; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_5; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_5.",
+        "child=b7c50005-0000-4000-8237-000000000006; parent=b7c50005-0000-4000-8137-000000000108; cap=6; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_6; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_6.",
+        "child=b7c50005-0000-4000-8237-000000000007; parent=b7c50005-0000-4000-8137-000000000108; cap=7; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_7; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_7.",
+        "child=b7c50005-0000-4000-8237-000000000008; parent=b7c50005-0000-4000-8137-000000000108; cap=8; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_8; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_8.",
+        "child=b7c50005-0000-4000-8237-000000000009; parent=b7c50005-0000-4000-8137-000000000108; cap=9; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_9; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_9.",
+        "child=b7c50005-0000-4000-8237-000000000010; parent=b7c50005-0000-4000-8137-000000000108; cap=10; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_10; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_10.",
+        "child=b7c50005-0000-4000-8237-000000000011; parent=b7c50005-0000-4000-8137-000000000108; cap=11; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_11; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_11.",
+        "child=b7c50005-0000-4000-8237-000000000012; parent=b7c50005-0000-4000-8137-000000000108; cap=12; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_12; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_12.",
+        "child=b7c50005-0000-4000-8237-000000000013; parent=b7c50005-0000-4000-8137-000000000108; cap=13; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_13; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_13.",
+        "child=b7c50005-0000-4000-8237-000000000014; parent=b7c50005-0000-4000-8137-000000000108; cap=14; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_14; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_14.",
+        "child=b7c50005-0000-4000-8237-000000000015; parent=b7c50005-0000-4000-8137-000000000108; cap=15; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_15; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_15.",
+        "child=b7c50005-0000-4000-8237-000000000016; parent=b7c50005-0000-4000-8137-000000000108; cap=16; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_16; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_16.",
+        "child=b7c50005-0000-4000-8237-000000000017; parent=b7c50005-0000-4000-8137-000000000108; cap=17; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_17; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_17.",
+        "child=b7c50005-0000-4000-8237-000000000018; parent=b7c50005-0000-4000-8137-000000000108; cap=18; code=eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_18; wallet=strategy:eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_18.",
+        "Read all2830 parent outcomes in the proposed pre-T0 scope: Up4 1749=1003W+746L and Up8 1081=610W+471L. LossDiff uses Gross outcome, not fee-adjusted win/loss. Preserve a deterministic microsecond settlement/entry/UUID order and strict settled_at<entry condition; no result of the candidate itself may trigger its entry.",
+        "Historical k>0 selects1132 Up4 and750 Up8 parent entries. Every Up4 cap1..16 receives1132 trades; every Up8 cap1..18 receives750. Total31612. Missing order-book history is not an exclusion under this explicit full-fill model. At k0 there is no bet/financial chain; report948 parent zero-gate entries in the manifest, without fabricating entered/settled or fee rows.",
+        "Validate positive candidate parent order/signal/fill/position/settlement identity, price/size/notional, outcome/time and fee inputs before accepting the plan. One first Up4 k0 row lacks fee inputs; its known Gross outcome still participates in k and it is not a missing-fee modeled trade.",
+        "Resolve all six target IDs deterministically from exact child UUID, parent run UUID and entity role; validate raw run/market uniqueness, existing positions/settlements, archive/tombstone/deletion collisions and marker state before inserting. Initial pre-T0 entered-run count0 is not proof that every dependency collision check already passed.",
+        "Freeze relevant counter-source and candidate accounting fields, exact membership, target IDs, fee provenance and expected per-cap totals in a deterministic plan digest after implementation preview. Relevant source/identity drift or an unexpected candidate/dependency count stops before writes; do not silently shrink scope or repair parents."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-native-history.trx\"",
+          "expected": "Exact34 literal allowlist/caps; causal k, strict timestamp equality and out-of-order settlements, independent reflected-prefix reference; cap5/k12, zero gate, incomplete-fee zero-gate first row; exact candidate counts and deterministic target IDs; unchanged old profiles.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Run the new command --backfill-eth-progress34-history without --apply; native psql exact-ID dependency/metadata checks READ ONLY UTC15s/2s.",
+          "expected": "Complete frozen31612-trade plan and per-cap accounting, collision/archive checks and schema/trigger bindings; zero preview writes and no synthetic missing-book exclusions.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Использовать согласованную модель полного исполнения увеличенной ставки по средней цене родителя.",
+      "sourceRequestIndexes": [
+        4,
+        5,
+        6,
+        8,
+        10
+      ],
+      "sourceQuote": "стакан был достаточно глубокий, чтобы вся ставка была сделана по одинаковой цене",
+      "acceptanceCriteria": [
+        "Research/model premise: enough liquidity for the entire modeled child amount at the parent's average executed price, no additional slippage/partial fills/retries. Every cap is an independent strategy, not a shared liquidity pool across all34.",
+        "Multiplier m=min(pre-entry Positive LossDiff,cap). Base amount is the parent's actual invested notional excluding fees, not its configured stake or unused order remainder. Exact scaling/price precision and no additional venue normalization are explicit ASM-002.",
+        "Child spent notional=parent invested notional*m; child shares=parent actual filled shares*m. Model average price is parent actual invested notional/parent actual filled shares, retained at calculation precision, with numeric18,8 display/storage price and numeric28,8 amounts. Prove agreement of parent run/fill/settlement amounts at their stored precision before using them. Never reinterpret a rounded display price as a different stake.",
+        "Derive child payout from verified parent selected-token settlement price/outcome and child shares; derive Gross=payout-spent. Do not multiply a stored parent Gross or Net as the implementation shortcut. Rounded financial identities must agree in all persisted records; explicit rounding tests cover storage precision.",
+        "Create native accepted signal, Filled Buy Paper order, fill, Settled run, closed zero-size position and settlement. Use execution_source='eth_lossdiff_positive_progress_history_research_paper' and evidence version='eth_progress34_parent_average_full_fill_history_v1', not fake evidence of independent frozen-book execution.",
+        "Keep actual historical market/entry/fill/settlement times for native history and separately retain reconstructed_at_utc, source IDs/digests, parent amount/average price, k/cap/m, model assumption, ResearchOnly provenance, this approved exception ID/digest and ordinary_paper_metrics_included=true. If old book evidence exists it is retained as parent evidence, never claimed to prove the enlarged fill; never generate fictional snapshots."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-native-history.trx\"",
+          "expected": "Full-fill model independent hand calculations for loss/win, repeated caps, mixed-price parent VWAP, rounding, missing book, overlapping settlements; no venue/network/order operation or runtime strategy change.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-native-history.trx\"",
+          "expected": "Native six-record chain consistent at DB precision; history effective dates and explicit reconstruction provenance both preserved, positions closed, no fictional child depth; current actual-depth Positive Progress tests unchanged and passing.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Пересчитать комиссию, Net PnL и Net ROI для восстановленных увеличенных ставок.",
+      "sourceRequestIndexes": [
+        4,
+        9,
+        12
+      ],
+      "sourceQuote": "Учитывай именно Net Pnl, то есть с комиссией Polymarket",
+      "acceptanceCriteria": [
+        "Use each candidate parent's recorded complete market fee schedule and provenance for the same condition, and recalculate via existing PolymarketFeeCalculator for modeled child shares and the model average price. Own fee is rounded5 AwayFromZero by that calculator; never multiply the parent's already rounded fee/Net or coerce a missing fee to zero.",
+        "All1882 candidate parent entries currently have Calculated/Taker,r0.07,e1,taker_onlytrue. Of these1054 (664 Up4+390 Up8) carry historical-current-paper-model-v1:polymarket-clob-v2-fd-shares-rate-price-curve-round5-away-from-zero-v1;828 (468+360) carry the unprefixed calculator source. ASM-003 explicitly accepts this recorded retrospective modeled tariff without claiming actual historical venue charges.",
+        "Child fee status Calculated, never VenueReported. Preserve rate/exponent/taker-only/role, parent fee provenance, new calculation timestamp and evidence. No fetching today's fee schedule to replace recorded inputs; no donor/fixed3.33-point policy.",
+        "Net=payout-spent-fee. Aggregate Net ROI=100*sum(Net)/(sum(spent)+sum(fee)) for the exact modeled settled scope. Native accounting records and normal projections must reconcile; preserve current Gross and Net field meanings, not a new ROI denominator.",
+        "Independently recompute per-cap trade/win/loss counts, stake, payouts, fees, Gross and Net from persisted exact-manifest rows and compare to the frozen decimal plan. Verify ordinary projection Net/counts include the inserted contribution without confusing organic concurrent trades with command writes."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-native-history.trx\"",
+          "expected": "Own fee vs multiplied rounded-parent fee counterexample, recorded historical provenance, unknown rejection and rounding/curve examples; independently calculated Net and fee-inclusive ROI; complete run/fill/position/settlement consistency.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "After each committed batch and completion, native psql exact target-ID accounting joins and independent numeric per-cap aggregates; read ordinary performance projections.",
+          "expected": "All planned rows/totals reconcile;31612 restored native trades are included once in ordinary counters/WinRate/Gross/Net/ROI, with post-T0 organic contributions separately reconciled, not overwritten.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Включить восстановленные сделки в обычную историю и показатели как явно разрешённое закрытое исключение.",
+      "sourceRequestIndexes": [
+        10,
+        11,
+        12
+      ],
+      "sourceQuote": "восстановленные сделки должны также входить в обычные показатели",
+      "acceptanceCriteria": [
+        "This user's latest instruction overrides ResearchOnly accounting separation only for the exact34 historical modeled trades created by this command/evidence version/approved digest and pre-T0 window. Persist ResearchOnly as model provenance while ordinary Paper metrics inclusion is true; do not describe the imported fills as historically venue-proven.",
+        "Normal application history, trade details, sorting, dates, existing counts/WinRate/Net PnL/Net ROI and exports use the ordinary native records/projections. No separate research tab or report substitutes for native history; no artificial UI-only totals, strategy rename or new visible restoration column. Technical provenance remains available in persisted evidence.",
+        "Update the four current rule/architecture documents with only this exact closed historical exception, its IDs/caps/window/source/model/accounting inclusion and exclusion of Live equivalence. Do not weaken general parity requirements or the old28-family exception. No future strategy, clone, later trade or current34 runtime execution inherits the synthetic full-fill rule.",
+        "Keep all current34 strategy configurations/Live permissions/counters and actual-depth Paper/Live execution unchanged. All new imported orders are Paper accounting only; zero live_orders/shadow decisions/external actions are created by this command.",
+        "Existing current native query/calculator paths already count normal Settled runs without a research exclusion. Reuse them, not change global statistics formulas or dashboard implementation. Tests must prove ordinary projection inclusion and that no new generic research filtering path was introduced."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "AGENTS.md",
+        "Codex/Rules/Workflow.md",
+        "Codex/Rules/CodingRules.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-007",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-native-history.trx\"",
+          "expected": "Native projection source/calculator receives the closed exception records and includes their exact counts/Gross/Net/fees; other/current runtime paths retain original semantics, no Live effects or UI-only forgery.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-008",
+          "kind": "inspection",
+          "command": "Independent semantic review of the verbatim user prompts, exact approved contract, all scoped source/document diffs and focused build/test/post-operation evidence.",
+          "expected": "PASS with no open findings; ordinary inclusion is explicitly requested, provenance not erased, scope exactly34/pre-T0 and other parity exceptions unchanged.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Выполнить восстановление щадящими, атомарными и возобновляемыми порциями.",
+      "sourceRequestIndexes": [
+        0,
+        3,
+        11,
+        12
+      ],
+      "sourceQuote": "восстановим историю отдельной командой",
+      "acceptanceCriteria": [
+        "Before any apply require later exact APPROVE digest, committed approval checkpoint, complete passing focused tests including real isolated PostgreSQL, pre-apply independent semantic review, exact frozen manifest and fresh healthy Production/dependency preview. This draft and prior partial-history approval discussion do not authorize writes.",
+        "Initial gentle batch bound from preview is one parent entry,16/18 child trades,96/108 primary rows,1882 batches; no whole-history transaction. Each batch independently atomic. Start with one, verify all expected rows/dependencies and service/projections, then continue. Minimum1s pause outside transactions; if queued work is not draining, wait rather than accelerating or disabling triggers.",
+        "Preview/health sessions READ ONLY,UTC,statement_timeout15s,lock_timeout2s. Apply uses only bounded explicit READ WRITE transactions at same timeouts. A single operation-specific nonblocking advisory lock may prevent concurrent copies; no table-wide lock or service stop. No connection acquires write mode during preview.",
+        "Before/after batches verify exact identities/settings, unchanged rollout state policy, PolyCopyTrader.Service Running heartbeat age<=120s,last_errorNULL, no waitinglocks and normal projection/performance health. Ignore the unrelated stale PolyCopyTrader.Tests heartbeat. Expected initial Service build3548a5736cba95661b0284613ac228c600d0a5b1; local src diff to this deployed build was empty before new command work. Unexpected build/schema/identity changes or service deterioration stop before next batch.",
+        "Observe actual normal trigger effects: dashboard events on five table types, wallet performance queue, retention coordination and archive/deletion/restore guards. Preserve every trigger. Baseline08:05:25Z dashboard4954 events and refresh568 wallets; measure again before apply. Do not outrun downstream processing: after a batch verify its source-linked dashboard events drain and relevant wallet refresh completes before next batch. Bounded pauses and health checks continue; no direct projection rewrite or unrelated queue repair.",
+        "Before first write complete exact candidate collisions across raw history, unique market/position/settlement keys and both existing archive/tombstone forms. Existing organic post-T0 records, current balances/settings and runtime states are protected. If an existing record is not a byte/accounting/provenance-equivalent previously committed batch from this contract, stop instead of overwrite.",
+        "Deterministic six-chain IDs and embedded contract/source/plan identifiers are the durable resume point. Re-run verifies already complete chains and skips them; current failed transaction rolls back only itself. Do not delete completed batches as an automatic rollback. No unrequested full/scoped backup or new journal schema.",
+        "Use only one final existing schema_data_migrations marker key20260903_eth_progress34_native_history_v1 after all31612 native chains/totals/projection contributions reconcile. Marker includes exact allowlist, UTC source boundary, model/fee assumptions, source/plan digests, zero-gate counts, per-cap financial totals and completed batch count. Retry with complete marker verifies and writes0.",
+        "Preserve post-T0 current counter/event activity under ASM-001; current records may advance organically. Record command-attributable changes and protected-row checks without claiming the whole database is static. No auto-rewind or reseeding of counter state from the imported historical series.",
+        "Build/test output and isolated native PostgreSQL data must be under a marked D:\\CodexTemp run; no user/Production DB tests. Extract compact durable evidence, stop own test processes and complete protected cleanup. No task completion with surviving temp run or skipped required integration tests."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-009",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
+          "expected": "Relevant build succeeds; no service host starts and no unrelated repairs.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-010",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-native-history.trx\"",
+          "expected": "Isolated PostgreSQL exercises six native tables and relevant normal triggers, exact IDs, transaction rollback, duplicate retry/resume, archive/collision rejection, protected current rows/counters, marker-last and repeat writes0; no skipped required integration tests.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-011",
+          "kind": "runtime",
+          "command": "Frozen-plan preview, first-batch apply and read-only verification, each later bounded batch with heartbeat/locks/queue checks, final per-cap native/ordinary-projection reconciliation, repeat apply.",
+          "expected": "Only exact approved native31612 chains and documented normal trigger dependencies; no external trading/current-state changes; healthy production and idempotent completion.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-012",
+          "kind": "inspection",
+          "command": "Independent reviewer compares actual approved contract/user words against final scoped diff, tests, exact source/target plan and post-apply evidence; Validate-RequirementContract WorkingTree/Staged/Range and protected temp cleanup.",
+          "expected": "PASS, no open findings, compliant approval-parent ordering and all required verification/cleanup completed.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "text": "После восстановления отдельно сообщить, сколько существующих ResearchOnly сделок не входит в статистику.",
+      "sourceRequestIndexes": [
+        12
+      ],
+      "sourceQuote": "потом отдельно расскажи мне, сколько у нас `ResearchOnly` сделок, которые сейчас не входят в статистику",
+      "acceptanceCriteria": [
+        "Read-only follow-up of current retained Production192.168.0.101:5432/polycopytrader with explicit UTC cutoff, no mutation of those trades. First prove the actual persisted classification and exclusion path; report scope/query/count and independently confirm important totals.",
+        "Count trades excluded specifically because of ResearchOnly, not ordinary Skipped/unfilled/deleted/archived rows, fee-unknown rows or research-only price ticks; do not double count a run/order/fill/settlement chain as four trades. Separate this task's31612 modeled-but-included histories from any excluded population.",
+        "Initial bounded evidence: local src contains no implemented ResearchOnly accounting filter; deployed src diff to local before edits empty. Production catalogs07:59/08:02Z returned0 Research-named relations/columns/defaults/enums/constraints/functions/views. Native run query/calculator includes all ordinary Settled runs. These are absence-of-mechanism observations, not by themselves an exhaustive full-row count of arbitrary JSON labels.",
+        "If an authoritative registry/filter does not exist, explicitly say separate ResearchOnly trade count is not tracked/verified instead of inventing a zero. State exact verified narrower counts (including no pre-T0 history for these34 before apply) separately. No all-table heavy JSON scan or generic audit tooling without further authorization.",
+        "Deliver this accounting-status finding in a separate clearly labeled paragraph after the history result, with remaining uncertainty and without unrelated recommendations, reclassification or cleanup."
+      ],
+      "implementationPaths": [
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-09-03.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-013",
+          "kind": "inspection",
+          "command": "Bounded read-only Production catalog/classification/indexed-count inspection plus independently inspected deployed-matching inclusion/exclusion code; report exact SQL/filter/time and independent count check where defined.",
+          "expected": "A supported count of specifically excluded ResearchOnly trades, or an explicit untracked/unknown result with precise search coverage. No unsupported global zero and no mutations outside the34-history scope.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "Восстанавливаем сделки только до первого запуска34 стратегий2026-09-03T05:32:51.200614Z, по всей доступной истории родителя с начальным историческим k=0. Текущие счётчики/их T0/события и органические сделки после запуска не пересчитываем. Старую отсечку по последнему нулю из моделирования здесь не применяем.",
+      "impact": "Историческая серия и начатая с нуля при выкладке реальная серия имеют разные начальные условия; включение старых сделок в обычные показатели не делает текущий LossDiff продолжением всей восстановленной цепочки. Это предлагаемая граница/политика, требующая отдельного подтверждения с digest.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша.",
+        "semanticDigest": "sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2"
+      }
+    },
+    {
+      "id": "ASM-002",
+      "text": "Одинаковая цена означает фактическую среднюю цену исполнения родителя: вложенная сумма/исполненные shares. Умножаем обе величины на min(k,cap), не добавляем новую Live-нормализацию объёма, проскальзывание или ограничение банкроллом. Отображаемая цена округляется к существующей точности БД; комиссию считаем по расчётной средней цене.",
+      "impact": "Это точная математическая модель увеличения исполненной родительской ставки. Она не доказывает допустимость и достижимость такого ордера в Live. Копирование только округлённой экранной цены могло бы дать другое количество shares/Net.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша.",
+        "semanticDigest": "sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2"
+      }
+    },
+    {
+      "id": "ASM-003",
+      "text": "Для1054 положительных входов родителя (664 Up4+390 Up8) принимаем сохранённую ретроспективную Paper-модель комиссии historical-current-paper-model-v1; для828 остальных — их записанный профиль того же калькулятора. Собственную комиссию увеличенной ставки рассчитываем заново и сохраняем происхождение.",
+      "impact": "Net всех дочерних сделок учитывает расчётную комиссию. Для ретроспективных профилей это не подтверждение реально действовавшего/списанного исторического тарифа Polymarket; нет подмены на VenueReported, донорский процент или ноль.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша.",
+        "semanticDigest": "sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2"
+      }
+    }
+  ],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша.",
+    "semanticDigest": "sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/progress34_native_history_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
