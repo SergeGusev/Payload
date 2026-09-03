@@ -1,3 +1,16 @@
+## Active Update 2026-09-03 Positive Progress34 Deployment Verified
+Goal: Verify the user's rollout of the exact34 ETH Up4/Up8 Positive Progress children, read-only.
+Status: Deployment, identities, zero start and reconciliation verified; no child fills yet
+Done:
+- Production192.168.0.101:5432/polycopytrader runs exact3548a5736cba95661b0284613ac228c600d0a5b1, assembly1.0.0.0/mvidd42f178b96b1, service start05:32:51.854919Z. Git ancestry and unchanged six relevant implementation files independently confirm inclusion of b448164f.
+- Migration0008 journal applied05:32:51.758966Z with expected checksum e224535a4b826e61410fbbe13b55f9a2db357109689ff7d6c66e66fa627daa82. All34 strategies +34 exact assignments +34 Positive states exist: Up4 parent8137-000000000104/group8236 caps1..16; Up8 parent8137-000000000108/group8237 caps1..18. SQL aggregate and independently validated34 raw tuples agree.
+- Every child enabled/unpaused/not-auto-paused, Live off/null enable timestamp, stake1/coeff1/legacy counters0/internal Live balance100. Both exact parents remain enabled/unpaused Paper. Every current Positive value0, threshold1, common start2026-09-03T05:32:51.200614Z matching strategy creation and assignment time; no prior parent references or seeded events/trades.
+- Reconciliation advanced05:34:30.150294Z ->05:39:30.192643Z for all34. At05:38:03Z each parent had one post-rollout Observed run, no entered/settled runs; child runs/orders/fills/Live/shadow/discrepancies/events0. Later check still orders/events0. Full first-trade execution is not yet observed.
+- Heartbeat advanced05:34:52.397590Z ->05:39:52.448057Z, Running/Live global mode, last_errorNULL, age19.23s at final05:40:11.675733Z identity snapshot; waiting locks0. API errors since start: two missing-first-price ETH/SOL records05:32:57 and one staleSOL price05:37:37.898687Z. ETH/SOL ticks subsequently existed05:37:57.964775Z/.966244Z. No LossDiff API error among those3 records.
+Next: None for this read-only rollout check. History restoration remains a separately authorized task.
+Notes: Native psql sessions forced READ ONLY/UTC/15s statement/2s lock; no source/config/data/order/service mutation or backfill. Environment Host127.0.0.1 was rejected before connection; verified existing Product access convention uses the environment credentials with explicit Product host. Supplemental remote log scan was stopped without changing files; conclusions rely on database rows, actual runtime timestamps and exact deployed-version ancestry. No temp artifacts/build/tests needed. Preserve earlier dirty context/September2 history.
+Blockers: None for deployment verification; financial execution remains unobserved until a qualifying parent entry.
+
 ## Active Update 2026-09-03 Historical Live Component Hash Fix Verified
 Goal: Correct the approved historical Live component-hash incompatibility and deliver the verified patch directly on master for user deployment.
 Status: Local implementation and verification completed; deployed runtime verification remains separate
