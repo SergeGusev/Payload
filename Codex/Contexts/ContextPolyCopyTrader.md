@@ -1,3 +1,15 @@
+## Active Update 2026-09-03 Historical Gross Ranking Solution Options
+Goal: Compare solutions to the diagnosed ranking fallback scan without implementing one.
+Status: Options evaluated; recommend a narrowly scoped query change using existing indexes
+Done:
+- Current source still combines ordinary strategy wallet equality and broad FollowLeader matching in one lower/OR settlement subquery. Existing donor-streaming source separately dispatches these cases and uses canonical exact wallet equality for ordinary strategies; its old approval is not authorization to change ranking.
+- Read-only Production check06:33:15.812921Z:2687 strategy codes,0 differing from lower(code); Running heartbeat06:32:53.265966Z/NULL error. A representative canonical-wallet settlement aggregate used existing ix_paper_position_settlements_wallet_time, returned0 source rows and executed in1.242ms (planning7.513ms). This is one lookup measurement, not a full-ranking speed guarantee.
+- Bounded ascending indexed distinct-wallet walk exhausted below its10000-key cap at06:34:05.6793365Z:2816 distinct settlement wallets, all2816 strategy-prefixed,0 noncanonical-case values. SQL lower/prefix classification and independent PowerShell ordinal-prefix/lower comparison agree. Current stored data supports canonical exact matching, but future mixed-case records would not retain current case-insensitive semantics without a separate policy.
+- Options: (1) split FollowLeader from ordinary ranking fallback, using current canonical wallet and existing indexes; no new index, preserve Gross sums/order for verified canonical data, explicit case-compatibility approval needed before edits. (2) retain case-insensitive matching, split branches and add an expression index on lower(copied_trader_wallet); more database deployment/load/maintenance, runtime plan must be verified. (3) remove synchronous fallback and defer queue creation until missing snapshot Gross is ready; no fabricated zero, but adds dependency on snapshot availability. Merely increasing timeout does not remove repeated scans.
+Next: User chooses a solution; any implementation requires a new exact requirement contract. No draft or product change made.
+Notes: PostgreSQL18 official expression-index and CREATE INDEX CONCURRENTLY documentation checked; concurrent creation avoids excluding normal writes but adds scans, waits,CPU/I/O load and can leave an invalid index. No index build or DDL initiated. Only bounded read-only checks, no temp artifacts/builds/tests or Product mutation; prior dirty context/September2 history preserved.
+Blockers: None for proposal. Financial formula,3.33-point fallback,donor removal,cutoff and Gross order are not proposed to change.
+
 ## Active Update 2026-09-03 Positive Progress34 History Preflight Blocked
 Goal: Restore history for all34 added ETH Up4/Up8 LossDiff Positive Progress variants.
 Status: Read-only preflight completed; reconstruction blocked pending the user's missing-evidence choice and a new approved contract
