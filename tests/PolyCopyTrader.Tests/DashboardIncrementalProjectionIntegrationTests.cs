@@ -11,6 +11,336 @@ public sealed class DashboardIncrementalProjectionIntegrationTests
 {
     [PostgresIntegrationFact]
     [Trait("Category", "PostgresIntegration")]
+    public async Task LockContention_EventAckCompletesWhileRealBatchMarksHoldQueueLocks()
+    {
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        foreach (var rollbackProducer in new[] { false, true })
+        foreach (var unknownNet in new[] { false, true })
+        {
+            var strategyId = Guid.NewGuid();
+            var code = $"projection_test_{strategyId:N}";
+            await InsertStrategyAsync(factory, strategyId);
+            var positionIds = new List<Guid>();
+            for (var index = 0; index < 4; index++)
+                positionIds.Add(await InsertPaperPositionAsync(factory, code, DateTimeOffset.UtcNow));
+            var runId = Guid.NewGuid();
+            var settledAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+            await InsertRunAsync(factory, runId, strategyId, $"ack-run-{runId:N}",
+                StrategyMarketPaperRunStatuses.Settled, settledAt, settledAt, settledAt, 2m, null);
+            await using (var setup = factory.CreateConnection())
+            {
+                await setup.OpenAsync();
+                await using var fees = new NpgsqlCommand("""
+UPDATE paper_positions SET fee_usd = 0.02, fee_accounting_status = 'Calculated',
+    net_unrealized_pnl_usd = 0.73 WHERE id = ANY(@Ids);
+""", setup);
+                fees.Parameters.AddWithValue("Ids", positionIds.ToArray());
+                Assert.Equal(4, await fees.ExecuteNonQueryAsync());
+                await using var runFees = new NpgsqlCommand("""
+UPDATE strategy_market_paper_runs
+SET fee_usd = 0.10, fee_accounting_status = @Status, net_realized_pnl_usd = @Net
+WHERE id = @Id;
+""", setup);
+                runFees.Parameters.AddWithValue("Id", runId);
+                runFees.Parameters.AddWithValue("Status", unknownNet ? "LegacyUnknown" : "Calculated");
+                runFees.Parameters.AddWithValue("Net", NpgsqlDbType.Numeric, unknownNet ? DBNull.Value : 1.90m);
+                Assert.Equal(1, await runFees.ExecuteNonQueryAsync());
+                if (unknownNet)
+                {
+                    await using var unknown = new NpgsqlCommand("""
+UPDATE paper_positions SET fee_usd = 0, fee_accounting_status = 'LegacyUnknown',
+    net_unrealized_pnl_usd = NULL WHERE id = @Id;
+""", setup);
+                    unknown.Parameters.AddWithValue("Id", positionIds[0]);
+                    Assert.Equal(1, await unknown.ExecuteNonQueryAsync());
+                }
+            }
+            var projection = new PostgresDashboardProjectionRepository(factory);
+            await projection.BootstrapAsync();
+            // Three selected position events: two busy, one free. The fourth
+            // position gets its event only after the consumer has read its batch.
+            foreach (var id in positionIds.Take(3))
+                await UpdateAckFixturePositionAsync(factory, id, 1m);
+            var orderId = Guid.NewGuid();
+            await InsertPaperOrderAsync(factory, orderId, strategyId, DateTimeOffset.UtcNow);
+            var positions = (await new PostgresAppRepository(factory).GetPaperPositionsAsync())
+                .Where(position => position.CopiedTraderWallet == $"strategy:{code}").ToArray();
+            var marks = positions.Where(position => position.UnrealizedPnlUsd == 1m).Take(2)
+                .Select(position => new PaperPositionMarkUpdate(position, 3.5m, 2m,
+                    DateTimeOffset.UtcNow, position.NetUnrealizedPnlUsd.HasValue ? 1.98m : null)).ToArray();
+            Assert.Equal(2, marks.Length);
+            var markedAssets = marks.Select(mark => mark.ExpectedPosition.AssetId).ToArray();
+            var suffix = Guid.NewGuid().ToString("N");
+            var producerName = $"batch_marks_{suffix}";
+            var functionName = $"pct_marks_barrier_{suffix}";
+            var lockKey = BitConverter.ToInt32(Guid.NewGuid().ToByteArray());
+            await using var barrier = factory.CreateConnection();
+            await barrier.OpenAsync();
+            await using (var setup = new NpgsqlCommand($$"""
+CREATE FUNCTION public.{{functionName}}() RETURNS trigger LANGUAGE plpgsql AS $test$
+BEGIN
+    IF current_setting('application_name') = '{{producerName}}' THEN
+        PERFORM pg_advisory_xact_lock(1809202604, {{lockKey}});
+        {{(rollbackProducer ? "RAISE EXCEPTION 'Injected mark batch rollback';" : string.Empty)}}
+    END IF;
+    RETURN NULL;
+END;
+$test$;
+CREATE TRIGGER {{functionName}} AFTER UPDATE ON public.paper_positions
+FOR EACH STATEMENT EXECUTE FUNCTION public.{{functionName}}();
+SELECT pg_advisory_lock(1809202604, {{lockKey}});
+""", barrier))
+                await setup.ExecuteNonQueryAsync();
+
+            Task<IReadOnlyList<PaperPosition>>? producer = null;
+            try
+            {
+                await RunWhileProjectionPausedAsync(factory, strategyId,
+                    async consumer => Assert.Equal(4, (await consumer.ApplyPendingEventsAsync(4)).EventsApplied),
+                    async () =>
+                    {
+                        producer = new PostgresAppRepository(WithApplicationName(factory, producerName))
+                            .TryUpdatePaperPositionMarksAsync(marks);
+                        // AFTER STATEMENT is reached only after the real row triggers
+                        // have coalesced both events; the statement is not committed.
+                        await WaitForTestBlockerAsync(factory, producerName, barrier.ProcessID, producer);
+                        await UpdateAckFixturePositionAsync(factory, positionIds[3], 4m);
+                    },
+                    afterRelease: async (consumer, consumerName) =>
+                    {
+                        try
+                        {
+                            await AssertConsumerCompletesWithoutProducerWaitAsync(factory, consumerName, producerName, consumer);
+                            Assert.False(producer!.IsCompleted);
+                            await using var check = factory.CreateConnection();
+                            await check.OpenAsync();
+                            await using var remaining = new NpgsqlCommand("""
+SELECT count(*)::integer,
+       count(*) FILTER (WHERE pending.source_kind = 'PaperOrder')::integer,
+       count(*) FILTER (WHERE pending.source_id = @OutsideId)::integer,
+       count(*) FILTER (WHERE position.asset_id = ANY(@Assets))::integer
+FROM dashboard_projection_events pending
+LEFT JOIN paper_positions position ON position.id = pending.source_id
+WHERE pending.strategy_id = @StrategyId;
+""", check);
+                            remaining.Parameters.AddWithValue("StrategyId", strategyId);
+                            remaining.Parameters.AddWithValue("OutsideId", positionIds[3]);
+                            remaining.Parameters.AddWithValue("Assets", markedAssets);
+                            await using var reader = await remaining.ExecuteReaderAsync();
+                            Assert.True(await reader.ReadAsync());
+                            Assert.Equal(3, reader.GetInt32(0)); // two busy plus the unselected event
+                            Assert.Equal(0, reader.GetInt32(1)); // non-position acknowledged once
+                            Assert.Equal(1, reader.GetInt32(2));
+                            Assert.Equal(2, reader.GetInt32(3));
+                        }
+                        finally
+                        {
+                            // Also release on the old-code regression failure so
+                            // the real consumer can exit before fixture cleanup.
+                            await using var release = new NpgsqlCommand(
+                                $"SELECT pg_advisory_unlock(1809202604, {lockKey});", barrier);
+                            await release.ExecuteScalarAsync();
+                            await consumer.WaitAsync(TimeSpan.FromSeconds(10));
+                        }
+                    });
+            }
+            finally
+            {
+                await using (var release = new NpgsqlCommand(
+                    $"SELECT pg_advisory_unlock(1809202604, {lockKey});", barrier))
+                    await release.ExecuteScalarAsync();
+                try
+                {
+                    if (producer is not null)
+                    {
+                        if (rollbackProducer)
+                        {
+                            var error = await Assert.ThrowsAsync<PostgresException>(async () => await producer);
+                            Assert.Equal(PostgresErrorCodes.RaiseException, error.SqlState);
+                        }
+                        else
+                            Assert.Equal(2, (await producer.WaitAsync(TimeSpan.FromSeconds(10))).Count);
+                    }
+                }
+                finally
+                {
+                    await using var cleanup = new NpgsqlCommand($"""
+DROP TRIGGER {functionName} ON public.paper_positions;
+DROP FUNCTION public.{functionName}();
+""", barrier);
+                    await cleanup.ExecuteNonQueryAsync();
+                }
+            }
+            Assert.Equal(3, (await projection.ApplyPendingEventsAsync(1000)).EventsApplied);
+            Assert.Equal(0, (await projection.ApplyPendingEventsAsync(1000)).EventsApplied);
+            await AssertRawAndProjectedAccountingAsync(factory, strategyId);
+            var actual = await ReadSnapshotAsync(new PostgresDashboardSnapshotRepository(factory), strategyId);
+            Assert.Equal(rollbackProducer ? 7m : 9m, actual.UnrealizedPnlUsd);
+            Assert.Equal(4, actual.FeeRequiredOpenPositionCount);
+            Assert.Equal(unknownNet ? 3 : 4, actual.FeeAccountedOpenPositionCount);
+            Assert.Equal(unknownNet, actual.NetUnrealizedPnlUsd is null);
+            Assert.Equal(unknownNet, actual.NetRealizedPnlUsd is null);
+            Assert.Equal(1, actual.FeeRequiredSettledCount);
+            Assert.Equal(unknownNet ? 0 : 1, actual.FeeAccountedSettledCount);
+        }
+    }
+
+    private static async Task WaitForTestBlockerAsync(
+        PostgresConnectionFactory factory, string applicationName, int blockerPid, Task task)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (true)
+        {
+            await using var command = new NpgsqlCommand("""
+SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+WHERE application_name = @Name AND @Blocker = ANY(pg_blocking_pids(pid)));
+""", connection);
+            command.Parameters.AddWithValue("Name", applicationName);
+            command.Parameters.AddWithValue("Blocker", blockerPid);
+            if ((bool)(await command.ExecuteScalarAsync(timeout.Token))!) return;
+            if (task.IsCompleted)
+            {
+                await task;
+                Assert.Fail("Task completed without reaching its test-only database barrier.");
+            }
+            await Task.Delay(10, timeout.Token);
+        }
+    }
+
+    private static async Task AssertConsumerCompletesWithoutProducerWaitAsync(
+        PostgresConnectionFactory factory, string consumerName, string producerName, Task consumer)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (!consumer.IsCompleted)
+        {
+            await using var command = new NpgsqlCommand("""
+SELECT consumer.query FROM pg_stat_activity consumer
+JOIN pg_stat_activity producer ON producer.pid = ANY(pg_blocking_pids(consumer.pid))
+WHERE consumer.application_name = @Consumer AND producer.application_name = @Producer
+  AND consumer.wait_event_type = 'Lock';
+""", connection);
+            command.Parameters.AddWithValue("Consumer", consumerName);
+            command.Parameters.AddWithValue("Producer", producerName);
+            var waitingSql = await command.ExecuteScalarAsync(timeout.Token) as string;
+            Assert.True(waitingSql is null,
+                $"Consumer waits on the still-uncommitted producer at final acknowledgement: {waitingSql}");
+            await Task.Delay(10, timeout.Token);
+        }
+        await consumer;
+    }
+
+    private static async Task UpdateAckFixturePositionAsync(
+        PostgresConnectionFactory factory, Guid id, decimal gross)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+UPDATE paper_positions SET unrealized_pnl_usd = @Gross,
+    estimated_value_usd = average_price * size_shares + @Gross,
+    net_unrealized_pnl_usd = CASE WHEN fee_accounting_status = 'Calculated' THEN @Gross - fee_usd END,
+    updated_at_utc = clock_timestamp() WHERE id = @Id;
+""", connection);
+        command.Parameters.AddWithValue("Id", id);
+        command.Parameters.AddWithValue("Gross", gross);
+        Assert.Equal(1, await command.ExecuteNonQueryAsync());
+    }
+
+    private static async Task AssertRawAndProjectedAccountingAsync(PostgresConnectionFactory factory, Guid strategyId)
+    {
+        var raw = new PostgresAppRepository(factory);
+        var snapshots = new PostgresDashboardSnapshotRepository(factory);
+        var expected = (await raw.GetStrategyPerformanceAsync()).Single(row => row.StrategyId == strategyId);
+        var actual = await ReadSnapshotAsync(snapshots, strategyId);
+        AssertStrategyMetricsEqual(expected, actual);
+        // The legacy raw repository returns gross metrics only. Calculate Net
+        // independently from this fixture's raw positions and settled run, not
+        // from projection state or DashboardProjectionCalculator.
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand("""
+WITH positions AS (
+    SELECT *, fee_accounting_status = 'Calculated' AND fee_usd >= 0
+        AND net_unrealized_pnl_usd = unrealized_pnl_usd - fee_usd AS accounted
+    FROM paper_positions WHERE copied_trader_wallet = @Wallet AND size_shares > 0
+), runs AS (
+    SELECT *, fee_accounting_status = 'Calculated' AND fee_usd >= 0
+        AND net_realized_pnl_usd = realized_pnl_usd - fee_usd AS accounted
+    FROM strategy_market_paper_runs WHERE strategy_id = @Id AND status = 'Settled'
+)
+SELECT p.*, r.* FROM (
+    SELECT count(*)::integer AS required, count(*) FILTER (WHERE accounted)::integer AS known,
+           COALESCE(sum(fee_usd) FILTER (WHERE accounted), 0) AS fees,
+           CASE WHEN count(*) = count(*) FILTER (WHERE accounted)
+                THEN sum(net_unrealized_pnl_usd) END AS net,
+           sum(size_shares * average_price) AS cost
+    FROM positions
+) p CROSS JOIN (
+    SELECT count(*)::integer AS required, count(*) FILTER (WHERE accounted)::integer AS known,
+           COALESCE(sum(fee_usd) FILTER (WHERE accounted), 0) AS fees,
+           CASE WHEN count(*) = count(*) FILTER (WHERE accounted)
+                THEN sum(net_realized_pnl_usd) END AS net,
+           sum(stake_usd) AS cost,
+           count(*) FILTER (WHERE settled_at_utc >= clock_timestamp() - interval '1 hour')::integer AS recent
+    FROM runs
+) r;
+""", connection);
+        command.Parameters.AddWithValue("Id", strategyId);
+        command.Parameters.AddWithValue("Wallet", $"strategy:projection_test_{strategyId:N}");
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        var openRequired = reader.GetInt32(0);
+        var openKnown = reader.GetInt32(1);
+        var openFees = reader.GetDecimal(2);
+        decimal? openNet = reader.IsDBNull(3) ? null : reader.GetDecimal(3);
+        var openCost = reader.GetDecimal(4);
+        var closedRequired = reader.GetInt32(5);
+        var closedKnown = reader.GetInt32(6);
+        var closedFees = reader.GetDecimal(7);
+        decimal? closedNet = reader.IsDBNull(8) ? null : reader.GetDecimal(8);
+        var closedCost = reader.GetDecimal(9);
+        Assert.Equal(4, openRequired);
+        Assert.Equal(1, closedRequired);
+        Assert.Equal(closedRequired, reader.GetInt32(10)); // same run lies in all three recent windows
+        Assert.Equal(closedNet, actual.NetRealizedPnlUsd);
+        Assert.Equal(openNet, actual.NetUnrealizedPnlUsd);
+        Assert.Equal(closedNet + openNet, actual.NetTotalPnlUsd);
+        AssertAckNullableDecimalEqual((closedNet + openNet) * 100m / (closedCost + openCost + openFees + closedFees), actual.NetRoiPct);
+        AssertAckNullableDecimalEqual(closedNet * 100m / (closedCost + closedFees), actual.NetClosedRoiPct);
+        Assert.Equal(openFees + closedFees, actual.AccountedFeeUsd);
+        Assert.Equal(openRequired, actual.FeeRequiredOpenPositionCount);
+        Assert.Equal(openKnown, actual.FeeAccountedOpenPositionCount);
+        Assert.Equal(closedRequired, actual.FeeRequiredSettledCount);
+        Assert.Equal(closedKnown, actual.FeeAccountedSettledCount);
+        var rawRecent = (await raw.GetStrategyRecentPerformanceAsync())
+            .Where(row => row.StrategyId == strategyId).OrderBy(row => row.WindowHours).ToArray();
+        var recent = (await snapshots.GetStrategyRecentPerformanceSnapshotAsync())
+            .Where(row => row.StrategyId == strategyId).OrderBy(row => row.WindowHours).ToArray();
+        Assert.Equal(3, recent.Length);
+        Assert.Equal(3, rawRecent.Length);
+        for (var index = 0; index < recent.Length; index++)
+        {
+            AssertRecentMetricsEqual(rawRecent[index], recent[index]);
+            Assert.Equal(closedNet, recent[index].NetRealizedPnlUsd);
+            AssertAckNullableDecimalEqual(closedNet * 100m / (closedCost + closedFees), recent[index].NetRoiPct);
+            Assert.Equal(closedFees, recent[index].AccountedFeeUsd);
+            Assert.Equal(closedRequired, recent[index].FeeRequiredSettledCount);
+            Assert.Equal(closedKnown, recent[index].FeeAccountedSettledCount);
+        }
+    }
+
+    private static void AssertAckNullableDecimalEqual(decimal? expected, decimal? actual)
+    {
+        Assert.Equal(expected.HasValue, actual.HasValue);
+        if (expected.HasValue)
+            AssertSnapshotDecimalEqual(expected.Value, actual!.Value);
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
     public async Task LockContention_PositionProducerCommitsDuringProjectionAndNewVersionSurvives()
     {
         var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
@@ -412,14 +742,16 @@ WHERE source_kind = 'PaperOrder' AND source_id = @Id FOR UPDATE;
     }
 
     // A test-only trigger pauses the real consumer after it has read its queue,
-    // during snapshot persistence. The producer must commit before this barrier
-    // is released. No product test hook or timing-only synchronization is used.
+    // during snapshot persistence. The optional afterRelease callback can check
+    // consumer completion while a separately paused producer still holds locks.
+    // No product test hook or timing-only synchronization is used.
     internal static async Task RunWhileProjectionPausedAsync(
         PostgresConnectionFactory factory,
         Guid strategyId,
         Func<PostgresDashboardProjectionRepository, Task> consume,
         Func<Task> produce,
-        bool failConsumer = false)
+        bool failConsumer = false,
+        Func<Task, string, Task>? afterRelease = null)
     {
         var suffix = Guid.NewGuid().ToString("N");
         var functionName = $"pct_lock_test_{suffix}";
@@ -490,6 +822,8 @@ SELECT EXISTS (
             {
                 if (consumerTask is not null)
                 {
+                    if (afterRelease is not null)
+                        await afterRelease(consumerTask, consumerName);
                     await consumerTask.WaitAsync(TimeSpan.FromSeconds(10));
                 }
             }

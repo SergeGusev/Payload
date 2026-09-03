@@ -88,6 +88,23 @@ Tests cover FIFO/retry, real batch commit/rollback and gate release, dependency
 races, queue versions, position rebinding, missing facts and projection totals.
 These local tests do not establish a numerical Production latency improvement.
 
+### Nonblocking Dashboard event acknowledgement
+
+The event consumer's final acknowledgement locks only processed, eligible queue
+rows with `FOR UPDATE SKIP LOCKED`, then deletes those rows in the same projection
+transaction. Busy position events and newer `xmin` versions remain queued for
+normal replay against stored position facts; free events still progress. This
+does not change mark producers, accounting formulas, migrations or retry settings,
+and does not claim to eliminate all PostgreSQL contention.
+
+After a separate service deployment, this runs through the existing Dashboard
+worker without new configuration. Local verification uses the disposable
+PostgreSQL setup above: `DashboardIncrementalProjectionIntegrationTests` covers a
+real batch mark writer held through final acknowledgement, commit/rollback,
+version preservation and replay; also run `DashboardSnapshotTests` and
+`DashboardProjectionCalculatorTests`, then build `src/PolyCopyTrader.Service`.
+Deployment and history restoration are separate operations, not part of this fix.
+
 ```powershell
 dotnet build
 ```

@@ -3,7 +3,7 @@
   "contractId": "RC-20260903-dashboard-event-ack-nonblocking",
   "title": "Неблокирующее подтверждение событий PaperPosition в цикле Dashboard",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -64,16 +64,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~DashboardIncrementalProjectionIntegrationTests\" --logger \"trx;LogFileName=dashboard-event-ack-integration.trx\"",
           "expected": "Все существующие и новые focused PostgreSQL tests проходят без пропусков в отдельной owned loopback fixture. Новый детерминированный сценарий сначала показывает ожидание на старом ack, затем nonblocking completion на исправленном. Проверены несколько позиционных событий, mixed source kinds, producer commit/rollback/new version/delete-reinsert, запрет удаления вне processed list, replay и raw/lifetime/recent accounting.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Exact isolated checkout ebf916587856973ff5851bc8d192024f94bd61b0 plus only the three scoped paths. PostgreSQL18.6 owned loopback127.0.0.1:52127, UTC, marked run manual-4809c4664ed84ce394e36488523a6650. Full DashboardIncrementalProjectionIntegrationTests14/14PASS,0skipped; TRX SHA256AB870DE387528FB0862D7DA0F264A9AA3ED8A13161C1259D129BBE29EFBF15EE. Old regression independently observed plain DELETE waiting on uncommitted real batch marks via pg_stat_activity (expected failure, TRX2540E6DA934C417C7E762F21344DF66E0AC57BCC8E72B605448C41427AB6F270). Final real-batch test31.735s passes four commit/rollback x known/unknown fee cases: consumer finishes while writer remains held,2busy+1unselected events survive,free position and nonposition order acknowledged, replay converges. Nonzero settled fee0.10/net1.90 and unknown counterpart verified against independent raw SQL, including lifetime/recent1h6h24h Net/ROI/coverage. Initial invalid legacy gross-only Net oracle and NULL nonnullable fixture fee corrected only in test; no product formula change. Existing newer-version/delete-reinsert/consumer-rollback/limit tests pass."
         },
         {
           "id": "VER-002",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~DashboardSnapshotTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=dashboard-event-ack-accounting.trx\"",
           "expected": "Существующие snapshot/calculator tests проходят, финансовые формулы не изменены. PostgreSQL-тесты используют только отдельную owned fixture; ни один обязательный тест не пропущен.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "DashboardSnapshotTests and DashboardProjectionCalculatorTests23/23PASS,0skipped, exact compiled candidate using --no-build and POLYCOPYTRADER_REPOSITORY_ROOT set to isolated checkout. TRX SHA2561BF7E41DCE0027A3E0CC6B11B478449D011ED3B95830602608ACA51B0676FD6E. Financial calculator and producer/schema paths unchanged. Source/test hashes match main and verified checkout."
         }
       ]
     },
@@ -101,16 +101,16 @@
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
           "expected": "Build exit0; предупреждения/ошибки отражены честно, все disposable outputs только в owned D:/CodexTemp run.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Service incremental build exit0,0warnings/0errors, log SHA256F12B85BFAE5D8DC240F656AD1FB5E6C55F41C5014D6806705AC161D89C6D510A. Initial dependency/test compilation emitted existing warnings outside scoped files; no claim of a warning-free clean build. TEMP/TMP/TMPDIR/artifacts/results/logs and owned PG data confined to marked D:/CodexTemp/runs/manual-4809c4664ed84ce394e36488523a6650; shared .NET/NuGet caches on D:. No Production or service/deploy/import operations."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Independent semantic review of verbatim requests, approved contract, exact scoped diff and final test/raw-aggregate evidence; git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree, -Mode Staged and -Mode Range for the exact implementation range.",
           "expected": "Reviewer pass/no findings; сохранены producer/formulas/other paths и approval-before-edit checkpoint; все gates проходят без bypass. Локальное завершение не выдаётся за Production deployment или завершение истории.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/approval_checkpoint_review PASS/no findings after comparing verbatim prompts, approved contract, exact three-file isolated diff and actual37passing tests/raw SQL/build evidence. Approval-only parent ebf916587856973ff5851bc8d192024f94bd61b0 precedes edits. Events SHA256221B4426CF3A0902B0240C425708BE3606A6244BFAB037583121492BE40C3C8B; tests91D622877B776DA7921C394276D3CA3B7189A923740F07F762385A07D9363586; README only17lines in isolated diff. Diff--checkPASS. Mandatory final WorkingTree/Staged/Range results, real refs and owned cleanup are recorded in same-turn daily-history finalization; unrelated pending native-history work is excluded, not reverted or declared complete."
         }
       ]
     }
@@ -125,8 +125,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/approval_checkpoint_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

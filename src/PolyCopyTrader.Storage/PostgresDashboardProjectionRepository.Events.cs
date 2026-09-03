@@ -1045,17 +1045,26 @@ DELETE FROM dashboard_projection_reconciliation_queue WHERE strategy_id = @Strat
     {
         await using var command = new NpgsqlCommand(
             """
+WITH acknowledged AS MATERIALIZED (
+    SELECT pending.id
+    FROM dashboard_projection_events AS pending
+    WHERE pending.id = ANY(@EventIds)
+      AND (pending.source_kind <> 'PaperPosition' OR EXISTS (
+          SELECT 1 FROM unnest(@PositionEventIds, @PositionEventVersions) AS processed(id, row_version)
+          WHERE processed.id = pending.id AND processed.row_version = pending.xmin::text))
+    FOR UPDATE OF pending SKIP LOCKED
+)
 DELETE FROM dashboard_projection_events AS pending
-WHERE pending.id = ANY(@EventIds)
-  AND (pending.source_kind <> 'PaperPosition' OR EXISTS (
-      SELECT 1 FROM unnest(@PositionEventIds, @PositionEventVersions) AS processed(id, row_version)
-      WHERE processed.id = pending.id AND processed.row_version = pending.xmin::text));
+USING acknowledged
+WHERE pending.id = acknowledged.id;
 """,
             connection,
             transaction);
         command.Parameters.AddWithValue("EventIds", eventIds.ToArray());
         // A producer can coalesce a new payload into the same ID during the
         // calculation. Only the version actually applied may be acknowledged.
+        // Lock it only here, without waiting for producers. Skipped position
+        // events replay against stored position facts in a later normal pass.
         var versions = positionEventVersions.ToArray();
         command.Parameters.AddWithValue("PositionEventIds", versions.Select(pair => pair.Key).ToArray());
         command.Parameters.AddWithValue("PositionEventVersions", versions.Select(pair => pair.Value).ToArray());
