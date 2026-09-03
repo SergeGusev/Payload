@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260903-eth-progress34-resume-after-dashboard-ack",
+  "title": "Resume the unchanged 34 native histories on the deployed Dashboard acknowledgement fix",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    { "source": "user", "text": "Подготовь" },
+    { "source": "user", "text": "А когда планируем запускать?" },
+    { "source": "user", "text": "Выложил, проверяй" },
+    { "source": "user", "text": "Запускай восстановление истории" },
+    { "source": "user", "text": "Восстанови историю по всем добавленным Loss Diff Progress стратегиям" },
+    { "source": "user", "text": "Все 34 варианта" },
+    { "source": "user", "text": "Да, восстановленные сделки должны также входить в обычные показатели. И потом отдельно расскажи мне, сколько у нас `ResearchOnly` сделок, которые сейчас не входят в статистику" }
+  ],
+  "scope": {
+    "goal": "Подготовить узкое согласование привязки существующей команды импорта к уже выложенной сборке с исправлением Dashboard; после отдельного утверждения этого digest изменить только привязку, проверить и завершить прежнее восстановление истории ровно34 стратегий.",
+    "inScope": [
+      "The unchanged original operation RC-20260903-eth-progress34-native-history at sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2 and its explicitly approved ASM-001/002/003 remain binding. This amendment replaces only the expected deployed version from RC-20260903-eth-progress34-resume-deployed-build at sha256:a116d0d2f3a5fc87d16c4c4f868ec7f8c753607ca10d6a603429d0c36303137e; no other original requirement is reopened or weakened.",
+      "Only Production192.168.0.101:5432/polycopytrader. Exact Up4 parent b7c50005-0000-4000-8137-000000000104, code eth_up_down_5m_up_bps_4_fak_premarket; children b7c50005-0000-4000-8236-{cap:12digits}, caps1..16, exact codes eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_{cap}. Exact Up8 parent b7c50005-0000-4000-8137-000000000108, code eth_up_down_5m_up_bps_8_fak_premarket; children b7c50005-0000-4000-8237-{cap:12digits}, caps1..18, exact codes eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_{cap}. These closed enumerations refer to the34 literal ID/code/wallet/parent/cap tuples in original REQ-001, not a pattern selector or new descendants.",
+      "Replace only EthLossDiffPositiveProgressHistoryBackfillCommand.ServiceVersion from info=1.0.0+9aeb7447318ea244028fbc9d8b05c1c3529006af; assembly=1.0.0.0; mvid=d5191846ec8f to info=1.0.0+3aa0dc5c62ed84377158d822eb6c720ffbd1aca9; assembly=1.0.0.0; mvid=2b5992c622c9. Update the existing exact-version integration assertion, explicitly cover rejection of the former9aeb version, and update only the README continuation note. Existing broader tests are run unchanged.",
+      "Run the existing local early-exit CLI; no service deployment is required. After exact approval and focused verification, revalidate the full frozen source/plan, all native-chain and archive collisions, protected state, schema/dependencies and current health; resume missing batches only. Original plan31612trades=18112Up4+13500Up8,2830parent outcomes,1882eligible parent entries. Fresh narrow preview20:29:17.920130UTC found16 pre-cutoff Settled runs, independently16 modeled orders/fills and16 signals, all one per Up4 cap; Up8 zero and final marker absent. Expected remaining31596trades in1881batches is conditional on the full frozen-plan revalidation, not a new plan.",
+      "Preserve one parent entry per independently atomic/idempotent transaction:16or18child trades,96or108primary rows, at least1second outside transactions plus existing normal projection and wallet-refresh completion. Only one importer. Preserve deterministic IDs, reconstruction provenance, original apply digest, frozen source/plan digests and final marker. Previously committed chains are verified and skipped, not overwritten or deleted.",
+      "Complete the original native-history/ordinary-Paper counts, WinRate, own fee-inclusive Net PnL/ROI reconciliation, protected-state checks, zero-write repeat verification and original separate ResearchOnly-exclusion finding with its proved classification filter or explicit unknown. No other research trades are changed.",
+      "After approval, estimated local amendment/build/focused verification30–60minutes. Import duration is estimated from observed completed batches, not promised from the former45–75minute estimate. The approved import continues within the same gentle method, scope and resource profile until completion or an existing guard fails; communicate updated ETA without introducing arbitrary observation delays."
+    ],
+    "outOfScope": [
+      "Changing historical period, counter/cap logic, source membership, full-fill/parent-average assumptions, rounding, fee schedule/provenance, Net/ROI formulas, ordinary-Paper exception, ID/evidence/marker construction or frozen source/plan digests.",
+      "Weakening, parameterizing or bypassing exact-version, heartbeat, error, waiting-lock, identity, schema, collision or protected-state checks. No accepting multiple builds, automatic retries on lock errors, timeout/batch/queue-policy changes, or activation of any unapproved partial-history or resume-completion draft.",
+      "Live flags/orders/shadow decisions/submission/cancellation/signing, current counters/balances/settings/assignments, parent data, organic post-cutoff trades, new strategies, service stop/restart/deployment, automations, schema/index/trigger changes, backups, cleanup or broader lock diagnosis.",
+      "Additional Storage/Dashboard/Program changes or financial refactoring. Editing existing completed contracts. Treating Подготовь or this draft as exact approval; product edits and Production apply remain blocked until a later matching APPROVE."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "UTC; original two exact parents, status='Settled', entered_at_utc strictly before2026-09-03T05:32:51.200614Z; original retained source history from July3 and frozen31612-trade manifest, not last-zero truncation. Current/post-cutoff records and counters unchanged. Current turn is read-only preview plus new-contract/context drafting only.",
+    "firstVerification": "Fresh Production identity/read-only preview2026-09-03T20:28:30.953563Z confirmed192.168.0.101:5432/polycopytrader,READ ONLY,UTC,statement15s,lock2s. Exact service3aa0dc5c62ed84377158d822eb6c720ffbd1aca9/mvid2b5992c622c9,Running/Live,last_errorNULL,heartbeat20:28:27.695593Z; DashboardRunning/initialized/errorNULL,waitinglocks0 at that instant. Git ancestry independently confirms tested ack fix7d14f9709617c7e1a1d5ee6596457c64b0f5de3a belongs to deployed commit. Indexed narrow34-row preview20:29:17.920130Z confirms exact codes, enabled/unpaused/non-auto-paused/Paper and null live_enabled_at_utc for all34, both parents enabled/unpaused/Paper,16pre-cutoff runs/orders/fills/signals and no final marker. Current importer SHA256F93765AD490985D7D48C74D2F1EAB512AC5E2B67E64857A887B759F0BFF5670E still enforces old9aeb before source preview/writes. Full current manifest, assignments/state/schema/collisions and post-deployment error inspection remain mandatory before apply; this bounded draft preview is not their substitute."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Подготовить и после точного утверждения выполнить только обновление ожидаемой версии существующей команды для выложенного исправления.",
+      "sourceRequestIndexes": [0, 1, 2, 3],
+      "sourceQuote": "Подготовь",
+      "acceptanceCriteria": [
+        "The draft is presented with its semantic digest and no product edits. Later exact approval must be recorded verbatim and committed before implementation, with independent semantic review before apply/completion. No approval is inferred from this preparation request.",
+        "The only importer difference from SHA256F93765AD490985D7D48C74D2F1EAB512AC5E2B67E64857A887B759F0BFF5670E is the exact ServiceVersion replacement specified in scope. Reverse replacement in memory must recover that original file hash. No runtime override or extra accepted version.",
+        "Original ApprovalDigest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2, FrozenSourceDigest sha256:3048d1e890a5f605e9d7c4107731477f11dd98e0f62521880f1d263f41ac6533, FrozenPlanDigest sha256:966103194019979106007e3659316bd41e6938f4dc4e4076636a2fb086e66817, CLI arguments and early dispatch remain byte-identical. Financial, counter, guard and batching behavior remain unchanged.",
+        "Existing integration lifecycle proves exact3aa version acceptance and rejection of former9aeb, older3548 and a different version before history writes, with protected history/state unchanged. All original selected tests and required isolated PostgreSQL lifecycle checks pass without skips against the current deployed-matching Storage implementation; service build passes. No Production test database or service host startup.",
+        "README continuation note names this approval and new exact build without claiming import completion. No edits to Program, Storage, Dashboard or existing accounting-exception rules. Preserve unrelated work and the user's existing commits; no service redeployment is required for the local CLI."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-resume-ack.trx\"",
+          "expected": "All original focused cases pass without skipped required integration tests, including new exact-build acceptance/former-build refusal before writes and unchanged financial/counter/native-chain/rollback/resume/marker behavior. Isolated PostgreSQL is loopback-only under a marked D:/CodexTemp run.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
+          "expected": "Service build succeeds with disposable output only under a marked D:/CodexTemp run; no service/worker startup or deployment.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Independently review verbatim requests, this amendment, original approved contract, exact three-file diff and verification; reverse the version replacement in memory and compare SHA256F93765AD490985D7D48C74D2F1EAB512AC5E2B67E64857A887B759F0BFF5670E; run requirement WorkingTree/Staged/Range gates at the applicable checkpoints.",
+          "expected": "No unrequested importer or adjacent changes, unchanged original digests, reviewer PASS/no findings, mechanical gates pass and compliant approval-parent order. Protected cleanup of owned test artifacts completes before final handoff.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "После проверок возобновить и завершить прежнее восстановление всех34 вариантов в обычной истории, сохранив согласованную модель и щадящие порции.",
+      "sourceRequestIndexes": [3, 4, 5, 6],
+      "sourceQuote": "Запускай восстановление истории",
+      "acceptanceCriteria": [
+        "Before apply, run rebuilt local CLI --backfill-eth-progress34-history without --apply. Require full unchanged frozen plan, exact identities/assignments/state/creation checksum, schema/dependencies, protected settings, archives/collisions and fresh health. Independently inspect fresh deployed version/activity and post-deployment errors; old recovered incidents are distinguished from new deterioration. No conclusion of universal deadlock elimination from one clean snapshot.",
+        "Report fresh verified existing/remaining counts,16/18-trade transaction boundaries, dependent queue/load state and durable resume point before apply. Original expected total31612, currently narrow-counted16 existing and derived31596remaining/1881batches are subject to complete native-chain verification, not permission to skip that verification.",
+        "When approvals, tests, independent pre-apply review and preview pass, use only existing --backfill-eth-progress34-history --apply --approved-contract-digest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2. First verify the next single missing batch, then continue the same approved command/method. Keep original one-importer advisory lock,15s statement/2s lock timeouts, at least1s between commits and existing projection/wallet-refresh backpressure. No whole-history transaction or service stop.",
+        "Skip only independently verified previously completed equivalent native chains. Preserve original per-cap totals1132for eachUp4cap and750for eachUp8cap, own recalculated fees and Net/ROI, ResearchOnly provenance with ordinary_paper_metrics_included=true. No post-T0/current state mutation attributable to this command.",
+        "Any build/schema/source/identity mismatch, waiting-lock guard, worsening health, collision or financial discrepancy stops before the next batch. Report exact committed/remaining scope; failed current transaction rolls back only itself. Do not relaunch into a failed guard, add retry behavior, weaken checks or treat elapsed time alone as a stop condition.",
+        "Complete only after all31612 native chains and original per-cap accounting/ordinary projection contributions independently reconcile, original final marker20260903_eth_progress34_native_history_v1 is verified, repeat verification writes0 and protected-state checks pass. Then deliver the original separate ResearchOnly-excluded-trade finding using a verified exclusion path/count or explicit untracked/unknown result; no broad unrelated JSON scan."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Run the rebuilt local service DLL with --backfill-eth-progress34-history, without --apply; independent exact-ID Production reads in READ ONLY/UTC/statement15s/lock2s sessions.",
+          "expected": "Full original2830-source/1882-batch/31612-trade plan and frozen digests, exact current resume point and native dependencies verified; fresh health and deployed build match; zero preview writes.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "runtime",
+          "command": "After approval/review/preview gates, run existing --backfill-eth-progress34-history --apply --approved-contract-digest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2, followed by original independent per-cap/native/projection/protected-state checks and zero-write repeat verification.",
+          "expected": "Only missing original batches inserted; all31612 histories included in ordinary metrics with correct original marker and no unintended changes. Report actual completion or exact guarded stop, never declare completion merely because the command was launched.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260903-eth-progress34-resume-after-dashboard-ack sha256:7f0aa937d4c839cebe208ed962d263ff38a464631298606346e528359fea23fe",
+    "semanticDigest": "sha256:7f0aa937d4c839cebe208ed962d263ff38a464631298606346e528359fea23fe"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/approval_checkpoint_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
