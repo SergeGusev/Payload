@@ -1,3 +1,15 @@
+## Active Update 2026-09-03 Historical Live Hash Deployment Ranking Timeout
+Goal: Verify the user's deployment read-only and check actual historical Net progress for the closed ETH Up50 Instant priority.
+Status: Deployment verified; recalculation still blocked upstream of the corrected Live loader
+Done:
+- Production192.168.0.101:5432/polycopytrader reports deployed info=1.0.0+3548a5736cba95661b0284613ac228c600d0a5b1, assembly1.0.0.0/mvidd42f178b96b1, started2026-09-03T05:32:51.854919Z. Git ancestry confirms inclusion of product fixb177f215. SMB startup independently shows the enabled historical parity lane at05:32:52.432Z with initial delay300s, batch50, cycle15s, command timeout10s and strict origin cutoff2026-08-10T00:00:00Z.
+- Exact strategy b7c50005-0000-4000-8079-000000000150 / eth_up_down_5m_up_bps_50_instant remained405 historical settled Live rows:403 NULL Net and2 Net-complete at05:34:28.416247Z and05:42:50.452473Z. Only408 PaperRun parity audit rows exist, latest2026-08-29T08:54:28.019924Z; no Live audit rows. First snapshot independently confirmed all408 historical Paper rows Net-complete and Net=Gross-fee.
+- Fresh polycopytrader-service-20260903_030.log records Parity cycle failures at05:38:17.596Z and05:42:30.911Z (08:38/08:42 Sofia): NpgsqlException with inner System.TimeoutException, Timeout during reading attempt. Both stacks identify LoadHistoricalGrossNetParityMissingStrategyGrossAsync then strategy ranking and processor RunCycleAsync line904. Current deployed-matching source confirms ranking must finish before priority selection and candidate loading; missing Gross values are derived from historical accounting tables. These observed cycles never reached the corrected Live component binding.
+- Heartbeat advanced05:33:52.393430Z ->05:41:52.478207Z, statusRunning and last_errorNULL; latest age57.996s. Waiting-lock snapshots were0 initially and1 at05:42:50; no causal attribution to that transient lock count. Service liveness does not establish successful backfill. Bounded SMB stream read independently saw runtime activity through05:43:25.190Z.
+Next: None within this read-only request; any new ranking-query implementation needs its own explicit request and requirement approval.
+Notes: Native psql forced READ ONLY/UTC, statement timeout10s and lock timeout1s; no Product data/schema/service/order/config/source edits, build/test or temporary files. Slow network Get-Content was reported and replaced by bounded in-memory FileStream reads. Verification identifies the failing phase, not the underlying reason for query slowness; no new fix or global backlog scan performed. Preserve concurrent LossDiff and prior context/history changes.
+Blockers: Repeated ranking read timeout prevents observed historical parity progress; runtime success of the Live hash correction remains unverified.
+
 ## Active Update 2026-09-03 Positive Progress34 Deployment Verified
 Goal: Verify the user's rollout of the exact34 ETH Up4/Up8 Positive Progress children, read-only.
 Status: Deployment, identities, zero start and reconciliation verified; no child fills yet
