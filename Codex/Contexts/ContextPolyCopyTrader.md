@@ -1,3 +1,15 @@
+## Active Update 2026-09-03 Progress34 ResearchOnly Classification Accepted
+Goal: Continue the requested history reconstruction for all34 Positive Progress children under the user's explicit ResearchOnly choice.
+Status: Blocked on result destination before drafting the replacement implementation contract
+Done:
+- User now says verbatim: `Ок, действуем в режиме ResearchOnly`. This accepts research classification after the sufficient-depth/same-price hypothesis and modeled Net explanation; it does not approve a new source/schema/UI change or an exact requirement digest.
+- Exact scope remains Up4 parent b7c50005-0000-4000-8137-000000000104, children8236 caps1..16, and Up8 parent b7c50005-0000-4000-8137-000000000108, children8237 caps1..18. No numerical results were recalculated this turn and no new historical cutoff was chosen.
+- Local source at2d6bce05: BotMode contains ReadOnly/Paper/DryRun/Live. Search across src/tests/docs found no ResearchOnly accounting implementation; the only source research-only text was an unrelated legacy auth-readiness message. Dashboard run-source query includes ordinary strategy runs without research segregation, and GetLifetimeContribution counts Settled runs toward Paper metrics. The parity rule requires research results to remain separated.
+- The unapproved RC-20260903-eth-progress34-partial-history-backfill draft is superseded in meaning: its ordinary Paper insert/depth-only exclusion plan must NOT be implemented or treated as approved. Preserve it as an unapproved draft until the new scope is resolved.
+Next: Clarify whether the user wants a separate research report with reconstructed trade history and Net metrics, or a separate ResearchOnly history displayed inside the application. The latter requires new persistence/UI behavior, not just a backfill switch; do not silently add it or substitute a report for application history.
+Notes: Read-only local inspection only, no Production connection, code/schema/config/service/order changes, calculation, temporary artifacts, build or tests. Existing dirty context/September2 history and old draft preserved. This acceptance is not an authorization to change the running34 strategies or merge modeled results into Paper/Live statistics.
+Blockers: Result storage/display destination is not specified; any material implementation requires the later exact replacement contract approval.
+
 ## Active Update 2026-09-03 Historical Gross Ranking Solution Options
 Goal: Compare solutions to the diagnosed ranking fallback scan without implementing one.
 Status: Options evaluated; recommend a narrowly scoped query change using existing indexes
