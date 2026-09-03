@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260903-dashboard-event-ack-nonblocking",
+  "title": "Неблокирующее подтверждение событий PaperPosition в цикле Dashboard",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "И что дальше?"
+    },
+    {
+      "source": "user",
+      "text": "Готовь"
+    }
+  ],
+  "scope": {
+    "goal": "Подготовить и после отдельного точного APPROVE реализовать узкое исправление завершающего удаления обработанных событий Dashboard, сохранив события и финансовые показатели.",
+    "inScope": [
+      "Пользовательское «Готовь» отвечает на вопрос «Готовить контракт на это исправление?». Сейчас разрешена только подготовка этого проекта контракта. Перечисленные ниже изменения являются предложением для последующего APPROVE, а не уже выданным разрешением на код или Production.",
+      "Ровно три продуктовых/тестовых/документационных пути: src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Events.cs, tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs, README.md. В runtime-файле менять только завершающее подтверждение событий DeleteProcessedEventsAsync и непосредственно необходимые локальные SQL/parameter helpers в этом же файле; публичные интерфейсы не менять.",
+      "Общий путь PostgresDashboardProjectionRepository.ApplyPendingEventsAsync → DeleteProcessedEventsAsync для уже выбранных и обработанных событий. Изменение относится ко всем его существующим PaperPosition events, а не только к 34 Progress-стратегиям. Каталог и торговая логика стратегий не меняются.",
+      "На этапе завершающего подтверждения пытаться захватить только допустимые обработанные строки очереди без ожидания занятых строк (FOR UPDATE SKIP LOCKED). Удалять лишь успешно захваченные строки, причём PaperPosition — только при совпадении с прочитанной и учтённой версией xmin. Занятые или обновлённые конкурентно события оставлять в существующей очереди для следующих штатных проходов.",
+      "Сохранить текущую единую транзакцию проекции и подтверждений, короткий завершающий участок владения event locks, исходный non-PaperPosition acknowledgement, обработку сохранённых position facts, все существующие финансовые формулы и защиту от повторного учёта. Не возвращать долгие блокировки PaperPosition events на этапе чтения/расчёта.",
+      "Сфокусированные PostgreSQL regression/concurrency tests только в принадлежащей задаче изолированной локальной базе. Реальные ApplyPendingEventsAsync, TryUpdatePaperPositionMarksAsync и существующие триггеры; детерминированные тестовые барьеры разрешены только в тестовой схеме/тестовом файле. Сборка, независимое ревью, короткая README-заметка и обязательные context/history/gate записи.",
+      "После отдельного APPROVE ориентир реализации и локальной проверки — 1–2 часа; не жёсткий лимит. Все временные fixtures/build/log/TRX только в маркированном D:/CodexTemp run с последующей защищённой очисткой. Продолжать внутри этих границ при изменении только времени, но останавливаться при необходимости расширить код/поведение/ресурсы."
+    ],
+    "outOfScope": [
+      "Любые Production writes, SQL apply, миграции/индексы/триггеры/настройки PostgreSQL, Live-операции, остановка/перезапуск/выкладка сервиса, отмена чужих запросов и backup.",
+      "Возобновление или изменение Progress34 history command, ServiceVersion pin, health guards, retries/timeouts, frozen manifest, source/plan digests, истории/счётчиков/ставок/балансов. История и проверка после пользовательской выкладки остаются отдельным этапом; этот APPROVE их не запускает.",
+      "Изменения producer SQL/mark calculations, PaperTradingMarketDataUpdater, PostgresAppRepository, DashboardProjectionSchema, reconciliation/expiry/bootstrap paths, retention, очередей копирования, тарифов/комиссий, Net/Gross/ROI формул или Paper/Live исполнения.",
+      "Глобальная сериализация producer/consumer, новые очереди/schema objects, обобщённая инфраструктура блокировок, слепые retry loops, увеличение таймаутов, проглатывание deadlock/ошибок или отключение существующих проверок.",
+      "Удаление событий вне processedEventIds, удаление новой неучтённой версии PaperPosition, изменение поведения не обработанных/заблокированных стратегий или non-PaperPosition events, потеря/двойной учёт фактов.",
+      "Правки завершённых контрактов или активация старых неподтверждённых drafts, включение чужих незавершённых native-history изменений, обещание устранить любые PostgreSQL deadlocks или точно воспроизвести неизвестный полный порядок строк инцидента."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Локальный checkout D:/My/Business/PolyMarket, исходный HEAD4702cb19befd1f4b2ed48e9ad943d35f247f477b; runtime-область только текущие processedEventIds в ApplyPendingEventsAsync, без исторического окна или фильтра по стратегиям. Основание — подтверждённый инцидент Production2026-09-03T14:28:23.156430Z, error5f639752-2cf4-4ca4-8830-3ed271899af2, deployed9aeb7447318ea244028fbc9d8b05c1c3529006af/mvidd5191846ec8f. Полный порядок/IDs исторических строк неизвестен.",
+    "firstVerification": "До продуктовых правок сверить git/status, точный dispatch и неизменённые соседние пути. Текущий Events.cs SHA256288997B62D34EBD1691DEE436C10092473993C6E31FBD3658D2DDCF714F5E3BE, integration tests SHA25643ACC8A99482238F34F3903C50C59A36B44BE97940AF463481EAC8FE95E43C21. Серверный журнал и api_errors уже независимо подтверждают обычный DELETE событий, ожидающий транзакцию batch mark update, и обратное ожидание. Сначала новый локальный тест должен показать ожидание на старом ack при удерживаемом producer, после исправления — завершение consumer до освобождения producer. Для подготовки контракта новые Production запросы не нужны."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Подтверждать обработанные PaperPosition события без ожидания занятых строк очереди, не теряя обновлённые события и не удваивая показатели.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Готовь",
+      "acceptanceCriteria": [
+        "До реализации этот draft предъявлен пользователю с semantic SHA256; получено позднейшее точное APPROVE и записано отдельным approval-only commit до продуктовых правок. Ответ «Готовь» не записывается как такое APPROVE.",
+        "Завершающий ack выбирает для блокировки/удаления только уже обработанные IDs текущего прохода. Строки, занятые другим producer, пропускаются без ожидания row lock; не блокируются строки вне текущего списка. Незанятые обработанные события продолжают подтверждаться в том же проходе.",
+        "Для PaperPosition сохраняется проверка версии: удаляется только фактически прочитанная и учтённая версия. Producer commit, rollback, обновление того же ID, удаление/reinsert не приводят к потере нового состояния. Пропущенные события остаются видимыми следующему штатному проходу.",
+        "Повторная обработка оставленного события после producer commit/rollback сходится к исходным данным без повторного добавления уже учтённой позиции/прибыли/комиссии. Независимые raw aggregates совпадают с lifetime и recent snapshots, включая nullable Net и fee coverage; уже пройденный повтор становится безрезультатным по финансовым показателям.",
+        "Non-PaperPosition events и не обработанные events/стратегии сохраняют прежнее поведение. Не меняются определения кандидатов, лимиты, порядок основной обработки, финансовые данные/формулы или reconciliation requests; сохранены атомарный rollback и общий projection advisory lock.",
+        "Реальный пакетный mark producer и event consumer проверены одновременно с producer, продолжающим удерживать event locks на этапе ack. Исправленный consumer завершает свой проход до освобождения этого producer; те же события затем обрабатываются без потерь. Это проверка найденного механизма, а не заявление о точном восстановлении неизвестных параметров инцидента."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Events.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~DashboardIncrementalProjectionIntegrationTests\" --logger \"trx;LogFileName=dashboard-event-ack-integration.trx\"",
+          "expected": "Все существующие и новые focused PostgreSQL tests проходят без пропусков в отдельной owned loopback fixture. Новый детерминированный сценарий сначала показывает ожидание на старом ack, затем nonblocking completion на исправленном. Проверены несколько позиционных событий, mixed source kinds, producer commit/rollback/new version/delete-reinsert, запрет удаления вне processed list, replay и raw/lifetime/recent accounting.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~DashboardSnapshotTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=dashboard-event-ack-accounting.trx\"",
+          "expected": "Существующие snapshot/calculator tests проходят, финансовые формулы не изменены. PostgreSQL-тесты используют только отдельную owned fixture; ни один обязательный тест не пропущен.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Подготовить узкое проверенное исправление к пользовательской выкладке без применения к Production или запуска восстановления истории.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Готовь",
+      "acceptanceCriteria": [
+        "Новые изменения ограничены тремя перечисленными путями плюс новый контракт/обязательное bookkeeping; существующие чужие/незавершённые изменения не включаются и не отменяются. README кратко описывает поведение и проверку, не заявляя об отсутствии любых блокировок.",
+        "Service build проходит. Другой reviewer сравнивает дословные запросы, этот одобренный контракт, фактический diff и тестовые/raw evidence. Нет открытых замечаний; requirements WorkingTree/Staged/Range gates и diff checks проходят перед финализацией.",
+        "Не выполняется Production mutation/deployment/import. Отчёт отделяет локально проверенное поведение от состояния развёрнутого сервиса. Удалены только принадлежащие задаче временные артефакты после сохранения компактных доказательств; необходимые Git approval/implementation checkpoints и push выполняются без включения чужого worktree."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Events.cs",
+        "tests/PolyCopyTrader.Tests/DashboardIncrementalProjectionIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
+          "expected": "Build exit0; предупреждения/ошибки отражены честно, все disposable outputs только в owned D:/CodexTemp run.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Independent semantic review of verbatim requests, approved contract, exact scoped diff and final test/raw-aggregate evidence; git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree, -Mode Staged and -Mode Range for the exact implementation range.",
+          "expected": "Reviewer pass/no findings; сохранены producer/formulas/other paths и approval-before-edit checkpoint; все gates проходят без bypass. Локальное завершение не выдаётся за Production deployment или завершение истории.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260903-dashboard-event-ack-nonblocking sha256:7b1f7604e3d243d0da2da1885b61e78ac622ab11800bcefe88ada1bb39412b78",
+    "semanticDigest": "sha256:7b1f7604e3d243d0da2da1885b61e78ac622ab11800bcefe88ada1bb39412b78"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/approval_checkpoint_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
