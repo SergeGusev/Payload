@@ -1,3 +1,15 @@
+## Active Update 2026-09-03 Dashboard Event Ack Nonblocking Completed
+Goal: Complete only the approved local Dashboard final event acknowledgement correction.
+Status: Completed locally; not deployed and history not resumed
+Done:
+- Exact APPROVE7b1f7604e3d243d0da2da1885b61e78ac622ab11800bcefe88ada1bb39412b78 recorded in approval-only commit ebf916587856973ff5851bc8d192024f94bd61b0 before edits. Product commit7d14f9709617c7e1a1d5ee6596457c64b0f5de3a, tree29ee3677a15165b10636918eceda3fc4f9650968, contains only final Events.cs acknowledgement, focused integration tests,17-line README and completed new contract. Unrelated native-history changes excluded.
+- Final acknowledgement selects processed eligible IDs with exact PaperPosition xmin using FOR UPDATE SKIP LOCKED, then deletes only locked rows. Busy/newer events replay against stored facts. Producer/schema/formulas/initial read/transaction/advisory lock unchanged.
+- Old code regression actually observed plain DELETE waiting on an uncommitted real batch mark producer. Final integration14/14PASS and snapshot/calculator23/23PASS,0skips. Four real-batch cases cover commit/rollback x known/unknown fees, busy/free/unselected and nonposition events, nonzero settled fee/Net, raw SQL vs lifetime/recent1h6h24h accounting and replay. Service incremental buildPASS0warnings0errors; initial compilation had existing warnings outside scoped files.
+- Independent semantic reviewer agent:/root/approval_checkpoint_review PASS/no findings against original words, contract, exact3-file artifact and actual37passing tests. WorkingTree gate on isolated exact tree, Contract semantic digest, Staged gate and Range ebf91658..7d14f970 allPASS; no bypass. Main/isolated code hashes identical.
+Next: None within this local correction. User deployment and any Production verification/history restoration are separate operations.
+Notes: Own PG18.6 data_directory D:/CodexTemp/runs/manual-4809c4664ed84ce394e36488523a6650/db/pgdata verified;0otherclients, stopped, pg_ctl confirms no server. Initial protected cleanup met a compiler-held analyzer DLL; exact owned VBCSCompiler14104 confirmed by module paths and stopped. Protected cleanup then Removed=true; run absence verified and only its worktree registration removed. Other stale runs/registration untouched. Compact commands/hashes/failures recorded in daily history. No Production query/write, service/deploy/Live/import operation this turn; original history remains unfinished and was not recounted.
+Blockers: None for this local fix. Git push follows the scoped final bookkeeping commit.
+
 ## Active Update 2026-09-03 Approved Paper Storage Lock Correction Verified
 Goal: Complete only the approved local Paper storage/dashboard lock correction.
 Status: Completed locally; not deployed
@@ -31262,3 +31274,4 @@ Done:
 Next: Continue future tasks by reading workflow, active context, history, project memory, and Git status before acting.
 Notes: `git pull --ff-only` was attempted on 2026-04-30 and failed because branch `master` has no configured upstream. `git diff --check` passed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` and `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. Last commit before adoption was `d9d7984 Update Codex project memory`. The working tree contains the completed on-chain ingestion/leaders changes plus this context protocol setup.
 Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+
