@@ -390,7 +390,7 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша.",
+        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2",
         "semanticDigest": "sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2"
       }
     },
@@ -401,7 +401,7 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша.",
+        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2",
         "semanticDigest": "sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2"
       }
     },
@@ -412,7 +412,7 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша.",
+        "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2",
         "semanticDigest": "sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2"
       }
     }
@@ -421,7 +421,7 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2\nПодтверждаю ASM-001, ASM-002 и ASM-003 для указанного хеша.",
+    "evidenceText": "APPROVE RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2",
     "semanticDigest": "sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2"
   },
   "independentReview": {
