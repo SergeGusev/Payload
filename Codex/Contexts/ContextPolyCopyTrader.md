@@ -1,3 +1,14 @@
+## Active Update 2026-09-03 Progress34 Native Application History Requested
+Goal: Restore the exact34 Positive Progress histories inside the existing application with native history presentation.
+Status: Destination resolved; ordinary-Paper aggregate inclusion requires explicit clarification
+Done:
+- User says verbatim: `Мне нужна история в приложении в том виде, как будто это родная история, а не восстановленная`. Do not substitute an external report or a separate research application. Do not interpret native presentation as permission to erase reconstruction/assumption provenance.
+- Read-only local inspection at4cfeafea confirms ordinary run-source query has no ResearchOnly segregation and Settled run contributions include stake, wins/losses, fees and Net. Dashboard/MainWindow.xaml and DashboardDataService bind these strategy performance values to normal Net ROI/PnL presentation. Existing fixed-child backfill code also retains explicit backfill evidence; its closed old profiles remain out of scope.
+- The earlier explicit ResearchOnly classification requires separation from ordinary Paper metrics under current project rules. Native UI placement alone does not resolve whether the user wants a new closed exception allowing modeled34 history into ordinary Paper totals.
+Next: Ask only whether reconstructed34 trades should also contribute to the ordinary Paper trade counts, WinRate, Net PnL and Net ROI. If yes, record that requested exception in a replacement digest-bound contract rather than silently retaining the ResearchOnly separation rule or removing provenance.
+Notes: Exact34 families/parents unchanged; no Production connection, new calculation/cutoff, source/schema/UI/runtime/data/order change, build/test or temporary artifact. The stale unapproved partial-history draft is not authorization. Preserve prior unrelated context/September2 history edits.
+Blockers: Financial aggregation semantics conflict with the previously selected ResearchOnly separation until the user confirms inclusion or separation; later exact contract approval still required before implementation.
+
 ## Active Update 2026-09-03 Progress34 ResearchOnly Classification Accepted
 Goal: Continue the requested history reconstruction for all34 Positive Progress children under the user's explicit ResearchOnly choice.
 Status: Blocked on result destination before drafting the replacement implementation contract
