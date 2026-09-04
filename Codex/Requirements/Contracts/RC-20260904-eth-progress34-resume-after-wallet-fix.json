@@ -133,16 +133,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-resume-wallet.trx\"",
           "expected": "All original selected tests pass without required integration skips,exact-build acceptance/former-build refusal and unchanged accounting/native-chain/rollback/resume/projection/marker behavior; isolated loopback PostgreSQL only.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Original64selection passed64/64,0skip,0failure in four isolated loopback PostgreSQL18.6 UTC databases,pct_codex_skip_v2_20260904121422_6f6c1841..1844:history11/progress27/legacy19/dashboard7. TRX names independently compared to originalcombinedfilter --list-tests:64expected/64actual/difference0. Ownedrunmanual-6f6c18408ac643c091295ca23c3746fb/results/progress34-resume-wallet-{group}.trx; historySHA256020729052EA2727C930ECA8176DE0131ACDD2BBE8E096E554B618BA859A9A94C,progress16991D97FBC72E7A576BCE7319B105B4650F67E25BEE4084308766AB4A8D7E6F,legacy5A2E8511EB73BA9BF7BD649F48B96E1A4ABA05F94616502954DD72C3CE4EBD36,dashboard9400BC72CF72652E4A8C9BEC043FDC5805C88AA9CDB01852D4E17FF9EDD3B364. Exacteab acceptance/3aa9aeb3548suffix refusal executed in existing lifecycle; testprocess Productionconnectionenv cleared."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
           "expected": "Successful relevant build with marked disposable outputs; no service startup or deployment.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Service buildPASS71.48s,121warnings in unchanged sources,0errors; testsbuildPASS50.18s,5existingwarnings,0errors. Explicit markedrunartifacts,TEMP/TMP/TMPDIRrun/temp,sharedcompiler/nodereuse disabled. BuildlogSHA256serviceF578BF4E47A1CDBF3ED8C0C961F0659703E673EB9F6BD02CF6BE08516C881B41,testsEAA0130E9524130C0957EFAAA55194425DB40F38DD207E0A9B874AD57B1FFBFD. ServiceDLLE2F234BCC923EC68619A78977AB76F14E3336A76D2866FD095165299A80A3141,TestsDLLFCCC5E4E8A8CB3AD401A2D84182FB5C736F27BB6AD75E127D61E140C51517A14. No service host startup/deployment."
         },
         {
           "id": "VER-003",
@@ -150,7 +150,7 @@
           "command": "Independent review of literal requests/original approval/new amendment/actual three-file diff/test evidence; reverse exact version replacement in memory and verify91E67B3E5BE26EE4EC311B7A08F0C2197B8B14791789925A3D9F22D1B2400B1E; applicable Contract/WorkingTree/Staged/Range gates; protected temp cleanup.",
           "expected": "Pre-apply and final reviewer PASS/no open findings, no scope expansion, approval-parent order/gates pass, owned run cleaned before final completion.",
           "result": "pending",
-          "evidence": ""
+          "evidence": "Independentagent:/root/settlement_wallet_review comparedliteralrequests/originald2ec/approvedamendment/actualthreefilediff,reversebytehash,64TRX/originalnameunion/builds/fullpreview and returnedpre-applysemanticPASS/noopenfindings. Approval-onlycommita2b0f6de30a620bce887ea394e1ae017c706c59b precedesedits;ContractandWorkingTree-AllowPendingEvidence gatesPASS3governed/2contracts. Actualapplysubsequentlystoppedonexistingwaiting-lockguardafteronecommittedbatch;nofinalcompletionPASS. Final32-chainrawchecksandcleanup recordedin dailyhistory;contractremainsapproved,incomplete."
         }
       ]
     },
@@ -184,8 +184,8 @@
           "kind": "inspection",
           "command": "Rebuilt local CLI --backfill-eth-progress34-history without --apply; independent exact-ID native psql reads READ ONLY/UTC/statement15s/lock2s, fresh service/runtime/error checks.",
           "expected": "Full original2830-source/1882-parent/31612-trade plan with original digests and complete existing-chain/dependency checks; current exact build/health/protected state verified; zero preview writes.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Rebuilt local CLI withoutapply started2026-09-04T12:15:15.977491Z,exited0/PREVIEW_OK afterall31612native/archivecollisionchecks. PREVIEWcutoff12:15:54.972750Z,parents2830,batches1882,trades31612,verified_existing16,writes0,originalsource3048d1e890a5f605e9d7c4107731477f11dd98e0f62521880f1d263f41ac6533/plan966103194019979106007e3659316bd41e6938f4dc4e4076636a2fb086e66817 unchanged. PreviewlogSHA256D76381049DB424BE270F1C000F2BDFE84D6A3A2D80E18237592717A3EF99C2CE. Fresh independent nativepsqlROUTC15s2s cutoff12:18:16.52646Z exactProduction/exacteabRunningLiveMVID0b7cc2c4a796,heartbeat12:18:02.21224age14.314220s,NULLerror,0waitinglockbackends,DashboardinitializedRunningNULLerror,34exactPaperflags;targetevents0,refresh/inflight0,reconciliationqueue34withnoerrors perfullReadHealth. Independent freshactivity288Filledorders since12:12:58.663232Z,last12:18:00.360723; api_errors samewindow0. Poststart earlier9feedtimeout/stale-referenceerrors are not claimed absent; latest12:10:39.728496Z. This preview does not claim apply/finalcompletion."
         },
         {
           "id": "VER-005",
@@ -193,7 +193,7 @@
           "command": "Existing --backfill-eth-progress34-history --apply --approved-contract-digest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2 after required gates; independent original per-cap/native/projection/protected-state reconciliation and zero-write repeat.",
           "expected": "Only missing original batches inserted; all31612 ordinary histories correctly counted with modeled own fees/Net/provenance,original final marker and no unintended changes; original ResearchOnly-exclusion finding separately reported with verified limits.",
           "result": "pending",
-          "evidence": ""
+          "evidence": "BLOCKED afteroneadditionalcommittedbatch. Existingapplywithoriginald2ecdigest repeatedfullpreview and committed16trades/96primaryrows at2026-09-04T12:22:34.314003Z,parent_run4a2e7447-b1ba-4a4c-ab1a-7a4ad3724fbe,total32/31612,remaining31580. Whileawaitingprojections,ReadHealthraisedProduction has waiting locks at12:24:34.260365Z;exit1,nonextbatchattempt,noautomaticrelaunch/guardchange. ApplylogSHA256A62FCDA98E2BD610105E852C90C2C885880D9DB89C3C8C464E7B9B0C6BDD9EDE. IndependentROfirstbatch12:23:20.932669Zverified16ofeachsixrecords/16feeNetconsistent. Closeout12:26:18.024965Zrawper34IDs:each16Up4caps2ofeachsixrecords/2feeNetconsistent,each18Up8caps0,total32;markerabsent,Runningeab/heartbeat12:26:02.325313/NULLlast_error,0currentwaitinglockbackends,0api_errorssince12:23:20.932669. GuardobservedanyotherLockbackendinthisDB;actualparticipant/causeatstopnotcaptured,notproofdeadlock. Full31612accounting/projection/marker/repeat0/ResearchOnlyfinding notcomplete."
         }
       ]
     }

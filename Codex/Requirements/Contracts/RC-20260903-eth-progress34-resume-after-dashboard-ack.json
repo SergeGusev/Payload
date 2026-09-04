@@ -58,16 +58,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-resume-ack.trx\"",
           "expected": "All original focused cases pass without skipped required integration tests, including new exact-build acceptance/former-build refusal before writes and unchanged financial/counter/native-chain/rollback/resume/marker behavior. Isolated PostgreSQL is loopback-only under a marked D:/CodexTemp run.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "All64 distinct original selected tests passed,zero skipped: history11/progress27/legacy19/dashboard7. Original filter partitioned across four isolated loopback PostgreSQL18.6 UTC databases to prevent fixture interference, same total/name union. Existing lifecycle exercised exact3aa acceptance and9aeb/3548/suffix refusals before writes. Owned runmanual-55efea9648514df09a9401499c21820e,results/progress34-resume-ack-{history,progress,legacy,dashboard}.trx; detailed commands/hashes in daily history2026-09-03 approval entry. No Production tests."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
           "expected": "Service build succeeds with disposable output only under a marked D:/CodexTemp run; no service/worker startup or deployment.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Service buildPASS in63.85s,121warnings in unchanged sources,0errors; tests buildPASS in38.30s,5existingwarnings,0errors. Explicit markedrun/artifacts and TEMP/TMP/TMPDIRrun/temp, shared compilation/node reuse disabled. ServiceDLL SHA2569781B0DB7335727507BCBCF9887F34897820BFB74625F38DFBE21EBE0A1E2868. No service host started, no deployment."
         },
         {
           "id": "VER-003",
@@ -75,7 +75,7 @@
           "command": "Independently review verbatim requests, this amendment, original approved contract, exact three-file diff and verification; reverse the version replacement in memory and compare SHA256F93765AD490985D7D48C74D2F1EAB512AC5E2B67E64857A887B759F0BFF5670E; run requirement WorkingTree/Staged/Range gates at the applicable checkpoints.",
           "expected": "No unrequested importer or adjacent changes, unchanged original digests, reviewer PASS/no findings, mechanical gates pass and compliant approval-parent order. Protected cleanup of owned test artifacts completes before final handoff.",
           "result": "pending",
-          "evidence": ""
+          "evidence": "Approval-only commit32c5bc01932f9e01ed5efad1bae315e8517fb6ea preceded product edits,Contract/Staged approval gatesPASS. Main and independent reviewer reverse replacement recovered exactF93765AD490985D7D48C74D2F1EAB512AC5E2B67E64857A887B759F0BFF5670E; new importer91E67B3E5BE26EE4EC311B7A08F0C2197B8B14791789925A3D9F22D1B2400B1E. Only three mapped product paths changed; reviewer verified64TRX/builds/rawhealth/counts,localPASS/no code-scope findings,operationalBLOCKED. Latest raw20:45:05.072830Z confirms same fresh SettleDueRun deadlock and18waiters; counts20:45:38.629846Z still16/31612. Owned test server stopped; protected cleanup removed6353files/779047596bytes and runabsence verified after durable evidence extraction. No pre-apply/completionPASS; final completion gates remain pending,contract not complete."
         }
       ]
     },
@@ -103,7 +103,7 @@
           "command": "Run the rebuilt local service DLL with --backfill-eth-progress34-history, without --apply; independent exact-ID Production reads in READ ONLY/UTC/statement15s/lock2s sessions.",
           "expected": "Full original2830-source/1882-batch/31612-trade plan and frozen digests, exact current resume point and native dependencies verified; fresh health and deployed build match; zero preview writes.",
           "result": "pending",
-          "evidence": ""
+          "evidence": "BLOCKED before full CLI preview. Fresh health20:42:14.471053Z verified Production endpoint/session READ ONLY/UTC/15s/2s,exact3aa/mvid2b5992c622c9,Running/Live,last_errorNULL,DashboardRunning and0waiters. Poststart api_errors query through20:42:38.556857Z found new40P01 at20:42:36.303471Z,BtcUpDown5mPaperStrategyProcessor/SettleDueRun,id8d5fa8cc-6509-4537-bb49-8e9ece2a8f6f; independent PK lookup20:43:10.750079Z confirms. A later0waiter snapshot does not erase this failed pre-apply health condition. Narrow exact34-ID recheck20:43:11.089063Z:16pre-cutoffSettled and independently16modeledorders/fills/signals,allUp4;Up8zero;markerabsent;catalog flags unchanged. Full frozen source/chain/schema checks were not run in this turn."
         },
         {
           "id": "VER-005",
@@ -111,7 +111,7 @@
           "command": "After approval/review/preview gates, run existing --backfill-eth-progress34-history --apply --approved-contract-digest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2, followed by original independent per-cap/native/projection/protected-state checks and zero-write repeat verification.",
           "expected": "Only missing original batches inserted; all31612 histories included in ordinary metrics with correct original marker and no unintended changes. Report actual completion or exact guarded stop, never declare completion merely because the command was launched.",
           "result": "pending",
-          "evidence": ""
+          "evidence": "NOT STARTED: fresh Production deadlock failed the pre-apply health requirement. No CLI apply,Production mutation,retry,guard bypass,service operation or new diagnosis/fix. Verified existing16,derived31596remaining/1881batches against original frozen plan; full six-chain equivalence remains pending. Stop is health-related,not an elapsed-time limit; original and amendment contracts remain approved but incomplete."
         }
       ]
     }

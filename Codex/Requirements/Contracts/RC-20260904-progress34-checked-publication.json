@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260904-progress34-checked-publication",
+  "title": "Публикация готового исправления Progress34 отдельно от незавершённой истории",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    { "source": "user", "text": "Опять я запутался. Коммить всё. Публикуй всё" },
+    { "source": "user", "text": "Так что надо сделать, чтобы решить эти проблему?" },
+    { "source": "user", "text": "Если я просто сейчас ручками сделаю коммит вообще всего, это решит проблему?" },
+    { "source": "user", "text": "Ок, устрани причину по-своему" }
+  ],
+  "scope": {
+    "goal": "Устранить конфликт проверки публикации существующих изменений, разделив готовое исправление импортера и отчёты незавершённого восстановления. Сохранить все текущие изменения и опубликовать проверенную последовательность коммитов в origin/master без обхода проверок.",
+    "inScope": [
+      "Рабочая копия D:/My/Business/PolyMarket, master aa449f65, upstream origin/master, локально ahead2/behind0 на момент подготовки. Ровно10 уже изменённых файлов, перечисленных ниже, плюс этот новый документ согласования и обязательные последующие записи контекста/истории.",
+      "Группа отчётов: Codex/Contexts/ContextPolyCopyTrader.md; Codex/Contexts/History/ContextPolyCopyTrader-2026-09-03.md; Codex/Contexts/History/ContextPolyCopyTrader-2026-09-04.md; Codex/Requirements/Contracts/RC-20260903-eth-progress34-resume-after-dashboard-ack.json; Codex/Requirements/Contracts/RC-20260904-eth-progress34-resume-after-wallet-fix.json. Сохранить существующие изменения, не дописывая завершение фактически незавершённых операций.",
+      "Группа готового исправления: README.md; src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs; tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs; tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs; Codex/Requirements/Contracts/RC-20260904-eth-progress34-resilient-import.json. Четыре product-файла публикуются без дальнейшего изменения содержимого. В существующем контракте разрешено изменить только evidence/results/status/independentReview для честного завершения уже проверенной задачи кода, без изменения её semantic digest и approval.",
+      "После позднего точного APPROVE создать изолированную чистую рабочую копию для раздельных WorkingTree/Staged проверок. Сначала approval-only checkpoint этого документа и группа отчётов без product-файлов; затем product-файлы и completion документов именно задачи исправления/публикации. Допустимы отдельные commits обязательного итогового контекста. Не объединять approval и implementation в один commit.",
+      "Независимое сравнение исходных запросов, обоих согласований, фактических diff и сохранённых проверок. Ориентир выполнения10–20мин после точного утверждения, без повторного полного тестового прогона при подтверждённой неизменности уже проверенных product-файлов. Временная рабочая копия и scratch только в собственном marked D:/CodexTemp run с обязательной защищённой очисткой."
+    ],
+    "outOfScope": [
+      "Изменение validator, Git/Codex hooks, Workflow, RequirementGate, AGENTS, Git-конфигурации, remote policy или отключение/обход любой обязательной проверки. Новый общий механизм публикации не создаётся.",
+      "Изменение содержимого четырёх готовых product-файлов, финансовой/торговой логики, состава истории, схемы, настроек или зависимостей. При несовпадении с проверенной ревизией остановиться, не исправлять код в рамках этой задачи.",
+      "Любой доступ к Production, запуск импортера, восстановление истории, deploy, restart/stop сервиса, Live-операции, backup, новая автоматизация. Завершение кода не означает завершение восстановления истории.",
+      "Ложное завершение старых dashboard-ack/wallet-fix задач, стирание свидетельств предыдущих неудачных проверок, изменение их semantic approval или присвоение passed без фактической новой успешной проверки.",
+      "Удаление или потеря любых исходных изменений, включение возникших параллельно чужих изменений, force push, переписывание уже опубликованной истории, squash approval с implementation. При расхождении remote/локального состояния не выполнять автоматический merge/rebase."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Только текущий неопубликованный набор10 файлов и два имеющихся локальных approval commits; не финансовый период. Все новые evidence timestamps в UTC.",
+    "firstVerification": "Read-only: Git status/index/upstream/divergence и свежий remote ref; точные статусы трёх контрактов; повтор текущей ошибки validator; сверка четырёх SHA256 с ранее независимо проверенной ревизией67/67PASS. До любых изменений подтвердить, что scope и исходные файлы не изменились."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Сохранить все существующие изменения, разделив отчёты незавершённых задач и готовое исправление на разные проверяемые изменения Git.",
+      "sourceRequestIndexes": [0, 3],
+      "sourceQuote": "Коммить всё. Публикуй всё",
+      "acceptanceCriteria": [
+        "После получения точного согласования approval checkpoint этого документа существует в родительской ревизии implementation. Группа отчётов не содержит governed product changes. Оба старых восстановления сохраняют approved и фактические pending проверки.",
+        "Четыре product-файла совпадают с исходной проверенной ревизией: README SHA256 F6756F7E8C1F1E6A6BE020CF4F74BD4C1FA7A3A4FAABB436CB79A3739EC0F5D8; importer 9A77FB8452E3C4FE7B86F842436202E43EB16DFC3E3E74CBF4C6B1847D06AFA3; command tests 50F95215A682686B3AB84244BECFA194760D2C8ACB4938905B3E0EA2FDCFD072; PostgreSQL tests 6FBB4359570D7C3CAEC4920C82E398EADB9C2828A368031435BD8684C39083F3. Git-нормализацию CRLF проверять отдельно сравнением blob/diff, не принимать произвольные изменения под видом нормализации.",
+        "Исходная рабочая копия и все10 файлов сохраняются. Перед присоединением подготовленной последовательности сравнить её конечное дерево с ожидаемыми рабочими файлами; обновлять master только fast-forward и при неизменившемся исходном HEAD. Случайные параллельные изменения не терять и не включать."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "Codex/Requirements/Contracts/RC-20260903-eth-progress34-resume-after-dashboard-ack.json",
+        "Codex/Requirements/Contracts/RC-20260904-eth-progress34-resume-after-wallet-fix.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Get-FileHash for four exact product paths; git diff and git diff --cached for each isolated group; compare original contracts and normalized product blobs with the frozen pre-publication state",
+          "expected": "Полный исходный набор сохранён; product bytes/normalized blobs неизменны; старые операции не объявлены завершёнными; нет посторонних изменений.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Устранить причину failing contract gate без его отключения и без ложного закрытия восстановления истории.",
+      "sourceRequestIndexes": [3],
+      "sourceQuote": "устрани причину по-своему",
+      "acceptanceCriteria": [
+        "Для RC-20260904-eth-progress34-resilient-import сохранить semantic digest sha256:555ea95d40356b93dfbf390a544fdce5b51b9e39cb84e856a513de8d2d88a8b6 и исходные user approvals. Предыдущую неудачу VER-005 не стирать: добавить новое фактическое evidence успешных изолированных проверок; completed относится только к уже реализованному исправлению кода.",
+        "Кандидат завершения проходит независимый semantic review originalRequests/approved contracts/actual diff/имеющихся67 passing test evidence и новых publication checks. Не выдавать прежние тесты за новый запуск. Изменения code/test/README запрещены, поэтому новую функциональную реализацию здесь не проверять и не заявлять.",
+        "В каждой изолированной группе реально проходят обычные WorkingTree и Staged проверки без AllowPendingEvidence, bypass или подмены validator. Перед отправкой вся исходящая последовательность проходит обычный Range commit-by-commit. Commit/push и финальные ref checks отражаются в обязательном контексте/истории, не в выдуманном заранее passed evidence.",
+        "После успешного Range выполнить обычный fast-forward push в origin/master и свежей read-only проверкой подтвердить точный remote commit. Отчитаться о hash публикации и фактическом состоянии исходной рабочей копии; не объявлять восстановление истории выполненным. Завершить процессы временной копии и защищённую очистку собственного run. Если обязательная проверка не проходит, сохранить точную ошибку, ничего не обходить."
+      ],
+      "implementationPaths": [
+        "Codex/Requirements/Contracts/RC-20260904-eth-progress34-resilient-import.json",
+        "Codex/Requirements/Contracts/RC-20260904-progress34-checked-publication.json",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-09-04.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Independent semantic review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; git diff --check",
+          "expected": "Перед implementation commit завершение задачи кода и разделение групп подтверждены actual checks и независимым reviewer; старые незавершённые задачи сохраняют корректный статус. Последующий Range и push подтверждаются отдельными фактическими записями доставки в контексте/истории.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260904-progress34-checked-publication sha256:fabb53f204a3a195eda573c0c98678ab38a2cb1b1f56975afff152cce856cbe3",
+    "semanticDigest": "sha256:fabb53f204a3a195eda573c0c98678ab38a2cb1b1f56975afff152cce856cbe3"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/publication_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
