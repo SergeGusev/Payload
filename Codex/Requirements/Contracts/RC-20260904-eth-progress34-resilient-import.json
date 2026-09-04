@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260904-eth-progress34-resilient-import",
+  "title": "Устойчивое продолжение Progress34: временные блокировки, ограниченное отставание показателей и длительный тест",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Восстанови историю по всем добавленным Loss Diff Progress стратегиям"
+    },
+    {
+      "source": "user",
+      "text": "Все 34 варианта"
+    },
+    {
+      "source": "user",
+      "text": "Да, восстановленные сделки должны также входить в обычные показатели. И потом отдельно расскажи мне, сколько у нас `ResearchOnly` сделок, которые сейчас не входят в статистику"
+    },
+    {
+      "source": "user",
+      "text": "Мы уже два дня пытаемся сделать историю и за это время сделали всего 32 записи. Мне одному кажется, что здесь что-то не так?"
+    },
+    {
+      "source": "user",
+      "text": "Исправь эти недостатки"
+    }
+  ],
+  "scope": {
+    "goal": "Исправить подтверждённые недостатки существующей команды восстановления истории 34 Progress-стратегий: аварийный выход при временном ожидании блокировки, обязательное полное обновление показателей после каждой отдельной порции и недостаточный длительный интеграционный тест. Подготовить и проверить код; этот контракт не запускает Production-импорт.",
+    "inScope": [
+      "Только существующая команда EthLossDiffPositiveProgressHistoryBackfillCommand, её два существующих тестовых файла и README. Новый проект, фоновый процесс или общая инфраструктура повторов не создаются.",
+      "Точные две семьи оригинального RC-20260903-eth-progress34-native-history, sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2: родитель Up4 b7c50005-0000-4000-8137-000000000104 / eth_up_down_5m_up_bps_4_fak_premarket; дети b7c50005-0000-4000-8236-{cap:12digits}, cap1..16, code eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_{cap}, assignment8238. Родитель Up8 b7c50005-0000-4000-8137-000000000108 / eth_up_down_5m_up_bps_8_fak_premarket; дети8237 cap1..18, code eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_{cap}, assignment8239. Это ссылки на закрытые34 буквальных ID/code/parent/cap/assignment/wallet tuples оригинального REQ-001 и существующей миграции, не широкие селекторы по имени.",
+      "В отношении этих файлов данный контракт заменяет только прежние запреты на новую политику временных блокировок/ожидания очередей в RC-20260904-eth-progress34-resume-after-wallet-fix. Ранее утверждённые финансовые правила, весь план, схема/native chains, provenance, ограничения Production и независимая финальная сверка сохраняются. Не активировать старый неутверждённый RC-20260903-eth-progress34-resume-completion или partial-history draft.",
+      "Политика DEV-001: ожидать вне транзакций при временных lock waits; разрешить максимум8 отдельных новых родительских порций до обязательного опустошения их обычных очередей. Размер каждой транзакции остаётся16/18 сделок,96/108 первичных строк; единственный импортёр, READ COMMITTED, минимум1s между коммитами и SQL15s/lock2s остаются.",
+      "Проверки на изолированном loopback PostgreSQL, включая не менее64 родительских порций/1088 дочерних сделок, реальные триггеры и обычные методы обработки очередей с интервалом30s и лимитами25/5/100. Оценка реализации и проверок45–90мин после утверждения; это не обещание срока Production-импорта.",
+      "На начало подготовки master a2b0f6de30a620bce887ea394e1ae017c706c59b, origin/master eab41015744d4d2fcc04b042d946529efeb13084, ahead1/behind0. Существующие незавершённые изменения версии импортёра и теста сохраняются; остальная грязная рабочая копия не включается в новые изменения."
+    ],
+    "outOfScope": [
+      "Production INSERT/UPDATE/DELETE, запуск --apply, восстановление или удаление хотя бы одной сделки, новая полная выгрузка/backup; Production допускает только узкие read-only проверки необходимости и условий этого исправления.",
+      "Изменение формул LossDiff/cap, cutoff/состава истории, parent-average full-fill, собственных комиссий/округления/Net PnL/Net ROI, ResearchOnly provenance и ordinary_paper_metrics_included=true, детерминированных ID, оригинальных source/plan/apply digest и финального marker. Оригинальная задача восстановления и отдельный ResearchOnly-отчёт не объявляются завершёнными по завершении этого исправления.",
+      "Изменение Storage, Dashboard, Program, workers, схемы/индексов/триггеров, их обход, искусственная обработка или удаление Production-очередей, приоритетов/настроек сервиса, Live/родительских/current/post-cutoff данных, стратегия/сервис deployment/restart/stop, новые стратегии или автомонитор.",
+      "Ослабление точного deployed-build, heartbeat120s/last_error, identity/settings/schema/source/financial/collision/protected-state проверок. ServiceVersion остаётся info=1.0.0+eab41015744d4d2fcc04b042d946529efeb13084; assembly=1.0.0.0; mvid=0b7cc2c4a796. Никакого принятия любой новой сборки автоматически.",
+      "Автоматический повтор deadlock40P01, произвольных SQL/statement-timeout/сетевых ошибок или неизвестного результата COMMIT; увеличение SQL timeout или размера транзакции; бесконтрольный рост очереди; ожидание внутри пишущей транзакции; общий механизм retry.",
+      "Утверждение, что неизвестная причина задержки фонового worker уже установлена/исправлена, либо что локальный тест доказывает Production-пропускную способность. Никакой общей диагностики или ремонта очередей за пределами этих подтверждённых недостатков."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Финансовый scope не меняется: UTC, два точных родителя, Settled, entered_at_utc строго до2026-09-03T05:32:51.200614Z; исходный frozen plan2830 sources/1882parent batches/31612children (18112Up4+13500Up8). Срез read-only2026-09-04T12:44:46.779878Z:32 уже сохранённых историй,31580 ожидаемых оставшихся; не новый план.",
+    "firstVerification": "До draft прочитаны фактический dispatch до запуска host, ReadHealthAsync/RunPlanAsync/WaitForProjectionsAsync/CompleteWhenReconciledAsync, обычные queue schema/claim/worker methods и действующий resume integration test. ReadHealth сейчас отвергает ANY other Lock backend в этой БД; тест использует34 synthetic entries и50ms/250 consumer. Свежая native psql сессия к192.168.0.101:5432/polycopytrader подтвердила READ ONLY/UTC/15s/2s, точнуюeab/MVID0b7cc2c4a796 Running/Live heartbeat12:44:02.555653,last_errorNULL,34точных детей Paper/unpaused,32исторических Settled runs (по2каждому16Up4,0Up8),0целевых refresh/inflight jobs и0наблюдаемых Lock backends. Все16Up4 wallet projections refreshed_at12:30:30.931898,позже остановки импортёра12:24:34. Это подтверждает последующий прогресс очереди, не объясняет причину её задержки и не заменяет будущий полный pre-apply preview."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Разделить временное ожидание блокировок и реальные причины остановки команды.",
+      "sourceRequestIndexes": [
+        3,
+        4
+      ],
+      "sourceQuote": "Исправь эти недостатки",
+      "acceptanceCriteria": [
+        "Наличие waiting Lock backends само по себе не завершает apply и не разрешает следующую запись: команда остаётся в read-only ожидании вне транзакции с проверкой каждые5s, продолжает после исчезновения ожиданий и успешной повторной проверки остальных guards. Любая fatal-причина проверяется и во время ожидания, не маскируется lock wait.",
+        "Разделить типизированный transient lock результат и fatal health/settings/schema/source/accounting ошибки; не классифицировать по тексту произвольного Exception. Полный baseline не продвигается автоматически. Проверять locks перед и после короткой порции, а не ожидать их снятия внутри неё. Сама write-транзакция сохраняет SQL15s/lock2s и все остальные инварианты.",
+        "Только SQLSTATE55P03 внутри неподтверждённой порции допускает повтор: сначала подтверждённые rollback/dispose всей порции, затем read-only health/lock check и пауза5s вне транзакции, затем повторная проверка источника/детерминированных цепочек. Ни одной дублирующей записи. При неизвестном результате COMMIT прекратить запись и явно сообщить unknown; автоматического replay нет.40P01 и остальные неразрешённые ошибки остаются fatal.",
+        "Отмена ожидания освобождает ресурсы и не меняет ранее сохранённые цепочки. Preview без --apply не пишет; текущие locks отражаются как текущее условие ожидания/неготовности, а не как доказательство deadlock или повреждения данных. Правила apply/финансовые approval digests не меняются."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill\"",
+          "expected": "Реальные двухсессионные PG lock waits/55P03, rollback/no duplicate, отмена, fatal guard одновременно с lock wait, отказ неизвестным ошибкам/40P01. Все прежние финансовые/identity/schema/source/protected-state проверки сохраняются.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Убрать обязательное ожидание полного обновления показателей после каждой единственной порции, сохранив ограниченную нагрузку и финальную сверку.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        2,
+        4
+      ],
+      "sourceQuote": "Исправь эти недостатки",
+      "acceptanceCriteria": [
+        "Перед началом новых записей один раз дождаться обычных pending/inflight queues точных34детей от прошлого запуска, сохранив health/transient-lock policy. Проверить и пропустить уже сохранённые эквивалентные порции; не ждать повторно те же очереди для каждой старой порции.",
+        "После каждого коммита сохранить существующие проверки фактических цепочек и protected state, проверить health/locks/состояние относящихся к импорту очередей и выждать минимум1s. Не более8 новых родительских порций может быть сохранено с прошлого подтверждённого опустошения их очередей: максимум144сделки/864первичные строки, но всё ещё8независимых транзакций, а не одна большая.",
+        "После восьмой порции или конца плана приостановить следующие записи до завершения существующих dashboard events по source IDs всех порций окна и refresh/inflight по их exact wallets. Не удалять, не подтверждать и не выполнять эти задания из импортёра. Во время ожидания не держать транзакцию; health и read-only проверки каждые5s; продолжить автоматически после завершения очередей. При fatal guard остановить, а не продолжать до лимита8.",
+        "Не сбрасывать лимит от одного факта уменьшения очереди или отсутствия одного кошелька; сбросить только после проверки полного соответствующего окна. На отмене/повторном запуске durable checkpoint остаётся полная проверенная шестизаписная цепочка, не локальный счётчик окна. Не создавать новые таблицы/checkpoints.",
+        "Сохранить обязательные оригинальные окончательные проверки all34 queues/ordinary projections/полного плана/финансовых итогов/marker-last/repeat writes0. Ни накопленная пачка коммитов, ни отставшие показатели не считаются завершённой историей."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfillPostgresTests\"",
+          "expected": "При остановленном consumer сохраняются ровно максимум8missing parent batches и ни одной девятой; marker отсутствует; после возобновления consumer импорт продолжается. Проверены граница7/8/9, последний неполный window, resume без дублей, отмена, окончательная сверка с organic events.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Проверить длительное прохождение многих порций с реалистичной задержкой обработки очередей, а не только маленький ускоренный пример.",
+      "sourceRequestIndexes": [
+        3,
+        4
+      ],
+      "sourceQuote": "Исправь эти недостатки",
+      "acceptanceCriteria": [
+        "Добавить воспроизводимый изолированный PostgreSQL сценарий не менее64eligible parent batches:32дляUp4 и32дляUp8,1088child chains, реальные нормальные триггеры и те же RunPlan/queue/repository/projection методы. Обработчик wallet очереди работает с периодом30s, high-priority25, reconciliation5, seed100; не подменять его consumer50ms/250 в этом тесте. Тестовый heartbeat регулярно обновляется в отдельной тестовой сессии.",
+        "В сценарии воспроизвести реальные временные чужие блокировки, отставание consumer не менее двух его30s циклов, отмену после нескольких коммитов и продолжение с durable history. Проверить прогресс более двух окон, верхнюю границу8, исходные chain/count/fee-inclusive Net/protected-state totals, marker only after final reconciliation и repeat0. Сохранить elapsed time/число коммитов/максимальное отставание/число ожиданий как доказательство, без обещания идентичной скорости Production.",
+        "Сохранить все первоначальные64 выбранных регрессионных теста; изменить только устаревшее ожидание обязательного drain после одной порции под новую явно утверждённую политику. Новые тесты дополняют, не заменяют финансовые/causal/rollback/identity/source/collision/projection coverage. Требуемые integration tests не пропускать.",
+        "Все локальные БД/билды/тестовые данные/TRX/логи только в принадлежащем задаче marked D:/CodexTemp run; TEMP/TMP/TMPDIR и явные outputs внутри run. Никаких test DB на Production. Удаление только собственных disposable artifacts после сохранения компактного evidence и завершения процессов."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-resilient-import.trx\"",
+          "expected": "Все исходные и новые тесты проходят без обязательных skips. TRX/логи доказывают1088цепочек/64порции, длительное ожидание, устойчивое продолжение, неизменность accounting и zero-write повтор.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Сделать состояние восстановления понятным и завершить проверенное исправление без скрытого Production-запуска.",
+      "sourceRequestIndexes": [
+        3,
+        4
+      ],
+      "sourceQuote": "Исправь эти недостатки",
+      "acceptanceCriteria": [
+        "Выводить отдельно WAITING_LOCKS/WAITING_PROJECTIONS/STOPPED с UTC, стадией, известными committed/remaining и window counts. Для очереди показывать фактические pending/inflight counts и возраст ожидания; для lock wait только bounded диагностические PID/application/wait/blocker сведения без query text/секретов. Обновление при изменении состояния и не реже30s ожидания; не писать, что committed порция откатилась.",
+        "STOPPED явно различает отсутствие write-транзакции, подтверждённый rollback неподтверждённой порции и unknown commit outcome. Никаких выводов deadlock по одному wait_event_type='Lock'. Не выводить выдуманный ETA, пока нет измеренного устойчивого темпа.",
+        "README описывает новые ожидания/окно8, неизменные финансовые/сервисные ограничения и как запустить тесты; не объявляет историю восстановленной. Точноеeab build expectation и ранний exit доhost сохраняются; деплой сервиса для запуска исправленной standalone-команды не требуется по существующему dispatch, но этот контракт её не запускает.",
+        "После поздней точной пользовательской APPROVE и отдельного DEV-001 approval — approval-only commit до material edits. Перед завершением независимый reviewer сравнивает verbatim prompts/контракт/actual diff/результаты тестов; стандартные WorkingTree/Staged gates, scoped commit/push без чужих грязных изменений. Старые незавершённые контракты не помечать completed ради обхода gate; если их незавершённость блокирует публикацию, явно сообщить, не обходить.",
+        "В этой задаче завершается исправление кода, не исторический импорт. Финансовые source/plan/apply digest, source selection, CreateChain/BuildPlan/CalculateMetrics и финальное доказательство complete сохраняются; полный pre-apply preview и выполнение Production остаются отдельной явно запрошенной операцией."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Startup/EthLossDiffPositiveProgressHistoryBackfillCommand.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillCommandTests.cs",
+        "tests/PolyCopyTrader.Tests/EthLossDiffPositiveProgressHistoryBackfillPostgresTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
+          "expected": "Build проходит без запуска host/Production. Проверены диагностические сообщения/отмена и неизменность финансовой части/точной версии.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Independent semantic review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree then Staged; git diff --check; protected owned-run cleanup",
+          "expected": "Независимый PASS/no findings, traceability и approval-parent-order соблюдены, только4разрешённых product paths, исходные dirty edits сохранены, temporary run отсутствует, Production writes0.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Изменить прежнюю операционную политику: transient lock wait и подтверждённый rollback по55P03 означают read-only паузу5s с повторной проверкой/продолжением, а не выход из команды. Полное опустошение обычных очередей требуется после максимум8отдельных новых родительских порций вместо каждой одной; сохранить1s/15s/2s и все fatal guards. Это предлагаемые точные параметры исправления, а не ранее одобренные настройки.",
+      "impact": "Окно допускает до144дополнительных исторических сделок, временно ещё не отражённых в показателях; каждая из8порций остаётся отдельной атомарной транзакцией. На задержке очереди запись прекращается на границе окна; процесс ждёт без write-транзакции. Повтор только55P03 после подтверждённого rollback; deadlock/unknown outcome/fatal guards не маскируются. Формулы/история/Live не меняются. Нужна отдельная явная пользовательская фраза подтверждения DEV-001 для этого semantic digest.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260904-eth-progress34-resilient-import sha256:555ea95d40356b93dfbf390a544fdce5b51b9e39cb84e856a513de8d2d88a8b6",
+        "semanticDigest": "sha256:555ea95d40356b93dfbf390a544fdce5b51b9e39cb84e856a513de8d2d88a8b6"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260904-eth-progress34-resilient-import sha256:555ea95d40356b93dfbf390a544fdce5b51b9e39cb84e856a513de8d2d88a8b6",
+    "semanticDigest": "sha256:555ea95d40356b93dfbf390a544fdce5b51b9e39cb84e856a513de8d2d88a8b6"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/settlement_wallet_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
