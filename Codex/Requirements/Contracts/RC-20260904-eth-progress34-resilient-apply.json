@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260904-eth-progress34-resilient-apply",
+  "title": "Prepared execution of the unchanged 34 native histories with the published resilient importer",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    { "source": "user", "text": "Подготовь запуск восстановления  " },
+    { "source": "user", "text": "Восстанови историю по всем добавленным Loss Diff Progress стратегиям" },
+    { "source": "user", "text": "Все 34 варианта" },
+    { "source": "user", "text": "Мне нужно, чтобы задача была сделана. Делай то, что необходимо для её завершения" },
+    { "source": "user", "text": "Да, восстановленные сделки должны также входить в обычные показатели. И потом отдельно расскажи мне, сколько у нас `ResearchOnly` сделок, которые сейчас не входят в статистику" }
+  ],
+  "scope": {
+    "goal": "Подготовить точный запуск прежней истории всех34 Progress стратегий; только после позднего APPROVE этого digest выполнить уже опубликованную standalone-команду до завершения либо fatal guard, без новой разработки или выкладки.",
+    "inScope": [
+      "Only Production192.168.0.101:5432/polycopytrader. Exact original Up4 parent b7c50005-0000-4000-8137-000000000104/code eth_up_down_5m_up_bps_4_fak_premarket; its16 children b7c50005-0000-4000-8236-{cap:12digits},caps1..16,code eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_{cap}. Exact Up8 parent b7c50005-0000-4000-8137-000000000108/code eth_up_down_5m_up_bps_8_fak_premarket; its18 children b7c50005-0000-4000-8237-{cap:12digits},caps1..18,code eth_up_down_5m_up_bps_8_fak_premarket_lossdiff_positive_progress_cap_{cap}. These are closed references to the34literal tuples in original RC-20260903-eth-progress34-native-history REQ-001, not broad SQL pattern selectors.",
+      "Original financial/accounting contract RC-20260903-eth-progress34-native-history sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2, including its explicitly approved ASM-001/002/003, remains unchanged. ResearchOnly provenance, sufficient-depth parent-average full-fill model, ordinary_paper_metrics_included=true and own recorded fee schedules including accepted retrospective modeled schedules remain. No claim of historical venue charges or proven Live-equivalent depth.",
+      "Use published importer revision22b4672270cb49f152f0a0071d3555b448ff53de, present at HEAD24e86b1a. Source SHA2569A77FB8452E3C4FE7B86F842436202E43EB16DFC3E3E74CBF4C6B1847D06AFA3. Keep exact service guard info=1.0.0+eab41015744d4d2fcc04b042d946529efeb13084; assembly=1.0.0.0; mvid=0b7cc2c4a796. Existing command dispatch returns before service-host startup; no deployment/restart needed.",
+      "Apply the already approved/implemented policy of RC-20260904-eth-progress34-resilient-import sha256:555ea95d40356b93dfbf390a544fdce5b51b9e39cb84e856a513de8d2d88a8b6 and its explicit DEV-001 approval. It supersedes old fail-on-transient-lock/per-parent-full-drain policy only: outside-transaction5s waits; only55P03 before commit and after confirmed rollback may retry; max8independent parent batches then ordinary projection/refresh drain; minimum1s between batches; SQL15s/lock2s. No new deviation is introduced here.",
+      "Frozen source digest sha256:3048d1e890a5f605e9d7c4107731477f11dd98e0f62521880f1d263f41ac6533 and plan digest sha256:966103194019979106007e3659316bd41e6938f4dc4e4076636a2fb086e66817:2830source parents,1882eligible parent batches,31612child trades (18112Up4+13500Up8). Full successful preview verifies32existing complete native chains; independent raw query confirms2perUp4cap and0perUp8cap. Remaining31580trades in1880parent transactions (1130Up4+750Up8). Each transaction16or18trades/96or108primary records; window up to144trades, with128for8Up4batches,144for8Up8batches and intermediate totals possible in a mixed-family window. No all-history transaction.",
+      "Keep original deterministic six-record IDs, complete-chain equality checks and provenance as durable resume points. Verify/skip existing32chains, never overwrite them; final marker20260903_eth_progress34_native_history_v1 last, only after full native/ordinary accounting reconciliation. Final repeat must verify writes0. Include original separate read-only ResearchOnly-excluded count with exact classification/coverage or explicit unknown.",
+      "Preparation means read-only preview/build plus new draft/context/history only. After exact later approval, record approval before execution, rebuild unchanged source in owned temporary run, repeat full fresh preflight, then execute command. Continue within approved bounded scope; elapsed time alone is not a stop condition. Estimate actual duration from observed batch/queue progress, not old test throughput. Fatal guard, deadlock, statement timeout, unknown commit outcome or changed scope/build require stop with exact committed/remaining report, not relaxed checks or blind relaunch."
+    ],
+    "outOfScope": [
+      "Any code/test/README/validator/hook/rule/configuration change; service deployment/stop/restart; schema/index/trigger changes or bypasses; backups, new infrastructure, automations or broad lock diagnosis.",
+      "New strategies, changed exact children/parents, any Live order/submission/cancel/shadow change; current counters, flags, balances, settings or assignments; parent data and organic post-cutoff data. Ordinary derived accounting updates caused by approved historical inserts remain in scope.",
+      "Changing original cutoff, frozen source/plan, sufficient-depth/average-price/cap/counter/fee/Net/ROI model, original apply digest, provenance, deterministic IDs or marker semantics. No last-zero truncation or extension to current date.",
+      "Actual Production apply in the preparation turn, claiming old histories completed before final proof, editing completed contracts, pushing unrelated work or bypassing required validation."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "UTC; original two exact parents,status='Settled',entered_at_utc strictly before2026-09-03T05:32:51.200614Z; original retained source history, frozen2830/1882/31612manifest. No current or post-cutoff calculation extension.",
+    "firstVerification": "Full unchanged CLI preview started2026-09-04T17:15:30.732184Z,PREVIEW cutoff17:16:01.396355Z,exit0/PREVIEW_OK after101.887s,writes0. Independent native psql cutoff17:17:55.087174Z READ ONLY/UTC15s2s exactProduction confirms32chains by runs/orders/fills/signals and feeNet; all34Paper enabled/unpaused,events0/refresh0/inflight0,reconciliation34with0errors,marker0,lockwaiters0. Exacteab Running/Live heartbeat17:17:05.915377Z age49.195s,last_errorNULL; DashboardRunning initialized,NULLerror. Independent fresh activity427paper orders/latest17:17:30.382497Z and0api_errors since initial check17:11:44.300275Z. This is a readiness snapshot, not a guarantee that later queues/health stay unchanged."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Подготовить проверенный точный запуск без преждевременной записи в Production.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "Подготовь запуск восстановления",
+      "acceptanceCriteria": [
+        "Fresh build and full default read-only preview pass; independently verify current native counts and Production health/activity. Present exact remaining count, original period, batch/queue policy and semantic approval line.",
+        "Before later exact APPROVE, no --apply or Production mutation. Draft approval remains pending; read-only preparation does not approve itself. Product source unchanged and no new deploy required."
+      ],
+      "implementationPaths": ["Codex/Requirements/Contracts/RC-20260904-eth-progress34-resilient-apply.json", "Codex/Contexts/ContextPolyCopyTrader.md", "Codex/Contexts/History/ContextPolyCopyTrader-2026-09-04.md"],
+      "verification": [
+        {
+          "id": "VER-001", "kind": "inspection",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <owned-run>/artifacts -p:UseSharedCompilation=false -nodeReuse:false; dotnet <owned-run>/artifacts/bin/PolyCopyTrader.Service/debug/PolyCopyTrader.Service.dll --backfill-eth-progress34-history; independent psql READ ONLY per-ID run/order/fill/signal counts, source provenance, Net=Gross-fee, health/queues/errors/fresh-activity checks.",
+          "expected": "Build/preview exit0,writes0,original2830/1882/31612digests,32existing/31580remaining and no health/schema/collision contradiction.",
+          "result": "passed",
+          "evidence": "Build35.094s,121warnings/0errors. Source hash matches reviewed67/67-test published revision; no new test-run claim. Full31612-chain preview exit0/PREVIEW_OK101.887s; source/plan unchanged,verified_existing32,writes0. Independent psql0.976s exact34rows:16Up4each2/18Up8each0,32eachruns/orders/fills/signals/Net-consistent. Health/activity snapshot in scope.firstVerification. BuildlogSHA256DF7FE0A733E102A15586FD8850520FAC8DEE885A392736B3FEBB497DE9DBB446; preview8CE49B3D9D604BB209B14DC5032187B479AF74CA4F44C90E991162995A074AC4; independent81F4A37B9D0D70369152760B1CBCA045039AAFC7DDD98DB1FA32ECC434F100C7. Additional READ ONLY/UTC15s2s query at17:23:12.857474Z groups all exact34pre-cutoff runs by audit.parent_run_id and family: exactly2Up4groups,4a2e7447-b1ba-4a4c-ab1a-7a4ad3724fbe andeef173e4-fb64-43bb-a1a1-ff37ee31bd6b,each16runs/16distinct allowed children;noUp8group. This independently proves2complete existing parent batches and1880remaining. ExacteabRunningLive/heartbeat17:23:05.982917Z/NULLerror,lockwaiters0,newapi_errors0since17:17:55.087174Z. BatchchecklogSHA256B1916A78B700A27AC2408D9A224B96DFD8DF0FE173F1AE9006C9FFAEFB5AC60C. Compact evidence retained here before temporary cleanup."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "После точного позднего подтверждения выполнить прежнее восстановление всех34стратегий опубликованной командой и доказать полный итог.",
+      "sourceRequestIndexes": [1,2,3,4],
+      "sourceQuote": "Восстанови историю по всем добавленным Loss Diff Progress стратегиям",
+      "acceptanceCriteria": [
+        "After exact user approval only: recheck unchanged source SHA/deployed build, original plan and existing equivalent chains. Execute dotnet <owned-run>/artifacts/bin/PolyCopyTrader.Service/debug/PolyCopyTrader.Service.dll --backfill-eth-progress34-history --apply --approved-contract-digest sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2. Original CLI model digest remains separate from this operational approval.",
+        "Use only existing single-parent atomic transactions and approved resilient waits/backpressure. Report actual committed/remaining and UTC/stage; no write transaction while waiting. Do not change code/guards/parameters when waiting or failing. At fatal stop retain confirmed commits and report unresolved outcome.",
+        "Completion requires31612exact equivalent six-record historical chains and all34restored-only native counts/WinRate/fee-inclusiveNetPnL/NetROI matching the frozen plan. Ordinary projected lifetime totals must instead match restored plus preserved organic history. Require protected state unchanged by importer,valid final marker and verified zero-write repeat. Independent postchecks must confirm totals/state. Separately report original requested ResearchOnly-excluded count or exact remaining uncertainty; do not reclassify other trades.",
+        "Independent semantic reviewer compares literal requests, inherited approvals, unchanged actual code and execution evidence. Keep prior incomplete history records honest. Retain compact evidence, finish owned processes and protected temporary cleanup."
+      ],
+      "implementationPaths": ["Codex/Requirements/Contracts/RC-20260904-eth-progress34-resilient-apply.json", "Codex/Contexts/ContextPolyCopyTrader.md", "Codex/Contexts/History/ContextPolyCopyTrader-2026-09-04.md"],
+      "verification": [
+        {
+          "id": "VER-002", "kind": "inspection",
+          "command": "Approved exact standalone apply command above; fresh native psql independent exact34accounting/protected-state/marker postchecks; same command repeat with zero writes; original read-only ResearchOnly classification report.",
+          "expected": "Full31612native/ordinary histories verified,finalmarker valid,repeatwrites0,no unintended mutation; original separate classification count resolved or explicitly unknown.",
+          "result": "pending", "evidence": "Not executed. This turn prepares the run only; actual history remains32/31612."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved", "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260904-eth-progress34-resilient-apply sha256:9dbe1254a7b39ff2ced134f080777b88f4fa5145ccac92f265cdfb2b20fb70be",
+    "semanticDigest": "sha256:9dbe1254a7b39ff2ced134f080777b88f4fa5145ccac92f265cdfb2b20fb70be"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/restore_preparation_review", "comparedOriginalRequests": true,
+    "verdict": "pass", "findings": []
+  }
+}
