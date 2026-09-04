@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260904-paper-settlement-wallet-serialization",
+  "title": "Общая синхронизация одиночного и пакетного завершения Paper-сделок",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Эта проблема решаема?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, действуй"
+    }
+  ],
+  "scope": {
+    "goal": "После отдельного точного APPROVE устранить диагностированный конфликт одиночной и пакетной записи Paper settlement, подключив одиночный путь к существующей wallet-scoped синхронизации, и проверить неизменность результатов учёта.",
+    "inScope": [
+      "«Ок, действуй» относится к объяснённому исправлению: одиночный обработчик должен участвовать в существующей общей блокировке до записи settlement. Этот draft фиксирует предлагаемый способ и границы для позднейшего точного APPROVE; краткий ответ не считается approval semantic digest.",
+      "Ровно четыре продуктовых/тестовых/документационных пути: src/PolyCopyTrader.Storage/PostgresAppRepository.cs, tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs, tests/PolyCopyTrader.Tests/StorageTests.cs, README.md. В runtime-файле менять только TryAddPaperPositionSettlementAsync; существующий LockPaperWalletsAsync переиспользовать без изменения его ключа, порядка или реализации.",
+      "Одиночная запись открывает короткую транзакцию, до INSERT берёт существующий transaction advisory lock для settlement.CopiedTraderWallet, привязывает прежний INSERT к этой транзакции и возвращает прежний bool только после успешного commit. Lock удерживается до конца транзакции; отмена/ошибка освобождает его через rollback/dispose. Это локальная атомарность записи PostgreSQL, не новая семантика исполнения ордера на бирже.",
+      "Общий метод действует для всех его существующих Paper settlement вызовов, включая BtcUpDown5mPaperStrategyProcessor.SettleDueRunAsync; не ограничивать исправление 34 Progress-стратегиями. Пакетный PersistPaperPositionSettlementBatchAsync уже использует тот же LockPaperWalletsAsync через LockPaperPositionKeysAsync и остаётся неизменным. Каталог, обработчики стратегий и их расчёты не меняются.",
+      "Сохранить исходный INSERT, передаваемые поля, nullable fee/Net evidence, ON CONFLICT(copied_trader_wallet,asset_id) DO NOTHING, первый успешно записанный результат и bool inserted/not-inserted. Не переносить закрытие позиции, изменение run или счётчиков внутрь новой одиночной транзакции; эти последующие операции сохраняют нынешние границы.",
+      "Сфокусированные C# и PostgreSQL concurrency/regression проверки в отдельной принадлежащей задаче loopback базе с реальными singleton/batch repository methods и существующими production-schema triggers. Только в тестовой схеме разрешены необходимые управляемые барьеры/ошибки; никаких тестовых hooks в runtime-коде. Проверить обе очередности singleton/batch, дубликаты, разные кошельки, commit/rollback/cancellation и неизменность сохранённых финансовых полей.",
+      "После APPROVE ориентир реализации, изолированных тестов и обязательного независимого semantic review — 1–2 часа, не жёсткий лимит. Короткая README-заметка описывает границы исправления, проверку и отсутствие обещания устранить все возможные deadlocks. Обязательные context/history/gate записи, scoped commit/push по workflow; чужие незавершённые изменения не включать.",
+      "Все будущие временные тестовые PostgreSQL/build/TRX/diagnostic артефакты только в маркированном D:/CodexTemp run через codex-temp-lifecycle, с изолированным проверенным endpoint и защищённой очисткой. На этапе этого draft временные артефакты и Production запросы не нужны."
+    ],
+    "outOfScope": [
+      "Production writes, выкладка/перезапуск/остановка сервиса, Live-ордера/флаги/балансы, отмена запросов, backup, изменение PostgreSQL schema/triggers/indexes/configuration или глобальная блокировка базы/сервиса.",
+      "Возобновление Progress34 history import, пересчёт/изменение старых результатов, source/manifest/ServiceVersion/health guards и любые изменения прежних контрактов восстановления. История и пользовательская выкладка остаются отдельными этапами.",
+      "Изменение стратегий, условий входа, размеров ставок, LossDiff/Progress/counters, цен, комиссии, Gross/Net PnL/ROI, Paper/Live execution intent или классификации ResearchOnly/ordinary metrics.",
+      "Изменение batch settlement, wallet-lock helper, position updates, Dashboard ack/projection, performance queue triggers, retention, других workers, публичных интерфейсов или connection factory. Если тесты покажут необходимость такого расширения, остановиться и запросить новый контракт до этих правок.",
+      "Новые retry loops, повышение таймаутов, проглатывание ошибок, SKIP LOCKED-пропуск settlement, отказ от записей для избежания ожидания или рефакторинг/общая инфраструктура блокировок.",
+      "Гарантия отсутствия любых будущих PostgreSQL deadlocks, утверждение о точном воспроизведении неизвестных исторических wallet/asset/strategy IDs, поиск/восстановление конкретных пострадавших сделок или общий аудит всех блокировок."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Локальный D:/My/Business/PolyMarket, исходный HEAD32c5bc01932f9e01ed5efad1bae315e8517fb6ea. Runtime scope — все существующие вызовы TryAddPaperPositionSettlementAsync, без исторического окна/фильтра стратегий. Основание: Production incident8d5fa8cc-6509-4537-bb49-8e9ece2a8f6f at2026-09-03T20:42:36.303471Z, singletonPID13880/tx947268060 и batchPID564/tx947268034; соседний цикл20:42:37Z того же batch с singletonPID7428/tx947268074. Диагностика ранее сверена с deployed3aa0dc5c62ed84377158d822eb6c720ffbd1aca9; это не новая проверка текущего Production состояния.",
+    "firstVerification": "До продуктовых правок повторно сверить git/status, отсутствие перекрывающихся правок целевого метода, runtime dispatch и существующие lock helpers. Исходные SHA256: repositoryA14E181CC8AA339347257B50BF20EC03CE336D675ACF0C79FFD8DEBD41E61544; PaperSettlementPostgresIntegrationTestsB2B29256C2E392F19B70ED632AFFEFF7B6F498984687B41C8A25F7DE02AC01E5; StorageTestsC3156966A53BD24FF1F53FA17A84FDA27677AD52771EB0BB982EA52B42F12051. До тестовых mutations независимо проверить loopback endpoint/database/data_directory, не использовать Production credentials. Сначала продемонстрировать старый singleton/batch lock cycle в локальном регрессионном сценарии, затем проверить исправление."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Подключить одиночную запись Paper settlement к существующему wallet-scoped transaction lock до любых settlement/queue writes, сохранив текущий контракт данных и результата.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "До runtime/test/README edits получено позднейшее точное APPROVE этого digest и записано отдельным approval-only commit. Draft и обсуждение не считаются разрешением на продуктовые изменения.",
+        "TryAddPaperPositionSettlementAsync начинает транзакцию и получает существующий LockPaperWalletsAsync для точного CopiedTraderWallet до выполнения прежнего INSERT. SQL-команда использует эту же транзакцию; bool возвращается после commit. Нет нового глобального lock, иной нормализации кошелька или другого advisory key.",
+        "Одиночная запись, конкурирующая с batch по общему wallet, ожидает на общей advisory lock до захвата settlement/queue ресурсов. После освобождения lock операция завершается либо вставкой, либо прежним false при существующем unique(wallet,asset), без взаимного ожидания найденного класса. Проверка разных wallet lock keys не показывает введённой глобальной сериализации.",
+        "Новый детерминированно управляемый PostgreSQL тест с реальными singleton/batch методами и очередью воспроизводит 40P01 на исходном методе, а на исправленном оба пути завершаются без 40P01 и дублей. Фиксируются реально наблюдённые блокирующие PID/тип ожидания, а не только elapsed-time предположение. Тест проверяет найденный механизм, не неизвестные исходные параметры инцидента.",
+        "Проверены singleton-first и batch-first, один и несколько settlement keys общего wallet, commit и rollback тестового блокировщика. При success/duplicate/error/cancellation транзакция завершается, lock освобождается, позднейший корректный вызов проходит; существующий первый settlement не перезаписывается.",
+        "Сырые строки и независимый подсчёт по allowlist тестовых wallet/asset keys совпадают с ожидаемыми counts и суммами cost/settlement value/Gross/fees/Net. Ненулевая известная комиссия и nullable Net для неизвестной комиссии сохраняются точно. Ошибка после INSERT не оставляет частичного settlement/его trigger side effects; конкурентное завершение не восстанавливает открытую позицию.",
+        "За пределами TryAddPaperPositionSettlementAsync runtime diff отсутствует. Существующие batch ordering/transactions, helpers, стратегии/счётчики, position/run updates, source labels, price/size/fees и projection formulas не изменены. Прежний conflict winner не заменяется новым правилом приоритета источников."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~PaperSettlementPostgresIntegrationTests\" --logger \"trx;LogFileName=paper-settlement-wallet-integration.trx\" -p:UseSharedCompilation=false -nr:false",
+          "expected": "Все существующие и новые tests действительно выполняются в owned PostgreSQL fixture, не проходят через отсутствие connection string. Старый concurrent сценарий документирован как ожидаемый 40P01; финальный метод проходит обе очередности, wallet scoping, unique duplicate, rollback/cancellation/recovery и независимые raw fee/Net/count checks без пропусков.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~PaperSettlementProcessorTests|FullyQualifiedName~PaperCopiedTraderPerformancePostgresIntegrationTests|FullyQualifiedName~StorageTests.PostgresRepository_SinglePaperPositionMutationsUseWalletLockTransactionContract|FullyQualifiedName~StorageTests.PostgresRepository_MarketPaperPositionsAndSettlementPersistenceAreSetBased|FullyQualifiedName~StorageTests.PostgresRepository_SingleSettlementUsesWalletLockTransactionContract\" --logger \"trx;LogFileName=paper-settlement-wallet-regressions.trx\" -p:UseSharedCompilation=false -nr:false",
+          "expected": "Существующие settlement processor/performance PostgreSQL и lock contract tests, плюс новый source contract test singleton, проходят без отсутствующих/пропущенных обязательных fixtures. Источник кода для source assertions — именно проверяемый checkout, не посторонний рабочий каталог.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Подготовить проверенное локальное исправление к отдельной пользовательской выкладке, не меняя Production и не запуская восстановление истории.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Service build проходит; предупреждения/ошибки, исходный failing regression и финальные passing результаты отражены честно. Формулы не меняются; заявляется проверка конкретного singleton/batch конфликта, не всех возможных блокировок.",
+        "README содержит только краткую заметку об этом исправлении: что изменилось, как собрать/проверить и что Production deployment/history import этим этапом не выполнялись. Существующая незавершённая README-правка Progress34 сохраняется отдельно и не включается в этот commit.",
+        "Независимый reviewer сравнивает verbatim запрос, approved contract, фактический diff и доказательства; перед завершением требуется pass без открытых findings. Проверки contract/working tree/staged/range выполняются без обхода gate и без присвоения чужих изменений.",
+        "Нет Production writes/deployment/restart/Live/backup/history import. Изолированный тестовый PostgreSQL остановлен, временные процессы завершены и marked run удалён защищённой очисткой после сохранения необходимых доказательств; чужие временные каталоги не удаляются."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\" -p:UseSharedCompilation=false -nr:false",
+          "expected": "Exit0; TEMP/TMP/TMPDIR и disposable outputs находятся в принадлежащем задаче marked D:/CodexTemp run. Сборка не запускает service или history command.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Independent semantic review of exact approved contract, four-path diff and test evidence; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree, -Mode Staged and scoped -Mode Range; git diff --check; protected temporary run cleanup verification.",
+          "expected": "Независимый pass без findings, все gates pass на точном изменении и approval checkpoint, нет изменения runtime вне одного метода/Production. Прежние незавершённые Progress34 артефакты сохранены и исключены из scoped commit. Owned temporary run отсутствует после очистки.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260904-paper-settlement-wallet-serialization sha256:b17f8f2e635f5ed337eb4c7c3d9b4369bd39c37a8a7989e794ac87d4c8f4fa5d",
+    "semanticDigest": "sha256:b17f8f2e635f5ed337eb4c7c3d9b4369bd39c37a8a7989e794ac87d4c8f4fa5d"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/settlement_wallet_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
