@@ -3,7 +3,7 @@
   "contractId": "RC-20260904-paper-settlement-wallet-serialization",
   "title": "Общая синхронизация одиночного и пакетного завершения Paper-сделок",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -63,17 +63,17 @@
           "id": "VER-001",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~PaperSettlementPostgresIntegrationTests\" --logger \"trx;LogFileName=paper-settlement-wallet-integration.trx\" -p:UseSharedCompilation=false -nr:false",
-          "expected": "Все существующие и новые tests действительно выполняются в owned PostgreSQL fixture, не проходят через отсутствие connection string. Старый concurrent сценарий документирован как ожидаемый 40P01; финальный метод проходит обе очередности, wallet scoping, unique duplicate, rollback/cancellation/recovery и независимые raw fee/Net/count checks без пропусков.",
-          "result": "pending",
-          "evidence": ""
+         "expected": "Все существующие и новые tests действительно выполняются в owned PostgreSQL fixture, не проходят через отсутствие connection string. Старый concurrent сценарий документирован как ожидаемый 40P01; финальный метод проходит обе очередности, wallet scoping, unique duplicate, rollback/cancellation/recovery и независимые raw fee/Net/count checks без пропусков.",
+          "result": "passed",
+          "evidence": "2026-09-04 final combined39-test run on owned PostgreSQL18.6 UTC127.0.0.1:52127/pct_codex_wallet_count_20260904 executes all15 settlement tests:15pass0skip, all8 controlled races observe advisory blocking and both tasks completing; raw financial fields/counts, knownfees/nullableNet, duplicate/cancel/rollback/retry invariants pass. TRX SHA2561A942C0EFA8C93A48DCC3C21BD520679629DC24832A12F4FF48CEBD50D0483A4. Prior old-runtime proof retained in dailyhistory2026-09-04:4batch-first40P01 plus4singleton-first missingadvisory failures,oldTRX9565D9B95A0DFEB93BD3B310C5A8D7640E15E6DA696F3EB2F152088052292D92. No future/Production guarantee."
         },
         {
           "id": "VER-002",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~PaperSettlementProcessorTests|FullyQualifiedName~PaperCopiedTraderPerformancePostgresIntegrationTests|FullyQualifiedName~StorageTests.PostgresRepository_SinglePaperPositionMutationsUseWalletLockTransactionContract|FullyQualifiedName~StorageTests.PostgresRepository_MarketPaperPositionsAndSettlementPersistenceAreSetBased|FullyQualifiedName~StorageTests.PostgresRepository_SingleSettlementUsesWalletLockTransactionContract\" --logger \"trx;LogFileName=paper-settlement-wallet-regressions.trx\" -p:UseSharedCompilation=false -nr:false",
-          "expected": "Существующие settlement processor/performance PostgreSQL и lock contract tests, плюс новый source contract test singleton, проходят без отсутствующих/пропущенных обязательных fixtures. Источник кода для source assertions — именно проверяемый checkout, не посторонний рабочий каталог.",
-          "result": "pending",
-          "evidence": ""
+         "expected": "Существующие settlement processor/performance PostgreSQL и lock contract tests, плюс новый source contract test singleton, проходят без отсутствующих/пропущенных обязательных fixtures. Источник кода для source assertions — именно проверяемый checkout, не посторонний рабочий каталог.",
+          "result": "passed",
+          "evidence": "Resolved under separate user-approved RC-20260904-paper-wallet-lock-test-count, approval-onlybd4aa7a5. Exact shared-retention-key exclusion in otherwise unchanged performance-test helper preserves all original expected counts/assertions. Final combined run executes this full24-test subset:14performance+7processor+3Storage allpass0skip; both formercountfailurespass. TRX1A942C0EFA8C93A48DCC3C21BD520679629DC24832A12F4FF48CEBD50D0483A4. Previous22/24fail and independently observed exactShareLock1346589778/1/objsubid2 retained in dailyhistory; no exclusion of otherkeys/modes and no runtime/schema/trigger change."
         }
       ]
     },
@@ -99,17 +99,17 @@
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\" -p:UseSharedCompilation=false -nr:false",
-          "expected": "Exit0; TEMP/TMP/TMPDIR и disposable outputs находятся в принадлежащем задаче marked D:/CodexTemp run. Сборка не запускает service или history command.",
-          "result": "pending",
-          "evidence": ""
+         "expected": "Exit0; TEMP/TMP/TMPDIR и disposable outputs находятся в принадлежащем задаче marked D:/CodexTemp run. Сборка не запускает service или history command.",
+          "result": "passed",
+          "evidence": "Isolated approved five-path checkout atbd4aa7a5, original3sourcehashespreserved. Explicit servicebuild exit0/0warnings/0errors incremental, logSHA25635D7D930B093F52DE91BE27E5F25CB81DDCA27319B9EE7A580C34B9F67B43DFF. Full test/dependency build exit0,126existingwarnings/0errors,log9BB694A34D909EBEC9F493345DC618C7EDDD6E61644CB876531161D12D37C566. Alloutputs/temp under ownedrunmanual-4618844e78ad4d8095339777947cd045,cachesD:/CodexTemp/shared. No service/Production/history invocation."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Independent semantic review of exact approved contract, four-path diff and test evidence; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree, -Mode Staged and scoped -Mode Range; git diff --check; protected temporary run cleanup verification.",
-          "expected": "Независимый pass без findings, все gates pass на точном изменении и approval checkpoint, нет изменения runtime вне одного метода/Production. Прежние незавершённые Progress34 артефакты сохранены и исключены из scoped commit. Owned temporary run отсутствует после очистки.",
-          "result": "pending",
-          "evidence": ""
+         "expected": "Независимый pass без findings, все gates pass на точном изменении и approval checkpoint, нет изменения runtime вне одного метода/Production. Прежние незавершённые Progress34 артефакты сохранены и исключены из scoped commit. Owned temporary run отсутствует после очистки.",
+          "result": "passed",
+          "evidence": "Independent agent:/root/settlement_wallet_review reviewed both exact approvals, actualfivepathdiff, originalfailure evidence and fresh39/39TRX/build; semanticPASS nofindings. Originalruntime6+/1- confinedtosingleton; originalSQL/fields/helpers/batch unchanged; threeoriginalsourcehashespreserved. Scope-specific WorkingTree/Staged/Range gates, cleanup and commit outcomes recorded in dailyhistory2026-09-04 during finalization. Publication of the branch has a separate pre-existing blocker: rangeorigin/master..bd4aa7a5 failsCONTRACT_NOT_PREAPPROVED in oldcommit3aa0dc5c forRC-20260903-eth-progress34-partial-history-backfill; no force/push/gate bypass or alteration of that commit."
         }
       ]
     }
@@ -124,8 +124,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/settlement_wallet_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

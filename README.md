@@ -105,6 +105,30 @@ version preservation and replay; also run `DashboardSnapshotTests` and
 `DashboardProjectionCalculatorTests`, then build `src/PolyCopyTrader.Service`.
 Deployment and history restoration are separate operations, not part of this fix.
 
+### Singleton Paper settlement wallet serialization
+
+`TryAddPaperPositionSettlementAsync` takes the same existing wallet-scoped
+transaction advisory lock as the batch settlement path, before its original
+INSERT. It commits before returning the inserted/duplicate result; errors and
+cancellation dispose the uncommitted transaction. Settlement fields, fees/Net
+accounting, duplicate handling and later position/run updates are unchanged.
+This targets the observed singleton/batch lock-order conflict, not all possible
+PostgreSQL deadlocks.
+
+Build `src/PolyCopyTrader.Service`. Run
+`PaperSettlementPostgresIntegrationTests`,
+`PaperSettlementProcessorTests`, `PaperCopiedTraderPerformancePostgresIntegrationTests`
+and the `StorageTests.PostgresRepository_SingleSettlementUsesWalletLockTransactionContract`,
+`PostgresRepository_SinglePaperPositionMutationsUseWalletLockTransactionContract`
+and `PostgresRepository_MarketPaperPositionsAndSettlementPersistenceAreSetBased`
+filters. The new integration tests require `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION`
+to name a disposable loopback `pct_codex_*` database whose data directory is under
+`D:/CodexTemp/runs`; set `POLYCOPYTRADER_REPOSITORY_ROOT` to the tested checkout
+and keep build/results/temp paths under the owned marked run. They exercise both
+start orders, duplicates, wallet independence, rollback/cancellation and raw
+financial fields. Service deployment and history import remain separate steps;
+neither is performed by this correction.
+
 ```powershell
 dotnet build
 ```

@@ -2503,7 +2503,9 @@ SELECT count(*)::integer
 FROM pg_locks
 WHERE pid = @BackendPid
   AND locktype = 'advisory'
-  AND granted;
+  AND granted
+  -- Wallet counts exclude only the existing shared retention gate.
+  AND NOT (classid = 1346589778 AND objid = 1 AND objsubid = 2 AND mode = 'ShareLock');
 """,
             connection);
         command.Parameters.AddWithValue("BackendPid", backendPid);

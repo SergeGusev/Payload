@@ -3,7 +3,7 @@
   "contractId": "RC-20260904-paper-wallet-lock-test-count",
   "title": "Уточнить подсчёт wallet-блокировок в существующих PostgreSQL тестах",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -55,25 +55,25 @@
           "id": "VER-001",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~PaperSettlementPostgresIntegrationTests|FullyQualifiedName~PaperSettlementProcessorTests|FullyQualifiedName~PaperCopiedTraderPerformancePostgresIntegrationTests|FullyQualifiedName~StorageTests.PostgresRepository_SinglePaperPositionMutationsUseWalletLockTransactionContract|FullyQualifiedName~StorageTests.PostgresRepository_MarketPaperPositionsAndSettlementPersistenceAreSetBased|FullyQualifiedName~StorageTests.PostgresRepository_SingleSettlementUsesWalletLockTransactionContract\" --logger \"trx;LogFileName=paper-wallet-lock-test-count.trx\" -p:UseSharedCompilation=false -nr:false",
-          "expected": "39tests pass,0skip, owned PostgreSQL18/UTC; исходные expected1/2 и все финансовые/concurrency assertions сохранены.",
-          "result": "pending",
-          "evidence": ""
+         "expected": "39tests pass,0skip, owned PostgreSQL18/UTC; исходные expected1/2 и все финансовые/concurrency assertions сохранены.",
+          "result": "passed",
+          "evidence": "Fresh owned PostgreSQL18.6 loopback127.0.0.1:52127/pct_codex_wallet_count_20260904,UTC,exactdata_directory under markedrunmanual-4618844e78ad4d8095339777947cd045 verifiedempty0publictablesbeforeinit. Combinedapprovedfilter39executed39pass0skip:15settlement/14performance/7processor/3Storage. Former2countfailurespass withunchangedexpectations. All8singleton/batchvariantsobserveadvisorywait. TRX1A942C0EFA8C93A48DCC3C21BD520679629DC24832A12F4FF48CEBD50D0483A4. TESTconnectionexplicitlyowned andsourceassertrootisolated; runtime/sourcehashes521A1117/DEB86679/B80CC8C8 unchanged."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\" -p:UseSharedCompilation=false -nr:false",
-          "expected": "Exit0; сервис не запускается; временные outputs под owned run.",
-          "result": "pending",
-          "evidence": ""
+         "expected": "Exit0; сервис не запускается; временные outputs под owned run.",
+          "result": "passed",
+          "evidence": "Explicit servicebuild succeeds exit0/0warnings/0errors incremental,logSHA25635D7D930B093F52DE91BE27E5F25CB81DDCA27319B9EE7A580C34B9F67B43DFF. Full test/dependency build exit0,126existingwarnings/0errors,log9BB694A34D909EBEC9F493345DC618C7EDDD6E61644CB876531161D12D37C566. OutputsandTEMP/TMP/TMPDIR belowownedrun; no service/history run."
         },
         {
           "id": "VER-003",
           "kind": "inspection",
           "command": "Independent actual-diff review of both approved contracts and evidence; Validate-RequirementContract.ps1 WorkingTree/Staged/Range; git diff --check; protected owned-run cleanup.",
-          "expected": "Независимый pass без findings; один дополнительный тестовый путь, неизменённый runtime и ранее одобренные четыре пути; gates pass, owned run отсутствует.",
-          "result": "pending",
-          "evidence": ""
+         "expected": "Независимый pass без findings; один дополнительный тестовый путь, неизменённый runtime и ранее одобренные четыре пути; gates pass, owned run отсутствует.",
+          "result": "passed",
+          "evidence": "Independent agent:/root/settlement_wallet_review semanticPASS forbothcontracts,verbatimapprovals,exactfivepathdiff andfresh39tests/build, noopenfindings. Additionaltestdiff3+/1- onlyexactShareLock exclusion/comment,allassertionsunchanged; testSHA25628D26EFE43EA38E1D48488AE8EE1CD120272B138B83B387782C7BDFC62EA94C3. Finalscopedgates,protectedcleanup/localcommit recordedindailyhistory2026-09-04; pre-existing3aa0dc5c historicalgatefailure blocks publishingbranch independently ofthischange,no bypass."
         }
       ]
     }
@@ -88,8 +88,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/settlement_wallet_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

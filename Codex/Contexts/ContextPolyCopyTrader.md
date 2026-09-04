@@ -1,3 +1,16 @@
+## Active Update 2026-09-04 Wallet Settlement Serialization Verified
+Goal: Complete approved singleton wallet serialization and exact shared-retention-lock exclusion in the existing test helper, without Production/history changes.
+Status: Completed locally; branch publication blocked by a pre-existing commit
+Done:
+- Approval-only checkpoints8b9a2afb andbd4aa7a56e9846c1f4f6f7a14b9a5cbe73ef824c precede their respective edits. Both semantic digests unchanged (b17f8f2e...f4fa5d and48b98f5d...46d56); independent semantic review agent:/root/settlement_wallet_reviewPASS/nofindings.
+- Runtime6+/1- remains onlyTryAddPaperPositionSettlementAsync: begintransaction,existingexact-walletlock,unchangedINSERT/fields/conflict,committhenbool. Additionaltesthelper3+/1- excludesonlyShareLock1346589778/1/objsubid2; alloriginalassertions preserved. Nochange tofees/Net/counters/strategies/batch/helperruntime/positionrun boundaries.
+- Fresh39/39tests pass,0skip:15settlement,14performance,7processor,3Storage. Bothformerfailurespass; all8singleton/batchcasesobserveadvisorywait andcompletion. Originalold40P01 evidence retained in scoped dailyhistory. TRX1A942C0EFA8C93A48DCC3C21BD520679629DC24832A12F4FF48CEBD50D0483A4.
+- Explicitservicebuildexit0/0warnings/0errors incremental; fulltestbuild126existingwarnings/0errors. Approvedfivepathisolatedcheckout andmainstagedGitblobs independentlymatched. WorkingTree gate onisolatedexactscopePASS(5governed/2contracts); mainStaged gate anddiffcheckPASS. PriorProgress34 source/test/contract andREADME5+/3- hunk excluded.
+- OwnedPG18.6loopback/UTC stopped afterexactidentity,0othersessions,0remainingnewtestsettlements checks. Protectedcleanup removedonlymanual-4618844e78ad4d8095339777947cd045(5008files/1375825962bytes); runabsenceverified,exactworktreeregistrationremoved. Oldstalerun/registrationuntouched. Evidencepreservedbeforecleanup.
+Next: None within local correction. Publication requires separately resolving the already-existing historical requirement-gate violation; no history import/deployment follows automatically.
+Notes: Localimplementationcommit/scopedRange results followindailyhistory. Fullorigin/master..bd4aa7a5 alreadyfailsCONTRACT_NOT_PREAPPROVED atold3aa0dc5c becauseRC-20260903-eth-progress34-partial-history-backfill wasfirstaddedwithproductchanges. Remote4e791c2c matchesorigin/master; noforcepush/rebase/historyrewrite/gatebypass attempted.
+Blockers: Publishingcurrentbranch isblockedbythepre-existing3aa0dc5c approval-order violation, notbythesettlementfix/tests. NoProductionqueries/writes/service/Live/history operations.
+
 ## Active Update 2026-09-03 Dashboard Event Ack Nonblocking Completed
 Goal: Complete only the approved local Dashboard final event acknowledgement correction.
 Status: Completed locally; not deployed and history not resumed

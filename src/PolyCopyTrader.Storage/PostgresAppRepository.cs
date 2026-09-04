@@ -3013,6 +3013,8 @@ ORDER BY updated_at_utc DESC, copied_trader_wallet ASC, asset_id ASC;
 	public async Task<bool> TryAddPaperPositionSettlementAsync(PaperPositionSettlement settlement, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
+		await LockPaperWalletsAsync(connection, transaction, [settlement.CopiedTraderWallet], cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO paper_position_settlements (
     id, copied_trader_wallet, asset_id, condition_id, outcome, winning_asset_id, winning_outcome,
@@ -3030,6 +3032,7 @@ INSERT INTO paper_position_settlements (
 ON CONFLICT (copied_trader_wallet, asset_id) DO NOTHING
 RETURNING 1;
 """);
+		command.Transaction = transaction;
 		command.Parameters.AddWithValue("Id", settlement.Id);
 		command.Parameters.AddWithValue("CopiedTraderWallet", settlement.CopiedTraderWallet);
 		command.Parameters.AddWithValue("AssetId", settlement.AssetId);
@@ -3056,7 +3059,9 @@ RETURNING 1;
 		command.Parameters.AddWithValue("FeeTakerOnly", settlement.FeeTakerOnly.HasValue ? settlement.FeeTakerOnly.Value : (object)DBNull.Value);
 		command.Parameters.AddWithValue("FeeCalculatedAtUtc", NullableDateTime(settlement.FeeCalculatedAtUtc));
 		command.Parameters.AddWithValue("NetRealizedPnlUsd", NullableDecimal(settlement.NetRealizedPnlUsd));
-		return await command.ExecuteScalarAsync(cancellationToken) is not null;
+		bool inserted = await command.ExecuteScalarAsync(cancellationToken) is not null;
+		await transaction.CommitAsync(cancellationToken);
+		return inserted;
 	}
 
 	public async Task<int> PersistPaperPositionSettlementBatchAsync(

@@ -1820,6 +1820,32 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public void PostgresRepository_SingleSettlementUsesWalletLockTransactionContract()
+    {
+        var source = ReadStorageRepositorySource();
+        var start = source.IndexOf("public async Task<bool> TryAddPaperPositionSettlementAsync", StringComparison.Ordinal);
+        Assert.True(start >= 0);
+        var end = source.IndexOf("public async Task<int> PersistPaperPositionSettlementBatchAsync", start, StringComparison.Ordinal);
+        Assert.True(end > start);
+        var method = source[start..end];
+        var begin = method.IndexOf("await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken)", StringComparison.Ordinal);
+        var walletLock = method.IndexOf("await LockPaperWalletsAsync(connection, transaction, [settlement.CopiedTraderWallet], cancellationToken)", StringComparison.Ordinal);
+        var insert = method.IndexOf("INSERT INTO paper_position_settlements", StringComparison.Ordinal);
+        var binding = method.IndexOf("command.Transaction = transaction", StringComparison.Ordinal);
+        var execute = method.IndexOf("bool inserted = await command.ExecuteScalarAsync(cancellationToken) is not null", StringComparison.Ordinal);
+        var commit = method.IndexOf("await transaction.CommitAsync(cancellationToken)", StringComparison.Ordinal);
+        var result = method.IndexOf("return inserted", StringComparison.Ordinal);
+        Assert.True(begin >= 0 && walletLock > begin && insert > walletLock);
+        Assert.True(binding > insert && execute > binding && commit > execute && result > commit);
+        Assert.Contains("ON CONFLICT (copied_trader_wallet, asset_id) DO NOTHING", method, StringComparison.Ordinal);
+        Assert.Contains("NullableDecimal(settlement.NetRealizedPnlUsd)", method, StringComparison.Ordinal);
+        Assert.Contains("NullableDateTime(settlement.FeeCalculatedAtUtc)", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("paper_positions", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("LockPaperPositionKeysAsync", method, StringComparison.Ordinal);
+        Assert.DoesNotContain("catch", method, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PostgresRepository_SinglePaperPositionMutationsUseWalletLockTransactionContract()
     {
         var source = ReadStorageRepositorySource();
