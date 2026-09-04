@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260904-paper-wallet-lock-test-count",
+  "title": "Уточнить подсчёт wallet-блокировок в существующих PostgreSQL тестах",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, действуй"
+    },
+    {
+      "source": "user",
+      "text": "APPROVE RC-20260904-paper-settlement-wallet-serialization sha256:b17f8f2e635f5ed337eb4c7c3d9b4369bd39c37a8a7989e794ac87d4c8f4fa5d"
+    }
+  ],
+  "scope": {
+    "goal": "Предлагаемое отдельное разрешение на один дополнительный тестовый файл, необходимое для завершения проверки уже одобренного singleton settlement fix; этот draft не разрешает его изменение.",
+    "inScope": [
+      "После позднейшего точного APPROVE менять только tests/PolyCopyTrader.Tests/PaperCopiedTraderPerformancePostgresIntegrationTests.cs: в существующем CountGrantedAdvisoryLocksAsync исключить из подсчёта ровно подтверждённую shared retention advisory lock (classid=1346589778,objid=1,objsubid=2,mode=ShareLock). Сохранить pid/locktype/granted фильтры и все численные ожидания/прочие assertions. Короткий комментарий объясняет исключение; без переименований или других изменений тестов.",
+      "Основание: обязательный VER-002 первоначального контракта дал 22 pass/2 fail. Два неизменённых теста ожидают соответственно1 и2 wallet locks, но их helper считает также существующую shared retention lock. Прямой READ ONLY pg_locks snapshot в owned loopback базе подтвердил дополнительный ключ1346589778/1/objsubid2/ShareLock в обоих backends. Изменённый singleton до этих assertions не вызывается. Никакая блокировка не отключается; тест начинает считать только нужный ему набор.",
+      "После исправления повторить все15 PaperSettlementPostgresIntegrationTests и весь исходный VER-002 (24 tests), build сервиса и независимый actual-diff review. Исходное доказательство old40P01 сохраняется в daily history; runtime поправка первоначального контракта и её четыре пути не расширяются этим контрактом.",
+      "Ориентир после approval 20–40 минут на owned PostgreSQL18 fixture/build/tests/review/gates, не жёсткий лимит. Обязательные contract/context/history, отдельный approval-only commit перед новым test edit, последующий scoped implementation commit/push по workflow. Временные артефакты только marked D:/CodexTemp run с защищённой очисткой; чужие незавершённые изменения не включать."
+    ],
+    "outOfScope": [
+      "Любое изменение runtime-кода, PostgreSQL schema/triggers/lock helpers/retention gate, trading/settlement/accounting/fee/Net/strategy/counter поведения в рамках этого дополнительного контракта.",
+      "Изменение численных ожиданий, пропуск тестов, отключение retention trigger/gate, исключение всех shared/advisory locks вместо одного точного известного ключа, ослабление первоначальных acceptance criteria.",
+      "Production queries/writes, deployment/restart/stop, Live/балансы/ордера, история34, backup, retry/timeout изменения, новые тестовые инфраструктуры и другие файлы."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Только указанная тестовая функция в D:/My/Business/PolyMarket. Существующие14 performance PostgreSQL cases входят в исходный VER-002. Runtime lock observation2026-09-04 около06:53UTC в owned127.0.0.1:52127/pct_codex_wallet_20260904, PostgreSQL18.6/UTC, data_directoryD:/CodexTemp/runs/manual-bbb3172b795a422a946d3923fb209698/db/pgdata; не Production.",
+    "firstVerification": "Сверить исходный дополнительный тестовый файл с approval-parent8b9a2afb (он не менялся), исходный helper и обе failing assertions907/1517; re-read сохранённое raw lock evidence в history2026-09-04. Перед новой локальной тестовой mutation независимо подтвердить owned loopback database/data_directory/UTC и отсутствие Production credentials. Сохранить три уже проверенных source hashes и незавершённые Progress34 изменения."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Исправить только подсчёт блокировок в существующих tests, чтобы завершить обязательную проверку согласованного singleton settlement fix без изменения сервиса.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Получено позднейшее точное APPROVE этого semantic digest и записано отдельным approval-only commit до изменения дополнительного тестового файла.",
+        "В CountGrantedAdvisoryLocksAsync добавлено только исключение точной granted shared retention lock1346589778/1/objsubid2/ShareLock и поясняющий комментарий. Иные ключи/режимы продолжают учитываться; все имеющиеся assertions и expected counts остаются прежними.",
+        "Все15 settlement integration и24 исходных regression tests действительно выполняются на owned PostgreSQL18 и проходят,0skip. Source assertions читают проверяемый checkout. Сервис собирается; исходный runtime singleton fix остаётся побайтно/нормализованно тем же, вне метода изменений нет.",
+        "Независимый reviewer сопоставил verbatim request, оба approved contracts, actual diff, raw snapshots и тесты; pass без findings. Первоначальный контракт не объявляется completed при failed VER-002.",
+        "Нет Production/Live/history операции. Обязательные gates/scoped commit/push не обходятся; чужие изменения сохранены. Owned test server остановлен, marked run удалён защищённой очисткой."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/PaperCopiedTraderPerformancePostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~PaperSettlementPostgresIntegrationTests|FullyQualifiedName~PaperSettlementProcessorTests|FullyQualifiedName~PaperCopiedTraderPerformancePostgresIntegrationTests|FullyQualifiedName~StorageTests.PostgresRepository_SinglePaperPositionMutationsUseWalletLockTransactionContract|FullyQualifiedName~StorageTests.PostgresRepository_MarketPaperPositionsAndSettlementPersistenceAreSetBased|FullyQualifiedName~StorageTests.PostgresRepository_SingleSettlementUsesWalletLockTransactionContract\" --logger \"trx;LogFileName=paper-wallet-lock-test-count.trx\" -p:UseSharedCompilation=false -nr:false",
+          "expected": "39tests pass,0skip, owned PostgreSQL18/UTC; исходные expected1/2 и все финансовые/concurrency assertions сохранены.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\" -p:UseSharedCompilation=false -nr:false",
+          "expected": "Exit0; сервис не запускается; временные outputs под owned run.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Independent actual-diff review of both approved contracts and evidence; Validate-RequirementContract.ps1 WorkingTree/Staged/Range; git diff --check; protected owned-run cleanup.",
+          "expected": "Независимый pass без findings; один дополнительный тестовый путь, неизменённый runtime и ранее одобренные четыре пути; gates pass, owned run отсутствует.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260904-paper-wallet-lock-test-count sha256:48b98f5d9f477191dd8e012545eb944982d54e4b17148cafe50891f99a546d56",
+    "semanticDigest": "sha256:48b98f5d9f477191dd8e012545eb944982d54e4b17148cafe50891f99a546d56"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/settlement_wallet_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
