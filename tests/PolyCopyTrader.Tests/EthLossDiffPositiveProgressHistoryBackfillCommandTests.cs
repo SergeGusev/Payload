@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Npgsql;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Service.Startup;
 using PolyCopyTrader.Storage;
@@ -12,6 +13,37 @@ namespace PolyCopyTrader.Tests;
 public sealed class EthLossDiffPositiveProgressHistoryBackfillCommandTests
 {
     internal static readonly DateTimeOffset Start = DateTimeOffset.Parse("2026-07-20T00:00:00Z", CultureInfo.InvariantCulture);
+
+    [Fact]
+    public void RetryPolicy_OnlyConfirmedRollbackOf55P03BeforeCommit()
+    {
+        var locked = new PostgresException("fixture", "ERROR", "ERROR", "55P03");
+        Assert.True(Cmd.IsRetryableBatchLock(locked, true, false));
+        Assert.False(Cmd.IsRetryableBatchLock(locked, false, false));
+        Assert.False(Cmd.IsRetryableBatchLock(locked, true, true));
+        foreach (var code in new[] { "40P01", "57014", "40001", "08006", "23505" })
+            Assert.False(Cmd.IsRetryableBatchLock(new PostgresException("fixture", "ERROR", "ERROR", code), true, false));
+        Assert.False(Cmd.IsRetryableBatchLock(new InvalidOperationException("55P03"), true, false));
+        Assert.False(Cmd.IsRetryableBatchLock(new OperationCanceledException(), true, false));
+    }
+
+    [Fact]
+    public void StopDiagnostics_DistinguishCommittedRolledBackAndUnknown()
+    {
+        var progress = new Cmd.Progress { Stage = "window_queues", Completed = 128, Total = 1088, WindowBatches = 8 };
+        var error = new InvalidOperationException("fixture");
+        foreach (var outcome in new[] { Cmd.WriteOutcome.None, Cmd.WriteOutcome.Committed })
+        {
+            progress.Outcome = outcome;
+            Assert.Contains("no active write transaction", progress.StopMessage(error));
+            Assert.DoesNotContain("rollback confirmed", progress.StopMessage(error));
+        }
+        progress.Outcome = Cmd.WriteOutcome.RolledBack;
+        Assert.Contains("uncommitted transaction rollback confirmed", progress.StopMessage(error));
+        progress.Outcome = Cmd.WriteOutcome.Unknown;
+        Assert.Contains("outcome unknown; no automatic replay", progress.StopMessage(error));
+        Assert.Contains("completed=128; remaining=960; window_batches=8", progress.StopMessage(error));
+    }
 
     [Fact]
     public void ClosedAllowlist_MatchesEveryLiteralMigrationTuple()

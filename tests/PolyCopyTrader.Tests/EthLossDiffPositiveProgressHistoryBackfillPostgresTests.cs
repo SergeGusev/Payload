@@ -1,14 +1,16 @@
 using System.Net;
+using System.Diagnostics;
 using System.Text.Json;
 using Npgsql;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
+using Xunit.Abstractions;
 using Cmd = PolyCopyTrader.Service.Startup.EthLossDiffPositiveProgressHistoryBackfillCommand;
 
 namespace PolyCopyTrader.Tests;
 
 [Collection(PaperCopiedTraderPerformancePostgresIntegrationCollection.Name)]
-public sealed class EthLossDiffPositiveProgressHistoryBackfillPostgresTests
+public sealed class EthLossDiffPositiveProgressHistoryBackfillPostgresTests(ITestOutputHelper output)
 {
     [Fact]
     public async Task NativeSixChain_AtomicRollbackExactResumeProvenanceAndCollisionGuards()
@@ -207,7 +209,7 @@ ON CONFLICT(service_name) DO UPDATE SET status='Running',last_heartbeat_utc=now(
             var plan = Cmd.BuildPlan(await Cmd.ReadSourcesAsync(connection, null, CancellationToken.None));
             Assert.Equal(34, plan.Entries.Count);
             var baseline = await Cmd.ReadHealthAsync(connection, null, CancellationToken.None);
-            Assert.Equal("info=1.0.0+9aeb7447318ea244028fbc9d8b05c1c3529006af; assembly=1.0.0.0; mvid=d5191846ec8f", Cmd.ServiceVersion);
+            Assert.Equal("info=1.0.0+eab41015744d4d2fcc04b042d946529efeb13084; assembly=1.0.0.0; mvid=0b7cc2c4a796", Cmd.ServiceVersion);
             var protectedBefore = await StateDigestAsync(connection);
             await ScalarAsync<string>(connection,"SET default_transaction_read_only=on; SELECT current_setting('transaction_read_only');");
             var preview = new StringWriter();
@@ -218,6 +220,8 @@ ON CONFLICT(service_name) DO UPDATE SET status='Running',last_heartbeat_utc=now(
             // A redeployment is not an implicit authorization to accept any build.
             foreach (var wrongVersion in new[]
             {
+                "info=1.0.0+3aa0dc5c62ed84377158d822eb6c720ffbd1aca9; assembly=1.0.0.0; mvid=2b5992c622c9",
+                "info=1.0.0+9aeb7447318ea244028fbc9d8b05c1c3529006af; assembly=1.0.0.0; mvid=d5191846ec8f",
                 "info=1.0.0+3548a5736cba95661b0284613ac228c600d0a5b1; assembly=1.0.0.0; mvid=d42f178b96b1",
                 Cmd.ServiceVersion + "-unexpected"
             })
@@ -262,12 +266,14 @@ ON CONFLICT(service_name) DO UPDATE SET status='Running',last_heartbeat_utc=now(
             }
 
             // Normal queues are deliberately not consumed yet. The command must
-            // commit just the first16, wait, then preserve that batch on cancellation.
+            // commit the two-parent partial window, wait, then preserve both on cancellation.
             using var interrupted = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            var waiting = new CallbackWriter(line => { if (line?.StartsWith("PROJECTION_WAIT",StringComparison.Ordinal)==true) interrupted.Cancel(); });
+            var waiting = new CallbackWriter(line => { if (line?.StartsWith("WAITING_PROJECTIONS",StringComparison.Ordinal)==true) interrupted.Cancel(); });
             await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>Cmd.RunPlanAsync(connection,plan,baseline,true,waiting,interrupted.Token));
-            Assert.Contains("PROJECTION_WAIT",waiting.ToString());
+            Assert.Contains("WAITING_PROJECTIONS",waiting.ToString());
+            Assert.Contains("stage=window_queues", waiting.ToString());
             Assert.Equal(16L,await ScalarAsync<long>(connection,"SELECT count(*) FROM strategy_market_paper_runs WHERE strategy_id IN (SELECT child_strategy_id FROM strategy_loss_diff_states WHERE parent_strategy_id='b7c50005-0000-4000-8137-000000000104');"));
+            Assert.Equal(18L,await ScalarAsync<long>(connection,"SELECT count(*) FROM strategy_market_paper_runs WHERE strategy_id IN (SELECT child_strategy_id FROM strategy_loss_diff_states WHERE parent_strategy_id='b7c50005-0000-4000-8137-000000000108');"));
             Assert.Equal(0L,await ScalarAsync<long>(connection,"SELECT count(*) FROM schema_data_migrations WHERE migration_key='20260903_eth_progress34_native_history_v1';"));
             Assert.Equal(protectedBefore,await StateDigestAsync(connection));
 
@@ -285,8 +291,8 @@ ON CONFLICT(service_name) DO UPDATE SET status='Running',last_heartbeat_utc=now(
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(45));
             var resumed = new StringWriter();
             Assert.Equal(0,await Cmd.RunPlanAsync(connection,plan,baseline,true,resumed,deadline.Token));
-            Assert.Contains("verified_existing=16",resumed.ToString());
-            Assert.Equal(1,resumed.ToString().Split("BATCH_COMMITTED").Length-1);
+            Assert.Contains("verified_existing=34",resumed.ToString());
+            Assert.DoesNotContain("BATCH_COMMITTED",resumed.ToString());
             Assert.Contains("COMPLETE",resumed.ToString());
             Assert.Equal(1L,await ScalarAsync<long>(connection,"SELECT count(*) FROM schema_data_migrations WHERE migration_key='20260903_eth_progress34_native_history_v1';"));
             Assert.Equal(protectedBefore,await StateDigestAsync(connection));
@@ -316,9 +322,9 @@ SELECT x.* FROM strategy_market_paper_runs r CROSS JOIN LATERAL jsonb_populate_r
                 await transaction.CommitAsync();
             }
             using var finalWait=new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            var organicWait=new CallbackWriter(line=>{ if(line?.StartsWith("FINAL_PROJECTION_WAIT",StringComparison.Ordinal)==true) finalWait.Cancel(); });
+            var organicWait=new CallbackWriter(line=>{ if(line?.StartsWith("WAITING_PROJECTIONS",StringComparison.Ordinal)==true && line.Contains("stage=final_reconciliation",StringComparison.Ordinal)) finalWait.Cancel(); });
             await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>Cmd.RunPlanAsync(connection,plan,baseline,true,organicWait,finalWait.Token));
-            Assert.Contains("FINAL_PROJECTION_WAIT",organicWait.ToString());
+            Assert.Contains("stage=final_reconciliation",organicWait.ToString());
             Assert.DoesNotContain("BATCH_COMMITTED",organicWait.ToString());
             Assert.Equal(1L,await ScalarAsync<long>(connection,"SELECT count(*) FROM schema_data_migrations WHERE migration_key='20260903_eth_progress34_native_history_v1';"));
         }
@@ -332,6 +338,256 @@ SELECT x.* FROM strategy_market_paper_runs r CROSS JOIN LATERAL jsonb_populate_r
             await using (var heartbeat = new NpgsqlCommand("DELETE FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service';",connection))
                 await heartbeat.ExecuteNonQueryAsync();
             await CleanCatalogAsync(connection);
+        }
+    }
+
+    [Fact]
+    public async Task ResilientLifecycle_64BatchesRealCadenceLocksBackpressureCancellationAndResume()
+    {
+        var factory = await GuardedFactoryAsync();
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var sources = new[] { Cmd.Up4, Cmd.Up8 }.SelectMany((parent, family) =>
+            Enumerable.Range(0, 33).Select(i => EthLossDiffPositiveProgressHistoryBackfillCommandTests.Row(
+                9000 + family * 100 + i, 10 + i * 10, 11 + i * 10, i % 4 == 3, parent: parent))).ToArray();
+        var ids = sources.SelectMany(s => new[] { "signal", "order", "fill", "run", "position", "settlement" }
+            .SelectMany(role => Cmd.Children.Select(c => Cmd.DeterministicId(c.Id, s.RunId, role))
+                .Append(role == "run" ? s.RunId : Cmd.DeterministicId(s.ParentId, s.RunId, role)))).ToArray();
+        using var backgroundStop = new CancellationTokenSource();
+        using var firstStop = new CancellationTokenSource(TimeSpan.FromMinutes(4));
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(12));
+        Task? heartbeat = null, dashboard = null, wallet = null, firstRun = null;
+        await using var blocker = factory.CreateConnection();
+        await using var waiter = factory.CreateConnection();
+        await blocker.OpenAsync();
+        await waiter.OpenAsync();
+        NpgsqlTransaction? fillBlock = null;
+        Task<int>? foreignWait = null;
+        var stopwatch = Stopwatch.StartNew();
+        var commits = 0;
+        var waitReports = 0;
+        var maximumWindow = 0;
+        var retryObserved = false;
+        Exception? testFailure = null;
+        try
+        {
+            foreach (var source in sources) await InsertParentAsync(connection, source);
+            await using (var setup = new NpgsqlCommand("""
+UPDATE strategy_loss_diff_states SET started_at_utc=@Cutoff WHERE child_strategy_id=ANY(@Children);
+UPDATE strategy_child_parent_assignments SET assigned_at_utc=@Cutoff WHERE child_strategy_id=ANY(@Children);
+INSERT INTO service_heartbeats(service_name,status,started_at_utc,last_heartbeat_utc,version,mode,current_loop,last_error)
+VALUES('PolyCopyTrader.Service','Running',now(),now(),@Version,'Live','isolated sustained fixture',NULL)
+ON CONFLICT(service_name) DO UPDATE SET status='Running',last_heartbeat_utc=now(),version=@Version,mode='Live',last_error=NULL;
+""", connection))
+            {
+                setup.Parameters.AddWithValue("Cutoff", Cmd.CutoffUtc);
+                setup.Parameters.AddWithValue("Children", Cmd.Children.Select(c => c.Id).ToArray());
+                setup.Parameters.AddWithValue("Version", Cmd.ServiceVersion);
+                await setup.ExecuteNonQueryAsync();
+            }
+            var projections = new PostgresDashboardProjectionRepository(factory);
+            var repository = new PostgresAppRepository(factory);
+            await projections.BootstrapAsync();
+            var plan = Cmd.BuildPlan(await Cmd.ReadSourcesAsync(connection, null, deadline.Token));
+            Assert.Equal(64, plan.Entries.Select(e => e.Source.RunId).Distinct().Count());
+            Assert.Equal(1088, plan.Entries.Count);
+            var protectedBefore = await StateDigestAsync(connection);
+            var baseline = await Cmd.ReadHealthAsync(connection, null, deadline.Token);
+            await ScalarAsync<string>(connection, "SET default_transaction_read_only=on; SET statement_timeout='15s'; SET lock_timeout='2s'; SELECT current_setting('transaction_read_only');");
+            var importerPid = await ScalarAsync<int>(connection, "SELECT pg_backend_pid();");
+            heartbeat = Task.Run(async () =>
+            {
+                await using var healthConnection = factory.CreateConnection();
+                await healthConnection.OpenAsync(backgroundStop.Token);
+                while (!backgroundStop.IsCancellationRequested)
+                {
+                    await using var update = new NpgsqlCommand("UPDATE service_heartbeats SET last_heartbeat_utc=clock_timestamp() WHERE service_name='PolyCopyTrader.Service';", healthConnection);
+                    await update.ExecuteNonQueryAsync(backgroundStop.Token);
+                    await Task.Delay(TimeSpan.FromSeconds(10), backgroundStop.Token);
+                }
+            });
+
+            // A real unrelated waiting backend, with no writes to the tested family.
+            await ScalarAsync<object>(blocker, "SELECT pg_advisory_lock(9000034);");
+            await using var waitCommand = new NpgsqlCommand("SELECT pg_advisory_lock(9000034);", waiter) { CommandTimeout = 120 };
+            foreignWait = waitCommand.ExecuteNonQueryAsync(deadline.Token);
+            for (var i = 0; i < 100 && (await Cmd.ReadLocksAsync(connection, deadline.Token)).Waiting == 0; i++)
+                await Task.Delay(20, deadline.Token);
+            Assert.True((await Cmd.ReadLocksAsync(connection, deadline.Token)).Waiting > 0);
+            Assert.Equal(baseline, await Cmd.ReadHealthAsync(connection, null, deadline.Token));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Cmd.WaitForReadyAsync(connection,
+                baseline with { SchemaFingerprint = "fatal-even-with-locks" }, new Cmd.Progress(), TextWriter.Null, deadline.Token));
+            using (var cancelLockWait = new CancellationTokenSource())
+            {
+                var canceledLockOutput = new CallbackWriter(line =>
+                {
+                    if (line?.StartsWith("WAITING_LOCKS", StringComparison.Ordinal) == true) cancelLockWait.Cancel();
+                });
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Cmd.WaitForReadyAsync(connection,
+                    baseline, new Cmd.Progress(), canceledLockOutput, cancelLockWait.Token));
+                Assert.Contains("WAITING_LOCKS", canceledLockOutput.ToString());
+                Assert.True(await ScalarAsync<bool>(blocker, $"SELECT xact_start IS NULL FROM pg_stat_activity WHERE pid={importerPid};"));
+            }
+
+            var firstProgress = new Cmd.Progress();
+            var atEight = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releasedForeignLock = false;
+            var firstOutput = new AsyncCallbackWriter(async line =>
+            {
+                output.WriteLine(line);
+                if (line.StartsWith("WAITING_", StringComparison.Ordinal)) waitReports++;
+                if (line.StartsWith("WAITING_LOCKS", StringComparison.Ordinal) && !releasedForeignLock)
+                {
+                    releasedForeignLock = true;
+                    Assert.True(await ScalarAsync<bool>(blocker, $"SELECT xact_start IS NULL FROM pg_stat_activity WHERE pid={importerPid};"));
+                    await ScalarAsync<object>(blocker, "SELECT pg_advisory_unlock(9000034);");
+                    await foreignWait;
+                    await ScalarAsync<object>(waiter, "SELECT pg_advisory_unlock(9000034);");
+                }
+                if (line.StartsWith("BATCH_COMMITTED", StringComparison.Ordinal))
+                {
+                    commits++;
+                    maximumWindow = Math.Max(maximumWindow, firstProgress.WindowBatches);
+                    Assert.InRange(firstProgress.WindowBatches, 1, 8);
+                    Assert.True(commits <= 8, "A ninth batch was committed while the consumer was stopped.");
+                }
+                if (line.StartsWith("WAITING_PROJECTIONS", StringComparison.Ordinal) && firstProgress.WindowBatches == 8)
+                    atEight.TrySetResult();
+            });
+            firstRun = Cmd.RunPlanAsync(connection, plan, baseline, true, firstOutput, firstStop.Token, firstProgress);
+            await atEight.Task.WaitAsync(firstStop.Token);
+            var delayedSince = stopwatch.Elapsed;
+            // Two entire production-cadence periods with consumer deliberately stopped.
+            await Task.Delay(TimeSpan.FromSeconds(61), firstStop.Token);
+            Assert.False(firstRun.IsCompleted);
+            Assert.Equal(8, commits);
+            Assert.True(await ScalarAsync<bool>(blocker, $"SELECT xact_start IS NULL FROM pg_stat_activity WHERE pid={importerPid};"));
+            Assert.Equal(128L, await ScalarAsync<long>(blocker, "SELECT count(*) FROM strategy_market_paper_runs WHERE strategy_id IN (SELECT child_strategy_id FROM strategy_loss_diff_states);"));
+            Assert.Equal(0L, await ScalarAsync<long>(blocker, "SELECT count(*) FROM schema_data_migrations WHERE migration_key='20260903_eth_progress34_native_history_v1';"));
+            firstStop.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => firstRun);
+            firstRun = null;
+            Assert.Equal(protectedBefore, await StateDigestAsync(connection));
+
+            // Normal repository methods on separate connections, as in separate workers.
+            dashboard = Task.Run(async () =>
+            {
+                while (!backgroundStop.IsCancellationRequested)
+                {
+                    await projections.ApplyPendingEventsAsync(500, backgroundStop.Token);
+                    await projections.ReconcileNextStrategyAsync(backgroundStop.Token);
+                    await Task.Delay(TimeSpan.FromSeconds(1), backgroundStop.Token);
+                }
+            });
+            wallet = Task.Run(async () =>
+            {
+                using var cadence = new PeriodicTimer(TimeSpan.FromSeconds(30));
+                do
+                {
+                    await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(25, 5, 100, backgroundStop.Token);
+                } while (await cadence.WaitForNextTickAsync(backgroundStop.Token));
+            });
+
+            var resumedProgress = new Cmd.Progress();
+            var installedFillLock = false;
+            var resumedOutput = new AsyncCallbackWriter(async line =>
+            {
+                output.WriteLine(line);
+                if (line.StartsWith("WAITING_", StringComparison.Ordinal)) waitReports++;
+                if (line.StartsWith("BATCH_ATTEMPT", StringComparison.Ordinal) && !installedFillLock)
+                {
+                    // SHARE permits preview SELECTs but blocks INSERT after signal/order writes.
+                    installedFillLock = true;
+                    fillBlock = await blocker.BeginTransactionAsync();
+                    await using var hold = new NpgsqlCommand("LOCK TABLE paper_fills IN SHARE MODE;", blocker, fillBlock);
+                    await hold.ExecuteNonQueryAsync();
+                }
+                if (line.StartsWith("WAITING_LOCKS", StringComparison.Ordinal) && line.Contains("sqlstate=55P03", StringComparison.Ordinal))
+                {
+                    retryObserved = true;
+                    Assert.Equal(Cmd.WriteOutcome.RolledBack, resumedProgress.Outcome);
+                    Assert.True(await ScalarAsync<bool>(waiter, $"SELECT xact_start IS NULL FROM pg_stat_activity WHERE pid={importerPid};"));
+                    Assert.Equal(128L, await ScalarAsync<long>(waiter, "SELECT count(*) FROM paper_orders WHERE execution_source='eth_lossdiff_positive_progress_history_research_paper';"));
+                    await fillBlock!.RollbackAsync();
+                    await fillBlock.DisposeAsync();
+                    fillBlock = null;
+                }
+                if (line.StartsWith("BATCH_COMMITTED", StringComparison.Ordinal))
+                {
+                    commits++;
+                    maximumWindow = Math.Max(maximumWindow, resumedProgress.WindowBatches);
+                    Assert.InRange(resumedProgress.WindowBatches, 1, 8);
+                }
+            });
+            Assert.Equal(0, await Cmd.RunPlanAsync(connection, plan, baseline, true, resumedOutput, deadline.Token, resumedProgress));
+            Assert.Contains("verified_existing=128", resumedOutput.ToString());
+            Assert.True(retryObserved);
+            Assert.Equal(64, commits);
+            Assert.Equal(8, maximumWindow);
+            Assert.Equal(protectedBefore, await StateDigestAsync(connection));
+            Assert.Equal(1088L, await ScalarAsync<long>(connection, "SELECT count(*) FROM paper_orders WHERE execution_source='eth_lossdiff_positive_progress_history_research_paper';"));
+            Assert.Equal(1088L, await ScalarAsync<long>(connection, """
+SELECT count(*) FROM strategy_market_paper_runs r
+JOIN paper_orders o ON o.id=r.paper_order_id JOIN paper_fills f ON f.paper_order_id=o.id
+JOIN paper_position_settlements s ON s.copied_trader_wallet=o.copied_trader_wallet AND s.asset_id=o.asset_id
+WHERE o.execution_source='eth_lossdiff_positive_progress_history_research_paper'
+ AND r.net_realized_pnl_usd=r.settlement_value_usd-r.stake_usd-r.fee_usd
+ AND f.fee_usd=r.fee_usd AND s.fee_usd=r.fee_usd AND s.net_realized_pnl_usd=r.net_realized_pnl_usd;
+"""));
+            Assert.Equal(1L, await ScalarAsync<long>(connection, "SELECT count(*) FROM schema_data_migrations WHERE migration_key='20260903_eth_progress34_native_history_v1';"));
+            var repeat = new StringWriter();
+            Assert.Equal(0, await Cmd.RunPlanAsync(connection, plan, baseline, true, repeat, deadline.Token));
+            Assert.Contains("IDEMPOTENT_OK", repeat.ToString());
+            Assert.DoesNotContain("BATCH_COMMITTED", repeat.ToString());
+            output.WriteLine($"SUSTAINED_VERIFIED parent_batches={commits}; child_chains=1088; max_window={maximumWindow}; wait_reports={waitReports}; deliberately_delayed_seconds=61; delay_started_seconds={delayedSince.TotalSeconds:F1}; elapsed_seconds={stopwatch.Elapsed.TotalSeconds:F1}; cadence_seconds=30; high_priority=25; reconciliation=5; seed=100; repeat_writes=0");
+        }
+        catch (Exception ex)
+        {
+            testFailure = ex;
+            throw;
+        }
+        finally
+        {
+            firstStop.Cancel();
+            backgroundStop.Cancel();
+            var cleanupErrors = new List<Exception>();
+            async Task CleanupAsync(Func<Task> action)
+            {
+                try { await action(); }
+                catch (OperationCanceledException) { }
+                catch (Exception ex) { cleanupErrors.Add(ex); output.WriteLine("Cleanup: " + ex); }
+            }
+            // Always release locks and observe every task even if the importer failed.
+            if (fillBlock is not null)
+            {
+                await CleanupAsync(() => fillBlock.RollbackAsync());
+                await CleanupAsync(() => fillBlock.DisposeAsync().AsTask());
+            }
+            await CleanupAsync(() => ScalarAsync<object>(blocker, "SELECT pg_advisory_unlock_all();"));
+            if (foreignWait is not null) await CleanupAsync(() => foreignWait);
+            await CleanupAsync(() => ScalarAsync<object>(waiter, "SELECT pg_advisory_unlock_all();"));
+            if (firstRun is not null) await CleanupAsync(() => firstRun);
+            foreach (var task in new[] { heartbeat, dashboard, wallet })
+                if (task is not null) await CleanupAsync(() => task);
+            await CleanupAsync(() => ScalarAsync<string>(connection, "SET default_transaction_read_only=off; SELECT current_setting('transaction_read_only');"));
+            await CleanupAsync(() => CleanTradeRowsAsync(connection, ids));
+            await CleanupAsync(async () =>
+            {
+                await using var clearHealth = new NpgsqlCommand("DELETE FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service';", connection);
+                await clearHealth.ExecuteNonQueryAsync();
+            });
+            await CleanupAsync(() => CleanCatalogAsync(connection));
+            if (testFailure is null && cleanupErrors.Count > 0) throw new AggregateException(cleanupErrors);
+        }
+    }
+
+    private sealed class AsyncCallbackWriter(Func<string, Task> callback) : StringWriter
+    {
+        public override async Task WriteLineAsync(string? value)
+        {
+            await base.WriteLineAsync(value);
+            if (value is not null) await callback(value);
         }
     }
 
@@ -390,10 +646,15 @@ DELETE FROM strategy_loss_diff_parent_events WHERE child_strategy_id=ANY(@Childr
 DELETE FROM strategy_loss_diff_states WHERE child_strategy_id=ANY(@Children);
 DELETE FROM strategy_child_parent_assignments WHERE child_strategy_id=ANY(@Children);
 DELETE FROM strategies WHERE id=ANY(@Children);
+-- The removed fixture wallets have no remaining histories. Their refresh queues
+-- have no strategy FK and must not leak into another test's initial drain.
+DELETE FROM paper_copied_trader_performance_refresh_queue WHERE copied_trader_wallet=ANY(@Wallets);
+DELETE FROM paper_copied_trader_performance_refresh_inflight WHERE copied_trader_wallet=ANY(@Wallets);
 DELETE FROM schema_migration_history WHERE migration_id='0008-eth-lossdiff-positive-progress-34';
 DELETE FROM schema_data_migrations WHERE migration_key='20260903_eth_progress34_native_history_v1';
 """, connection);
         command.Parameters.AddWithValue("Children", Cmd.Children.Select(c => c.Id).ToArray());
+        command.Parameters.AddWithValue("Wallets", Cmd.Children.Select(c => c.Wallet).ToArray());
         await command.ExecuteNonQueryAsync();
     }
 

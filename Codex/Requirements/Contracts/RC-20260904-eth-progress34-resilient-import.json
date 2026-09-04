@@ -3,7 +3,7 @@
   "contractId": "RC-20260904-eth-progress34-resilient-import",
   "title": "Устойчивое продолжение Progress34: временные блокировки, ограниченное отставание показателей и длительный тест",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -74,8 +74,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill\"",
           "expected": "Реальные двухсессионные PG lock waits/55P03, rollback/no duplicate, отмена, fatal guard одновременно с lock wait, отказ неизвестным ошибкам/40P01. Все прежние финансовые/identity/schema/source/protected-state проверки сохраняются.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PASS final-history14/14 with no skips; actual unrelated PostgreSQL advisory Lock waiter and canceled lock wait outside transaction, simultaneous fatal schema guard, real paper_fills contention produced55P03 after partial writes and confirmed full rollback/disposal before retry;128 prior orders retained, no duplicate. Unit retry policy rejects40P01/57014/40001/08006/23505/arbitrary text/OCE and any attempted/unknown COMMIT. Isolated installedPG17.5,127.0.0.1:52128,ownedmarkedrunmanual-8e612232126e4d9b9bc29465c1b63f3c,finalhistoryDBpct_codex_skip_v2_20260904132200_8e612234,UTC15s/2s; no Production access. TRX SHA256029A607B4A30C00E303BC91F4BF186C65EDC63D55780AE2CED6DB73C87B58C58."
         }
       ]
     },
@@ -106,8 +106,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfillPostgresTests\"",
           "expected": "При остановленном consumer сохраняются ровно максимум8missing parent batches и ни одной девятой; marker отсутствует; после возобновления consumer импорт продолжается. Проверены граница7/8/9, последний неполный window, resume без дублей, отмена, окончательная сверка с organic events.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PASS same actual PostgreSQL lifecycle tests: stopped consumer61s leavesexact8commits/128chains, ninth forbidden andmarker0; cancellation and resume verifies128existing, thenall64parentbatches1088chains, maxwindow8; final ordinary counts/ownfee/Net and protected state unchanged,marker1,repeatwrites0. Small legacy lifecycle verifies final partialwindow16Up4+18Up8, interruptedresumeverified34/no BATCH_COMMITTED, and all34final check waits for post-T0 organic event. First run exposed34orphan fixture-wallet refresh jobs causing premature test cancellation; exactownedfixturecleanup corrected, repeated full selection passes."
         }
       ]
     },
@@ -135,8 +135,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~EthLossDiffPositiveProgressHistoryBackfill|FullyQualifiedName~LossDiffPositiveProgress|FullyQualifiedName~EthLossDiffHistoryBackfillCommandTests|FullyQualifiedName~DashboardProjectionCalculatorTests\" --logger \"trx;LogFileName=progress34-resilient-import.trx\"",
           "expected": "Все исходные и новые тесты проходят без обязательных skips. TRX/логи доказывают1088цепочек/64порции, длительное ожидание, устойчивое продолжение, неизменность accounting и zero-write повтор.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PASS repeated original64 plus3new tests: final-history14 + final-progress27 + final-legacy19 + final-dashboard7 =67unique/67passed/0failed/0skipped. Four fresh guarded loopbackDBs pct_codex_skip_v2_20260904132200_8e612234..237, productionenvcleared; artifacts underownedrun. Sustained evidence parent_batches64,child_chains1088,max_window8,wait_reports13,deliberately_delayed_seconds61,elapsed_seconds298.6,cadence30s,high_priority25,reconciliation5,seed100,repeatwrites0. TRX SHA256 history029A607B4A30C00E303BC91F4BF186C65EDC63D55780AE2CED6DB73C87B58C58;progress1A995874F3D69917CB0FB60E0EE33BA9746397E42EE2D504F161983481EBA7CA;legacyDA722D7BDECF4DB3B13EEC1236EBE117CDABCDB3FF35CA45B7C8105EBA4CE82F;dashboardCA25B6B9BA5EBB2CD18A2534097C259DAB8EDF0DFD1453BA334437310713A9DE. Testfix verification complete; not a Production speed claim."
         }
       ]
     },
@@ -167,16 +167,16 @@
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\"",
           "expected": "Build проходит без запуска host/Production. Проверены диагностические сообщения/отмена и неизменность финансовой части/точной версии.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "PASS final tests-project build31.11s/6warnings in unchanged files/0errors, explicit Servicebuild1.86s/0warnings/0errors; initial fullbuild38.23s/126warnings/0errors. Explicitrun artifacts/env; no host startup or Production connection. FinalServiceDLL SHA2564070EBDFFE6244AB4B388FF78E241DE7718FBAE54086664859CC599AE969056C; buildlogsC7839D999DF0D07FB2E847083A473BAF8EF26C07B8425C465645B8F61079F4C1/A8AB415B2702305B9F66621F8D64A50A3281C618DE2E5770266FF3C37AD116FA. Main and independent reviewer compared unchanged financial/source/native-chain/final accounting blocks with approvalparentaa449f65; exactServiceVersioneab/MVID0b7cc2c4a796 and originalsource/plan/applydigest/cutoff retained. Outcome diagnostics distinguish None/Committed/RolledBack/Unknown; finalmarker explicitrollback and OCE reporting reviewed."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "Independent semantic review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree then Staged; git diff --check; protected owned-run cleanup",
           "expected": "Независимый PASS/no findings, traceability и approval-parent-order соблюдены, только4разрешённых product paths, исходные dirty edits сохранены, temporary run отсутствует, Production writes0.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "CODE-SEMANTIC PASS by agent:/root/settlement_wallet_review after independent actualdiff/originalprompts/approvedcontract/XML67unique67PASS0skip/64commits1088chains/55P03rollback-retry/298.6s sustainedrun/buildlogs review. No open code findings. Exact reviewed SHA256 importer9A77FB8452E3C4FE7B86F842436202E43EB16DFC3E3E74CBF4C6B1847D06AFA3;unit50F95215A682686B3AB84244BECFA194760D2C8ACB4938905B3E0EA2FDCFD072;PG6FBB4359570D7C3CAEC4920C82E398EADB9C2828A368031435BD8684C39083F3;READMEF6756F7E8C1F1E6A6BE020CF4F74BD4C1FA7A3A4FAABB436CB79A3739EC0F5D8. PUBLICATION BLOCKED: ordinary WorkingTree fails IMPLEMENTATION_CONTRACT_STATUS on pre-existing dirty RC-20260903-eth-progress34-resume-after-dashboard-ack.json, stillapproved because actualhistoryincomplete. Scoped Staged gate alsofails currentcontractapproved-not-completed; no falsecompletion/bypass/commit/push. Index initiallyempty, onlyfourproducts+thiscontract brieflystaged forcheckthenexactpathsunstaged,workingfilespreserved. Currentcontractremainsapproved; fullcompletionwithmandatorygates notclaimed. Prior oldcontracts/09-03history unchanged thisturn. CleanupPASS: alltests/builds ended; ownedPG127.0.0.1:52128 exactdata_directorymarkedrun/db/pgdata and0clients verified,pg_ctlstopped,statusnoserver. Reviewerreleasedartifactreads; validmarkerinventory8201files/483622286bytes/0referencingprocesses; protectedComplete-CodexTempRun removedexactmanual-8e612232126e4d9b9bc29465c1b63f3c,independentTestPathfalse. Compactevidencehereanddailyhistory retained; noProductionaccess/writes/apply/deploy. Approval-onlycheckpointaa449f65 beforeproduct. Separate user DEV approval verbatim: Подтверждаю DEV-001 для указанного хеша. Bound to sha256:555ea95d40356b93dfbf390a544fdce5b51b9e39cb84e856a513de8d2d88a8b6 and retained with fullAPPROVE in dailyhistory/activecontext; validator631 requires approval.evidenceText itself to equalexactAPPROVE line, hence separatephrase recordedhere. Publication completion candidate under approved RC-20260904-progress34-checked-publication sha256:fabb53f204a3a195eda573c0c98678ab38a2cb1b1f56975afff152cce856cbe3: 2026-09-04 fresh four SHA256 and normalized blobs exactly match reviewed revision; agent:/root/publication_review independently inspected original requests, approved contracts, actual group2 diff and prior67/67 evidence with no findings. Group1 d9d2d336 normal WorkingTree/Staged PASS governedFiles0/contracts3 independently repeated; old history contracts remain approved/pending outside this product changeset. Original failed-publication evidence above is retained. CheckpointE candidate prepared for the required ordinary group2 gates; no implementation commit or push is authorized by this candidate alone until those checks actually pass. Actual superseding result 2026-09-04 14:22:51 UTC: isolated group2 ordinary WorkingTree PASS governedFiles4/contracts2; Staged PASS governedFiles4/contracts2; cached diffcheck PASS. No bypass, AllowPendingEvidence, validator change, or false old-history completion. This successful check resolves the earlier publication gate failure; final reviewer confirmation and repeat gates on this evidence update precede commit. Range, push, remote-ref and cleanup remain delivery steps, not claimed completed here. Independent final candidate check received 2026-09-04 14:24:01 UTC: agent:/root/publication_review independently reran ordinary WorkingTree and Staged, bothPASS4governed/2contracts, cached diffcheckPASS and unstageddiffempty; confirmed original failure evidence retained and no old-history/product edits. Only this factual review evidence was appended afterward."
         }
       ]
     }
@@ -202,9 +202,9 @@
     "semanticDigest": "sha256:555ea95d40356b93dfbf390a544fdce5b51b9e39cb84e856a513de8d2d88a8b6"
   },
   "independentReview": {
-    "reviewer": "agent:/root/settlement_wallet_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/publication_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

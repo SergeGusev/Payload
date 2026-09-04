@@ -400,9 +400,9 @@ the configured `polycopytrader` database at the fixed Production endpoint
 Apply adds `--apply --approved-contract-digest
 sha256:d2ec671347eb083cab33ab7ed9c67280e6f8887eba06bcae14b2e6eae57602f2` only after
 the approved preview, tests and independent review pass. It writes one parent
-entry per transaction (16/18 native trade chains), waits at least1s plus normal
-projection/refresh completion, and stops on health, identity, source or collision
-drift. Exact IDs/evidence are the resume point; repeat runs verify/skip complete
+entry per transaction (16/18 native trade chains), waits at least1s between
+commits, and stops on fatal health, identity, source or collision drift.
+Exact IDs/evidence are the resume point; repeat runs verify/skip complete
 batches without overwriting. The final existing migration marker is written only
 after accounting/projection verification; there is no automatic deletion rollback.
 
@@ -410,14 +410,39 @@ Test filters: `EthLossDiffPositiveProgressHistoryBackfill`,
 `LossDiffPositiveProgress`, `EthLossDiffHistoryBackfillCommandTests` and
 `DashboardProjectionCalculatorTests`, with explicit artifact/results paths and
 `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` pointing to a marked disposable loopback
-database. These modeled fills do not establish historical depth or Live returns.
+database. The sustained PostgreSQL test covers64 parent batches/1088 child
+chains, a30s wallet consumer with25/5/100 limits, stopped consumption for61s,
+real lock contention, cancellation/resume, final reconciliation and a zero-write
+repeat. Local elapsed time does not establish Production throughput. These
+modeled fills do not establish historical depth or Live returns.
 
-Continuation after the Paper lock correction is approved separately under
-`RC-20260903-eth-progress34-resume-deployed-build`. The command requires exactly
-`info=1.0.0+9aeb7447318ea244028fbc9d8b05c1c3529006af; assembly=1.0.0.0; mvid=d5191846ec8f`.
-The original apply digest, frozen history manifest and batching are unchanged;
-another build or a waiting-lock guard still stops the operation before the next
-batch. This does not enable the separate, unapproved transient-lock retry draft.
+Continuation after the wallet-settlement correction is approved separately under
+`RC-20260904-eth-progress34-resume-after-wallet-fix`, replacing only the expected
+build from `RC-20260903-eth-progress34-resume-after-dashboard-ack`.
+The command requires exactly
+`info=1.0.0+eab41015744d4d2fcc04b042d946529efeb13084; assembly=1.0.0.0; mvid=0b7cc2c4a796`.
+The original apply digest, frozen history manifest and per-transaction batch size
+are unchanged; another deployed build still stops the operation.
+
+The code-only correction `RC-20260904-eth-progress34-resilient-import` changes
+only the import execution policy. Temporary database lock waits pause outside
+transactions with5s health/lock polling. Only SQLSTATE55P03 before a commit
+attempt may retry, after confirmed rollback and disposal, a fresh health check
+and5s pause. Deadlocks40P01, other SQL/network errors, timeouts and an unknown
+commit outcome remain fatal; an uncertain commit is never replayed automatically.
+SQL15s/lock2s limits and every other fatal guard remain unchanged.
+
+Before new writes, the importer drains prior pending events/refresh work for all34
+children. It then permits at most8 independently committed parent batches before
+waiting for the whole window's source events and wallet refresh/inflight queues
+to drain (at most144 trades/864 primary rows, not one transaction). Queue state
+is checked after every batch; the last partial window also drains. Only ordinary
+consumers process those queues. Final all34 queue/accounting/projection checks
+still precede the completion marker. `WAITING_LOCKS`, `WAITING_PROJECTIONS` and
+`STOPPED` report UTC, stage, counts and transaction outcome without query text.
+This correction neither runs Production import nor declares history complete.
+The standalone command exits before host startup; deploying/restarting the
+service is not required to run it. Production preview/apply is a separate action.
 
 ### ETH LossDiff History Backfill
 

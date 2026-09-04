@@ -3,7 +3,7 @@
   "contractId": "RC-20260904-progress34-checked-publication",
   "title": "Публикация готового исправления Progress34 отдельно от незавершённой истории",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     { "source": "user", "text": "Опять я запутался. Коммить всё. Публикуй всё" },
     { "source": "user", "text": "Так что надо сделать, чтобы решить эти проблему?" },
@@ -55,8 +55,8 @@
           "kind": "inspection",
           "command": "Get-FileHash for four exact product paths; git diff and git diff --cached for each isolated group; compare original contracts and normalized product blobs with the frozen pre-publication state",
           "expected": "Полный исходный набор сохранён; product bytes/normalized blobs неизменны; старые операции не объявлены завершёнными; нет посторонних изменений.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent agent:/root/publication_review inspected actual group1 and group2 diffs. Group1 d9d2d336 contains only six allowed approval/evidence paths and preserves five existing files byte-identically. Old contracts remain approved with3/2pending checks. Four product SHA256 equal all frozen REQ-001 values; normalized Git blobs README21856ccdf51525189d76f17d191f19a4241b6edc/importer341a07c508b5825977c3eea4dd5a12515a15bf2b/commandtestsd2bba1086c5423c4fbb101c338c6d77162b91f77/PGtests6e6da45639bb5d9d2436ee0927a39e79a085b6fd. Original main working files retained, no product edits, no unrelated paths."
         }
       ]
     },
@@ -83,8 +83,8 @@
           "kind": "inspection",
           "command": "Independent semantic review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; git diff --check",
           "expected": "Перед implementation commit завершение задачи кода и разделение групп подтверждены actual checks и независимым reviewer; старые незавершённые задачи сохраняют корректный статус. Последующий Range и push подтверждаются отдельными фактическими записями доставки в контексте/истории.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "CheckpointE completion candidate: independent actual code/publication semantic review PASS/no findings by agent:/root/publication_review; prior67/67test evidence retained, no new test-run claim. Group1 ordinary WorkingTree/Staged PASS governedFiles0/contracts3 independently repeated, cached diffcheck PASS; approval checkpoint d9d2d336 precedes group2. Candidate record is not evidence of group2 gate success or publication: run ordinary WorkingTree/Staged now and append their actual result before implementation commit; Range/push/ref/cleanup delivery evidence follows in context/history. Existing failed-publication evidence preserved in the resilient contract. Actual superseding result 2026-09-04 14:22:51 UTC: isolated group2 ordinary WorkingTree PASS governedFiles4/contracts2; Staged PASS governedFiles4/contracts2; cached diffcheck PASS. No bypass, AllowPendingEvidence, validator change, or false old-history completion. This successful check resolves the earlier publication gate failure; final reviewer confirmation and repeat gates on this evidence update precede commit. Range, push, remote-ref and cleanup remain delivery steps, not claimed completed here. Independent final candidate check received 2026-09-04 14:24:01 UTC: agent:/root/publication_review independently reran ordinary WorkingTree and Staged, bothPASS4governed/2contracts, cached diffcheckPASS and unstageddiffempty; confirmed original failure evidence retained and no old-history/product edits. Only this factual review evidence was appended afterward."
         }
       ]
     }
@@ -99,8 +99,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/publication_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

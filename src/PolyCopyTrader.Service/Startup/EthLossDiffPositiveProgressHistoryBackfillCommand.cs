@@ -21,7 +21,7 @@ public static class EthLossDiffPositiveProgressHistoryBackfillCommand
     internal const string ExecutionSource = "eth_lossdiff_positive_progress_history_research_paper";
     internal const string EvidenceVersion = "eth_progress34_parent_average_full_fill_history_v1";
     internal const string MarkerKey = "20260903_eth_progress34_native_history_v1";
-    internal const string ServiceVersion = "info=1.0.0+9aeb7447318ea244028fbc9d8b05c1c3529006af; assembly=1.0.0.0; mvid=d5191846ec8f";
+    internal const string ServiceVersion = "info=1.0.0+eab41015744d4d2fcc04b042d946529efeb13084; assembly=1.0.0.0; mvid=0b7cc2c4a796";
     // Frozen by the successful read-only31612-chain preview on2026-09-03 at09:43 UTC.
     internal const string FrozenSourceDigest = "sha256:3048d1e890a5f605e9d7c4107731477f11dd98e0f62521880f1d263f41ac6533";
     internal const string FrozenPlanDigest = "sha256:966103194019979106007e3659316bd41e6938f4dc4e4076636a2fb086e66817";
@@ -29,6 +29,8 @@ public static class EthLossDiffPositiveProgressHistoryBackfillCommand
     internal static readonly Guid Up4 = Guid.Parse("b7c50005-0000-4000-8137-000000000104");
     internal static readonly Guid Up8 = Guid.Parse("b7c50005-0000-4000-8137-000000000108");
     private const long AdvisoryKey = 8236202609030034;
+    internal const int MaximumPendingBatches = 8;
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     internal sealed record Child(Guid Id, Guid AssignmentId, Guid ParentId, string Code, string Name, int Cap)
@@ -76,6 +78,53 @@ public static class EthLossDiffPositiveProgressHistoryBackfillCommand
         JsonObject Signal, JsonObject Order, JsonObject Fill, JsonObject Run, JsonObject Position, JsonObject Settlement);
     internal sealed record Plan(IReadOnlyList<Source> Sources, IReadOnlyList<Entry> Entries, string SourceDigest, string PlanDigest);
     internal sealed record Baseline(string ProtectedSettings, string SchemaFingerprint);
+    internal sealed record LockSnapshot(long Waiting, string Participants);
+    internal sealed record ProjectionSnapshot(long Events, long Queued, long Inflight, long Reconciliation)
+    {
+        public bool Pending => Events + Queued + Inflight + Reconciliation > 0;
+    }
+
+    internal enum WriteOutcome { None, Active, RolledBack, Committed, Unknown }
+
+    internal sealed class Progress
+    {
+        public string Stage { get; set; } = "preview";
+        public int? Completed { get; set; }
+        public int? Total { get; set; }
+        public int WindowBatches { get; set; }
+        public WriteOutcome Outcome { get; set; }
+        private string? lastWait;
+        private DateTimeOffset waitStarted;
+        private DateTimeOffset lastReported;
+
+        public string Counts => $"completed={Completed?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}; remaining={(Total - Completed)?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}; window_batches={WindowBatches}";
+
+        public async Task ReportWaitAsync(TextWriter output, string kind, string detail)
+        {
+            var now = MicrosecondUtcNow();
+            var signature = kind + ";" + detail;
+            if (lastWait is null) waitStarted = now;
+            if (lastWait != signature || now - lastReported >= TimeSpan.FromSeconds(30))
+            {
+                await output.WriteLineAsync($"{kind} utc={now:O}; stage={Stage}; {Counts}; wait_seconds={(now - waitStarted).TotalSeconds:F1}; {detail}; no active write transaction.");
+                lastReported = now;
+            }
+            lastWait = signature;
+        }
+
+        public void EndWait() => lastWait = null;
+
+        public string StopMessage(Exception error) =>
+            $"STOPPED utc={MicrosecondUtcNow():O}; stage={Stage}; {Counts}; type={error.GetType().Name}; reason={error.Message}; write_outcome={Outcome}; " + (Outcome switch
+            {
+                WriteOutcome.RolledBack => "uncommitted transaction rollback confirmed; prior committed batches retained.",
+                WriteOutcome.Unknown or WriteOutcome.Active => "transaction/commit outcome unknown; no automatic replay; inspect deterministic chains before further writes.",
+                _ => "no active write transaction; prior committed batches retained."
+            });
+    }
+
+    internal static bool IsRetryableBatchLock(Exception error, bool rollbackConfirmed, bool commitAttempted) =>
+        rollbackConfirmed && !commitAttempted && error is PostgresException { SqlState: PostgresErrorCodes.LockNotAvailable };
     private sealed record Marker(string Contract, string Digest, string SourceDigest, string PlanDigest,
         DateTimeOffset Cutoff, int Batches, int Trades, object[] PerChild,
         string Model, string CounterPolicy, object[] RecordedFeeProfiles);
@@ -371,7 +420,8 @@ SELECT
         {
             Require(await reader.ReadAsync(token), "Health snapshot absent.");
             Require(reader.GetInt64(0) == 1, "Exact service build/heartbeat/error guard failed.");
-            Require(reader.GetInt64(1) == 0, "Production has waiting locks.");
+            // The independent lock observation is transient, not a baseline/fatal condition.
+            // It is enforced outside write transactions by WaitForReadyAsync.
             Require(reader.GetInt64(2) == 34 && reader.GetInt64(3) == 2, "Exact Paper family/state/assignment guard failed.");
             Require(reader.GetInt64(4) == 1, "Creation migration checksum mismatch.");
             Require(reader.GetInt64(5) == 1 && reader.GetInt64(7) == 0, "Projection health guard failed.");
@@ -405,6 +455,35 @@ SELECT jsonb_build_object(
         Baseline baseline, CancellationToken token)
     {
         Require(await ReadHealthAsync(connection, transaction, token) == baseline, "Strategy settings or schema changed since preview.");
+    }
+
+    internal static async Task<LockSnapshot> ReadLocksAsync(NpgsqlConnection connection, CancellationToken token)
+    {
+        await using var command = Command("""
+WITH waiting AS MATERIALIZED (
+ SELECT pid,application_name,wait_event,pg_blocking_pids(pid) AS blocking_pids
+ FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock'
+)
+SELECT (SELECT count(*) FROM waiting),
+ COALESCE((SELECT jsonb_agg(to_jsonb(x) ORDER BY pid)::text FROM (SELECT * FROM waiting ORDER BY pid LIMIT 30) x),'[]');
+""", connection);
+        await using var reader = await command.ExecuteReaderAsync(token);
+        Require(await reader.ReadAsync(token), "Lock snapshot absent.");
+        return new LockSnapshot(reader.GetInt64(0), reader.GetString(1));
+    }
+
+    internal static async Task WaitForReadyAsync(NpgsqlConnection connection, Baseline baseline,
+        Progress progress, TextWriter output, CancellationToken token)
+    {
+        while (true)
+        {
+            // Fatal guards are evaluated even while another session waits for a lock.
+            await RequireBaselineAsync(connection, null, baseline, token);
+            var locks = await ReadLocksAsync(connection, token);
+            if (locks.Waiting == 0) return;
+            await progress.ReportWaitAsync(output, "WAITING_LOCKS", $"waiting={locks.Waiting}; participants={locks.Participants}");
+            await Task.Delay(PollInterval, token);
+        }
     }
 
     internal static void RequireFrozenPlan(Plan plan)
@@ -487,34 +566,46 @@ SELECT encode(sha256(convert_to(COALESCE(jsonb_agg(jsonb_build_array(kind,key,va
         return Hash((string)(await command.ExecuteScalarAsync(token))!);
     }
 
-    private static async Task WaitForProjectionsAsync(NpgsqlConnection connection, IReadOnlyList<NativeChain> chains,
-        Baseline baseline, TextWriter output, CancellationToken token)
+    private static async Task<ProjectionSnapshot> ReadProjectionQueuesAsync(NpgsqlConnection connection,
+        IReadOnlyList<NativeChain> chains, CancellationToken token, bool allChildren = false,
+        NpgsqlTransaction? transaction = null, bool includeReconciliation = false)
     {
         var ids = chains.SelectMany(c => new[] { c.Signal, c.Order, c.Fill, c.Run, c.Position, c.Settlement })
             .Select(r => r["id"]!.GetValue<Guid>()).ToArray();
-        var waits = 0;
+        await using var command = Command("""
+SELECT
+ (SELECT count(*) FROM public.dashboard_projection_events WHERE strategy_id=ANY(@Children) AND (@AllChildren OR source_id=ANY(@Ids))),
+ (SELECT count(*) FROM public.paper_copied_trader_performance_refresh_queue WHERE copied_trader_wallet=ANY(@Wallets)),
+ (SELECT count(*) FROM public.paper_copied_trader_performance_refresh_inflight WHERE copied_trader_wallet=ANY(@Wallets)),
+ (SELECT count(*) FROM public.dashboard_projection_reconciliation_queue WHERE @Reconciliation AND strategy_id=ANY(@Children));
+""", connection, transaction);
+        command.Parameters.AddWithValue("Ids", ids);
+        command.Parameters.AddWithValue("AllChildren", allChildren);
+        command.Parameters.AddWithValue("Reconciliation", includeReconciliation);
+        command.Parameters.AddWithValue("Children", allChildren ? Children.Select(c => c.Id).ToArray() : chains.Select(c => c.ChildId).Distinct().ToArray());
+        command.Parameters.AddWithValue("Wallets", allChildren ? Children.Select(c => c.Wallet).ToArray() : chains.Select(c => c.Wallet).Distinct().ToArray());
+        await using var reader = await command.ExecuteReaderAsync(token);
+        Require(await reader.ReadAsync(token), "Projection queue state absent.");
+        return new ProjectionSnapshot(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2), reader.GetInt64(3));
+    }
+
+    private static string QueueDetail(ProjectionSnapshot queues) =>
+        $"events={queues.Events}; queued={queues.Queued}; inflight={queues.Inflight}; reconciliation={queues.Reconciliation}";
+
+    private static async Task WaitForProjectionsAsync(NpgsqlConnection connection, IReadOnlyList<NativeChain> chains,
+        Baseline baseline, Progress progress, TextWriter output, CancellationToken token, bool allChildren = false)
+    {
         while (true)
         {
-            await RequireBaselineAsync(connection, null, baseline, token);
-            await using var command = Command("""
-SELECT
- EXISTS(SELECT 1 FROM public.dashboard_projection_events WHERE strategy_id=ANY(@Children) AND source_id=ANY(@Ids)),
- EXISTS(SELECT 1 FROM public.paper_copied_trader_performance_refresh_queue WHERE copied_trader_wallet=ANY(@Wallets))
- OR EXISTS(SELECT 1 FROM public.paper_copied_trader_performance_refresh_inflight WHERE copied_trader_wallet=ANY(@Wallets));
-""", connection);
-            command.Parameters.AddWithValue("Ids", ids);
-            command.Parameters.AddWithValue("Children", chains.Select(c => c.ChildId).Distinct().ToArray());
-            command.Parameters.AddWithValue("Wallets", chains.Select(c => c.Wallet).Distinct().ToArray());
-            bool pending;
-            await using (var reader = await command.ExecuteReaderAsync(token))
+            await WaitForReadyAsync(connection, baseline, progress, output, token);
+            var queues = await ReadProjectionQueuesAsync(connection, chains, token, allChildren);
+            if (!queues.Pending)
             {
-                Require(await reader.ReadAsync(token), "Projection queue state absent.");
-                pending = reader.GetBoolean(0) || reader.GetBoolean(1);
+                progress.EndWait();
+                return;
             }
-            if (!pending) return;
-            if (waits++ % 6 == 0)
-                await output.WriteLineAsync($"PROJECTION_WAIT utc={MicrosecondUtcNow():O}; pending work for this batch; no next write.");
-            await Task.Delay(TimeSpan.FromSeconds(5), token);
+            await progress.ReportWaitAsync(output, "WAITING_PROJECTIONS", QueueDetail(queues));
+            await Task.Delay(PollInterval, token);
         }
     }
 
@@ -580,45 +671,59 @@ GROUP BY r.strategy_id,d.settled_runs_count,d.realized_pnl_usd,d.net_realized_pn
     // Check all34 queues and totals in the SAME snapshot. A new organic event
     // committed later belongs to a later snapshot, not a false discrepancy here.
     private static async Task CompleteWhenReconciledAsync(NpgsqlConnection connection, Plan plan,
-        Baseline baseline, string marker, bool writeMarker, TextWriter output, CancellationToken token)
+        Baseline baseline, string marker, bool writeMarker, Progress progress, TextWriter output, CancellationToken token)
     {
-        var waits = 0;
+        progress.Stage = "final_reconciliation";
         while (true)
         {
+            await WaitForReadyAsync(connection, baseline, progress, output, token);
+            ProjectionSnapshot queues;
+            progress.Outcome = WriteOutcome.None;
             await using (var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, token))
             {
-                if (writeMarker)
+                var commitAttempted = false;
+                try
                 {
-                    await using var rw = Command("SET TRANSACTION READ WRITE;", connection, transaction);
-                    await rw.ExecuteNonQueryAsync(token);
-                }
-                await RequireBaselineAsync(connection, transaction, baseline, token);
-                await using var pending = Command("""
-SELECT EXISTS(SELECT 1 FROM dashboard_projection_events WHERE strategy_id=ANY(@Ids))
- OR EXISTS(SELECT 1 FROM dashboard_projection_reconciliation_queue WHERE strategy_id=ANY(@Ids))
- OR EXISTS(SELECT 1 FROM paper_copied_trader_performance_refresh_queue WHERE copied_trader_wallet=ANY(@Wallets))
- OR EXISTS(SELECT 1 FROM paper_copied_trader_performance_refresh_inflight WHERE copied_trader_wallet=ANY(@Wallets));
-""", connection, transaction);
-                pending.Parameters.AddWithValue("Ids", Children.Select(c => c.Id).ToArray());
-                pending.Parameters.AddWithValue("Wallets", Children.Select(c => c.Wallet).ToArray());
-                if (!(bool)(await pending.ExecuteScalarAsync(token))!)
-                {
-                    await VerifyFinancialTotalsAsync(connection, plan, token, transaction);
-                    await VerifyOrdinaryProjectionsAsync(connection, transaction, token);
                     if (writeMarker)
                     {
-                        await using var finish = Command("INSERT INTO public.schema_data_migrations(migration_key,applied_at_utc,details) VALUES (@Key,clock_timestamp(),@Details);", connection, transaction);
-                        finish.Parameters.AddWithValue("Key", MarkerKey);
-                        finish.Parameters.AddWithValue("Details", marker);
-                        Require(await finish.ExecuteNonQueryAsync(token) == 1, "Final marker was not inserted.");
+                        progress.Outcome = WriteOutcome.Active;
+                        await using var rw = Command("SET TRANSACTION READ WRITE;", connection, transaction);
+                        await rw.ExecuteNonQueryAsync(token);
                     }
-                    await transaction.CommitAsync(token);
-                    return;
+                    await RequireBaselineAsync(connection, transaction, baseline, token);
+                    queues = await ReadProjectionQueuesAsync(connection, [], token, true, transaction, true);
+                    if (!queues.Pending)
+                    {
+                        await VerifyFinancialTotalsAsync(connection, plan, token, transaction);
+                        await VerifyOrdinaryProjectionsAsync(connection, transaction, token);
+                        if (writeMarker)
+                        {
+                            await using var finish = Command("INSERT INTO public.schema_data_migrations(migration_key,applied_at_utc,details) VALUES (@Key,clock_timestamp(),@Details);", connection, transaction);
+                            finish.Parameters.AddWithValue("Key", MarkerKey);
+                            finish.Parameters.AddWithValue("Details", marker);
+                            Require(await finish.ExecuteNonQueryAsync(token) == 1, "Final marker was not inserted.");
+                        }
+                        commitAttempted = true;
+                        progress.Outcome = writeMarker ? WriteOutcome.Unknown : WriteOutcome.None;
+                        await transaction.CommitAsync(token);
+                        progress.Outcome = writeMarker ? WriteOutcome.Committed : WriteOutcome.None;
+                        progress.EndWait();
+                        return;
+                    }
+                    await transaction.RollbackAsync(CancellationToken.None);
+                    progress.Outcome = WriteOutcome.None; // Queue check made no writes.
+                }
+                catch
+                {
+                    if (commitAttempted) throw; // No marker replay after uncertain COMMIT.
+                    progress.Outcome = writeMarker ? WriteOutcome.Unknown : WriteOutcome.None;
+                    await transaction.RollbackAsync(CancellationToken.None);
+                    progress.Outcome = writeMarker ? WriteOutcome.RolledBack : WriteOutcome.None;
+                    throw;
                 }
             }
-            if (waits++ % 6 == 0)
-                await output.WriteLineAsync($"FINAL_PROJECTION_WAIT utc={MicrosecondUtcNow():O}; all34 native/organic queues; no marker written.");
-            await Task.Delay(TimeSpan.FromSeconds(5), token);
+            await progress.ReportWaitAsync(output, "WAITING_PROJECTIONS", QueueDetail(queues) + "; no marker written");
+            await Task.Delay(PollInterval, token);
         }
     }
 
@@ -653,6 +758,7 @@ SELECT EXISTS(SELECT 1 FROM dashboard_projection_events WHERE strategy_id=ANY(@I
                 reader.GetString(1) == "192.168.0.101" && reader.GetString(2) == "on", "Production/read-only identity mismatch.");
         }
         var acquired = false;
+        var progress = new Progress();
         try
         {
             if (apply)
@@ -670,12 +776,12 @@ SELECT EXISTS(SELECT 1 FROM dashboard_projection_events WHERE strategy_id=ANY(@I
             var plan = BuildPlan(sources);
             await output.WriteLineAsync($"PREVIEW_STAGE utc={MicrosecondUtcNow():O}; independent_source_totals");
             await ValidateUniverseAsync(connection, plan, cancellationToken);
-            return await RunPlanAsync(connection, plan, baseline, apply, output, cancellationToken);
+            return await RunPlanAsync(connection, plan, baseline, apply, output, cancellationToken, progress);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             // Do not emit connection strings or raw row JSON in operational errors.
-            await output.WriteLineAsync($"STOPPED utc={MicrosecondUtcNow():O}; type={ex.GetType().Name}; reason={ex.Message}; prior committed batches retained; current failed transaction rolled back.");
+            await output.WriteLineAsync(progress.StopMessage(ex));
             await output.WriteLineAsync(ex.StackTrace);
             return 1;
         }
@@ -693,8 +799,11 @@ SELECT EXISTS(SELECT 1 FROM dashboard_projection_events WHERE strategy_id=ANY(@I
     // Only reached after production identity/source-universe checks above.
     // Internal visibility allows the same lifecycle to run in isolated PG tests.
     internal static async Task<int> RunPlanAsync(NpgsqlConnection connection, Plan plan,
-        Baseline baseline, bool apply, TextWriter output, CancellationToken cancellationToken)
+        Baseline baseline, bool apply, TextWriter output, CancellationToken cancellationToken, Progress? progress = null)
     {
+        progress ??= new Progress();
+        progress.Stage = "preview";
+        progress.Total = plan.Entries.Count;
         await output.WriteLineAsync($"PREVIEW_STAGE utc={MicrosecondUtcNow():O}; existing_history");
         var timestamps = await ReadExistingTimestampsAsync(connection, plan, cancellationToken);
         await VerifyTargetCoverageAsync(connection,cancellationToken);
@@ -714,6 +823,7 @@ SELECT EXISTS(SELECT 1 FROM dashboard_projection_events WHERE strategy_id=ANY(@I
             }
         }
         Require(completed == timestamps.Count, "Historical target records outside the frozen plan.");
+        progress.Completed = completed;
         var marker = BuildMarker(plan);
         var existingMarker = await ReadMarkerAsync(connection, cancellationToken);
         Require(existingMarker is null || existingMarker == marker, "Final marker does not match the current frozen plan.");
@@ -724,59 +834,121 @@ SELECT EXISTS(SELECT 1 FROM dashboard_projection_events WHERE strategy_id=ANY(@I
         await RequireBaselineAsync(connection, null, baseline, cancellationToken);
         if (!apply)
         {
+            var locks = await ReadLocksAsync(connection, cancellationToken);
+            if (locks.Waiting > 0)
+                await progress.ReportWaitAsync(output, "WAITING_LOCKS", $"waiting={locks.Waiting}; participants={locks.Participants}; preview_only=true; apply_not_ready=true");
             await output.WriteLineAsync("PREVIEW_OK: read-only; native rows, source plan and collisions verified.");
             return 0;
         }
         if (existingMarker is not null)
         {
-            await CompleteWhenReconciledAsync(connection, plan, baseline, marker, false, output, cancellationToken);
+            await CompleteWhenReconciledAsync(connection, plan, baseline, marker, false, progress, output, cancellationToken);
             await output.WriteLineAsync("IDEMPOTENT_OK: full marker and native history verified; writes=0.");
             return 0;
         }
-
+        progress.Stage = "prior_run_queues";
+        await WaitForProjectionsAsync(connection, [], baseline, progress, output, cancellationToken, allChildren: true);
+        var window = new List<NativeChain>();
         foreach (var batch in batches)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await RequireBaselineAsync(connection, null, baseline, cancellationToken);
+            progress.Stage = "batch_preflight";
+            await WaitForReadyAsync(connection, baseline, progress, output, cancellationToken);
             var batchChains = batch.Select(Chain).ToArray();
             var existing = await CheckChainsAsync(connection, null, batchChains, cancellationToken);
             if (existing == batch.Length)
             {
-                await WaitForProjectionsAsync(connection, batchChains, baseline, output, cancellationToken);
                 continue;
             }
             Require(existing == 0, "Only complete one-parent batches may be resumed.");
-            await using (var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken))
-            {
-                await using (var rw = Command("SET TRANSACTION READ WRITE;", connection, transaction))
-                    await rw.ExecuteNonQueryAsync(cancellationToken);
-                await using (var retention = Command("SELECT public.lock_strategy_run_retention_dependency();", connection, transaction))
-                    await retention.ExecuteNonQueryAsync(cancellationToken);
-                await RequireBaselineAsync(connection, transaction, baseline, cancellationToken);
-                var protectedBefore = await ReadProtectedDigestAsync(connection, transaction, cancellationToken);
-                var currentSource = await ReadSourcesAsync(connection, transaction, cancellationToken, batch[0].Source.RunId);
-                Require(currentSource.Count == 1 && currentSource[0].Fingerprint == batch[0].Source.Fingerprint,
-                    "Parent chain changed since the frozen preview.");
-                Require(await CheckChainsAsync(connection, transaction, batchChains, cancellationToken) == 0, "Concurrent target collision.");
-                await InsertChainsAsync(connection, transaction, batchChains, cancellationToken);
-                Require(await CheckChainsAsync(connection, transaction, batchChains, cancellationToken) == batch.Length, "Incomplete batch.");
-                Require(await ReadProtectedDigestAsync(connection, transaction, cancellationToken) == protectedBefore,
-                    "Batch changed protected current/native/Live state.");
-                await transaction.CommitAsync(cancellationToken);
-            }
+            await ApplyBatchAsync(connection, batch, batchChains, baseline, progress, output, cancellationToken);
             completed += batch.Length;
-            await output.WriteLineAsync($"BATCH_COMMITTED utc={MicrosecondUtcNow():O}; parent_run={batch[0].Source.RunId:D}; trades={batch.Length}; primary_rows={batch.Length * 6}; completed={completed}; remaining={plan.Entries.Count - completed}");
+            progress.Completed = completed;
+            progress.WindowBatches++;
+            window.AddRange(batchChains);
+            progress.EndWait();
+            await output.WriteLineAsync($"BATCH_COMMITTED utc={MicrosecondUtcNow():O}; parent_run={batch[0].Source.RunId:D}; trades={batch.Length}; primary_rows={batch.Length * 6}; {progress.Counts}");
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
-            await WaitForProjectionsAsync(connection, batchChains, baseline, output, cancellationToken);
+            progress.Stage = "window_queues";
+            await WaitForReadyAsync(connection, baseline, progress, output, cancellationToken);
+            var queues = await ReadProjectionQueuesAsync(connection, window, cancellationToken);
+            if (progress.WindowBatches == MaximumPendingBatches)
+                await WaitForProjectionsAsync(connection, window, baseline, progress, output, cancellationToken);
+            if (!queues.Pending || progress.WindowBatches == MaximumPendingBatches)
+            {
+                window.Clear();
+                progress.WindowBatches = 0;
+                progress.EndWait();
+            }
         }
+        if (window.Count > 0)
+        {
+            await WaitForProjectionsAsync(connection, window, baseline, progress, output, cancellationToken);
+            progress.WindowBatches = 0;
+        }
+        progress.Stage = "final_sources_and_chains";
         var refreshed = BuildPlan(await ReadSourcesAsync(connection, null, cancellationToken));
         Require(refreshed.SourceDigest == plan.SourceDigest && refreshed.PlanDigest == plan.PlanDigest, "Source changed before final reconciliation.");
         foreach (var chunk in plan.Entries.Chunk(128))
             Require(await CheckChainsAsync(connection, null, chunk.Select(Chain).ToArray(), cancellationToken) == chunk.Length, "Missing completed history.");
-        await CompleteWhenReconciledAsync(connection, plan, baseline, marker, true, output, cancellationToken);
+        await CompleteWhenReconciledAsync(connection, plan, baseline, marker, true, progress, output, cancellationToken);
         Require(await ReadMarkerAsync(connection, cancellationToken) == marker, "Final marker verification failed.");
         await output.WriteLineAsync($"COMPLETE utc={MicrosecondUtcNow():O}; native_trades={completed}; ordinary_paper_metrics_included=true; provenance=ResearchOnly; marker={MarkerKey}");
         return 0;
+    }
+
+    private static async Task ApplyBatchAsync(NpgsqlConnection connection, Entry[] batch,
+        NativeChain[] batchChains, Baseline baseline, Progress progress, TextWriter output, CancellationToken token)
+    {
+        while (true)
+        {
+            progress.Stage = "batch_preflight";
+            await WaitForReadyAsync(connection, baseline, progress, output, token);
+            await output.WriteLineAsync($"BATCH_ATTEMPT utc={MicrosecondUtcNow():O}; parent_run={batch[0].Source.RunId:D}; {progress.Counts}");
+            var retry = false;
+            await using (var transaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, token))
+            {
+                var commitAttempted = false;
+                progress.Stage = "batch_write";
+                progress.Outcome = WriteOutcome.Active;
+                try
+                {
+                    await using (var rw = Command("SET TRANSACTION READ WRITE;", connection, transaction))
+                        await rw.ExecuteNonQueryAsync(token);
+                    await using (var retention = Command("SELECT public.lock_strategy_run_retention_dependency();", connection, transaction))
+                        await retention.ExecuteNonQueryAsync(token);
+                    await RequireBaselineAsync(connection, transaction, baseline, token);
+                    var protectedBefore = await ReadProtectedDigestAsync(connection, transaction, token);
+                    var currentSource = await ReadSourcesAsync(connection, transaction, token, batch[0].Source.RunId);
+                    Require(currentSource.Count == 1 && currentSource[0].Fingerprint == batch[0].Source.Fingerprint,
+                        "Parent chain changed since the frozen preview.");
+                    Require(await CheckChainsAsync(connection, transaction, batchChains, token) == 0, "Concurrent target collision.");
+                    await InsertChainsAsync(connection, transaction, batchChains, token);
+                    Require(await CheckChainsAsync(connection, transaction, batchChains, token) == batch.Length, "Incomplete batch.");
+                    Require(await ReadProtectedDigestAsync(connection, transaction, token) == protectedBefore,
+                        "Batch changed protected current/native/Live state.");
+                    progress.Stage = "batch_commit";
+                    commitAttempted = true;
+                    progress.Outcome = WriteOutcome.Unknown;
+                    await transaction.CommitAsync(token);
+                    progress.Outcome = WriteOutcome.Committed;
+                }
+                catch (Exception ex)
+                {
+                    if (commitAttempted) throw; // Never replay an uncertain COMMIT.
+                    progress.Outcome = WriteOutcome.Unknown;
+                    await transaction.RollbackAsync(CancellationToken.None);
+                    progress.Outcome = WriteOutcome.RolledBack;
+                    if (!IsRetryableBatchLock(ex, rollbackConfirmed: true, commitAttempted)) throw;
+                    retry = true;
+                }
+            }
+            if (!retry) return;
+            progress.Stage = "batch_lock_retry";
+            await WaitForReadyAsync(connection, baseline, progress, output, token);
+            await progress.ReportWaitAsync(output, "WAITING_LOCKS", "sqlstate=55P03; rollback_confirmed=true; retry_after_seconds=5");
+            await Task.Delay(PollInterval, token);
+        }
     }
 
     private static async Task VerifyTargetCoverageAsync(NpgsqlConnection connection,CancellationToken token)
