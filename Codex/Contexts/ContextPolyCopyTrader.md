@@ -1,3 +1,17 @@
+## Active Update 2026-09-04 Checked Publication Completed
+Goal: Publish every existing Progress34 change while retaining normal checks and honest unfinished-history status.
+Status: Completed implementation publication and owned temporary cleanup; final bookkeeping delivery follows.
+Done:
+- Exact user approval of RC-20260904-progress34-checked-publication sha256:fabb53f204a3a195eda573c0c98678ab38a2cb1b1f56975afff152cce856cbe3 verified and recorded. Commit d9d2d336 separates old pending-task evidence and the new approval checkpoint; commit 22b4672270cb49f152f0a0071d3555b448ff53de publishes the unchanged tested importer/test/README revision with honest code-only completion evidence.
+- Original ten dirty files plus the approved publication contract all preserved. Four product byte SHA256 and normalized blobs match the prior independently verified67/67 revision; no functional tests rerun or product edits this turn. Old dashboard-ack and wallet-fix contracts retain original byte hashes3FC69DB19A0D2BACF5B0D8913E15F2738EAB6720A902BF8F6FE9A5B2FD35E632/5A44BB7823464CE9CF1376F491779B9B9D7FA91FF2608B93011428617CE9F534, approved with3/2pending checks. Full earlier failed-publication evidence retained and superseded by actual passing isolated checks.
+- Normal group1 WorkingTree/Staged PASS0governed/3contracts; group2 PASS4/2; eab41015..22b46722 Range PASS4commits/4governed/7contracts. Independent agent:/root/publication_review repeated checks and compared actual requests/contracts/diffs/evidence, final PASS/no findings. Rules, validator, hooks and configuration unchanged; no bypass.
+- Main adopted prepared commits only after exact11path normalized-blob comparison, complete index tree55f7459945b3fbf59d95dd4922899c1ac7a9925a equality, no unstaged changes and ancestor check; compare-and-swap fast-forward from aa449f65. No reset or loss of working files. One text-patch context mismatch during contract transfer changed no files; guarded full-document patch then succeeded.
+- Ordinary push eab41015..22b46722 succeeded. Main and independent reviewer each confirmed fresh remote origin/master=22b4672270cb49f152f0a0071d3555b448ff53de, upstream0/0 and clean working tree. Main clean WorkingTree/Staged PASS0/0. Final context/history records are an additional exempt documentation-only commit, not a product change.
+- Protected cleanup complete: own clean detached worktree under D:/CodexTemp/runs/manual-bfe6185b9fe94a6db5e7763947e3bbc5 removed only after all reads ended and0referencing processes; pre-removal inventory1038files/24919107bytes. Complete-CodexTempRun removed remaining2files/936bytes; independent path check confirms run absent. Only disposable copies removed; originals and commits retained. Unrelated stale/unmarked directories and unrelated stale worktree metadata untouched.
+Next: Historical restoration remains a separate unfinished operation; this publication did not run it.
+Notes: No Production connection, importer execution, deployment, service restart, database/trading change, new test run or monitor. No active owned temporary process/run remains.
+Blockers: None for the requested publication; old history-operation pending checks are not code-publication blockers now.
+
 ## Active Update 2026-09-04 Checked Publication Contract Draft
 Goal: Resolve the existing publication-gate conflict by isolated grouping, without changing code, enforcement or unfinished history status.
 Status: Blocked pending the required later exact approval; narrow publication contract prepared.
