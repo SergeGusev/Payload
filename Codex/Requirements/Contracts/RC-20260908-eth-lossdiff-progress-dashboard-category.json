@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260908-eth-lossdiff-progress-dashboard-category",
+  "title": "Group the 34 ETH LossDiff Progress strategies in a dedicated Dashboard category",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Сделай для них отдельную LossDiff Progress категорию"
+    },
+    {
+      "source": "user",
+      "text": "`ETH 5m LossDiff Progress`  "
+    }
+  ],
+  "scope": {
+    "goal": "Show exactly the existing 34 ETH LossDiff Positive Progress strategies in a dedicated Dashboard category named `ETH 5m LossDiff Progress`.",
+    "inScope": [
+      "Dashboard display-category classification for the 16 existing Up4 children b7c50005-0000-4000-8236-{cap:12 digits}, caps 1..16, whose exact display names are `ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap N`.",
+      "Dashboard display-category classification for the 18 existing Up8 children b7c50005-0000-4000-8237-{cap:12 digits}, caps 1..18, whose exact display names are `ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap N`.",
+      "The category label is exactly `ETH 5m LossDiff Progress` and is available through the existing Dashboard category selector/filter path."
+    ],
+    "outOfScope": [
+      "Changes to strategy identities, names, catalog rows, assignments, configuration, trading logic, LossDiff calculation, Progress sizing, caps, history, metrics, Paper/Live state, orders, database data, service state, or Production deployment.",
+      "Reclassification of any strategy outside the exact two existing 34-member families, including similarly named clones, aliases, future strategies, and non-Progress LossDiff strategies.",
+      "Any new Dashboard control, category hierarchy, sorting rule, currency classification, or visual redesign."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Not applicable; category classification applies to the exact existing 34 strategies whenever they are displayed.",
+    "firstVerification": "Inspect the current Dashboard category classifier and its selector/filter consumers, then prove with focused tests that all 34 exact display names map to the new label while neighboring names retain their prior categories."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Classify exactly the existing 34 ETH LossDiff Positive Progress strategies into one Dashboard category whose visible label is `ETH 5m LossDiff Progress`.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "`ETH 5m LossDiff Progress`",
+      "acceptanceCriteria": [
+        "Each exact Up4 display name with Cap 1 through Cap 16 returns `ETH 5m LossDiff Progress` from StrategyDisplayCategories.GetCategory.",
+        "Each exact Up8 display name with Cap 1 through Cap 18 returns `ETH 5m LossDiff Progress` from StrategyDisplayCategories.GetCategory.",
+        "The existing Dashboard category option builder exposes one `ETH 5m LossDiff Progress` option and the existing category filter includes these strategies when that option is selected.",
+        "Close but out-of-scope names, including out-of-range caps and non-Progress LossDiff names, are not classified into this category.",
+        "Existing category-classification tests remain passing."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/StrategyDisplayCategories.cs",
+        "tests/PolyCopyTrader.Tests/StrategyDisplayCategoryTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~StrategyDisplayCategoryTests",
+          "expected": "All focused category tests pass, including exact coverage of all 34 members and rejection of neighboring names.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260908-eth-lossdiff-progress-dashboard-category sha256:949abc1de0633a66846db2f4e9f70f13eca71416c6dbee15563bb9a977e3dc7a",
+    "semanticDigest": "sha256:949abc1de0633a66846db2f4e9f70f13eca71416c6dbee15563bb9a977e3dc7a"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer_eth_lossdiff_progress_dashboard_category",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
