@@ -611,10 +611,23 @@ For Live, the workflow uses only authoritative Fee already associated with the
 order; it does not create an on-chain matcher. A modeled public-schedule Fee is
 `Calculated`, never `VenueReported`. A strictly newer associated
 `VenueReported` revision may supersede earlier non-authoritative accounting and
-applies an audited cumulative balance correction. Historical balance writes are
-serialized in settlement order, clamped by the existing balance bounds, and do
+applies an audited balance correction. For every future initial application or
+accepted revision, the correction is the difference between two chronological
+replays of that strategy's settled Live contributions. Both replays start from
+`100`, order rows by `(settled_at_utc, lower(id::text))`, and clamp to `0..100`
+after every contribution; only the target contribution changes from its accepted
+pre-event baseline to the new desired Net contribution. The resulting marginal
+delta is applied to the currently locked balance, so intervening ordinary
+settlements or manual balance changes are not replaced by an absolute replay
+result. Historical balance writes remain serialized in settlement order and do
 not toggle Live, alter loss counters, pause trading, or emit ordinary settlement
 notifications.
+
+This replay-delta rule is future-only. Deploying or restarting the corrected
+build does not reopen completed initial balance applications, recalculate current
+balances, or overwrite a manually edited balance. A previously unresolved row
+uses the rule when its initial balance event first completes; a completed row
+uses it only if a strictly newer valid `VenueReported` revision is accepted.
 
 The deployed service performs this historical repair incrementally. It first
 selects the unfinished strategy with the greatest current Dashboard Gross. That
@@ -629,8 +642,10 @@ selection evidence remains readable. Live
 initial balance effects remain ordered by settlement time and UUID per strategy:
 an earlier unfinished row gates later initial balance transactions for that
 strategy, and the active strategy is retained until that balance work is
-terminal. The background cadence and projection reconciliation can leave Net
-temporarily blank until the relevant target and snapshot refresh complete.
+terminal. Completed rows are not swept again solely because the replay-delta
+implementation changed. The background cadence and projection reconciliation
+can leave Net temporarily blank until the relevant target and snapshot refresh
+complete.
 
 The current model has four material limits:
 

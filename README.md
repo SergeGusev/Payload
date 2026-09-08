@@ -1425,6 +1425,26 @@ selected until that ordered balance work is terminal; lower-Gross strategies do
 not overtake it. Dashboard visibility still waits for the applicable cycle and
 projection reconciliation.
 
+Future historical Live balance events use a chronological marginal replay
+instead of adding the raw Gross-to-Net difference to the current capped balance.
+For one exact strategy, the repository replays all settled Live contributions
+from `100` in `(settled_at_utc, lower(id::text))` order and clamps to `0..100`
+after every row. The before/after replays differ only in the target's accepted
+contribution, and their final difference is added to the currently locked
+balance. This preserves intervening ordinary settlements and manual balance
+edits instead of replacing the current balance with the replay result.
+
+The correction is deliberately future-only: deployment or restart does not
+reopen completed historical balance events, recalculate current balances, or
+overwrite a manual balance. A still-unresolved historical row uses the corrected
+rule when it is first applied, while a completed row uses it only for a strictly
+newer accepted `VenueReported` revision.
+
+Build this path with `dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj`.
+Its focused verification is `dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter "FullyQualifiedName~HistoricalGrossNetParity|FullyQualifiedName~PaperFakFeeBackfillProcessorTests"`;
+the PostgreSQL cases require `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` to name an
+allowlisted disposable loopback database.
+
 Each strategy-bound candidate page first materializes that strategy's exact
 allowlisted BUY order IDs and probes their fills through the existing per-order
 index. The legacy `PaperRun` payload exclusion then looks up the resulting

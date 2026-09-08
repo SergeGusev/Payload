@@ -3,7 +3,7 @@
   "contractId": "RC-20260908-historical-live-balance-replay-delta",
   "title": "Корректный будущий пересчёт исторического Live-баланса с учётом хронологических ограничений",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -66,8 +66,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~HistoricalGrossNetParityPostgresIntegrationTests\" --logger \"trx;LogFileName=historical-live-balance-replay.trx\" -p:UseSharedCompilation=false -nr:false",
           "expected": "Все существующие и новые HistoricalGrossNetParity PostgreSQL integration tests действительно выполняются на owned loopback fixture, не пропускаются из-за connection string, и проходят. Новые tests подтверждают upper/lower clamp replay delta, future initial/revision semantics, idempotency, audit evidence и отсутствие reprocessing Completed без новой revision.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Owned PostgreSQL 17 fixture at 127.0.0.1:52129 was independently verified as database pct_codex_skip_v2_20260908090500_aea4d759 with data_directory inside the marked run and TimeZone UTC. The exact HistoricalGrossNetParityPostgresIntegrationTests class executed 8/8 passed, 0 failed, 0 skipped. TRX historical-live-balance-replay-run2.trx SHA256 0BEA2FAB630119AD76CC56C859305F1481B05246C495F45479C424C856290762. The later 57-test regression run also included the strengthened future revision target-contribution assertions."
         }
       ]
     },
@@ -94,24 +94,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~HistoricalGrossNetParity|FullyQualifiedName~PaperFakFeeBackfillProcessorTests\" --logger \"trx;LogFileName=historical-live-balance-regressions.trx\" -p:UseSharedCompilation=false -nr:false",
           "expected": "Все выбранные tests выполняются и проходят; future-only candidate boundary, worker dispatch, revision/idempotency behavior и новая replay-delta логика не ломают существующий historical parity workflow.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "With POLYCOPYTRADER_REPOSITORY_ROOT=D:/My/Business/PolyMarket and a fresh independently verified owned PostgreSQL database pct_codex_skip_v2_20260908091500_aea4d759, the combined HistoricalGrossNetParity and PaperFakFeeBackfillProcessor filters executed 57/57 passed, 0 failed, 0 skipped. TRX historical-live-balance-regressions-final2.trx SHA256 422C3D9E44BD035C8B6C2521B8D0D9DC76BE8293F054DAC18A3F650866891D91. Independent read-only SQL confirmed current balance 79.8; initial desired -0.410922, requested/applied replay delta -0.2, residual 0, replay finals 0.2/0; future VenueReportedRevision desired -0.5, prior applied -0.2, requested/applied 0, residual 0, target contributions -10.210922/-10.3, replay finals 0/0."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\" -p:UseSharedCompilation=false -nr:false",
           "expected": "Exit 0. Все TEMP/TMP/TMPDIR, build, test и TRX outputs находятся внутри принадлежащего задаче marked D:/CodexTemp run; service не запускается, Production не меняется.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final PolyCopyTrader.Service build exited 0 with 0 errors and 121 pre-existing warnings; no warning referenced a changed file. service-build-final.log SHA256 F126E2654158862B55A0BC9CB2A1EBE6B840DA8BCE211FADAA939793F46DC381. Service was not started and Production was not accessed or changed during implementation verification."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "Independent semantic review of verbatim requests, approved contract, exact diff and verification evidence; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree, -Mode Staged and scoped -Mode Range; git diff --check; protected owned-run cleanup verification.",
           "expected": "Независимый reviewer выдаёт pass без findings; все requirement gates проходят на approval checkpoint и exact scoped changes; unrelated context/history edits не присваиваются; owned temporary run удалён защищённой очисткой; deployment/Production writes отсутствуют.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/historical_live_balance_reviewer compared all three verbatim requests, the approved contract at approval-only parent commit b70bfa64ef0bd685648ee1b9c7e45a809d3dc412, the exact four-path product/test/docs diff, dispatch/repository behavior and final test/build evidence; verdict PASS with no findings. git diff --check found no whitespace errors (only line-ending notices). Final SHA256: repository F8AE5554AED0A869AC93D61CD261DDB95143624207B704CCFF85615C3BED180A; integration tests AE3DF9FAD1CE3AFB27302A6BBCEC5C2AC8D4D9E1E358ADBAA011D086FE7C9549; README 842B3BDB5F47D0D469C9AEA6E52E275239DB1E508670AB3836D0B1EB50E19F5C; PAPER_LIVE_PARITY D4C135C96210FCA24BF35814781DB92913F5AC97E15963BE52C1A787FB0FB6B7. The exact owned PostgreSQL server was stopped, its temporary worktree registration was removed, and protected cleanup removed marked run aea4d75970a740a5a666a752717db512 (8373 files, 598480866 bytes); the run path no longer exists. Unrelated context/history changes remain unstaged."
         }
       ]
     }
@@ -125,9 +125,9 @@
     "semanticDigest": "sha256:9c20f622a39c9d20a4b2f11940f22a6584ef333435b3dcf2cf02d71e109b07f9"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/historical_live_balance_reviewer",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

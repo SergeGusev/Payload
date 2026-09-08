@@ -496,7 +496,8 @@ GROUP BY r.fee_usd, r.net_realized_pnl_usd, r.fee_calculation_source;
             var result = await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(request);
             Assert.True(result.Status == HistoricalGrossNetParityApplyStatus.Applied, result.Details);
             Assert.Equal(HistoricalGrossNetParityOwnership.Completed, result.Ownership);
-            Assert.Equal(-0.41092200m, result.ActualAppliedDelta);
+            Assert.Equal(0m, result.RequestedDelta);
+            Assert.Equal(0m, result.ActualAppliedDelta);
             Assert.Equal(0m, result.ResidualUnappliedDelta);
             Assert.Equal(HistoricalGrossNetParityApplyStatus.TerminalNoOp,
                 (await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(request)).Status);
@@ -531,10 +532,155 @@ FROM strategies strategy WHERE strategy.id = @StrategyId;
         verify.Parameters.AddWithValue("PostCutoffId", fixture.PostCutoffId);
         await using var reader = await verify.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
-        Assert.Equal(79.17815600m, reader.GetDecimal(0));
+        Assert.Equal(80m, reader.GetDecimal(0));
         for (var index = 1; index <= 4; index++) Assert.Equal(2, reader.GetInt64(index));
-        Assert.Equal(-0.82184400m, reader.GetDecimal(5));
+        Assert.Equal(0m, reader.GetDecimal(5));
         Assert.True(reader.GetBoolean(6));
+        Assert.False(await reader.ReadAsync());
+    }
+
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task FutureLiveBalanceReplay_UsesChronologicalFloorAndFutureVenueRevisionOnly()
+    {
+        var factory = await CreateFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var fixture = await SeedLiveFloorReplayFixtureAsync(factory);
+        var targets = await LoadLiveHashTargetsAsync(repository, fixture.StrategyId);
+        Assert.Equal(2, targets.Count);
+        var exact = Assert.Single(targets, value => value.SourceId == fixture.ExactId);
+        var target = Assert.Single(targets, value => value.SourceId == fixture.TargetId);
+
+        var exactDecision = HistoricalGrossNetParityDecisionFactory.TryCreateExact(
+            exact,
+            [],
+            DateTimeOffset.UtcNow,
+            HistoricalGrossNetParityConstants.CalculationVersion);
+        Assert.NotNull(exactDecision);
+        var exactAccounting = LiveHashAccountingRequest(exact) with { Decision = exactDecision };
+        Assert.Equal(
+            HistoricalGrossNetParityApplyStatus.Applied,
+            (await repository.TryApplyHistoricalGrossNetParityLiveAccountingAsync(exactAccounting)).Status);
+        var exactBalance = await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(
+            LiveHashBalanceRequest(exact));
+        Assert.Equal(HistoricalGrossNetParityApplyStatus.Applied, exactBalance.Status);
+        Assert.Equal(0m, exactBalance.RequestedDelta);
+        Assert.Equal(0m, exactBalance.ActualAppliedDelta);
+
+        var targetAccounting = LiveHashAccountingRequest(target);
+        Assert.Equal(0.41092200m, targetAccounting.Decision.StoredFeeUsd);
+        Assert.Equal(-10.21092200m, targetAccounting.Decision.NetPnlUsd);
+        Assert.Equal(
+            HistoricalGrossNetParityApplyStatus.Applied,
+            (await repository.TryApplyHistoricalGrossNetParityLiveAccountingAsync(targetAccounting)).Status);
+
+        var targetBalanceRequest = LiveHashBalanceRequest(target);
+        var targetBalance = await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(
+            targetBalanceRequest);
+        Assert.Equal(HistoricalGrossNetParityApplyStatus.Applied, targetBalance.Status);
+        Assert.Equal(-0.2m, targetBalance.RequestedDelta);
+        Assert.Equal(-0.2m, targetBalance.ActualAppliedDelta);
+        Assert.Equal(0m, targetBalance.ResidualUnappliedDelta);
+        Assert.Equal(
+            HistoricalGrossNetParityApplyStatus.TerminalNoOp,
+            (await repository.TryApplyHistoricalGrossNetParityEarliestLiveBalanceAsync(
+                targetBalanceRequest)).Status);
+
+        var revision = new HistoricalGrossNetParityVenueRevisionRequest(
+            fixture.TargetId,
+            "integration-floor-authority",
+            "00000000000000000001",
+            "venue-floor-replay-v1",
+            targetAccounting.Decision.EvidenceVersion,
+            0.5m,
+            -10.3m,
+            "integration-venue-reported",
+            nameof(FeeLiquidityRole.Taker),
+            0.01m,
+            2,
+            true,
+            HistoricalGrossNetParityConstants.CutoffUtc.AddDays(2),
+            "{\"source\":\"integration\"}");
+        var revisionResult = await repository.ApplyHistoricalGrossNetParityVenueRevisionAsync(revision);
+        Assert.True(revisionResult.Applied, revisionResult.Details);
+        Assert.False(revisionResult.Idempotent);
+        Assert.Equal(HistoricalGrossNetParityOwnership.Completed, revisionResult.Ownership);
+        Assert.Equal(0m, revisionResult.RequestedDelta);
+        Assert.Equal(0m, revisionResult.ActualAppliedDelta);
+        Assert.Equal(0m, revisionResult.ResidualUnappliedDelta);
+        Assert.False(revisionResult.BalanceDeferred);
+        var repeatedRevision = await repository.ApplyHistoricalGrossNetParityVenueRevisionAsync(revision);
+        Assert.False(repeatedRevision.Applied);
+        Assert.True(repeatedRevision.Idempotent);
+
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var verify = new NpgsqlCommand(
+            """
+SELECT strategy.live_available_balance,
+       target.fee_usd,
+       target.net_realized_pnl_usd,
+       target.historical_gross_net_parity_ownership,
+       initial.desired_cumulative_adjustment,
+       initial.requested_delta,
+       initial.actual_applied_delta,
+       initial.residual_unapplied_delta,
+       initial.evidence_payload_json #>> '{balance_replay,schema}',
+       (initial.evidence_payload_json #>> '{balance_replay,settled_order_count}')::integer,
+       (initial.evidence_payload_json #>> '{balance_replay,target_contribution_before}')::numeric,
+       (initial.evidence_payload_json #>> '{balance_replay,target_contribution_after}')::numeric,
+       (initial.evidence_payload_json #>> '{balance_replay,final_balance_before}')::numeric,
+       (initial.evidence_payload_json #>> '{balance_replay,final_balance_after}')::numeric,
+       revision.desired_cumulative_adjustment,
+       revision.prior_actual_cumulative_adjustment,
+       revision.requested_delta,
+       revision.actual_applied_delta,
+       revision.residual_unapplied_delta,
+       revision.new_actual_cumulative_adjustment,
+       (revision.evidence_payload_json #>> '{balance_replay,final_balance_before}')::numeric,
+       (revision.evidence_payload_json #>> '{balance_replay,final_balance_after}')::numeric,
+       (revision.evidence_payload_json #>> '{balance_replay,target_contribution_before}')::numeric,
+       (revision.evidence_payload_json #>> '{balance_replay,target_contribution_after}')::numeric,
+       (SELECT count(*) FROM historical_gross_net_parity_audit audit
+        WHERE audit.strategy_id=@StrategyId AND audit.operation_kind='InitialBalanceApplication')
+FROM strategies strategy
+INNER JOIN live_orders target ON target.id=@TargetId
+INNER JOIN historical_gross_net_parity_audit initial
+  ON initial.source_id=target.id AND initial.operation_kind='InitialBalanceApplication'
+INNER JOIN historical_gross_net_parity_audit revision
+  ON revision.source_id=target.id AND revision.operation_kind='VenueReportedRevision'
+WHERE strategy.id=@StrategyId;
+""",
+            connection);
+        verify.Parameters.AddWithValue("StrategyId", fixture.StrategyId);
+        verify.Parameters.AddWithValue("TargetId", fixture.TargetId);
+        await using var reader = await verify.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(79.8m, reader.GetDecimal(0));
+        Assert.Equal(0.5m, reader.GetDecimal(1));
+        Assert.Equal(-10.3m, reader.GetDecimal(2));
+        Assert.Equal(nameof(HistoricalGrossNetParityOwnership.Completed), reader.GetString(3));
+        Assert.Equal(-0.41092200m, reader.GetDecimal(4));
+        Assert.Equal(-0.2m, reader.GetDecimal(5));
+        Assert.Equal(-0.2m, reader.GetDecimal(6));
+        Assert.Equal(0m, reader.GetDecimal(7));
+        Assert.Equal("HistoricalGrossNetParityLiveBalanceReplayV1", reader.GetString(8));
+        Assert.Equal(2, reader.GetInt32(9));
+        Assert.Equal(-9.8m, reader.GetDecimal(10));
+        Assert.Equal(-10.21092200m, reader.GetDecimal(11));
+        Assert.Equal(0.2m, reader.GetDecimal(12));
+        Assert.Equal(0m, reader.GetDecimal(13));
+        Assert.Equal(-0.5m, reader.GetDecimal(14));
+        Assert.Equal(-0.2m, reader.GetDecimal(15));
+        Assert.Equal(0m, reader.GetDecimal(16));
+        Assert.Equal(0m, reader.GetDecimal(17));
+        Assert.Equal(0m, reader.GetDecimal(18));
+        Assert.Equal(-0.2m, reader.GetDecimal(19));
+        Assert.Equal(0m, reader.GetDecimal(20));
+        Assert.Equal(0m, reader.GetDecimal(21));
+        Assert.Equal(-10.21092200m, reader.GetDecimal(22));
+        Assert.Equal(-10.3m, reader.GetDecimal(23));
+        Assert.Equal(2, reader.GetInt64(24));
         Assert.False(await reader.ReadAsync());
     }
 
@@ -748,6 +894,68 @@ FROM unnest(@Ids::uuid[]) WITH ORDINALITY AS entries(id, ordinal);
         seed.Parameters.AddWithValue("Cutoff", HistoricalGrossNetParityConstants.CutoffUtc.UtcDateTime);
         await seed.ExecuteNonQueryAsync();
         return (strategyId, ids[0], ids[1], ids[2]);
+    }
+
+    private static async Task<(Guid StrategyId, Guid ExactId, Guid TargetId)>
+        SeedLiveFloorReplayFixtureAsync(PostgresConnectionFactory factory)
+    {
+        var strategyId = Guid.NewGuid();
+        var exactId = Guid.NewGuid();
+        var targetId = Guid.NewGuid();
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var seed = new NpgsqlCommand(
+            """
+INSERT INTO strategies (id, code, name, description, enabled, live_stakes,
+                        live_available_balance, created_at_utc, updated_at_utc)
+VALUES (@StrategyId, @Code, @Code, 'Live floor replay regression', true, false,
+        80, @EnteredAt, @EnteredAt);
+
+INSERT INTO live_orders (
+    id, signal_id, strategy_id, status, order_id, side, asset_id, condition_id,
+    outcome, price, size_shares, notional_usd, order_type, created_at_utc,
+    expires_at_utc, submitted_at_utc, response_status, filled_size, remaining_size,
+    average_fill_price, filled_notional_usd, cost_basis_usd, fee_usd,
+    fee_accounting_status, fee_liquidity_role, fee_calculation_source,
+    fee_rate, fee_exponent, fee_taker_only, fee_calculated_at_utc,
+    cancel_status, raw_response_json, validation_summary, balance_effect_applied,
+    settlement_value_usd, realized_pnl_usd, net_realized_pnl_usd,
+    settled_at_utc, winning_asset_id, winning_outcome, won, settlement_source,
+    updated_at_utc)
+VALUES
+    (@ExactId, gen_random_uuid(), @StrategyId, 'Matched', 'floor-exact',
+     'Buy', 'floor-exact-asset', 'floor-exact-condition', 'Yes', 0.5, 200, 100,
+     'FAK', @EnteredAt, @EnteredAt + interval '5 minutes',
+     @EnteredAt + interval '1 second', 'ok', 200, 0, 0.5, 100, 100.2, 0.2,
+     'Calculated', 'Taker', @ExactSource, 0.01, 2, true, @SettledAt,
+     '', '{}'::jsonb, 'floor exact', true, 10.2, -89.8, -90,
+     @SettledAt + interval '1 second', 'floor-exact-asset', 'Yes', false,
+     'integration', @SettledAt),
+    (@TargetId, gen_random_uuid(), @StrategyId, 'Matched', 'floor-target',
+     'Buy', 'floor-target-asset', 'floor-target-condition', 'Yes', 0.5, 24.68, 12.34,
+     'FAK', @EnteredAt, @EnteredAt + interval '5 minutes',
+     @EnteredAt + interval '2 seconds', 'ok', 24.68, 0, 0.5, 12.34, 12.34, 0,
+     'LegacyUnknown', 'Unknown', '', NULL, NULL, NULL, NULL,
+     '', '{}'::jsonb, 'floor target', true, 2.54, -9.8, NULL,
+     @SettledAt + interval '2 seconds', 'floor-target-asset', 'Yes', false,
+     'integration', @SettledAt);
+""",
+            connection);
+        seed.Parameters.AddWithValue("StrategyId", strategyId);
+        seed.Parameters.AddWithValue("ExactId", exactId);
+        seed.Parameters.AddWithValue("TargetId", targetId);
+        seed.Parameters.AddWithValue("Code", "historical_live_floor_" + strategyId.ToString("N"));
+        seed.Parameters.AddWithValue(
+            "ExactSource",
+            "polymarket-clob-v2-fd-shares-rate-price-curve-round5-away-from-zero-v1");
+        seed.Parameters.AddWithValue(
+            "EnteredAt",
+            HistoricalGrossNetParityConstants.CutoffUtc.AddDays(-2).UtcDateTime);
+        seed.Parameters.AddWithValue(
+            "SettledAt",
+            HistoricalGrossNetParityConstants.CutoffUtc.AddDays(-1).UtcDateTime);
+        await seed.ExecuteNonQueryAsync();
+        return (strategyId, exactId, targetId);
     }
 
     private static async Task<PostgresConnectionFactory> CreateFactoryAsync()

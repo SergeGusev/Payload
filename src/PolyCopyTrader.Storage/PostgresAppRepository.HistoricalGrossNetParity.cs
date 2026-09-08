@@ -645,6 +645,16 @@ public sealed partial class PostgresAppRepository
         string LatestEvidenceVersion,
         decimal PriorActualCumulativeAdjustment);
 
+    private sealed record HistoricalGrossNetParityLiveBalanceReplay(
+        int SettledOrderCount,
+        decimal TargetContributionBefore,
+        decimal TargetContributionAfter,
+        decimal FinalBalanceBefore,
+        decimal FinalBalanceAfter)
+    {
+        public decimal RequestedDelta => FinalBalanceAfter - FinalBalanceBefore;
+    }
+
     private static async Task<HistoricalGrossNetParityLiveBalanceResult>
         TryApplyHistoricalGrossNetParityEarliestLiveBalanceCoreAsync(
             NpgsqlConnection connection,
@@ -699,12 +709,26 @@ public sealed partial class PostgresAppRepository
                 "The target strategy is missing.");
         }
 
-        var requestedDelta = state.DesiredCumulativeAdjustment - state.PriorActualCumulativeAdjustment;
+        var targetContributionBefore = GetHistoricalGrossNetParityBaselineContribution(
+            state.BaselineKind,
+            state.NominalGrossPnlUsd,
+            state.NominalNetPnlUsd);
+        var replay = await CalculateHistoricalGrossNetParityLiveBalanceReplayAsync(
+            connection,
+            transaction,
+            request.StrategyId,
+            request.LiveOrderId,
+            targetContributionBefore,
+            targetContributionBefore + state.DesiredCumulativeAdjustment,
+            request.CalculationVersion,
+            request.CommandTimeoutSeconds,
+            cancellationToken);
+        var requestedDelta = replay.RequestedDelta;
         var unclamped = balanceBefore.Value + requestedDelta;
         var balanceAfter = Math.Clamp(unclamped, 0m, 100m);
         var actualDelta = balanceAfter - balanceBefore.Value;
         var newActual = state.PriorActualCumulativeAdjustment + actualDelta;
-        var residual = state.DesiredCumulativeAdjustment - newActual;
+        var residual = requestedDelta - actualDelta;
         var clamp = balanceAfter != unclamped;
         await UpdateHistoricalGrossNetParityStrategyBalanceAsync(
             connection, transaction, request.StrategyId, balanceAfter,
@@ -734,8 +758,9 @@ public sealed partial class PostgresAppRepository
             state.CurrentPayloadJson, newPayload,
             JsonSerializer.Serialize(new
             {
-                schema = "HistoricalGrossNetParityInitialBalanceApplicationV1",
-                latest_evidence_version = state.LatestEvidenceVersion
+                schema = "HistoricalGrossNetParityInitialBalanceApplicationV2",
+                latest_evidence_version = state.LatestEvidenceVersion,
+                balance_replay = CreateHistoricalGrossNetParityLiveBalanceReplayEvidence(replay)
             }),
             state.RowVersion, resultingRowVersion,
             state.BaselineKind, state.NominalGrossPnlUsd, state.NominalNetPnlUsd,
@@ -750,6 +775,184 @@ public sealed partial class PostgresAppRepository
             HistoricalGrossNetParityOwnership.Completed,
             requestedDelta, actualDelta, residual, true);
     }
+
+    private static decimal GetHistoricalGrossNetParityBaselineContribution(
+        HistoricalGrossNetParityBaselineEffectKind baselineKind,
+        decimal nominalGrossPnlUsd,
+        decimal? nominalNetPnlUsd) => baselineKind switch
+        {
+            HistoricalGrossNetParityBaselineEffectKind.None => 0m,
+            HistoricalGrossNetParityBaselineEffectKind.LegacyGrossApplied => nominalGrossPnlUsd,
+            HistoricalGrossNetParityBaselineEffectKind.NetAlreadyApplied
+                when nominalNetPnlUsd is not null => nominalNetPnlUsd.Value,
+            HistoricalGrossNetParityBaselineEffectKind.NetAlreadyApplied =>
+                throw new InvalidOperationException("Historical parity Net-applied baseline is missing Net PnL."),
+            _ => throw new ArgumentOutOfRangeException(nameof(baselineKind))
+        };
+
+    private static async Task<HistoricalGrossNetParityLiveBalanceReplay>
+        CalculateHistoricalGrossNetParityLiveBalanceReplayAsync(
+            NpgsqlConnection connection,
+            NpgsqlTransaction transaction,
+            Guid strategyId,
+            Guid targetLiveOrderId,
+            decimal targetContributionBefore,
+            decimal targetContributionAfter,
+            string calculationVersion,
+            int commandTimeoutSeconds,
+            CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+SELECT live_order.id, live_order.realized_pnl_usd, live_order.net_realized_pnl_usd,
+       live_order.balance_effect_applied,
+       live_order.historical_gross_net_parity_ownership,
+       baseline.baseline_effect_kind,
+       baseline.nominal_baseline_gross_pnl_usd,
+       baseline.nominal_baseline_net_pnl_usd,
+       latest_decision.desired_cumulative_adjustment
+FROM live_orders live_order
+LEFT JOIN LATERAL (
+    SELECT audit.baseline_effect_kind,
+           audit.nominal_baseline_gross_pnl_usd,
+           audit.nominal_baseline_net_pnl_usd
+    FROM historical_gross_net_parity_audit audit
+    WHERE audit.source_kind='LiveOrder' AND audit.source_id=live_order.id
+      AND audit.calculation_version=@CalculationVersion
+      AND audit.operation_kind='AccountingBaseline'
+    LIMIT 1
+) baseline ON true
+LEFT JOIN LATERAL (
+    SELECT audit.desired_cumulative_adjustment
+    FROM historical_gross_net_parity_audit audit
+    WHERE audit.source_kind='LiveOrder' AND audit.source_id=live_order.id
+      AND audit.calculation_version=@CalculationVersion
+      AND audit.operation_kind IN ('AccountingDecision','VenueReportedRevision')
+      AND audit.desired_cumulative_adjustment IS NOT NULL
+    ORDER BY CASE WHEN audit.operation_kind='VenueReportedRevision' THEN 1 ELSE 0 END DESC,
+             audit.authority_order_key DESC NULLS LAST,
+             audit.occurred_at_utc DESC, lower(audit.audit_id::text) DESC
+    LIMIT 1
+) latest_decision ON true
+WHERE live_order.strategy_id=@StrategyId
+  AND live_order.settled_at_utc IS NOT NULL
+  AND live_order.realized_pnl_usd IS NOT NULL
+ORDER BY live_order.settled_at_utc, lower(live_order.id::text);
+""",
+            connection,
+            transaction)
+        {
+            CommandTimeout = commandTimeoutSeconds
+        };
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        command.Parameters.AddWithValue("CalculationVersion", calculationVersion);
+
+        var finalBefore = 100m;
+        var finalAfter = 100m;
+        var settledOrderCount = 0;
+        var targetCount = 0;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var liveOrderId = reader.GetGuid(0);
+            decimal contributionBefore;
+            decimal contributionAfter;
+            if (liveOrderId == targetLiveOrderId)
+            {
+                targetCount++;
+                contributionBefore = targetContributionBefore;
+                contributionAfter = targetContributionAfter;
+            }
+            else
+            {
+                var contribution = GetHistoricalGrossNetParityReplayContribution(
+                    liveOrderId,
+                    reader.GetDecimal(1),
+                    reader.IsDBNull(2) ? null : reader.GetDecimal(2),
+                    reader.GetBoolean(3),
+                    Enum.Parse<HistoricalGrossNetParityOwnership>(reader.GetString(4), false),
+                    reader.IsDBNull(5)
+                        ? null
+                        : Enum.Parse<HistoricalGrossNetParityBaselineEffectKind>(reader.GetString(5), false),
+                    reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                    reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                    reader.IsDBNull(8) ? null : reader.GetDecimal(8));
+                contributionBefore = contribution;
+                contributionAfter = contribution;
+            }
+
+            finalBefore = Math.Clamp(finalBefore + contributionBefore, 0m, 100m);
+            finalAfter = Math.Clamp(finalAfter + contributionAfter, 0m, 100m);
+            settledOrderCount++;
+        }
+
+        if (targetCount != 1)
+        {
+            throw new InvalidOperationException(
+                $"Historical parity balance replay expected one target order but found {targetCount.ToString(CultureInfo.InvariantCulture)}.");
+        }
+
+        return new HistoricalGrossNetParityLiveBalanceReplay(
+            settledOrderCount,
+            targetContributionBefore,
+            targetContributionAfter,
+            finalBefore,
+            finalAfter);
+    }
+
+    private static decimal GetHistoricalGrossNetParityReplayContribution(
+        Guid liveOrderId,
+        decimal grossPnlUsd,
+        decimal? netPnlUsd,
+        bool balanceEffectApplied,
+        HistoricalGrossNetParityOwnership ownership,
+        HistoricalGrossNetParityBaselineEffectKind? baselineKind,
+        decimal? nominalGrossPnlUsd,
+        decimal? nominalNetPnlUsd,
+        decimal? desiredCumulativeAdjustment)
+    {
+        if (ownership == HistoricalGrossNetParityOwnership.None)
+        {
+            return balanceEffectApplied ? netPnlUsd ?? grossPnlUsd : 0m;
+        }
+
+        if (baselineKind is null || nominalGrossPnlUsd is null)
+        {
+            throw new InvalidOperationException(
+                $"Historical parity balance replay found owned order {liveOrderId:D} without its immutable baseline.");
+        }
+
+        var baselineContribution = GetHistoricalGrossNetParityBaselineContribution(
+            baselineKind.Value,
+            nominalGrossPnlUsd.Value,
+            nominalNetPnlUsd);
+        if (ownership == HistoricalGrossNetParityOwnership.Pending)
+        {
+            return baselineContribution;
+        }
+        if (ownership == HistoricalGrossNetParityOwnership.Completed &&
+            desiredCumulativeAdjustment is not null)
+        {
+            return baselineContribution + desiredCumulativeAdjustment.Value;
+        }
+
+        throw new InvalidOperationException(
+            $"Historical parity balance replay found Completed order {liveOrderId:D} without an accepted desired adjustment.");
+    }
+
+    private static object CreateHistoricalGrossNetParityLiveBalanceReplayEvidence(
+        HistoricalGrossNetParityLiveBalanceReplay replay) => new
+        {
+            schema = "HistoricalGrossNetParityLiveBalanceReplayV1",
+            initial_balance = 100m,
+            order_key = "settled_at_utc,lower(id::text)",
+            settled_order_count = replay.SettledOrderCount,
+            target_contribution_before = replay.TargetContributionBefore,
+            target_contribution_after = replay.TargetContributionAfter,
+            final_balance_before = replay.FinalBalanceBefore,
+            final_balance_after = replay.FinalBalanceAfter,
+            requested_delta = replay.RequestedDelta
+        };
 
     private static void ValidateHistoricalGrossNetParityCandidatePageRequest(
         HistoricalGrossNetParityCandidatePageRequest request)
@@ -1967,6 +2170,7 @@ RETURNING row_version;
         string LatestEvidenceVersion,
         string? LatestVenueAuthorityId,
         string? LatestVenueAuthorityOrderKey,
+        decimal PriorDesiredCumulativeAdjustment,
         decimal PriorActualCumulativeAdjustment);
 
     private static async Task<HistoricalGrossNetParityVenueRevisionResult>
@@ -2032,6 +2236,7 @@ RETURNING row_version;
         decimal? balanceAfter = null;
         decimal? newActual = state.PriorActualCumulativeAdjustment;
         bool? clamp = null;
+        HistoricalGrossNetParityLiveBalanceReplay? replay = null;
         if (state.Ownership == HistoricalGrossNetParityOwnership.Completed)
         {
             balanceBefore = await ReadHistoricalGrossNetParityStrategyBalanceForUpdateAsync(
@@ -2042,12 +2247,26 @@ RETURNING row_version;
                     false, false, state.Ownership, null, null, null, false,
                     "Venue correction strategy is missing.");
             }
-            requestedDelta = desired - state.PriorActualCumulativeAdjustment;
+            var baselineContribution = GetHistoricalGrossNetParityBaselineContribution(
+                state.BaselineKind,
+                state.NominalGrossPnlUsd,
+                state.NominalNetPnlUsd);
+            replay = await CalculateHistoricalGrossNetParityLiveBalanceReplayAsync(
+                connection,
+                transaction,
+                state.StrategyId,
+                request.LiveOrderId,
+                baselineContribution + state.PriorDesiredCumulativeAdjustment,
+                baselineContribution + desired,
+                HistoricalGrossNetParityConstants.CalculationVersion,
+                30,
+                cancellationToken);
+            requestedDelta = replay.RequestedDelta;
             var unclamped = balanceBefore.Value + requestedDelta.Value;
             balanceAfter = Math.Clamp(unclamped, 0m, 100m);
             actualDelta = balanceAfter.Value - balanceBefore.Value;
             newActual = state.PriorActualCumulativeAdjustment + actualDelta.Value;
-            residual = desired - newActual.Value;
+            residual = requestedDelta.Value - actualDelta.Value;
             clamp = balanceAfter.Value != unclamped;
             await UpdateHistoricalGrossNetParityStrategyBalanceAsync(
                 connection, transaction, state.StrategyId, balanceAfter.Value, 30,
@@ -2075,7 +2294,10 @@ RETURNING row_version;
             request.EvidenceVersion,
             request.SupersedesEvidenceVersion,
             associatedLiveOrderId = request.LiveOrderId,
-            evidence = venueEvidence.RootElement
+            evidence = venueEvidence.RootElement,
+            balance_replay = replay is null
+                ? null
+                : CreateHistoricalGrossNetParityLiveBalanceReplayEvidence(replay)
         });
         await InsertHistoricalGrossNetParityAuditAsync(
             connection, transaction,
@@ -2118,12 +2340,14 @@ WITH baseline AS MATERIALIZED (
       AND calculation_version=@CalculationVersion
       AND operation_kind='AccountingBaseline'
 ), accounting AS MATERIALIZED (
-    SELECT evidence_version FROM historical_gross_net_parity_audit
+    SELECT evidence_version, desired_cumulative_adjustment
+    FROM historical_gross_net_parity_audit
     WHERE source_kind='LiveOrder' AND source_id=@Id
       AND calculation_version=@CalculationVersion
       AND operation_kind='AccountingDecision'
 ), venue AS MATERIALIZED (
-    SELECT evidence_version, authority_id, authority_order_key
+    SELECT evidence_version, authority_id, authority_order_key,
+           desired_cumulative_adjustment
     FROM historical_gross_net_parity_audit
     WHERE source_kind='LiveOrder' AND source_id=@Id
       AND calculation_version=@CalculationVersion
@@ -2150,7 +2374,10 @@ SELECT live_order.strategy_id, live_order.row_version,
        baseline.baseline_effect_kind, baseline.nominal_baseline_gross_pnl_usd,
        baseline.nominal_baseline_net_pnl_usd,
        COALESCE(venue.evidence_version,accounting.evidence_version),
-       venue.authority_id, venue.authority_order_key, applied.total
+       venue.authority_id, venue.authority_order_key,
+       COALESCE(venue.desired_cumulative_adjustment,
+                accounting.desired_cumulative_adjustment),
+       applied.total
 FROM live_orders live_order
 CROSS JOIN baseline
 CROSS JOIN accounting
@@ -2177,7 +2404,8 @@ FOR UPDATE OF live_order;
             Enum.Parse<HistoricalGrossNetParityBaselineEffectKind>(reader.GetString(6), false),
             reader.GetDecimal(7), reader.IsDBNull(8) ? null : reader.GetDecimal(8),
             reader.GetString(9), reader.IsDBNull(10) ? null : reader.GetString(10),
-            reader.IsDBNull(11) ? null : reader.GetString(11), reader.GetDecimal(12));
+            reader.IsDBNull(11) ? null : reader.GetString(11),
+            reader.GetDecimal(12), reader.GetDecimal(13));
     }
 
     private static async Task<long> UpdateHistoricalGrossNetParityVenueAccountingAsync(
