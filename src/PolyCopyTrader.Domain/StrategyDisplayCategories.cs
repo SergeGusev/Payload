@@ -4,6 +4,7 @@ namespace PolyCopyTrader.Domain;
 
 public static class StrategyDisplayCategories
 {
+    private const string EthLossDiffProgressCategory = "ETH 5m LossDiff Progress";
     private static readonly string[] UpDownAssetSymbols = ["BTC", "ETH", "SOL"];
     private static readonly string[] UpDownIntervals = ["5m", "15m", "1h", "4h"];
 
@@ -27,6 +28,11 @@ public static class StrategyDisplayCategories
         }
 
         var name = strategyName.Trim();
+        if (IsEthLossDiffPositiveProgress(name))
+        {
+            return EthLossDiffProgressCategory;
+        }
+
         if (ContainsStrategyWord(name, "LowerEnter"))
         {
             var sourceCategory = GetCategory(RemoveStrategyWord(name, "LowerEnter"));
@@ -323,6 +329,30 @@ public static class StrategyDisplayCategories
         }
 
         return categoryPrefix + "Other";
+    }
+
+    private static bool IsEthLossDiffPositiveProgress(string value)
+    {
+        var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 13 ||
+            !int.TryParse(parts[3], NumberStyles.None, CultureInfo.InvariantCulture, out var bps) ||
+            !int.TryParse(parts[12], NumberStyles.None, CultureInfo.InvariantCulture, out var cap))
+        {
+            return false;
+        }
+
+        var maximumCap = bps switch
+        {
+            4 => 16,
+            8 => 18,
+            _ => 0,
+        };
+
+        return cap is >= 1 && cap <= maximumCap &&
+            string.Equals(
+                value,
+                $"ETH 5m Up {bps} bps Reference Average Premarket LossDiff Positive Progress Cap {cap}",
+                StringComparison.Ordinal);
     }
 
     private static bool StartsWithStrategyWord(string value, string word)

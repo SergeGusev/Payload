@@ -3,7 +3,7 @@
   "contractId": "RC-20260908-eth-lossdiff-progress-dashboard-category",
   "title": "Group the 34 ETH LossDiff Progress strategies in a dedicated Dashboard category",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -56,8 +56,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~StrategyDisplayCategoryTests",
           "expected": "All focused category tests pass, including exact coverage of all 34 members and rejection of neighboring names.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Acceptance-focused run passed 84/84: all 34 registered LossDiffPositiveProgressMirror variants, five neighboring-name exclusions, 77 existing category-preservation cases, and the independent exact-34 catalog test. The broader class run compiled successfully and passed 103/109; its six failures are pre-existing stale catalog inventory-count assertions that fail before category classification (expected/actual: 48/46, 324/317, 15/4, 16/4, 10/2, 292/187) and are outside this contract. Dashboard project build completed with 0 errors; existing repository warnings remain."
         }
       ]
     }
@@ -71,9 +71,9 @@
     "semanticDigest": "sha256:949abc1de0633a66846db2f4e9f70f13eca71416c6dbee15563bb9a977e3dc7a"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer_eth_lossdiff_progress_dashboard_category",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/review_eth_lossdiff_progress_category",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

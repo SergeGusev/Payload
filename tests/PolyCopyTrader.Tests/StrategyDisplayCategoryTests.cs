@@ -4,6 +4,31 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class StrategyDisplayCategoryTests
 {
+    [Fact]
+    public void EthLossDiffPositiveProgressStrategiesUseDedicatedDisplayCategory()
+    {
+        var variants = StrategyIds.UpDown5mStrategyVariants
+            .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveProgressMirror)
+            .ToArray();
+
+        Assert.Equal(34, variants.Length);
+        Assert.All(variants, variant =>
+            Assert.Equal("ETH 5m LossDiff Progress", StrategyDisplayCategories.GetCategory(variant.Name)));
+    }
+
+    [Theory]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 0")]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 17")]
+    [InlineData("ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 19")]
+    [InlineData("ETH 5m Up 6 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Cap 1")]
+    public void SimilarNamesDoNotUseEthLossDiffProgressCategory(string strategyName)
+    {
+        Assert.NotEqual(
+            "ETH 5m LossDiff Progress",
+            StrategyDisplayCategories.GetCategory(strategyName));
+    }
+
     [Theory]
     [InlineData("BTC Up or Down 5m 1 Child", "BTC")]
     [InlineData("eth up or down 5m Down 2 bps", "ETH")]
