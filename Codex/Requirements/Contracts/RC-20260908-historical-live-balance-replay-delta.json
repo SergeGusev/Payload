@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260908-historical-live-balance-replay-delta",
+  "title": "Корректный будущий пересчёт исторического Live-баланса с учётом хронологических ограничений",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Это я ручками вернул и 100"
+    },
+    {
+      "source": "user",
+      "text": "Исправь этот дефект"
+    },
+    {
+      "source": "user",
+      "text": "1. Только будущие пересчёты"
+    }
+  ],
+  "scope": {
+    "goal": "Исправить только будущие применения и будущие ревизии исторического Gross-to-Net Live-пересчёта: изменение баланса должно равняться разнице двух хронологических воспроизведений с ограничением баланса 0..100 после каждой сделки, а не сырой разнице Gross/Net, при этом не переигрывать завершённую историю и не переписывать текущие, включая вручную установленный 100, балансы одной только выкладкой или перезапуском.",
+    "inScope": [
+      "Только исторический Live Gross-to-Net parity path в PostgresAppRepository.HistoricalGrossNetParity.cs для будущего InitialBalanceApplication ранее не обработанной строки и будущего VenueReportedRevision с действительно более новой авторитетной комиссией. Существующие критерии кандидата, pre-cutoff 2026-08-10, provenance, приоритеты источников, claim/finalize state machine и последовательная обработка сохраняются.",
+      "Для точной стратегии каждого будущего события построить два детерминированных воспроизведения её settled Live-сделок от исходного Live-банка 100 в порядке (settled_at_utc, lower(id::text)); после вклада каждой сделки применять Math.Clamp(..., 0, 100). В варианте before целевая строка использует свой фактически принятый до события вклад, в after только целевая строка заменяется на новый desired Net-вклад; остальные строки одинаковы в обоих воспроизведениях и не получают будущие correction-вклады преждевременно.",
+      "Будущий применяемый balance delta равен finalAfterReplay minus finalBeforeReplay. Только этот marginal delta добавляется к текущему заблокированному балансу стратегии с существующим ограничением 0..100. Это сохраняет любые последующие обычные settlement-изменения и ручную корректировку текущего баланса вместо восстановления исторического абсолютного остатка.",
+      "Уже завершённые balance events не переоткрывать и не выбирать заново только из-за новой версии. По production preview cutoff 2026-09-08T07:56:37.298591Z это означает отсутствие автоматического переигрывания 405 Completed pre-cutoff orders одной стратегии; 2708 None pre-cutoff orders 33 стратегий остаются будущими первичными пересчётами и после пользовательской выкладки могут применяться уже по исправленной формуле. Новая более поздняя VenueReported revision завершённой строки также считается будущим пересчётом.",
+      "Текущий вручную восстановленный баланс 100 стратегии b7c50005-0000-4000-8079-000000000150 не менять при startup/deployment и не делать отдельный repair/backfill. Если для неё впоследствии появится новое допустимое future revision событие, оно меняет текущий баланс только на вычисленный marginal replay delta.",
+      "Добавить сфокусированные PostgreSQL integration regression tests для верхнего и нижнего clamp: старый raw-delta способ должен отличаться от корректного replay delta; текущий баланс должен изменяться только на replay delta; повторный вызов идемпотентен; Completed без новой revision не переигрывается; новая revision использует предыдущий принятый вклад target как before.",
+      "Кратко обновить README.md и docs/architecture/PAPER_LIVE_PARITY.md только в части нового future-only алгоритма и границы: исторические Completed/current balances автоматически не исправляются. Все build/test/TRX артефакты — только в принадлежащем задаче маркированном D:/CodexTemp run по codex-temp-lifecycle.",
+      "После точного APPROVE ориентир реализации и сфокусированных проверок — 2–4 часа, не жёсткий лимит. Изменение остаётся локальным; выкладку выполняет пользователь отдельно. Обязательные context/history/requirement-gate записи разрешены, но не расширяют продуктовый scope."
+    ],
+    "outOfScope": [
+      "Автоматический ремонт, сброс или полный replay уже Completed balance events, текущих балансов либо вручную возвращённого 100; новая audit version/sweep для повторного захвата 405 Completed строк; production data mutation или одноразовая команда восстановления.",
+      "Deployment, публикация, запуск/остановка/перезапуск сервиса, изменение production PostgreSQL 192.168.0.101, Live order placement/cancel, стратегия, сигнал, размер/цена/тип ордера, комиссия, Gross/Net PnL, settlement или Dashboard-формулы.",
+      "Изменение candidate selection, cutoff, источников fee, source priority, retry/claim/finalize semantics, audit schema/statuses, balance cap 0..100, live_stakes, enable/control flags или порядка обработки audit candidates.",
+      "Схемная миграция, новый общий ledger/manual-balance audit framework, реконструкция неизвестных исторических ручных изменений, общий пересчёт всех Live-балансов или рефакторинг соседних storage/worker путей.",
+      "Обещание, что текущий 100 является исторически рассчитанным значением, либо утверждение о корректности всех прежних балансов. Этот контракт исправляет только будущий механизм применения найденного класса correction-событий."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Локальный checkout D:/My/Business/PolyMarket на исходном HEAD 208e0643329108ed0d0db2cefc9da58c7765ef2c. Runtime filter остаётся прежним: исторические settled Live orders строго до 2026-08-10, обрабатываемые существующим Historical Gross-to-Net parity worker. Поведенческая граница: только события, впервые применяемые исправленным build после пользовательской выкладки; уже Completed state не меняется без новой допустимой fee revision. Production preview и диагноз выполнены в UTC.",
+    "firstVerification": "До продуктовых правок повторно сверить git status, точный dispatch HistoricalGrossNetParity worker/repository, SQL candidate filters, audit baseline fields, settlement ordering, balance lock/update and clamp. Исходные SHA256: PostgresAppRepository.HistoricalGrossNetParity.cs A54DCF2CA34C730C2F1B58172609FD6807BD2F52CF2A37FC493A00677A930A9C; HistoricalGrossNetParityPostgresIntegrationTests.cs C5C4EA1F52C8D894E47861AA7A5DED70DF2D9C0AE90F5972E32F43AE461212BF; README.md F6756F7E8C1F1E6A6BE020CF4F74BD4C1FA7A3A4FAABB436CB79A3739EC0F5D8; PAPER_LIVE_PARITY.md 89B6214FC9C9A32C590B69E6E1FF1AF844E7C8118797B6E0D77163A0200FCA88. Production evidence already previewed read-only at cutoff 2026-09-08T07:56:37.298591Z: exact candidate states Completed 405/1 strategy and None 2708/33 strategies; before any local PostgreSQL test mutation independently prove loopback endpoint/database/data_directory and owned fixture."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Исправить будущий Historical Gross-to-Net Live balance adjustment так, чтобы его marginal effect соответствовал хронологическому replay с clamp 0..100 после каждой settled Live-сделки, сохранив прежние candidate/state/fee правила.",
+      "sourceRequestIndexes": [1, 2],
+      "sourceQuote": "Только будущие пересчёты",
+      "acceptanceCriteria": [
+        "До product/test/docs edits получено позднейшее точное APPROVE semantic digest и записано отдельным approval-only commit; этот draft и обсуждение не являются разрешением на изменение исходников.",
+        "Для одного strategy_id обе replay-последовательности читают одни и те же settled Live rows в однозначном порядке (settled_at_utc, lower(id::text)), начинают с 100 и после каждого финансового вклада ограничивают баланс диапазоном 0..100. Запрос стратегии индексно ограничен и не сканирует все стратегии.",
+        "Before и after отличаются только вкладом текущего audit target/event. Before воспроизводит фактически принятый baseline target до события; after заменяет его на desired Net этого события. Completed correction-вклады остальных rows учитываются одинаково; ещё не применённые corrections не подмешиваются заранее ни в один вариант.",
+        "Repository применяет к текущему FOR UPDATE балансу только finalAfterReplay-finalBeforeReplay, затем прежний clamp 0..100. Он не присваивает replay final balance и не прибавляет сырую desired-minus-baseline разницу, если clamp-history делает её неэквивалентной.",
+        "Первичное применение сохраняет прежние InitialBalanceApplication state/evidence, а будущая более новая авторитетная комиссия сохраняет прежние VenueReportedRevision state/evidence. Повтор с тем же evidence не меняет balance; существующие source priority, requested/applied bookkeeping, live_stakes=false и control flags сохраняются.",
+        "Регрессионные тесты показывают как минимум верхний cap-сценарий, где raw fee delta ненулевой, а корректный replay delta равен 0 из-за последующей истории, и нижний floor-сценарий. Независимо сверяются ordered input contributions, оба replay finals, applied delta, текущий balance before/after и audit fields.",
+        "Обычные Live settlement и все Paper paths не меняются. В runtime diff нет изменений за пределами exact Historical Gross-to-Net balance application метода/необходимого локального replay helper в том же файле."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.HistoricalGrossNetParity.cs",
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~HistoricalGrossNetParityPostgresIntegrationTests\" --logger \"trx;LogFileName=historical-live-balance-replay.trx\" -p:UseSharedCompilation=false -nr:false",
+          "expected": "Все существующие и новые HistoricalGrossNetParity PostgreSQL integration tests действительно выполняются на owned loopback fixture, не пропускаются из-за connection string, и проходят. Новые tests подтверждают upper/lower clamp replay delta, future initial/revision semantics, idempotency, audit evidence и отсутствие reprocessing Completed без новой revision.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Сохранить future-only границу: не пересчитывать и не переписывать текущие балансы или уже завершённые correction events одной только выкладкой исправленного build.",
+      "sourceRequestIndexes": [0, 2],
+      "sourceQuote": "Только будущие пересчёты",
+      "acceptanceCriteria": [
+        "Нет новой audit version, migration, startup repair, sweep или выбора Completed rows только ради этого исправления. Existing Completed без строго более новой допустимой fee revision остаётся без записи в balance/audit.",
+        "Вручную установленный текущий 100 для b7c50005-0000-4000-8079-000000000150 не является входом отдельного backfill и не меняется при startup/deployment. Контракт не утверждает, что 100 — исторически вычисленное значение.",
+        "Существующие 2708 None pre-cutoff orders/33 strategies по preview являются будущими первичными событиями: если worker впервые применит их после пользовательской выкладки, используется новый marginal replay delta. Новая допустимая VenueReportedRevision для ранее Completed order также использует новый алгоритм.",
+        "Focused test начинает с произвольного текущего balance, отличного от replay final, и доказывает, что future event добавляет только marginal delta, сохраняя уже накопленные обычные и ручные изменения; repository не заменяет balance абсолютным replay result.",
+        "README и PAPER_LIVE_PARITY прямо фиксируют future-only границу, исходный банк replay 100, chronological per-trade clamp и ограничение: Completed/current balances автоматически не исправляются."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/HistoricalGrossNetParityPostgresIntegrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~HistoricalGrossNetParity|FullyQualifiedName~PaperFakFeeBackfillProcessorTests\" --logger \"trx;LogFileName=historical-live-balance-regressions.trx\" -p:UseSharedCompilation=false -nr:false",
+          "expected": "Все выбранные tests выполняются и проходят; future-only candidate boundary, worker dispatch, revision/idempotency behavior и новая replay-delta логика не ломают существующий historical parity workflow.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path \"$runRoot/artifacts\" -p:UseSharedCompilation=false -nr:false",
+          "expected": "Exit 0. Все TEMP/TMP/TMPDIR, build, test и TRX outputs находятся внутри принадлежащего задаче marked D:/CodexTemp run; service не запускается, Production не меняется.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Independent semantic review of verbatim requests, approved contract, exact diff and verification evidence; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree, -Mode Staged and scoped -Mode Range; git diff --check; protected owned-run cleanup verification.",
+          "expected": "Независимый reviewer выдаёт pass без findings; все requirement gates проходят на approval checkpoint и exact scoped changes; unrelated context/history edits не присваиваются; owned temporary run удалён защищённой очисткой; deployment/Production writes отсутствуют.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260908-historical-live-balance-replay-delta sha256:9c20f622a39c9d20a4b2f11940f22a6584ef333435b3dcf2cf02d71e109b07f9",
+    "semanticDigest": "sha256:9c20f622a39c9d20a4b2f11940f22a6584ef333435b3dcf2cf02d71e109b07f9"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
