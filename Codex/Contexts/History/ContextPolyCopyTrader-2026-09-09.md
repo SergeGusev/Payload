@@ -25,3 +25,10 @@ APPROVE RC-20260909-legacy-backfill-and-paper-mark-isolation sha256:0339b09d754e
 
 Result:
 Completed the approved local source correction. Legacy PaperRun membership is now candidate-driven through bounded lateral index probes, and the ordinary DI-wired market-data handler no longer awaits Paper position-mark persistence; the existing dedicated mark worker and all order/fill/expiry/settlement lifecycle work remain unchanged. Focused Release tests passed 26/26 on real disposable loopback PostgreSQL and 46/46 for market-data/worker isolation; Release solution build passed with zero warnings/errors. Production READ ONLY EXPLAIN over 50 exact candidates matched independent semantics 50/50 with zero difference and used 50 ix_historical_parity_paper_run_order searches in 1.194 ms. All requirement gates and independent review passed. No Production mutation occurred; the exact disposable database and marked D:\CodexTemp run were removed and verified absent.
+
+## 2026-09-09T08:18:00Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified Production deployment `a00e06cd094ef33429487e9e2c6eed7135160802` read-only. Service was Running/Live with fresh heartbeat and NULL error. Since the `07:46:51.712797Z` start, 2,124 Paper orders exactly matched 2,124 fills, all Filled, with fresh BTC/ETH/SOL activity, no open recent Paper orders, and no new Live orders/cancels. The last 50 settlements had complete Gross/Net/calculated-fee accounting. Legacy backfill ranks 1..12 completed in 26..1,177ms with zero timeout/defer/error, and post-deploy logs had no Paper-mark persistence warning/error in the ordinary queue, confirming both deployed fixes. No ERR/FTL appeared through 11:14:30 +03. A separate Maker-GTD queue burst remained: 679 warnings, maximum 14,691ms queue delay, 13,307ms processing and 397 pending; it cleared and fills continued. Four OKX expiry-futures refresh warnings occurred, while all BTC/ETH/SOL references and both Polymarket WebSockets were fresh/healthy. No Production or product-source mutation was performed.
