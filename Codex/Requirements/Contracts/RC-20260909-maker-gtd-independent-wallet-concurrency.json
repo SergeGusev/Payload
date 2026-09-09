@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260909-maker-gtd-independent-wallet-concurrency",
+  "title": "Bound Maker-GTD fill persistence by independent wallet",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, сделай эту доработку"
+    }
+  ],
+  "scope": {
+    "goal": "Eliminate the verified dedicated Maker-GTD queue burst caused by serial processing of multiple independent exact-family wallet/order fills for one accepted evidence event, without changing retained evidence, trading decisions, execution semantics, accounting or Live behavior.",
+    "inScope": [
+      "For one already dequeued exact Maker-GTD evidence event, load the linked strategy runs for all matching exact-family orders in one existing bounded repository call instead of one call per order.",
+      "Partition matching exact-family orders by normalized copied-trader wallet, preserve current order processing within each wallet, and process independent wallet groups with a hard maximum concurrency of four.",
+      "Await every wallet group before the queue completes the current evidence event or dequeues the next event, preserving the existing per-asset event FIFO, publication fence, expiry drain and no-drop contract.",
+      "Keep the existing per-order atomic repository transition, wallet advisory lock, compare-and-set retry, fill and fee calculation, cache publication, failure evidence and mandatory Maker-GTD result label.",
+      "Add deterministic focused tests for one batched run lookup, maximum-four independent-wallet concurrency, same-wallet serialization, next-event FIFO, exact-once results and failure isolation; update only directly affected documentation and mandatory requirement/context/history records.",
+      "Run focused Maker-GTD tests, a Release solution build, requirement validation and independent semantic review; commit and push only the approved local source change."
+    ],
+    "outOfScope": [
+      "No Production database write, strategy/order/configuration mutation, service restart, deployment or server repair.",
+      "No change to Reference Average signals, windows, thresholds, direction, selected outcome, price, stake, GTD/PostOnly intent, TouchNoDepth predicate, event eligibility, expiry boundary, fee/PnL/settlement formulas, PaperOnly status, Live behavior or mandatory optimistic label.",
+      "No dropping, sampling, coalescing, synthesizing or reordering accepted exact Maker evidence; no change to the dedicated queue topology, general market-data queue, WebSocket subscriptions, ordinary Paper lifecycle, position-mark worker, OKX processing or database schema.",
+      "No batching of multiple wallet mutations into one database transaction, no replacement of the existing per-order atomic repository API, no increase above four concurrent wallet groups and no generalized concurrency framework.",
+      "No replay or rewrite of historical terminal orders and no claim that the local correction is deployed or that Production backlog is eliminated before a later user-controlled deployment and read-only verification."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future exact closed-exception ETH neutral Reference Average Maker-GTD Paper processing after user-controlled deployment. Read-only Production evidence on deployed build a00e06cd094ef33429487e9e2c6eed7135160802: one burst reached 397 pending events, 14691.3712 ms queue delay and 13306.7377 ms processing, with slowest operation IAppRepository.TryApplyMakerGtdPaperFullFill; the triggering asset had 9 matching Filled orders belonging to 9 distinct strategy wallets.",
+    "firstVerification": "Trace ApplyMakerGtdUpdateAsync through exact-family order selection, linked-run lookup, wallet-scoped position state, per-order atomic persistence, exposure cache and execution trace; verify the approved no-drop/per-asset-FIFO contracts and Production pool bound before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Reduce repeated read work for one exact Maker-GTD evidence event without changing which linked run is accepted for any order.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "сделай эту доработку",
+      "acceptanceCriteria": [
+        "ApplyMakerGtdUpdateAsync issues exactly one GetStrategyMarketPaperRunsByPaperOrderIdsAsync call containing all matching order IDs for the current evidence event, and does not issue per-order linked-run queries.",
+        "Each order still requires exactly one linked run whose PaperOrderId equals that order ID; zero or multiple matches record the current market-data apply failure and skip only that order.",
+        "The batch is bounded by the already captured matching open Maker order set for the one asset/event; no unbounded history scan, new repository query, schema or index is introduced.",
+        "Fill eligibility, source/receipt timestamps, event fingerprint, TouchNoDepth evaluation, fill content, fee calculation and entered-run content remain unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter \"FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests\" --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
+          "expected": "Focused tests prove one bounded linked-run query per event and unchanged exact Maker-GTD eligibility, fill, atomic persistence and lifecycle results.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Process independent Maker-GTD wallet groups concurrently with a hard bound of four while preserving sequential state and evidence ordering wherever it is semantically required.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "сделай эту доработку",
+      "acceptanceCriteria": [
+        "At most four distinct normalized copied-trader wallet groups for one evidence event may execute concurrently; the limit is local and constant and does not change service configuration.",
+        "Orders for the same normalized wallet are processed sequentially in their current matching-order order and share only that wallet group's position state, so position composition and compare-and-set retry behavior remain correct.",
+        "All wallet groups finish before ApplyMakerGtdUpdateAsync returns; the dedicated queue cannot mark the event complete or dequeue its next event early, preserving accepted-event FIFO, no-drop, publication and expiry-drain guarantees.",
+        "Every per-order persistence attempt continues to use TryApplyMakerGtdPaperFullFillAsync unchanged, with its existing independent transaction, wallet advisory lock, validation, atomic fill/order/position/run update and at-most-three position-conflict attempts.",
+        "An exception in one wallet group records failure for that group's not-yet-completed exact orders and does not cancel or suppress already started independent wallet groups; the event completes only after all groups settle, and no order is processed more than once.",
+        "Execution telemetry identifies the bounded independent-wallet phase without racing one shared mutable per-order operation trace."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MakerGtdPaperLifecycleIntegrationTests|FullyQualifiedName~MakerGtdPaperAtomicRepositoryTests|FullyQualifiedName~MakerGtdPaperPlacementHandoffTests|FullyQualifiedName~ReferenceAverageMakerGtdPremarketStrategyTests\" --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
+          "expected": "Deterministic tests prove maximum-four independent-wallet execution, same-wallet serialization, event FIFO/no-drop, failure evidence, exactly-once atomic persistence and all existing exact-family semantics.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Deliver only the approved local Maker-GTD performance correction with deterministic verification and no Production mutation.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Ок, сделай эту доработку",
+      "acceptanceCriteria": [
+        "PolyCopyTrader.sln builds in Release with zero errors after the focused tests pass.",
+        "git diff --check and WorkingTree/Staged requirement validation pass, and every governed changed path maps to this contract.",
+        "An independent reviewer compares the verbatim request, approved contract, complete task diff and verification evidence and returns PASS with no open findings.",
+        "All disposable build/test artifacts remain in one marked D:\\CodexTemp run and that exact run is removed before completion.",
+        "The approval checkpoint is committed before product edits; final task commits are pushed to the configured upstream without incorporating unrelated pre-existing context/history changes."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "README.md",
+        "Codex/Requirements/Contracts/RC-20260909-maker-gtd-independent-wallet-concurrency.json",
+        "Codex/Contexts/ContextPolyCopyTrader.md",
+        "Codex/Contexts/History/ContextPolyCopyTrader-2026-09-09.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts",
+          "expected": "Release solution build succeeds with zero errors; warning count is reported exactly.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Run git diff --check, scripts/requirements/Validate-RequirementContract.ps1 in WorkingTree and Staged modes, inspect the task-only diff, verify protected D:\\CodexTemp cleanup, and obtain independent semantic review.",
+          "expected": "All checks pass, the exact marked temporary run is absent, and reviewer verdict is PASS with no open findings.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Permit independent copied-trader wallet groups for the same accepted Maker-GTD evidence event to complete in nondeterministic cross-wallet order, with at most four groups active, while retaining the current order within each wallet and waiting for all groups before the next evidence event.",
+      "impact": "This is the concurrency needed to remove unnecessary serialization observed for nine distinct strategy wallets. It does not change any wallet's own order/position sequence or evidence-event FIFO, but database commit/cache-publication order between unrelated wallets can differ from the current single-threaded loop.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed",
+        "semanticDigest": "sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "If one wallet group throws while processing an evidence event, let other already started independent wallet groups finish and record failure only for the failed group's not-yet-completed orders instead of aborting all later matching orders in the current serial array.",
+      "impact": "An infrastructure failure for one strategy wallet no longer prevents unrelated wallets from applying the same accepted evidence. Failure remains explicit and fail-closed for every affected order, but independent wallets may now succeed where the current serial loop would not reach them after the first exception.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed",
+        "semanticDigest": "sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed"
+      }
+    }
+  ],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed",
+    "semanticDigest": "sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
