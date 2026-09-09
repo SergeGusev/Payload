@@ -3,7 +3,7 @@
   "contractId": "RC-20260909-legacy-backfill-and-paper-mark-isolation",
   "title": "Bound Legacy backfill probes and isolate Paper mark persistence",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -64,16 +64,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~HistoricalPaperFakFeeBackfill --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
           "expected": "All focused source-contract and real-PostgreSQL integration tests pass, including exact legacy old-payload membership and paging parity.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release filter FullyQualifiedName~HistoricalPaperFakFeeBackfill passed 26/26, failed 0, skipped 0 against allowlisted disposable loopback PostgreSQL 17.5 database pct_codex_skip_v2_20260909000000_75184437. TRX legacy-backfill-rerun.trx SHA256 33A5990DFF3CF7705721BFC69E9A67265DDB893C0B70720293574E0894CDADA8."
         },
         {
           "id": "VER-002",
           "kind": "inspection",
           "command": "Run EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) in BEGIN READ ONLY with SET LOCAL statement_timeout='15s' against 192.168.0.101:5432/polycopytrader for an exact bounded candidate batch, without changing Production.",
           "expected": "The proposed lookup completes within 15 seconds, is driven by the bounded candidate input and uses the deployed historical parity expression index for the equality probe; returned membership matches the current semantics for the same batch.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Production READ ONLY UTC inspection at exact candidate cutoff 2026-09-09T07:20:38.355396Z used 50 IDs for strategy b7c50005-0000-4000-8155-000000000015. New membership and an independently equivalent EXISTS formulation returned 50/50 with symmetric difference 0. EXPLAIN ANALYZE completed in 1.194 ms with 50 Index Searches on ix_historical_parity_paper_run_order, 200 shared hits, 0 shared reads and no Production mutation."
         }
       ]
     },
@@ -105,8 +105,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter \"FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~PaperTradingWorkerIsolationTests\" --artifacts-path <D_CodexTemp_run>\\artifacts --results-directory <D_CodexTemp_run>\\results",
           "expected": "All focused market-data, Paper lifecycle, non-blocking handler and dedicated mark-worker isolation tests pass.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Release filter FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~PaperTradingWorkerIsolationTests passed 46/46, failed 0, skipped 0. The blocking mark-persistence test proves the DI-wired handler completes without starting batch mark persistence, and the Program source contract confirms the existing dedicated PaperPositionMarkWorker registration. TRX paper-mark-isolation.trx SHA256 B8E43478F3CCC6BB1012BF2F0442FE18955F1447A7EFEEFCA526BBBBED1027C2."
         }
       ]
     },
@@ -144,16 +144,16 @@
           "kind": "build",
           "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <D_CodexTemp_run>\\artifacts",
           "expected": "Release solution build succeeds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "dotnet build PolyCopyTrader.sln -c Release --no-restore completed in 7.34 seconds with 0 warnings and 0 errors, with all outputs under the marked D:\\CodexTemp run."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "Run git diff --check, scripts/requirements/Validate-RequirementContract.ps1 in WorkingTree and Staged modes, inspect the task-only diff, verify protected D:\\CodexTemp cleanup, and obtain independent semantic review.",
           "expected": "All checks pass, the exact marked temporary run is absent, and reviewer verdict is PASS with no open findings.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "git diff --check passed; WorkingTree and Staged requirement gates passed; task-only diff inspection found no unrelated product change; independent reviewer agent:/root/reviewer returned PASS with no findings after comparing original requests, approved contract, implementation and evidence; the exact marked run manual-7518443776e7453990812c820ea40288 and exact disposable database were removed and verified absent before completion."
         }
       ]
     }
@@ -168,8 +168,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

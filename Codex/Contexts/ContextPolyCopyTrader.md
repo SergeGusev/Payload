@@ -1,3 +1,16 @@
+## Active Update 2026-09-09 Legacy Backfill And Paper Mark Isolation Completed
+Goal: Correct recurring Legacy historical-backfill membership timeouts and remove synchronous Paper position-mark persistence from the ordinary market-data critical path.
+Status: Completed locally; independent semantic review passed.
+Done:
+- Replaced only the Legacy `PaperRun` old-payload membership phase with candidate-driven `LATERAL` existence probes in deterministic batches of at most 500 IDs. Exact source kind, calculation version, operation kind and paper-order ID equality predicates, transaction, timeout, cursor, paging and returned membership remain unchanged.
+- The DI-wired `MarketDataSideEffectHandler` now invokes the existing updater with `persistPositionMarks: false`. Order, fill, expiry, settlement, fee, diagnostic and exposure-cache work remains awaited; the already registered `PaperPositionMarkWorker` remains the mark-refresh path with unchanged interval/cache/REST/CAS behavior.
+- Focused Release tests passed `26/26` for HistoricalPaperFakFeeBackfill against real disposable loopback PostgreSQL and `46/46` for market-data/mark-worker isolation, with zero failures or skips. Release solution build passed with zero warnings and zero errors.
+- Production READ ONLY `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` at candidate cutoff `2026-09-09T07:20:38.355396Z` compared 50 IDs: new and independently equivalent semantic sets were `50/50`, symmetric difference `0`; execution was `1.194 ms` with 50 searches on `ix_historical_parity_paper_run_order`, zero shared reads and no lock wait.
+- `git diff --check`, Contract/WorkingTree/Staged requirement gates and independent reviewer `agent:/root/reviewer` all passed with no findings.
+Next: User-controlled build/deployment, then verify Production backfill telemetry and ordinary market-data queue latency on the deployed version.
+Notes: Approved contract `RC-20260909-legacy-backfill-and-paper-mark-isolation` retained digest `sha256:0339b09d754e909ad54ec97403e96b0ebb8e566ab8fc88bfa6aa6ab096b51fc1`; approval checkpoint commit is `0e2247e42d57`. Production was read only and received no data/schema/service/configuration/trading mutation. Exact disposable database `pct_codex_skip_v2_20260909000000_75184437` was deleted after zero-session preview. Protected cleanup removed 432 files / 115,977,907 bytes from exact marked run `manual-7518443776e7453990812c820ea40288`, which is verified absent. Unrelated pre-existing context/history changes were preserved.
+Blockers: None.
+
 ## Active Update 2026-09-04 Progress34 Restoration Apply Approved
 Goal: Execute the exact prepared Progress34 historical restoration after the user's matching approval.
 Status: In Progress; approval checkpoint being committed before any Production writes.

@@ -411,7 +411,19 @@ public sealed class HistoricalPaperFakFeeBackfillStorageTests
                 StringSplitOptions.None).Length - 1);
 
         Assert.Contains("old_payload_json ->> 'paper_order_id'", legacyScan, StringComparison.Ordinal);
-        Assert.Contains("ANY(@CandidatePaperOrderIds)", legacyScan, StringComparison.Ordinal);
+        Assert.Contains(
+            "FROM unnest(@CandidatePaperOrderIds) AS candidate(paper_order_id)",
+            legacyScan,
+            StringComparison.Ordinal);
+        Assert.Contains("CROSS JOIN LATERAL (", legacyScan, StringComparison.Ordinal);
+        Assert.Contains(
+            "candidate.paper_order_id",
+            legacyScan,
+            StringComparison.Ordinal);
+        Assert.Contains("LIMIT 1", legacyScan, StringComparison.Ordinal);
+        Assert.Contains("OFFSET 0", legacyScan, StringComparison.Ordinal);
+        Assert.DoesNotContain("ANY(@CandidatePaperOrderIds)", legacyScan, StringComparison.Ordinal);
+        Assert.DoesNotContain("SELECT DISTINCT", legacyScan, StringComparison.Ordinal);
         Assert.Contains(
             ".OrderBy(static paperOrderId => paperOrderId, StringComparer.Ordinal)",
             candidateMethod,

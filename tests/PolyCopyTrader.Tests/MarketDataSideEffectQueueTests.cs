@@ -6,11 +6,72 @@ using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.MarketData;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
+using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Tests;
 
 public sealed class MarketDataSideEffectQueueTests
 {
+    [Fact]
+    public async Task ProductionHandler_DoesNotAwaitSynchronousPositionMarkPersistence()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-1",
+            "condition-1",
+            "Yes",
+            10m,
+            0.50m,
+            5m,
+            0m,
+            receivedAtUtc.AddMinutes(-1),
+            "strategy:mark"));
+        var markPersistenceStarted = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseMarkPersistence = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        repository.BeforeTryUpdatePaperPositionMarksAsync = () =>
+        {
+            markPersistenceStarted.TrySetResult(true);
+            return releaseMarkPersistence.Task;
+        };
+        var updater = new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository);
+        var handler = new MarketDataSideEffectHandler(
+            new MarketDataWebSocketOptions(),
+            new NoOpMarketTradeTickDiagnosticService(),
+            updater,
+            repository);
+        var update = Quote("asset-1", 0.40m);
+        var workItem = new MarketDataSideEffectWorkItem(
+            "test-component",
+            update,
+            null,
+            receivedAtUtc,
+            receivedAtUtc,
+            new HashSet<Guid>(),
+            Replaceable: true);
+
+        Assert.True(workItem.PersistPositionMarks);
+        try
+        {
+            await handler.ProcessUpdateAsync(workItem).WaitAsync(TimeSpan.FromSeconds(2));
+
+            Assert.False(markPersistenceStarted.Task.IsCompleted);
+            Assert.Equal(0, repository.TryUpdatePaperPositionMarksBatchCalls);
+        }
+        finally
+        {
+            releaseMarkPersistence.TrySetResult(true);
+        }
+    }
+
     [Fact]
     public void ExecutionTrace_AttributesDelayedPositionMarkRepositoryStageExactly()
     {
@@ -1562,6 +1623,31 @@ public sealed class MarketDataSideEffectQueueTests
         {
             releaseFirstUpdate.TrySetResult(true);
         }
+    }
+
+    private sealed class NoOpMarketTradeTickDiagnosticService : IMarketTradeTickDiagnosticService
+    {
+        public Task RecordAsync(
+            MarketDataUpdate update,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpPaperSettlementProcessor : IPaperSettlementProcessor
+    {
+        public Task<PaperSettlementProcessingResult> ProcessOpenPositionsAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PaperSettlementProcessingResult(0, 0, 0, 0));
+
+        public Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(
+            string? conditionId,
+            string? assetId,
+            string? winningAssetId,
+            string? winningOutcome,
+            string? category,
+            string settlementSource,
+            DateTimeOffset settledAtUtc,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PaperSettlementProcessingResult(0, 0, 0, 0));
     }
 
     private static void EnterPositionMarkStage(

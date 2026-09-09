@@ -233,15 +233,20 @@ FROM strategy_fill_keys fill;
                      HistoricalPaperFakFeeBackfillMaxPageSize))
         {
             await using var legacyParityCommand = CreateCommand(connection, $$"""
-SELECT DISTINCT
-    parity_audit.old_payload_json ->> 'paper_order_id' AS paper_order_id
-FROM public.historical_gross_net_parity_audit parity_audit
-WHERE parity_audit.source_kind = 'PaperRun'
-  AND parity_audit.calculation_version =
-        '{{HistoricalGrossNetParityConstants.CalculationVersion}}'
-  AND parity_audit.operation_kind = 'AccountingDecision'
-  AND parity_audit.old_payload_json ->> 'paper_order_id' =
-        ANY(@CandidatePaperOrderIds);
+SELECT candidate.paper_order_id
+FROM unnest(@CandidatePaperOrderIds) AS candidate(paper_order_id)
+CROSS JOIN LATERAL (
+    SELECT 1
+    FROM public.historical_gross_net_parity_audit parity_audit
+    WHERE parity_audit.source_kind = 'PaperRun'
+      AND parity_audit.calculation_version =
+            '{{HistoricalGrossNetParityConstants.CalculationVersion}}'
+      AND parity_audit.operation_kind = 'AccountingDecision'
+      AND parity_audit.old_payload_json ->> 'paper_order_id' =
+            candidate.paper_order_id
+    LIMIT 1
+    OFFSET 0
+) matching_parity_audit;
 """);
             legacyParityCommand.Transaction = transaction;
             legacyParityCommand.CommandTimeout = HistoricalPaperFakFeeBackfillCommandTimeoutSeconds;

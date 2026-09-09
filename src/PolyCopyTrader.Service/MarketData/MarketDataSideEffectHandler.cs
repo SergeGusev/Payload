@@ -80,6 +80,8 @@ public sealed class MarketDataSideEffectHandler(
                 () => repository.AddMarketDataEventAsync(ToMarketDataEvent(workItem.Update), cancellationToken));
         }
 
+        // Position marks are refreshed by the dedicated PaperPositionMarkWorker.
+        // Keep the general market-data worker reserved for lifecycle-critical work.
         await RunPhaseAsync(
             MarketDataSideEffectPhases.ApplyPaperTradingUpdate,
             "PaperTradingMarketDataUpdater.ApplyUpdate",
@@ -90,7 +92,7 @@ public sealed class MarketDataSideEffectHandler(
                 workItem.EligiblePaperOrderIds,
                 cancellationToken,
                 workItem.ExecutionTrace,
-                workItem.PersistPositionMarks));
+                persistPositionMarks: false));
     }
 
     public Task PersistFrameDiagnosticAsync(

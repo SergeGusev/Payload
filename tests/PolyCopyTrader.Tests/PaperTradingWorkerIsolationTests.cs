@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Runtime.CompilerServices;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.Control;
@@ -8,6 +9,25 @@ namespace PolyCopyTrader.Tests;
 
 public sealed class PaperTradingWorkerIsolationTests
 {
+    [Fact]
+    public void Program_RegistersDedicatedPositionMarkWorker()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            GetRepositoryRoot(),
+            "src",
+            "PolyCopyTrader.Service",
+            "Program.cs"));
+
+        Assert.Contains(
+            "AddSingleton<IPaperPositionMarkProcessor>(sp => sp.GetRequiredService<PaperTradingProcessor>())",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "AddHostedService<PaperPositionMarkWorker>()",
+            source,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task BlockedPositionMarkWorker_DoesNotBlockOpenOrderWorker()
     {
@@ -91,5 +111,14 @@ public sealed class PaperTradingWorkerIsolationTests
             Started.TrySetResult();
             return Task.FromResult(new PaperTradingProcessingResult(0, 0, 0, 0));
         }
+    }
+
+    private static string GetRepositoryRoot(
+        [CallerFilePath] string sourceFilePath = "")
+    {
+        return Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(sourceFilePath)!,
+            "..",
+            ".."));
     }
 }
