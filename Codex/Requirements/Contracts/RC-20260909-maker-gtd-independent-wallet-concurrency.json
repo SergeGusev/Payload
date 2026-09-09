@@ -14,7 +14,7 @@
     "goal": "Eliminate the verified dedicated Maker-GTD queue burst caused by serial processing of multiple independent exact-family wallet/order fills for one accepted evidence event, without changing retained evidence, trading decisions, execution semantics, accounting or Live behavior.",
     "inScope": [
       "For one already dequeued exact Maker-GTD evidence event, load the linked strategy runs for all matching exact-family orders in one existing bounded repository call instead of one call per order.",
-      "Partition matching exact-family orders by exact persisted copied-trader-wallet identity using ordinal string equality, preserve current order processing within each exact wallet identity, and process independent wallet groups with a hard maximum concurrency of four.",
+      "Partition matching exact-family orders into concurrency groups by the existing exposure-cache wallet key (Trim().ToUpperInvariant()), preserve current matching-order processing within each cache-key group, keep working position state separated by exact persisted copied-trader-wallet identity using ordinal string equality, and process independent cache-key groups with a hard maximum concurrency of four.",
       "Await every wallet group before the queue completes the current evidence event or dequeues the next event, preserving the existing per-asset event FIFO, publication fence, expiry drain and no-drop contract.",
       "Keep the existing per-order atomic repository transition, wallet advisory lock, compare-and-set retry, fill and fee calculation, cache publication, failure evidence and mandatory Maker-GTD result label.",
       "Add deterministic focused tests for one batched run lookup, maximum-four independent-wallet concurrency, same-wallet serialization, next-event FIFO, exact-once results and failure isolation; update only directly affected documentation and mandatory requirement/context/history records.",
@@ -63,17 +63,18 @@
     },
     {
       "id": "REQ-002",
-      "text": "Process independent Maker-GTD wallet groups concurrently with a hard bound of four while preserving sequential state and evidence ordering wherever it is semantically required.",
+      "text": "Process independent Maker-GTD exposure-cache wallet groups concurrently with a hard bound of four while preserving exact persisted position identity, cache publication order and evidence ordering wherever they are semantically required.",
       "sourceRequestIndexes": [
         0
       ],
       "sourceQuote": "сделай эту доработку",
       "acceptanceCriteria": [
-        "At most four distinct exact persisted copied-trader-wallet identities for one evidence event may execute concurrently; identity uses ordinal string equality, and the limit is local and constant and does not change service configuration.",
-        "Orders for the same exact persisted copied-trader-wallet identity are processed sequentially in their current matching-order order and share only that wallet group's position state, so position composition and compare-and-set retry behavior remain correct without merging differently persisted wallet strings.",
+        "At most four distinct exposure-cache wallet-key groups for one evidence event may execute concurrently; the grouping key uses the cache's existing Trim().ToUpperInvariant() wallet identity, and the limit is local and constant and does not change service configuration.",
+        "All orders sharing one exposure-cache wallet key are processed sequentially in their current matching-order order, preventing concurrent publication to the same cache key. Within that group, working position state is kept separately for each exact persisted copied-trader-wallet string using ordinal equality, so differently persisted strings remain distinct in PostgreSQL while repeated orders for one exact string compose the same position.",
         "All wallet groups finish before ApplyMakerGtdUpdateAsync returns; the dedicated queue cannot mark the event complete or dequeue its next event early, preserving accepted-event FIFO, no-drop, publication and expiry-drain guarantees.",
         "Every per-order persistence attempt continues to use TryApplyMakerGtdPaperFullFillAsync unchanged, with its existing independent transaction, wallet advisory lock, validation, atomic fill/order/position/run update and at-most-three position-conflict attempts.",
-        "An exception in one wallet group records failure for that group's not-yet-completed exact orders and does not cancel or suppress already started independent wallet groups; the event completes only after all groups settle, and no order is processed more than once.",
+        "An exception in one exposure-cache wallet-key group records failure for that group's not-yet-completed exact orders and does not cancel or suppress already started independent cache-key groups; the event completes only after all groups settle, and no order is processed more than once.",
+        "Cache publications inside one cache-key group retain current matching-order order; differently persisted strings that map to one existing cache key retain the cache's pre-existing last-publication representation rather than racing nondeterministically.",
         "Execution telemetry identifies the bounded independent-wallet phase without racing one shared mutable per-order operation trace."
       ],
       "implementationPaths": [
@@ -142,32 +143,32 @@
   "deviations": [
     {
       "id": "DEV-001",
-      "text": "Permit independent exact persisted copied-trader-wallet identity groups, compared with ordinal string equality, for the same accepted Maker-GTD evidence event to complete in nondeterministic cross-wallet order, with at most four groups active, while retaining the current order within each exact wallet identity and waiting for all groups before the next evidence event.",
-      "impact": "This is the concurrency needed to remove unnecessary serialization observed for nine distinct strategy wallets. It does not change any wallet's own order/position sequence or evidence-event FIFO, but database commit/cache-publication order between unrelated wallets can differ from the current single-threaded loop.",
+      "text": "Permit independent exposure-cache wallet-key groups, using the cache's existing Trim().ToUpperInvariant() wallet identity, for the same accepted Maker-GTD evidence event to complete in nondeterministic cross-group order, with at most four groups active, while retaining current matching-order order inside each cache-key group, maintaining separate exact persisted-wallet position state, and waiting for all groups before the next evidence event.",
+      "impact": "This is the concurrency needed to remove unnecessary serialization observed for nine distinct strategy wallets while preventing concurrent writes to one existing cache identity. It does not change exact PostgreSQL position identity, any cache-key group's own order/publication sequence or evidence-event FIFO, but database commit/cache-publication order between unrelated cache-key groups can differ from the current single-threaded loop.",
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44",
-        "semanticDigest": "sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44"
+        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:acaf8c4928657c23ef06d201c4c54394efc51245383e293c4d5a3fe8012ce871",
+        "semanticDigest": "sha256:acaf8c4928657c23ef06d201c4c54394efc51245383e293c4d5a3fe8012ce871"
       }
     },
     {
       "id": "DEV-002",
-      "text": "If one wallet group throws while processing an evidence event, let other already started independent wallet groups finish and record failure only for the failed group's not-yet-completed orders instead of aborting all later matching orders in the current serial array.",
-      "impact": "An infrastructure failure for one strategy wallet no longer prevents unrelated wallets from applying the same accepted evidence. Failure remains explicit and fail-closed for every affected order, but independent wallets may now succeed where the current serial loop would not reach them after the first exception.",
+      "text": "If one exposure-cache wallet-key group throws while processing an evidence event, let other already started independent cache-key groups finish and record failure only for the failed group's not-yet-completed orders instead of aborting all later matching orders in the current serial array.",
+      "impact": "An infrastructure failure for one cache-key group no longer prevents unrelated cache-key groups from applying the same accepted evidence. Failure remains explicit and fail-closed for every affected order, but independent groups may now succeed where the current serial loop would not reach them after the first exception.",
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44",
-        "semanticDigest": "sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44"
+        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:acaf8c4928657c23ef06d201c4c54394efc51245383e293c4d5a3fe8012ce871",
+        "semanticDigest": "sha256:acaf8c4928657c23ef06d201c4c54394efc51245383e293c4d5a3fe8012ce871"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44",
-    "semanticDigest": "sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44"
+    "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:acaf8c4928657c23ef06d201c4c54394efc51245383e293c4d5a3fe8012ce871",
+    "semanticDigest": "sha256:acaf8c4928657c23ef06d201c4c54394efc51245383e293c4d5a3fe8012ce871"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
