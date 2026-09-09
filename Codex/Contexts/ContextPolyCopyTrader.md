@@ -1,3 +1,16 @@
+## Active Update 2026-09-09 Maker-GTD Independent Wallet Concurrency Completed
+Goal: Remove the verified dedicated Maker-GTD multi-wallet persistence burst without changing accepted evidence, trading decisions, execution semantics, accounting or Live behavior.
+Status: Completed locally; independent semantic review passed.
+Done:
+- The dedicated updater evaluates the already accepted event, then loads linked runs for all matching exact-family orders in one bounded repository call whenever at least one order has eligible touch evidence.
+- Matching fills are grouped by the existing exposure-cache wallet key `Trim().ToUpperInvariant()` and at most four independent groups run concurrently. Every group is awaited before the event returns, retaining dedicated queue event FIFO/no-drop/publication/expiry guarantees.
+- Orders sharing one cache key remain sequential in matching-order order. Working position state is separated inside that group by the exact persisted copied-trader-wallet string with ordinal equality, so exact PostgreSQL identities remain distinct while cache-equivalent aliases cannot race publication.
+- The existing per-order `TryApplyMakerGtdPaperFullFillAsync` transaction, wallet lock, CAS retry, fill/fee/accounting semantics, failure evidence and mandatory exact-family label remain unchanged. One failed cache-key group does not suppress independent groups.
+- Final verification passed: updater tests `19/19`; full Maker-GTD contract tests `136 passed / 1 pre-existing opt-in PostgreSQL integration skipped / 0 failed`; Release solution build `0 warnings / 0 errors`; `git diff --check` and independent reviewer `agent:/root/reviewer` passed with no findings.
+Next: User-controlled deployment, followed by read-only Production verification of dedicated Maker-GTD queue delay, processing time, pending depth and lifecycle results.
+Notes: Approved contract `RC-20260909-maker-gtd-independent-wallet-concurrency` retains digest `sha256:acaf8c4928657c23ef06d201c4c54394efc51245383e293c4d5a3fe8012ce871`; final approval checkpoint is `827123b1`. Production, database, strategies, orders, configuration and service state were not changed. Protected cleanup removed 43 files / 3,968,523 bytes from exact marked run `manual-079b8967c8ba41249524959c242f3340`, which is verified absent. Exact-family results remain `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: None.
+
 ## Active Update 2026-09-09 Deployed Backfill And Paper-Mark Fix Verification
 Goal: Verify the user-deployed Legacy backfill and ordinary Paper position-mark isolation fixes on Production.
 Status: Both deployed fixes are working; service and Paper betting are healthy, while a separate dedicated Maker-GTD queue produced one severe but recovered backlog burst.

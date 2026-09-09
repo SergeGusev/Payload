@@ -32,3 +32,10 @@ Request:
 
 Result:
 Verified Production deployment `a00e06cd094ef33429487e9e2c6eed7135160802` read-only. Service was Running/Live with fresh heartbeat and NULL error. Since the `07:46:51.712797Z` start, 2,124 Paper orders exactly matched 2,124 fills, all Filled, with fresh BTC/ETH/SOL activity, no open recent Paper orders, and no new Live orders/cancels. The last 50 settlements had complete Gross/Net/calculated-fee accounting. Legacy backfill ranks 1..12 completed in 26..1,177ms with zero timeout/defer/error, and post-deploy logs had no Paper-mark persistence warning/error in the ordinary queue, confirming both deployed fixes. No ERR/FTL appeared through 11:14:30 +03. A separate Maker-GTD queue burst remained: 679 warnings, maximum 14,691ms queue delay, 13,307ms processing and 397 pending; it cleared and fills continued. Four OKX expiry-futures refresh warnings occurred, while all BTC/ETH/SOL references and both Polymarket WebSockets were fresh/healthy. No Production or product-source mutation was performed.
+
+## 2026-09-09T10:09:31.5998759Z
+Request:
+Ок, сделай эту доработку
+
+Result:
+Completed the approved local Maker-GTD queue correction. One accepted event now uses one bounded linked-run lookup and runs at most four independent exposure-cache wallet-key groups concurrently, while awaiting every group before the next event. Cache-equivalent wallet aliases remain sequential and deterministic; exact persisted wallet strings retain separate PostgreSQL position state. Per-order atomic persistence, evidence, trading/accounting and Live behavior are unchanged. Updater tests passed 19/19; full Maker-GTD contract tests passed 136 with one pre-existing opt-in PostgreSQL integration skip and zero failures; Release build passed with zero warnings/errors; independent review passed. No Production mutation occurred, and protected cleanup removed the exact marked D:\CodexTemp run.

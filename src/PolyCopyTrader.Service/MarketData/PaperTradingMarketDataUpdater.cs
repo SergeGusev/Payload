@@ -21,6 +21,7 @@ public sealed class PaperTradingMarketDataUpdater(
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const int MakerPositionCasMaximumAttempts = 3;
+    private const int MakerWalletMaximumConcurrency = 4;
     private readonly TimeSpan makerMaximumEventAge = TimeSpan.FromSeconds(
         Math.Max(1, (marketDataWebSocketOptions ?? new MarketDataWebSocketOptions()).StaleAfterSeconds));
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
@@ -53,11 +54,6 @@ public sealed class PaperTradingMarketDataUpdater(
             phase = nextFailurePhase;
             operation = nextOperation;
             executionTrace?.EnterPhase(nextTracePhase, nextOperation, DateTimeOffset.UtcNow);
-        }
-
-        void EnterTraceOperation(string tracePhase, string traceOperation)
-        {
-            executionTrace?.EnterPhase(tracePhase, traceOperation, DateTimeOffset.UtcNow);
         }
 
         EnterPhase(
@@ -100,28 +96,81 @@ public sealed class PaperTradingMarketDataUpdater(
                     eligibleMakerGtdPaperOrderIds.Contains(order.Id) &&
                     MakerGtdPaperExecutionContract.IsMakerGtdOrder(order))
                 .ToArray();
-            var positions = exposure.PaperPositions
-                .Where(position => string.Equals(position.AssetId, update.AssetId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            foreach (var order in matchingOrders)
+            EnterPhase(
+                MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+                "EvaluateMakerGtdTouch",
+                "MakerGtdTouchNoDepthEvaluator.Evaluate");
+            var fillCandidates = matchingOrders
+                .Select(order => TryCreateMakerGtdPaperFillCandidate(order, update, receivedAtUtc))
+                .Where(candidate => candidate is not null)
+                .Cast<MakerGtdPaperFillCandidate>()
+                .ToArray();
+            if (fillCandidates.Length == 0)
             {
-                paperOrderId = order.Id;
-                EnterPhase(
-                    MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
-                    "ApplyMakerGtdPaperUpdate",
-                    "IAppRepository.TryApplyMakerGtdPaperFullFill");
-                EnterTraceOperation(
-                    MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
-                    "MakerGtdTouchNoDepthEvaluator.Evaluate");
-                await TryApplyMakerGtdPaperUpdateAsync(
-                    order,
+                return;
+            }
+
+            EnterPhase(
+                MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+                "LoadMakerGtdLinkedRuns",
+                "IAppRepository.GetStrategyMarketPaperRunsByPaperOrderIds");
+            var linkedRuns = await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
+                matchingOrders.Select(order => order.Id).ToArray(),
+                cancellationToken);
+            var linkedRunsByPaperOrderId = linkedRuns
+                .Where(run => run.PaperOrderId is not null)
+                .GroupBy(run => run.PaperOrderId!.Value)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<StrategyMarketPaperRun>)group.ToArray());
+            var walletGroups = fillCandidates
+                .GroupBy(
+                    candidate => candidate.Order.CopiedTraderWallet.Trim().ToUpperInvariant(),
+                    StringComparer.Ordinal)
+                .Select(group => group.ToArray())
+                .ToArray();
+
+            EnterPhase(
+                MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+                "ApplyMakerGtdWalletGroups",
+                $"PaperTradingMarketDataUpdater.ApplyMakerGtdWalletGroups(MaxConcurrency={MakerWalletMaximumConcurrency})");
+            using var walletConcurrency = new SemaphoreSlim(
+                MakerWalletMaximumConcurrency,
+                MakerWalletMaximumConcurrency);
+            var groupTasks = walletGroups
+                .Select(group => ProcessMakerGtdWalletGroupAsync(
+                    group,
+                    update,
+                    exposure.PaperPositions,
+                    linkedRunsByPaperOrderId,
+                    walletConcurrency,
+                    cancellationToken,
+                    operationStarted))
+                .ToArray();
+            var groupFailures = await Task.WhenAll(groupTasks);
+            pendingMakerOrderIds.ExceptWith(fillCandidates.Select(candidate => candidate.Order.Id));
+
+            foreach (var failure in groupFailures.Where(failure => failure is not null))
+            {
+                RecordMakerGtdMarketDataFailure(
+                    failure!.PendingPaperOrderIds,
                     update,
                     receivedAtUtc,
-                    positions,
-                    cancellationToken,
-                    executionTrace);
-                pendingMakerOrderIds.Remove(order.Id);
+                    MakerGtdPaperExecutionContract.MarketDataApplyFailureCode);
+                logger.LogError(
+                    failure.Exception,
+                    "Failed to apply dedicated Maker-GTD WebSocket evidence for an independent wallet group. AssetId={AssetId} EventType={EventType} Phase={Phase} Operation={Operation} PaperOrderId={PaperOrderId} Wallet={Wallet} DurationMs={DurationMs}",
+                    update.AssetId,
+                    update.EventType,
+                    "ApplyMakerGtdWalletGroups",
+                    "IAppRepository.TryApplyMakerGtdPaperFullFill",
+                    failure.PaperOrderId,
+                    failure.CopiedTraderWallet,
+                    failure.Duration.TotalMilliseconds);
+                await TryRecordApiErrorAsync(
+                    "ApplyMakerGtdUpdate/ApplyMakerGtdWalletGroups",
+                    $"AssetId={update.AssetId}; EventType={update.EventType}; Operation=IAppRepository.TryApplyMakerGtdPaperFullFill; PaperOrderId={failure.PaperOrderId?.ToString() ?? "<null>"}; Wallet={failure.CopiedTraderWallet}; DurationMs={failure.Duration.TotalMilliseconds:F0}; Error={failure.Exception.Message}",
+                    cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -518,6 +567,33 @@ public sealed class PaperTradingMarketDataUpdater(
         CancellationToken cancellationToken,
         MarketDataSideEffectExecutionTrace? executionTrace)
     {
+        var candidate = TryCreateMakerGtdPaperFillCandidate(order, update, receivedAtUtc);
+        if (candidate is null)
+        {
+            return;
+        }
+
+        executionTrace?.EnterPhase(
+            MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+            "IAppRepository.GetStrategyMarketPaperRunsByPaperOrderIds",
+            DateTimeOffset.UtcNow);
+        var linkedRuns = await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
+            [order.Id],
+            cancellationToken);
+        await TryApplyMakerGtdPaperFillAsync(
+            candidate,
+            linkedRuns,
+            update,
+            positions,
+            cancellationToken,
+            executionTrace);
+    }
+
+    private MakerGtdPaperFillCandidate? TryCreateMakerGtdPaperFillCandidate(
+        PaperOrder order,
+        MarketDataUpdate update,
+        DateTimeOffset? receivedAtUtc)
+    {
         if (!MakerGtdPaperOrderEvidenceParser.TryParse(
                 order,
                 out var orderEvidence,
@@ -528,7 +604,7 @@ public sealed class PaperTradingMarketDataUpdater(
                 "Maker-GTD Paper update skipped because acceptance evidence is invalid. PaperOrderId={PaperOrderId} Detail={Detail}",
                 order.Id,
                 parseFailure);
-            return;
+            return null;
         }
 
         var processedAtUtc = DateTimeOffset.UtcNow;
@@ -542,7 +618,7 @@ public sealed class PaperTradingMarketDataUpdater(
             receiptTimestampUtc >= order.ExpiresAtUtc ||
             receiptTimestampUtc > processedAtUtc)
         {
-            return;
+            return null;
         }
 
         var sourceAge = receiptTimestampUtc - sourceTimestampUtc;
@@ -578,16 +654,31 @@ public sealed class PaperTradingMarketDataUpdater(
             touchEvidence);
         if (!evaluation.Filled)
         {
-            return;
+            return null;
         }
 
-        executionTrace?.EnterPhase(
-            MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
-            "IAppRepository.GetStrategyMarketPaperRunsByPaperOrderIds",
-            DateTimeOffset.UtcNow);
-        var linkedRuns = await repository.GetStrategyMarketPaperRunsByPaperOrderIdsAsync(
-            [order.Id],
-            cancellationToken);
+        return new MakerGtdPaperFillCandidate(
+            order,
+            sourceTimestampUtc,
+            receiptTimestampUtc,
+            processedAtUtc,
+            evaluation);
+    }
+
+    private async Task TryApplyMakerGtdPaperFillAsync(
+        MakerGtdPaperFillCandidate candidate,
+        IReadOnlyList<StrategyMarketPaperRun> linkedRuns,
+        MarketDataUpdate update,
+        List<PaperPosition> positions,
+        CancellationToken cancellationToken,
+        MarketDataSideEffectExecutionTrace? executionTrace)
+    {
+        var order = candidate.Order;
+        var sourceTimestampUtc = candidate.SourceTimestampUtc;
+        var receiptTimestampUtc = candidate.ReceiptTimestampUtc;
+        var processedAtUtc = candidate.ProcessedAtUtc;
+        var evaluation = candidate.Evaluation;
+
         executionTrace?.EnterPhase(
             MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
             "PaperTradingMarketDataUpdater.ValidateMakerGtdLinkedRun",
@@ -771,6 +862,82 @@ public sealed class PaperTradingMarketDataUpdater(
         }
     }
 
+    private async Task<MakerGtdWalletGroupFailure?> ProcessMakerGtdWalletGroupAsync(
+        IReadOnlyList<MakerGtdPaperFillCandidate> candidates,
+        MarketDataUpdate update,
+        IReadOnlyList<PaperPosition> exposurePositions,
+        IReadOnlyDictionary<Guid, IReadOnlyList<StrategyMarketPaperRun>> linkedRunsByPaperOrderId,
+        SemaphoreSlim walletConcurrency,
+        CancellationToken cancellationToken,
+        long operationStarted)
+    {
+        await walletConcurrency.WaitAsync(cancellationToken);
+        try
+        {
+            var copiedTraderWallet = candidates[0].Order.CopiedTraderWallet;
+            var walletPositionsByExactIdentity = candidates
+                .Select(candidate => candidate.Order.CopiedTraderWallet)
+                .Distinct(StringComparer.Ordinal)
+                .ToDictionary(
+                    wallet => wallet,
+                    wallet => exposurePositions
+                        .Where(position =>
+                            string.Equals(
+                                position.AssetId,
+                                candidates[0].Order.AssetId,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(
+                                position.CopiedTraderWallet,
+                                wallet,
+                                StringComparison.Ordinal))
+                        .ToList(),
+                    StringComparer.Ordinal);
+            var pendingPaperOrderIds = candidates
+                .Select(candidate => candidate.Order.Id)
+                .ToHashSet();
+            Guid? paperOrderId = null;
+            try
+            {
+                foreach (var candidate in candidates)
+                {
+                    paperOrderId = candidate.Order.Id;
+                    var linkedRuns = linkedRunsByPaperOrderId.TryGetValue(
+                        candidate.Order.Id,
+                        out var matchingLinkedRuns)
+                            ? matchingLinkedRuns
+                            : Array.Empty<StrategyMarketPaperRun>();
+                    await TryApplyMakerGtdPaperFillAsync(
+                        candidate,
+                        linkedRuns,
+                        update,
+                        walletPositionsByExactIdentity[candidate.Order.CopiedTraderWallet],
+                        cancellationToken,
+                        executionTrace: null);
+                    pendingPaperOrderIds.Remove(candidate.Order.Id);
+                }
+
+                return null;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return new MakerGtdWalletGroupFailure(
+                    copiedTraderWallet,
+                    paperOrderId,
+                    pendingPaperOrderIds,
+                    ex,
+                    Stopwatch.GetElapsedTime(operationStarted));
+            }
+        }
+        finally
+        {
+            walletConcurrency.Release();
+        }
+    }
+
     private void RecordMakerGtdMarketDataFailure(
         Guid paperOrderId,
         MarketDataUpdate update,
@@ -889,6 +1056,20 @@ public sealed class PaperTradingMarketDataUpdater(
     {
         return Math.Min(maxShares, fills.Sum(fill => Math.Max(0m, fill.SizeShares)));
     }
+
+    private sealed record MakerGtdPaperFillCandidate(
+        PaperOrder Order,
+        DateTimeOffset SourceTimestampUtc,
+        DateTimeOffset ReceiptTimestampUtc,
+        DateTimeOffset ProcessedAtUtc,
+        MakerGtdTouchNoDepthEvaluation Evaluation);
+
+    private sealed record MakerGtdWalletGroupFailure(
+        string CopiedTraderWallet,
+        Guid? PaperOrderId,
+        IReadOnlySet<Guid> PendingPaperOrderIds,
+        Exception Exception,
+        TimeSpan Duration);
 
     private static LeaderTrade? ToObservedTrade(PaperOrder order, MarketDataUpdate update)
     {

@@ -27,6 +27,7 @@ internal sealed class TestAppRepository : IAppRepository
     private int endingBetweenGammaMarketCalls;
     private int getOpenPaperPositionsCalls;
     private int makerGtdPaperFullFillAttempts;
+    private int makerGtdLinkedRunLookupCalls;
 
     public TimeSpan PolymarketGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
     public TimeSpan ObservationGammaMarketLookupDelay { get; set; } = TimeSpan.Zero;
@@ -371,6 +372,11 @@ internal sealed class TestAppRepository : IAppRepository
 
     public int MakerGtdPaperFullFillAttempts =>
         System.Threading.Volatile.Read(ref makerGtdPaperFullFillAttempts);
+
+    public int MakerGtdLinkedRunLookupCalls =>
+        System.Threading.Volatile.Read(ref makerGtdLinkedRunLookupCalls);
+
+    public List<IReadOnlyList<Guid>> MakerGtdLinkedRunLookupOrderIds { get; } = [];
 
     public bool ThrowOnGetCryptoUpDown5mWebSocketResolvedMarkets { get; set; }
 
@@ -1629,12 +1635,18 @@ internal sealed class TestAppRepository : IAppRepository
         IReadOnlyCollection<Guid> paperOrderIds,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var orderIds = paperOrderIds.ToHashSet();
-        return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
-            .Where(item => item.PaperOrderId is { } paperOrderId && orderIds.Contains(paperOrderId))
-            .OrderByDescending(item => item.SettledAtUtc ?? item.EnteredAtUtc ?? item.UpdatedAtUtc)
-            .ThenByDescending(item => item.UpdatedAtUtc)
-            .ToArray());
+        Interlocked.Increment(ref makerGtdLinkedRunLookupCalls);
+        lock (sync)
+        {
+            MakerGtdLinkedRunLookupOrderIds.Add(orderIds.Order().ToArray());
+            return Task.FromResult<IReadOnlyList<StrategyMarketPaperRun>>(StrategyMarketPaperRuns
+                .Where(item => item.PaperOrderId is { } paperOrderId && orderIds.Contains(paperOrderId))
+                .OrderByDescending(item => item.SettledAtUtc ?? item.EnteredAtUtc ?? item.UpdatedAtUtc)
+                .ThenByDescending(item => item.UpdatedAtUtc)
+                .ToArray());
+        }
     }
 
     public Task AddPaperFillAsync(PaperFill fill, CancellationToken cancellationToken = default)

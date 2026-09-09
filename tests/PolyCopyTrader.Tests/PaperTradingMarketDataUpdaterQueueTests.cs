@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -392,6 +393,213 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
     }
 
     [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_LoadsLinkedRunsOnceForAllMatchingOrders()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var orders = Enumerable.Range(1, 3)
+            .Select(index => AddMakerOrder(repository, receivedAtUtc, $"strategy:maker-{index}"))
+            .ToArray();
+        var updater = CreateMakerUpdater(repository);
+
+        await updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            orders.Select(order => order.Id).ToHashSet(),
+            CancellationToken.None);
+
+        Assert.Equal(1, repository.MakerGtdLinkedRunLookupCalls);
+        Assert.Equal(
+            orders.Select(order => order.Id).Order(),
+            Assert.Single(repository.MakerGtdLinkedRunLookupOrderIds));
+        Assert.Equal(3, repository.PaperFills.Count);
+        Assert.All(repository.PaperOrders, order => Assert.Equal(PaperOrderStatus.Filled, order.Status));
+    }
+
+    [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_BoundsIndependentWalletsAndWaitsBeforeNextEvent()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var orders = Enumerable.Range(1, 6)
+            .Select(index => AddMakerOrder(repository, receivedAtUtc, $"strategy:maker-{index}"))
+            .ToArray();
+        var feeService = new CoordinatedMakerFeeAccountingService();
+        var updater = CreateMakerUpdater(repository, feeService);
+        var trace = CreateTrace(receivedAtUtc);
+
+        var firstApply = updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            orders.Select(order => order.Id).ToHashSet(),
+            CancellationToken.None,
+            trace);
+        await feeService.WaitForStartedCountAsync(4);
+
+        Assert.Equal(4, feeService.StartedCount);
+        Assert.Equal(4, feeService.MaximumActiveCount);
+        Assert.Equal(
+            "PaperTradingMarketDataUpdater.ApplyMakerGtdWalletGroups(MaxConcurrency=4)",
+            trace.Capture(DateTimeOffset.UtcNow).Operation);
+
+        var secondReceivedAtUtc = receivedAtUtc.AddMilliseconds(1);
+        var secondApply = updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(secondReceivedAtUtc),
+            secondReceivedAtUtc,
+            orders.Select(order => order.Id).ToHashSet(),
+            CancellationToken.None);
+        await Task.Delay(50);
+        Assert.False(secondApply.IsCompleted);
+
+        feeService.Release();
+        await Task.WhenAll(firstApply, secondApply).WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(6, feeService.StartedCount);
+        Assert.Equal(4, feeService.MaximumActiveCount);
+        Assert.Equal(1, repository.MakerGtdLinkedRunLookupCalls);
+        Assert.Equal(6, repository.PaperFills.Count);
+    }
+
+    [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_SerializesOrdersWithinOneWallet()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var firstWalletOrder = AddMakerOrder(repository, receivedAtUtc, "strategy:same-wallet");
+        var secondWalletOrder = AddMakerOrder(repository, receivedAtUtc, "strategy:same-wallet");
+        var independentOrder = AddMakerOrder(repository, receivedAtUtc, "strategy:independent");
+        var orders = new[] { firstWalletOrder, secondWalletOrder, independentOrder };
+        var feeService = new CoordinatedMakerFeeAccountingService();
+        var updater = CreateMakerUpdater(repository, feeService);
+
+        var apply = updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            orders.Select(order => order.Id).ToHashSet(),
+            CancellationToken.None);
+        await feeService.WaitForStartedCountAsync(2);
+        await Task.Delay(50);
+
+        var startedOrderIds = feeService.StartedOrderIds;
+        Assert.Equal(2, startedOrderIds.Count);
+        Assert.Equal(
+            1,
+            startedOrderIds.Count(orderId =>
+                orderId == firstWalletOrder.Id || orderId == secondWalletOrder.Id));
+        Assert.Contains(independentOrder.Id, startedOrderIds);
+
+        feeService.Release();
+        await apply.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(3, feeService.StartedCount);
+        Assert.Equal(2, feeService.MaximumActiveCount);
+        Assert.Equal(3, repository.PaperFills.Count);
+        Assert.Equal(
+            20m,
+            Assert.Single(repository.PaperPositions, position =>
+                string.Equals(
+                    position.CopiedTraderWallet,
+                    firstWalletOrder.CopiedTraderWallet,
+                    StringComparison.Ordinal)).SizeShares);
+    }
+
+    [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_SerializesCacheAliasesWithoutMergingPersistedPositions()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var lowerCaseOrder = AddMakerOrder(repository, receivedAtUtc, " strategy:case-wallet ");
+        var upperCaseOrder = AddMakerOrder(repository, receivedAtUtc, "STRATEGY:CASE-WALLET");
+        var feeService = new CoordinatedMakerFeeAccountingService();
+        var exposureCache = new ExposureSnapshotCache(repository);
+        await exposureCache.GetSnapshotAsync();
+        var updater = CreateMakerUpdater(repository, feeService, exposureCache);
+
+        var apply = updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid> { lowerCaseOrder.Id, upperCaseOrder.Id },
+            CancellationToken.None);
+        await feeService.WaitForStartedCountAsync(1);
+        await Task.Delay(50);
+
+        Assert.Equal(1, feeService.StartedCount);
+        Assert.Equal(1, feeService.MaximumActiveCount);
+
+        feeService.Release();
+        await apply.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(2, feeService.StartedCount);
+        Assert.Equal(1, feeService.MaximumActiveCount);
+        Assert.Equal(2, repository.PaperFills.Count);
+        Assert.Equal(2, repository.PaperPositions.Count);
+        Assert.All(repository.PaperPositions, position => Assert.Equal(10m, position.SizeShares));
+        Assert.Contains(
+            repository.PaperPositions,
+            position => string.Equals(
+                position.CopiedTraderWallet,
+                lowerCaseOrder.CopiedTraderWallet,
+                StringComparison.Ordinal));
+        Assert.Contains(
+            repository.PaperPositions,
+            position => string.Equals(
+                position.CopiedTraderWallet,
+                upperCaseOrder.CopiedTraderWallet,
+                StringComparison.Ordinal));
+        var cachedPosition = Assert.Single((await exposureCache.GetSnapshotAsync()).PaperPositions);
+        Assert.Equal(upperCaseOrder.CopiedTraderWallet, cachedPosition.CopiedTraderWallet);
+        Assert.Equal(10m, cachedPosition.SizeShares);
+    }
+
+    [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_OneWalletFailureDoesNotSuppressIndependentWallet()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var failedOrder = AddMakerOrder(repository, receivedAtUtc, "strategy:failed");
+        var successfulOrder = AddMakerOrder(repository, receivedAtUtc, "strategy:successful");
+        var updater = CreateMakerUpdater(
+            repository,
+            new SelectiveThrowingMakerFeeAccountingService(failedOrder.Id));
+
+        await updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid> { failedOrder.Id, successfulOrder.Id },
+            CancellationToken.None);
+
+        Assert.Equal(
+            PaperOrderStatus.Pending,
+            repository.PaperOrders.Single(order => order.Id == failedOrder.Id).Status);
+        Assert.Equal(
+            PaperOrderStatus.Filled,
+            repository.PaperOrders.Single(order => order.Id == successfulOrder.Id).Status);
+        Assert.Equal(successfulOrder.Id, Assert.Single(repository.PaperFills).PaperOrderId);
+        var apiError = Assert.Single(repository.ApiErrors);
+        Assert.Equal("ApplyMakerGtdUpdate/ApplyMakerGtdWalletGroups", apiError.Operation);
+        Assert.Contains(failedOrder.Id.ToString(), apiError.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_NoTouchDoesNotLoadLinkedRuns()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var order = AddMakerOrder(repository, receivedAtUtc, "strategy:no-touch");
+        var updater = CreateMakerUpdater(repository);
+
+        await updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(receivedAtUtc, bestBid: 0.60m),
+            receivedAtUtc,
+            new HashSet<Guid> { order.Id },
+            CancellationToken.None);
+
+        Assert.Equal(0, repository.MakerGtdLinkedRunLookupCalls);
+        Assert.Empty(repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(repository.PaperOrders).Status);
+    }
+
+    [Fact]
     public async Task ApplyUpdateAsync_ReportsMarketResolutionSettlementPhase()
     {
         var repository = new TestAppRepository();
@@ -668,6 +876,114 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
             timestamp);
     }
 
+    private static MarketDataUpdate MakerBookUpdate(DateTimeOffset timestamp, decimal bestBid = 0.40m)
+    {
+        return BookUpdate(timestamp, bestBid) with
+        {
+            SourceTimestampUtc = timestamp,
+            TimestampQuality = MarketDataTimestampQuality.VenueProvided,
+            ReceivedAtUtc = timestamp,
+            SourceEventId = Guid.NewGuid().ToString("N"),
+            EventFingerprint = Guid.NewGuid().ToString("N")
+        };
+    }
+
+    private static PaperOrder AddMakerOrder(
+        TestAppRepository repository,
+        DateTimeOffset receivedAtUtc,
+        string copiedTraderWallet)
+    {
+        var createdAtUtc = receivedAtUtc.AddMinutes(-2);
+        var acceptedAtUtc = createdAtUtc.AddSeconds(1);
+        var strategyId = Guid.NewGuid();
+        var order = new PaperOrder(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            copiedTraderWallet,
+            PaperOrderStatus.Pending,
+            TradeSide.Buy,
+            "asset-1",
+            "condition-1",
+            "Yes",
+            0.50m,
+            10m,
+            5m,
+            createdAtUtc,
+            receivedAtUtc.AddMinutes(1),
+            StrategyId: strategyId,
+            ExecutionSource: MakerGtdPaperExecutionContract.ExecutionSource);
+        order = order with
+        {
+            RawDecisionJson = JsonSerializer.Serialize(new
+            {
+                maker_gtd = new
+                {
+                    accepted_at_utc = acceptedAtUtc,
+                    effective_expires_at_utc = order.ExpiresAtUtc,
+                    attempts = Array.Empty<object>()
+                },
+                market_data_status_at_acceptance = new
+                {
+                    connection_state = MarketDataConnectionState.Connected.ToString(),
+                    stale = false,
+                    reconnect_count = 1,
+                    last_connected_utc = (DateTimeOffset?)createdAtUtc.AddMinutes(-1),
+                    last_disconnected_utc = (DateTimeOffset?)null,
+                    asset_subscribed = true,
+                    subscribed_assets_count = 1,
+                    accepted_at_utc = acceptedAtUtc
+                }
+            })
+        };
+        var run = new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            strategyId,
+            "market-maker-gtd",
+            order.ConditionId,
+            "market-maker-gtd",
+            "Maker GTD market",
+            "Crypto",
+            MarketStartUtc: createdAtUtc.AddMinutes(1),
+            MarketEndUtc: order.ExpiresAtUtc.AddMinutes(1),
+            DetectedAtUtc: createdAtUtc.AddSeconds(-1),
+            EntryDueAtUtc: createdAtUtc,
+            Status: StrategyMarketPaperRunStatuses.Resting,
+            SelectedAssetId: order.AssetId,
+            SelectedOutcome: order.Outcome,
+            EntryPrice: order.Price,
+            StakeUsd: order.NotionalUsd,
+            SizeShares: order.SizeShares,
+            SignalId: order.SignalId,
+            PaperOrderId: order.Id,
+            EnteredAtUtc: null,
+            SettlementPrice: null,
+            SettlementValueUsd: null,
+            RealizedPnlUsd: null,
+            SettledAtUtc: null,
+            SkipReason: null,
+            CreatedAtUtc: createdAtUtc,
+            UpdatedAtUtc: acceptedAtUtc);
+        repository.PaperOrders.Add(order);
+        repository.StrategyMarketPaperRuns.Add(run);
+        return order;
+    }
+
+    private static PaperTradingMarketDataUpdater CreateMakerUpdater(
+        TestAppRepository repository,
+        IPolymarketFeeAccountingService? feeAccountingService = null,
+        IExposureSnapshotCache? exposureCache = null)
+    {
+        return new PaperTradingMarketDataUpdater(
+            NullLogger<PaperTradingMarketDataUpdater>.Instance,
+            new DefaultPaperTradingEngine(),
+            new NoOpPaperSettlementProcessor(),
+            exposureCache ?? new ExposureSnapshotCache(repository),
+            new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
+            repository,
+            feeAccountingService,
+            new MarketDataWebSocketOptions { StaleAfterSeconds = 30 });
+    }
+
     private static MarketDataSideEffectExecutionTrace CreateTrace(DateTimeOffset receivedAtUtc)
     {
         return new MarketDataSideEffectExecutionTrace(
@@ -749,5 +1065,119 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         {
             releasePaperFill.TrySetResult(true);
         }
+    }
+
+    private sealed class CoordinatedMakerFeeAccountingService : IPolymarketFeeAccountingService
+    {
+        private readonly object sync = new();
+        private readonly TaskCompletionSource<bool> release = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly List<Guid> startedOrderIds = [];
+        private int activeCount;
+        private int maximumActiveCount;
+
+        public int StartedCount
+        {
+            get
+            {
+                lock (sync)
+                {
+                    return startedOrderIds.Count;
+                }
+            }
+        }
+
+        public int MaximumActiveCount
+        {
+            get
+            {
+                lock (sync)
+                {
+                    return maximumActiveCount;
+                }
+            }
+        }
+
+        public IReadOnlyList<Guid> StartedOrderIds
+        {
+            get
+            {
+                lock (sync)
+                {
+                    return startedOrderIds.ToArray();
+                }
+            }
+        }
+
+        public async Task<PaperFill> ApplyToPaperFillAsync(
+            PaperOrder order,
+            PaperFill fill,
+            CancellationToken cancellationToken = default)
+        {
+            lock (sync)
+            {
+                startedOrderIds.Add(order.Id);
+                activeCount++;
+                maximumActiveCount = Math.Max(maximumActiveCount, activeCount);
+            }
+
+            try
+            {
+                await release.Task.WaitAsync(cancellationToken);
+                return fill;
+            }
+            finally
+            {
+                lock (sync)
+                {
+                    activeCount--;
+                }
+            }
+        }
+
+        public Task<LiveOrder> ApplyToLiveOrderAsync(
+            LiveOrder order,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<PaperEntryPersistenceBatch> ApplyToEntryBatchAsync(
+            PaperEntryPersistenceBatch batch,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public async Task WaitForStartedCountAsync(int expectedCount)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (StartedCount < expectedCount)
+            {
+                await Task.Delay(10, timeout.Token);
+            }
+        }
+
+        public void Release()
+        {
+            release.TrySetResult(true);
+        }
+    }
+
+    private sealed class SelectiveThrowingMakerFeeAccountingService(Guid failedOrderId)
+        : IPolymarketFeeAccountingService
+    {
+        public Task<PaperFill> ApplyToPaperFillAsync(
+            PaperOrder order,
+            PaperFill fill,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return order.Id == failedOrderId
+                ? Task.FromException<PaperFill>(new InvalidOperationException("simulated independent wallet failure"))
+                : Task.FromResult(fill);
+        }
+
+        public Task<LiveOrder> ApplyToLiveOrderAsync(
+            LiveOrder order,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<PaperEntryPersistenceBatch> ApplyToEntryBatchAsync(
+            PaperEntryPersistenceBatch batch,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }
