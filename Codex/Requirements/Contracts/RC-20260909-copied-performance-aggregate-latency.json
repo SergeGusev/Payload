@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260909-copied-performance-aggregate-latency",
+  "title": "Reduce copied-trader performance aggregate latency",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "То есть идей для доработок нет?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, приступай"
+    }
+  ],
+  "scope": {
+    "goal": "Implement the first previously identified improvement target: reduce the recurring latency and resulting high-priority backlog of the Paper copied-trader performance aggregate while preserving its calculated results and all surrounding worker behavior.",
+    "inScope": [
+      "Only the WITH event_rows aggregate SQL executed by PostgresAppRepository.RefreshPaperCopiedTraderPerformanceProjectionAsync for the already selected copied-trader wallet batch.",
+      "Select the batch's Paper orders, open positions and settlements once; resolve the latest Gamma category once per distinct required condition; aggregate fills through the existing paper_order_id-leading index; and reduce each source to wallet/category metrics before the final category and OVERALL aggregation.",
+      "Focused source-contract and PostgreSQL integration regression tests proving result equivalence, selected-wallet boundedness, and indexed fill lookup.",
+      "Concise README and configuration-reference documentation of the unchanged semantics and optimized source aggregation.",
+      "A disposable non-production PostgreSQL test database may be used only for focused verification if the integration-test connection is available or can be safely provisioned locally."
+    ],
+    "outOfScope": [
+      "Any PostgreSQL production mutation, schema or index migration, backup, deployment, service restart, configuration mutation, queue/inflight edit, or order action.",
+      "Any change to copied-performance scores, PnL, ROI, win rate, categories, OVERALL rows, event inclusion rules, refresh timeout, wallet selection, queue ordering, batch sizes, worker cadence, transaction boundaries, advisory locks, recovery, reconciliation, or retry behavior.",
+      "Paper settlement persistence, external-market-data timeouts, Maker-GTD, strategy decisions, Paper/Live execution, balances, and all other previously observed improvement targets.",
+      "A generalized projection framework, new background worker, new durable state, or historical data rewrite."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future copied-performance refresh cycles after the user deploys the resulting source change; diagnostic production evidence is read-only and uses exact UTC cutoffs.",
+    "firstVerification": "Inspect the exact aggregate, worker, schema indexes and focused tests, then use bounded production READ ONLY queries with 15-second statement timeout to measure the current selected-batch source scale, query plan and output equivalence of the proposed SQL shape before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Reduce the recurring copied-trader performance aggregate work by reading the selected batch's source rows once, resolving each required condition category once, folding indexed fill metrics into the selected orders, and aggregating each source before the final wallet/category and OVERALL rollup.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "приступай",
+      "acceptanceCriteria": [
+        "The governed aggregate SQL materializes only source rows belonging to the already populated temp_paper_copied_trader_performance_wallets selector.",
+        "Paper orders are not independently rescanned for the order and fill branches; fill totals are obtained per selected order through paper_fills.paper_order_id and retain support for zero, one, or multiple fills per order.",
+        "The latest Gamma category lookup is performed once per distinct condition required by selected orders, open positions, or settlements whose stored category is empty.",
+        "Each source is reduced to wallet/category metrics before the final category and OVERALL aggregation; no new table, index, worker, queue or durable state is introduced.",
+        "A focused PostgreSQL plan check contains ix_paper_fills_order_time for fill lookup and contains no sequential scan of paper_fills."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperCopiedTraderPerformancePostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~PaperCopiedTraderPerformance --artifacts-path <runPath>/artifacts --results-directory <runPath>/results",
+          "expected": "All copied-performance unit, source-contract and available PostgreSQL integration tests pass; any unavailable external integration environment is reported explicitly.",
+          "result": "pending",
+          "evidence": "Filled after execution"
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Run a bounded EXPLAIN plan for the optimized selected-wallet aggregate against a disposable PostgreSQL integration database and inspect the complete plan.",
+          "expected": "Selected orders, open positions and settlements remain wallet-index bounded, fill lookup uses ix_paper_fills_order_time, and paper_fills has no sequential scan.",
+          "result": "pending",
+          "evidence": "Filled after execution"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preserve the exact copied-performance projection result for every selected wallet and category, including the OVERALL row and all score inputs.",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "sourceQuote": "приступай",
+      "acceptanceCriteria": [
+        "For identical source rows and selected wallets, legacy and optimized projections contain exactly the same wallet/category keys, orders, filled orders, buy fills, sell fills, open positions, settled positions, wins, losses, buy cost, sell proceeds, settlement value, realized PnL, unrealized PnL, first order time and last order time.",
+        "ROI, win rate, total PnL and score formulas remain unchanged and therefore produce the same values from the equivalent aggregate inputs.",
+        "Stored non-empty settlement category still takes precedence over Gamma category; missing/empty categories still resolve to the same latest Gamma category or unknown.",
+        "Fixtures cover multiple categories, missing category metadata, no-fill and multiple-fill orders, open positions, won and lost settlements, and more than one selected wallet.",
+        "A bounded read-only production comparison records zero legacy-minus-optimized and zero optimized-minus-legacy rows for a concrete selected-wallet sample before product editing."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperCopiedTraderPerformancePostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Run focused PostgreSQL equivalence tests that execute legacy and optimized aggregate shapes over the same fixtures and compare every projected input column with EXCEPT ALL in both directions.",
+          "expected": "Both difference sets are empty and all explicit edge-case assertions pass.",
+          "result": "pending",
+          "evidence": "Filled after execution"
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Compare the aggregate formulas and surrounding transaction flow in the task diff against the approved parent revision.",
+          "expected": "Only the internal aggregate data shape and mapped tests/documentation change; formulas, selector, delete/insert scope, transaction, queue/inflight lifecycle and worker remain unchanged.",
+          "result": "pending",
+          "evidence": "Filled after execution"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Deliver a verified local source change for the user to deploy; leave Production unchanged during implementation.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, приступай",
+      "acceptanceCriteria": [
+        "No Production DML, DDL, service action, configuration change, deployment, order action or queue edit is performed.",
+        "The Release solution build and focused copied-performance tests complete with zero errors; warnings and unavailable integration prerequisites are reported exactly.",
+        "An independent reviewer compares both verbatim requests, this approved contract, the complete governed diff and verification evidence and returns PASS with no open findings.",
+        "Existing unrelated working-tree changes are preserved and excluded from task commits."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperCopiedTraderPerformancePostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "README.md",
+        "docs/configuration_reference.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "dotnet build PolyCopyTrader.sln -c Release --no-restore --artifacts-path <runPath>/artifacts -p:UseSharedCompilation=false -nr:false",
+          "expected": "The Release solution build exits zero with zero errors.",
+          "result": "pending",
+          "evidence": "Filled after execution"
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Run git diff --check, task-scoped requirement Contract/WorkingTree/Staged/Range validation, inspect every staged path, and obtain independent semantic review.",
+          "expected": "All applicable gates pass, only mapped task paths enter task commits, unrelated work remains untouched, and review returns PASS with no findings.",
+          "result": "pending",
+          "evidence": "Filled after execution"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260909-copied-performance-aggregate-latency sha256:b2fb7bb38f2d6eafe21df8d481f090278cd046cce62fb5069580ad63b9ed69a1",
+    "semanticDigest": "sha256:b2fb7bb38f2d6eafe21df8d481f090278cd046cce62fb5069580ad63b9ed69a1"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
