@@ -295,8 +295,9 @@ SET LOCAL enable_bitmapscan = off;
         var firstOrderId = Guid.NewGuid();
         var secondOrderId = Guid.NewGuid();
         var fillId = Guid.NewGuid();
+        var secondFillId = Guid.NewGuid();
         var orderIds = new[] { firstOrderId, secondOrderId };
-        var fillIds = new[] { fillId };
+        var fillIds = new[] { fillId, secondFillId };
         var controlState = await ReadControlStateAsync(factory);
 
         try
@@ -363,6 +364,20 @@ SET LOCAL enable_bitmapscan = off;
                 buyCostUsd: 2m,
                 realizedPnlUsd: 1.25m);
 
+            await InsertPaperFillAsync(factory, secondFillId, firstOrderId, 0.25m, 4m, -0.50m, createdAtUtc.AddSeconds(3));
+            Assert.Equal("paper_fill", await ReadQueuedWalletSourceKindAsync(factory, firstWallet));
+
+            var afterSecondInsert = await RefreshExactWalletAsync(factory, repository, firstWallet);
+            Assert.Equal(1, afterSecondInsert.WalletsProcessed);
+            Assert.Equal(2, afterSecondInsert.PerformanceRowsWritten);
+            AssertProjectionRows(
+                await ReadProjectionRowsAsync(factory, firstWallet),
+                ordersCount: 1,
+                filledOrdersCount: 1,
+                buyFillsCount: 2,
+                buyCostUsd: 3m,
+                realizedPnlUsd: 0.75m);
+
             await UpdatePaperFillAsync(factory, fillId, 0.50m, 6m, 3.50m);
             Assert.Equal("paper_fill", await ReadQueuedWalletSourceKindAsync(factory, firstWallet));
 
@@ -373,9 +388,9 @@ SET LOCAL enable_bitmapscan = off;
                 await ReadProjectionRowsAsync(factory, firstWallet),
                 ordersCount: 1,
                 filledOrdersCount: 1,
-                buyFillsCount: 1,
-                buyCostUsd: 3m,
-                realizedPnlUsd: 3.50m);
+                buyFillsCount: 2,
+                buyCostUsd: 4m,
+                realizedPnlUsd: 3m);
 
             await DeletePaperFillAsync(factory, fillId);
             Assert.Equal("paper_fill", await ReadQueuedWalletSourceKindAsync(factory, firstWallet));
@@ -383,6 +398,20 @@ SET LOCAL enable_bitmapscan = off;
             var afterFillDelete = await RefreshExactWalletAsync(factory, repository, firstWallet);
             Assert.Equal(1, afterFillDelete.WalletsProcessed);
             Assert.Equal(2, afterFillDelete.PerformanceRowsWritten);
+            AssertProjectionRows(
+                await ReadProjectionRowsAsync(factory, firstWallet),
+                ordersCount: 1,
+                filledOrdersCount: 1,
+                buyFillsCount: 1,
+                buyCostUsd: 1m,
+                realizedPnlUsd: -0.50m);
+
+            await DeletePaperFillAsync(factory, secondFillId);
+            Assert.Equal("paper_fill", await ReadQueuedWalletSourceKindAsync(factory, firstWallet));
+
+            var afterAllFillsDeleted = await RefreshExactWalletAsync(factory, repository, firstWallet);
+            Assert.Equal(1, afterAllFillsDeleted.WalletsProcessed);
+            Assert.Equal(2, afterAllFillsDeleted.PerformanceRowsWritten);
             AssertProjectionRows(
                 await ReadProjectionRowsAsync(factory, firstWallet),
                 ordersCount: 1,
@@ -400,6 +429,79 @@ SET LOCAL enable_bitmapscan = off;
         finally
         {
             await DeleteTestRowsAsync(factory, wallets, orderIds, fillIds);
+            await RestoreControlStateAsync(factory, controlState);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task Projection_OptimizedAggregate_MatchesLegacyMetricsAndUsesIndexedFillLookup()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
+        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var repository = new PostgresAppRepository(factory);
+        var strategyId = await ReadFirstStrategyIdAsync(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallets = new[]
+        {
+            $"paper-performance-equivalence-{suffix}-one",
+            $"paper-performance-equivalence-{suffix}-two"
+        };
+        var orderIds = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToArray();
+        var fillIds = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid()).ToArray();
+        var gammaMarketIds = new[]
+        {
+            $"paper-performance-equivalence-{suffix}-gamma-old",
+            $"paper-performance-equivalence-{suffix}-gamma-latest",
+            $"paper-performance-equivalence-{suffix}-gamma-second"
+        };
+        var controlState = await ReadControlStateAsync(factory);
+
+        try
+        {
+            await InsertAggregateEquivalenceFixtureAsync(
+                factory,
+                strategyId,
+                wallets,
+                orderIds,
+                fillIds,
+                gammaMarketIds,
+                suffix);
+            await PromoteQueuedWalletsAsync(factory, wallets);
+            await SetControlCursorToMaximumSourceWalletAsync(factory);
+
+            var plan = await ExplainOptimizedFillLookupAsync(factory, wallets);
+            Assert.Contains("ix_paper_fills_order_time", plan, StringComparison.Ordinal);
+            Assert.DoesNotContain("Seq Scan on paper_fills", plan, StringComparison.Ordinal);
+
+            var result = await repository.RefreshPaperCopiedTraderPerformanceProjectionAsync(
+                highPriorityWalletBatchSize: 2,
+                reconciliationWalletBatchSize: 1,
+                reconciliationSeedWalletBatchSize: 1);
+
+            Assert.True(result.LockAcquired);
+            Assert.Equal(2, result.HighPriorityWalletsProcessed);
+            var differences = await CompareLegacyAndPersistedProjectionAsync(factory, wallets);
+            Assert.Equal(0, differences.LegacyMinusPersisted);
+            Assert.Equal(0, differences.PersistedMinusLegacy);
+
+            Assert.Equal(
+                new[] { "Crypto", "OVERALL", "StoredCategory", "unknown" },
+                (await ReadProjectionRowsAsync(factory, wallets[0])).Select(row => row.Category).ToArray());
+            Assert.Equal(
+                new[] { "OVERALL", "Sports", "unknown" },
+                (await ReadProjectionRowsAsync(factory, wallets[1])).Select(row => row.Category).ToArray());
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, wallets, orderIds, fillIds);
+            await DeleteGammaMarketRowsAsync(factory, gammaMarketIds);
             await RestoreControlStateAsync(factory, controlState);
         }
     }
@@ -2105,6 +2207,416 @@ WHERE copied_trader_wallet = ANY(@Wallets);
             ?? throw new InvalidOperationException("PostgreSQL integration database has no strategy row."));
     }
 
+    private static async Task InsertAggregateEquivalenceFixtureAsync(
+        PostgresConnectionFactory factory,
+        Guid strategyId,
+        string[] wallets,
+        Guid[] orderIds,
+        Guid[] fillIds,
+        string[] gammaMarketIds,
+        string suffix)
+    {
+        var conditionA = $"condition-{suffix}-a";
+        var conditionB = $"condition-{suffix}-b";
+        var missingCondition = $"condition-{suffix}-missing";
+        var nowUtc = DateTimeOffset.UtcNow.AddMinutes(-5);
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand(
+            """
+INSERT INTO polymarket_gamma_markets (
+    market_id, condition_id, question_id, slug, question, category,
+    active, closed, archived, restricted, accepting_orders, enable_order_book,
+    negative_risk, outcomes_json, clob_token_ids_json, raw_json, fetched_at_utc)
+VALUES
+    (@Gamma0, @ConditionA, @Question0, @Slug0, 'Old category fixture', 'OldCategory',
+     true, false, false, false, true, true, false, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, @GammaOldUtc),
+    (@Gamma1, @ConditionA, @Question1, @Slug1, 'Latest category fixture', 'Crypto',
+     true, false, false, false, true, true, false, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, @GammaLatestUtc),
+    (@Gamma2, @ConditionB, @Question2, @Slug2, 'Second category fixture', 'Sports',
+     true, false, false, false, true, true, false, '[]'::jsonb, '[]'::jsonb, '{}'::jsonb, @GammaLatestUtc);
+
+INSERT INTO paper_orders (
+    id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id,
+    condition_id, outcome, price, size_shares, notional_usd, created_at_utc,
+    expires_at_utc, filled_at_utc, raw_decision_json)
+VALUES
+    (@Order0, @Signal0, @StrategyId, @Wallet0, 'Filled', 'Buy', @Asset0,
+     @ConditionA, 'Yes', 0.40, 5, 2, @Created0, @ExpiresUtc, @FilledUtc, '{}'::jsonb),
+    (@Order1, @Signal1, @StrategyId, @Wallet0, 'PartiallyFilled', 'Sell', @Asset1,
+     @ConditionA, 'Yes', 0.60, 3, 1.8, @Created1, @ExpiresUtc, @FilledUtc, '{}'::jsonb),
+    (@Order2, @Signal2, @StrategyId, @Wallet0, 'Pending', 'Buy', @Asset2,
+     @MissingCondition, 'Yes', 0.30, 2, 0.6, @Created2, @ExpiresUtc, NULL, '{}'::jsonb),
+    (@Order3, @Signal3, @StrategyId, @Wallet1, 'Filled', 'Buy', @Asset3,
+     @ConditionB, 'Yes', 0.50, 4, 2, @Created3, @ExpiresUtc, @FilledUtc, '{}'::jsonb);
+
+INSERT INTO paper_fills (
+    id, paper_order_id, price, size_shares, filled_at_utc, evidence, realized_pnl_usd)
+VALUES
+    (@Fill0, @Order0, 0.40, 2, @FilledUtc, 'aggregate equivalence fixture', 0.25),
+    (@Fill1, @Order0, 0.45, 3, @FilledUtc, 'aggregate equivalence fixture', -0.10),
+    (@Fill2, @Order1, 0.65, 1.5, @FilledUtc, 'aggregate equivalence fixture', 0.40),
+    (@Fill3, @Order3, 0.50, 4, @FilledUtc, 'aggregate equivalence fixture', 1.20);
+
+INSERT INTO paper_positions (
+    id, copied_trader_wallet, asset_id, condition_id, outcome, size_shares,
+    average_price, estimated_value_usd, unrealized_pnl_usd, updated_at_utc)
+VALUES
+    (@Position0, @Wallet0, @OpenAsset0, @ConditionA, 'Yes', 1, 0.40, 1.15, 0.75, @Created3),
+    (@Position1, @Wallet1, @OpenAsset1, @MissingCondition, 'Yes', 2, 0.50, 0.75, -0.25, @Created3);
+
+INSERT INTO paper_position_settlements (
+    id, copied_trader_wallet, asset_id, condition_id, outcome, winning_asset_id,
+    winning_outcome, category, settled_size_shares, average_price, cost_basis_usd,
+    settlement_value_usd, realized_pnl_usd, won, settlement_source,
+    settled_at_utc, created_at_utc)
+VALUES
+    (@Settlement0, @Wallet0, @SettledAsset0, @MissingCondition, 'Yes', @SettledAsset0,
+     'Yes', 'StoredCategory', 3, 0.30, 0.90, 3, 2.10, true, 'aggregate equivalence fixture', @Created3, @Created3),
+    (@Settlement1, @Wallet0, @SettledAsset1, @ConditionA, 'Yes', NULL,
+     'No', NULL, 2, 0.60, 1.20, 0, -1.20, false, 'aggregate equivalence fixture', @Created3, @Created3),
+    (@Settlement2, @Wallet1, @SettledAsset2, @MissingCondition, 'Yes', NULL,
+     'No', NULL, 1, 0.50, 0.50, 0, -0.50, false, 'aggregate equivalence fixture', @Created3, @Created3);
+""",
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("StrategyId", strategyId);
+        for (var index = 0; index < wallets.Length; index++)
+        {
+            command.Parameters.AddWithValue($"Wallet{index}", wallets[index]);
+        }
+
+        for (var index = 0; index < orderIds.Length; index++)
+        {
+            command.Parameters.AddWithValue($"Order{index}", orderIds[index]);
+            command.Parameters.AddWithValue($"Signal{index}", Guid.NewGuid());
+            command.Parameters.AddWithValue($"Asset{index}", $"asset-{suffix}-order-{index}");
+        }
+
+        for (var index = 0; index < fillIds.Length; index++)
+        {
+            command.Parameters.AddWithValue($"Fill{index}", fillIds[index]);
+        }
+
+        for (var index = 0; index < gammaMarketIds.Length; index++)
+        {
+            command.Parameters.AddWithValue($"Gamma{index}", gammaMarketIds[index]);
+            command.Parameters.AddWithValue($"Question{index}", $"question-{suffix}-{index}");
+            command.Parameters.AddWithValue($"Slug{index}", $"slug-{suffix}-{index}");
+        }
+
+        command.Parameters.AddWithValue("ConditionA", conditionA);
+        command.Parameters.AddWithValue("ConditionB", conditionB);
+        command.Parameters.AddWithValue("MissingCondition", missingCondition);
+        command.Parameters.AddWithValue("GammaOldUtc", nowUtc.AddMinutes(-2).UtcDateTime);
+        command.Parameters.AddWithValue("GammaLatestUtc", nowUtc.AddMinutes(-1).UtcDateTime);
+        command.Parameters.AddWithValue("Created0", nowUtc.UtcDateTime);
+        command.Parameters.AddWithValue("Created1", nowUtc.AddSeconds(1).UtcDateTime);
+        command.Parameters.AddWithValue("Created2", nowUtc.AddSeconds(2).UtcDateTime);
+        command.Parameters.AddWithValue("Created3", nowUtc.AddSeconds(3).UtcDateTime);
+        command.Parameters.AddWithValue("ExpiresUtc", nowUtc.AddMinutes(5).UtcDateTime);
+        command.Parameters.AddWithValue("FilledUtc", nowUtc.AddSeconds(4).UtcDateTime);
+        command.Parameters.AddWithValue("Position0", Guid.NewGuid());
+        command.Parameters.AddWithValue("Position1", Guid.NewGuid());
+        command.Parameters.AddWithValue("OpenAsset0", $"asset-{suffix}-open-0");
+        command.Parameters.AddWithValue("OpenAsset1", $"asset-{suffix}-open-1");
+        command.Parameters.AddWithValue("Settlement0", Guid.NewGuid());
+        command.Parameters.AddWithValue("Settlement1", Guid.NewGuid());
+        command.Parameters.AddWithValue("Settlement2", Guid.NewGuid());
+        command.Parameters.AddWithValue("SettledAsset0", $"asset-{suffix}-settled-0");
+        command.Parameters.AddWithValue("SettledAsset1", $"asset-{suffix}-settled-1");
+        command.Parameters.AddWithValue("SettledAsset2", $"asset-{suffix}-settled-2");
+        await command.ExecuteNonQueryAsync();
+        await transaction.CommitAsync();
+    }
+
+    private static async Task<string> ExplainOptimizedFillLookupAsync(
+        PostgresConnectionFactory factory,
+        string[] wallets)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await using var command = new NpgsqlCommand(
+            """
+SET LOCAL enable_seqscan = off;
+EXPLAIN (COSTS OFF)
+WITH selected_orders AS MATERIALIZED (
+    SELECT po.id, po.copied_trader_wallet, po.side
+    FROM paper_orders po
+    WHERE po.copied_trader_wallet = ANY(@Wallets)
+)
+SELECT
+    orders.copied_trader_wallet,
+    SUM(CASE WHEN orders.side = 'Buy' THEN fills.fill_count ELSE 0 END),
+    SUM(CASE WHEN orders.side = 'Buy' THEN fills.notional_usd ELSE 0 END),
+    SUM(fills.realized_pnl_usd)
+FROM selected_orders orders
+LEFT JOIN LATERAL (
+    SELECT
+        COUNT(*) AS fill_count,
+        COALESCE(SUM(fill.price * fill.size_shares), 0) AS notional_usd,
+        COALESCE(SUM(fill.realized_pnl_usd), 0) AS realized_pnl_usd
+    FROM paper_fills fill
+    WHERE fill.paper_order_id = orders.id
+    OFFSET 0
+) fills ON true
+GROUP BY orders.copied_trader_wallet;
+""",
+            connection,
+            transaction);
+        command.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
+        await using var reader = await command.ExecuteReaderAsync();
+        var planLines = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            planLines.Add(reader.GetString(0));
+        }
+
+        await reader.DisposeAsync();
+        await transaction.RollbackAsync();
+        return string.Join(Environment.NewLine, planLines);
+    }
+
+    private static async Task<ProjectionDifferenceCounts> CompareLegacyAndPersistedProjectionAsync(
+        PostgresConnectionFactory factory,
+        string[] wallets)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+WITH selected AS MATERIALIZED (
+    SELECT unnest(@Wallets::text[]) AS copied_trader_wallet
+), event_rows AS (
+    SELECT
+        po.copied_trader_wallet,
+        COALESCE(NULLIF(gm.category, ''), 'unknown') AS category,
+        1::integer AS orders_count,
+        CASE WHEN po.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired') THEN 1 ELSE 0 END::integer AS filled_orders_count,
+        0::integer AS buy_fills_count,
+        0::integer AS sell_fills_count,
+        0::integer AS open_positions_count,
+        0::integer AS settled_positions_count,
+        0::integer AS won_positions_count,
+        0::integer AS lost_positions_count,
+        0::numeric AS buy_cost_usd,
+        0::numeric AS sell_proceeds_usd,
+        0::numeric AS settlement_value_usd,
+        0::numeric AS realized_pnl_usd,
+        0::numeric AS unrealized_pnl_usd,
+        po.created_at_utc AS first_order_utc,
+        po.created_at_utc AS last_order_utc
+    FROM paper_orders po
+    JOIN selected ON selected.copied_trader_wallet = po.copied_trader_wallet
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE market.condition_id = po.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) gm ON true
+    WHERE po.copied_trader_wallet <> ''
+
+    UNION ALL
+
+    SELECT
+        po.copied_trader_wallet,
+        COALESCE(NULLIF(gm.category, ''), 'unknown'),
+        0, 0,
+        CASE WHEN po.side = 'Buy' THEN 1 ELSE 0 END,
+        CASE WHEN po.side = 'Sell' THEN 1 ELSE 0 END,
+        0, 0, 0, 0,
+        CASE WHEN po.side = 'Buy' THEN pf.price * pf.size_shares ELSE 0 END,
+        CASE WHEN po.side = 'Sell' THEN pf.price * pf.size_shares ELSE 0 END,
+        0,
+        pf.realized_pnl_usd,
+        0,
+        po.created_at_utc,
+        po.created_at_utc
+    FROM paper_fills pf
+    JOIN paper_orders po ON po.id = pf.paper_order_id
+    JOIN selected ON selected.copied_trader_wallet = po.copied_trader_wallet
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE market.condition_id = po.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) gm ON true
+    WHERE po.copied_trader_wallet <> ''
+
+    UNION ALL
+
+    SELECT
+        pp.copied_trader_wallet,
+        COALESCE(NULLIF(gm.category, ''), 'unknown'),
+        0, 0, 0, 0,
+        1,
+        0, 0, 0,
+        0, 0, 0, 0,
+        pp.unrealized_pnl_usd,
+        NULL::timestamptz,
+        NULL::timestamptz
+    FROM paper_positions pp
+    JOIN selected ON selected.copied_trader_wallet = pp.copied_trader_wallet
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE market.condition_id = pp.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) gm ON true
+    WHERE pp.copied_trader_wallet <> ''
+      AND pp.size_shares > 0
+
+    UNION ALL
+
+    SELECT
+        ps.copied_trader_wallet,
+        COALESCE(NULLIF(ps.category, ''), NULLIF(gm.category, ''), 'unknown'),
+        0, 0, 0, 0, 0,
+        1,
+        CASE WHEN ps.won THEN 1 ELSE 0 END,
+        CASE WHEN ps.won THEN 0 ELSE 1 END,
+        0, 0,
+        ps.settlement_value_usd,
+        ps.realized_pnl_usd,
+        0,
+        NULL::timestamptz,
+        NULL::timestamptz
+    FROM paper_position_settlements ps
+    JOIN selected ON selected.copied_trader_wallet = ps.copied_trader_wallet
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE NULLIF(ps.category, '') IS NULL
+          AND market.condition_id = ps.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) gm ON true
+    WHERE ps.copied_trader_wallet <> ''
+), grouped AS (
+    SELECT
+        copied_trader_wallet,
+        CASE WHEN GROUPING(category) = 1 THEN 'OVERALL' ELSE category END AS category,
+        SUM(orders_count)::integer AS orders_count,
+        SUM(filled_orders_count)::integer AS filled_orders_count,
+        SUM(buy_fills_count)::integer AS buy_fills_count,
+        SUM(sell_fills_count)::integer AS sell_fills_count,
+        SUM(open_positions_count)::integer AS open_positions_count,
+        SUM(settled_positions_count)::integer AS settled_positions_count,
+        SUM(won_positions_count)::integer AS won_positions_count,
+        SUM(lost_positions_count)::integer AS lost_positions_count,
+        SUM(buy_cost_usd) AS buy_cost_usd,
+        SUM(sell_proceeds_usd) AS sell_proceeds_usd,
+        SUM(settlement_value_usd) AS settlement_value_usd,
+        SUM(realized_pnl_usd) AS realized_pnl_usd,
+        SUM(unrealized_pnl_usd) AS unrealized_pnl_usd,
+        MIN(first_order_utc) AS first_order_utc,
+        MAX(last_order_utc) AS last_order_utc
+    FROM event_rows
+    GROUP BY GROUPING SETS (
+        (copied_trader_wallet, category),
+        (copied_trader_wallet)
+    )
+), scored AS (
+    SELECT *,
+        realized_pnl_usd + unrealized_pnl_usd AS total_pnl_usd,
+        CASE WHEN buy_cost_usd = 0 THEN 0 ELSE (realized_pnl_usd + unrealized_pnl_usd) / buy_cost_usd * 100 END AS roi_pct,
+        CASE WHEN settled_positions_count = 0 THEN 0 ELSE won_positions_count::numeric / settled_positions_count * 100 END AS win_rate_pct
+    FROM grouped
+), legacy_projection AS (
+    SELECT
+        copied_trader_wallet,
+        category,
+        orders_count,
+        filled_orders_count,
+        buy_fills_count,
+        sell_fills_count,
+        open_positions_count,
+        settled_positions_count,
+        won_positions_count,
+        lost_positions_count,
+        buy_cost_usd::numeric(28,8),
+        sell_proceeds_usd::numeric(28,8),
+        settlement_value_usd::numeric(28,8),
+        realized_pnl_usd::numeric(28,8),
+        unrealized_pnl_usd::numeric(28,8),
+        total_pnl_usd::numeric(28,8),
+        roi_pct::numeric(18,8),
+        win_rate_pct::numeric(18,8),
+        greatest(0, least(100,
+            50
+            + greatest(-50, least(50, roi_pct)) * 0.35
+            + (win_rate_pct - 50) * 0.25
+            + greatest(-20, least(20, total_pnl_usd)) * 1.25
+            + least(settled_positions_count, 20) * 0.5
+            - lost_positions_count * 1.25
+            - open_positions_count * 0.1
+        ))::numeric(28,8) AS score,
+        first_order_utc,
+        last_order_utc
+    FROM scored
+), persisted_projection AS (
+    SELECT
+        copied_trader_wallet,
+        category,
+        orders_count,
+        filled_orders_count,
+        buy_fills_count,
+        sell_fills_count,
+        open_positions_count,
+        settled_positions_count,
+        won_positions_count,
+        lost_positions_count,
+        buy_cost_usd,
+        sell_proceeds_usd,
+        settlement_value_usd,
+        realized_pnl_usd,
+        unrealized_pnl_usd,
+        total_pnl_usd,
+        roi_pct,
+        win_rate_pct,
+        score,
+        first_order_utc,
+        last_order_utc
+    FROM paper_copied_trader_performance
+    WHERE copied_trader_wallet = ANY(@Wallets)
+), legacy_minus_persisted AS (
+    SELECT * FROM legacy_projection
+    EXCEPT ALL
+    SELECT * FROM persisted_projection
+), persisted_minus_legacy AS (
+    SELECT * FROM persisted_projection
+    EXCEPT ALL
+    SELECT * FROM legacy_projection
+)
+SELECT
+    (SELECT count(*)::integer FROM legacy_minus_persisted),
+    (SELECT count(*)::integer FROM persisted_minus_legacy);
+""",
+            connection);
+        command.Parameters.Add("Wallets", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = wallets;
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        return new ProjectionDifferenceCounts(reader.GetInt32(0), reader.GetInt32(1));
+    }
+
+    private static async Task DeleteGammaMarketRowsAsync(
+        PostgresConnectionFactory factory,
+        string[] marketIds)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "DELETE FROM polymarket_gamma_markets WHERE market_id = ANY(@MarketIds);",
+            connection);
+        command.Parameters.Add("MarketIds", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = marketIds;
+        await command.ExecuteNonQueryAsync();
+    }
+
     private static async Task<(int Orders, int Fills)> CountPaperEntryRowsAsync(
         PostgresConnectionFactory factory,
         Guid[] orderIds,
@@ -2929,6 +3441,10 @@ SELECT max(wallet) FROM source_wallets;
         long Cycle,
         DateTime? LastCycleCompletedAtUtc,
         DateTime UpdatedAtUtc);
+
+    private sealed record ProjectionDifferenceCounts(
+        int LegacyMinusPersisted,
+        int PersistedMinusLegacy);
 
     private sealed record BlockingSession(
         int BackendPid,

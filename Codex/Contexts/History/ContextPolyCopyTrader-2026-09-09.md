@@ -60,3 +60,10 @@ Request:
 
 Result:
 Clarified that there are three evidence-backed improvement targets despite the healthy current state: first the recurring approximately 22.7-second copied-performance aggregate, second the 1.69-2.10-second ordinary settlement persistence that briefly produced about 4.65 seconds queue delay/depth 69, and third lower-priority resilience to short OKX/Binance data interruptions. The recovered one-off WebSocket close is not enough evidence by itself for a code change. No additional Maker-GTD correction is currently indicated because the checked post-deploy window had complete processing, zero failures and verified Filled/Expired lifecycle. No code or Production change was made.
+
+## 2026-09-09T18:56:00Z
+Request:
+Ок, приступай
+
+Result:
+Completed approved contract RC-20260909-copied-performance-aggregate-latency. The selected-wallet aggregate now materializes orders, positive-size positions and settlements once, resolves latest Gamma category once per distinct required condition, aggregates fills per selected order through ix_paper_fills_order_time, and reduces each source before the unchanged category/OVERALL formulas. Pre-edit Production READ ONLY evidence covered 25 wallets with 127,552 orders/fills and 124,147 settlements; the optimized prototype completed in 1,972.808ms with no paper_fills sequential scan, and a five-wallet comparison returned zero differences both ways. Final disposable-loopback PostgreSQL tests passed 21/21 with exact legacy/persisted equivalence and indexed fill lookup; Release solution build exited zero with 0 errors and 125 existing out-of-scope warnings. Independent review passed with no findings after correcting one stale README CTE name. The disposable database was removed; Production remained unchanged.

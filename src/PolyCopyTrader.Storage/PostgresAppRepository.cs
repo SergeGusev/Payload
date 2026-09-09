@@ -3541,118 +3541,137 @@ WHERE performance.copied_trader_wallet = selected.copied_trader_wallet;
 				}
 
 				await using NpgsqlCommand command = CreateCommand(connection, """
-WITH event_rows AS (
+WITH selected_orders AS MATERIALIZED (
     SELECT
+        po.id,
         po.copied_trader_wallet,
-        COALESCE(NULLIF(gm.category, ''), 'unknown') AS category,
-        1::integer AS orders_count,
-        CASE WHEN po.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired') THEN 1 ELSE 0 END::integer AS filled_orders_count,
-        0::integer AS buy_fills_count,
-        0::integer AS sell_fills_count,
+        po.condition_id,
+        po.status,
+        po.side,
+        po.created_at_utc
+    FROM paper_orders po
+    JOIN temp_paper_copied_trader_performance_wallets selected
+      ON selected.copied_trader_wallet = po.copied_trader_wallet
+    WHERE po.copied_trader_wallet <> ''
+),
+selected_open_positions AS MATERIALIZED (
+    SELECT
+        pp.copied_trader_wallet,
+        pp.condition_id,
+        pp.unrealized_pnl_usd
+    FROM paper_positions pp
+    JOIN temp_paper_copied_trader_performance_wallets selected
+      ON selected.copied_trader_wallet = pp.copied_trader_wallet
+    WHERE pp.copied_trader_wallet <> ''
+      AND pp.size_shares > 0
+),
+selected_settlements AS MATERIALIZED (
+    SELECT
+        ps.copied_trader_wallet,
+        ps.condition_id,
+        ps.category,
+        ps.won,
+        ps.settlement_value_usd,
+        ps.realized_pnl_usd
+    FROM paper_position_settlements ps
+    JOIN temp_paper_copied_trader_performance_wallets selected
+      ON selected.copied_trader_wallet = ps.copied_trader_wallet
+    WHERE ps.copied_trader_wallet <> ''
+),
+required_condition_ids AS MATERIALIZED (
+    SELECT condition_id FROM selected_orders
+    UNION
+    SELECT condition_id FROM selected_open_positions
+    UNION
+    SELECT condition_id
+    FROM selected_settlements
+    WHERE NULLIF(category, '') IS NULL
+),
+condition_categories AS MATERIALIZED (
+    SELECT required.condition_id, latest.category
+    FROM required_condition_ids required
+    LEFT JOIN LATERAL (
+        SELECT market.category
+        FROM polymarket_gamma_markets market
+        WHERE market.condition_id = required.condition_id
+        ORDER BY market.fetched_at_utc DESC, market.market_id
+        LIMIT 1
+    ) latest ON true
+),
+source_metrics AS (
+    SELECT
+        orders.copied_trader_wallet,
+        COALESCE(NULLIF(category.category, ''), 'unknown') AS category,
+        COUNT(*)::integer AS orders_count,
+        COUNT(*) FILTER (
+            WHERE orders.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired')
+        )::integer AS filled_orders_count,
+        COALESCE(SUM(CASE WHEN orders.side = 'Buy' THEN fills.fill_count ELSE 0 END), 0)::integer AS buy_fills_count,
+        COALESCE(SUM(CASE WHEN orders.side = 'Sell' THEN fills.fill_count ELSE 0 END), 0)::integer AS sell_fills_count,
         0::integer AS open_positions_count,
         0::integer AS settled_positions_count,
         0::integer AS won_positions_count,
         0::integer AS lost_positions_count,
-        0::numeric AS buy_cost_usd,
-        0::numeric AS sell_proceeds_usd,
+        COALESCE(SUM(CASE WHEN orders.side = 'Buy' THEN fills.notional_usd ELSE 0 END), 0) AS buy_cost_usd,
+        COALESCE(SUM(CASE WHEN orders.side = 'Sell' THEN fills.notional_usd ELSE 0 END), 0) AS sell_proceeds_usd,
         0::numeric AS settlement_value_usd,
-        0::numeric AS realized_pnl_usd,
+        COALESCE(SUM(fills.realized_pnl_usd), 0) AS realized_pnl_usd,
         0::numeric AS unrealized_pnl_usd,
-        po.created_at_utc AS first_order_utc,
-        po.created_at_utc AS last_order_utc
-    FROM paper_orders po
-    JOIN temp_paper_copied_trader_performance_wallets selected
-      ON selected.copied_trader_wallet = po.copied_trader_wallet
+        MIN(orders.created_at_utc) AS first_order_utc,
+        MAX(orders.created_at_utc) AS last_order_utc
+    FROM selected_orders orders
+    LEFT JOIN condition_categories category
+      ON category.condition_id = orders.condition_id
     LEFT JOIN LATERAL (
-        SELECT market.category
-        FROM polymarket_gamma_markets market
-        WHERE market.condition_id = po.condition_id
-        ORDER BY market.fetched_at_utc DESC, market.market_id
-        LIMIT 1
-    ) gm ON true
-    WHERE po.copied_trader_wallet <> ''
+        SELECT
+            COUNT(*) AS fill_count,
+            COALESCE(SUM(fill.price * fill.size_shares), 0) AS notional_usd,
+            COALESCE(SUM(fill.realized_pnl_usd), 0) AS realized_pnl_usd
+        FROM paper_fills fill
+        WHERE fill.paper_order_id = orders.id
+        OFFSET 0
+    ) fills ON true
+    GROUP BY orders.copied_trader_wallet, COALESCE(NULLIF(category.category, ''), 'unknown')
 
     UNION ALL
 
     SELECT
-        po.copied_trader_wallet,
-        COALESCE(NULLIF(gm.category, ''), 'unknown') AS category,
-        0, 0,
-        CASE WHEN po.side = 'Buy' THEN 1 ELSE 0 END,
-        CASE WHEN po.side = 'Sell' THEN 1 ELSE 0 END,
+        positions.copied_trader_wallet,
+        COALESCE(NULLIF(category.category, ''), 'unknown') AS category,
         0, 0, 0, 0,
-        CASE WHEN po.side = 'Buy' THEN pf.price * pf.size_shares ELSE 0 END,
-        CASE WHEN po.side = 'Sell' THEN pf.price * pf.size_shares ELSE 0 END,
-        0,
-        pf.realized_pnl_usd,
-        0,
-        po.created_at_utc,
-        po.created_at_utc
-    FROM paper_fills pf
-    JOIN paper_orders po ON po.id = pf.paper_order_id
-    JOIN temp_paper_copied_trader_performance_wallets selected
-      ON selected.copied_trader_wallet = po.copied_trader_wallet
-    LEFT JOIN LATERAL (
-        SELECT market.category
-        FROM polymarket_gamma_markets market
-        WHERE market.condition_id = po.condition_id
-        ORDER BY market.fetched_at_utc DESC, market.market_id
-        LIMIT 1
-    ) gm ON true
-    WHERE po.copied_trader_wallet <> ''
-
-    UNION ALL
-
-    SELECT
-        pp.copied_trader_wallet,
-        COALESCE(NULLIF(gm.category, ''), 'unknown') AS category,
-        0, 0, 0, 0,
-        1,
+        COUNT(*)::integer,
         0, 0, 0,
         0, 0, 0, 0,
-        pp.unrealized_pnl_usd,
+        COALESCE(SUM(positions.unrealized_pnl_usd), 0),
         NULL::timestamptz,
         NULL::timestamptz
-    FROM paper_positions pp
-    JOIN temp_paper_copied_trader_performance_wallets selected
-      ON selected.copied_trader_wallet = pp.copied_trader_wallet
-    LEFT JOIN LATERAL (
-        SELECT market.category
-        FROM polymarket_gamma_markets market
-        WHERE market.condition_id = pp.condition_id
-        ORDER BY market.fetched_at_utc DESC, market.market_id
-        LIMIT 1
-    ) gm ON true
-    WHERE pp.copied_trader_wallet <> ''
-      AND pp.size_shares > 0
+    FROM selected_open_positions positions
+    LEFT JOIN condition_categories category
+      ON category.condition_id = positions.condition_id
+    GROUP BY positions.copied_trader_wallet, COALESCE(NULLIF(category.category, ''), 'unknown')
 
     UNION ALL
 
     SELECT
-        ps.copied_trader_wallet,
-        COALESCE(NULLIF(ps.category, ''), NULLIF(gm.category, ''), 'unknown') AS category,
-        0, 0, 0, 0, 0,
-        1,
-        CASE WHEN ps.won THEN 1 ELSE 0 END,
-        CASE WHEN ps.won THEN 0 ELSE 1 END,
+        settlements.copied_trader_wallet,
+        COALESCE(NULLIF(settlements.category, ''), NULLIF(category.category, ''), 'unknown') AS category,
+        0, 0, 0, 0,
+        0,
+        COUNT(*)::integer,
+        COUNT(*) FILTER (WHERE settlements.won)::integer,
+        COUNT(*) FILTER (WHERE NOT settlements.won)::integer,
         0, 0,
-        ps.settlement_value_usd,
-        ps.realized_pnl_usd,
+        COALESCE(SUM(settlements.settlement_value_usd), 0),
+        COALESCE(SUM(settlements.realized_pnl_usd), 0),
         0,
         NULL::timestamptz,
         NULL::timestamptz
-    FROM paper_position_settlements ps
-    JOIN temp_paper_copied_trader_performance_wallets selected
-      ON selected.copied_trader_wallet = ps.copied_trader_wallet
-    LEFT JOIN LATERAL (
-        SELECT market.category
-        FROM polymarket_gamma_markets market
-        WHERE NULLIF(ps.category, '') IS NULL
-          AND market.condition_id = ps.condition_id
-        ORDER BY market.fetched_at_utc DESC, market.market_id
-        LIMIT 1
-    ) gm ON true
-    WHERE ps.copied_trader_wallet <> ''
+    FROM selected_settlements settlements
+    LEFT JOIN condition_categories category
+      ON category.condition_id = settlements.condition_id
+    GROUP BY
+        settlements.copied_trader_wallet,
+        COALESCE(NULLIF(settlements.category, ''), NULLIF(category.category, ''), 'unknown')
 ),
 grouped AS (
     SELECT
@@ -3673,7 +3692,7 @@ grouped AS (
            SUM(unrealized_pnl_usd) AS unrealized_pnl_usd,
            MIN(first_order_utc) AS first_order_utc,
            MAX(last_order_utc) AS last_order_utc
-    FROM event_rows
+    FROM source_metrics
     GROUP BY GROUPING SETS (
         (copied_trader_wallet, category),
         (copied_trader_wallet)

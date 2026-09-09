@@ -1606,7 +1606,9 @@ public sealed class StorageTests
         var projectionDelete = refreshSource.IndexOf(
             "DELETE FROM paper_copied_trader_performance performance",
             StringComparison.Ordinal);
-        var projectionAggregate = refreshSource.IndexOf("WITH event_rows AS (", StringComparison.Ordinal);
+        var projectionAggregate = refreshSource.IndexOf(
+            "WITH selected_orders AS MATERIALIZED (",
+            StringComparison.Ordinal);
         var projectionAggregateTimeout = refreshSource.IndexOf(
             "command.CommandTimeout = PaperCopiedTraderPerformanceCommandTimeoutSeconds;",
             projectionAggregate,
@@ -1615,17 +1617,13 @@ public sealed class StorageTests
             "performanceRowsWritten = Convert.ToInt32(await command.ExecuteScalarAsync",
             projectionAggregate,
             StringComparison.Ordinal);
-        var positionBranchFrom = refreshSource.IndexOf(
-            "    FROM paper_positions pp",
+        var selectedOpenPositionsStart = refreshSource.IndexOf(
+            "selected_open_positions AS MATERIALIZED (",
             projectionAggregate,
             StringComparison.Ordinal);
-        var positionBranchStart = refreshSource.LastIndexOf(
-            "    SELECT\n",
-            positionBranchFrom,
-            StringComparison.Ordinal);
-        var positionBranchEnd = refreshSource.IndexOf(
-            "\n\n    UNION ALL",
-            positionBranchFrom,
+        var selectedOpenPositionsEnd = refreshSource.IndexOf(
+            "\n),\nselected_settlements AS MATERIALIZED (",
+            selectedOpenPositionsStart,
             StringComparison.Ordinal);
         var statsBeforeSeed = refreshSource.IndexOf(
             "paperPositionsStatsBeforeSeed = await PostgresPaperPositionsScanTelemetry.ReadAsync",
@@ -1663,28 +1661,20 @@ public sealed class StorageTests
                 "command.CommandTimeout = PaperCopiedTraderPerformanceCommandTimeoutSeconds;",
                 StringSplitOptions.None).Length - 1);
         Assert.True(
-            positionBranchFrom > projectionAggregate
-            && positionBranchStart >= projectionAggregate
-            && positionBranchEnd > positionBranchFrom);
-        var positionBranch = refreshSource[positionBranchStart..positionBranchEnd];
+            selectedOpenPositionsStart > projectionAggregate
+            && selectedOpenPositionsEnd > selectedOpenPositionsStart);
+        var selectedOpenPositions = refreshSource[selectedOpenPositionsStart..selectedOpenPositionsEnd];
         Assert.Contains(
             """
-                    0, 0, 0, 0,
-                    1,
-                    0, 0, 0,
-                    0, 0, 0, 0,
-                    pp.unrealized_pnl_usd,
-            """.Replace("\r\n", "\n", StringComparison.Ordinal),
-            positionBranch,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            """
+                FROM paper_positions pp
+                JOIN temp_paper_copied_trader_performance_wallets selected
+                  ON selected.copied_trader_wallet = pp.copied_trader_wallet
                 WHERE pp.copied_trader_wallet <> ''
                   AND pp.size_shares > 0
             """.Replace("\r\n", "\n", StringComparison.Ordinal),
-            positionBranch,
+            selectedOpenPositions,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("CASE WHEN pp.size_shares > 0", positionBranch, StringComparison.Ordinal);
+        Assert.DoesNotContain("CASE WHEN pp.size_shares > 0", selectedOpenPositions, StringComparison.Ordinal);
         Assert.True(
             statsBeforeSeed >= 0
             && seedProjection > statsBeforeSeed
@@ -1712,10 +1702,19 @@ public sealed class StorageTests
         Assert.Contains("JOIN temp_paper_copied_trader_performance_wallets selected", source, StringComparison.Ordinal);
         Assert.Contains("LEFT JOIN LATERAL", source, StringComparison.Ordinal);
         Assert.Contains("ORDER BY market.fetched_at_utc DESC, market.market_id", source, StringComparison.Ordinal);
-        Assert.Contains("WHERE NULLIF(ps.category, '') IS NULL", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("required_condition_ids AS MATERIALIZED (", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("condition_categories AS MATERIALIZED (", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("SELECT condition_id FROM selected_orders", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("SELECT condition_id FROM selected_open_positions", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("FROM selected_settlements\n    WHERE NULLIF(category, '') IS NULL", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("COUNT(*) AS fill_count", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("FROM paper_fills fill\n        WHERE fill.paper_order_id = orders.id\n        OFFSET 0", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("FROM selected_open_positions positions", refreshSource, StringComparison.Ordinal);
+        Assert.Contains("FROM selected_settlements settlements", refreshSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("FROM paper_fills pf\n    JOIN paper_orders po", refreshSource, StringComparison.Ordinal);
         Assert.Contains("CASE WHEN GROUPING(category) = 1 THEN 'OVERALL' ELSE category END AS category", refreshSource, StringComparison.Ordinal);
         Assert.Contains("GROUP BY GROUPING SETS (", refreshSource, StringComparison.Ordinal);
-        Assert.Equal(1, refreshSource.Split("FROM event_rows", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, refreshSource.Split("FROM source_metrics", StringSplitOptions.None).Length - 1);
         Assert.Contains("COALESCE((SELECT sum(ps.realized_pnl_usd) FROM paper_position_settlements ps), 0) AS paper_pnl", source, StringComparison.Ordinal);
         Assert.Contains("PaperPositionsSeedSequentialScans", refreshSource, StringComparison.Ordinal);
         Assert.Contains("PaperPositionsSeedSequentialTuplesRead", refreshSource, StringComparison.Ordinal);
