@@ -1,3 +1,15 @@
+## Active Update 2026-09-09 Production Improvement Priorities Clarified
+Goal: Clarify whether the latest Production verification exposed actionable improvement ideas.
+Status: Completed read-only prioritization; no implementation was requested or performed.
+Done:
+- Identified the recurring copied-trader performance aggregate observed at about `22.7s` DataFileRead as the highest-priority verified performance target because it recurs independently of the healthy final queue state.
+- Identified ordinary Paper settlement persistence as the second target: batches of 101 and 128 positions took about `1.69s` and `2.10s`, temporarily causing about `4.65s` queue delay and depth 69 before full recovery.
+- Classified intermittent OKX two-second timeouts and Binance ETH/SOL staleness as a lower-priority resilience target because fresh prices and betting recovered without intervention. The one WebSocket close `1013` likewise recovered and is not independently sufficient evidence for a code change.
+- No further Maker-GTD change is currently supported by the evidence: the inspected post-deploy window had maximum delay about `1.27s`, depth 26, complete `87,290/87,290` processing, zero rejected/failed work and verified Filled/Expired lifecycle. This is an observed window result, not a guarantee for future load.
+Next: Await an explicit user request selecting a correction target before drafting a requirement contract or editing product code.
+Notes: Conclusions use the immediately preceding read-only Production/DB/log evidence; no new Production query or mutation, source edit, configuration change, restart or deployment occurred.
+Blockers: None.
+
 ## Active Update 2026-09-09 Production Server Bets And Logs Check
 Goal: Read-only verify current Production service health, Paper/Live betting, Maker-GTD lifecycle, queues, market data and server logs.
 Status: Operational; no stuck orders, cancels, ERR/FTL or current queue backlog. Maker-GTD real lifecycle is confirmed, while brief external-data and settlement latency warnings recovered.
