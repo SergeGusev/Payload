@@ -1,3 +1,18 @@
+## Active Update 2026-09-09 Production Server Bets And Logs Check
+Goal: Read-only verify current Production service health, Paper/Live betting, Maker-GTD lifecycle, queues, market data and server logs.
+Status: Operational; no stuck orders, cancels, ERR/FTL or current queue backlog. Maker-GTD real lifecycle is confirmed, while brief external-data and settlement latency warnings recovered.
+Done:
+- Final read-only Production cutoff `2026-09-09T18:33:21.992660Z`: service `Running`/`Live`, unchanged start `2026-09-09T10:17:36.285477Z`, heartbeat age `40.928s`, `last_error=NULL`, deployed version `7c72a0c6b984fe77beb35c930c48710d887d9c85`. Database had zero lock waits, idle transactions or active queries older than 15 seconds.
+- A 15-minute Paper cross-check contained 445 BTC, 409 ETH and 168 SOL orders; all were `Filled`, zero Filled orders lacked a fill, and there were no open Paper orders. Final two-minute activity still had 32/32 Filled orders with latest order/fill `2026-09-09T18:33:00.330795Z`. No Entered/Resting strategy run was over 15 minutes past market end.
+- Exact 28-strategy Maker-GTD family produced 179 Filled orders since process start, with exactly 179 distinct fill rows. Latest independently checked fill was order `cfaa870e-0378-4462-8712-9df8d8eb88ea`, created `18:19:32.770708Z`, Filled `18:20:00.395Z`, with one matching fill. A newly observed Pending order `ee8e4976-6254-477a-add2-02f4b13b9f94` reached its `18:29:00Z` GTD cutoff and was independently confirmed `Expired` with zero fills.
+- Latest queue metric at `2026-09-09T18:33:06.509Z` had zero general/Maker pending and in-flight work, zero rejected/failed updates, and exact Maker counters `87,290 enqueued = 87,290 processed`. No recent Maker processing failure, filled-order shape mismatch or ineligible atomic persistence warning was found. Nine earlier Maker slow warnings peaked at `1,173.2344ms` queue delay, `1,268.6568ms` processing and pending depth 26, then cleared.
+- Eleven Live orders in the preceding 24 hours were all `Matched`, settled and balance-applied, with zero remaining size, open rows or cancels; aggregate stored Net PnL was `-19.08311200` USD.
+- Logs had no ERR/FTL. Intermittent warnings included OKX two-second timeouts and short Binance ETH/SOL staleness. A critical WebSocket close frame `1013` at `18:28:55Z` recovered; both current/critical components were Connected, non-stale and error-free by the final cutoff. BTC/ETH/SOL reference ticks were independently fresh at about `4.66s` age.
+- A separate ordinary settlement burst for 101 and 128 positions produced up to about `4.65s` queue delay and pending depth 69; it was fully drained by `18:33:06Z` with no rejected/failed work. The recurring copied-trader performance aggregate was once observed at `22.693s` DataFileRead without lock waits and was absent in the final snapshot.
+Next: None.
+Notes: Only `192.168.0.101:5432/polycopytrader` and `\\192.168.0.101\CodexLogs` were inspected. SQL transactions were forced read-only/UTC with 15-second statement and 2-second lock timeouts. No database, service, strategy, order, configuration, deployment or product-source mutation was performed. Maker results remain `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: None.
+
 ## Active Update 2026-09-09 Maker-GTD Concurrency Deployment Verification
 Goal: Verify the user-deployed Maker-GTD independent-wallet concurrency build on Production, including service health, betting activity and server logs.
 Status: Deployment is healthy and five exact-family evaluation cycles completed, but the changed accepted-order persistence path has not yet been exercised because every Maker-GTD decision was below threshold.
