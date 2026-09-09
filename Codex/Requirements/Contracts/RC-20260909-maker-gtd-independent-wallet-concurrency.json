@@ -14,7 +14,7 @@
     "goal": "Eliminate the verified dedicated Maker-GTD queue burst caused by serial processing of multiple independent exact-family wallet/order fills for one accepted evidence event, without changing retained evidence, trading decisions, execution semantics, accounting or Live behavior.",
     "inScope": [
       "For one already dequeued exact Maker-GTD evidence event, load the linked strategy runs for all matching exact-family orders in one existing bounded repository call instead of one call per order.",
-      "Partition matching exact-family orders by normalized copied-trader wallet, preserve current order processing within each wallet, and process independent wallet groups with a hard maximum concurrency of four.",
+      "Partition matching exact-family orders by exact persisted copied-trader-wallet identity using ordinal string equality, preserve current order processing within each exact wallet identity, and process independent wallet groups with a hard maximum concurrency of four.",
       "Await every wallet group before the queue completes the current evidence event or dequeues the next event, preserving the existing per-asset event FIFO, publication fence, expiry drain and no-drop contract.",
       "Keep the existing per-order atomic repository transition, wallet advisory lock, compare-and-set retry, fill and fee calculation, cache publication, failure evidence and mandatory Maker-GTD result label.",
       "Add deterministic focused tests for one batched run lookup, maximum-four independent-wallet concurrency, same-wallet serialization, next-event FIFO, exact-once results and failure isolation; update only directly affected documentation and mandatory requirement/context/history records.",
@@ -69,8 +69,8 @@
       ],
       "sourceQuote": "сделай эту доработку",
       "acceptanceCriteria": [
-        "At most four distinct normalized copied-trader wallet groups for one evidence event may execute concurrently; the limit is local and constant and does not change service configuration.",
-        "Orders for the same normalized wallet are processed sequentially in their current matching-order order and share only that wallet group's position state, so position composition and compare-and-set retry behavior remain correct.",
+        "At most four distinct exact persisted copied-trader-wallet identities for one evidence event may execute concurrently; identity uses ordinal string equality, and the limit is local and constant and does not change service configuration.",
+        "Orders for the same exact persisted copied-trader-wallet identity are processed sequentially in their current matching-order order and share only that wallet group's position state, so position composition and compare-and-set retry behavior remain correct without merging differently persisted wallet strings.",
         "All wallet groups finish before ApplyMakerGtdUpdateAsync returns; the dedicated queue cannot mark the event complete or dequeue its next event early, preserving accepted-event FIFO, no-drop, publication and expiry-drain guarantees.",
         "Every per-order persistence attempt continues to use TryApplyMakerGtdPaperFullFillAsync unchanged, with its existing independent transaction, wallet advisory lock, validation, atomic fill/order/position/run update and at-most-three position-conflict attempts.",
         "An exception in one wallet group records failure for that group's not-yet-completed exact orders and does not cancel or suppress already started independent wallet groups; the event completes only after all groups settle, and no order is processed more than once.",
@@ -142,13 +142,13 @@
   "deviations": [
     {
       "id": "DEV-001",
-      "text": "Permit independent copied-trader wallet groups for the same accepted Maker-GTD evidence event to complete in nondeterministic cross-wallet order, with at most four groups active, while retaining the current order within each wallet and waiting for all groups before the next evidence event.",
+      "text": "Permit independent exact persisted copied-trader-wallet identity groups, compared with ordinal string equality, for the same accepted Maker-GTD evidence event to complete in nondeterministic cross-wallet order, with at most four groups active, while retaining the current order within each exact wallet identity and waiting for all groups before the next evidence event.",
       "impact": "This is the concurrency needed to remove unnecessary serialization observed for nine distinct strategy wallets. It does not change any wallet's own order/position sequence or evidence-event FIFO, but database commit/cache-publication order between unrelated wallets can differ from the current single-threaded loop.",
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed",
-        "semanticDigest": "sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed"
+        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44",
+        "semanticDigest": "sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44"
       }
     },
     {
@@ -158,16 +158,16 @@
       "approval": {
         "status": "approved",
         "approvedBy": "user",
-        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed",
-        "semanticDigest": "sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed"
+        "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44",
+        "semanticDigest": "sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44"
       }
     }
   ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed",
-    "semanticDigest": "sha256:b44907e8826734f64af98f2079ea3a2acd46cec6893177844ecdcc07f7babaed"
+    "evidenceText": "APPROVE RC-20260909-maker-gtd-independent-wallet-concurrency sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44",
+    "semanticDigest": "sha256:289bc03903e6a8ab24a10c6a2580276420c04527ab393b0ae7ea972e30ea5f44"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
