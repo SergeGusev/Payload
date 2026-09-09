@@ -39,3 +39,10 @@ Request:
 
 Result:
 Completed the approved local Maker-GTD queue correction. One accepted event now uses one bounded linked-run lookup and runs at most four independent exposure-cache wallet-key groups concurrently, while awaiting every group before the next event. Cache-equivalent wallet aliases remain sequential and deterministic; exact persisted wallet strings retain separate PostgreSQL position state. Per-order atomic persistence, evidence, trading/accounting and Live behavior are unchanged. Updater tests passed 19/19; full Maker-GTD contract tests passed 136 with one pre-existing opt-in PostgreSQL integration skip and zero failures; Release build passed with zero warnings/errors; independent review passed. No Production mutation occurred, and protected cleanup removed the exact marked D:\CodexTemp run.
+
+## 2026-09-09T10:42:48.3482189Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified Production deployment `7c72a0c6b984fe77beb35c930c48710d887d9c85` read-only. Service was Running/Live from `2026-09-09T10:17:36.285477Z` with fresh heartbeat and NULL error. Five full cycles produced 140 exact Maker-GTD skips, all solely `reference_average_move_below_bps_threshold`; the dedicated Maker queue had zero pending/in-flight/rejected/failed work and no exact-family order was created, so the changed accepted-order concurrency branch remains runtime-unproven. Ordinary Paper betting remained healthy at 1,512 orders/fills, all Filled, with no open Paper order and no new Live order/cancel. Logs had no post-start ERR/FTL. Fresh BTC/ETH/SOL ticks confirmed recovery after a small external-data timeout cluster. A separate copied-performance aggregate repeatedly performed about 22 seconds of data-file reads without lock waits; the general side-effect queue remained failure-free and near empty. No Production or product-source mutation was performed.

@@ -1,3 +1,17 @@
+## Active Update 2026-09-09 Maker-GTD Concurrency Deployment Verification
+Goal: Verify the user-deployed Maker-GTD independent-wallet concurrency build on Production, including service health, betting activity and server logs.
+Status: Deployment is healthy and five exact-family evaluation cycles completed, but the changed accepted-order persistence path has not yet been exercised because every Maker-GTD decision was below threshold.
+Done:
+- Read-only Production cutoff `2026-09-09T10:41:55.165279Z`: `PolyCopyTrader.Service` is `Running`/`Live`, started `2026-09-09T10:17:36.285477Z`, heartbeat age `18.470s`, `last_error=NULL`, exact version `7c72a0c6b984fe77beb35c930c48710d887d9c85` / MVID `36876f6efdb3`.
+- Exact Maker catalog remained `28/28` enabled, zero paused and zero Live-enabled. Server logs contain five complete post-start cycles / 140 exact-strategy decisions through `2026-09-09T10:39:30.589Z`; every decision had only `reference_average_move_below_bps_threshold`. Consequently there were zero new exact-family orders/fills and no opportunity to verify the new grouped persistence branch under real accepted-order load.
+- Dedicated Maker metrics at `2026-09-09T10:39:06.421Z` were zero pending, in-flight, rejected and failed, with zero enqueued because no order was accepted. No post-start ERR/FTL was found.
+- Ordinary Paper activity remained healthy: 1,512 orders and 1,512 fills since start, all Filled with zero open, latest fill `2026-09-09T10:40:02.863951Z`. No Live orders or cancels appeared after start.
+- BTC/ETH/SOL reference ticks independently recovered to about four seconds old at `2026-09-09T10:41:55Z`. A transient external-data cluster remained: four OKX expiry-ticker timeouts plus one OKX USD-index timeout and one SOL current-tick gap after warm-up; service heartbeat and Paper flow continued.
+- A separate copied-trader performance aggregation query was repeatedly observed doing `DataFileRead` for about 22 seconds, without lock waits or idle transactions. The general side-effect queue remained failure-free and near empty; this latency is not evidence of a Maker-GTD regression.
+Next: The deployment itself needs no rollback, but the new Maker-GTD concurrency behavior remains runtime-unproven until an exact-family order is accepted and reaches Filled/Expired; recurring OKX timeouts and the copied-performance aggregate remain separate observable warnings.
+Notes: Only `192.168.0.101:5432/polycopytrader` and `\\192.168.0.101\CodexLogs` were inspected. Every SQL transaction was forced read-only/UTC with 15-second statement timeout and 2-second lock timeout. No database, service, strategy, order, configuration, deployment or product-source mutation was performed. Exact-family results remain `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+Blockers: None.
+
 ## Active Update 2026-09-09 Maker-GTD Independent Wallet Concurrency Completed
 Goal: Remove the verified dedicated Maker-GTD multi-wallet persistence burst without changing accepted evidence, trading decisions, execution semantics, accounting or Live behavior.
 Status: Completed locally; independent semantic review passed.
