@@ -1,3 +1,15 @@
+## Active Update 2026-09-10 Binance And Paper Mark Recovery Confirmed
+Goal: Answer whether the previously unconfirmed Binance and Paper position-mark recovery still has problems; current Production read-only check only.
+Status: Completed
+Done:
+- Production192.168.0.101:5432/polycopytrader, forced BEGIN READ ONLY, statement_timeout15s, indexed asset-tail and exact5positionPK reads. At2026-09-10T12:05:36.157289Z service Running/Live,last_errorNULL,heartbeat48.756s,same start2026-09-09T19:58:37.947072Z andbuilda3f92a7ce79300672d94ef191a9c473e4f99b839. Local src diff againstthatbuild empty.
+- Binance BTC/ETH/SOL ticks at12:05:34.191094/194732/199900Z were about2seconds old, with explicit BinanceTradeWebSocket/BinanceCryptoTradeWebSocket provenance. Second12:06:13.428525Z check foundnew ticks12:06:04.177568/180149/186868Z andsourceevents12:06:04.012/03.894/03.906Z. Currentincomingdata confirmed independentlybyserverlog samples; no inference frommissingerrors.
+- Four of5exact retained samplepositionIDs changed estimatedvalue2.52→3.66,unrealizedPnL−0.48→0.66 withsame6shares between12:05:36.234347 and12:06:13.412912Z; updated12:06:04.120049..141541Z. IDs1dbffa26-ec38-4853-b54d-f793f6d6bf7a,53f84ac2-89cd-41db-bf9f-986552579860,8c2ed431-0998-4c28-9996-71b3c0381b05,bf96eb1b-2b49-4b21-98c3-867db47164d0. Fifthvalueunchanged; source intentionallyskipssame-valuewrites. SourcePaperTradingProcessor.UpdatePositionMarksAsync increments success onlyafterTryUpdatePaperPositionMarkAsync succeeds.
+- Independent complete boundedserverlogwindow11:50:24.6834483..12:05:24.6834483Z in_054/_055:72430datedlines,0ERR/FTL,0Binance/Paper-markWRN,35successfulPaperposition-markcycles;latest12:05:12.579Zupdated65positions. Binance15samplemessagesforeachBTC/ETH/SOL,latestsourceevents12:04:37.732/12:05:09.285/12:05:17.976Z. Heartbeat12:04:47.4014855ZLive,12:05:08.343runtimequeues0. Explicitreconnectnotinthewindow; positivefreshsamplesandpersistedchangesnowconfirmbothcomponentsworking. Theentireperiodsince10:33wasnotrescanned.
+Next: None
+Notes: No Production writes, source/config/service/network changes or disposable artifacts. Prior unconfirmed-recovery caveat is resolved for the current observations, not a guarantee against future network failures. Bookkeeping-only requirement gate/diff checks apply; preserve unrelated working-tree changes.
+Blockers: None
+
 ## Active Update 2026-09-10 Approved Disabled Strategy History Deletion
 Goal: Execute the approved deletion of the exact42 disabled Production strategies and their own complete history, including611 ended shared assignment links; retain enabled Child strategies and their own data.
 Status: Completed production deletion and read-only verification. All42 final commits completed2026-09-10T10:36:21.595300Z; mutator98651 exited0. No active mutation runner remains and no further Production writes are authorized by this completed operation.
