@@ -1,3 +1,15 @@
+## Active Update 2026-09-10 Current Maker Strategy Availability
+Goal: Answer whether strategies currently operate in Maker mode; read-only Production and current source inspection.
+Status: Completed
+Done:
+- Production 192.168.0.101:5432/polycopytrader preview at 2026-09-10T18:52:40.110775Z returned exactly 28 Maker-named strategies. Independent exact catalog-ID query at 18:53:20.165604Z matched all 28: enabled=true, paused=false, paused_until_utc=NULL, live_stakes=false. IDs b7c50005-0000-4000-8223-{100+threshold:12 digits}, thresholds 1..10 and 15..100 step 5.
+- Source catalog Models.cs:3272 and actual processor dispatch:5751 confirm ETH Up/Down 5m Reference Average Maker GTD Premarket, PaperOnly=true; intent GTD/PostOnly=true. Production heartbeat Running, last_error=NULL, last heartbeat 18:51:51.996756Z, build a3f92a7ce79300672d94ef191a9c473e4f99b839; local src diff against that build empty. Independent source agent confirmed catalog and dispatch.
+- Indexed latest-one-order-per-exact-strategy reads, no analysis-period assumption: 28 orders, all execution_source=eth_reference_average_maker_gtd_paper. Example 1bps order 977fdcfa-a2fc-4d56-8c70-a8b0e3b9b00d created 18:49:31.884497Z, Filled 18:51:12.481Z, one matching paper_fills row with touch_no_depth evidence; 2bps order a790cf21-2c52-4c0f-a625-b90d869a955b independently has the same fill event time and one fill. This proves recent family activity, not simultaneous recent executions for every threshold.
+- Required label: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. Live is disabled for this family.
+Next: None
+Notes: SQL forced BEGIN READ ONLY, UTC, statement_timeout=15s and lock_timeout=2s; verified order/fill indexes before bounded reads. No source/config/Production/service changes, no tests/build needed for this read-only answer, no disposable artifacts. Only required context/history bookkeeping; preserve unrelated working-tree edits.
+Blockers: None
+
 ## Active Update 2026-09-10 Binance And Paper Mark Recovery Confirmed
 Goal: Answer whether the previously unconfirmed Binance and Paper position-mark recovery still has problems; current Production read-only check only.
 Status: Completed
