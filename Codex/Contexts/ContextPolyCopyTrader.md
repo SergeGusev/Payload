@@ -1,3 +1,60 @@
+## Active Update 2026-09-10 Disabled Production Strategies Deletion Preview
+Goal: Delete Production strategies with Enabled=false, including their history.
+Status: Blocked before mutation on shared historical links to enabled Child strategies.
+Done:
+- Verbatim requests: "Удали на бою все стратегии, у которых Enabled = false"; "Включая историю".
+- Preview at 2026-09-10T05:39:31.187362Z on explicit 192.168.0.101:5432/polycopytrader, configured postgres, forced BEGIN READ ONLY, UTC, statement_timeout=15s, lock_timeout=2s, no parallel DB workers. Exact initial scope:42 disabled,2645 enabled; all42 have live_stakes=false.
+- Indexed per-ID counts:164689 Paper orders,211189 raw strategy_market_paper_runs,0 Live orders. Independent Live status grouping also returned0. Pending/PartiallyFilled Paper orders0; Entered/Resting/Detected/Ready target runs0. These are NOT the complete history graph counts; fills, signals, positions, settlements, archives, projections and audit ownership remain to preview.
+- Verified cross-scope blocker using Production rows plus NO ACTION parent_strategy_id FK:611 historical strategy_child_parent_assignments reference two target parents and10 enabled children. All611 ended; no active assignments. SOL parent b7c50005-0000-4000-8171-000000000002:216 links to9 enabled children; ETH parent b7c50005-0000-4000-8173-000000000002:395 links to1 enabled child. No strategy_loss_diff_states matches target child or parent IDs.
+- Exact enabled children/link counts: b7c50005-0000-4000-8190-000000000015=35,8190-000000000017=34,8190-000000000019=19,8190-000000000020=20,8190-000000000021=17,8190-000000000022=23,8190-000000000023=33,8190-000000000024=28,8198-000000000001=395,8199-000000000009=7 (all share b7c50005-0000-4000 prefix). Their own bets/results were not modified.
+- Final heartbeat2026-09-10T05:41:02.657451Z:Running/Live,age18.974s,last_errorNULL,unchanged start2026-09-09T19:58:37.947072Z,versiona3f92a7ce79300672d94ef191a9c473e4f99b839. This is a deletion safety preview, not a fresh full logs/betting audit.
+- Immutable initial target UUID allowlist (must recheck each still disabled and all dependencies before any mutation):
+  - b7c50005-0000-4000-8171-000000000002
+  - b7c50005-0000-4000-8173-000000000002
+  - b7c50005-0000-4000-8182-000000000102
+  - b7c50005-0000-4000-8192-000000000101
+  - b7c50005-0000-4000-8192-000000000102
+  - b7c50005-0000-4000-8192-000000000103
+  - b7c50005-0000-4000-8192-000000000105
+  - b7c50005-0000-4000-8192-000000000108
+  - b7c50005-0000-4000-8192-000000000110
+  - b7c50005-0000-4000-8233-000000030050
+  - b7c50005-0000-4000-8233-000000030055
+  - b7c50005-0000-4000-8233-000000030060
+  - b7c50005-0000-4000-8233-000000060055
+  - b7c50005-0000-4000-8233-000000120050
+  - b7c50005-0000-4000-8233-000000120055
+  - b7c50005-0000-4000-8233-000000120060
+  - b7c50005-0000-4000-8233-000000150050
+  - b7c50005-0000-4000-8233-000000150055
+  - b7c50005-0000-4000-8233-000000150060
+  - b7c50005-0000-4000-8233-000000180055
+  - b7c50005-0000-4000-8233-000000180060
+  - b7c50005-0000-4000-8233-000000210050
+  - b7c50005-0000-4000-8233-000000210055
+  - b7c50005-0000-4000-8233-000000210060
+  - b7c50005-0000-4000-8233-000000240050
+  - b7c50005-0000-4000-8233-000000240055
+  - b7c50005-0000-4000-8233-000000240060
+  - b7c50005-0000-4000-8233-000000240065
+  - b7c50005-0000-4000-8233-000000240070
+  - b7c50005-0000-4000-8233-000000240075
+  - b7c50005-0000-4000-8234-000000030050
+  - b7c50005-0000-4000-8235-000000030050
+  - b7c50005-0000-4000-8235-000000030055
+  - b7c50005-0000-4000-8235-000000030060
+  - b7c50005-0000-4000-8235-000000030065
+  - b7c50005-0000-4000-8235-000000060050
+  - b7c50005-0000-4000-8235-000000060055
+  - b7c50005-0000-4000-8235-000000060060
+  - b7c50005-0000-4000-8235-000000090050
+  - b7c50005-0000-4000-8235-000000090055
+  - b7c50005-0000-4000-8235-000000090060
+  - b7c50005-0000-4000-8235-000000120050
+Next: Ask whether deleting those611 historical parent-assignment links is permitted while preserving the10 enabled Child strategies and their own orders/results. After that choice, finish the bounded dependency/ownership preview and determine gentle atomic batches and auditable progress before deletion.
+Notes: No Production writes, source/config changes, service actions, backups, triggers bypassed or temporary artifacts. No deletion method or batch size approved/selected yet. Existing unrelated context/history changes preserved.
+Blockers: Shared history belongs also to enabled children, outside the initial disabled-strategy allowlist; explicit scope choice required. Full dependent history counts and operational plan remain incomplete.
+
 ## Active Update 2026-09-10 Production Server Bets And Logs Check
 Goal: Read-only verify current Production service, Paper/Live bets and server logs.
 Status: Completed. Service and betting are operating; copied-performance queue latency, short settlement bursts and one historical deferral remain.
