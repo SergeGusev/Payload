@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260911-settlement-persistence-phase-telemetry",
+  "title": "Expose the exact Paper settlement persistence bottleneck without changing settlement behavior",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Есть что доработать?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, действуй"
+    }
+  ],
+  "scope": {
+    "goal": "First bounded step on the accepted highest-priority settlement latency work: identify which existing persistence phase consumes time, without claiming a speedup or changing accounting/transaction behavior before that evidence exists.",
+    "inScope": [
+      "Only the existing PaperSettlementProcessor -> IAppRepository.PersistPaperPositionSettlementBatchAsync -> PostgresAppRepository settlement-batch call path.",
+      "Add per-attempt monotonic elapsed-time diagnostics for batch preparation/serialization, connection acquisition, transaction start, wallet advisory locks, position-row locks, position upsert, settlement insert, commit and resource disposal, distinguishing completed from failed/incomplete stages.",
+      "Extend existing settlement completion, deadlock-retry and failure logs with measured persistence stage durations and the last/slowest stage; preserve current log levels, warning threshold and existing fields. No per-position log stream.",
+      "Source-compatible optional stage-aware repository path; old callers and repositories without phase support retain existing behavior and report unavailable diagnostics rather than invented zero timings.",
+      "Focused tests, bounded documentation and independent review. Tests may use a dedicated disposable PostgreSQL instance/database under the managed D:\\CodexTemp lifecycle; never Production or the user's application Local database."
+    ],
+    "outOfScope": [
+      "An immediate latency reduction claim, speculative SQL optimization, changing SQL statements, their parameters/order, wallet/position lock semantics, transaction boundaries, isolation, retries, queue order, scheduling, worker counts or the updater semaphore.",
+      "Copied-performance queue optimization, Dashboard reconciliation repair, Binance freshness rules or any of the other three proposed workstreams.",
+      "Changing strategies, execution intents, Paper/Live orders/fills/settlements/accounting formulas, balances, fees, PnL, historical data, Maker-GTD semantics or exception classification.",
+      "Production writes, schema/index/trigger changes, backups, deployment, server/service stop or restart; user-controlled deployment remains separate."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future Paper settlement batches after user-controlled deployment. Evidence case: 2026-09-11T05:22:36.214Z, condition0xa26f43714ea4ee229c32bbb49ade9bc63ce4b2497d5c7e649a365137f985f693,165positions/165settlements,total2905.7368ms,persistence2831.4276ms; no historical replay.",
+    "firstVerification": "Inspect actual batch SQL/lock path and focused tests, compare it with deployed a3f92a7ce79300672d94ef191a9c473e4f99b839, and verify the exact server-log case before product edits. Those read-only checks found existing bulk SQL and no internal persistence-stage timing, so the SQL bottleneck is still unknown."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Expose measured internal settlement persistence stages so the next optimization is based on the real bottleneck rather than the aggregate PersistenceDurationMs span.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Each attempt reports nonnegative elapsed durations from a monotonic timer, actual entered/failed stage, slowest observed stage and availability; attempts and simultaneous batches do not share timing state.",
+        "Instrumentation separates client preparation/serialization, OpenConnection, BeginTransaction, wallet locks, position-row locks, position upsert execution, settlement insert execution, Commit and cleanup/disposal at their existing execution boundaries. Execute timings are end-to-end command durations, not claims of pure server CPU or lock-wait time.",
+        "Existing structured settlement completion/retry/failure records contain the diagnostics, with condition/asset/count/attempt correlation retained. Partial/error attempts are not presented as successful measurements; unavailable stages are not fabricated as zeros.",
+        "There are no additional SQL round trips, catalog/statistics probes, database tables, new background workers or per-position log lines. Diagnostic payloads contain stage names/durations/counts, not wallet lists, connection strings, secrets, full JSON or financial payloads."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperSettlementProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run the focused PaperSettlementProcessorTests and StorageTests in Release using managed D:\\CodexTemp build/test paths; inspect structured completion, retry and failure fields with controlled delayed/failing stage tests.",
+          "expected": "Stage attribution, availability, completed/incomplete measurements, per-attempt reset and old-interface compatibility pass; no extra SQL/financial logging introduced.",
+          "result": "pending",
+          "evidence": "Read-only evidence only: server log polycopytrader-service-20260911_029.log line91086 has Load2.6134ms,Prepare0.0732ms,Persistence2831.4276ms,Cache71.6216ms,total2905.7368ms. Source already performs wallet/row locking and two bulk writes before commit; no internal stage identifies the bottleneck yet."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep the existing settlement result and concurrency behavior unchanged while adding diagnostics.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Existing overloads remain usable. An empty batch returns0 without opening a connection; repositories without telemetry support retain their existing persistence implementation.",
+        "The actual SQL, parameters, lock order, single transaction, duplicate settlement ON CONFLICT behavior and returned inserted count remain unchanged. No splitting the atomic settlement batch and no early exposure-cache updates.",
+        "Successful batches keep identical ledger/zeroed positions; replay keeps prior ledger and returns0. Failure/cancellation rolls back as before; diagnostic collection cannot turn committed success into a business failure/retry or replace the original persistence exception.",
+        "Deadlock retry still uses the existing maximum3 attempts and reloads current positions before retry; non-deadlock errors and cancellation remain unchanged. The cache is updated only after successful persistence; stale marks cannot restore a settled position.",
+        "Focused PostgreSQL tests actually execute against an isolated disposable test target; a missing test connection/early return is not represented as a passing integration verification. No Production or application Local DB is used."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperSettlementProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused PaperSettlementPostgresIntegrationTests, PaperSettlementProcessorTests and PaperTradingMarketDataUpdaterQueueTests in Release with explicit isolated disposable PostgreSQL test target and D:\\CodexTemp artifacts/results; compare actual SQL before/after the diff.",
+          "expected": "Exact stages and delayed lock/command attribution verified together with original accounting, rollback, replay, same-wallet coordination, cancellation/deadlock and stale-mark invariants; no statement/order/transaction semantic change.",
+          "result": "pending",
+          "evidence": "Existing tests inspected include SettlementBatch_FiltersMarketAndRollsBackBothTablesOnFailure, same-wallet singleton/batch contention, ConditionalMarkUpdates_DoNotRestoreSettledPositions and processor deadlock/cancellation tests. No tests or database mutations executed in draft phase."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Deliver only the bounded diagnostic source change with verified build/tests and no Production operation.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Release Service build and focused tests pass; unrelated baseline failures are stated explicitly and not treated as task success.",
+        "Independent reviewer compares the verbatim prompts, approved semantic digest, actual diff and verification and returnsPASS with no open findings.",
+        "Requirement WorkingTree/Staged checks and diff checks pass. Unrelated working-tree changes are preserved; no new branch is created implicitly.",
+        "README describes the diagnostic fields and explicitly states that this stage identifies the bottleneck but does not itself claim to reduce Production latency.",
+        "All disposable build/test/temporary PostgreSQL artifacts are created and removed with the codex-temp-lifecycle skill under a marked D:\\CodexTemp run. No source/product edits before later approval of this exact digest."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperSettlementProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/StorageTests.cs",
+        "tests/PolyCopyTrader.Tests/TestAppRepository.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "Build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj in Release with --artifacts-path below the marked D:\\CodexTemp run; run focused tests, git diff --check, requirements WorkingTree/Staged validation, independent semantic review and protected temp cleanup.",
+          "expected": "Build/tests/gates/review/cleanup pass with only approved paths and telemetry changes; Production remains untouched and measured speedup remains a post-deployment question.",
+          "result": "pending",
+          "evidence": "Draft only. Repository HEAD77536fbf,upstreamorigin/master,divergence0/0; unrelated context/history edits preserved. Independent service and log reviewers found no evidence supporting a speculative SQL/queue fix."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260911-settlement-persistence-phase-telemetry sha256:6fd33cb250bb856cbacea5800d898195fc2a811af707f39ea4422505e2f248f8",
+    "semanticDigest": "sha256:6fd33cb250bb856cbacea5800d898195fc2a811af707f39ea4422505e2f248f8"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/live_scope_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
