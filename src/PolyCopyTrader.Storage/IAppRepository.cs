@@ -2,6 +2,38 @@ using PolyCopyTrader.Domain;
 
 namespace PolyCopyTrader.Storage;
 
+public static class PaperSettlementPersistenceStages
+{
+    public const string PrepareBatch = "PrepareBatch";
+    public const string OpenConnection = "OpenConnection";
+    public const string BeginTransaction = "BeginTransaction";
+    public const string PreparePositions = "PreparePositions";
+    public const string PreparePositionKeys = "PreparePositionKeys";
+    public const string SerializeWallets = "SerializeWallets";
+    public const string AcquireWalletLocks = "AcquireWalletLocks";
+    public const string AcquirePositionLocks = "AcquirePositionLocks";
+    public const string SerializePositions = "SerializePositions";
+    public const string UpsertPositions = "UpsertPositions";
+    public const string PrepareSettlements = "PrepareSettlements";
+    public const string SerializeSettlements = "SerializeSettlements";
+    public const string InsertSettlements = "InsertSettlements";
+    public const string Commit = "Commit";
+    public const string DisposeTransaction = "DisposeTransaction";
+    public const string DisposeConnection = "DisposeConnection";
+}
+
+public enum PaperSettlementPersistenceStageStatus
+{
+    Started,
+    Completed,
+    Failed
+}
+
+public sealed record PaperSettlementPersistenceStageEvent(
+    string Stage,
+    PaperSettlementPersistenceStageStatus Status,
+    double? DurationMilliseconds = null);
+
 public static class PaperPositionMarkPersistenceStages
 {
     public const string SerializeUpdates = "SerializeUpdates";
@@ -701,6 +733,15 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
     }
 
     Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default);
+
+    Task<int> PersistPaperPositionSettlementBatchAsync(
+        IReadOnlyList<PaperPositionSettlementWrite> writes,
+        Action<PaperSettlementPersistenceStageEvent> stageObserver,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stageObserver);
+        return PersistPaperPositionSettlementBatchAsync(writes, cancellationToken);
+    }
 
     Task<PaperCopiedTraderPerformanceRefreshResult> RefreshPaperCopiedTraderPerformanceProjectionAsync(
         int highPriorityWalletBatchSize,

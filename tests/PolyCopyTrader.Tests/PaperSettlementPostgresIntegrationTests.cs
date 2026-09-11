@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Npgsql;
 using NpgsqlTypes;
 using PolyCopyTrader.Domain;
@@ -267,6 +268,255 @@ FOR UPDATE;
         finally
         {
             await DeleteTestRowsAsync(factory, wallets);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task StageAwareSettlementBatch_ReportsExactStagesAndPreservesLegacyResultAndReplay()
+    {
+        var factory = await CreateWalletTestFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallet = $"settlement-stages-{suffix}";
+        var legacyWallet = $"settlement-legacy-{suffix}";
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var positions = new[]
+        {
+            Position(wallet, $"asset-{suffix}-yes", $"condition-{suffix}", "Yes", 4m, 0.25m, now),
+            Position(wallet, $"asset-{suffix}-no", $"condition-{suffix}", "No", 3m, 0.40m, now)
+        };
+        var writes = positions.Select((position, index) =>
+        {
+            var write = SettlementWrite(position, index == 0, now.AddSeconds(1));
+            return write with { Settlement = WithWalletTestFees(write.Settlement, index == 0) };
+        }).ToArray();
+        var legacyWrites = writes.Select(write => write with
+        {
+            Settlement = write.Settlement with { Id = Guid.NewGuid(), CopiedTraderWallet = legacyWallet },
+            SettledPosition = write.SettledPosition with { CopiedTraderWallet = legacyWallet }
+        }).ToArray();
+
+        try
+        {
+            await repository.UpsertPaperPositionsAsync(
+                [.. positions, .. positions.Select(position => position with { CopiedTraderWallet = legacyWallet })]);
+            var events = new List<PaperSettlementPersistenceStageEvent>();
+
+            Assert.Equal(2, await repository.PersistPaperPositionSettlementBatchAsync(writes, events.Add));
+            Assert.Equal(2, await repository.PersistPaperPositionSettlementBatchAsync(legacyWrites));
+
+            AssertSuccessfulSettlementStages(events);
+            await AssertWalletSettlementAccountingAsync(factory, repository, wallet,
+                writes.Select(write => write.Settlement).ToArray());
+            await AssertWalletSettlementAccountingAsync(factory, repository, legacyWallet,
+                legacyWrites.Select(write => write.Settlement).ToArray());
+            foreach (var write in writes)
+            {
+                var actual = Assert.IsType<PaperPosition>(
+                    await repository.GetPaperPositionAsync(wallet, write.Settlement.AssetId));
+                var legacy = Assert.IsType<PaperPosition>(
+                    await repository.GetPaperPositionAsync(legacyWallet, write.Settlement.AssetId));
+                Assert.Equal(write.SettledPosition, actual);
+                Assert.Equal(actual, legacy with { CopiedTraderWallet = wallet });
+            }
+
+            var replayEvents = new List<PaperSettlementPersistenceStageEvent>();
+            var replay = writes.Select(write => write with
+            {
+                Settlement = write.Settlement with
+                {
+                    Id = Guid.NewGuid(), FeeUsd = 99m, NetRealizedPnlUsd = -99m
+                }
+            }).ToArray();
+            Assert.Equal(0, await repository.PersistPaperPositionSettlementBatchAsync(replay, replayEvents.Add));
+            AssertSuccessfulSettlementStages(replayEvents);
+            await AssertWalletSettlementAccountingAsync(factory, repository, wallet,
+                writes.Select(write => write.Settlement).ToArray());
+            Assert.Equal(4, await CountSettlementsAsync(factory, [wallet, legacyWallet]));
+            await AssertNoWalletAdvisoryLockAsync(factory, wallet);
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, [wallet, legacyWallet]);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task StageAwareSettlementBatch_AttributesWalletLockWaitAndPreservesCancellation(bool cancelWhileBlocked)
+    {
+        var factory = await CreateWalletTestFactoryAsync();
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallet = $"settlement-stage-lock-{suffix}";
+        var applicationName = $"stage-lock-{suffix}";
+        var repository = WalletTestRepository(factory, applicationName);
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var position = Position(wallet, $"asset-{suffix}", $"condition-{suffix}", "Yes", 4m, 0.25m, now);
+        var write = SettlementWrite(position, true, now.AddSeconds(1));
+        var events = new ConcurrentQueue<PaperSettlementPersistenceStageEvent>();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await using var blocker = factory.CreateConnection();
+        await blocker.OpenAsync();
+        await using var transaction = await blocker.BeginTransactionAsync();
+        Task<int>? task = null;
+        var released = false;
+
+        try
+        {
+            await repository.UpsertPaperPositionAsync(position);
+            await using (var command = new NpgsqlCommand(
+                "SELECT pg_advisory_xact_lock(hashtextextended(@Wallet, 4937427318840178337));", blocker, transaction))
+            {
+                command.Parameters.AddWithValue("Wallet", wallet);
+                await command.ExecuteNonQueryAsync();
+            }
+
+            task = repository.PersistPaperPositionSettlementBatchAsync([write], events.Enqueue, cancellation.Token);
+            var blocked = await WaitForSettlementSessionAsync(factory, applicationName,
+                session => session.Blockers.Contains(blocker.ProcessID));
+            Assert.Equal("advisory", blocked.WaitEvent);
+            Assert.Contains("pg_advisory_xact_lock", blocked.Query, StringComparison.Ordinal);
+            var whileBlocked = events.ToArray();
+            Assert.Contains(whileBlocked, item => item.Stage == PaperSettlementPersistenceStages.AcquireWalletLocks
+                && item.Status == PaperSettlementPersistenceStageStatus.Started);
+            Assert.DoesNotContain(whileBlocked, item => item.Stage == PaperSettlementPersistenceStages.AcquireWalletLocks
+                && item.Status != PaperSettlementPersistenceStageStatus.Started);
+            Assert.DoesNotContain(whileBlocked, item => item.Stage == PaperSettlementPersistenceStages.AcquirePositionLocks);
+            await Task.Delay(150);
+            Assert.False(task.IsCompleted);
+
+            if (cancelWhileBlocked)
+            {
+                cancellation.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await task);
+                var failed = Assert.Single(events, item =>
+                    item.Status == PaperSettlementPersistenceStageStatus.Failed);
+                Assert.Equal(PaperSettlementPersistenceStages.AcquireWalletLocks, failed.Stage);
+                Assert.True(failed.DurationMilliseconds >= 100);
+                Assert.DoesNotContain(events, item => item.Stage == PaperSettlementPersistenceStages.Commit);
+                Assert.Equal(position, await repository.GetPaperPositionAsync(wallet, position.AssetId));
+                Assert.Equal(0, await CountSettlementsAsync(factory, [wallet]));
+            }
+
+            await transaction.RollbackAsync();
+            released = true;
+            if (!cancelWhileBlocked)
+            {
+                Assert.Equal(1, await task.WaitAsync(TimeSpan.FromSeconds(5)));
+                AssertSuccessfulSettlementStages(events.ToArray());
+                var completed = Assert.Single(events, item =>
+                    item.Stage == PaperSettlementPersistenceStages.AcquireWalletLocks
+                    && item.Status == PaperSettlementPersistenceStageStatus.Completed);
+                Assert.True(completed.DurationMilliseconds >= 100);
+            }
+            else
+            {
+                var retryEvents = new List<PaperSettlementPersistenceStageEvent>();
+                Assert.Equal(1, await repository.PersistPaperPositionSettlementBatchAsync([write], retryEvents.Add));
+                AssertSuccessfulSettlementStages(retryEvents);
+            }
+
+            await AssertWalletSettlementAccountingAsync(factory, repository, wallet, [write.Settlement]);
+            Assert.Equal(write.SettledPosition, await repository.GetPaperPositionAsync(wallet, position.AssetId));
+            await AssertNoWalletAdvisoryLockAsync(factory, wallet);
+        }
+        finally
+        {
+            if (!released)
+                await transaction.RollbackAsync();
+            cancellation.Cancel();
+            await DrainSettlementTaskAsync(task);
+            await DeleteTestRowsAsync(factory, [wallet]);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task StageAwareSettlementBatch_InsertFailureRollsBackAndObserverCannotReplaceOriginalException()
+    {
+        var factory = await CreateWalletTestFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallet = $"settlement-stage-failure-{suffix}";
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var position = Position(wallet, $"asset-{suffix}", $"condition-{suffix}", "Yes", 4m, 0.25m, now);
+        var write = SettlementWrite(position, true, now.AddSeconds(1));
+        var invalid = write with { Settlement = write.Settlement with { ConditionId = null! } };
+        var events = new List<PaperSettlementPersistenceStageEvent>();
+
+        try
+        {
+            await repository.UpsertPaperPositionAsync(position);
+            var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+                repository.PersistPaperPositionSettlementBatchAsync([invalid], item =>
+                {
+                    events.Add(item);
+                    if (item.Status == PaperSettlementPersistenceStageStatus.Failed)
+                        throw new InvalidOperationException("The diagnostic observer must not replace the SQL failure.");
+                }));
+
+            Assert.Equal(PostgresErrorCodes.NotNullViolation, exception.SqlState);
+            Assert.Equal("condition_id", exception.ColumnName);
+            Assert.Contains(events, item => item.Stage == PaperSettlementPersistenceStages.UpsertPositions
+                && item.Status == PaperSettlementPersistenceStageStatus.Completed);
+            var failed = Assert.Single(events, item => item.Status == PaperSettlementPersistenceStageStatus.Failed);
+            Assert.Equal(PaperSettlementPersistenceStages.InsertSettlements, failed.Stage);
+            Assert.True(failed.DurationMilliseconds >= 0);
+            Assert.DoesNotContain(events, item => item.Stage == PaperSettlementPersistenceStages.Commit);
+            Assert.Contains(events, item => item.Stage == PaperSettlementPersistenceStages.DisposeTransaction
+                && item.Status == PaperSettlementPersistenceStageStatus.Completed);
+            Assert.Contains(events, item => item.Stage == PaperSettlementPersistenceStages.DisposeConnection
+                && item.Status == PaperSettlementPersistenceStageStatus.Completed);
+            Assert.Equal(position, await repository.GetPaperPositionAsync(wallet, position.AssetId));
+            Assert.Equal(0, await CountSettlementsAsync(factory, [wallet]));
+            Assert.Equal(0, await CountSettlementEventsAsync(factory, write.Settlement.Id));
+            await AssertNoWalletAdvisoryLockAsync(factory, wallet);
+
+            var retryEvents = new List<PaperSettlementPersistenceStageEvent>();
+            Assert.Equal(1, await repository.PersistPaperPositionSettlementBatchAsync([write], retryEvents.Add));
+            AssertSuccessfulSettlementStages(retryEvents);
+            await AssertWalletSettlementAccountingAsync(factory, repository, wallet, [write.Settlement]);
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, [wallet]);
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task StageAwareSettlementBatch_ThrowingObserverCannotBreakCommittedResult()
+    {
+        var factory = await CreateWalletTestFactoryAsync();
+        var repository = new PostgresAppRepository(factory);
+        var suffix = Guid.NewGuid().ToString("N");
+        var wallet = $"settlement-stage-observer-{suffix}";
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var position = Position(wallet, $"asset-{suffix}", $"condition-{suffix}", "Yes", 4m, 0.25m, now);
+        var write = SettlementWrite(position, true, now.AddSeconds(1));
+        var events = new List<PaperSettlementPersistenceStageEvent>();
+
+        try
+        {
+            await repository.UpsertPaperPositionAsync(position);
+            Assert.Equal(1, await repository.PersistPaperPositionSettlementBatchAsync([write], item =>
+            {
+                events.Add(item);
+                throw new InvalidOperationException("Diagnostic observer failure.");
+            }));
+
+            AssertSuccessfulSettlementStages(events);
+            Assert.Equal(write.SettledPosition, await repository.GetPaperPositionAsync(wallet, position.AssetId));
+            await AssertWalletSettlementAccountingAsync(factory, repository, wallet, [write.Settlement]);
+            Assert.Equal(0, await repository.PersistPaperPositionSettlementBatchAsync([write]));
+            await AssertNoWalletAdvisoryLockAsync(factory, wallet);
+        }
+        finally
+        {
+            await DeleteTestRowsAsync(factory, [wallet]);
         }
     }
 
@@ -613,6 +863,42 @@ FOR EACH ROW EXECUTE FUNCTION public.{{function}}();
                 await command.ExecuteNonQueryAsync();
             }
             await DeleteTestRowsAsync(factory, [wallet]);
+        }
+    }
+
+    private static void AssertSuccessfulSettlementStages(IReadOnlyList<PaperSettlementPersistenceStageEvent> events)
+    {
+        string[] expectedStages =
+        [
+            PaperSettlementPersistenceStages.PrepareBatch,
+            PaperSettlementPersistenceStages.OpenConnection,
+            PaperSettlementPersistenceStages.BeginTransaction,
+            PaperSettlementPersistenceStages.PreparePositions,
+            PaperSettlementPersistenceStages.PreparePositionKeys,
+            PaperSettlementPersistenceStages.SerializeWallets,
+            PaperSettlementPersistenceStages.AcquireWalletLocks,
+            PaperSettlementPersistenceStages.AcquirePositionLocks,
+            PaperSettlementPersistenceStages.SerializePositions,
+            PaperSettlementPersistenceStages.UpsertPositions,
+            PaperSettlementPersistenceStages.PrepareSettlements,
+            PaperSettlementPersistenceStages.SerializeSettlements,
+            PaperSettlementPersistenceStages.InsertSettlements,
+            PaperSettlementPersistenceStages.Commit,
+            PaperSettlementPersistenceStages.DisposeTransaction,
+            PaperSettlementPersistenceStages.DisposeConnection
+        ];
+        Assert.Equal(expectedStages.Length * 2, events.Count);
+        for (var index = 0; index < expectedStages.Length; index++)
+        {
+            var started = events[index * 2];
+            var completed = events[index * 2 + 1];
+            Assert.Equal(expectedStages[index], started.Stage);
+            Assert.Equal(PaperSettlementPersistenceStageStatus.Started, started.Status);
+            Assert.Null(started.DurationMilliseconds);
+            Assert.Equal(expectedStages[index], completed.Stage);
+            Assert.Equal(PaperSettlementPersistenceStageStatus.Completed, completed.Status);
+            Assert.True(completed.DurationMilliseconds >= 0);
+            Assert.True(double.IsFinite(completed.DurationMilliseconds!.Value));
         }
     }
 

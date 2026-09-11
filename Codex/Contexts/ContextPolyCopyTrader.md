@@ -1,3 +1,17 @@
+## Active Update 2026-09-11 Settlement Persistence Phase Telemetry Implemented
+Goal: Implement only approved settlement persistence diagnostics under RC-20260911-settlement-persistence-phase-telemetry.
+Status: Completed
+Done:
+- Exact user approval sha256:6fd33cb250bb856cbacea5800d898195fc2a811af707f39ea4422505e2f248f8 committed as33675ac1 before product edits. Added16 typed monotonic persistence stages, completed/failed status and nullable unavailable durations; existing completion/retry/failure logs now show last/first-failed/slowest stage and per-attempt structured timings.
+- Source-compatible stage-aware repository overload preserves legacy callers and no-telemetry repositories. Observer failures cannot break committed success or replace SQL errors. SQL122/122 raw literals, parameters/order, wallet/position locks, atomic transaction, retry3/backoff and cache-after-success unchanged; no workers/queues/trading/accounting changes. README states diagnostic-only, not a latency fix.
+- Release Service build PASS (explicit incremental0warnings/0errors); initial Storage120warnings and test-project6warnings,0errors. Contract-focused67/67 PASS at2026-09-11T06:24:13.2679848Z..06:24:18.0677367Z: processor13,PG20,updaterqueue19,settlement/positionStorage15,0skips. PG actually used isolated127.0.0.1:62131/pct_codex_settlement_20260911 beneath marked D:/CodexTemp run; tested ordered stages, contention/cancellation, rollback/replay, stale marks and faulting observers.
+- Broader configured run136/137: Storage84/85. Existing catalog test PostgresSchema_SeedsExactBtcLowerEnterPremarketCloneAllowlistPaperOnly fails expected324/actual317. Reviewer verified the test and its Domain/Schema inputs unchanged from33675ac1; no separate baseline checkout run, no catalog edits and no claim that full suite is green. Initial source-root/filter setup errors fixed via existing environment setting only.
+- Independent implementation review agent:/root/disabled_delete_dependencies PASS/no open findings. Contract/TRX hashes preserved in completed contract; WorkingTree validation and diff-check PASS. Own8approved paths only; preserve unrelated context/history edits, stay on master. Staged validation required before scoped commit/push.
+- Temp skill cleanup stopped exact disposablePG PID56760 and build servers, then removed4105files/379594763bytes. Run and process absence verified2026-09-11T06:26:56.3750543Z. No Production/appLocal DB, deployment, restart, history recalculation or performance claim.
+Next: User-controlled deployment; only then can new logs identify which persistence phase is slow.
+Notes: This change adds evidence collection, not a proven speedup. Full-suite residual catalog failure is explicitly outside the approved settlement scope.
+Blockers: None for this bounded telemetry change; unrelated catalog-count test remains failing.
+
 ## Active Update 2026-09-11 Settlement Persistence Phase Draft
 Goal: Start the first accepted improvement priority after "Ок, действуй": investigate Paper settlement latency and prepare a precise change contract.
 Status: Blocked

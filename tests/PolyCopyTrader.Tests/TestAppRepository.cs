@@ -168,6 +168,9 @@ internal sealed class TestAppRepository : IAppRepository
 
     public Action<int>? PaperPositionSettlementBatchFailureHook { get; set; }
 
+    public Func<IReadOnlyList<PaperPositionSettlementWrite>, Action<PaperSettlementPersistenceStageEvent>, CancellationToken, Task<int>>?
+        PaperPositionSettlementStageHook { get; set; }
+
     public int RefreshPaperCopiedTraderPerformanceProjectionCalls { get; private set; }
 
     public int LastPaperCopiedTraderPerformanceWalletBatchSize { get; private set; }
@@ -2103,6 +2106,16 @@ internal sealed class TestAppRepository : IAppRepository
             PaperPositionSettlements.Add(settlement);
             return Task.FromResult(true);
         }
+    }
+
+    public Task<int> PersistPaperPositionSettlementBatchAsync(
+        IReadOnlyList<PaperPositionSettlementWrite> writes,
+        Action<PaperSettlementPersistenceStageEvent> stageObserver,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stageObserver);
+        return PaperPositionSettlementStageHook?.Invoke(writes, stageObserver, cancellationToken)
+            ?? PersistPaperPositionSettlementBatchAsync(writes, cancellationToken);
     }
 
     public Task<int> PersistPaperPositionSettlementBatchAsync(

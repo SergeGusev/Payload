@@ -1550,6 +1550,21 @@ Interpret paper results conservatively. Paper fills are approximate, long positi
 
 Do not enable live trading unless `dotnet build`, `dotnet test`, `--print-config`, runtime IPC smoke, geoblock check from the actual host, and cancel-all testing pass.
 
+### Paper settlement persistence diagnostics
+
+Existing settlement completion, deadlock-retry and failure records include
+`PersistenceStagesAvailability`, `PersistenceLastStage`, `PersistenceFailedStage`,
+`PersistenceSlowestStage`, `PersistenceSlowestDurationMs` and structured
+`PersistenceStages`. Each attempt has independent measurements of preparation,
+serialization, connection/transaction acquisition, wallet/position locks, bulk
+position/settlement writes, commit and disposal. Stage status is `Started`,
+`Completed` or `Failed`; an incomplete stage has no fabricated duration. A
+repository without phase support reports `NotAvailable`, not zero timings.
+Command durations are end-to-end elapsed times, not isolated server CPU or
+lock-wait measurements. The original warning threshold, transaction, retry and
+cache-update order are unchanged. These diagnostics locate the slow phase;
+they do not themselves establish or promise a Production latency improvement.
+
 ## Known Limitations
 
 - A Paper depth sweep may be persisted as one aggregate fill at VWAP. Because the fee curve is nonlinear, applying it once to aggregate shares and VWAP can differ from summing independently rounded fees for each actual match; exact accounting requires per-match fills or a venue-reported fee.

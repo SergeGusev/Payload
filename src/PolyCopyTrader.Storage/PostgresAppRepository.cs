@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -1601,7 +1602,8 @@ ORDER BY
 		NpgsqlTransaction transaction,
 		IReadOnlyList<PaperPosition> positions,
 		CancellationToken cancellationToken,
-		string? preparedJson = null)
+		string? preparedJson = null,
+		Action<PaperSettlementPersistenceStageEvent>? stageObserver = null)
 	{
 		if (positions.Count == 0)
 		{
@@ -1666,8 +1668,16 @@ ON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET
     updated_at_utc = excluded.updated_at_utc;
 """);
 		command.Transaction = transaction;
-		AddJsonbParameter(command, "PaperPositionsJson", preparedJson ?? PreparePaperPositionsJson(positions));
-		await command.ExecuteNonQueryAsync(cancellationToken);
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.SerializePositions))
+		{
+			AddJsonbParameter(command, "PaperPositionsJson", preparedJson ?? PreparePaperPositionsJson(positions));
+			stage?.Complete();
+		}
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.UpsertPositions))
+		{
+			await command.ExecuteNonQueryAsync(cancellationToken);
+			stage?.Complete();
+		}
 	}
 
 	private static async Task LockPaperPositionKeysAsync(
@@ -1675,28 +1685,35 @@ ON CONFLICT (copied_trader_wallet, asset_id) DO UPDATE SET
 		NpgsqlTransaction transaction,
 		IReadOnlyList<PaperPosition> positions,
 		IReadOnlyCollection<string> additionalWallets,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		Action<PaperSettlementPersistenceStageEvent>? stageObserver = null)
 	{
 		if (positions.Count == 0 && additionalWallets.Count == 0)
 		{
 			return;
 		}
 
-		var keys = positions
-			.Select(position => new
-			{
-				copied_trader_wallet = position.CopiedTraderWallet,
-				asset_id = position.AssetId
-			})
-			.Distinct()
-			.ToArray();
-		var wallets = positions
-			.Select(position => position.CopiedTraderWallet)
-			.Concat(additionalWallets)
-			.Distinct(StringComparer.Ordinal)
-			.ToArray();
-		var keysJson = JsonSerializer.Serialize(keys);
-		await LockPaperWalletsAsync(connection, transaction, wallets, cancellationToken);
+		string keysJson;
+		string[] wallets;
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.PreparePositionKeys))
+		{
+			var keys = positions
+				.Select(position => new
+				{
+					copied_trader_wallet = position.CopiedTraderWallet,
+					asset_id = position.AssetId
+				})
+				.Distinct()
+				.ToArray();
+			wallets = positions
+				.Select(position => position.CopiedTraderWallet)
+				.Concat(additionalWallets)
+				.Distinct(StringComparer.Ordinal)
+				.ToArray();
+			keysJson = JsonSerializer.Serialize(keys);
+			stage?.Complete();
+		}
+		await LockPaperWalletsAsync(connection, transaction, wallets, cancellationToken, stageObserver);
 		if (positions.Count == 0)
 		{
 			return;
@@ -1722,9 +1739,15 @@ FOR UPDATE OF target_position;
 """);
 		command.Transaction = transaction;
 		AddJsonbParameter(command, "PaperPositionKeysJson", keysJson);
-		await using NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
-		while (await reader.ReadAsync(cancellationToken))
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.AcquirePositionLocks))
 		{
+			await using (NpgsqlDataReader reader = await command.ExecuteReaderAsync(cancellationToken))
+			{
+				while (await reader.ReadAsync(cancellationToken))
+				{
+				}
+			}
+			stage?.Complete();
 		}
 	}
 
@@ -1732,7 +1755,8 @@ FOR UPDATE OF target_position;
 		NpgsqlConnection connection,
 		NpgsqlTransaction transaction,
 		IReadOnlyCollection<string> wallets,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		Action<PaperSettlementPersistenceStageEvent>? stageObserver = null)
 	{
 		if (wallets.Count == 0)
 		{
@@ -1749,14 +1773,24 @@ FROM wallet_lock_keys
 ORDER BY lock_key;
 """);
 		walletLockCommand.Transaction = transaction;
-		AddJsonbParameter(
-			walletLockCommand,
-			"PaperWalletsJson",
-			JsonSerializer.Serialize(wallets.Distinct(StringComparer.Ordinal)));
-		await using NpgsqlDataReader walletLockReader =
-			await walletLockCommand.ExecuteReaderAsync(cancellationToken);
-		while (await walletLockReader.ReadAsync(cancellationToken))
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.SerializeWallets))
 		{
+			AddJsonbParameter(
+				walletLockCommand,
+				"PaperWalletsJson",
+				JsonSerializer.Serialize(wallets.Distinct(StringComparer.Ordinal)));
+			stage?.Complete();
+		}
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.AcquireWalletLocks))
+		{
+			await using (NpgsqlDataReader walletLockReader =
+				await walletLockCommand.ExecuteReaderAsync(cancellationToken))
+			{
+				while (await walletLockReader.ReadAsync(cancellationToken))
+				{
+				}
+			}
+			stage?.Complete();
 		}
 	}
 
@@ -3068,48 +3102,165 @@ RETURNING 1;
 		IReadOnlyList<PaperPositionSettlementWrite> writes,
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
+		return await PersistPaperPositionSettlementBatchCoreAsync(writes, null, cancellationToken);
+	}
+
+	public async Task<int> PersistPaperPositionSettlementBatchAsync(
+		IReadOnlyList<PaperPositionSettlementWrite> writes,
+		Action<PaperSettlementPersistenceStageEvent> stageObserver,
+		CancellationToken cancellationToken = default(CancellationToken))
+	{
+		ArgumentNullException.ThrowIfNull(stageObserver);
+		return await PersistPaperPositionSettlementBatchCoreAsync(writes, stageObserver, cancellationToken);
+	}
+
+	private async Task<int> PersistPaperPositionSettlementBatchCoreAsync(
+		IReadOnlyList<PaperPositionSettlementWrite> writes,
+		Action<PaperSettlementPersistenceStageEvent>? stageObserver,
+		CancellationToken cancellationToken)
+	{
 		if (writes.Count == 0)
 		{
 			return 0;
 		}
-		if (writes.Any(write =>
-			!string.Equals(
-				write.Settlement.CopiedTraderWallet,
-				write.SettledPosition.CopiedTraderWallet,
-				StringComparison.Ordinal)
-			|| !string.Equals(
-				write.Settlement.AssetId,
-				write.SettledPosition.AssetId,
-				StringComparison.Ordinal)))
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.PrepareBatch))
 		{
-			throw new ArgumentException(
-				"Each settlement and settled position must have the same exact wallet and asset key.",
-				nameof(writes));
+			if (writes.Any(write =>
+				!string.Equals(
+					write.Settlement.CopiedTraderWallet,
+					write.SettledPosition.CopiedTraderWallet,
+					StringComparison.Ordinal)
+				|| !string.Equals(
+					write.Settlement.AssetId,
+					write.SettledPosition.AssetId,
+					StringComparison.Ordinal)))
+			{
+				throw new ArgumentException(
+					"Each settlement and settled position must have the same exact wallet and asset key.",
+					nameof(writes));
+			}
+			stage?.Complete();
 		}
 
-		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
-		var settledPositions = writes.Select(write => write.SettledPosition).ToArray();
-		await LockPaperPositionKeysAsync(connection, transaction, settledPositions, [], cancellationToken);
-		await UpsertPaperPositionsBatchAsync(
-			connection,
-			transaction,
-			settledPositions,
-			cancellationToken);
-		var inserted = await AddPaperPositionSettlementsBatchAsync(
-			connection,
-			transaction,
-			writes.Select(write => write.Settlement).ToArray(),
-			cancellationToken);
-		await transaction.CommitAsync(cancellationToken);
-		return inserted;
+		NpgsqlConnection connection;
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.OpenConnection))
+		{
+			connection = await OpenConnectionAsync(cancellationToken);
+			stage?.Complete();
+		}
+		try
+		{
+			NpgsqlTransaction transaction;
+			using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.BeginTransaction))
+			{
+				transaction = await connection.BeginTransactionAsync(cancellationToken);
+				stage?.Complete();
+			}
+			try
+			{
+				PaperPosition[] settledPositions;
+				using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.PreparePositions))
+				{
+					settledPositions = writes.Select(write => write.SettledPosition).ToArray();
+					stage?.Complete();
+				}
+				await LockPaperPositionKeysAsync(connection, transaction, settledPositions, [], cancellationToken, stageObserver);
+				await UpsertPaperPositionsBatchAsync(
+					connection,
+					transaction,
+					settledPositions,
+					cancellationToken,
+					stageObserver: stageObserver);
+				PaperPositionSettlement[] settlements;
+				using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.PrepareSettlements))
+				{
+					settlements = writes.Select(write => write.Settlement).ToArray();
+					stage?.Complete();
+				}
+				var inserted = await AddPaperPositionSettlementsBatchAsync(
+					connection,
+					transaction,
+					settlements,
+					cancellationToken,
+					stageObserver);
+				using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.Commit))
+				{
+					await transaction.CommitAsync(cancellationToken);
+					stage?.Complete();
+				}
+				return inserted;
+			}
+			finally
+			{
+				using var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.DisposeTransaction);
+				await transaction.DisposeAsync();
+				stage?.Complete();
+			}
+		}
+		finally
+		{
+			using var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.DisposeConnection);
+			await connection.DisposeAsync();
+			stage?.Complete();
+		}
+	}
+
+	private static SettlementPersistenceStageScope? ObserveSettlementStage(
+		Action<PaperSettlementPersistenceStageEvent>? observer,
+		string stage)
+	{
+		return observer is null ? null : new SettlementPersistenceStageScope(observer, stage);
+	}
+
+	private sealed class SettlementPersistenceStageScope : IDisposable
+	{
+		private readonly Action<PaperSettlementPersistenceStageEvent> observer;
+		private readonly string stage;
+		private readonly long startedAt;
+		private bool completed;
+		private bool disposed;
+
+		public SettlementPersistenceStageScope(Action<PaperSettlementPersistenceStageEvent> observer, string stage)
+		{
+			this.observer = observer;
+			this.stage = stage;
+			startedAt = Stopwatch.GetTimestamp();
+			Notify(PaperSettlementPersistenceStageStatus.Started, null);
+		}
+
+		public void Complete() => completed = true;
+
+		public void Dispose()
+		{
+			if (disposed)
+			{
+				return;
+			}
+			disposed = true;
+			Notify(
+				completed ? PaperSettlementPersistenceStageStatus.Completed : PaperSettlementPersistenceStageStatus.Failed,
+				Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
+		}
+
+		private void Notify(PaperSettlementPersistenceStageStatus status, double? durationMilliseconds)
+		{
+			try
+			{
+				observer(new PaperSettlementPersistenceStageEvent(stage, status, durationMilliseconds));
+			}
+			catch (Exception)
+			{
+				// A diagnostic observer must not abort accounting, mask its exception, or retry a committed batch.
+			}
+		}
 	}
 
 	private static async Task<int> AddPaperPositionSettlementsBatchAsync(
 		NpgsqlConnection connection,
 		NpgsqlTransaction transaction,
 		IReadOnlyList<PaperPositionSettlement> settlements,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		Action<PaperSettlementPersistenceStageEvent>? stageObserver = null)
 	{
 		var rows = settlements.Select(settlement => new
 		{
@@ -3196,8 +3347,17 @@ WITH inserted AS (
 SELECT count(*)::integer FROM inserted;
 """);
 		command.Transaction = transaction;
-		AddJsonbParameter(command, "SettlementsJson", JsonSerializer.Serialize(rows));
-		return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken) ?? 0);
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.SerializeSettlements))
+		{
+			AddJsonbParameter(command, "SettlementsJson", JsonSerializer.Serialize(rows));
+			stage?.Complete();
+		}
+		using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.InsertSettlements))
+		{
+			var inserted = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken) ?? 0);
+			stage?.Complete();
+			return inserted;
+		}
 	}
 
 	public async Task<IReadOnlyList<PaperPositionSettlement>> GetRecentPaperPositionSettlementsAsync(int limit = 100, CancellationToken cancellationToken = default(CancellationToken))

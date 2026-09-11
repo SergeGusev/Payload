@@ -104,6 +104,7 @@ public sealed class PaperSettlementProcessor(
             var prepareDuration = TimeSpan.Zero;
             var persistenceDuration = TimeSpan.Zero;
             var cacheDuration = TimeSpan.Zero;
+            var persistenceDiagnostics = new SettlementPersistenceDiagnostics();
             try
             {
                 var phaseStarted = Stopwatch.GetTimestamp();
@@ -181,7 +182,10 @@ public sealed class PaperSettlementProcessor(
 
                 phase = "PersistSettlementBatch";
                 phaseStarted = Stopwatch.GetTimestamp();
-                var inserted = await repository.PersistPaperPositionSettlementBatchAsync(writes, cancellationToken);
+                var inserted = await repository.PersistPaperPositionSettlementBatchAsync(
+                    writes,
+                    persistenceDiagnostics.Observe,
+                    cancellationToken);
                 persistenceDuration = Stopwatch.GetElapsedTime(phaseStarted);
 
                 phase = "ApplyExposureCache";
@@ -194,9 +198,10 @@ public sealed class PaperSettlementProcessor(
 
                 var totalDuration = Stopwatch.GetElapsedTime(operationStarted);
                 var logLevel = totalDuration >= TimeSpan.FromSeconds(1) ? LogLevel.Warning : LogLevel.Debug;
+                var persistenceSnapshot = persistenceDiagnostics.Capture();
                 logger.Log(
                     logLevel,
-                    "Paper resolution settlement completed. ConditionId={ConditionId} AssetId={AssetId} Positions={Positions} SettlementsInserted={SettlementsInserted} Attempt={Attempt} LoadDurationMs={LoadDurationMs} PrepareDurationMs={PrepareDurationMs} PersistenceDurationMs={PersistenceDurationMs} CacheDurationMs={CacheDurationMs} TotalDurationMs={TotalDurationMs}",
+                    "Paper resolution settlement completed. ConditionId={ConditionId} AssetId={AssetId} Positions={Positions} SettlementsInserted={SettlementsInserted} Attempt={Attempt} LoadDurationMs={LoadDurationMs} PrepareDurationMs={PrepareDurationMs} PersistenceDurationMs={PersistenceDurationMs} CacheDurationMs={CacheDurationMs} TotalDurationMs={TotalDurationMs} PersistenceStagesAvailability={PersistenceStagesAvailability} PersistenceLastStage={PersistenceLastStage} PersistenceFailedStage={PersistenceFailedStage} PersistenceSlowestStage={PersistenceSlowestStage} PersistenceSlowestDurationMs={PersistenceSlowestDurationMs} PersistenceStages={@PersistenceStages}",
                     conditionId,
                     assetId,
                     positions.Length,
@@ -206,7 +211,13 @@ public sealed class PaperSettlementProcessor(
                     prepareDuration.TotalMilliseconds,
                     persistenceDuration.TotalMilliseconds,
                     cacheDuration.TotalMilliseconds,
-                    totalDuration.TotalMilliseconds);
+                    totalDuration.TotalMilliseconds,
+                    persistenceSnapshot.Availability,
+                    persistenceSnapshot.LastStage,
+                    persistenceSnapshot.FailedStage,
+                    persistenceSnapshot.SlowestStage,
+                    persistenceSnapshot.SlowestDurationMilliseconds,
+                    persistenceSnapshot.Stages);
                 return new PaperSettlementProcessingResult(positions.Length, positions.Length, inserted, 0);
             }
             catch (OperationCanceledException)
@@ -219,33 +230,153 @@ public sealed class PaperSettlementProcessor(
             {
                 var retryDelay = TimeSpan.FromMilliseconds(
                     SettlementDeadlockInitialRetryDelayMilliseconds * attempt);
+                var persistenceSnapshot = persistenceDiagnostics.Capture();
                 logger.LogWarning(
                     ex,
-                    "Paper resolution settlement deadlocked. Reloading current positions before retry. ConditionId={ConditionId} AssetId={AssetId} Phase={Phase} Attempt={Attempt} NextAttempt={NextAttempt} RetryDelayMs={RetryDelayMs} DurationMs={DurationMs}",
+                    "Paper resolution settlement deadlocked. Reloading current positions before retry. ConditionId={ConditionId} AssetId={AssetId} Phase={Phase} Attempt={Attempt} NextAttempt={NextAttempt} RetryDelayMs={RetryDelayMs} DurationMs={DurationMs} PersistenceStagesAvailability={PersistenceStagesAvailability} PersistenceLastStage={PersistenceLastStage} PersistenceFailedStage={PersistenceFailedStage} PersistenceSlowestStage={PersistenceSlowestStage} PersistenceSlowestDurationMs={PersistenceSlowestDurationMs} PersistenceStages={@PersistenceStages}",
                     conditionId,
                     assetId,
                     phase,
                     attempt,
                     attempt + 1,
                     retryDelay.TotalMilliseconds,
-                    Stopwatch.GetElapsedTime(operationStarted).TotalMilliseconds);
+                    Stopwatch.GetElapsedTime(operationStarted).TotalMilliseconds,
+                    persistenceSnapshot.Availability,
+                    persistenceSnapshot.LastStage,
+                    persistenceSnapshot.FailedStage,
+                    persistenceSnapshot.SlowestStage,
+                    persistenceSnapshot.SlowestDurationMilliseconds,
+                    persistenceSnapshot.Stages);
                 await Task.Delay(retryDelay, cancellationToken);
             }
             catch (Exception ex)
             {
+                var persistenceSnapshot = persistenceDiagnostics.Capture();
                 logger.LogError(
                     ex,
-                    "Paper resolution settlement failed. ConditionId={ConditionId} AssetId={AssetId} Phase={Phase} Attempt={Attempt} DurationMs={DurationMs}",
+                    "Paper resolution settlement failed. ConditionId={ConditionId} AssetId={AssetId} Phase={Phase} Attempt={Attempt} DurationMs={DurationMs} PersistenceStagesAvailability={PersistenceStagesAvailability} PersistenceLastStage={PersistenceLastStage} PersistenceFailedStage={PersistenceFailedStage} PersistenceSlowestStage={PersistenceSlowestStage} PersistenceSlowestDurationMs={PersistenceSlowestDurationMs} PersistenceStages={@PersistenceStages}",
                     conditionId,
                     assetId,
                     phase,
                     attempt,
-                    Stopwatch.GetElapsedTime(operationStarted).TotalMilliseconds);
+                    Stopwatch.GetElapsedTime(operationStarted).TotalMilliseconds,
+                    persistenceSnapshot.Availability,
+                    persistenceSnapshot.LastStage,
+                    persistenceSnapshot.FailedStage,
+                    persistenceSnapshot.SlowestStage,
+                    persistenceSnapshot.SlowestDurationMilliseconds,
+                    persistenceSnapshot.Stages);
                 throw;
             }
         }
 
         throw new InvalidOperationException("Paper settlement retry loop completed without a result.");
+    }
+
+    private sealed record SettlementPersistenceSnapshot(
+        string Availability,
+        string? LastStage,
+        string? FailedStage,
+        string? SlowestStage,
+        double? SlowestDurationMilliseconds,
+        PaperSettlementPersistenceStageEvent[] Stages)
+    {
+        public static readonly SettlementPersistenceSnapshot NotAvailable =
+            new("NotAvailable", null, null, null, null, []);
+    }
+
+    private sealed class SettlementPersistenceDiagnostics
+    {
+        private readonly List<PaperSettlementPersistenceStageEvent> stages = [];
+        private string? lastStage;
+        private string? failedStage;
+        private bool collectionIncomplete;
+
+        public void Observe(PaperSettlementPersistenceStageEvent observation)
+        {
+            try
+            {
+                if (observation is null || !IsKnownStage(observation.Stage) ||
+                    !Enum.IsDefined(observation.Status))
+                {
+                    collectionIncomplete = true;
+                    return;
+                }
+
+                if (observation.Status == PaperSettlementPersistenceStageStatus.Started)
+                {
+                    observation = observation with { DurationMilliseconds = null };
+                }
+                else if (observation.DurationMilliseconds is not double duration ||
+                    !double.IsFinite(duration) || duration < 0)
+                {
+                    collectionIncomplete = true;
+                    return;
+                }
+
+                lastStage = observation.Stage;
+                var index = stages.FindIndex(stage => stage.Stage == observation.Stage);
+                if (observation.Status == PaperSettlementPersistenceStageStatus.Failed)
+                {
+                    // Cleanup can be the last observed stage without replacing the
+                    // first persistence failure that caused the attempt to unwind.
+                    failedStage ??= observation.Stage;
+                }
+
+                if (index >= 0)
+                    stages[index] = observation;
+                else
+                    stages.Add(observation);
+            }
+            catch (Exception)
+            {
+                // Diagnostics must never change the persistence result or retry path.
+                collectionIncomplete = true;
+            }
+        }
+
+        public SettlementPersistenceSnapshot Capture()
+        {
+            try
+            {
+                if (stages.Count == 0 && !collectionIncomplete)
+                    return SettlementPersistenceSnapshot.NotAvailable;
+
+                var slowest = stages
+                    .Where(stage => stage.DurationMilliseconds.HasValue)
+                    .OrderByDescending(stage => stage.DurationMilliseconds)
+                    .FirstOrDefault();
+                return new SettlementPersistenceSnapshot(
+                    collectionIncomplete ? "Incomplete" : "Available",
+                    lastStage,
+                    failedStage,
+                    slowest?.Stage,
+                    slowest?.DurationMilliseconds,
+                    stages.ToArray());
+            }
+            catch (Exception)
+            {
+                return SettlementPersistenceSnapshot.NotAvailable;
+            }
+        }
+
+        private static bool IsKnownStage(string stage) => stage is
+            PaperSettlementPersistenceStages.PrepareBatch or
+            PaperSettlementPersistenceStages.OpenConnection or
+            PaperSettlementPersistenceStages.BeginTransaction or
+            PaperSettlementPersistenceStages.PreparePositions or
+            PaperSettlementPersistenceStages.PreparePositionKeys or
+            PaperSettlementPersistenceStages.SerializeWallets or
+            PaperSettlementPersistenceStages.AcquireWalletLocks or
+            PaperSettlementPersistenceStages.AcquirePositionLocks or
+            PaperSettlementPersistenceStages.SerializePositions or
+            PaperSettlementPersistenceStages.UpsertPositions or
+            PaperSettlementPersistenceStages.PrepareSettlements or
+            PaperSettlementPersistenceStages.SerializeSettlements or
+            PaperSettlementPersistenceStages.InsertSettlements or
+            PaperSettlementPersistenceStages.Commit or
+            PaperSettlementPersistenceStages.DisposeTransaction or
+            PaperSettlementPersistenceStages.DisposeConnection;
     }
 
     private async Task<IReadOnlyList<PolymarketOnChainTokenMetadata>> GetResolvedMetadataAsync(

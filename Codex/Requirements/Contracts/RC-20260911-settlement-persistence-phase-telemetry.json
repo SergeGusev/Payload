@@ -3,7 +3,7 @@
   "contractId": "RC-20260911-settlement-persistence-phase-telemetry",
   "title": "Expose the exact Paper settlement persistence bottleneck without changing settlement behavior",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -62,8 +62,8 @@
           "kind": "test",
           "command": "Run the focused PaperSettlementProcessorTests and StorageTests in Release using managed D:\\CodexTemp build/test paths; inspect structured completion, retry and failure fields with controlled delayed/failing stage tests.",
           "expected": "Stage attribution, availability, completed/incomplete measurements, per-attempt reset and old-interface compatibility pass; no extra SQL/financial logging introduced.",
-          "result": "pending",
-          "evidence": "Read-only evidence only: server log polycopytrader-service-20260911_029.log line91086 has Load2.6134ms,Prepare0.0732ms,Persistence2831.4276ms,Cache71.6216ms,total2905.7368ms. Source already performs wallet/row locking and two bulk writes before commit; no internal stage identifies the bottleneck yet."
+          "result": "passed",
+          "evidence": "2026-09-11 Release: PaperSettlementProcessorTests13/13 and settlement/position StorageTests15/15 PASS in the 67/67 contract-focused run; no skipped cases. Completion/retry/failure payloads, first failed stage through cleanup, unavailable/invalid diagnostics, independent attempts/concurrent calls, legacy default overload and empty-batch behavior verified. Full configured four-class run136/137: StorageTests84/85 with unrelated PostgresSchema_SeedsExactBtcLowerEnterPremarketCloneAllowlistPaperOnly failing expected324/actual317; this failure is disclosed, not counted as success. Initial source-location failures were resolved using the existing POLYCOPYTRADER_REPOSITORY_ROOT setting and exact class filters, without test-source changes. Contract TRX SHA256160D54849F290AECF668813B0DC92117472357EB8BF99832D0A598F47C53DC74; configured four-class TRX SHA256CED4F94675D564335A4975CEB5B8BE9DE67F61DD651398D4E6E0B4E6CFA6FE88."
         }
       ]
     },
@@ -96,8 +96,8 @@
           "kind": "test",
           "command": "Run focused PaperSettlementPostgresIntegrationTests, PaperSettlementProcessorTests and PaperTradingMarketDataUpdaterQueueTests in Release with explicit isolated disposable PostgreSQL test target and D:\\CodexTemp artifacts/results; compare actual SQL before/after the diff.",
           "expected": "Exact stages and delayed lock/command attribution verified together with original accounting, rollback, replay, same-wallet coordination, cancellation/deadlock and stale-mark invariants; no statement/order/transaction semantic change.",
-          "result": "pending",
-          "evidence": "Existing tests inspected include SettlementBatch_FiltersMarketAndRollsBackBothTablesOnFailure, same-wallet singleton/batch contention, ConditionalMarkUpdates_DoNotRestoreSettledPositions and processor deadlock/cancellation tests. No tests or database mutations executed in draft phase."
+          "result": "passed",
+          "evidence": "2026-09-11T06:24:13.2679848Z..06:24:18.0677367Z contract-focused67/67 PASS: PostgreSQL20/20, processor13/13, updater queue19/19, settlement/position Storage15/15. SQL tests actually executed on isolated PostgreSQL17.5 at127.0.0.1:62131/pct_codex_settlement_20260911 with data_directory beneath marked D:/CodexTemp/runs/manual-e05b744a0af14fe69a74e25ad4ce654e/db/pgdata; fixture verifies loopback/name/data_directory. Tested16 ordered stages, delayed advisory-lock attribution, cancellation/rollback, replay, same-wallet serialization, unchanged ledger/zeroed positions, stale-mark protection and throwing observer after commit/on original SQL failure. Independent comparison against approval33675ac1 found all122 raw SQL literals unchanged, same parameters/order/transaction/disposal. No Production or application Local DB connection. Filter: three exact processor/PostgreSQL/updater classes plus StorageTests where method contains Settlement or PaperPosition."
         }
       ]
     },
@@ -131,8 +131,8 @@
           "kind": "build",
           "command": "Build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj in Release with --artifacts-path below the marked D:\\CodexTemp run; run focused tests, git diff --check, requirements WorkingTree/Staged validation, independent semantic review and protected temp cleanup.",
           "expected": "Build/tests/gates/review/cleanup pass with only approved paths and telemetry changes; Production remains untouched and measured speedup remains a post-deployment question.",
-          "result": "pending",
-          "evidence": "Draft only. Repository HEAD77536fbf,upstreamorigin/master,divergence0/0; unrelated context/history edits preserved. Independent service and log reviewers found no evidence supporting a speculative SQL/queue fix."
+          "result": "passed",
+          "evidence": "Approval committed before product edits as33675ac1 on master. Release Storage build exit0/120warnings/0errors; test-project build exit0/6warnings/0errors; explicit incremental Service Release build exit0/0warnings/0errors. Builds used --artifacts-path and test --results-directory under the marked temporary run, with TEMP/TMP/TMPDIR and NuGet/CLI caches there. Focused67/67 PASS; broader136/137 has the explicitly disclosed unrelated catalog-count failure, not a clean full-suite claim. Independent reviewer agent:/root/disabled_delete_dependencies compared original prompts, exact approved digest, stable8-path diff and actual TRX: PASS/no open findings. Failing catalog test4164normalized characters and its Domain/Schema inputs match approval33675ac1; baseline checkout was not separately executed. SQL122/122 identical, git diff --check PASS. Protected cleanup removed4105files/379594763bytes after stopping exact disposable PG instance56760 and build servers; run absence independently verified. An outer shell check incorrectly used a stale LASTEXITCODE after the successful PowerShell cleanup; the cleanup JSON returned Removed=true and no run survived. Contract semantic digest validation PASS/unchanged; final WorkingTree/Staged checks run with this completed record before commit. No Production mutation/deployment/restart or latency-reduction claim."
         }
       ]
     }
@@ -146,9 +146,9 @@
     "semanticDigest": "sha256:6fd33cb250bb856cbacea5800d898195fc2a811af707f39ea4422505e2f248f8"
   },
   "independentReview": {
-    "reviewer": "agent:/root/live_scope_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/disabled_delete_dependencies",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

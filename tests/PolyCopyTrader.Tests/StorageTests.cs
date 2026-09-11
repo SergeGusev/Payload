@@ -1946,6 +1946,77 @@ public sealed class StorageTests
     }
 
     [Fact]
+    public async Task PaperSettlementStageAwareDefaultOverload_PreservesLegacyNoOpRepositoryBehavior()
+    {
+        IAppRepository repository = new NoOpAppRepository();
+        var write = CreateSettlementStageWrite();
+        var events = new List<PaperSettlementPersistenceStageEvent>();
+
+        var legacyInserted = await repository.PersistPaperPositionSettlementBatchAsync([write]);
+        var stageAwareInserted = await repository.PersistPaperPositionSettlementBatchAsync([write], item =>
+        {
+            events.Add(item);
+            throw new InvalidOperationException("An unsupported telemetry observer must not be invoked.");
+        });
+
+        Assert.Equal(0, legacyInserted);
+        Assert.Equal(legacyInserted, stageAwareInserted);
+        Assert.Empty(events);
+        Assert.Empty(await repository.GetRecentPaperPositionSettlementsAsync());
+        Assert.Null(await repository.GetPaperPositionAsync(write.Settlement.CopiedTraderWallet, write.Settlement.AssetId));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PostgresRepository_EmptySettlementBatchDoesNotOpenConnection(bool observeStages)
+    {
+        var repository = CreateUnreachablePostgresRepository();
+        var events = new List<PaperSettlementPersistenceStageEvent>();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        var inserted = observeStages
+            ? await repository.PersistPaperPositionSettlementBatchAsync([], events.Add, cancellation.Token)
+            : await repository.PersistPaperPositionSettlementBatchAsync([], cancellation.Token);
+
+        Assert.Equal(0, inserted);
+        Assert.Empty(events);
+    }
+
+    [Fact]
+    public async Task PostgresRepository_StageAwareSettlementBatchReportsValidationFailureWithoutOpeningConnection()
+    {
+        var repository = CreateUnreachablePostgresRepository();
+        var write = CreateSettlementStageWrite();
+        var invalid = write with { SettledPosition = write.SettledPosition with { AssetId = "different-asset" } };
+        var events = new List<PaperSettlementPersistenceStageEvent>();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() =>
+            repository.PersistPaperPositionSettlementBatchAsync([invalid], item =>
+            {
+                events.Add(item);
+                throw new InvalidOperationException("Diagnostic failure must not hide validation failure.");
+            }));
+
+        Assert.Equal("writes", exception.ParamName);
+        Assert.Collection(events,
+            started =>
+            {
+                Assert.Equal(PaperSettlementPersistenceStages.PrepareBatch, started.Stage);
+                Assert.Equal(PaperSettlementPersistenceStageStatus.Started, started.Status);
+                Assert.Null(started.DurationMilliseconds);
+            },
+            failed =>
+            {
+                Assert.Equal(PaperSettlementPersistenceStages.PrepareBatch, failed.Stage);
+                Assert.Equal(PaperSettlementPersistenceStageStatus.Failed, failed.Status);
+                Assert.True(failed.DurationMilliseconds >= 0);
+                Assert.True(double.IsFinite(failed.DurationMilliseconds!.Value));
+            });
+    }
+
+    [Fact]
     public async Task PaperPositionMarkUpdate_PropagatesNullableNetPnlInTestAndNoOpRepositories()
     {
         var nowUtc = new DateTimeOffset(2026, 8, 8, 10, 0, 0, TimeSpan.Zero);
@@ -2862,6 +2933,19 @@ CREATE INDEX first_table_id_idx ON first_table(id);
     private static string ReadStorageRepositorySource()
     {
         return ReadRepositorySource("src", "PolyCopyTrader.Storage", "PostgresAppRepository.cs");
+    }
+
+    private static PaperPositionSettlementWrite CreateSettlementStageWrite()
+    {
+        var now = new DateTimeOffset(2026, 9, 11, 5, 22, 36, TimeSpan.Zero);
+        var settlement = new PaperPositionSettlement(
+            Guid.NewGuid(), "stage-wallet", "stage-asset", "stage-condition", "Yes",
+            "stage-asset", "Yes", "IntegrationTest", 2m, 0.40m, 0.80m, 2m, 1.20m,
+            true, "IntegrationTest", now, now);
+        var position = new PaperPosition(
+            settlement.AssetId, settlement.ConditionId, settlement.Outcome,
+            0m, 0m, 0m, 0m, now, settlement.CopiedTraderWallet);
+        return new PaperPositionSettlementWrite(settlement, position);
     }
 
     private static PostgresAppRepository CreateUnreachablePostgresRepository()
