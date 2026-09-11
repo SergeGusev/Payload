@@ -1,3 +1,14 @@
+## Active Update 2026-09-11 Follow-up Improvement Priorities
+Goal: Answer "Есть что доработать?" from the completed 2026-09-11T05:24..05:29Z health check, without starting fixes.
+Status: Completed
+Done:
+- Proposed order: (1) investigate and reduce market-data side-effect/settlement latency (max queue5.6802321s, settlement persistence2.8314276s of2.9057368s); (2) reduce copied-performance freshness lag (~6m37s oldest queued request); (3) identify fields/reason behind3Dashboard reconciliation repairs; (4) investigate reference-price delivery/tick skips, with stale reason directly verified for the SOL example only.
+- These are proposed priorities, not diagnosed root causes or confirmed loss of bets/PnL. Logs had0ERR/FTL in the checked window and live orders/settlement were consistent. No emergency fix established by that check; latency/freshness work remains. Do not silently change freshness thresholds or trading logic.
+- Current source confirms MarketResolved calls settlement inside the updater serialization section, and Dashboard repaired-drift log is emitted for successful reconciliation with ValuesChanged; these3files match deployed a3f92a7ce79300672d94ef191a9c473e4f99b839. Independent log reviewer passed the priority framing and uncertainty boundaries. No new Production query was needed for this follow-up.
+Next: None; proposed work is not implementation authorization.
+Notes: Source/Production/config/orders unchanged; only required context/history bookkeeping. No build/tests or disposable artifacts; preserve unrelated edits.
+Blockers: None
+
 ## Active Update 2026-09-11 Production Health Bets And Logs
 Goal: Answer "Проверь сервер, ставки и логи" using bounded Production read-only evidence.
 Status: Completed
