@@ -1,3 +1,16 @@
+## Active Update 2026-09-11 Settlement Persistence Phase Draft
+Goal: Start the first accepted improvement priority after "Ок, действуй": investigate Paper settlement latency and prepare a precise change contract.
+Status: Blocked
+Done:
+- Read-only code plus exact server-log correlation confirms existing bulk persistence, not per-position round trips. Case2026-09-11T05:22:36.214Z in server polycopytrader-service-20260911_029.log:91086,condition0xa26f43714ea4ee229c32bbb49ade9bc63ce4b2497d5c7e649a365137f985f693,asset20547590548940824344600509978729981935233759991972711215629537969764655718356,165positions/165settlements,attempt1:Load2.6134ms,Prepare0.0732ms,Persistence2831.4276ms,Cache71.6216ms,total2905.7368ms. Next general event queue5680.2321ms,processing12.864ms. Internal persistence stages/commit timings are not logged; root SQL/lock cause and missed-bet impact remain unproved.
+- PostgresAppRepository.PersistPaperPositionSettlementBatchAsync already opens one transaction, locks wallets then position rows, upserts zeroed positions, bulk inserts settlements, commits; processor applies exposure cache only after successful return. SQL/processor sources match deployed a3f92a7ce79300672d94ef191a9c473e4f99b839. Existing rollback/replay/wallet-contention/stale-mark/deadlock tests were inspected, not run.
+- Draft Codex/Requirements/Contracts/RC-20260911-settlement-persistence-phase-telemetry.json, semantic sha256:6fd33cb250bb856cbacea5800d898195fc2a811af707f39ea4422505e2f248f8. First step is diagnostic-only: per-attempt monotonic preparation/connection/begin/wallet-lock/row-lock/upsert/insert/commit/disposal timings in existing settlement logs, no extra SQL. No claim that telemetry itself reduces latency.
+- Exact production paths planned: IAppRepository.cs,PostgresAppRepository.cs,PaperSettlementProcessor.cs; focused tests and README only. Preserve SQL/parameters/order, transactions, locks, retries, cache-after-commit and accounting; no other three improvement workstreams, deployment or Production writes. No product edits before later exact-digest approval.
+- Independent agent live_scope_review passed preliminary draft design/scope review; final implementation review correctly remains pending. Draft contract validation/digest passed. No new DB queries, builds/tests or temporary artifacts; source/config/Production unchanged and unrelated working-tree changes preserved.
+Next: Await APPROVE RC-20260911-settlement-persistence-phase-telemetry sha256:6fd33cb250bb856cbacea5800d898195fc2a811af707f39ea4422505e2f248f8; then commit approval before implementing the diagnostic-only contract.
+Notes: This is the required approval checkpoint, not a completed latency fix. Current master before draft77536fbf,origin/master divergence0/0; only new draft and own context/history records may be committed.
+Blockers: Later user approval of the exact semantic digest is required by RequirementGate.
+
 ## Active Update 2026-09-11 Follow-up Improvement Priorities
 Goal: Answer "Есть что доработать?" from the completed 2026-09-11T05:24..05:29Z health check, without starting fixes.
 Status: Completed
