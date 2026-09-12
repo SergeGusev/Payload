@@ -1,3 +1,14 @@
+## Active Update 2026-09-12 Settlement Index Source Delivered
+Goal: Finish delivery of the approved unchanged settlement index fix and user-owned UpCounter notes.
+Status: Completed
+Done:
+- Implementation commit6a888595f8b35543e81a0efacd99eb3ddfa5031a pushed to origin/master. Independent remote refs/heads/master query confirmed that exact commit at2026-09-12T10:18:49.0066417Z; local/upstream divergence0/0.
+- Strict WorkingTree and Staged gates passed with9 governed files/2 completed contracts. Range validation from ec0caa49 to6a888595 passed3 commits/9 governed files/4 contract transitions. Final independent staged scope review passed13 paths:9 approved,2 contracts,2 own context/history files; unrelated additions remained unstaged.
+- Committed UpCounter blob50c6b605a055dd3b2e35d310b10b5edeb4b72899 and rawSHA25693515e9db4f57fdb78e74770b3399f89d6e6b5d0d195dda007762385272e9d1d are unchanged. The eight source/test/README hashes match previously verified versions, with original build/51-profiled-test evidence retained; no new product edits or test/DB runs.
+Next: User-controlled deployment; this task does not deploy or alter the running service. Production speedup remains unmeasured until a later requested runtime check.
+Notes: Source migration0009 creates the approved concurrent HASH index on startup; only it has60s command timeout. Existing startup-failure/invalid-index and old-binary unknown-ledger risks are documented in README. Tests used isolatedPG17.5, not Production18.3; one unrelated old EthUp8 test failure remains disclosed/excluded. No disposable artifacts remain from this task; no Production/application Local DB or service action in finalization.
+Blockers: None for source delivery. Other users' context/history changes remain in the worktree intentionally.
+
 ## Active Update 2026-09-12 Settlement Index and UpCounter Finalization
 Goal: Deliver the unchanged approved settlement index source fix and unchanged user-owned UpCounter notes on master.
 Status: In Progress
