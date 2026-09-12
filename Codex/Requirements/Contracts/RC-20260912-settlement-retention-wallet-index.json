@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260912-settlement-retention-wallet-index",
+  "title": "Remove repeated strategy-table scans from Paper settlement retention lookup",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    { "source": "user", "text": "Есть что исправлять?" },
+    { "source": "user", "text": "Ок, действуй" }
+  ],
+  "scope": {
+    "goal": "First bounded correction of the accepted settlement-persistence latency issue: provide an index for the verified repeated strategy-wallet equality lookup, without changing settlement or retention behavior.",
+    "inScope": [
+      "One new nonunique HASH expression index public.ix_strategies_retention_wallet_lookup on public.strategies using exactly lower('strategy:' || code), with the existing expression collation and no predicate, included columns, uniqueness or code-length restriction.",
+      "New ordered migration 0009-strategy-retention-wallet-index at order8, registered in the existing migration catalog. CREATE INDEX CONCURRENTLY outside a transaction, exact completion validation and the existing migration ledger protocol. Immutable baseline and all eight existing migration SQL/checksums remain unchanged.",
+      "An optional per-migration command timeout in the existing migration model and pending-SQL execution path, set to60seconds only for the new migration. Existing migrations retain their current timeout and checksum behavior. No migration-framework redesign.",
+      "Focused migration, lookup, retention and settlement regression tests plus a short README deployment/limitation note. Builds/tests may use the installed PostgreSQL17 runtime in a dedicated disposable instance under a marked D:\\CodexTemp run, not the user's application Local database. Production18.3 is not represented as locally integration-tested.",
+      "Local source changes only after later exact-digest approval. User controls deployment. This contract does not authorize the agent to create the index or alter the migration ledger on Production."
+    ],
+    "outOfScope": [
+      "Changing any lookup SQL, retention function/trigger, restoration guard, advisory/row lock, transaction boundary, retry, queue, worker, settlement processor or position-upsert semantics.",
+      "Changing strategies, strategy codes, execution intents, Paper/Live orders/fills, accounting, fees, balances, historical records or Maker-GTD classification.",
+      "Copied-performance projection, Dashboard, Binance/SOL freshness or other improvement workstreams; new telemetry or generalized migration/recovery infrastructure.",
+      "Production mutation, agent manual index application, Production/application Local ANALYZE/VACUUM, backup, deployment, service stop/restart, server configuration or software installation. No automatic DROP/REINDEX or bypass of failed migration checks. Isolated test-fixture index application and ANALYZE remain allowed for the specified verification."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future retention lookups after user-controlled deployment; no historical replay. Evidence: Production192.168.0.101:5432/polycopytrader, PostgreSQL18.3, deployed538c726cf2691461bbb2a0c5b788342fb088cedc. At2026-09-12T07:22:53.232717Z strategies=2645, max code75bytes/folded wallet84bytes, casefold collision groups0, proposed index absent. The99-row settlement cohort is condition0x38364a7276ebcb7434eb860121207c8986704208c93a6a84f263cbe092bd9ceb, settled_at in[2026-09-12T06:23:00Z,06:24:00Z). Index construction concerns the strategies table, not the millions of settlement/archive rows.",
+    "firstVerification": "Read-only Production catalog, exact cohort and bounded SELECT plan checks are complete: both hot row triggers call the unchanged wallet lookup; current indexes are only id/code/name; representative lookup scans2645 rows/2060 heap buffers and takes5.286ms. The99/99 batch logged1171.1257ms UpsertPositions and1014.2657ms InsertSettlements. This proves the repeated scan, not its exact share of the2.2s persistence span. Reinspect current source/catalog/tests and dirty worktree before editing."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Make the existing case-insensitive strategy-wallet equality lookup indexable without changing its matching, ordering or retention behavior.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "The only new application-schema object is public.ix_strategies_retention_wallet_lookup: nonunique HASH, one key lower('strategy:' || code), default existing collation/operator class, no partial predicate or INCLUDE. Existing ORDER BY strategy.id remains in the original function; hash ordering or index-only execution is not assumed.",
+        "New migration0009/order8 has a fixed SQL checksum and an exact pg_catalog completion check including intended table/schema/expression/access method, valid/ready/live, nonunique status and absence of additional keys/predicate. A pre-existing correct index is accepted without rebuilding; wrong/invalid same-name objects are rejected without a success ledger row or automatic destructive recovery.",
+        "The immutable baseline and all eight existing migration definitions/checksums remain unchanged. Default-catalog count and second-start ledger tests reflect exactly one additional migration.",
+        "Identical ordered UUID results before/after the index for ordinary, mixed-case, multiple case-variant codes, missing/non-strategy/empty/null wallet inputs, empty code, representative non-ASCII text under the same collation and long-code fixtures. A verified pair of distinct folded values with the same hash must still be distinguished by the unchanged equality predicate; no truncation, uniqueness or new maximum code length.",
+        "A representative synthetic fixture demonstrates natural planner use of the new index with literal, prepared custom and prepared generic queries; report plans/buffers before/after and statistics availability. Do not use enable_seqscan=off as sole performance proof. Isolated fixture ANALYZE is allowed for verification only; no Production ANALYZE is authorized. Production speedup remains unconfirmed until a later read-only post-deployment check."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresStrategyRetentionWalletIndexSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "Run focused PostgresSchemaMigrationTests and lookup/retention integration tests in Release with explicit isolated disposable PostgreSQL connection and managed D:\\CodexTemp artifacts/results; inspect exact index catalog shape and before/after SELECT plans/results.",
+          "expected": "Index create/re-run/pre-existing-correct/wrong/invalid shape, unchanged old checksums, equality/order/collision semantics and natural indexed lookup pass. Missing test connection or an integration early return is not a passing DB test.",
+          "result": "pending",
+          "evidence": "Not run; awaiting later user approval of the exact semantic digest."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Bound only the new migration command while preserving existing startup and failure semantics, with deployment risks made explicit.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Optional positive CommandTimeoutSeconds is appended source-compatibly to PostgresSchemaMigration; null preserves current behavior. Pending migration SQL uses the explicit value when supplied. Only0009 specifies60seconds; existing migration SQL timeouts remain0 and metadata/history commands remain15seconds. Baseline bootstrap is unchanged.",
+        "Existing normalized-SQL-only checksum calculation remains unchanged, including for the new SQL. The60second timeout is enforced by catalog/configuration tests and this requirement contract, not misrepresented as a new ledger-checksum format.",
+        "CREATE INDEX CONCURRENTLY executes as one standalone command outside an explicit or implicit multi-statement transaction. Exact completion is checked before the existing short ledger transaction. No row-history batching, broad table lock, retry loop, trigger bypass or service-control mechanism is added.",
+        "Cancellation/timeout/error records no migration success and propagates the existing startup failure. A cancelled concurrent build may leave an invalid index; it is not silently dropped/repaired. The command timeout is not a promise of an exact60second end-to-end startup deadline. Test cancellation and connection/migration-lock release using a short synthetic timeout instead of a60second sleep.",
+        "README explicitly states that user deployment applies this migration at startup; a blocker/error/invalid index can prevent startup and needs separate approved intervention. Concurrent construction avoids locking out ordinary table writes but may wait for existing transactions and adds temporary CPU/I/O load. Existing old binaries reject an unknown0009 ledger row on restart: no promise of blind rollback to538c726c after migration.",
+        "No agent Production DDL or ledger write occurs under this source-only contract. Any separately requested operational application first needs a fresh read-only preview of exact index/table, strategy count, service state, blockers and progress state. Durable states are pg_index readiness/validity then the existing schema-migration ledger; invalid state is a stop, not an automatic resume/rebuild."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "src/PolyCopyTrader.Storage/PostgresStrategyRetentionWalletIndexSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Run focused migration-model/initializer tests with the new migration and short synthetic timeout on the dedicated disposable PostgreSQL instance; compare all existing migration checksums and default timeout behavior.",
+          "expected": "Only new0009 gets60seconds; old checksum/startup behavior unchanged; timeout/cancellation does not record success or leave the migration lock owned by an abandoned connection. README states startup and rollback risks without hiding them.",
+          "result": "pending",
+          "evidence": "Not run; awaiting later user approval of the exact semantic digest."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Verify unchanged retention and settlement correctness and deliver only the approved source fix, without a premature Production latency claim.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Focused existing tests for case-variant restoration, V1/V2 late dependencies, concurrent code changes, legacy-incomplete/higher-isolation fail-closed behavior and settlement accounting/replay/rollback run with the new migration actually applied. Original functions, triggers, batch SQL, lock order and single-transaction semantics have no diff.",
+        "Release Service build and focused tests pass. Any unrelated baseline failures, unavailable verification and PostgreSQL17-test versus18.3-Production version limitation are disclosed; no claim of an18.3 integration run if not executed.",
+        "Independent reviewer compares verbatim requests, exact approved contract, actual diff and test evidence and returnsPASS/no open findings. Requirement/diff validation covers only approved changes; unrelated working-tree contents are preserved, not absorbed to bypass the gate.",
+        "Record exact query filters, fixture sizes, plans and test counts in durable task evidence. An indexed isolated lookup is not proof that all observed2.2second persistence latency is eliminated. No guarantees about end-to-end Production improvement until later runtime evidence.",
+        "All disposable builds/tests/temporary database artifacts use the codex-temp-lifecycle skill and a marked D:\\CodexTemp run, with protected cleanup before completion. No Production/application Local DB use for tests, software installation, new branch or unrelated fixes. Implementation/test estimate after approval: approximately45-60minutes; no single action expected to exceed15minutes without further explicit approval."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "src/PolyCopyTrader.Storage/PostgresStrategyRetentionWalletIndexSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyRunRetentionPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "Build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj in Release and run focused migration/retention/settlement tests with managed artifacts/results; compare original SQL/functions/triggers; run requirement WorkingTree/Staged and diff checks, independent semantic review and protected temporary cleanup.",
+          "expected": "Approved8-path maximum source scope only; build/focused tests/review/cleanup pass with limitations stated, unrelated changes preserved and no Production mutation/deployment.",
+          "result": "pending",
+          "evidence": "Not run; awaiting later user approval of the exact semantic digest."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260912-settlement-retention-wallet-index sha256:6fe08bc37f354da2f454b43d67d270613600bc842346941b9b7f0bc4ea9ca574",
+    "semanticDigest": "sha256:6fe08bc37f354da2f454b43d67d270613600bc842346941b9b7f0bc4ea9ca574"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/settlement_trigger_review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
