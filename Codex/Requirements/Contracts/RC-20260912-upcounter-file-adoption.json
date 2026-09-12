@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260912-upcounter-file-adoption",
+  "title": "Include the user's existing UpCounter notes without content changes",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Считай его своим файлом, это я с ним работаю"
+    }
+  ],
+  "scope": {
+    "goal": "Take responsibility for the explicitly identified Strategies/UpCounter.txt file in the pending commit, preserving its current content, so the already approved settlement index fix can pass the repository scope gate.",
+    "inScope": [
+      "Add exactly the existing Strategies/UpCounter.txt text file to Git without editing, deleting, renaming or moving it. Observed current size618 bytes, SHA25693515e9db4f57fdb78e74770b3399f89d6e6b5d0d195dda007762385272e9d1d, expected Git blob50c6b605a055dd3b2e35d310b10b5edeb4b72899.",
+      "Commit this new contract's exact approval first, separately from adding the existing file. Then complete the pending source-fix finalization under the unchanged RC-20260912-settlement-retention-wallet-index approval sha256:6fe08bc37f354da2f454b43d67d270613600bc842346941b9b7f0bc4ea9ca574 already committed as5754b8e9. No further product edits are authorized here.",
+      "Normal requirement review, WorkingTree/Staged validation, selective commit and push of these approved changes on current master, plus required context/history bookkeeping. The original fix's eight source/test/README paths remain governed by its existing contract, not newly broadened by this file adoption."
+    ],
+    "outOfScope": [
+      "Editing the UpCounter notes, implementing or executing instructions found inside them, creating the mentioned BTC chart, changing strategies or calculations, or treating the notes as runtime instructions.",
+      "Taking ownership of any other unrelated working-tree change; changing requirement gates, Git ignore rules, hooks or Git attributes to evade validation; moving or deleting the file as a workaround.",
+      "Changing settlement index behavior or any other product source, rerunning broad builds/tests, querying or mutating Production/application Local DBs, deploying, stopping/restarting services, backups or a new branch. Existing focused verification may be reused only after exact source identity is confirmed."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exactly the current618-byte Strategies/UpCounter.txt in D:/My/Business/PolyMarket, last written2026-09-11T20:45:10.6227913Z. No historical or future file versions and no trading-data period.",
+    "firstVerification": "Read-only preview completed: full file inspected as data, SHA256 and Git blob recorded, untracked status confirmed, HEAD5754b8e9 on master is one ahead of origin/master. Recheck these identities before staging; if the user changes the file, stop rather than silently capture a different version."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Treat the explicitly identified existing UpCounter file as in scope for committing, while preserving the user's content and the previously approved source fix.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "Считай его своим файлом, это я с ним работаю",
+      "acceptanceCriteria": [
+        "Strategies/UpCounter.txt is added unchanged: working-tree raw SHA256 remains93515e9db4f57fdb78e74770b3399f89d6e6b5d0d195dda007762385272e9d1d and staged/committed blob is50c6b605a055dd3b2e35d310b10b5edeb4b72899. No content execution, rewrite, rename, delete or move.",
+        "Only this one additional governed path is covered by this contract. Other unrelated paths remain untouched and unstaged. Existing settlement index semantics and approved digest remain unchanged; its source hashes and already recorded focused verification are checked before finalization.",
+        "The new exact approval is committed before the file is added. Independent semantic review, full WorkingTree and Staged requirement checks and diff checks pass before the implementation commit; neither this contract nor the earlier fix is declared completed while a required gate fails.",
+        "The final commit contains only separately approved changes and required own bookkeeping; push targets the existing origin/master. No Production/application Local database or service action. Report actual commit/push outcome without implying deployment or a new Production performance measurement."
+      ],
+      "implementationPaths": ["Strategies/UpCounter.txt"],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Get-FileHash -LiteralPath Strategies/UpCounter.txt -Algorithm SHA256; git hash-object --path=Strategies/UpCounter.txt -- Strategies/UpCounter.txt; compare git rev-parse :Strategies/UpCounter.txt and HEAD:Strategies/UpCounter.txt after staging/commit; inspect exact staged names/diff and preserved source hashes; run Validate-RequirementContract.ps1 -Mode WorkingTree then -Mode Staged and git diff --check; independent review and verify commit/push result.",
+          "expected": "The existing one-file note is captured unchanged; approved source identity and scope are preserved; all required gates pass, unrelated files are excluded, and no deployment/runtime change is claimed.",
+          "result": "pending",
+          "evidence": "Read-only preview only; no staging/commit or content change under this draft."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260912-upcounter-file-adoption sha256:6be0db81511cf7f8d166eb45e18b2264c4388e85615e42a321aab7d92506163f",
+    "semanticDigest": "sha256:6be0db81511cf7f8d166eb45e18b2264c4388e85615e42a321aab7d92506163f"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/settlement_sql_scope",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
