@@ -3,7 +3,7 @@
   "contractId": "RC-20260912-settlement-retention-wallet-index",
   "title": "Remove repeated strategy-table scans from Paper settlement retention lookup",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     { "source": "user", "text": "Есть что исправлять?" },
     { "source": "user", "text": "Ок, действуй" }
@@ -52,8 +52,8 @@
           "kind": "test",
           "command": "Run focused PostgresSchemaMigrationTests and lookup/retention integration tests in Release with explicit isolated disposable PostgreSQL connection and managed D:\\CodexTemp artifacts/results; inspect exact index catalog shape and before/after SELECT plans/results.",
           "expected": "Index create/re-run/pre-existing-correct/wrong/invalid shape, unchanged old checksums, equality/order/collision semantics and natural indexed lookup pass. Missing test connection or an integration early return is not a passing DB test.",
-          "result": "pending",
-          "evidence": "Not run; awaiting later user approval of the exact semantic digest."
+          "result": "passed",
+          "evidence": "2026-09-12T08:31:05.2412931Z..08:31:54.7528036Z final focused51/51 PASS,0skipped:22migration,9retention,20settlement. Actual isolatedPG17.5 at127.0.0.1:50457 with data_directory D:/CodexTemp/runs/manual-5993a2e78d6245689b3c33bcf5d961f5/db/pgdata,English_United States.1252/UTF8; migrationDB pct_codex_migration_20260912_5993a2e7 and retention/settlementDB pct_codex_skip_v2_20260912081604_5993a2e7. Fixture2645rows,12wallet inputs,20005-character longcode,verified hash pair collision_162590/collision_32437 from bounded200000candidate search. All literal/custom/generic naturalplans SeqScan2647sharedbuffers -> HashIndexScan2buffers plusSort, execution1.550/1.569/2.281ms ->0.043/0.012/0.013ms. Collisionquery3buffers,one falsecandidate removedbyindexrecheck. All orderedUUIDresults unchanged; expressionstatistics confirmed after isolatedANALYZE. Canonical publicindex completion check also applied by actualinitializer beforeexistingregressions. TRX SHA256 C4E5330A140820716738D8A45A0483E55CCA99933A57D233308A1A9AE0138FD8. These are syntheticPG17results,notPG18.3Production speedup evidence."
         }
       ]
     },
@@ -84,8 +84,8 @@
           "kind": "test",
           "command": "Run focused migration-model/initializer tests with the new migration and short synthetic timeout on the dedicated disposable PostgreSQL instance; compare all existing migration checksums and default timeout behavior.",
           "expected": "Only new0009 gets60seconds; old checksum/startup behavior unchanged; timeout/cancellation does not record success or leave the migration lock owned by an abandoned connection. README states startup and rollback risks without hiding them.",
-          "result": "pending",
-          "evidence": "Not run; awaiting later user approval of the exact semantic digest."
+          "result": "passed",
+          "evidence": "Focused22migrationcases PASS with actual dedicated disposable DB: exactHASHcreation,secondstart/pre-existingcorrectOIDpreserved,10wrongshape/object variantsrejectedwithoutreplacement/historysuccess,cancelledconcurrentbuildinvalidOIDpreservedandfailclosed,short1scommandtimeout and observed-query explicitcancellation yield nohistory/noactivecommand/releasedmigrationadvisorylock. New0009alone60s,first8timeoutsNULL/oldSQLchecksumsunchanged,normalizedSQL-only checksum behavior verified. Approvedcontract committed5754b8e9 BEFOREproductedits. NewSQL SHA256 aacc7783a6dc585df7f7e8e1980e2e6adccb8fe8913d5daf06028615efde6704. README disclosesstartupfailure/invalidindex/nondeterministiccleanupduration/oldbinaryunknownledger risks. NoProductionDDL,ledgerwrite,ANALYZE,deployorrestart."
         }
       ]
     },
@@ -117,8 +117,8 @@
           "kind": "build",
           "command": "Build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj in Release and run focused migration/retention/settlement tests with managed artifacts/results; compare original SQL/functions/triggers; run requirement WorkingTree/Staged and diff checks, independent semantic review and protected temporary cleanup.",
           "expected": "Approved8-path maximum source scope only; build/focused tests/review/cleanup pass with limitations stated, unrelated changes preserved and no Production mutation/deployment.",
-          "result": "pending",
-          "evidence": "Not run; awaiting later user approval of the exact semantic digest."
+          "result": "passed",
+          "evidence": "Service Release build PASS:121 warnings/0 errors; test build PASS:5 warnings/0 errors; final focused51/51 PASS,0 skipped. Initial52 run49 PASS/3 FAIL. Qualified baseline substituted exact5754b8e9 catalog and two original test files, with only temporary18->17 PG guard adaptation; current nullable timeout wrapper remained null for old catalog. Reproduced all three failures; both baseline DBs independently confirmed8 ledger rows/index absent/38 LossDiff states. Baseline TRX CA6D3C779618756399522BA09BB0B3D138FADAE820B804F5E85DAEEB2F3D4F8C; initial TRX53436CD7ECDF53083F85C99AE475A6F7EC1F17184C230C8A864AACF794ECE2E9. Only two required assertions corrected: full physical legacy-row preservation with existing55000/no-order/no-raw guards, and full JSONB equality with changed-value/missing-field negatives. Unrelated EthUp8 expected4/actual38 test remains unchanged and explicitly excluded from final51, not claimed fixed. Product query/functions/triggers/accounting unchanged. Independent settlement_trigger_review PASS/no findings on exact eight-file diff and actual final test evidence; all eight SHA256 reconfirmed unchanged in finalization turn, so no redundant build/DB run. Protected temporary cleanup succeeded and own run absence verified. Former UpCounter PATH_NOT_COVERED blocker resolved by separate exact user-approved RC-20260912-upcounter-file-adoption, approval-only commit b0a95d5d, unchanged blob50c6b605a055dd3b2e35d310b10b5edeb4b72899; it does not broaden this contract. WorkingTree AllowPendingEvidence PASS9 governed paths; staged nine-path scope/diff check PASS. Strict final WorkingTree/Staged validation and actual Git delivery are recorded in context/history before handoff; no completion claim if those final gates fail. No Production/application Local DB or service action."
         }
       ]
     }
@@ -133,8 +133,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/settlement_trigger_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

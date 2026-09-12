@@ -571,7 +571,7 @@ SELECT EXISTS (
                 transaction,
                 migration.Sql,
                 cancellationToken,
-                MigrationCommandTimeoutSeconds);
+                migration.CommandTimeoutSeconds ?? MigrationCommandTimeoutSeconds);
             await InsertHistoryAsync(
                 connection,
                 transaction,
@@ -600,7 +600,7 @@ SELECT EXISTS (
                     transaction: null,
                     migration.Sql,
                     cancellationToken,
-                    MigrationCommandTimeoutSeconds);
+                    migration.CommandTimeoutSeconds ?? MigrationCommandTimeoutSeconds);
                 complete = await ScalarExistsAsync(
                     connection,
                     transaction: null,

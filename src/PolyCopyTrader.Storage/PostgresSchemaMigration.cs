@@ -12,7 +12,8 @@ public sealed record PostgresSchemaMigration
         bool transactional,
         string details,
         bool isLegacyBaseline = false,
-        string? completionCheckSql = null)
+        string? completionCheckSql = null,
+        int? commandTimeoutSeconds = null)
     {
         if (order < 0)
         {
@@ -22,6 +23,11 @@ public sealed record PostgresSchemaMigration
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentException.ThrowIfNullOrWhiteSpace(details);
+
+        if (commandTimeoutSeconds is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(commandTimeoutSeconds));
+        }
 
         if (!transactional && !isLegacyBaseline && string.IsNullOrWhiteSpace(completionCheckSql))
         {
@@ -39,6 +45,7 @@ public sealed record PostgresSchemaMigration
         CompletionCheckSql = string.IsNullOrWhiteSpace(completionCheckSql)
             ? null
             : completionCheckSql.Trim();
+        CommandTimeoutSeconds = commandTimeoutSeconds;
         SemanticChecksum = CalculateSemanticChecksum(Sql);
     }
 
@@ -55,6 +62,8 @@ public sealed record PostgresSchemaMigration
     public bool IsLegacyBaseline { get; }
 
     public string? CompletionCheckSql { get; }
+
+    public int? CommandTimeoutSeconds { get; }
 
     public string SemanticChecksum { get; }
 

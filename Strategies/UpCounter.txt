@@ -1,0 +1,9 @@
+UpCount - количество исходов Up
+DownCount - количество исходов Down
+UpDiff = UpCount - DownCount
+Period - количество часов, за которое считаем среднее UpDiffMiddle
+UpDiffMiddle - скользящее среднее арифметическое UpDiff за Period
+UpMiddle = UpDiff - UpDiffMiddle
+MinUpMiddle - минимальное значение Abs(UpMiddle), при котором делается ставка
+
+Сделай график BTC за август за Period = 3. На графике покажи UpDiff и UpDiffMiddle

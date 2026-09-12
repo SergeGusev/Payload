@@ -3,7 +3,7 @@
   "contractId": "RC-20260912-upcounter-file-adoption",
   "title": "Include the user's existing UpCounter notes without content changes",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -45,8 +45,8 @@
           "kind": "inspection",
           "command": "Get-FileHash -LiteralPath Strategies/UpCounter.txt -Algorithm SHA256; git hash-object --path=Strategies/UpCounter.txt -- Strategies/UpCounter.txt; compare git rev-parse :Strategies/UpCounter.txt and HEAD:Strategies/UpCounter.txt after staging/commit; inspect exact staged names/diff and preserved source hashes; run Validate-RequirementContract.ps1 -Mode WorkingTree then -Mode Staged and git diff --check; independent review and verify commit/push result.",
           "expected": "The existing one-file note is captured unchanged; approved source identity and scope are preserved; all required gates pass, unrelated files are excluded, and no deployment/runtime change is claimed.",
-          "result": "pending",
-          "evidence": "Read-only preview only; no staging/commit or content change under this draft."
+          "result": "passed",
+          "evidence": "Exact user approval committed alone as b0a95d5d04b4c6d727eedf662e54e1c5fcb424ee, parent5754b8e9, before capture; approval-only Staged gate PASS. Actual file unchanged618 bytes/raw SHA25693515e9db4f57fdb78e74770b3399f89d6e6b5d0d195dda007762385272e9d1d; staged blob50c6b605a055dd3b2e35d310b10b5edeb4b72899 matches approved identity. Staged governed scope exactly nine paths: original eight-file fix plus this one note, no unrelated content. WorkingTree AllowPendingEvidence PASS9 governed paths, staged diff check PASS. Independent settlement_sql_scope implementation review PASS/no findings on original request/contract/approval-before-capture/current raw file/staged blob/scope. Independent original reviewer reconfirmed all eight source/test/README SHA256 match previously reviewed51/51 versions, no new product edits. Final strict WorkingTree/Staged gates and actual commit/push outcome are recorded in context/history; the completed record is not permission to skip those final checks. No notes execution/content edit, Production/application Local DB/service action, broad test rerun or new branch."
         }
       ]
     }
@@ -61,8 +61,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/settlement_sql_scope",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

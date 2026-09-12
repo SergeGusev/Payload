@@ -145,6 +145,19 @@ public static class PostgresSchemaMigrationCatalog
             throw new InvalidOperationException("LossDiff Positive Progress migration checksum mismatch.");
         }
 
+        var strategyRetentionWalletIndex = new PostgresSchemaMigration(
+            order: 8,
+            id: PostgresStrategyRetentionWalletIndexSchemaMigration.Id,
+            sql: PostgresStrategyRetentionWalletIndexSchemaMigration.Sql,
+            transactional: false,
+            details: "create exact case-insensitive strategy-wallet retention lookup hash index",
+            completionCheckSql: PostgresStrategyRetentionWalletIndexSchemaMigration.CompletionCheckSql,
+            commandTimeoutSeconds: 60);
+        if (strategyRetentionWalletIndex.SemanticChecksum != PostgresStrategyRetentionWalletIndexSchemaMigration.SemanticChecksum)
+        {
+            throw new InvalidOperationException("Strategy retention wallet index migration checksum mismatch.");
+        }
+
         return ValidateAndOrder(
             [
                 baseline,
@@ -154,7 +167,8 @@ public static class PostgresSchemaMigrationCatalog
                 followMarketStrategies,
                 historicalParityPaperRunOrderIndex,
                 historicalParityAuditTrigger,
-                positiveProgress
+                positiveProgress,
+                strategyRetentionWalletIndex
             ]);
     }
 

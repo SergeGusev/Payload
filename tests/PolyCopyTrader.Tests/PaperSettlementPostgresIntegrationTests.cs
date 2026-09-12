@@ -524,14 +524,7 @@ FOR UPDATE;
     [Trait("Category", "PostgresIntegration")]
     public async Task SettlementBatch_FiltersMarketAndRollsBackBothTablesOnFailure()
     {
-        var connectionString = Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
-
-        var factory = new PostgresConnectionFactory(new StorageOptions { ConnectionString = connectionString });
-        await new PostgresSchemaInitializer(factory).InitializeAsync();
+        var factory = await CreateWalletTestFactoryAsync();
         var repository = new PostgresAppRepository(factory);
         var suffix = Guid.NewGuid().ToString("N");
         var conditionId = $"Condition-{suffix}";
@@ -920,6 +913,14 @@ FOR EACH ROW EXECUTE FUNCTION public.{{function}}();
             Assert.StartsWith("D:/CodexTemp/runs/", reader.GetString(1).Replace('\\', '/'), StringComparison.OrdinalIgnoreCase);
         }
         await new PostgresSchemaInitializer(factory).InitializeAsync();
+        await using (var connection = factory.CreateConnection())
+        {
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(
+                PostgresStrategyRetentionWalletIndexSchemaMigration.CompletionCheckSql, connection);
+            Assert.True(Assert.IsType<bool>(await command.ExecuteScalarAsync()),
+                "Settlement regression tests require the exact new wallet index to be applied.");
+        }
         return factory;
     }
 

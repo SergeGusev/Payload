@@ -313,6 +313,40 @@ when `PolymarketAutoRedeem:AutoSubmitEnabled` is explicitly enabled. Live
 submission is throttled by `PolymarketAutoRedeem:MaxLiveSubmissionsPerCycle`,
 which defaults to one claim per cycle.
 
+### Settlement retention wallet lookup index
+
+Ordered migration `0009-strategy-retention-wallet-index` adds only
+`public.ix_strategies_retention_wallet_lookup`, a non-unique HASH index on
+`lower('strategy:' || code)`. It supports the existing per-row retention lookup
+used when positions and settlements are saved. The equality predicate, all
+case-variant matches, `ORDER BY strategy.id`, triggers, restoration guards,
+locks, transactions and accounting stay unchanged. Hash matches are rechecked
+against the original equality predicate; the index adds no code-length limit.
+
+The migration runs once at service startup after user-controlled deployment,
+using standalone `CREATE INDEX CONCURRENTLY` and a **60-second command timeout**
+only for this new migration. Existing migration timeouts and SQL checksums are
+unchanged. Concurrent construction permits ordinary table writes but can wait
+for old transactions and adds temporary CPU/I/O load. Its exact valid/ready/live
+shape is checked before recording completion; an already-correct index is not
+rebuilt. Timeout/error or a wrong/invalid same-name index prevents startup and
+records no success. Cancellation can leave an invalid index; there is no automatic
+drop/reindex or failure bypass. The command timeout is not an exact total-startup
+deadline. Recovery requires a separately approved operation. An older binary such
+as `538c726c` rejects the unknown `0009` ledger entry on restart, so blind binary
+rollback after this migration is not supported.
+
+Verification covers `PostgresSchemaMigrationTests`, the
+`RetentionWalletIndex_PreservesEqualityAndUsesNaturalLiteralCustomAndGenericPlans`
+test, focused retention restoration guards and Paper settlement replay/rollback.
+Use explicit disposable test database connections and managed `D:\CodexTemp`
+build/results paths, never Production or the application Local database.
+Local PostgreSQL 17 verification is not a PostgreSQL 18.3 Production integration
+run. Expression statistics may need automatic analysis; no Production `ANALYZE`
+is performed by this source change. A faster isolated lookup does not prove that
+all observed settlement latency is removed: Production improvement needs a later
+read-only post-deployment plan and settlement-stage comparison.
+
 ### BTC 5m History Backfill
 
 The service has a one-shot PostgreSQL backfill command for `btc_5m_history`.

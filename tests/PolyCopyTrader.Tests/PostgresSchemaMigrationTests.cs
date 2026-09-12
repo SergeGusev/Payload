@@ -55,6 +55,38 @@ public sealed class PostgresSchemaMigrationTests
     }
 
     [Fact]
+    public void MigrationCommandTimeout_IsOptionalPositiveAndDoesNotChangeSqlChecksum()
+    {
+        var original = Migration(1, "timeout-model", "SELECT 1;\r\n");
+        var bounded = new PostgresSchemaMigration(
+            1,
+            "timeout-model",
+            "SELECT 1;\n",
+            transactional: true,
+            details: "test migration",
+            commandTimeoutSeconds: 60);
+
+        Assert.Null(original.CommandTimeoutSeconds);
+        Assert.Equal(60, bounded.CommandTimeoutSeconds);
+        Assert.Equal(original.Sql, bounded.Sql);
+        Assert.Equal(original.SemanticChecksum, bounded.SemanticChecksum);
+        Assert.Equal(
+            PostgresSchemaMigration.CalculateSemanticChecksum(bounded.Sql),
+            bounded.SemanticChecksum);
+
+        foreach (var invalidTimeout in new[] { 0, -1 })
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new PostgresSchemaMigration(
+                1,
+                "invalid-timeout",
+                "SELECT 1;",
+                transactional: true,
+                details: "test migration",
+                commandTimeoutSeconds: invalidTimeout));
+        }
+    }
+
+    [Fact]
     public void LegacyBaselineState_RequiresEveryExactExistingDatabasePredicate()
     {
         var eligible = new PostgresLegacyBaselineState(100, true, true, true, true, true, true);
@@ -73,7 +105,7 @@ public sealed class PostgresSchemaMigrationTests
     public void DefaultCatalog_IsBoundToApprovedLegacyChecksum()
     {
         var catalog = PostgresSchemaMigrationCatalog.CreateDefault();
-        Assert.Equal(8, catalog.Count);
+        Assert.Equal(9, catalog.Count);
         var baseline = catalog[0];
         var lossDiff = catalog[1];
         var ethUp8LossDiff = catalog[2];
@@ -85,6 +117,29 @@ public sealed class PostgresSchemaMigrationTests
         Assert.Equal(7, catalog[7].Order);
         Assert.True(catalog[7].Transactional);
         Assert.Equal(PostgresLossDiffPositiveProgressStrategySchemaMigration.SemanticChecksum, catalog[7].SemanticChecksum);
+        Assert.All(catalog.Take(8), migration => Assert.Null(migration.CommandTimeoutSeconds));
+        var retentionWalletIndex = catalog[8];
+        Assert.Equal(PostgresStrategyRetentionWalletIndexSchemaMigration.Id, retentionWalletIndex.Id);
+        Assert.Equal("0009-strategy-retention-wallet-index", retentionWalletIndex.Id);
+        Assert.Equal(8, retentionWalletIndex.Order);
+        Assert.False(retentionWalletIndex.Transactional);
+        Assert.False(retentionWalletIndex.IsLegacyBaseline);
+        Assert.Equal(60, retentionWalletIndex.CommandTimeoutSeconds);
+        Assert.Equal(
+            PostgresStrategyRetentionWalletIndexSchemaMigration.SemanticChecksum,
+            retentionWalletIndex.SemanticChecksum);
+        Assert.Equal(
+            PostgresStrategyRetentionWalletIndexSchemaMigration.CompletionCheckSql,
+            retentionWalletIndex.CompletionCheckSql);
+        Assert.Equal(
+            """
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_strategies_retention_wallet_lookup
+            ON public.strategies USING hash (lower('strategy:' || code));
+            """.Replace("\r\n", "\n", StringComparison.Ordinal),
+            retentionWalletIndex.Sql);
+        Assert.All(catalog, migration => Assert.Equal(
+            PostgresSchemaMigration.CalculateSemanticChecksum(migration.Sql),
+            migration.SemanticChecksum));
 
         Assert.Equal(PostgresSchemaMigrationCatalog.LegacyBaselineId, baseline.Id);
         Assert.Equal(
@@ -203,6 +258,15 @@ public sealed class PostgresSchemaMigrationTests
         Assert.Equal(
             PostgresHistoricalParityPaperRunOrderIndexSchemaMigration.SemanticChecksum,
             actual);
+    }
+
+    [Fact]
+    public void StrategyRetentionWalletIndexMigration_ChecksumMatchesSql()
+    {
+        Assert.Equal(
+            PostgresStrategyRetentionWalletIndexSchemaMigration.SemanticChecksum,
+            PostgresSchemaMigration.CalculateSemanticChecksum(
+                PostgresStrategyRetentionWalletIndexSchemaMigration.Sql));
     }
 
     [Fact]
@@ -472,6 +536,248 @@ WHERE source_kind = 'PaperRun'
             await ExecuteAsync(connectionString, wrongIndexStatement);
             Assert.False(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
         }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresMigrationIntegration")]
+    public async Task StrategyRetentionWalletIndexMigration_CreatesExactShapeAndAcceptsExistingIndexWithoutRebuild()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = CreateFactory(connectionString);
+        var baseline = RetentionWalletIndexTestBaseline();
+        var migration = PostgresSchemaMigrationCatalog.CreateDefault()[8];
+        await ResetPublicSchemaAsync(connectionString);
+        var initializer = new PostgresSchemaInitializer(factory, [baseline, migration]);
+        await initializer.InitializeAsync();
+
+        Assert.True(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        var indexOid = await ScalarAsync<long>(connectionString,
+            "SELECT 'public.ix_strategies_retention_wallet_lookup'::regclass::oid::bigint;");
+        Assert.Equal(1, await ScalarAsync<int>(connectionString,
+            $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+
+        await initializer.InitializeAsync();
+        Assert.Equal(indexOid, await ScalarAsync<long>(connectionString,
+            "SELECT 'public.ix_strategies_retention_wallet_lookup'::regclass::oid::bigint;"));
+        Assert.Equal(1, await ScalarAsync<int>(connectionString,
+            $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+
+        await ResetPublicSchemaAsync(connectionString);
+        await new PostgresSchemaInitializer(factory, [baseline]).InitializeAsync();
+        await ExecuteAsync(connectionString, migration.Sql);
+        var preexistingOid = await ScalarAsync<long>(connectionString,
+            "SELECT 'public.ix_strategies_retention_wallet_lookup'::regclass::oid::bigint;");
+        await initializer.InitializeAsync();
+        Assert.True(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        Assert.Equal(preexistingOid, await ScalarAsync<long>(connectionString,
+            "SELECT 'public.ix_strategies_retention_wallet_lookup'::regclass::oid::bigint;"));
+        Assert.Equal(1, await ScalarAsync<int>(connectionString,
+            $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresMigrationIntegration")]
+    public async Task StrategyRetentionWalletIndexMigration_RejectsWrongSameNameObjectsWithoutDroppingOrRecordingSuccess()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = CreateFactory(connectionString);
+        var baseline = RetentionWalletIndexTestBaseline();
+        var migration = PostgresSchemaMigrationCatalog.CreateDefault()[8];
+        var wrongObjects = new[]
+        {
+            "CREATE INDEX ix_strategies_retention_wallet_lookup ON public.strategies (lower('strategy:' || code));",
+            "CREATE UNIQUE INDEX ix_strategies_retention_wallet_lookup ON public.strategies (lower('strategy:' || code));",
+            "CREATE INDEX ix_strategies_retention_wallet_lookup ON public.strategies (lower('strategy:' || code), id);",
+            "CREATE INDEX ix_strategies_retention_wallet_lookup ON public.strategies (lower('strategy:' || code)) INCLUDE (id);",
+            "CREATE INDEX ix_strategies_retention_wallet_lookup ON public.strategies USING hash (lower(code));",
+            "CREATE INDEX ix_strategies_retention_wallet_lookup ON public.strategies USING hash (code);",
+            "CREATE INDEX ix_strategies_retention_wallet_lookup ON public.strategies USING hash (lower('strategy:' || code)) WHERE enabled;",
+            "CREATE INDEX ix_strategies_retention_wallet_lookup ON public.strategies USING hash (lower('strategy:' || code) COLLATE \"C\");",
+            "CREATE TABLE public.ix_strategies_retention_wallet_lookup (id integer);",
+            "CREATE TABLE public.other_strategies (code text); CREATE INDEX ix_strategies_retention_wallet_lookup ON public.other_strategies USING hash (lower('strategy:' || code));"
+        };
+
+        foreach (var wrongObject in wrongObjects)
+        {
+            await ResetPublicSchemaAsync(connectionString);
+            await new PostgresSchemaInitializer(factory, [baseline]).InitializeAsync();
+            await ExecuteAsync(connectionString, wrongObject);
+            var originalOid = await ScalarAsync<long>(connectionString,
+                "SELECT 'public.ix_strategies_retention_wallet_lookup'::regclass::oid::bigint;");
+            Assert.False(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new PostgresSchemaInitializer(factory, [baseline, migration]).InitializeAsync());
+
+            Assert.Equal(originalOid, await ScalarAsync<long>(connectionString,
+                "SELECT 'public.ix_strategies_retention_wallet_lookup'::regclass::oid::bigint;"));
+            Assert.False(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+            Assert.Equal(0, await ScalarAsync<int>(connectionString,
+                $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "PostgresMigrationIntegration")]
+    public async Task StrategyRetentionWalletIndexMigration_RejectsCancelledInvalidIndexWithoutAutomaticRecovery()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var factory = CreateFactory(connectionString);
+        var baseline = RetentionWalletIndexTestBaseline();
+        var migration = PostgresSchemaMigrationCatalog.CreateDefault()[8];
+        await ResetPublicSchemaAsync(connectionString);
+        await new PostgresSchemaInitializer(factory, [baseline]).InitializeAsync();
+        await ExecuteAsync(connectionString,
+            "INSERT INTO public.strategies(id, code) VALUES ('a0000000-0000-4000-8000-000000000001', 'invalid-index-probe');");
+
+        await using (var writer = new NpgsqlConnection(connectionString))
+        await using (var builder = new NpgsqlConnection(connectionString))
+        {
+            await writer.OpenAsync();
+            await builder.OpenAsync();
+            await using var writerTransaction = await writer.BeginTransactionAsync();
+            await using (var update = new NpgsqlCommand(
+                "UPDATE public.strategies SET code = code;", writer, writerTransaction))
+            {
+                Assert.Equal(1, await update.ExecuteNonQueryAsync());
+            }
+
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await using var build = new NpgsqlCommand(migration.Sql, builder) { CommandTimeout = 10 };
+            var buildTask = build.ExecuteNonQueryAsync(cancellation.Token);
+            var observedInvalidIndex = false;
+            try
+            {
+                for (var attempt = 0; attempt < 100 && !buildTask.IsCompleted; attempt++)
+                {
+                    observedInvalidIndex = await ScalarAsync<bool>(connectionString,
+                        "SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_index WHERE indexrelid = to_regclass('public.ix_strategies_retention_wallet_lookup') AND NOT indisvalid);");
+                    if (observedInvalidIndex)
+                    {
+                        break;
+                    }
+                    await Task.Delay(25);
+                }
+            }
+            finally
+            {
+                await cancellation.CancelAsync();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => buildTask);
+            }
+            Assert.True(observedInvalidIndex, "The blocked concurrent build must expose its invalid index before cancellation.");
+            await writerTransaction.RollbackAsync();
+        }
+
+        var invalidOid = await ScalarAsync<long>(connectionString,
+            "SELECT 'public.ix_strategies_retention_wallet_lookup'::regclass::oid::bigint;");
+        Assert.False(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new PostgresSchemaInitializer(factory, [baseline, migration]).InitializeAsync());
+        Assert.Equal(invalidOid, await ScalarAsync<long>(connectionString,
+            "SELECT 'public.ix_strategies_retention_wallet_lookup'::regclass::oid::bigint;"));
+        Assert.False(await ScalarAsync<bool>(connectionString, migration.CompletionCheckSql!));
+        Assert.Equal(0, await ScalarAsync<int>(connectionString,
+            $"SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = '{migration.Id}';"));
+        await using var lockProbe = new NpgsqlConnection(connectionString);
+        await lockProbe.OpenAsync();
+        await AssertAdvisoryLockAvailableAsync(lockProbe);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "PostgresMigrationIntegration")]
+    public async Task MigrationCommandTimeout_AndCancellationDoNotRecordSuccessAndReleaseMigrationLock(bool cancelExplicitly)
+    {
+        var connectionString = Environment.GetEnvironmentVariable(IntegrationConnectionVariable);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var applicationName = $"retention-wallet-timeout-{Guid.NewGuid():N}";
+        var factory = CreateFactory(new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            ApplicationName = applicationName
+        }.ConnectionString);
+        var baseline = RetentionWalletIndexTestBaseline();
+        await ResetPublicSchemaAsync(connectionString);
+        await new PostgresSchemaInitializer(factory, [baseline]).InitializeAsync();
+        var migration = new PostgresSchemaMigration(
+            1,
+            "bounded-pending-probe",
+            "SELECT pg_sleep(5);",
+            transactional: false,
+            details: "short synthetic command timeout probe",
+            completionCheckSql: "SELECT to_regclass('public.bounded_recovery_probe') IS NOT NULL;",
+            commandTimeoutSeconds: cancelExplicitly ? 60 : 1);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        var initializer = new PostgresSchemaInitializer(factory, [baseline, migration]);
+
+        if (cancelExplicitly)
+        {
+            var migrationTask = initializer.InitializeAsync(cancellation.Token);
+            var observedPendingSql = false;
+            try
+            {
+                for (var attempt = 0; attempt < 100 && !migrationTask.IsCompleted; attempt++)
+                {
+                    observedPendingSql = await ScalarAsync<bool>(connectionString,
+                        $"SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_stat_activity WHERE application_name = '{applicationName}' AND state = 'active' AND query LIKE '%pg_sleep(5)%');");
+                    if (observedPendingSql)
+                    {
+                        break;
+                    }
+                    await Task.Delay(25);
+                }
+            }
+            finally
+            {
+                await cancellation.CancelAsync();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => migrationTask);
+            }
+            Assert.True(observedPendingSql, "Cancel only after observing the synthetic pending migration SQL.");
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAnyAsync<NpgsqlException>(() => initializer.InitializeAsync(cancellation.Token));
+            Assert.IsType<TimeoutException>(exception.InnerException);
+        }
+
+        Assert.Equal(0, await ScalarAsync<int>(connectionString,
+            "SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = 'bounded-pending-probe';"));
+        Assert.Equal(0, await ScalarAsync<int>(connectionString,
+            $"SELECT count(*)::integer FROM pg_catalog.pg_stat_activity WHERE application_name = '{applicationName}' AND state = 'active';"));
+        await using var lockProbe = new NpgsqlConnection(connectionString);
+        await lockProbe.OpenAsync();
+        await AssertAdvisoryLockAvailableAsync(lockProbe);
+
+        var recovery = new PostgresSchemaMigration(
+            1,
+            migration.Id,
+            "CREATE TABLE public.bounded_recovery_probe(id integer);",
+            transactional: false,
+            details: "explicit synthetic recovery after unrecorded failure",
+            completionCheckSql: migration.CompletionCheckSql,
+            commandTimeoutSeconds: 1);
+        await new PostgresSchemaInitializer(factory, [baseline, recovery]).InitializeAsync();
+        Assert.Equal(1, await ScalarAsync<int>(connectionString,
+            "SELECT count(*)::integer FROM public.schema_migration_history WHERE migration_id = 'bounded-pending-probe';"));
     }
 
     [Fact]
@@ -1113,7 +1419,7 @@ JOIN pg_namespace ns ON ns.oid=cls.relnamespace
 WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
 """);
         Assert.True(relationCount > 100);
-        Assert.Equal(8, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(9, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
 
         await Task.Delay(25);
         await initializer.InitializeAsync();
@@ -1121,7 +1427,7 @@ WHERE ns.nspname='public' AND cls.relkind IN ('r','p');
         Assert.Equal(
             firstUpdatedAt,
             await ScalarAsync<DateTime>(connectionString, "SELECT max(updated_at_utc) FROM public.strategies;"));
-        Assert.Equal(8, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
+        Assert.Equal(9, await ScalarAsync<int>(connectionString, "SELECT count(*)::integer FROM public.schema_migration_history;"));
     }
 
     private static string CreateSettledLossDiffParentRunsSql(
@@ -1179,6 +1485,23 @@ FROM (VALUES
 {{values}}
 ) AS source(id, market_id, entered_at_utc, settled_at_utc, realized_pnl_usd);
 """;
+    }
+
+    private static PostgresSchemaMigration RetentionWalletIndexTestBaseline()
+    {
+        return new PostgresSchemaMigration(
+            0,
+            "retention-wallet-index-test-baseline",
+            """
+CREATE TABLE public.strategies (
+    id uuid PRIMARY KEY,
+    code text NOT NULL UNIQUE,
+    enabled boolean NOT NULL DEFAULT true
+);
+""",
+            transactional: false,
+            details: "isolated retention wallet index test baseline",
+            isLegacyBaseline: true);
     }
 
     private static PostgresSchemaMigration Migration(

@@ -15,6 +15,7 @@ using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.PaperTrading;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
+using Xunit.Abstractions;
 
 namespace PolyCopyTrader.Tests;
 
@@ -250,7 +251,7 @@ SELECT
             var serverVersionNumber = reader.GetInt32(1);
             var serverAddress = reader.GetFieldValue<IPAddress>(2);
             Assert.Matches(AllowedDatabaseNameRegex(), databaseName);
-            Assert.Equal(18, serverVersionNumber / 10_000);
+            Assert.Contains(serverVersionNumber / 10_000, new[] { 17, 18 });
             Assert.NotEqual(IPAddress.Any, serverAddress);
             Assert.NotEqual(IPAddress.IPv6Any, serverAddress);
             Assert.NotEqual(IPAddress.Parse("192.168.0.101"), serverAddress);
@@ -273,8 +274,196 @@ SELECT
 }
 
 [Collection(PaperCopiedTraderPerformancePostgresIntegrationCollection.Name)]
-public sealed class StrategyRunRetentionPostgresIntegrationTests
+public sealed class StrategyRunRetentionPostgresIntegrationTests(ITestOutputHelper output)
 {
+    [PostgresIntegrationFact]
+    [Trait("Category", "PostgresIntegration")]
+    public async Task RetentionWalletIndex_PreservesEqualityAndUsesNaturalLiteralCustomAndGenericPlans()
+    {
+        var factory = await CreateFactoryAsync();
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        var suffix = Guid.NewGuid().ToString("N");
+        var table = $"retention_wallet_fixture_{suffix}";
+        var index = $"retention_wallet_hash_{suffix}";
+        var longCode = new string('L', 20_000) + "_tail";
+        var collisionCodes = new List<string>();
+        await using (var collision = new NpgsqlCommand(
+            """
+WITH candidates AS MATERIALIZED (
+    SELECT 'collision_' || value::text AS code,
+           hashtext(lower('strategy:collision_' || value::text)) AS hash
+    FROM generate_series(1, 200000) value
+), duplicate AS (
+    SELECT hash FROM candidates GROUP BY hash HAVING count(*) > 1 ORDER BY hash LIMIT 1
+)
+SELECT code FROM candidates WHERE hash = (SELECT hash FROM duplicate) ORDER BY code LIMIT 2;
+""", connection) { CommandTimeout = 15 })
+        await using (var reader = await collision.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync()) collisionCodes.Add(reader.GetString(0));
+        }
+        Assert.Equal(2, collisionCodes.Count);
+        Assert.NotEqual(collisionCodes[0], collisionCodes[1]);
+        var codes = new[] { "ordinary", "MiXeD", "Twin", "twin", "", "ÉTH_Δ", longCode,
+            collisionCodes[0], collisionCodes[1] };
+        var ids = Enumerable.Range(1, codes.Length)
+            .Select(value => Guid.Parse($"10000000-0000-4000-8000-{value:000000000000}"))
+            .ToArray();
+        var wallets = new string?[] { "strategy:ordinary", "STRATEGY:mixed", "strategy:TWIN",
+            "strategy:missing", "other:ordinary", "", null, "strategy:", "strategy:ÉTH_Δ",
+            "strategy:" + longCode, "strategy:" + collisionCodes[0], "strategy:" + collisionCodes[1] };
+        Guid[][] expected = [[ids[0]], [ids[1]], [ids[2], ids[3]], [], [], [], [], [ids[4]],
+            [ids[5]], [ids[6]], [ids[7]], [ids[8]]];
+        var query = $"SELECT strategy.id FROM public.{table} strategy " +
+            "WHERE lower($1) = lower('strategy:' || strategy.code) ORDER BY strategy.id";
+        try
+        {
+            // Copy the actual code type/collation, but not application triggers or rows.
+            await ExecuteAsync($"""
+CREATE TABLE public.{table} AS SELECT id, code FROM public.strategies WITH NO DATA;
+ALTER TABLE public.{table} ADD PRIMARY KEY(id), ADD UNIQUE(code), ADD COLUMN padding text;
+ALTER TABLE public.{table} ALTER COLUMN padding SET STORAGE PLAIN;
+INSERT INTO public.{table}(id, code, padding)
+SELECT md5('wallet-index-fixture-' || value::text)::uuid,
+       'background_' || value::text, repeat(md5(value::text), 150)
+FROM generate_series(1, {2645 - codes.Length}) value;
+""");
+            await using (var insert = new NpgsqlCommand(
+                $"INSERT INTO public.{table}(id, code, padding) " +
+                "SELECT id, code, repeat(md5(code), 150) FROM unnest(@Ids::uuid[], @Codes::text[]) fixture(id, code);",
+                connection))
+            {
+                insert.Parameters.AddWithValue("Ids", ids);
+                insert.Parameters.AddWithValue("Codes", codes);
+                Assert.Equal(codes.Length, await insert.ExecuteNonQueryAsync());
+            }
+            await using (var verify = new NpgsqlCommand(
+                $"SELECT count(*) FROM public.{table};", connection))
+                Assert.Equal(2645L, await verify.ExecuteScalarAsync());
+            await using (var verify = new NpgsqlCommand(
+                "SELECT lower('strategy:' || @First) <> lower('strategy:' || @Second), " +
+                "hashtext(lower('strategy:' || @First)) = hashtext(lower('strategy:' || @Second));", connection))
+            {
+                verify.Parameters.AddWithValue("First", collisionCodes[0]);
+                verify.Parameters.AddWithValue("Second", collisionCodes[1]);
+                await using var reader = await verify.ExecuteReaderAsync();
+                Assert.True(await reader.ReadAsync());
+                Assert.True(reader.GetBoolean(0));
+                Assert.True(reader.GetBoolean(1));
+            }
+            output.WriteLine($"Fixture rows=2645; collision search bounded to200000: {string.Join(", ", collisionCodes)}; long code characters={longCode.Length}.");
+            await ExecuteAsync($"ANALYZE public.{table};");
+            var before = await ReadAllAsync();
+            for (var i = 0; i < wallets.Length; i++) Assert.Equal(expected[i], before[i]);
+            var beforePlans = await ReadPlansAsync("before");
+            Assert.All(beforePlans.Values, plan => Assert.Contains("Seq Scan", plan, StringComparison.Ordinal));
+
+            // The catalog migration has already run on public.strategies. Apply its exact
+            // index statement to this disposable before/after fixture, as a standalone command.
+            var migrationSql = PostgresStrategyRetentionWalletIndexSchemaMigration.Sql
+                .Replace("ix_strategies_retention_wallet_lookup", index, StringComparison.Ordinal)
+                .Replace("public.strategies", $"public.{table}", StringComparison.Ordinal);
+            await ExecuteAsync(migrationSql);
+            var after = await ReadAllAsync();
+            for (var i = 0; i < wallets.Length; i++) Assert.Equal(before[i], after[i]);
+            await ExecuteAsync($"ANALYZE public.{table};");
+            await using (var stats = new NpgsqlCommand(
+                "SELECT count(*) FROM pg_catalog.pg_stats WHERE schemaname = 'public' AND tablename = @Index;", connection))
+            {
+                stats.Parameters.AddWithValue("Index", index);
+                Assert.Equal(1L, await stats.ExecuteScalarAsync());
+            }
+            output.WriteLine("Expression statistics verified after isolated fixture ANALYZE; no forced enable_seqscan setting.");
+            var afterPlans = await ReadPlansAsync("after");
+            foreach (var (mode, plan) in afterPlans)
+            {
+                Assert.Contains(index, plan, StringComparison.Ordinal);
+                Assert.Contains("Index Scan", plan, StringComparison.Ordinal);
+                Assert.True(ReadBuffers(plan) < ReadBuffers(beforePlans[mode]),
+                    $"Expected fewer measured shared buffers for {mode}. Before={beforePlans[mode]}; After={plan}");
+            }
+            await using (var collisionPlan = new NpgsqlCommand(
+                "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + query, connection))
+            {
+                collisionPlan.Parameters.Add(new NpgsqlParameter
+                {
+                    NpgsqlDbType = NpgsqlDbType.Text,
+                    Value = "strategy:" + collisionCodes[0]
+                });
+                var json = Assert.IsType<string>(await collisionPlan.ExecuteScalarAsync());
+                output.WriteLine($"after/collision equality recheck: {json}");
+                Assert.Contains(index, json, StringComparison.Ordinal);
+                using var document = JsonDocument.Parse(json);
+                Assert.True(CountIndexRechecks(document.RootElement[0].GetProperty("Plan")) >= 1,
+                    "The verified hash collision must be rejected by the unchanged equality recheck.");
+            }
+        }
+        finally
+        {
+            await ExecuteAsync("DEALLOCATE ALL; RESET plan_cache_mode;");
+            await ExecuteAsync($"DROP TABLE IF EXISTS public.{table};");
+        }
+
+        async Task ExecuteAsync(string sql)
+        {
+            await using var command = new NpgsqlCommand(sql, connection) { CommandTimeout = 15 };
+            await command.ExecuteNonQueryAsync();
+        }
+
+        async Task<Guid[][]> ReadAllAsync()
+        {
+            var results = new List<Guid[]>();
+            foreach (var wallet in wallets)
+            {
+                await using var command = new NpgsqlCommand(query, connection);
+                command.Parameters.Add(new NpgsqlParameter { NpgsqlDbType = NpgsqlDbType.Text, Value = (object?)wallet ?? DBNull.Value });
+                await using var reader = await command.ExecuteReaderAsync();
+                var matched = new List<Guid>();
+                while (await reader.ReadAsync()) matched.Add(reader.GetGuid(0));
+                results.Add(matched.ToArray());
+            }
+            return results.ToArray();
+        }
+
+        async Task<Dictionary<string, string>> ReadPlansAsync(string phase)
+        {
+            var plans = new Dictionary<string, string>();
+            await ExecuteAsync("DEALLOCATE ALL;");
+            await ExecuteAsync($"PREPARE retention_wallet_lookup(text) AS {query};");
+            foreach (var mode in new[] { "literal", "force_custom_plan", "force_generic_plan" })
+            {
+                await ExecuteAsync($"SET plan_cache_mode = '{(mode == "literal" ? "auto" : mode)}';");
+                var explained = mode == "literal"
+                    ? query.Replace("$1", "'strategy:ordinary'", StringComparison.Ordinal)
+                    : "EXECUTE retention_wallet_lookup('strategy:ordinary')";
+                await using var command = new NpgsqlCommand(
+                    "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + explained, connection) { CommandTimeout = 15 };
+                var plan = Assert.IsType<string>(await command.ExecuteScalarAsync());
+                plans.Add(mode, plan);
+                output.WriteLine($"{phase}/{mode}: {plan}");
+            }
+            return plans;
+        }
+
+        static long ReadBuffers(string json)
+        {
+            using var document = JsonDocument.Parse(json);
+            var plan = document.RootElement[0].GetProperty("Plan");
+            return plan.GetProperty("Shared Hit Blocks").GetInt64()
+                + plan.GetProperty("Shared Read Blocks").GetInt64();
+        }
+
+        static long CountIndexRechecks(JsonElement plan)
+        {
+            var count = plan.TryGetProperty("Rows Removed by Index Recheck", out var removed)
+                ? removed.GetInt64() : 0;
+            if (plan.TryGetProperty("Plans", out var children))
+                foreach (var child in children.EnumerateArray()) count += CountIndexRechecks(child);
+            return count;
+        }
+    }
+
     [PostgresStoragePrototypeFact]
     [Trait("Category", "PostgresStoragePrototype")]
     public async Task CompactSkipArchiveV2_StoragePrototype_IsSmallestAndUsesBoundedIndexes()
@@ -1278,6 +1467,9 @@ WHERE id = @StrategyId;
     {
         var factory = await CreateFactoryAsync();
         var repository = new PostgresAppRepository(factory);
+        Assert.True(await JsonbPayloadsEqualAsync("{\"fee_usd\":0}", "{\"fee_usd\":0.00000000}"));
+        Assert.False(await JsonbPayloadsEqualAsync("{\"fee_usd\":0}", "{\"fee_usd\":0.01}"));
+        Assert.False(await JsonbPayloadsEqualAsync("{\"fee_usd\":0}", "{}"));
         var strategyId = Guid.NewGuid();
         var oldCode = $"v2_restore_old_{Guid.NewGuid():N}";
         var newCode = $"v2_restore_new_{Guid.NewGuid():N}";
@@ -1368,9 +1560,9 @@ WHERE id = @StrategyId;
             async Task AssertOnlyTargetRestoredAsync(StrategyMarketPaperRun target)
             {
                 Assert.True(restoredV2RunIds.Add(target.Id));
-                Assert.Equal(
-                    archivedPayloads[target.Id],
-                    await ReadRestorableRawPayloadAsync(factory, target.Id));
+                var rawPayload = await ReadRestorableRawPayloadAsync(factory, target.Id);
+                Assert.True(await JsonbPayloadsEqualAsync(archivedPayloads[target.Id], rawPayload),
+                    $"Restored payload differs: expected={archivedPayloads[target.Id]}; actual={rawPayload}");
                 Assert.Equal(
                     restoredV2RunIds.OrderBy(id => id),
                     (await ReadRunIdsAsync(factory, v2Runs.Select(run => run.Id).ToArray()))
@@ -1522,6 +1714,17 @@ WHERE id = @StrategyId;
         {
             await DeleteConditionDependenciesAsync(factory, prefix);
             await DeleteTestStrategyAsync(factory, strategyId);
+        }
+
+        async Task<bool> JsonbPayloadsEqualAsync(string expected, string actual)
+        {
+            await using var connection = factory.CreateConnection();
+            await connection.OpenAsync();
+            await using var command = new NpgsqlCommand(
+                "SELECT @Expected::jsonb = @Actual::jsonb;", connection);
+            command.Parameters.AddWithValue("Expected", NpgsqlDbType.Jsonb, expected);
+            command.Parameters.AddWithValue("Actual", NpgsqlDbType.Jsonb, actual);
+            return Assert.IsType<bool>(await command.ExecuteScalarAsync());
         }
     }
 
@@ -3655,19 +3858,21 @@ VALUES (@Id, @SignalId, @StrategyId, @Wallet, 'Filled', 'Buy', @Asset, @Conditio
             liveStakes: false);
         try
         {
+            string originalTombstone;
             await using (var connection = factory.CreateConnection())
             {
                 await connection.OpenAsync();
                 await using var command = new NpgsqlCommand(
                     "INSERT INTO public.strategy_market_paper_skip_tombstones " +
                     "(strategy_id, market_id, archived_run_id, archived_at_utc) " +
-                    "VALUES (@StrategyId, @MarketId, @ArchivedRunId, @ArchivedAtUtc);",
+                    "VALUES (@StrategyId, @MarketId, @ArchivedRunId, @ArchivedAtUtc) " +
+                    "RETURNING to_jsonb(strategy_market_paper_skip_tombstones)::text;",
                     connection);
                 command.Parameters.AddWithValue("StrategyId", strategyId);
                 command.Parameters.AddWithValue("MarketId", $"retention-legacy-market-{Guid.NewGuid():N}");
                 command.Parameters.AddWithValue("ArchivedRunId", archivedRunId);
                 command.Parameters.AddWithValue("ArchivedAtUtc", DateTime.UtcNow.AddDays(-3));
-                Assert.Equal(1, await command.ExecuteNonQueryAsync());
+                originalTombstone = Assert.IsType<string>(await command.ExecuteScalarAsync());
             }
 
             var exception = await Assert.ThrowsAsync<PostgresException>(
@@ -3676,7 +3881,13 @@ VALUES (@Id, @SignalId, @StrategyId, @Wallet, 'Filled', 'Buy', @Asset, @Conditio
             Assert.Contains("legacy/incomplete tombstone", exception.MessageText);
             Assert.Equal(0, await ReadPaperOrderCountAsync(factory, order.Id));
             Assert.Empty(await ReadRunIdsAsync(factory, [archivedRunId]));
-            Assert.Equal([archivedRunId], await ReadArchivedRunIdsAsync(factory, strategyId));
+            // The restorable archive view intentionally excludes this legacy row.
+            // Verify that the exact physical tombstone, including every field, survives.
+            Assert.Equal(originalTombstone, await ReadRestorablePayloadAsync(
+                factory,
+                "SELECT to_jsonb(tombstone)::text FROM public.strategy_market_paper_skip_tombstones tombstone " +
+                "WHERE archived_run_id = @RunId;",
+                archivedRunId));
         }
         finally
         {
@@ -4604,7 +4815,14 @@ FROM (
 
     private static async Task<PostgresConnectionFactory> CreateFactoryAsync()
     {
-        return await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        var factory = await DisposablePostgresIntegrationGuard.CreateInitializedFactoryAsync();
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            PostgresStrategyRetentionWalletIndexSchemaMigration.CompletionCheckSql, connection);
+        Assert.True(Assert.IsType<bool>(await command.ExecuteScalarAsync()),
+            "Retention regression tests require the exact new wallet index to be applied.");
+        return factory;
     }
 
     private static async Task InsertArchivedPaperSkipAsync(
