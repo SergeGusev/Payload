@@ -1,3 +1,15 @@
+## Active Update 2026-09-12 Follow-up Repair Priorities
+Goal: Answer "Есть что исправлять?" using the completed September12 Production check, without starting implementation.
+Status: Completed
+Done:
+- Recommend first diagnosing/optimizing settlement persistence: verified worst99/99 batch at06:23:37.024Z spent2201.4117ms in persistence,including1171.1257ms UpsertPositions and1014.2657ms InsertSettlements,all16stagesCompleted. Actual SQL/trigger/planner cause and concrete source fix remain unknown; measurements are client command spans.
+- Current source matches deployed538c726c in checked Storage/processor/updater paths. MarketResolved awaits settlement within existing updater serialization lock. This supports prioritizing the latency path, not a claim of lostbets or proofallentrydelays have thatcause. Do not change locks,transactions,SQL ortrading rules under this question.
+- Other improvement targets: copiedperformancefreshness~4min observedlag (queueprocessing,notproveddefect withoutSLA); SOLreference delivery/staletick skips15 and onebooktimeout,exactRESTrecoveryunknown. Do not turn these into automatictimeout/freshnessrelaxation fixes.
+- Independent server_logs_sep12 reviewer PASS with these uncertainty/urgency boundaries. No confirmed urgent accounting/service outage in the checked window; this is not an all-strategy/all-history correctness guarantee.
+Next: None; user question requests assessment, not implementation authorization.
+Notes: No freshProductionquery/logscan,source/config/service/trading mutation,build/test or tempartifact. Recommendations refer to Sep12 06:13:37.639021..06:43:37.639021Z log/Paper window and service through06:47:51.902508Z. Only ownexemptcontext/history bookkeeping; preserve unrelated edits and Strategies/UpCounter.txt,which blocks fullWorkingTree gate; stagedownrecords separately validated.
+Blockers: None for advice; specific SQL latency cause remains unproved.
+
 ## Active Update 2026-09-12 Production Server Bets And Logs
 Goal: Check Production server, Paper/Live bets and server logs read-only for the user's current request.
 Status: Completed
