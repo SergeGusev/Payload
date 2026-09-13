@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260913-split-eth-lossdiff-progress-categories",
+  "title": "Separate ETH Up 4 bps and Up 8 bps LossDiff Progress Dashboard categories",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Раздели в Dashboard категории для ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap N и для ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap N"
+    }
+  ],
+  "scope": {
+    "goal": "Separate the Dashboard display categories for the two explicitly named ETH LossDiff Positive Progress Cap families.",
+    "inScope": [
+      "The 16 currently registered ETH Up 4 bps children b7c50005-0000-4000-8236-{cap:12 digits}, Cap 1..16, named ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap N.",
+      "The 18 currently registered ETH Up 8 bps children b7c50005-0000-4000-8237-{cap:12 digits}, Cap 1..18, named ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap N.",
+      "Replace their shared ETH 5m LossDiff Progress display category with one distinct category per family through the existing Dashboard category selector and filter. Proposed exact labels are recorded separately in ASM-001.",
+      "Focused category verification and a short README statement documenting the requested split; required requirement-contract and context/history bookkeeping."
+    ],
+    "outOfScope": [
+      "Strategy names, IDs, registration, configuration, trading behavior, caps, LossDiff counters, financial calculations, history, Paper/Live execution, orders, database data and schema.",
+      "Categories of other strategies, new category controls or hierarchy, sorting, currency selection and Dashboard redesign.",
+      "Production deployment, service or Dashboard process stop/restart, production queries and any cleanup or unrelated test repair."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "No analysis period or timezone applies. Exact currently registered 34 members only; display classification applies wherever the existing Dashboard category filters are used.",
+    "firstVerification": "Read StrategyDisplayCategories.GetCategory and its exact-name parser, independently enumerate the two families from Models.cs, and trace MainViewModel.BuildStrategyCategoryOptions and IsStrategyCategoryVisible before implementation."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Give the ETH Up 4 bps and ETH Up 8 bps LossDiff Positive Progress Cap families separate Dashboard categories, retaining all Cap variants within their corresponding family.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Раздели в Dashboard категории для ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap N и для ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap N",
+      "acceptanceCriteria": [
+        "All 16 exact Up 4 bps display names with Cap 1..16 map to ETH 5m Up 4 bps LossDiff Progress, subject to explicit approval of ASM-001.",
+        "All 18 exact Up 8 bps display names with Cap 1..18 map to ETH 5m Up 8 bps LossDiff Progress, subject to explicit approval of ASM-001.",
+        "These 34 members yield exactly two categories with counts 16 and 18. Neither family remains in the old shared ETH 5m LossDiff Progress category.",
+        "Selecting either category through the existing Dashboard filter includes its family and excludes the other family. Existing general and recent-performance category selectors consume the same classifier.",
+        "The existing exact-name, cap-range and whitespace/case matching behavior is preserved. Unrelated and near-matching names retain their previous categories.",
+        "Focused category tests and the Dashboard project build pass. The final diff contains only the requested split, corresponding category verification, a short README note and required bookkeeping."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/StrategyDisplayCategories.cs",
+        "tests/PolyCopyTrader.Tests/StrategyDisplayCategoryTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~StrategyDisplayCategoryTests.EthLossDiffPositiveProgress|FullyQualifiedName~StrategyDisplayCategoryTests.SimilarNamesDoNotUseEthLossDiffProgressCategory|FullyQualifiedName~StrategyDisplayCategoryTests.PreservesExistingDisplayCategories\"",
+          "expected": "Focused tests verify the exact 16/18 split, distinct labels, membership exclusion, preserved near-match behavior and existing category cases. All pass. Temporary paths and TEMP/TMP/TMPDIR use the marked D:/CodexTemp run directory.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj --artifacts-path \"$runRoot/artifacts\"",
+          "expected": "The current net10.0-windows WPF Dashboard builds successfully using the updated classifier; disposable outputs and process temp directories stay inside the marked D:/CodexTemp run directory.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Inspect MainViewModel.BuildStrategyCategoryOptions and IsStrategyCategoryVisible, MainWindow category bindings, and the final diff against the verbatim request and approved contract; run git diff --check and the required requirement-gate validation.",
+          "expected": "Independent semantic reviewer confirms all existing category selectors and row filters use the classifier, only requested families change categories, README reflects the split, no open findings remain and mechanical checks pass.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "Proposed visible category labels are ETH 5m Up 4 bps LossDiff Progress and ETH 5m Up 8 bps LossDiff Progress. The user requested the separation but did not specify literal labels; these labels require explicit user approval.",
+      "impact": "Determines only the two visible category labels and their existing category-filter values. No strategy display name or trading behavior changes.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260913-split-eth-lossdiff-progress-categories sha256:09fded18384ea3c071236c80a368692039f8579df520f184dc2394b602bc1828",
+        "semanticDigest": "sha256:09fded18384ea3c071236c80a368692039f8579df520f184dc2394b602bc1828"
+      }
+    }
+  ],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260913-split-eth-lossdiff-progress-categories sha256:09fded18384ea3c071236c80a368692039f8579df520f184dc2394b602bc1828",
+    "semanticDigest": "sha256:09fded18384ea3c071236c80a368692039f8579df520f184dc2394b602bc1828"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/inspect_category",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
