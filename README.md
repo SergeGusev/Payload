@@ -381,6 +381,9 @@ the exact Up 8 bps parent `b7c50005-0000-4000-8137-000000000108` has 18,
 caps 1..18. Names end in `LossDiff Positive Progress Cap N`. Child UUID groups
 are 8236 (Up4) and 8237 (Up8), with N as the twelve-digit suffix.
 
+Dashboard groups these children separately: `ETH 5m Up 4 bps LossDiff Progress`
+contains caps 1..16, and `ETH 5m Up 8 bps LossDiff Progress` contains caps 1..18.
+
 Each counter starts at zero at migration rollout, not from existing history.
 Only parent entries at/after that UTC cutoff qualify. Before a candidate entry,
 only already completed parent outcomes participate, ordered by settlement time,

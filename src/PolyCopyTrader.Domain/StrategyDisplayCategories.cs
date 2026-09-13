@@ -28,14 +28,17 @@ public static class StrategyDisplayCategories
         }
 
         var name = strategyName.Trim();
-        if (IsEthLossDiffPositiveProgress(name))
+        if (TryGetEthLossDiffPositiveProgressBps(name, out var bps))
         {
-            return EthLossDiffProgressCategory;
+            return $"ETH 5m Up {bps} bps LossDiff Progress";
         }
 
         if (ContainsStrategyWord(name, "LowerEnter"))
         {
-            var sourceCategory = GetCategory(RemoveStrategyWord(name, "LowerEnter"));
+            var sourceName = RemoveStrategyWord(name, "LowerEnter");
+            var sourceCategory = TryGetEthLossDiffPositiveProgressBps(sourceName, out _)
+                ? EthLossDiffProgressCategory
+                : GetCategory(sourceName);
             return string.Equals(sourceCategory, "Other", StringComparison.OrdinalIgnoreCase)
                 ? sourceCategory
                 : AddLowerEnterCategoryMarker(sourceCategory);
@@ -331,11 +334,12 @@ public static class StrategyDisplayCategories
         return categoryPrefix + "Other";
     }
 
-    private static bool IsEthLossDiffPositiveProgress(string value)
+    private static bool TryGetEthLossDiffPositiveProgressBps(string value, out int bps)
     {
+        bps = 0;
         var parts = value.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length != 13 ||
-            !int.TryParse(parts[3], NumberStyles.None, CultureInfo.InvariantCulture, out var bps) ||
+            !int.TryParse(parts[3], NumberStyles.None, CultureInfo.InvariantCulture, out bps) ||
             !int.TryParse(parts[12], NumberStyles.None, CultureInfo.InvariantCulture, out var cap))
         {
             return false;

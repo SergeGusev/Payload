@@ -1,3 +1,26 @@
+## Active Update 2026-09-13 Split ETH LossDiff Progress Dashboard Categories
+Goal: Separate Dashboard categories for the exact ETH Up 4 bps and Up 8 bps LossDiff Positive Progress Cap families.
+Status: Completed
+Done:
+- Approved RC-20260913-split-eth-lossdiff-progress-categories and ASM-001 using the user's exact APPROVE line for sha256:09fded18384ea3c071236c80a368692039f8579df520f184dc2394b602bc1828. Approval-only commit8bd8ac6c precedes product changes.
+- StrategyDisplayCategories now returns ETH 5m Up 4 bps LossDiff Progress for16 exact8236-family children Cap1..16, and ETH 5m Up 8 bps LossDiff Progress for18 exact8237-family children Cap1..18. All4 existing Dashboard category selectors and filters use this classifier. Exact matching and existing LowerEnter near-match category behavior preserved.
+- Updated only the classifier, corresponding category tests and a3-line README note. Focused approved filter passed103/103, failed0/skipped0; exact34 membership, group counts16/18, full-catalog exclusion,21 near-matches,2 trim cases and79 category-preservation cases. Dashboard net10.0-windows build passed with0 errors/120 warnings. Independent final semantic review agent:/root/inspect_category PASS, no open findings.
+Next: None for the requested source change. Runtime deployment is outside this contract.
+Notes: No DB queries/writes, trading/config/history/accounting changes, process launch/restart or Production deployment. Full test suite was not run. Required gate/diff validation, scoped commit/push and protected cleanup are final delivery checks. Existing unrelated context/history changes are preserved and excluded from the task commit.
+Blockers: None for the verified source change.
+
+## Active Update 2026-09-13 Split ETH LossDiff Progress Dashboard Categories Awaiting Approval
+Goal: Separate Dashboard categories for the exact ETH Up 4 bps and Up 8 bps LossDiff Positive Progress Cap families.
+Status: Blocked
+Done:
+- Read-only source inspection at HEAD 6774eb16 verified StrategyDisplayCategories currently returns one ETH 5m LossDiff Progress label for both families. Exact-name parser accepts Up4 caps1..16 and Up8 caps1..18. Independent inspect_category reviewer confirmed Models.cs registers the same34 children, IDs8236/caps1..16 and8237/caps1..18 under b7c50005-0000-4000 prefixes.
+- MainViewModel category option builder and row filter both call the classifier for the main and24h/6h/1h views. Proposed labels: ETH 5m Up 4 bps LossDiff Progress and ETH 5m Up 8 bps LossDiff Progress; exact wording was not supplied by the user and is explicitly pending as ASM-001.
+- Draft contract Codex/Requirements/Contracts/RC-20260913-split-eth-lossdiff-progress-categories.json includes verbatim request, exact34 scope, classifier/tests/short README note paths and focused tests/build/semantic review. Contract schema/digest validation passed: sha256:09fded18384ea3c071236c80a368692039f8579df520f184dc2394b602bc1828.
+- Independent pre-approval draft review PASS; final implementation review remains pending. Reviewer identified existing LowerEnter recursion as a preservation edge case: a naive split changes a synthetic near-match category. Include this case in the already scoped near-match verification and preserve its current category.
+Next: Obtain exact-form approval for this contract and explicit approval of ASM-001 labels, commit the approval checkpoint before product edits, then implement and verify the scoped category split.
+Notes: Only new draft contract and exempt context/history bookkeeping changed. Existing unrelated context/history worktree changes preserved; origin/master local divergence0/0. No product edits, builds/tests, temporary artifacts, DB/service/production actions, commit or push before approval.
+Blockers: RequirementGate.md checkpoint B requires later exact-form user approval bound to the digest before product edits; ASM-001 labels also require explicit approval.
+
 ## Active Update 2026-09-12 Settlement Index Source Delivered
 Goal: Finish delivery of the approved unchanged settlement index fix and user-owned UpCounter notes.
 Status: Completed

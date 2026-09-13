@@ -3,7 +3,7 @@
   "contractId": "RC-20260913-split-eth-lossdiff-progress-categories",
   "title": "Separate ETH Up 4 bps and Up 8 bps LossDiff Progress Dashboard categories",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -54,24 +54,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path \"$runRoot/artifacts\" --results-directory \"$runRoot/results\" --filter \"FullyQualifiedName~StrategyDisplayCategoryTests.EthLossDiffPositiveProgress|FullyQualifiedName~StrategyDisplayCategoryTests.SimilarNamesDoNotUseEthLossDiffProgressCategory|FullyQualifiedName~StrategyDisplayCategoryTests.PreservesExistingDisplayCategories\"",
           "expected": "Focused tests verify the exact 16/18 split, distinct labels, membership exclusion, preserved near-match behavior and existing category cases. All pass. Temporary paths and TEMP/TMP/TMPDIR use the marked D:/CodexTemp run directory.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Approved three-pattern focused filter passed103/103, failed0, skipped0, exit0, net10.0. Tests cover all34 exact catalog IDs and family names, category counts16/18, complete-catalog membership exclusion,21 near-matches,2 outer-whitespace cases and79 existing-category cases including2 LowerEnter preservation cases. TRX independently confirms103 total/executed/passed and0 failures. Run used marked D:/CodexTemp/runs/polymarket-eth-category-split-20260913 artifacts/results/temp, logger trx;LogFileName=eth-category-split.trx and -v:minimal. No full test suite, runtime launch or DB access. TRX SHA256=ff34316948cd5ac212d2cf131ba33351feadd402572c8571c5bde35ad7bc1e49."
         },
         {
           "id": "VER-002",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj --artifacts-path \"$runRoot/artifacts\"",
           "expected": "The current net10.0-windows WPF Dashboard builds successfully using the updated classifier; disposable outputs and process temp directories stay inside the marked D:/CodexTemp run directory.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "dotnet build src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj --artifacts-path D:/CodexTemp/runs/polymarket-eth-category-split-20260913/artifacts -v:minimal completed with exit0, 0 errors and120 warnings, elapsed31.02s. No Dashboard process launch or deployment. TEMP/TMP/TMPDIR and NuGet scratch were within the marked run; .NET/NuGet caches were under D:/CodexTemp/shared. Build-log SHA256=0ed7f15a682ef8b94a0bf9048e9a3b1becb0615ffbe1217dc026980f41a764fe."
         },
         {
           "id": "VER-003",
           "kind": "inspection",
           "command": "Inspect MainViewModel.BuildStrategyCategoryOptions and IsStrategyCategoryVisible, MainWindow category bindings, and the final diff against the verbatim request and approved contract; run git diff --check and the required requirement-gate validation.",
           "expected": "Independent semantic reviewer confirms all existing category selectors and row filters use the classifier, only requested families change categories, README reflects the split, no open findings remain and mechanical checks pass.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/inspect_category compared verbatim request, approved contract/ASM-001, approval-only commit8bd8ac6c, actual source/README/test diff, all4 Dashboard dropdown and row-filter paths, build log and independently parsed TRX. Final PASS with no open findings. Exact parser acceptance is unchanged; LowerEnter recursion retains previous shared-category marker. git diff --check passed. WorkingTree and Staged requirement-gate validations passed: governedFiles=3, contracts=1. Staged git diff --check passed. Range validation follows the implementation commit before push."
         }
       ]
     }
@@ -98,8 +98,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/inspect_category",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

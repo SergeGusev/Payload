@@ -5,28 +5,82 @@ namespace PolyCopyTrader.Tests;
 public sealed class StrategyDisplayCategoryTests
 {
     [Fact]
-    public void EthLossDiffPositiveProgressStrategiesUseDedicatedDisplayCategory()
+    public void EthLossDiffPositiveProgressStrategiesUseSeparateFamilyDisplayCategories()
     {
         var variants = StrategyIds.UpDown5mStrategyVariants
             .Where(variant => variant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveProgressMirror)
             .ToArray();
 
         Assert.Equal(34, variants.Length);
-        Assert.All(variants, variant =>
-            Assert.Equal("ETH 5m LossDiff Progress", StrategyDisplayCategories.GetCategory(variant.Name)));
+        var categoryCounts = variants
+            .GroupBy(variant => StrategyDisplayCategories.GetCategory(variant.Name))
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+
+        Assert.Equal(2, categoryCounts.Count);
+        Assert.Equal(16, categoryCounts["ETH 5m Up 4 bps LossDiff Progress"]);
+        Assert.Equal(18, categoryCounts["ETH 5m Up 8 bps LossDiff Progress"]);
+        Assert.DoesNotContain("ETH 5m LossDiff Progress", categoryCounts.Keys);
+
+        foreach (var (bps, maximumCap, group, category) in new[]
+        {
+            (4, 16, 8236, "ETH 5m Up 4 bps LossDiff Progress"),
+            (8, 18, 8237, "ETH 5m Up 8 bps LossDiff Progress"),
+        })
+        {
+            var expectedIds = Enumerable.Range(1, maximumCap)
+                .Select(cap => Guid.Parse($"b7c50005-0000-4000-{group}-{cap:000000000000}"))
+                .ToArray();
+            for (var cap = 1; cap <= maximumCap; cap++)
+            {
+                var variant = Assert.Single(variants, candidate => candidate.Id == expectedIds[cap - 1]);
+                Assert.Equal(
+                    $"ETH 5m Up {bps} bps Reference Average Premarket LossDiff Positive Progress Cap {cap}",
+                    variant.Name);
+                Assert.Equal(category, StrategyDisplayCategories.GetCategory(variant.Name));
+            }
+
+            var categoryMemberIds = StrategyIds.UpDown5mStrategyVariants
+                .Where(variant => StrategyDisplayCategories.GetCategory(variant.Name) == category)
+                .Select(variant => variant.Id)
+                .ToArray();
+
+            Assert.Equal(expectedIds.OrderBy(id => id), categoryMemberIds.OrderBy(id => id));
+        }
+    }
+
+    [Theory]
+    [InlineData(" ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1 ", "ETH 5m Up 4 bps LossDiff Progress")]
+    [InlineData("\tETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 18\r\n", "ETH 5m Up 8 bps LossDiff Progress")]
+    public void EthLossDiffPositiveProgressPreservesOuterWhitespaceTrimming(string strategyName, string expectedCategory)
+    {
+        Assert.Equal(expectedCategory, StrategyDisplayCategories.GetCategory(strategyName));
     }
 
     [Theory]
     [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 0")]
     [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 17")]
+    [InlineData("ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 0")]
     [InlineData("ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 19")]
     [InlineData("ETH 5m Up 6 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
     [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Cap 1")]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap -1")]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap +1")]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 01")]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1.0")]
+    [InlineData("ETH 5m Up 04 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
+    [InlineData("ETH 5m Up +4 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
+    [InlineData("ETH 5m Up 4.0 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
+    [InlineData("eth 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
+    [InlineData("ETH 5m Up 8 bps Reference Average Premarket LossDiff positive Progress Cap 1")]
+    [InlineData("ETH 5m  Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
+    [InlineData("ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap\t1")]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1 Extra")]
+    [InlineData("ETH 5m Down 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
+    [InlineData("ETH 15m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
+    [InlineData("BTC 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1")]
     public void SimilarNamesDoNotUseEthLossDiffProgressCategory(string strategyName)
     {
-        Assert.NotEqual(
-            "ETH 5m LossDiff Progress",
-            StrategyDisplayCategories.GetCategory(strategyName));
+        Assert.Equal("Other", StrategyDisplayCategories.GetCategory(strategyName));
     }
 
     [Theory]
@@ -419,6 +473,8 @@ public sealed class StrategyDisplayCategoryTests
     }
 
     [Theory]
+    [InlineData("ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1 LowerEnter", "ETH 5m LossDiff Progress LowerEnter")]
+    [InlineData("ETH 5m Up 8 bps Reference Average Premarket LossDiff Positive Progress Cap 18 LowerEnter", "ETH 5m LossDiff Progress LowerEnter")]
     [InlineData("ETH Up or Down 5m Middle 100 47 bps Instant", "ETH Up or Down 5m Middle")]
     [InlineData("BTC Up or Down 5m Up 5 Diff Instant", "BTC Up or Down 5m Diff Up")]
     [InlineData("SOL Up or Down 5m Down 150 Diff Instant", "SOL Up or Down 5m Diff Down")]
