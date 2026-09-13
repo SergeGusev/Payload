@@ -1,3 +1,15 @@
+## Active Update 2026-09-13 Historical Net Recalculation Current Status
+Goal: Report the current Production status of the historical Net PnL recalculation.
+Status: Completed
+Done:
+- Read-only Production snapshot2026-09-13T19:30:14.616486Z /19:31:24.281462Z at explicit192.168.0.101:5432/polycopytrader: service Running, deployed6774eb166155e04bfc8655dbcf00b19fdc77751f, started12:33:46.890919Z, heartbeat19:30:50.880970Z age33.400492s,last_errorNULL,waitinglocks0 at first snapshot.
+- Exact priority b7c50005-0000-4000-8079-000000000150 / ETH Up or Down5m Up50bps Instant is complete for strict historical Live origin before2026-08-10T00:00:00Z:405/405 Net present,0 missing,405 arithmetic-valid Net=Gross-coalesce(Fee,0). Audit independently identifies2 LiveOrder ExistingExactPreserved and403 LiveOrder Fixed0p0333; financial decisions ended2026-09-03T07:32:25.826103Z. Paper audit remains2 exact+406 fixed.
+- Fresh logs show b7c50005-0000-4000-8131-000000000115 completed at2026-09-13T18:57:37.556Z. Next selected b7c50005-0000-4000-8186-000000000008 / eth_up_down_5m_8_child / ETH Up or Down5m8Child at18:58:11.142Z, rank423,Gross311.88877686. Its audit currently0 because Exact scanning is not finished.
+- Latest bounded log evidence through19:30:23Z includes Exact page at19:29:57.830Z: Candidates50,Applied0,FallbackEligible50,Deferred0,ReachedBoundaryfalse. It is actively scanning the current strategy and has not begun its fixed fallback. No ERR/FTL or parity failure appeared in the inspected bounded tails of latest four files; this is not a global all-log negative assertion.
+Next: None for this status-only request.
+Notes: Native psql forced transaction READ ONLY,UTC,12s statement/1s lock,maxparallel0; SMB FileStream reads bounded10–12MiB per current file. No code/data/config/service/order/deployment/build/test/temp artifact changes. Previous expensive missing-Gross fallback remains in source but current snapshot Gross coverage and successful pages show it is not the present blocker.
+Blockers: None observed for the currently running historical recalculation; total remaining duration was not calculated.
+
 ## Active Update 2026-09-13 Split ETH LossDiff Progress Dashboard Categories
 Goal: Separate Dashboard categories for the exact ETH Up 4 bps and Up 8 bps LossDiff Positive Progress Cap families.
 Status: Completed
