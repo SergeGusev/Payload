@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260914-binance-connection-aware-last-price",
+  "title": "BTC/ETH/SOL Binance last price without age expiry, connection-aware availability and 10/10 keepalive",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Давай не признавать устаревшей"
+    },
+    {
+      "source": "user",
+      "text": "1. Для всех.\n2. А как ты считаешь?"
+    },
+    {
+      "source": "user",
+      "text": "Фиксируем"
+    },
+    {
+      "source": "user",
+      "text": "Согласуем"
+    }
+  ],
+  "scope": {
+    "goal": "Use the last valid Binance trade price for BTC, ETH and SOL without price-age expiry while its connection remains available; detected connection loss blocks new current-price reads until that asset receives a valid trade on the new connection. Implement the separately accepted native10s Ping interval and10s Pong timeout with its local-processing caveat.",
+    "inScope": [
+      "Exactly two existing reference-client implementations: BinanceBtcUsdTradeStreamService.GetBtcUsdPriceAsync for BTC and BinanceCryptoReferenceTradeStreamService.GetPriceAsync for ETH/SOL; their corresponding socket and per-asset publication lifecycle.",
+      "Small internal business connection-generation/availability state and focused deterministic test seams within those two stream files; native ClientWebSocket keepalive settings, no new receive architecture.",
+      "Adapt existing BinanceCryptoReferenceDiagnosticsTests, add one BinanceReferenceConnectionPolicyTests file, and update only the relevant README explanation. Exactly five planned governed paths.",
+      "Local source edits and focused verification after exact contract approval on the existing master branch; deployment remains user-controlled."
+    ],
+    "outOfScope": [
+      "Production or application Local database access/mutation, historical data repair, schema/migrations, backups, service start/stop/restart, deployment and new monitoring.",
+      "Other price providers including OKX, Binance channels/endpoints/subscriptions, alternate price feeds, HTTP fallback, new packages, sidecars, generalized receive-pump/queue/framework or new public configuration fields.",
+      "Changing strategy formulas, thresholds, lookback windows, history sampling/retention, order-book freshness and execution constraints, timed-close age/market-end checks, balances, fills, settlements or accounting.",
+      "New order revalidation after an intent is frozen; cancellation, resizing, repricing, retry or rollback of already frozen/submitted Paper/Live orders because Binance disconnects.",
+      "Global diagnostics redesign, deletion/renaming of diagnostic helper APIs, unrelated dirty bookkeeping adoption or any product path outside the five enumerated paths."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Prospective behavior only after the user deploys the eventual build; no historical analysis period or data rewrite. Read-only source preview baseline: master271e860a8edbc33de66ecf3185f9d81bbc160ce3, exactly2 stream implementations and3 reference assets BTC/ETH/SOL, origin/master divergence0/0 on2026-09-14 UTC.",
+    "firstVerification": "Reinitialize rules/context and read-only Git status/HEAD/upstream; inspect the exact two getter->socket->publication paths, DI sharing and focused tests. Confirm existing unrelated changes are excluded and both client-level StaleAfterSeconds gates are distinct from the unchanged timed-close constraint."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Apply the user's no-age-expiry request to all three Binance reference assets, using the connection-aware/per-asset restoration policy adopted by «Фиксируем».",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Давай не признавать устаревшей",
+      "acceptanceCriteria": [
+        "Both public reference getters cease rejecting an otherwise valid current-connection quote solely because FetchedAtUtc or SourceUpdatedAtUtc is old. Deterministic tests include ages exactly5s, greater than5s, and1hour with a usable connection; no substitute trade-silence deadline is introduced.",
+        "Before the first valid trade, while connecting, after detected close/abort/error, during reconnect delay, and after service cancellation/stop, the affected getter cannot supply the retained quote for a new current-price-dependent decision. Cancellation still propagates and an asset that has never had a price retains the existing never-seen exception behavior.",
+        "Every newly connected socket starts a new availability generation. Opening the socket or receiving Ping/Pong alone does not make an old quote usable. Only a valid parsed and enabled same-asset trade from that current connection makes that asset available; BTC, ETH and SOL are independent. On the shared ETH/SOL socket, a new ETH point cannot unlock an old SOL point or conversely. Invalid/ignored messages and late work from a previous generation cannot restore availability.",
+        "Business availability is synchronized with quote publication and connection lifecycle, separate from best-effort diagnostic state. A socket already observed non-Open/aborted cannot remain usable just because an asynchronous catch/finally/logging path has not yet completed. Detected unavailability is reflected before awaiting reconnect delay or error persistence; no claim of instantaneous detection of an otherwise unobserved network outage.",
+        "The returned PriceUsd, SourceUpdatedAtUtc, FetchedAtUtc and Source remain exactly those of the accepted trade. Getter reads, keepalive traffic and reconnect do not fabricate a price, refresh timestamps, or substitute another asset/source. Per-trade latest-price publication remains independent of the existing sampled-price interval.",
+        "Remove age-based ObserveStale/ObserveRecovery calls from the ETH/SOL production stream path, so elapsed price age alone neither marks the price stale nor produces a stale/recovery event. Preserve existing diagnostic phase/counter collection and helper implementation; no new global diagnostic event scheme. Existing close/error reporting continues to represent connection failures, not quiet trading.",
+        "Existing StaleAfterSeconds configuration fields/validation remain compatible but no longer gate these two client getters; relevant startup wording/README must not present that setting as an active getter expiry rule. Existing sampled caches and sampling schedules are not cleared or rewritten as a substitute for connection-generation availability."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/ExternalPrices/BinanceBtcUsdTradeStreamService.cs",
+        "src/PolyCopyTrader.Service/ExternalPrices/BinanceCryptoReferenceTradeStreamService.cs",
+        "tests/PolyCopyTrader.Tests/BinanceReferenceConnectionPolicyTests.cs",
+        "tests/PolyCopyTrader.Tests/BinanceCryptoReferenceDiagnosticsTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~BinanceReferenceConnectionPolicyTests|FullyQualifiedName~BinanceCryptoReferenceDiagnosticsTests\" (TEMP/TMP/TMPDIR under the same marked D:/CodexTemp run).",
+          "expected": "Focused deterministic tests cover all3 assets, no age expiry, cancellation/never-seen, connection loss, reconnect generation and per-asset first-price isolation, invalid/old-generation non-restoration, unchanged timestamps, latest-before-sampling and absence of age-triggered stale/recovery. Diagnostic failures do not become business authorization.",
+          "result": "pending",
+          "evidence": "Not run: this is an unapproved draft."
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Independently inspect before/after getter, socket/finally and publication paths in both stream files, their Program.cs singleton/hosted-client DI bindings and the exact five-path diff against originalRequests and the approved contract.",
+          "expected": "No business reliance on diagnostic best-effort state, no old-generation availability leak, no timestamp fabrication, no age rejection in the two getters, and no change outside the enumerated scope.",
+          "result": "pending",
+          "evidence": "Not run against an implementation: no product edits yet."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Implement the exact connection-control proposal separately accepted by «Согласуем»: native Ping after10seconds of channel inactivity and10seconds waiting for its Pong, including the disclosed possibility of a local delayed read causing reconnect.",
+      "sourceRequestIndexes": [2, 3],
+      "sourceQuote": "Согласуем",
+      "acceptanceCriteria": [
+        "For each new ClientWebSocket in both existing streams, set KeepAliveInterval=TimeSpan.FromSeconds(10) and KeepAliveTimeout=TimeSpan.FromSeconds(10) before ConnectAsync. Use the native .NET Ping/Pong implementation, not a per-asset no-trade timer, polling task or invented Pong parser.",
+        "The documented native semantics apply: after channel communication inactivity a Ping is sent; failure to process the matching Pong within the timeout aborts the socket. This is not a promise that only remote/network failures cause loss or that every outage is detected within20seconds. A long local processing delay can prevent Pong processing and trigger an abort even with a responsive peer; this limitation was explicitly presented and accepted.",
+        "A resulting abort follows the existing reconnect/error path with REQ-001 availability invalidation. Existing reconnect backoff, endpoints, subscriptions and message processing order remain unchanged. No generalized receive pump, unbounded channel, added package or hidden rearchitecture to change the accepted caveat.",
+        "Tests inspect the same socket-options configuration path used before production ConnectAsync and model close/error/abort restoration behavior without connecting to Binance or an application database. Internal test seams must not bypass the actual business availability logic."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/ExternalPrices/BinanceBtcUsdTradeStreamService.cs",
+        "src/PolyCopyTrader.Service/ExternalPrices/BinanceCryptoReferenceTradeStreamService.cs",
+        "tests/PolyCopyTrader.Tests/BinanceReferenceConnectionPolicyTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "Use the VER-001 focused test run; explicitly inspect its cases for native10s/10s options in both production socket-construction paths and close/error/abort availability transitions.",
+          "expected": "Both streams have exact10/10 settings before connection, Ping/Pong never supplies a price, disconnect/reconnect generation checks pass, and no external network or database fixture runs.",
+          "result": "pending",
+          "evidence": "Not run: timing policy is accepted in natural language but the implementation contract still requires exact digest approval."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Preserve the adopted policy's boundaries: real quote timestamps and already frozen/submitted orders remain unchanged, with focused regression verification and a concise explanation of the new reference-client behavior.",
+      "sourceRequestIndexes": [2, 3],
+      "sourceQuote": "Фиксируем",
+      "acceptanceCriteria": [
+        "Do not add Binance connection revalidation, cancellation or economic changes to the already frozen/submitted ExecutionIntent/Paper/Live paths. Only new reads through the two existing reference clients acquire the connection-aware availability policy. No order or accounting implementation file changes.",
+        "The separate CryptoUpDown5mResultPollingProcessor timed-close checks for quote age, pre-close data and market-end offset remain unchanged. Removing the reference-client expiry does not authorize an arbitrarily old quote as a market closing price. Order-book freshness, Polymarket Maker/FAK/GTD execution and the exact Maker Paper exception remain unchanged.",
+        "Existing consumers such as periodic history sampling may now obtain the same last trade point across a quiet connected interval. Their existing cadence and stored original quote timestamps remain unchanged; do not backfill old gaps, retimestamp the quote or change average/min/max formulas.",
+        "README states the exact BTC/ETH/SOL scope, no price-age expiry in the two getters, detected-loss/per-asset reconnection gate, native10/10 settings, delayed-local-read caveat, ignored legacy getter-age setting and unchanged separate timed-close/order constraints. Do not claim the implementation has been deployed or production behavior verified.",
+        "Run focused regression tests and a Release service build only, without starting the service or accessing an application database. Use the required marked temporary run and protected cleanup. Independent semantic review and requirement-gate checks must pass before implementation completion; preserve unrelated dirty files and the separate approval-before-product commit sequence."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/ExternalPrices/BinanceBtcUsdTradeStreamService.cs",
+        "src/PolyCopyTrader.Service/ExternalPrices/BinanceCryptoReferenceTradeStreamService.cs",
+        "tests/PolyCopyTrader.Tests/BinanceReferenceConnectionPolicyTests.cs",
+        "tests/PolyCopyTrader.Tests/BinanceCryptoReferenceDiagnosticsTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~BinanceTradeParser_ReadsTradePriceAndTradeTimestamp|FullyQualifiedName~CryptoUpDown5mOddsArchiveProcessorTests|FullyQualifiedName~CryptoUpDown5mResultPollingProcessorTests|FullyQualifiedName~ProcessAsync_BpsConfirmedAveragePremarketUsesFakLiveShadowWhenLiveIsEnabled|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_LossDiffParentMirrorLiveShadowCopiesParentFakRequestWithoutNewBookLookup\" (TEMP/TMP/TMPDIR under the same marked D:/CodexTemp run).",
+          "expected": "Existing parser timestamps, reference consumers/timed-close restrictions and selected frozen-FAK/Live-shadow tests remain green. This is focused local regression evidence, not a production or complete trading-suite claim.",
+          "result": "pending",
+          "evidence": "Existing test names located read-only; not run in draft preparation."
+        },
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path <marked-run>/artifacts (TEMP/TMP/TMPDIR under the same marked D:/CodexTemp run).",
+          "expected": "Release service build succeeds with existing dependencies and no service start/deployment or application database access.",
+          "result": "pending",
+          "evidence": "Not run: no approved source implementation yet."
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Independent originalRequests/approved-contract/actual-diff/test-evidence review; inspect unchanged consumer and order paths, run scripts/requirements/Validate-RequirementContract.ps1 in applicable Contract/WorkingTree/Staged modes and git diff --check; verify protected marked-run cleanup before completion.",
+          "expected": "Exact approved behavior only, no unapproved assumptions/deviations, no in-flight cancellation or price/source/timed-close substitution; README limitations truthful, contract lifecycle valid, temporary directory removed and unrelated work preserved.",
+          "result": "pending",
+          "evidence": "Independent implementation review and completed-contract checks remain pending."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260914-binance-connection-aware-last-price sha256:271261f5a83b8afa084bb5936407917a39a8d3afb8c97e4fc1d438dfd2d1fec9",
+    "semanticDigest": "sha256:271261f5a83b8afa084bb5936407917a39a8d3afb8c97e4fc1d438dfd2d1fec9"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/health_semantics_sep14",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
