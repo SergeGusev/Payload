@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260914-binance-eth-sol-stale-diagnostics",
+  "title": "Bounded diagnostics for Binance ETH/SOL reference-price freshness gaps",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Есть что дорабатывать?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, займись"
+    }
+  ],
+  "scope": {
+    "goal": "Determine where the verified Binance ETH/SOL freshness gaps arise by adding narrowly bounded diagnostic evidence, without claiming or implementing an unproven behavioral fix.",
+    "inScope": [
+      "Only BinanceCryptoReferenceTradeStreamService ETH/SOL reference-price receive, parse, publication and stale-to-fresh diagnostic lifecycle.",
+      "One small in-process diagnostic state/snapshot helper, deterministic focused tests and README explanation.",
+      "Local source implementation and verification after exact approval; user-controlled deployment remains separate."
+    ],
+    "outOfScope": [
+      "Changing StaleAfterSeconds, freshness comparison or accepted/rejected price behavior; accepting old quotes.",
+      "New fallback price sources, HTTP polling, different Binance channels, reconnect policy, keepalive settings or receive timeouts.",
+      "BTC stream changes, history sampling/retention, average/min/max windows, strategies, ExecutionIntent, Paper/Live orders or accounting.",
+      "Settlement latency instrumentation, Dashboard corrections and unrelated UpCounter changes.",
+      "Production or application Local database writes/schema changes, service restart/deployment, backups, continuous monitoring, raw payload logging, credentials and new packages."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Evidence baseline is Production deployed 6774eb166155e04bfc8655dbcf00b19fdc77751f, UTC [2026-09-14T04:49:41.580783Z,2026-09-14T05:19:41.580783Z): exactly29 stale-price warnings, ETH12 and SOL17. New instrumentation is restricted to the existing ETH/SOL reference stream.",
+    "firstVerification": "Recheck exact source interfaces/DI/deployed-source equivalence and working-tree ownership; confirm existing fresh/stale/never-seen behavior and original exception messages before material edits."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Add only the missing bounded evidence needed to diagnose the Binance ETH/SOL price-update pauses; this approved step is diagnostics, not a claimed fix of their unknown root cause.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, займись",
+      "acceptanceCriteria": [
+        "Keep existing Binance URL/subscriptions, single hosted/shared client instance, receive loop, reconnect policy, parser results, source/FetchedAtUtc meaning, freshness gate and returned prices/exceptions unchanged.",
+        "Record connection generation/state, active receive/parse/publication phase and phase start, last completed receive and frame/message counters, per-asset last accepted message/source/Fetched timestamps. Keep parser-rejected/unattributed and ignored-message counters at connection level; per-asset rejected counts are allowed only when ETH/SOL identity is reliably established, never inferred after an unidentified parse failure.",
+        "Measure local parse, publication-lock wait/hold and existing sampled-log call durations in memory using a monotonic clock; capture diagnostic state without awaiting new work. Emit only NEW diagnostic events outside the existing cache lock; do not relocate or otherwise change the existing sampled-log call or existing cache/receive work.",
+        "Every existing GetPriceAsync stale rejection marks diagnostic stale state for that asset and is a candidate for a new structured Warning event. A recovery candidate is exactly one transition of that previously observed stale state to fresh after a later accepted message of the same asset, rechecking the unchanged original freshness comparison at observation time; arrival alone must not declare recovery after slow handling. Recovery events use Information. No event per ordinary trade and no raw message/decision payload.",
+        "Use monotonic elapsed time to rate limit NEW events separately by asset and kind to at most one stale Warning and one recovery Information per60seconds, with first eligible event immediate and the exact60second boundary eligible. Suppressed stale count counts rejected stale-event candidates since the last emitted stale event; suppressed recovery count counts stale-to-fresh transitions whose recovery event was rate-limited since the last emitted recovery event. Update diagnostic state even when output is suppressed; report suppressed counts on the next corresponding emitted event and reset only that emitted kind's interval count. Never fabricate a delayed recovery event without a real transition. Preserve all existing warning/exception behavior.",
+        "No diagnostic logging or clock/snapshot failure may replace the original business result or exception. Tests verify retained fresh/stale/never-seen and cancellation behavior.",
+        "Use only a small internal deterministic test seam for time/message processing/state observation; no new production service, background loop, database access, public configuration or dependency package.",
+        "Document what observations distinguish waiting for receive from local processing delays and explicitly state that these timings alone do not prove the exchange or network caused the gap."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/ExternalPrices/BinanceCryptoReferenceTradeStreamService.cs",
+        "src/PolyCopyTrader.Service/ExternalPrices/BinanceCryptoReferenceDiagnostics.cs",
+        "tests/PolyCopyTrader.Tests/BinanceCryptoReferenceDiagnosticsTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Independent comparison of the approved request/contract against the actual four-path diff and before/after fresh-price, stale-price, parser, receive and reconnect dispatch paths.",
+          "expected": "No trading, freshness, source, cache, reconnect, database or deployment behavior changes; no unrelated paths adopted.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~BinanceCryptoReferenceDiagnosticsTests|FullyQualifiedName~CryptoUpDown5mOddsArchiveProcessorTests|FullyQualifiedName~ConfigurationTests\" (TEMP/TMP/TMPDIR under the same marked D:/CodexTemp run).",
+          "expected": "Deterministic phase/age/counter snapshots, per-asset stale/recovery/throttle boundaries, concurrent snapshot reads, suppressed counts, never-seen/fresh/stale/cancellation parity and diagnostics-failure isolation pass; existing parser/options consumers remain green.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path <marked-run>/artifacts (TEMP/TMP/TMPDIR under the same marked D:/CodexTemp run).",
+          "expected": "Release build succeeds with existing dependencies and no production/application database or live network actions.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Review README and structured diagnostic event fields/rate limits; run requirement Contract/WorkingTree/Staged checks applicable to approved paths; verify protected temporary-run cleanup before completion.",
+          "expected": "Bounded diagnostics only, no raw payload or secrets, limitations explicit, contract fidelity and cleanup pass; unrelated worktree changes preserved.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260914-binance-eth-sol-stale-diagnostics sha256:795bb716eacc1f5096b20d1c3df0f4feb5b031a99dc5a64e7c8c31141bb9f55d",
+    "semanticDigest": "sha256:795bb716eacc1f5096b20d1c3df0f4feb5b031a99dc5a64e7c8c31141bb9f55d"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/health_semantics_sep14",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
