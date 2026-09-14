@@ -14,32 +14,46 @@ public sealed class BinanceBtcUsdTradeStreamService(
     IAppRepository repository) : BackgroundService, IBtcUsdReferencePriceClient
 {
     private readonly object sync = new();
+    private readonly TimeProvider businessClock = TimeProvider.System;
     private BtcUsdReferencePricePoint? latest;
+    private WebSocket? activeSocket;
+    private CancellationToken connectionCancellationToken;
+    private long connectionGeneration;
+    private long latestGeneration;
     private DateTimeOffset nextSampleAtUtc = DateTimeOffset.MinValue;
+
+    internal BinanceBtcUsdTradeStreamService(
+        ILogger<BinanceBtcUsdTradeStreamService> logger,
+        BinanceBtcUsdReferenceOptions options,
+        IBtcUsdReferencePriceCache cache,
+        IBtcOrderBookLagDiagnosticService btcOrderBookLagDiagnosticService,
+        IAppRepository repository,
+        TimeProvider businessClock)
+        : this(logger, options, cache, btcOrderBookLagDiagnosticService, repository)
+    {
+        this.businessClock = businessClock;
+    }
 
     public Task<BtcUsdReferencePricePoint> GetBtcUsdPriceAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        BtcUsdReferencePricePoint? snapshot;
         lock (sync)
         {
-            snapshot = latest;
-        }
+            var snapshot = latest;
+            if (snapshot is null)
+            {
+                throw new InvalidOperationException("Binance BTC/USDT trade stream has not received a price yet.");
+            }
 
-        if (snapshot is null)
-        {
-            throw new InvalidOperationException("Binance BTC/USDT trade stream has not received a price yet.");
-        }
+            if (!IsConnectionAvailableUnderLock(latestGeneration))
+            {
+                throw new InvalidOperationException(
+                    "Binance BTC/USDT trade stream price is unavailable. An open connection and a BTC trade from that connection are required.");
+            }
 
-        var age = DateTimeOffset.UtcNow - snapshot.FetchedAtUtc;
-        if (age > TimeSpan.FromSeconds(options.StaleAfterSeconds))
-        {
-            throw new InvalidOperationException(
-                $"Binance BTC/USDT trade stream price is stale. AgeSeconds={age.TotalSeconds:0.###}; StaleAfterSeconds={options.StaleAfterSeconds}.");
+            return Task.FromResult(snapshot);
         }
-
-        return Task.FromResult(snapshot);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -53,11 +67,10 @@ public sealed class BinanceBtcUsdTradeStreamService(
         var reconnectDelay = TimeSpan.FromSeconds(options.ReconnectBaseDelaySeconds);
         var maxReconnectDelay = TimeSpan.FromSeconds(options.ReconnectMaxDelaySeconds);
         logger.LogInformation(
-            "Binance BTC/USDT trade stream reference service started. StreamUrl={StreamUrl} SampleIntervalSeconds={SampleIntervalSeconds} WindowSize={WindowSize} StaleAfterSeconds={StaleAfterSeconds}",
+            "Binance BTC/USDT trade stream reference service started. StreamUrl={StreamUrl} SampleIntervalSeconds={SampleIntervalSeconds} WindowSize={WindowSize} PriceAgeExpiryEnabled=false KeepAliveIntervalSeconds=10 KeepAliveTimeoutSeconds=10",
             options.StreamUrl,
             options.SampleIntervalSeconds,
-            options.WindowSize,
-            options.StaleAfterSeconds);
+            options.WindowSize);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -90,43 +103,88 @@ public sealed class BinanceBtcUsdTradeStreamService(
 
     private async Task RunSocketAsync(CancellationToken cancellationToken)
     {
-        using var socket = new ClientWebSocket();
-        await socket.ConnectAsync(new Uri(options.StreamUrl), cancellationToken);
-        logger.LogInformation("Binance BTC/USDT trade stream connected.");
-
-        var buffer = new byte[Math.Max(1_024, options.ReceiveBufferBytes)];
-        using var message = new MemoryStream();
-
-        while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
+        using var socket = CreateSocket();
+        var generation = BeginConnection(socket, cancellationToken);
+        try
         {
-            message.SetLength(0);
-            WebSocketReceiveResult result;
-            do
+            await socket.ConnectAsync(new Uri(options.StreamUrl), cancellationToken);
+            logger.LogInformation("Binance BTC/USDT trade stream connected.");
+
+            var buffer = new byte[Math.Max(1_024, options.ReceiveBufferBytes)];
+            using var message = new MemoryStream();
+
+            while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
             {
-                result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-                if (result.MessageType == WebSocketMessageType.Close)
+                message.SetLength(0);
+                WebSocketReceiveResult result;
+                do
                 {
-                    logger.LogWarning(
-                        "Binance BTC/USDT trade stream closed by server. Status={Status} Description={Description}",
-                        result.CloseStatus,
-                        result.CloseStatusDescription);
-                    return;
+                    result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        EndConnection(generation);
+                        logger.LogWarning(
+                            "Binance BTC/USDT trade stream closed by server. Status={Status} Description={Description}",
+                            result.CloseStatus,
+                            result.CloseStatusDescription);
+                        return;
+                    }
+
+                    message.Write(buffer, 0, result.Count);
                 }
+                while (!result.EndOfMessage);
 
-                message.Write(buffer, 0, result.Count);
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    ProcessMessage(message.ToArray(), generation);
+                }
             }
-            while (!result.EndOfMessage);
+        }
+        finally
+        {
+            EndConnection(generation);
+        }
+    }
 
-            if (result.MessageType == WebSocketMessageType.Text)
+    internal static ClientWebSocket CreateSocket()
+    {
+        var socket = new ClientWebSocket();
+        socket.Options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+        socket.Options.KeepAliveTimeout = TimeSpan.FromSeconds(10);
+        return socket;
+    }
+
+    internal long BeginConnection(WebSocket socket, CancellationToken cancellationToken = default)
+    {
+        lock (sync)
+        {
+            activeSocket = socket;
+            connectionCancellationToken = cancellationToken;
+            return ++connectionGeneration;
+        }
+    }
+
+    internal void EndConnection(long generation)
+    {
+        lock (sync)
+        {
+            if (generation == connectionGeneration)
             {
-                ProcessMessage(message.ToArray());
+                activeSocket = null;
             }
         }
     }
 
-    private void ProcessMessage(byte[] payload)
+    private bool IsConnectionAvailableUnderLock(long generation)
     {
-        var fetchedAtUtc = DateTimeOffset.UtcNow;
+        return generation == connectionGeneration &&
+               activeSocket?.State == WebSocketState.Open &&
+               !connectionCancellationToken.IsCancellationRequested;
+    }
+
+    internal void ProcessMessage(byte[] payload, long generation)
+    {
+        var fetchedAtUtc = businessClock.GetUtcNow();
         if (!BinanceBtcUsdTradeParser.TryParse(payload, fetchedAtUtc, out var point, out var error) ||
             point is null)
         {
@@ -136,7 +194,13 @@ public sealed class BinanceBtcUsdTradeStreamService(
 
         lock (sync)
         {
+            if (!IsConnectionAvailableUnderLock(generation))
+            {
+                return;
+            }
+
             latest = point;
+            latestGeneration = generation;
         }
 
         btcOrderBookLagDiagnosticService.RecordBinanceTrade(point);

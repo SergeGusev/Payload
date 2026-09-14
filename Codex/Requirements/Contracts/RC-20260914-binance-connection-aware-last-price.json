@@ -3,7 +3,7 @@
   "contractId": "RC-20260914-binance-connection-aware-last-price",
   "title": "BTC/ETH/SOL Binance last price without age expiry, connection-aware availability and 10/10 keepalive",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -69,16 +69,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~BinanceReferenceConnectionPolicyTests|FullyQualifiedName~BinanceCryptoReferenceDiagnosticsTests\" (TEMP/TMP/TMPDIR under the same marked D:/CodexTemp run).",
           "expected": "Focused deterministic tests cover all3 assets, no age expiry, cancellation/never-seen, connection loss, reconnect generation and per-asset first-price isolation, invalid/old-generation non-restoration, unchanged timestamps, latest-before-sampling and absence of age-triggered stale/recovery. Diagnostic failures do not become business authorization.",
-          "result": "pending",
-          "evidence": "Not run: this is an unapproved draft."
+          "result": "passed",
+          "evidence": "2026-09-14 Release/net10.0 focused filter exit0:57/57 passed,0failed/0skipped. Raw TRX independently recounted by root and health_semantics_sep14:40 BinanceReferenceConnectionPolicyTests +17 BinanceCryptoReferenceDiagnosticsTests. Covers3assets at5/5.001/3600s, original timestamps/values, never-seen/caller cancellation,15 non-Open state cases before EndConnection, lifetime cancellation, reconnect generation, old-generation publication/finally, independent BTC/sharedsocket and ETH/SOL firsttrade, unchanged samplecadence,10/10factory, no age events and diagnostic failure isolation. focused.trx SHA256 b1bdbd49fdf1eddb8e310e4c10f85f43807bd8d891338f3ea8cf956b739455e4; temp path D:/CodexTemp/runs/binance-connection-policy-20260914-01/results/focused.trx. No external exchange or application DB fixture."
         },
         {
           "id": "VER-002",
           "kind": "inspection",
           "command": "Independently inspect before/after getter, socket/finally and publication paths in both stream files, their Program.cs singleton/hosted-client DI bindings and the exact five-path diff against originalRequests and the approved contract.",
           "expected": "No business reliance on diagnostic best-effort state, no old-generation availability leak, no timestamp fabrication, no age rejection in the two getters, and no change outside the enumerated scope.",
-          "result": "pending",
-          "evidence": "Not run against an implementation: no product edits yet."
+          "result": "passed",
+          "evidence": "Independent health_semantics_sep14 compared the four verbatim requests, approved digest271261f5 and actual five-path diff/source/tests:PASS/no open findings. Both shared DI/hostedclient bindings unchanged; actual socket state/lifetime token and publication-generation guards under sync; Begin beforeConnect, End before closewarning/finally/error persistence, old End cannot invalidate newgeneration. Age calls removed without helper redesign. BTC remains bound to its existing dedicated btcusdt@trade channel/typedparser; adding payload-symbol validation would be separate parser hardening and was not introduced. Source SHA256 BTC f5ebe7d4358d04ecf751e1fb79798bc4d4c39d739c1d88915e7edbfc3c849521; ETHSOL0ed8cd0d2d3acf19d32c8a71508de228719b8336e27fafbb3a9a733373399774."
         }
       ]
     },
@@ -105,8 +105,8 @@
           "kind": "test",
           "command": "Use the VER-001 focused test run; explicitly inspect its cases for native10s/10s options in both production socket-construction paths and close/error/abort availability transitions.",
           "expected": "Both streams have exact10/10 settings before connection, Ping/Pong never supplies a price, disconnect/reconnect generation checks pass, and no external network or database fixture runs.",
-          "result": "pending",
-          "evidence": "Not run: timing policy is accepted in natural language but the implementation contract still requires exact digest approval."
+          "result": "passed",
+          "evidence": "VER-001 ProductionSocketFactoriesConfigureNativeTenSecondPingAndPong passed and independently found in57-result TRX. Test reads real ClientWebSocket factory options10s interval/10s timeout beforeconnection; production RunSocket in each stream uses that same factory.15 non-Open state cases, lifetime cancellation and old-generation cases also passed. No custom timer/pump/Pong parser or network fixture; accepted local delayed-read false-abort caveat remains documented."
         }
       ]
     },
@@ -135,24 +135,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~BinanceTradeParser_ReadsTradePriceAndTradeTimestamp|FullyQualifiedName~CryptoUpDown5mOddsArchiveProcessorTests|FullyQualifiedName~CryptoUpDown5mResultPollingProcessorTests|FullyQualifiedName~ProcessAsync_BpsConfirmedAveragePremarketUsesFakLiveShadowWhenLiveIsEnabled|FullyQualifiedName~ProcessDiffCounterDueEntriesAsync_LossDiffParentMirrorLiveShadowCopiesParentFakRequestWithoutNewBookLookup\" (TEMP/TMP/TMPDIR under the same marked D:/CodexTemp run).",
           "expected": "Existing parser timestamps, reference consumers/timed-close restrictions and selected frozen-FAK/Live-shadow tests remain green. This is focused local regression evidence, not a production or complete trading-suite claim.",
-          "result": "pending",
-          "evidence": "Existing test names located read-only; not run in draft preparation."
+          "result": "passed",
+          "evidence": "2026-09-14 exact VER-004 filter Release/net10.0 exit0:18/18 passed,0failed/0skipped. Independent raw TRX counts:12 CryptoUpDown5mResultPollingProcessorTests,3 CryptoUpDown5mOddsArchiveProcessorTests,1 BTC parser timestamp test,2 named BtcUpDown5mPaperStrategyProcessorTests frozen-FAK/Live-shadow cases. Capturing/in-memory clients; no exchange/DB actions. SHA256 regression.trx2b131222dc1b3dd6d273b8796e93bb624e2cd21b2926e7ebc19f9696a74ba66a, under the same marked run/results. Consumer/order/timedclose source unchanged. This is focused local regression evidence, not runtime/fullsuite verification."
         },
         {
           "id": "VER-005",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path <marked-run>/artifacts (TEMP/TMP/TMPDIR under the same marked D:/CodexTemp run).",
           "expected": "Release service build succeeds with existing dependencies and no service start/deployment or application database access.",
-          "result": "pending",
-          "evidence": "Not run: no approved source implementation yet."
+          "result": "passed",
+          "evidence": "Final separate dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path D:/CodexTemp/runs/binance-connection-policy-20260914-01/artifacts -p:UseSharedCompilation=false succeeded exit0,1.61s,0warnings/0errors(incremental). Initial full servicebuild also succeeded33.52s,0errors/121warnings from unchanged PostgresAppRepository.cs and PaperFakFeeBackfillProcessor.cs; no edited-stream warning. Reviewer independently read finalbuildlog. TEMP/TMP/TMPDIR in run/temp, MSBUILDDISABLENODEREUSE=1. Service was not started or deployed."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "Independent originalRequests/approved-contract/actual-diff/test-evidence review; inspect unchanged consumer and order paths, run scripts/requirements/Validate-RequirementContract.ps1 in applicable Contract/WorkingTree/Staged modes and git diff --check; verify protected marked-run cleanup before completion.",
           "expected": "Exact approved behavior only, no unapproved assumptions/deviations, no in-flight cancellation or price/source/timed-close substitution; README limitations truthful, contract lifecycle valid, temporary directory removed and unrelated work preserved.",
-          "result": "pending",
-          "evidence": "Independent implementation review and completed-contract checks remain pending."
+          "result": "passed",
+          "evidence": "Independent health_semantics_sep14 full originalRequests/approved contract/five-path actualdiff/TRX/finalbuild review PASS/no open findings; exact same75tests independently recounted. No order/consumer/timed-close/helper/configuration/database code changed. Reviewed SHA256 newpolicytests ea685bd788c0c751f9117e7f5ed92a66c4e5e662dd0622dc46506aac228b0593; diagtests0c2aad903728646e28f70459b7a95d82ca1658d9fc6a127f13e85fece6f87e06; READMEba9c7360b2c7cb225cffd54864d9988e209ee459130a601dba13c1a911b263d9; two streamhashes inVER-002. Requirement approval-only7965d6f2 precedes all product edits, semanticdigest unchanged. Protected Complete-CodexTempRun removed368files/98485401bytes;Removed=true and subsequent Test-Path=false. Old unmarked/invalid orphan folders remained protected and untouched. Unrelated dirty bookkeeping preserved; final mechanical gates execute before commit."
         }
       ]
     }
@@ -167,8 +167,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/health_semantics_sep14",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

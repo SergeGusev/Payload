@@ -13,7 +13,7 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
     private static readonly DateTimeOffset Epoch = new(2026, 9, 14, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public async Task LatestTradeUpdatesBeforeSampleGate_AndExactlyFiveSecondsIsFresh()
+    public async Task LatestTradeUpdatesBeforeSampleGate_WithoutAgeExpiryOrFreshnessEvents()
     {
         using var h = new Harness();
         h.Send("ETH", 3100m);
@@ -30,11 +30,11 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
         Assert.Empty(h.Logger.Diagnostics);
 
         h.Advance(TimeSpan.FromMilliseconds(1));
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
-        Assert.Equal($"Binance ETH/USDT trade stream price is stale. AgeSeconds={5.001:0.###}; StaleAfterSeconds=5.", error.Message);
-        var stale = Assert.Single(h.Logger.Diagnostics);
-        Assert.Equal(LogLevel.Warning, stale.Level);
-        Assert.Equal("stale", stale.Kind);
+        Assert.Equal(point, await h.Service.GetPriceAsync("ETH"));
+        h.Advance(TimeSpan.FromHours(1));
+        Assert.Equal(point, await h.Service.GetPriceAsync("ETH"));
+        Assert.Empty(h.Logger.Diagnostics);
+        Assert.False(h.Snapshot("ETH").IsStale);
     }
 
     [Fact]
@@ -53,54 +53,52 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
     }
 
     [Fact]
-    public async Task InvalidIgnoredAndOtherAssetMessagesDoNotRecoverStaleAsset()
+    public async Task InvalidIgnoredAndOtherAssetMessagesDoNotUnlockReconnectedAsset()
     {
         using var h = new Harness();
         h.Send("ETH");
-        h.Advance(TimeSpan.FromSeconds(6));
+        h.Reconnect();
         await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
-        h.Service.ProcessMessage("not-json"u8.ToArray());
-        h.Service.ProcessMessage("{\"s\":\"ETHUSDT\",\"p\":\"0\"}"u8.ToArray());
+        h.SendPayload("not-json"u8.ToArray());
+        h.SendPayload("{\"s\":\"ETHUSDT\",\"p\":\"0\"}"u8.ToArray());
         h.Send("BTC");
         h.Send("SOL");
-        Assert.Single(h.Logger.Diagnostics);
-        Assert.True(h.Snapshot("ETH").IsStale);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
+        Assert.Empty(h.Logger.Diagnostics);
+        Assert.False(h.Snapshot("ETH").IsStale);
         Assert.Equal(2, h.Snapshot("ETH").ParserRejectedMessages);
         Assert.Equal(1, h.Snapshot("ETH").IgnoredMessages);
         Assert.Equal(1, h.Snapshot("ETH").AcceptedMessages);
 
         h.Send("ETH", 3102m);
-        var recovery = h.Logger.Diagnostics.Last();
-        Assert.Equal("recovery", recovery.Kind);
-        Assert.Equal("ETH", recovery.Asset);
-        Assert.Equal(LogLevel.Information, recovery.Level);
+        Assert.Empty(h.Logger.Diagnostics);
         Assert.False(h.Snapshot("ETH").IsStale);
         Assert.Equal(3102m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
     }
 
     [Fact]
-    public async Task AcceptedMessageThatAgesDuringSampleLogDoesNotDeclareRecovery()
+    public async Task AcceptedMessageThatAgesDuringSampleLogRemainsUsableWithoutFreshnessEvents()
     {
         using var h = new Harness(sampleIntervalSeconds: 1);
         h.Send("ETH");
         h.Advance(TimeSpan.FromSeconds(6));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
+        Assert.Equal(3100m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
         h.Logger.OnSample = () => h.Advance(TimeSpan.FromSeconds(6));
         h.Send("ETH", 3105m);
-        Assert.Single(h.Logger.Diagnostics);
-        Assert.True(h.Snapshot("ETH").IsStale);
+        Assert.Empty(h.Logger.Diagnostics);
+        Assert.False(h.Snapshot("ETH").IsStale);
+        Assert.Equal(3105m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
         Assert.Equal(6000, h.Snapshot("ETH").LastSampleLogDurationMs);
         Assert.Equal(6000, h.Snapshot("ETH").LastPublicationLockHoldMs);
 
         h.Logger.OnSample = null;
         h.Send("ETH", 3106m);
-        Assert.Equal(2, h.Logger.Diagnostics.Length);
-        Assert.Equal("recovery", h.Logger.Diagnostics.Last().Kind);
+        Assert.Empty(h.Logger.Diagnostics);
         Assert.Equal(3106m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
     }
 
     [Fact]
-    public async Task NewDiagnosticEventsAreOutsidePriceCacheLock()
+    public void DiagnosticHelperEventsAllowConcurrentPriceCacheReads()
     {
         using var h = new Harness();
         h.Send("ETH");
@@ -110,22 +108,25 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
             Task.Run(() => h.Service.GetSnapshot("ETH")).WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
         };
         h.Advance(TimeSpan.FromSeconds(6));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
-        h.Send("ETH");
+        h.ObserveStale("ETH");
+        h.ObserveRecovery("ETH");
         Assert.Equal(2, h.Logger.Diagnostics.Length);
         Assert.Equal(2, h.Logger.CompletedDiagnosticCallbacks);
     }
 
     [Fact]
-    public async Task NewLoggerFailureCannotReplaceStaleExceptionOrFreshResult()
+    public async Task DiagnosticLoggerFailureCannotChangeBusinessAvailability()
     {
         using var h = new Harness();
         h.Send("ETH");
         h.Advance(TimeSpan.FromSeconds(6));
         h.Logger.ThrowDiagnostics = true;
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
-        Assert.Contains("price is stale", error.Message);
+        h.ObserveStale("ETH");
+        Assert.Equal(3100m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
+        h.Reconnect();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
         h.Send("ETH", 3200m);
+        h.ObserveRecovery("ETH");
         Assert.Equal(3200m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
         Assert.False(h.Snapshot("ETH").IsStale);
         Assert.True(h.Logger.DiagnosticAttempts >= 2);
@@ -142,9 +143,10 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
         h.Send("ETH", 3111m);
         Assert.Equal(3111m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
         h.Advance(TimeSpan.FromSeconds(6));
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
-        Assert.Contains("price is stale", error.Message);
-        h.Service.ProcessMessage("bad-json"u8.ToArray());
+        Assert.Equal(3111m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
+        h.Reconnect();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
+        h.SendPayload("bad-json"u8.ToArray());
         h.Send("ETH", 3112m);
         Assert.Equal(3112m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
     }
@@ -157,24 +159,24 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
         h.DiagnosticClock.ThrowFrequency = true;
         Assert.Null(h.Service.Diagnostics.GetSnapshot("ETH"));
         h.Advance(TimeSpan.FromSeconds(6));
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
-        Assert.Contains("price is stale", error.Message);
+        Assert.Equal(3100m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
+        h.Reconnect();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
         h.Send("ETH", 3120m);
         Assert.Equal(3120m, (await h.Service.GetPriceAsync("ETH")).PriceUsd);
     }
 
     [Fact]
-    public async Task ConcurrentStaleGettersEmitOnceAndRetainEverySuppressedCandidate()
+    public async Task ConcurrentHelperStaleObservationsEmitOnceAndRetainEverySuppressedCandidate()
     {
         using var h = new Harness();
         h.Send("ETH");
         h.Advance(TimeSpan.FromSeconds(6));
-        await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => Task.Run(async () =>
-            await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH")))));
+        await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => Task.Run(() => h.ObserveStale("ETH"))));
         Assert.Single(h.Logger.Diagnostics);
         Assert.Equal(31, h.Snapshot("ETH").SuppressedStaleCount);
         h.Advance(TimeSpan.FromSeconds(60));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
+        h.ObserveStale("ETH");
         Assert.Equal(31, h.Logger.Diagnostics.Last().SuppressedCount);
         Assert.Equal(0, h.Snapshot("ETH").SuppressedStaleCount);
     }
@@ -192,12 +194,11 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
             entered.TrySetResult();
             Assert.True(release.Wait(TimeSpan.FromSeconds(5)), "Diagnostic sink was not released.");
         };
-        var first = Task.Run(async () => await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH")));
+        var first = Task.Run(() => h.ObserveStale("ETH"));
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(async () =>
-                await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH")))));
+            await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(() => h.ObserveStale("ETH"))));
             Assert.Equal(8, h.Snapshot("ETH").SuppressedStaleCount);
         }
         finally
@@ -210,7 +211,7 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
         Assert.Equal(8, h.Snapshot("ETH").SuppressedStaleCount);
         h.Logger.OnDiagnostic = null;
         h.Advance(TimeSpan.FromSeconds(60));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
+        h.ObserveStale("ETH");
         Assert.Equal(8, h.Logger.Diagnostics.Last().SuppressedCount);
         Assert.Equal(0, h.Snapshot("ETH").SuppressedStaleCount);
     }
@@ -339,26 +340,26 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
     }
 
     [Fact]
-    public async Task WallClockJumpDoesNotOpenThrottle_AndSuppressedRecoveryIsNotReplayed()
+    public void HelperWallClockJumpDoesNotOpenThrottle_AndSuppressedRecoveryIsNotReplayed()
     {
         using var h = new Harness();
         h.Send("ETH");
         h.Advance(TimeSpan.FromSeconds(6));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
-        h.Send("ETH");
+        h.ObserveStale("ETH");
+        h.ObserveRecovery("ETH");
         h.Advance(TimeSpan.FromSeconds(6));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
-        h.Send("ETH");
+        h.ObserveStale("ETH");
+        h.ObserveRecovery("ETH");
         Assert.Equal(2, h.Logger.Diagnostics.Length);
         Assert.Equal(1, h.Snapshot("ETH").SuppressedRecoveryCount);
         h.BusinessClock.JumpUtc(TimeSpan.FromDays(2));
         h.DiagnosticClock.JumpUtc(TimeSpan.FromDays(2));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => h.Service.GetPriceAsync("ETH"));
+        h.ObserveStale("ETH");
         Assert.Equal(2, h.Logger.Diagnostics.Length);
-        h.Send("ETH");
+        h.ObserveRecovery("ETH");
         h.Advance(TimeSpan.FromSeconds(60));
-        // No new getter rejection: another accepted trade must not invent recovery.
-        h.Send("ETH");
+        // No new helper stale observation: another publication must not invent recovery.
+        h.ObserveRecovery("ETH");
         Assert.Equal(2, h.Logger.Diagnostics.Length);
         Assert.False(h.Snapshot("ETH").IsStale);
     }
@@ -402,12 +403,15 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
         public ManualClock DiagnosticClock { get; } = new();
         public RecordingLogger Logger { get; } = new();
         public BinanceCryptoReferenceTradeStreamService Service { get; }
+        private readonly List<TestBinanceReferenceWebSocket> sockets = [];
+        private long generation;
 
         public Harness(int sampleIntervalSeconds = 60)
         {
             Service = new BinanceCryptoReferenceTradeStreamService(Logger,
                 new BinanceCryptoReferenceOptions { AssetSymbols = ["ETH", "SOL"], StaleAfterSeconds = 5, SampleIntervalSeconds = sampleIntervalSeconds },
                 new TestAppRepository(), BusinessClock, new BinanceCryptoReferenceDiagnostics(Logger, DiagnosticClock));
+            Reconnect();
         }
 
         public void Advance(TimeSpan elapsed)
@@ -416,11 +420,36 @@ public sealed class BinanceCryptoReferenceDiagnosticsTests
             DiagnosticClock.Advance(elapsed);
         }
 
-        public void Send(string asset, decimal price = 3100m) => Service.ProcessMessage(Encoding.UTF8.GetBytes(
+        public void Send(string asset, decimal price = 3100m) => SendPayload(Encoding.UTF8.GetBytes(
             $$"""{"s":"{{asset}}USDT","p":"{{price.ToString(CultureInfo.InvariantCulture)}}","T":{{Epoch.ToUnixTimeMilliseconds()}}} """));
 
+        public void SendPayload(byte[] payload) => Service.ProcessMessage(payload, generation);
+
+        public void Reconnect()
+        {
+            Service.EndConnection(generation);
+            var socket = new TestBinanceReferenceWebSocket();
+            sockets.Add(socket);
+            generation = Service.BeginConnection(socket);
+        }
+
+        public void ObserveStale(string asset) => Service.Diagnostics.ObserveStale(
+            Point(asset, Epoch), TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(5));
+
+        public void ObserveRecovery(string asset)
+        {
+            var point = Point(asset, BusinessClock.GetUtcNow());
+            Service.Diagnostics.ObserveRecovery(point, Service.Diagnostics.RecordPublished(point),
+                BusinessClock.GetUtcNow, TimeSpan.FromSeconds(5));
+        }
+
         public BinanceCryptoReferenceDiagnosticSnapshot Snapshot(string asset) => Assert.IsType<BinanceCryptoReferenceDiagnosticSnapshot>(Service.Diagnostics.GetSnapshot(asset));
-        public void Dispose() => Service.Dispose();
+        public void Dispose()
+        {
+            Service.EndConnection(generation);
+            Service.Dispose();
+            foreach (var socket in sockets) socket.Dispose();
+        }
     }
 
     private sealed class ManualClock : TimeProvider
