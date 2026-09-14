@@ -1332,6 +1332,30 @@ After deploying the updated service from `master`, verify the retention batch lo
 
 `CryptoUpDown5mOddsArchive` extends the same archive pattern to non-BTC crypto 5-minute and 15-minute markets, currently `ETH` and `SOL`. It stores rows in `crypto_up_down_5m_odds_ticks` with the asset symbol, Binance `<asset>USDT` trade-stream price, the first archived market-start reference, asset move from start, Up/Down book proxy, source/age, and diagnostics. The companion `BinanceCryptoReference` service uses one Binance combined WebSocket stream for those symbols, exposes the latest price for start-relative crypto strategies, and samples each asset once per `BinanceCryptoReference:SampleIntervalSeconds`, default `60`, into a `BinanceCryptoReference:WindowSize`, default `100`, in-memory rolling mean for ETH/SOL Middle. This data feeds ETH/SOL fixed and reference-average strategies; Futures Basis uses the separate OKX fixed-expiry/index feed. Live placement for opening-limit entries is controlled by each strategy's runtime Dashboard `Live` flag plus the normal live gates.
 
+Binance ETH/SOL freshness diagnostics add bounded structured stale `Warning` and
+recovery `Information` events to the existing service logs; no new configuration
+or separate process is required. A stale getter rejection records the observed
+state. Recovery requires a later accepted message for the same asset that is
+still fresh when observed, not merely the arrival of a message. Each event kind
+is limited independently to one event per asset per 60 monotonic seconds; the
+next emitted event of that kind reports its suppressed candidate count. A
+suppressed recovery still clears the observed stale state and is never emitted
+later without another real stale-to-fresh transition.
+
+Diagnostic snapshots include connection generation/state, active phase and its
+age, completed receive/frame/message counters, accepted/source/fetched times,
+unattributed parser rejection/ignored-message counters, and local parse,
+publication-lock wait/hold and existing sampled-log call durations. Waiting in
+receive versus spending time in local processing helps locate an observed gap;
+it does not by itself prove an exchange or network fault. The existing sampled
+log stays in its original cache-lock location; new diagnostic events are emitted
+outside that lock. The freshness gate (default 5 seconds), latest-price updates,
+sampling, price sources, parser, reconnect policy and trading rules are unchanged.
+These diagnostics do not themselves fix the unproven cause of freshness gaps.
+Focused verification uses `BinanceCryptoReferenceDiagnosticsTests`,
+`CryptoUpDown5mOddsArchiveProcessorTests` and `ConfigurationTests` in the normal
+test project; no running service or database is needed.
+
 `CryptoUpDown5mResultPolling` measures how quickly BTC/ETH/SOL 5-minute results
 become available and also feeds the Diff result ledger. It polls each recently
 ended concrete market slug every 5 seconds by default, stores status, attempt

@@ -17,6 +17,22 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
     private readonly Dictionary<string, DateTimeOffset> nextSampleAtUtcByAsset = new(StringComparer.OrdinalIgnoreCase);
     private readonly int windowSize = Math.Max(1, options.WindowSize);
     private readonly TimeSpan sampleInterval = TimeSpan.FromSeconds(Math.Max(1, options.SampleIntervalSeconds));
+    private readonly TimeProvider businessClock = TimeProvider.System;
+    private readonly BinanceCryptoReferenceDiagnostics diagnostics = new(logger, TimeProvider.System);
+
+    internal BinanceCryptoReferenceTradeStreamService(
+        ILogger<BinanceCryptoReferenceTradeStreamService> logger,
+        BinanceCryptoReferenceOptions options,
+        IAppRepository repository,
+        TimeProvider businessClock,
+        BinanceCryptoReferenceDiagnostics diagnostics)
+        : this(logger, options, repository)
+    {
+        this.businessClock = businessClock;
+        this.diagnostics = diagnostics;
+    }
+
+    internal BinanceCryptoReferenceDiagnostics Diagnostics => diagnostics;
 
     public Task<CryptoReferencePricePoint> GetPriceAsync(
         string assetSymbol,
@@ -36,9 +52,10 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
             throw new InvalidOperationException($"Binance {normalized}/USDT trade stream has not received a price yet.");
         }
 
-        var age = DateTimeOffset.UtcNow - snapshot.FetchedAtUtc;
+        var age = businessClock.GetUtcNow() - snapshot.FetchedAtUtc;
         if (age > TimeSpan.FromSeconds(options.StaleAfterSeconds))
         {
+            diagnostics.ObserveStale(snapshot, age, TimeSpan.FromSeconds(options.StaleAfterSeconds));
             throw new InvalidOperationException(
                 $"Binance {normalized}/USDT trade stream price is stale. AgeSeconds={age.TotalSeconds:0.###}; StaleAfterSeconds={options.StaleAfterSeconds}.");
         }
@@ -113,44 +130,62 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
     {
         using var socket = new ClientWebSocket();
         var streamUrl = BuildStreamUrl();
-        await socket.ConnectAsync(new Uri(streamUrl), cancellationToken);
-        logger.LogInformation("Binance crypto trade stream connected. StreamUrl={StreamUrl}", streamUrl);
-
-        var buffer = new byte[Math.Max(1_024, options.ReceiveBufferBytes)];
-        using var message = new MemoryStream();
-
-        while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
+        diagnostics.ConnectionStarting();
+        try
         {
-            message.SetLength(0);
-            WebSocketReceiveResult result;
-            do
+            await socket.ConnectAsync(new Uri(streamUrl), cancellationToken);
+            diagnostics.ConnectionOpened();
+            logger.LogInformation("Binance crypto trade stream connected. StreamUrl={StreamUrl}", streamUrl);
+
+            var buffer = new byte[Math.Max(1_024, options.ReceiveBufferBytes)];
+            using var message = new MemoryStream();
+
+            while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
             {
-                result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
-                if (result.MessageType == WebSocketMessageType.Close)
+                message.SetLength(0);
+                WebSocketReceiveResult result;
+                do
                 {
-                    logger.LogWarning(
-                        "Binance crypto trade stream closed by server. Status={Status} Description={Description}",
-                        result.CloseStatus,
-                        result.CloseStatusDescription);
-                    return;
+                    diagnostics.ReceiveStarted();
+                    result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
+                    diagnostics.ReceiveCompleted(result.EndOfMessage && result.MessageType != WebSocketMessageType.Close);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        logger.LogWarning(
+                            "Binance crypto trade stream closed by server. Status={Status} Description={Description}",
+                            result.CloseStatus,
+                            result.CloseStatusDescription);
+                        return;
+                    }
+
+                    message.Write(buffer, 0, result.Count);
                 }
+                while (!result.EndOfMessage);
 
-                message.Write(buffer, 0, result.Count);
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    ProcessMessage(message.ToArray());
+                }
+                else
+                {
+                    diagnostics.MessageIgnored();
+                }
             }
-            while (!result.EndOfMessage);
-
-            if (result.MessageType == WebSocketMessageType.Text)
-            {
-                ProcessMessage(message.ToArray());
-            }
+        }
+        finally
+        {
+            diagnostics.ConnectionClosed();
         }
     }
 
-    private void ProcessMessage(byte[] payload)
+    internal void ProcessMessage(byte[] payload)
     {
-        var fetchedAtUtc = DateTimeOffset.UtcNow;
-        if (!BinanceCryptoTradeParser.TryParse(payload, fetchedAtUtc, out var point, out var error) ||
-            point is null)
+        var fetchedAtUtc = businessClock.GetUtcNow();
+        diagnostics.ParseStarted();
+        var parsed = BinanceCryptoTradeParser.TryParse(payload, fetchedAtUtc, out var point, out var error) &&
+            point is not null;
+        diagnostics.ParseCompleted(parsed);
+        if (!parsed || point is null)
         {
             logger.LogWarning("Binance crypto trade message skipped. Reason={Reason}", error);
             return;
@@ -158,28 +193,50 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
 
         if (!enabledAssetSymbols.Contains(point.AssetSymbol))
         {
+            diagnostics.MessageIgnored();
             return;
         }
 
+        long? publication = null;
+        diagnostics.PublicationWaiting();
         lock (sync)
         {
-            latestByAsset[point.AssetSymbol] = point;
-            if (!nextSampleAtUtcByAsset.TryGetValue(point.AssetSymbol, out var nextSampleAtUtc) ||
-                fetchedAtUtc >= nextSampleAtUtc)
+            diagnostics.PublicationEntered();
+            try
             {
-                AddSample(point);
-                nextSampleAtUtcByAsset[point.AssetSymbol] = fetchedAtUtc.Add(sampleInterval);
-                var snapshot = CreateSnapshot(samplesByAsset[point.AssetSymbol]);
-                logger.LogInformation(
-                    "Binance {AssetSymbol}/USDT reference price sampled. PriceUsd={PriceUsd} SourceUpdatedAtUtc={SourceUpdatedAtUtc} Samples={Samples} WindowSize={WindowSize} ArithmeticMeanUsd={ArithmeticMeanUsd}",
-                    point.AssetSymbol,
-                    point.PriceUsd,
-                    point.SourceUpdatedAtUtc,
-                    snapshot.SampleCount,
-                    snapshot.WindowSize,
-                    snapshot.ArithmeticMeanUsd);
+                latestByAsset[point.AssetSymbol] = point;
+                publication = diagnostics.RecordPublished(point);
+                if (!nextSampleAtUtcByAsset.TryGetValue(point.AssetSymbol, out var nextSampleAtUtc) ||
+                    fetchedAtUtc >= nextSampleAtUtc)
+                {
+                    AddSample(point);
+                    nextSampleAtUtcByAsset[point.AssetSymbol] = fetchedAtUtc.Add(sampleInterval);
+                    var snapshot = CreateSnapshot(samplesByAsset[point.AssetSymbol]);
+                    diagnostics.SampleLogStarted();
+                    try
+                    {
+                        logger.LogInformation(
+                            "Binance {AssetSymbol}/USDT reference price sampled. PriceUsd={PriceUsd} SourceUpdatedAtUtc={SourceUpdatedAtUtc} Samples={Samples} WindowSize={WindowSize} ArithmeticMeanUsd={ArithmeticMeanUsd}",
+                            point.AssetSymbol,
+                            point.PriceUsd,
+                            point.SourceUpdatedAtUtc,
+                            snapshot.SampleCount,
+                            snapshot.WindowSize,
+                            snapshot.ArithmeticMeanUsd);
+                    }
+                    finally
+                    {
+                        diagnostics.SampleLogCompleted();
+                    }
+                }
+            }
+            finally
+            {
+                diagnostics.PublicationCompleted();
             }
         }
+
+        diagnostics.ObserveRecovery(point, publication, businessClock.GetUtcNow, TimeSpan.FromSeconds(options.StaleAfterSeconds));
     }
 
     private void AddSample(CryptoReferencePricePoint point)
@@ -220,7 +277,7 @@ public sealed class BinanceCryptoReferenceTradeStreamService(
             mean,
             latest,
             orderedSamples,
-            DateTimeOffset.UtcNow);
+            businessClock.GetUtcNow());
     }
 
     private string BuildStreamUrl()
