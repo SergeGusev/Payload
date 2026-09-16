@@ -1,3 +1,16 @@
+## Active Update 2026-09-16 WebSocket First-Frame Post-Deploy Verification
+Goal: Read-only verify the deployed WebSocket first-frame readiness change, production service health, bets and server logs.
+Status: Completed
+Done:
+- Verified Production 192.168.0.101:5432/polycopytrader at cutoff 2026-09-16T17:10:49.294827Z: service Running/Live, started_at 2026-09-16T16:51:39.996590Z, heartbeat age 8.948s, last_error NULL, zero waiting locks, exact version d8cd7c5eaa263f4ca27a15211926efd3ddcecbf9. Git proves first-frame fix f6bee047 is its direct parent.
+- Verified continued Paper activity at fixed cutoff 2026-09-16T17:00:24.017686Z: 131/131 orders/fills in 5m, 376/376 in 15m and 1840/1840 in 60m; all 1840 recent orders Filled with zero open/Cancelled/Rejected/Expired. Five enabled Live strategies were not paused; zero open or failed recent Live orders and zero matched-unapplied settlements.
+- Verified exact post-deploy Maker-GTD order 1350dde7-44d5-48ee-93f6-daa15a2ad723 reached Filled and has exactly one fill row. Result label: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.
+- Verified server log window 2026-09-16T16:51:39.702Z..17:07:41.756Z: configured first-frame timeout 10s, first inbound bulk frame after 4.893s, 11 initial/bulk frames, zero FirstFrameTimeout and zero FirstFrameWait incidents. Normal readiness path is proven; timeout branch was not exercised because every connection delivered a frame within the bound.
+- Remote feed churn persisted but recovered: three close frames 1013, seven premature closes, one Binance Pong timeout recovering in about 4.3s and three isolated OKX failures recovering in 1.394..3.746s. Current critical and shard market WebSockets were Connected and non-stale; BTC/ETH/SOL reference ticks were fresh. No channel saturation was observed.
+Next: Continue normal monitoring; the new first-frame timeout branch can only be runtime-confirmed when a silent-open/no-frame connection actually occurs.
+Notes: Production and server logs were read-only. SQL used BEGIN READ ONLY, UTC, statement_timeout 15s, lock_timeout 1s and bounded/indexed queries. Two broad diagnostic queries reached the 15s timeout and were safely cancelled, then replaced by narrower indexed queries; no production impact. One slow side-effect queue burst reached about 1.5s and drained, and one BTC order-book timeout occurred without stopping bets.
+Blockers: None. Remote provider disconnects remain observable external instability, not a betting outage and not evidence of a failure in the first-frame fix.
+
 ## Active Update 2026-09-16 Market Data Resilience Maker Throughput Log Volume
 Goal: Implement the user-approved corrections for excessive logs, external market-data head-of-line failures and Maker-GTD backlog without changing trading semantics.
 Status: Completed
