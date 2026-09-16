@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260916-market-data-resilience-maker-throughput-log-volume",
+  "title": "Reduce production log volume, isolate external market-data stalls, and shorten Maker-GTD evidence backlog without changing trading semantics",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Есть идеи по решению этих проблем?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, действуй"
+    },
+    {
+      "source": "user",
+      "text": "Продолжай"
+    }
+  ],
+  "scope": {
+    "goal": "Implement the immediately preceding evidence-based plan for three observed production degradations: excessive routine log volume, coupled/blocked external market-data intake, and Maker-GTD evidence queue bursts. Preserve all strategy decisions, execution intent, prices, fills, accounting, FIFO touch evidence and the exact approved Maker-GTD Paper exception.",
+    "inScope": [
+      "Local C#/.NET source, configuration defaults, focused tests and documentation for the service only; deployment remains user-controlled.",
+      "Serilog category filtering for standard HttpClient lifecycle Information events; compact routine strategy-skip Information logging; full exceptional/Maker-GTD diagnostics; aggregation of repeated market-data slow warnings.",
+      "Independent OKX fixed-expiry and per-asset index polling loops, one bounded transient retry, post-success fetch timestamps, and incident-level error/recovery reporting while retaining the current 1-second success cadence, 2-second per-attempt timeout and 5-second stale gate.",
+      "A bounded ordered per-shard WebSocket frame handoff between transport receipt and the existing admission/parse/dispatch path, with receipt time captured immediately after the complete frame and explicit saturation diagnostics without silent frame dropping.",
+      "Configurable exact-family Maker-GTD independent-wallet concurrency with default 8 and bounds 1..16; pruning already-terminal order IDs from queued later work while retaining every accepted event for any still-Pending eligible order; unchanged per-event FIFO and same-wallet serialization.",
+      "Focused and full local verification in a marked D:/CodexTemp run, requirement-gate validation and independent semantic review."
+    ],
+    "outOfScope": [
+      "Any Production or application Local database read/write, schema/index/migration, strategy/order/configuration mutation, service start/stop/restart, deployment, backup, or live-order action.",
+      "Changes to strategy formulas, thresholds, lookback windows, current-price acceptance, OKX StaleAfterSeconds, polling success cadence, request timeout, selected contracts, execution intent, order type, time-in-force, fill price/size, settlement, balances, PnL or risk checks.",
+      "Dropping or coalescing generic Maker-GTD evidence, applying the general per-asset soft limit to the Maker lane, parallel execution of events for the same asset, or changing Maker fill/expiry/drain/publication semantics.",
+      "Changing Polymarket subscription scope, shard assignment, endpoint, reconnect delays, reconnect-reset policy, provider-close interpretation, heartbeat/watchdog policy, or claiming that local changes prove the remote cause of close status 1013.",
+      "A generalized logging, retry, channel, batching or queue framework; new packages, sidecars, Python/Node code, unrelated cleanup/refactoring, or retention-size increases before the post-change rate is measured.",
+      "Guaranteeing preservation in Information-level file logs of the complete arbitrary JSON for every routine skip; the persisted strategy run remains unchanged, while compact Info plus full Debug is the approved file-log tradeoff."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Prospective behavior only after a future user-controlled deployment. Runtime evidence baseline is the retained Production window checked on 2026-09-16 UTC; no historical rewrite or analysis-window change.",
+    "firstVerification": "Inspect the exact current logging, OKX poll, WebSocket receive/dispatch, Maker queue/updater/configuration paths and their focused tests; confirm current branch/upstream and preserve all unrelated dirty files before any approved material edit."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Reduce routine service-log volume without hiding errors or changing persisted trading evidence.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Serilog suppresses only standard System.Net.Http.HttpClient Information/Debug lifecycle noise by setting that category to Warning; custom application warnings/errors and existing database HTTP audit behavior remain unchanged.",
+        "Every routine skipped strategy run still emits an Information event containing strategy identity, market identity, skip reason, diagnostics byte/character length and lowercase SHA-256 fingerprint when diagnostics exist. The complete diagnostics JSON is emitted at Debug instead of Information and the run object/database persistence is unchanged.",
+        "Skip reasons whose value starts with maker_gtd_ and explicit shape-mismatch/evidence-unavailable diagnostics retain their complete payload at Information or higher with the mandatory label where applicable. Existing error and warning paths retain complete actionable evidence subject to existing secret-safety rules.",
+        "Repeated general-side-effect and dedicated Maker-GTD processing slow warnings use the existing 30-second metrics interval: first occurrence is immediate; repeats with the same component, event type, latency category and active phase are counted; one aggregate reports count, first/last UTC, maximum queue delay, processing time and pending depth; the first subsequent non-slow completion emits recovery. Every exception/error and Maker expiry-drain timeout remains immediate and unsuppressed.",
+        "Logging-focused tests capture event levels/properties, prove no full routine JSON at Information, prove full Debug and mandatory Maker evidence, and prove first/aggregate/recovery/error behavior."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Program.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/SlowProcessingWarningAggregator.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/OperationalLoggingTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~OperationalLoggingTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests\"",
+          "expected": "Focused logging and queue tests pass and demonstrate the exact event-level, compact/full evidence, aggregation, recovery and error-bypass contract without changing persisted runs.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Isolate OKX source failures and perform one bounded transient retry without weakening current freshness or changing strategy inputs.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "The all-fixed-expiry ticker source and each enabled asset's index source run independent poll loops. A slow/failing source does not pace or cancel successful sources; the instrument-catalog refresh remains single-flight and bounded.",
+        "Successful sources retain the current 1-second poll cadence. Each idempotent GET receives at most one retry for timeout, HTTP 429 or HTTP 5xx, after jitter in the inclusive 100..250ms range. Caller/service cancellation, parse/contract errors and other HTTP statuses do not retry. No attempt exceeds the existing 2-second request timeout and no stale cache is fabricated as fresh.",
+        "FetchedAtUtc is captured only after a successful payload has been received and parsed; venue SourceUpdatedAtUtc remains the venue value. GetNearestExpiryPricesAsync continues to reject data older than the unchanged 5-second StaleAfterSeconds rule.",
+        "For each endpoint/source incident the first failure is warned and persisted immediately, repeats are counted and summarized no more than once per 30 seconds, and recovery is logged once with duration/count. API failures remain observable without one database row and warning per failed one-second cycle.",
+        "Deterministic tests cover timeout then retry success, 429/5xx retry, non-transient/cancellation no-retry, independent source progress, post-success timestamps, unchanged stale rejection and incident aggregation/recovery."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/ExternalPrices/OkxExpiryFuturesReferencePriceService.cs",
+        "tests/PolyCopyTrader.Tests/OkxExpiryFuturesReferenceTests.cs",
+        "tests/PolyCopyTrader.Tests/OkxExpiryFuturesReferenceServiceTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~OkxExpiryFuturesReference\"",
+          "expected": "All parser/configuration and new service-resilience tests pass deterministically without external network or application database access.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Decouple complete Polymarket WebSocket frame receipt from existing ordered application dispatch using a bounded no-drop handoff.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Each shard has one bounded FIFO frame channel with configurable capacity ReceiveDispatchQueueCapacity, default 64 and validated range 1..1024. One transport producer reads complete frames; one consumer performs the existing Maker receipt admission, parse/classify/enqueue and status publication in original order.",
+        "The frame receipt timestamp and last-message observation are captured immediately after ReceiveAsync completes the full frame, before waiting for Maker admission or application dispatch. Existing source timestamps, event fingerprints and downstream eligibility snapshots remain unchanged.",
+        "No received frame is silently dropped or coalesced. A full channel waits with backpressure; waiting at least the existing SideEffectSlowProcessingMilliseconds emits an explicit saturation warning with shard/capacity/duration. Consumer failure closes the connection path and follows existing reconnect/error handling; normal peer close awaits already received channel work before reconnect, while service cancellation retains propagated cancellation semantics.",
+        "Endpoints, subscriptions, sharding, heartbeat/watchdog, reconnect delays and ResetAfterProcessedFrame behavior remain unchanged. The implementation and documentation make no claim that it fixes or explains remote status 1013.",
+        "Tests prove transport can receive/enqueue later frames while the consumer is held at Maker admission, FIFO dispatch and original receipt timestamps, bounded saturation with no loss, normal-close drain, consumer-failure reconnect propagation and unchanged reconnect-backoff tests."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/Configuration/AppConfigurationLoader.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataWebSocketShardRunner.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketFrameProcessingTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketReconnectBackoffTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~MarketDataWebSocketFrameProcessingTests|FullyQualifiedName~MarketDataWebSocketReconnectBackoffTests|FullyQualifiedName~ConfigurationTests\"",
+          "expected": "Bounded ordered frame handoff, timestamp, saturation, close/failure and unchanged reconnect/configuration contracts pass without an external WebSocket or database.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Shorten exact-family Maker-GTD backlog using measured independent-wallet concurrency and terminal-order pruning while preserving every still-relevant touch event.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Ок, действуй",
+      "acceptanceCriteria": [
+        "Add MarketDataWebSocket.MakerGtdWalletMaximumConcurrency with default 8 and validated range 1..16; replace only the current hard-coded value 4. Within one event, different normalized wallet groups may execute up to that bound, while candidates for the same normalized wallet remain sequential and every event completes before the next event starts.",
+        "After a Maker order is atomically persisted as Filled or Expired, its ID is removed from already queued later work items before expensive updater work. An item is skipped only when all of its eligible IDs are proven terminal; any still-Pending ID keeps the original full event, source/receipt timestamps, prices, snapshot, ordering and drain/preflight visibility.",
+        "No Maker event admission limit, generic coalescing/drop, same-asset parallel event processing, price/touch evaluator, execution source/contract, fee, fill, position, expiry, publication fence, error isolation or atomic persistence behavior changes.",
+        "A deterministic 28-distinct-wallet test demonstrates a maximum of 8 concurrently active wallet groups and unchanged event FIFO; same-wallet seriality, independent-wallet failure isolation, CAS conflict retry, terminal-tail pruning, no-prune-for-Pending and expiry/fill race/drain tests pass.",
+        "Every description of these exact-family results retains: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. Live submission remains disabled and no other strategy inherits the exception."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/Configuration/AppConfigurationLoader.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperPlacementHandoff.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtd|FullyQualifiedName~ConfigurationTests\"",
+          "expected": "Concurrency bound 8, wallet seriality, event FIFO, no-drop evidence, terminal-only pruning, expiry/fill/drain races and the exact Maker exception/parity tests pass.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Document and verify only the approved prospective changes, without touching Production or claiming deployed results.",
+      "sourceRequestIndexes": [1, 2],
+      "sourceQuote": "Продолжай",
+      "acceptanceCriteria": [
+        "README and configuration reference describe the new log policy, OKX independent bounded retry, WebSocket frame channel/capacity, Maker concurrency/pruning and all unchanged safety boundaries; they do not claim deployment or measured Production improvement.",
+        "The full PolyCopyTrader.Tests suite and Release service build pass using one marked D:/CodexTemp run with TEMP/TMP/TMPDIR and explicit artifacts/results paths. No service is started and no application database or external exchange fixture is used.",
+        "git diff --check, requirement WorkingTree/Staged validation and an independent reviewer comparison of all verbatim requests, approved contract, actual diff and evidence pass with no findings. Unrelated dirty files remain unmodified/uncommitted; approval record precedes product edits in Git history.",
+        "After all processes and reviewers finish, the owned marked temporary run is removed by the protected lifecycle script and verified absent."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "docs/configuration_reference.md",
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/Configuration/AppConfigurationLoader.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "src/PolyCopyTrader.Service/ExternalPrices/OkxExpiryFuturesReferencePriceService.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataWebSocketShardRunner.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperPlacementHandoff.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/MarketData/SlowProcessingWarningAggregator.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketFrameProcessingTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketReconnectBackoffTests.cs",
+        "tests/PolyCopyTrader.Tests/OkxExpiryFuturesReferenceTests.cs",
+        "tests/PolyCopyTrader.Tests/OkxExpiryFuturesReferenceServiceTests.cs",
+        "tests/PolyCopyTrader.Tests/OperationalLoggingTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results",
+          "expected": "The complete local test suite passes with zero failures and no external service/application database mutation.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-006",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path <marked-run>/artifacts",
+          "expected": "Release service build succeeds with zero errors; the service is not started or deployed.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-007",
+          "kind": "inspection",
+          "command": "Independent verbatim-request/approved-contract/actual-diff/test-evidence review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree and -Mode Staged; git diff --check; protected marked-run cleanup.",
+          "expected": "No unapproved behavior or path, all acceptance criteria evidenced, reviewer pass with no findings, mechanical gates pass, unrelated work is preserved and the owned temp run is absent.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260916-market-data-resilience-maker-throughput-log-volume sha256:ce8a97a16210f0655b85fd371388391f90594b00ecff9e7b99d554e54d8e044a",
+    "semanticDigest": "sha256:ce8a97a16210f0655b85fd371388391f90594b00ecff9e7b99d554e54d8e044a"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
