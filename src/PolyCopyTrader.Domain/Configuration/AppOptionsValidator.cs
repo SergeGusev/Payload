@@ -117,6 +117,7 @@ public static class AppOptionsValidator
             $"Market WebSocket enabled: {configuration.Bot.UseWebSockets && configuration.MarketDataWebSocket.Enabled}",
             $"Market WebSocket subscription scope: {configuration.MarketDataWebSocket.SubscriptionScope}",
             $"Market WebSocket URL: {configuration.MarketDataWebSocket.MarketEndpointUrl}",
+            $"Market WebSocket first-frame timeout seconds: {configuration.MarketDataWebSocket.FirstFrameTimeoutSeconds}",
             $"Market WebSocket subscription batch size: {configuration.MarketDataWebSocket.SubscriptionBatchSize}",
             $"Market WebSocket shard max assets: {configuration.MarketDataWebSocket.ShardMaxAssets}",
             $"Market WebSocket max shard connections: {configuration.MarketDataWebSocket.MaxShardConnections}",
@@ -509,6 +510,11 @@ public static class AppOptionsValidator
             errors.Add("MarketDataWebSocket.HeartbeatSeconds must be greater than zero.");
         }
 
+        if (options.FirstFrameTimeoutSeconds <= 0)
+        {
+            errors.Add("MarketDataWebSocket.FirstFrameTimeoutSeconds must be greater than zero.");
+        }
+
         if (options.ReconnectBaseDelaySeconds <= 0 || options.ReconnectMaxDelaySeconds <= 0)
         {
             errors.Add("MarketDataWebSocket reconnect delays must be greater than zero.");
@@ -568,6 +574,12 @@ public static class AppOptionsValidator
             options.WatchdogStaleSeconds <= options.HeartbeatSeconds)
         {
             errors.Add("MarketDataWebSocket.WatchdogStaleSeconds must exceed HeartbeatSeconds when stale shard restarts are enabled.");
+        }
+
+        if (options.WatchdogStaleSeconds > 0 &&
+            options.FirstFrameTimeoutSeconds >= options.WatchdogStaleSeconds)
+        {
+            errors.Add("MarketDataWebSocket.FirstFrameTimeoutSeconds must be less than WatchdogStaleSeconds when stale shard restarts are enabled.");
         }
 
         if (options.StatusPersistIntervalSeconds <= 0)

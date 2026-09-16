@@ -841,6 +841,7 @@ diagnostic path only; it does not change strategy entry or settlement behavior.
 - `MaxShardConnections`: soft cap for shard connection count; default `64`, `0` means unlimited.
 - `ReconnectBaseDelaySeconds`: first reconnect delay and the delay restored after the first parsed market update is accepted by the side-effect queue (`Enqueued` or `Coalesced`); default `2`.
 - `ReconnectMaxDelaySeconds`: cap for exponential reconnect delay across repeated connect/close flaps without an accepted market update; default `60`. Malformed JSON, `PING`/`PONG`, zero-update payloads, rejected/dropped updates, failed dispatch, and cancellation do not reset the delay.
+- `FirstFrameTimeoutSeconds`: maximum wait for the first complete non-empty inbound text frame after every initial-subscription batch has been sent; default `10`. The value must be positive and, when `WatchdogStaleSeconds` is enabled, strictly lower than that watchdog threshold.
 - `ReceiveDispatchQueueCapacity`: bounded per-shard FIFO capacity between complete frame receipt and the existing admission/parse/dispatch path; default `64`, valid `1..1024`. It never silently drops or coalesces a received frame. A full queue applies backpressure and reports waits that reach `SideEffectSlowProcessingMilliseconds`.
 - `WatchdogIntervalSeconds`: supervisor cadence for subscription reconciliation and shard health checks; default `10`.
 - `WatchdogStaleSeconds`: protocol-stale threshold for reopening an otherwise open shard; default `90`, `0` disables stale restarts.
@@ -849,6 +850,18 @@ diagnostic path only; it does not change strategy entry or settlement behavior.
 - `StatusPersistIntervalSeconds`: minimum interval for unchanged `market_data_status` upserts; default `60`.
 - `SideEffectSlowProcessingMilliseconds`: queue-delay or processing threshold for a slow side-effect warning; default `1000`. Position-mark warnings report the measured persistence stage as `OpenConnection`, `SerializeUpdates`, `ExecuteCommand`, or `ReadResults`, with the subsequent in-memory update reported separately as `ApplyExposureCache`. These labels add timing evidence only; they do not change the SQL, CAS predicates, queue, or persistence behavior.
 - `MakerGtdWalletMaximumConcurrency`: maximum independent normalized-wallet groups processed concurrently inside one exact-family Maker-GTD event; default `8`, valid `1..16`. Candidates for one normalized wallet remain sequential and the next event does not start until the current event completes.
+
+Each connection generation sends its complete initial subscription sequence
+before any dynamic subscribe/unsubscribe write. Desired asset changes received
+during initialization are retained and reconciled behind that barrier. The
+connection remains `Connecting`, and heartbeat traffic does not start, until the
+first complete non-empty inbound text frame is received. The first-frame timer
+starts only after the initial sequence completes. A timeout aborts that exact
+socket, records `Reason=FirstFrameTimeout` and `Phase=FirstFrameWait`, and uses
+the existing reconnect/backoff path. This is transport readiness before Maker
+admission, parsing, and application dispatch; it is not proof of parse success
+or a Live-trading guarantee. Post-readiness watchdog/backoff behavior is
+unchanged, and remote close status `1013` can still occur.
 
 Repeated general and Maker-GTD processing warnings with the same component,
 event type, latency category, and active phase are summarized on the existing

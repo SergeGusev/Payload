@@ -59,6 +59,7 @@ public sealed class ConfigurationTests
         Assert.Equal(64, configuration.MarketDataWebSocket.MaxShardConnections);
         Assert.Equal(10, configuration.MarketDataWebSocket.WatchdogIntervalSeconds);
         Assert.Equal(90, configuration.MarketDataWebSocket.WatchdogStaleSeconds);
+        Assert.Equal(10, configuration.MarketDataWebSocket.FirstFrameTimeoutSeconds);
         Assert.Equal(64, configuration.MarketDataWebSocket.ReceiveDispatchQueueCapacity);
         Assert.False(configuration.MarketDataWebSocket.PersistOrderBookSnapshots);
         Assert.False(configuration.MarketDataWebSocket.PersistMarketDataEvents);
@@ -351,6 +352,7 @@ public sealed class ConfigurationTests
                 MaxShardConnections = -1,
                 WatchdogIntervalSeconds = 0,
                 WatchdogStaleSeconds = 1,
+                FirstFrameTimeoutSeconds = 0,
                 ReceiveDispatchQueueCapacity = 0,
                 SideEffectMaxPendingUpdatesPerAsset = 0,
                 SideEffectDiagnosticQueueCapacity = 0,
@@ -393,6 +395,7 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.MaxShardConnections", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.WatchdogIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.WatchdogStaleSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.FirstFrameTimeoutSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.ReceiveDispatchQueueCapacity", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.StatusPersistIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectMaxPendingUpdatesPerAsset", StringComparison.Ordinal));
@@ -413,6 +416,50 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.SuccessfulRetentionHours", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("PolymarketHttpLogging.FailedRetentionDays", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("LiveTrading.MaintenancePollIntervalSeconds", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(90)]
+    [InlineData(91)]
+    public void FirstFrameTimeout_MustBeStrictlyBelowEnabledWatchdog(int firstFrameTimeoutSeconds)
+    {
+        var configuration = new AppConfiguration
+        {
+            MarketDataWebSocket = new MarketDataWebSocketOptions
+            {
+                FirstFrameTimeoutSeconds = firstFrameTimeoutSeconds,
+                WatchdogStaleSeconds = 90
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.Contains(
+            errors,
+            error => error.Contains(
+                "MarketDataWebSocket.FirstFrameTimeoutSeconds",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FirstFrameTimeout_DoesNotHaveWatchdogUpperBoundWhenWatchdogIsDisabled()
+    {
+        var configuration = new AppConfiguration
+        {
+            MarketDataWebSocket = new MarketDataWebSocketOptions
+            {
+                FirstFrameTimeoutSeconds = 90,
+                WatchdogStaleSeconds = 0
+            }
+        };
+
+        var errors = AppOptionsValidator.Validate(configuration);
+
+        Assert.DoesNotContain(
+            errors,
+            error => error.Contains(
+                "MarketDataWebSocket.FirstFrameTimeoutSeconds",
+                StringComparison.Ordinal));
     }
 
     [Fact]
@@ -1300,6 +1347,7 @@ public sealed class ConfigurationTests
 
         Assert.Contains("Mode:", summary);
         Assert.Contains("Paper runs in live mode:", summary);
+        Assert.Contains("Market WebSocket first-frame timeout seconds: 10", summary);
         Assert.Contains("Market WebSocket side-effect max pending updates per asset:", summary);
         Assert.Contains("BTC Up or Down 5m persists Diff counter snapshots:", summary);
         Assert.Contains("Gamma market persistence scope:", summary);

@@ -3,7 +3,7 @@
   "contractId": "RC-20260916-websocket-first-frame-readiness",
   "title": "Bound silent Polymarket WebSocket reconnects and serialize initial subscriptions",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -65,8 +65,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~MarketDataWebSocketFrameProcessingTests|FullyQualifiedName~MarketDataWebSocketReconnectBackoffTests|FullyQualifiedName~MarketWebSocketDisconnectDiagnosticBuilderTests|FullyQualifiedName~ConfigurationTests\"",
           "expected": "All focused readiness, timeout, cancellation, diagnostic, reconnect-backoff and configuration tests pass without an external WebSocket or application database.",
-          "result": "pending",
-          "evidence": "Filled after execution."
+          "result": "passed",
+          "evidence": "The final approved Release filter passed 98/98 tests with 0 failures and 0 skipped. It covers first non-empty transport-frame readiness before blocked dispatch, empty-frame exclusion, exact 10-second timeout, atomic frame-versus-timeout winner claims in both orders, one abort, close and cancellation behavior, explicit diagnostic wiring, unchanged accepted-update reconnect-backoff behavior, and configuration defaults/validation/summary. Because an existing disconnect source-contract locator assumes repository-relative artifacts, its current runner source was mirrored only inside the marked run's test layout; no repository file or runtime behavior was changed by that bounded test-layout workaround."
         }
       ]
     },
@@ -92,8 +92,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~MarketDataWebSocketFrameProcessingTests\"",
           "expected": "All subscription-generation barrier, delta reconciliation, ordering, cancellation and old-generation exclusion tests pass deterministically.",
-          "result": "pending",
-          "evidence": "Filled after execution."
+          "result": "passed",
+          "evidence": "The final 98/98 approved filter includes deterministic MarketDataWebSocketFrameProcessingTests for complete initial-batch ordering, updates held behind initialization, latest desired-set addition/removal reconciliation, initialization failure and cancellation, and rejection of sends through a deactivated old generation."
         }
       ]
     },
@@ -125,16 +125,16 @@
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path <marked-run>/artifacts",
           "expected": "Release service build succeeds with zero errors; the service is not started or deployed.",
-          "result": "pending",
-          "evidence": "Filled after execution."
+          "result": "passed",
+          "evidence": "The final Release service build after the atomic deadline-race correction succeeded with 0 errors and one existing CS9124 warning in the unrelated PaperFakFeeBackfillProcessor.cs:4199; the independent reviewer repeated an incremental no-restore Release build with 0 errors and 0 warnings. The service was not started or deployed."
         },
         {
           "id": "VER-004",
           "kind": "inspection",
           "command": "git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; independent verbatim-request/approved-contract/actual-diff/test-evidence review; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; protected marked-run cleanup",
           "expected": "The bounded change has no unapproved path or behavior, mechanical gates and reviewer pass, unrelated work is preserved, and the owned temp run is absent.",
-          "result": "pending",
-          "evidence": "Filled after execution."
+          "result": "passed",
+          "evidence": "git diff --check passed for every governed path. Requirement WorkingTree validation passed, the approval-only commit e5d6fa9f precedes all product edits, and independent reviewer agent:/root/websocket_first_frame_reviewer compared the verbatim requests, approved contract, complete governed diff, documentation and verification evidence and returned PASS with findings=[]. The reviewer found one deadline race during review; the implementation was corrected with an atomic CAS winner claim, two deterministic ordering tests were added, and the final re-review passed. Protected cleanup initially encountered a compiler-server file lock, then succeeded after stopping only the local .NET build servers: the owned marked run manual-208049534c124ca6aabaad2f653a0b7d was removed and verified absent. Final staged diff/check and requirement Staged validation passed for exactly eight governed implementation files plus this completed contract; unrelated dirty and untracked files were excluded."
         }
       ]
     }
@@ -148,9 +148,9 @@
     "semanticDigest": "sha256:47b92d782852d5b7884b3ca7389b0d2f9895d967cbe8830b0d665f96ac1f2e26"
   },
   "independentReview": {
-    "reviewer": "agent:/root/websocket-first-frame-reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/websocket_first_frame_reviewer",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

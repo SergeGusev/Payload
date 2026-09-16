@@ -24,14 +24,12 @@ public sealed class MarketDataWebSocketShardRunner(
     private static readonly object DisconnectDiagnosticDataKey = new();
     private readonly JsonSerializerOptions jsonOptions = new(JsonSerializerDefaults.Web);
     private readonly object stateGate = new();
-    private readonly object assetGate = new();
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
         makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance;
-    private HashSet<string> assetIds = plan.AssetIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private readonly MarketDataWebSocketDesiredAssetSet desiredAssetSet = new(plan.AssetIds);
     private CancellationTokenSource? runCts;
     private Task? runTask;
-    private ClientWebSocket? currentSocket;
-    private SemaphoreSlim? currentSendLock;
+    private MarketDataWebSocketConnectionGeneration? currentConnection;
     private DateTimeOffset? lastMessageUtc;
     private DateTimeOffset? lastConnectedUtc;
     private DateTimeOffset? lastDisconnectedUtc;
@@ -46,15 +44,7 @@ public sealed class MarketDataWebSocketShardRunner(
 
     public IReadOnlyList<string> AssetIds
     {
-        get
-        {
-            lock (assetGate)
-            {
-                return assetIds
-                    .OrderBy(assetId => assetId, StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-            }
-        }
+        get => desiredAssetSet.Snapshot().AssetIds;
     }
 
     public void Start(CancellationToken stoppingToken)
@@ -89,41 +79,28 @@ public sealed class MarketDataWebSocketShardRunner(
             .Where(assetId => !string.IsNullOrWhiteSpace(assetId))
             .Select(assetId => assetId.Trim())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        string[] toSubscribe;
-        string[] toUnsubscribe;
-        lock (assetGate)
+        if (!desiredAssetSet.Replace(next))
         {
-            toSubscribe = next.Except(assetIds, StringComparer.OrdinalIgnoreCase).ToArray();
-            toUnsubscribe = assetIds.Except(next, StringComparer.OrdinalIgnoreCase).ToArray();
-            if (toSubscribe.Length == 0 && toUnsubscribe.Length == 0)
-            {
-                return;
-            }
-
-            assetIds = next;
+            return;
         }
 
         var connection = GetCurrentConnection();
-        if (connection.Socket?.State != WebSocketState.Open || connection.SendLock is null)
+        if (connection?.Socket.State != WebSocketState.Open)
         {
             return;
         }
 
         try
         {
-            foreach (var batch in ChunkAssetIds(toSubscribe))
-            {
-                await SendSubscriptionUpdateAsync(connection.Socket, "subscribe", batch, connection.SendLock, cancellationToken);
-            }
-
-            foreach (var batch in ChunkAssetIds(toUnsubscribe))
-            {
-                await SendSubscriptionUpdateAsync(connection.Socket, "unsubscribe", batch, connection.SendLock, cancellationToken);
-            }
+            await connection.Subscriptions.ReconcileAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (OperationCanceledException) when (!connection.Subscriptions.IsActive || !IsCurrentConnection(connection))
+        {
+            return;
         }
         catch (Exception ex)
         {
@@ -157,7 +134,7 @@ public sealed class MarketDataWebSocketShardRunner(
 
         lock (stateGate)
         {
-            if (currentSocket?.State != WebSocketState.Open)
+            if (currentConnection?.Socket.State != WebSocketState.Open)
             {
                 return false;
             }
@@ -233,7 +210,15 @@ public sealed class MarketDataWebSocketShardRunner(
 
         using var socket = new ClientWebSocket();
         using var sendLock = new SemaphoreSlim(1, 1);
-        SetCurrentConnection(socket, sendLock);
+        using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var subscriptions = new MarketDataWebSocketSubscriptionGeneration(
+            desiredAssetSet,
+            options.SubscriptionBatchSize,
+            (batch, token) => SendSubscriptionAsync(socket, batch, sendLock, token),
+            (operation, batch, token) => SendSubscriptionUpdateAsync(socket, operation, batch, sendLock, token),
+            connectionCts.Token);
+        var connection = new MarketDataWebSocketConnectionGeneration(socket, subscriptions);
+        SetCurrentConnection(connection);
         Uri? endpointUri = null;
         var connectionAttempt = 0;
         var phase = "EndpointValidation";
@@ -252,19 +237,42 @@ public sealed class MarketDataWebSocketShardRunner(
             connectedAtUtc = DateTimeOffset.UtcNow;
             SetConnectedUtc(connectedAtUtc.Value);
             phase = "InitialSubscription";
-            await SendInitialSubscriptionsAsync(socket, sendLock, cancellationToken);
-            await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);
+            await subscriptions.InitializeAsync(cancellationToken);
 
-            using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var heartbeat = HeartbeatLoopAsync(socket, sendLock, connectionCts);
-            MarketWebSocketCloseFrame? closeFrame;
+            var firstFrameReadiness = new MarketDataWebSocketFirstFrameReadiness();
+            var receiveLoop = ReceiveLoopAsync(
+                socket,
+                reconnectBackoff,
+                firstFrameReadiness.ObserveFrame,
+                () => firstFrameReadiness.IsReady,
+                connectionCts.Token);
+            var heartbeat = Task.CompletedTask;
+            MarketWebSocketCloseFrame? closeFrame = null;
 
             try
             {
-                phase = "ReceiveLoop";
+                phase = "FirstFrameWait";
                 try
                 {
-                    closeFrame = await ReceiveLoopAsync(socket, reconnectBackoff, connectionCts.Token);
+                    var readinessOutcome = await firstFrameReadiness.WaitAsync(
+                        receiveLoop,
+                        TimeSpan.FromSeconds(options.FirstFrameTimeoutSeconds),
+                        socket.Abort,
+                        cancellationToken);
+                    if (readinessOutcome == MarketDataWebSocketFirstFrameWaitOutcome.TimedOut)
+                    {
+                        failureObservedAtUtc = DateTimeOffset.UtcNow;
+                        throw new MarketDataWebSocketFirstFrameTimeoutException(options.FirstFrameTimeoutSeconds);
+                    }
+
+                    if (readinessOutcome == MarketDataWebSocketFirstFrameWaitOutcome.Ready)
+                    {
+                        await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);
+                        heartbeat = HeartbeatLoopAsync(socket, sendLock, connectionCts);
+                        phase = "ReceiveLoop";
+                    }
+
+                    closeFrame = await receiveLoop;
                     receiveLoopObservedAtUtc = closeFrame?.ObservedAtUtc ?? DateTimeOffset.UtcNow;
                 }
                 catch
@@ -277,6 +285,7 @@ public sealed class MarketDataWebSocketShardRunner(
             {
                 await connectionCts.CancelAsync();
                 await SafeAwaitAsync(heartbeat);
+                await SafeAwaitAsync(receiveLoop);
             }
 
             if (cancellationToken.IsCancellationRequested)
@@ -303,8 +312,9 @@ public sealed class MarketDataWebSocketShardRunner(
         catch (Exception ex)
         {
             var observedAtUtc = failureObservedAtUtc ?? DateTimeOffset.UtcNow;
+            var firstFrameTimeout = ex as MarketDataWebSocketFirstFrameTimeoutException;
             var diagnostic = BuildDisconnectDiagnostic(
-                "Exception",
+                firstFrameTimeout is null ? "Exception" : "FirstFrameTimeout",
                 phase,
                 connectionAttempt,
                 Volatile.Read(ref reconnectCount),
@@ -314,12 +324,20 @@ public sealed class MarketDataWebSocketShardRunner(
                 closeFrame: null,
                 exception: ex,
                 observedAtUtc: observedAtUtc);
+            if (firstFrameTimeout is not null)
+            {
+                diagnostic =
+                    $"{diagnostic}; FirstFrameTimeoutSeconds={firstFrameTimeout.TimeoutSeconds}; " +
+                    $"FirstFrameSubscribedAssets={subscriptions.SentAssetCount}";
+            }
+
             TrySetDisconnectDiagnostic(ex, diagnostic);
             throw;
         }
         finally
         {
-            SetCurrentConnection(null, null);
+            await connectionCts.CancelAsync();
+            ClearCurrentConnection(connection);
             SetDisconnectedUtc(DateTimeOffset.UtcNow);
             await PublishStatusAsync(MarketDataConnectionState.Disconnected, null, cancellationToken);
         }
@@ -328,6 +346,8 @@ public sealed class MarketDataWebSocketShardRunner(
     private async Task<MarketWebSocketCloseFrame?> ReceiveLoopAsync(
         ClientWebSocket socket,
         MarketDataWebSocketReconnectBackoff reconnectBackoff,
+        Action<MarketWebSocketDispatchFrame> onFrameReceived,
+        Func<bool> isFirstFrameReady,
         CancellationToken cancellationToken)
     {
         return await MarketDataWebSocketFrameHandoff.RunAsync(
@@ -355,9 +375,12 @@ public sealed class MarketDataWebSocketShardRunner(
                         token);
                 }
 
-                await PublishStatusAsync(MarketDataConnectionState.Connected, null, token);
+                if (isFirstFrameReady())
+                {
+                    await PublishStatusAsync(MarketDataConnectionState.Connected, null, token);
+                }
             },
-            _ => { },
+            onFrameReceived,
             waitDuration => logger.LogWarning(
                 "Market WebSocket shard {Component} receive dispatch channel was saturated. Capacity={ReceiveDispatchQueueCapacity} WaitDurationMilliseconds={WaitDurationMilliseconds}",
                 Component,
@@ -560,25 +583,6 @@ public sealed class MarketDataWebSocketShardRunner(
         }
     }
 
-    private async Task SendInitialSubscriptionsAsync(
-        ClientWebSocket socket,
-        SemaphoreSlim sendLock,
-        CancellationToken cancellationToken)
-    {
-        var firstBatch = true;
-        foreach (var batch in ChunkAssetIds(AssetIds))
-        {
-            if (firstBatch)
-            {
-                await SendSubscriptionAsync(socket, batch, sendLock, cancellationToken);
-                firstBatch = false;
-                continue;
-            }
-
-            await SendSubscriptionUpdateAsync(socket, "subscribe", batch, sendLock, cancellationToken);
-        }
-    }
-
     private async Task SendSubscriptionAsync(
         ClientWebSocket socket,
         IReadOnlyCollection<string> assetIds,
@@ -614,14 +618,6 @@ public sealed class MarketDataWebSocketShardRunner(
         }
 
         await SendJsonAsync(socket, payload, sendLock, cancellationToken);
-    }
-
-    private IEnumerable<IReadOnlyCollection<string>> ChunkAssetIds(IReadOnlyCollection<string> assetIds)
-    {
-        foreach (var batch in assetIds.Chunk(options.SubscriptionBatchSize))
-        {
-            yield return batch;
-        }
     }
 
     private async Task SendJsonAsync(ClientWebSocket socket, object payload, SemaphoreSlim sendLock, CancellationToken cancellationToken)
@@ -778,24 +774,53 @@ public sealed class MarketDataWebSocketShardRunner(
     {
         lock (stateGate)
         {
-            return currentSocket;
+            return currentConnection?.Socket;
         }
     }
 
-    private (ClientWebSocket? Socket, SemaphoreSlim? SendLock) GetCurrentConnection()
+    private MarketDataWebSocketConnectionGeneration? GetCurrentConnection()
     {
         lock (stateGate)
         {
-            return (currentSocket, currentSendLock);
+            return currentConnection;
         }
     }
 
-    private void SetCurrentConnection(ClientWebSocket? socket, SemaphoreSlim? sendLock)
+    private bool IsCurrentConnection(MarketDataWebSocketConnectionGeneration connection)
     {
         lock (stateGate)
         {
-            currentSocket = socket;
-            currentSendLock = sendLock;
+            return ReferenceEquals(currentConnection, connection);
+        }
+    }
+
+    private void SetCurrentConnection(MarketDataWebSocketConnectionGeneration connection)
+    {
+        MarketDataWebSocketConnectionGeneration? previous;
+        lock (stateGate)
+        {
+            previous = currentConnection;
+            currentConnection = connection;
+        }
+
+        previous?.Subscriptions.Deactivate();
+    }
+
+    private void ClearCurrentConnection(MarketDataWebSocketConnectionGeneration connection)
+    {
+        var cleared = false;
+        lock (stateGate)
+        {
+            if (ReferenceEquals(currentConnection, connection))
+            {
+                currentConnection = null;
+                cleared = true;
+            }
+        }
+
+        if (cleared)
+        {
+            connection.Subscriptions.Deactivate();
         }
     }
 
@@ -851,6 +876,315 @@ public sealed class MarketDataWebSocketShardRunner(
         DateTimeOffset? LastConnectedUtc,
         DateTimeOffset? LastDisconnectedUtc);
 
+    private sealed record MarketDataWebSocketConnectionGeneration(
+        ClientWebSocket Socket,
+        MarketDataWebSocketSubscriptionGeneration Subscriptions);
+
+}
+
+internal sealed record MarketDataWebSocketDesiredAssetsSnapshot(
+    long Revision,
+    IReadOnlyList<string> AssetIds);
+
+internal sealed class MarketDataWebSocketDesiredAssetSet(IEnumerable<string> initialAssetIds)
+{
+    private readonly object gate = new();
+    private HashSet<string> assetIds = initialAssetIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private long revision;
+
+    public MarketDataWebSocketDesiredAssetsSnapshot Snapshot()
+    {
+        lock (gate)
+        {
+            return new MarketDataWebSocketDesiredAssetsSnapshot(
+                revision,
+                assetIds.OrderBy(assetId => assetId, StringComparer.OrdinalIgnoreCase).ToArray());
+        }
+    }
+
+    public bool Replace(IReadOnlyCollection<string> nextAssetIds)
+    {
+        var next = nextAssetIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        lock (gate)
+        {
+            if (assetIds.SetEquals(next))
+            {
+                return false;
+            }
+
+            assetIds = next;
+            revision++;
+            return true;
+        }
+    }
+
+    public bool TryCompleteInitialization(long expectedRevision, Action complete)
+    {
+        lock (gate)
+        {
+            if (revision != expectedRevision)
+            {
+                return false;
+            }
+
+            complete();
+            return true;
+        }
+    }
+}
+
+internal sealed class MarketDataWebSocketSubscriptionGeneration
+{
+    private readonly MarketDataWebSocketDesiredAssetSet desiredAssetSet;
+    private readonly int batchSize;
+    private readonly Func<IReadOnlyCollection<string>, CancellationToken, Task> sendInitialAsync;
+    private readonly Func<string, IReadOnlyCollection<string>, CancellationToken, Task> sendUpdateAsync;
+    private readonly CancellationTokenSource generationCts = new();
+    private readonly CancellationToken generationToken;
+    private readonly SemaphoreSlim operationGate = new(1, 1);
+    private readonly TaskCompletionSource initialSubscriptionCompleted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly HashSet<string> sentAssetIds = new(StringComparer.OrdinalIgnoreCase);
+    private int initializationStarted;
+    private int active = 1;
+    private int sentAssetCount;
+    private bool initialMessageSent;
+
+    public MarketDataWebSocketSubscriptionGeneration(
+        MarketDataWebSocketDesiredAssetSet desiredAssetSet,
+        int batchSize,
+        Func<IReadOnlyCollection<string>, CancellationToken, Task> sendInitialAsync,
+        Func<string, IReadOnlyCollection<string>, CancellationToken, Task> sendUpdateAsync,
+        CancellationToken generationToken)
+    {
+        this.desiredAssetSet = desiredAssetSet ?? throw new ArgumentNullException(nameof(desiredAssetSet));
+        ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
+        this.batchSize = batchSize;
+        this.sendInitialAsync = sendInitialAsync ?? throw new ArgumentNullException(nameof(sendInitialAsync));
+        this.sendUpdateAsync = sendUpdateAsync ?? throw new ArgumentNullException(nameof(sendUpdateAsync));
+        this.generationToken = generationToken;
+    }
+
+    public bool IsActive =>
+        Volatile.Read(ref active) == 1 &&
+        !generationCts.IsCancellationRequested &&
+        !generationToken.IsCancellationRequested;
+
+    public int SentAssetCount => Volatile.Read(ref sentAssetCount);
+
+    public async Task InitializeAsync(CancellationToken cancellationToken)
+    {
+        if (Interlocked.Exchange(ref initializationStarted, 1) != 0)
+        {
+            throw new InvalidOperationException("The WebSocket subscription generation has already been initialized.");
+        }
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            generationCts.Token,
+            generationToken);
+        var lockTaken = false;
+        try
+        {
+            await operationGate.WaitAsync(linkedCts.Token);
+            lockTaken = true;
+            while (true)
+            {
+                linkedCts.Token.ThrowIfCancellationRequested();
+                var desired = desiredAssetSet.Snapshot();
+                await ReconcileToSnapshotAsync(desired.AssetIds, linkedCts.Token);
+                if (desiredAssetSet.TryCompleteInitialization(
+                    desired.Revision,
+                    () => initialSubscriptionCompleted.TrySetResult()))
+                {
+                    return;
+                }
+            }
+        }
+        catch
+        {
+            Deactivate();
+            throw;
+        }
+        finally
+        {
+            if (lockTaken)
+            {
+                operationGate.Release();
+            }
+        }
+    }
+
+    public async Task ReconcileAsync(CancellationToken cancellationToken)
+    {
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            generationCts.Token,
+            generationToken);
+        await initialSubscriptionCompleted.Task.WaitAsync(linkedCts.Token);
+        await operationGate.WaitAsync(linkedCts.Token);
+        try
+        {
+            while (true)
+            {
+                linkedCts.Token.ThrowIfCancellationRequested();
+                var desired = desiredAssetSet.Snapshot();
+                await ReconcileToSnapshotAsync(desired.AssetIds, linkedCts.Token);
+                if (desiredAssetSet.Snapshot().Revision == desired.Revision)
+                {
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            operationGate.Release();
+        }
+    }
+
+    public void Deactivate()
+    {
+        if (Interlocked.Exchange(ref active, 0) == 0)
+        {
+            return;
+        }
+
+        generationCts.Cancel();
+        initialSubscriptionCompleted.TrySetCanceled(generationCts.Token);
+    }
+
+    private async Task ReconcileToSnapshotAsync(
+        IReadOnlyCollection<string> desiredAssetIds,
+        CancellationToken cancellationToken)
+    {
+        var toSubscribe = desiredAssetIds
+            .Except(sentAssetIds, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(assetId => assetId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var toUnsubscribe = sentAssetIds
+            .Except(desiredAssetIds, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(assetId => assetId, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var batch in toSubscribe.Chunk(batchSize))
+        {
+            if (!initialMessageSent)
+            {
+                await sendInitialAsync(batch, cancellationToken);
+                initialMessageSent = true;
+            }
+            else
+            {
+                await sendUpdateAsync("subscribe", batch, cancellationToken);
+            }
+
+            sentAssetIds.UnionWith(batch);
+            Volatile.Write(ref sentAssetCount, sentAssetIds.Count);
+        }
+
+        foreach (var batch in toUnsubscribe.Chunk(batchSize))
+        {
+            await sendUpdateAsync("unsubscribe", batch, cancellationToken);
+            sentAssetIds.ExceptWith(batch);
+            Volatile.Write(ref sentAssetCount, sentAssetIds.Count);
+        }
+    }
+}
+
+internal enum MarketDataWebSocketFirstFrameWaitOutcome
+{
+    Ready,
+    ReceiveLoopCompleted,
+    TimedOut
+}
+
+internal sealed class MarketDataWebSocketFirstFrameReadiness
+{
+    private readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int state;
+
+    public bool IsReady => Volatile.Read(ref state) == 1;
+
+    internal bool TryClaimTimeout()
+    {
+        return Interlocked.CompareExchange(ref state, 2, 0) == 0;
+    }
+
+    public void ObserveFrame(MarketWebSocketDispatchFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        if (frame.Text.Length == 0 || Interlocked.CompareExchange(ref state, 1, 0) != 0)
+        {
+            return;
+        }
+
+        ready.TrySetResult();
+    }
+
+    public Task<MarketDataWebSocketFirstFrameWaitOutcome> WaitAsync(
+        Task receiveLoop,
+        TimeSpan timeout,
+        Action onTimeout,
+        CancellationToken cancellationToken)
+    {
+        return WaitAsync(receiveLoop, timeout, onTimeout, Task.Delay, cancellationToken);
+    }
+
+    internal async Task<MarketDataWebSocketFirstFrameWaitOutcome> WaitAsync(
+        Task receiveLoop,
+        TimeSpan timeout,
+        Action onTimeout,
+        Func<TimeSpan, CancellationToken, Task> delayAsync,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(receiveLoop);
+        ArgumentNullException.ThrowIfNull(onTimeout);
+        ArgumentNullException.ThrowIfNull(delayAsync);
+        if (timeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeout), "First-frame timeout must be positive.");
+        }
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var timeoutTask = delayAsync(timeout, timeoutCts.Token);
+        try
+        {
+            var completed = await Task.WhenAny(ready.Task, receiveLoop, timeoutTask);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (ReferenceEquals(completed, ready.Task))
+            {
+                return MarketDataWebSocketFirstFrameWaitOutcome.Ready;
+            }
+
+            if (ReferenceEquals(completed, receiveLoop))
+            {
+                return MarketDataWebSocketFirstFrameWaitOutcome.ReceiveLoopCompleted;
+            }
+
+            await timeoutTask;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!TryClaimTimeout())
+            {
+                return IsReady
+                    ? MarketDataWebSocketFirstFrameWaitOutcome.Ready
+                    : MarketDataWebSocketFirstFrameWaitOutcome.TimedOut;
+            }
+
+            onTimeout();
+            return MarketDataWebSocketFirstFrameWaitOutcome.TimedOut;
+        }
+        finally
+        {
+            await timeoutCts.CancelAsync();
+        }
+    }
+}
+
+internal sealed class MarketDataWebSocketFirstFrameTimeoutException(int timeoutSeconds)
+    : TimeoutException($"No complete non-empty inbound text frame was received within {timeoutSeconds} seconds.")
+{
+    public int TimeoutSeconds { get; } = timeoutSeconds;
 }
 
 internal sealed record MarketWebSocketDispatchFrame(

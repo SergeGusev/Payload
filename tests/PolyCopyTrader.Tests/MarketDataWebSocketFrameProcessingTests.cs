@@ -15,6 +15,454 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         "{\"event_type\":\"last_trade_price\",\"asset_id\":\"asset-1\",\"market\":\"condition-1\",\"price\":\"0.51\",\"size\":\"2\",\"side\":\"BUY\",\"timestamp\":\"1752580800000\"}";
 
     [Fact]
+    public void ShardRunner_ReadinessWiringGatesConnectedHeartbeatAndTimeoutDiagnostic()
+    {
+        var source = ReadRepositorySource(
+            "src",
+            "PolyCopyTrader.Service",
+            "MarketData",
+            "MarketDataWebSocketShardRunner.cs").Replace("\r\n", "\n", StringComparison.Ordinal);
+        var runConnectionStart = source.IndexOf(
+            "private async Task<string?> RunConnectionAsync(",
+            StringComparison.Ordinal);
+        var receiveLoopStart = source.IndexOf(
+            "private async Task<MarketWebSocketCloseFrame?> ReceiveLoopAsync(",
+            runConnectionStart,
+            StringComparison.Ordinal);
+        Assert.True(runConnectionStart >= 0);
+        Assert.True(receiveLoopStart > runConnectionStart);
+        var runConnection = source[runConnectionStart..receiveLoopStart];
+
+        var initializationIndex = runConnection.IndexOf(
+            "await subscriptions.InitializeAsync(cancellationToken);",
+            StringComparison.Ordinal);
+        var receiveStartIndex = runConnection.IndexOf(
+            "var receiveLoop = ReceiveLoopAsync(",
+            StringComparison.Ordinal);
+        var firstFrameWaitIndex = runConnection.IndexOf(
+            "await firstFrameReadiness.WaitAsync(",
+            StringComparison.Ordinal);
+        var connectedIndex = runConnection.IndexOf(
+            "await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);",
+            StringComparison.Ordinal);
+        var heartbeatIndex = runConnection.IndexOf(
+            "heartbeat = HeartbeatLoopAsync(socket, sendLock, connectionCts);",
+            StringComparison.Ordinal);
+
+        Assert.True(initializationIndex >= 0);
+        Assert.True(receiveStartIndex > initializationIndex);
+        Assert.True(firstFrameWaitIndex > receiveStartIndex);
+        Assert.True(connectedIndex > firstFrameWaitIndex);
+        Assert.True(heartbeatIndex > connectedIndex);
+        Assert.DoesNotContain(
+            "MarketDataConnectionState.Connected",
+            runConnection[initializationIndex..firstFrameWaitIndex],
+            StringComparison.Ordinal);
+        Assert.Contains("phase = \"FirstFrameWait\";", runConnection, StringComparison.Ordinal);
+        Assert.Contains(
+            "firstFrameTimeout is null ? \"Exception\" : \"FirstFrameTimeout\"",
+            runConnection,
+            StringComparison.Ordinal);
+        Assert.Contains("FirstFrameTimeoutSeconds=", runConnection, StringComparison.Ordinal);
+        Assert.Contains("FirstFrameSubscribedAssets=", runConnection, StringComparison.Ordinal);
+        Assert.Contains("socket.Abort,", runConnection, StringComparison.Ordinal);
+        Assert.Contains(
+            "TryRecordApiErrorAsync(\"ConnectionLoop\", disconnectDiagnostic",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains("if (isFirstFrameReady())", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FirstFrameReadiness_NonEmptyCompleteTextQualifiesBeforeBlockedDispatchCompletes()
+    {
+        var readiness = new MarketDataWebSocketFirstFrameReadiness();
+        var closeFrame = new MarketWebSocketCloseFrame(
+            System.Net.WebSockets.WebSocketCloseStatus.NormalClosure,
+            "done",
+            DateTimeOffset.UtcNow);
+        var received = new Queue<MarketWebSocketReceivedMessage>(
+        [
+            Frame("opaque-nonempty-text", 0),
+            new(null, closeFrame)
+        ]);
+        var dispatchEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dispatchCompleted = false;
+        var abortCalls = 0;
+
+        var receiveLoop = MarketDataWebSocketFrameHandoff.RunAsync(
+            capacity: 1,
+            saturationThreshold: TimeSpan.FromHours(1),
+            _ => Task.FromResult(received.Dequeue()),
+            async (_, _) =>
+            {
+                dispatchEntered.TrySetResult();
+                await releaseDispatch.Task;
+                dispatchCompleted = true;
+            },
+            readiness.ObserveFrame,
+            _ => throw new InvalidOperationException("The channel should not saturate in this test."),
+            () => throw new InvalidOperationException("The consumer should not fail in this test."),
+            CancellationToken.None);
+
+        await dispatchEntered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var outcome = await readiness.WaitAsync(
+            receiveLoop,
+            TimeSpan.FromSeconds(10),
+            () => Interlocked.Increment(ref abortCalls),
+            static (_, token) => Task.Delay(Timeout.InfiniteTimeSpan, token),
+            CancellationToken.None);
+
+        Assert.Equal(MarketDataWebSocketFirstFrameWaitOutcome.Ready, outcome);
+        Assert.True(readiness.IsReady);
+        Assert.False(dispatchCompleted);
+        Assert.False(receiveLoop.IsCompleted);
+        Assert.Equal(0, abortCalls);
+
+        releaseDispatch.TrySetResult();
+        Assert.Same(closeFrame, await receiveLoop);
+    }
+
+    [Fact]
+    public async Task FirstFrameReadiness_EmptyTextFrameDoesNotQualify()
+    {
+        var readiness = new MarketDataWebSocketFirstFrameReadiness();
+        var received = new Queue<MarketWebSocketReceivedMessage>(
+        [
+            Frame(string.Empty, 0),
+            new(null, new MarketWebSocketCloseFrame(null, "done", DateTimeOffset.UtcNow))
+        ]);
+        var abortCalls = 0;
+        var receiveLoop = MarketDataWebSocketFrameHandoff.RunAsync(
+            capacity: 1,
+            saturationThreshold: TimeSpan.FromHours(1),
+            _ => Task.FromResult(received.Dequeue()),
+            (_, _) => Task.CompletedTask,
+            readiness.ObserveFrame,
+            _ => throw new InvalidOperationException("The channel should not saturate in this test."),
+            () => throw new InvalidOperationException("The consumer should not fail in this test."),
+            CancellationToken.None);
+
+        await receiveLoop;
+        var outcome = await readiness.WaitAsync(
+            receiveLoop,
+            TimeSpan.FromSeconds(10),
+            () => Interlocked.Increment(ref abortCalls),
+            static (_, token) => Task.Delay(Timeout.InfiniteTimeSpan, token),
+            CancellationToken.None);
+
+        Assert.Equal(MarketDataWebSocketFirstFrameWaitOutcome.ReceiveLoopCompleted, outcome);
+        Assert.False(readiness.IsReady);
+        Assert.Equal(0, abortCalls);
+    }
+
+    [Fact]
+    public async Task FirstFrameReadiness_TimeoutUsesExactBoundAndAbortsOnce()
+    {
+        var readiness = new MarketDataWebSocketFirstFrameReadiness();
+        var receiveLoop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseTimeout = new TaskCompletionSource();
+        var delayStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        TimeSpan? observedTimeout = null;
+        var abortCalls = 0;
+
+        var wait = readiness.WaitAsync(
+            receiveLoop.Task,
+            TimeSpan.FromSeconds(10),
+            () => Interlocked.Increment(ref abortCalls),
+            (timeout, token) =>
+            {
+                observedTimeout = timeout;
+                delayStarted.TrySetResult();
+                return releaseTimeout.Task.WaitAsync(token);
+            },
+            CancellationToken.None);
+
+        await delayStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.False(wait.IsCompleted);
+        Assert.False(readiness.IsReady);
+
+        releaseTimeout.TrySetResult();
+        var outcome = await wait;
+
+        Assert.Equal(MarketDataWebSocketFirstFrameWaitOutcome.TimedOut, outcome);
+        Assert.Equal(TimeSpan.FromSeconds(10), observedTimeout);
+        Assert.Equal(1, abortCalls);
+        Assert.False(readiness.IsReady);
+    }
+
+    [Fact]
+    public async Task FirstFrameReadiness_FrameAfterTimeoutWinnerCannotReopenReadiness()
+    {
+        var readiness = new MarketDataWebSocketFirstFrameReadiness();
+        var receiveLoop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseTimeout = new TaskCompletionSource();
+        var delayStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var abortCalls = 0;
+        var wait = readiness.WaitAsync(
+            receiveLoop.Task,
+            TimeSpan.FromSeconds(10),
+            () => Interlocked.Increment(ref abortCalls),
+            (_, _) =>
+            {
+                delayStarted.TrySetResult();
+                return releaseTimeout.Task;
+            },
+            CancellationToken.None);
+
+        await delayStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        releaseTimeout.TrySetResult();
+        readiness.ObserveFrame(Frame("late-frame", 0).Frame!);
+
+        Assert.Equal(MarketDataWebSocketFirstFrameWaitOutcome.TimedOut, await wait);
+        Assert.False(readiness.IsReady);
+        Assert.Equal(1, abortCalls);
+    }
+
+    [Fact]
+    public void FirstFrameReadiness_FrameClaimBeforeTimeoutClaimCannotBeOverwritten()
+    {
+        var readiness = new MarketDataWebSocketFirstFrameReadiness();
+
+        readiness.ObserveFrame(Frame("deadline-frame", 0).Frame!);
+
+        Assert.False(readiness.TryClaimTimeout());
+        Assert.True(readiness.IsReady);
+    }
+
+    [Fact]
+    public void FirstFrameReadiness_TimeoutClaimBeforeFrameCannotBeReopened()
+    {
+        var readiness = new MarketDataWebSocketFirstFrameReadiness();
+
+        Assert.True(readiness.TryClaimTimeout());
+        readiness.ObserveFrame(Frame("late-frame", 0).Frame!);
+
+        Assert.False(readiness.IsReady);
+        Assert.False(readiness.TryClaimTimeout());
+    }
+
+    [Fact]
+    public async Task FirstFrameReadiness_CloseBeforeReadinessReturnsWithoutTimeoutAbort()
+    {
+        var readiness = new MarketDataWebSocketFirstFrameReadiness();
+        var receiveLoop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delayStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var abortCalls = 0;
+        var wait = readiness.WaitAsync(
+            receiveLoop.Task,
+            TimeSpan.FromSeconds(10),
+            () => Interlocked.Increment(ref abortCalls),
+            (_, token) =>
+            {
+                delayStarted.TrySetResult();
+                return Task.Delay(Timeout.InfiniteTimeSpan, token);
+            },
+            CancellationToken.None);
+
+        await delayStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        receiveLoop.TrySetResult();
+
+        Assert.Equal(MarketDataWebSocketFirstFrameWaitOutcome.ReceiveLoopCompleted, await wait);
+        Assert.False(readiness.IsReady);
+        Assert.Equal(0, abortCalls);
+    }
+
+    [Fact]
+    public async Task FirstFrameReadiness_ServiceCancellationDoesNotInvokeTimeoutAbort()
+    {
+        var readiness = new MarketDataWebSocketFirstFrameReadiness();
+        var receiveLoop = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delayStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var abortCalls = 0;
+        using var cancellation = new CancellationTokenSource();
+        var wait = readiness.WaitAsync(
+            receiveLoop.Task,
+            TimeSpan.FromSeconds(10),
+            () => Interlocked.Increment(ref abortCalls),
+            (_, token) =>
+            {
+                delayStarted.TrySetResult();
+                return Task.Delay(Timeout.InfiniteTimeSpan, token);
+            },
+            cancellation.Token);
+
+        await delayStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => wait);
+        Assert.False(readiness.IsReady);
+        Assert.Equal(0, abortCalls);
+    }
+
+    [Fact]
+    public async Task SubscriptionGeneration_UpdateDuringInitializationWaitsAndReconcilesLatestDesiredSet()
+    {
+        var desiredAssets = new MarketDataWebSocketDesiredAssetSet(["asset-a", "asset-b", "asset-c"]);
+        var initialSendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseInitialSend = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sends = new List<string>();
+        var sendGate = new object();
+        var generation = new MarketDataWebSocketSubscriptionGeneration(
+            desiredAssets,
+            batchSize: 2,
+            async (batch, token) =>
+            {
+                lock (sendGate)
+                {
+                    sends.Add($"initial:{string.Join(",", batch)}");
+                }
+
+                initialSendEntered.TrySetResult();
+                await releaseInitialSend.Task.WaitAsync(token);
+            },
+            (operation, batch, _) =>
+            {
+                lock (sendGate)
+                {
+                    sends.Add($"{operation}:{string.Join(",", batch)}");
+                }
+
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        var initialize = generation.InitializeAsync(CancellationToken.None);
+        await initialSendEntered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.True(desiredAssets.Replace(["asset-b", "asset-c", "asset-d"]));
+        var reconcile = generation.ReconcileAsync(CancellationToken.None);
+
+        await Task.Yield();
+        Assert.False(initialize.IsCompleted);
+        Assert.False(reconcile.IsCompleted);
+        lock (sendGate)
+        {
+            Assert.Equal(["initial:asset-a,asset-b"], sends);
+        }
+
+        releaseInitialSend.TrySetResult();
+        await Task.WhenAll(initialize, reconcile);
+
+        lock (sendGate)
+        {
+            Assert.Equal(
+                [
+                    "initial:asset-a,asset-b",
+                    "subscribe:asset-c",
+                    "subscribe:asset-d",
+                    "unsubscribe:asset-a"
+                ],
+                sends);
+        }
+    }
+
+    [Fact]
+    public async Task SubscriptionGeneration_FailedInitializationDeactivatesAndRejectsLaterUpdates()
+    {
+        var desiredAssets = new MarketDataWebSocketDesiredAssetSet(["asset-a"]);
+        var updateCalls = 0;
+        var generation = new MarketDataWebSocketSubscriptionGeneration(
+            desiredAssets,
+            batchSize: 10,
+            (_, _) => Task.FromException(new InvalidOperationException("simulated initial send failure")),
+            (_, _, _) =>
+            {
+                Interlocked.Increment(ref updateCalls);
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => generation.InitializeAsync(CancellationToken.None));
+        Assert.Equal("simulated initial send failure", exception.Message);
+        Assert.False(generation.IsActive);
+
+        desiredAssets.Replace(["asset-b"]);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => generation.ReconcileAsync(CancellationToken.None));
+        Assert.Equal(0, updateCalls);
+    }
+
+    [Fact]
+    public async Task SubscriptionGeneration_CancelledInitializationStopsBeforeAnyLaterUpdate()
+    {
+        var desiredAssets = new MarketDataWebSocketDesiredAssetSet(["asset-a"]);
+        var initialSendEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var updateCalls = 0;
+        using var generationCancellation = new CancellationTokenSource();
+        var generation = new MarketDataWebSocketSubscriptionGeneration(
+            desiredAssets,
+            batchSize: 10,
+            async (_, token) =>
+            {
+                initialSendEntered.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            },
+            (_, _, _) =>
+            {
+                Interlocked.Increment(ref updateCalls);
+                return Task.CompletedTask;
+            },
+            generationCancellation.Token);
+
+        var initialize = generation.InitializeAsync(CancellationToken.None);
+        await initialSendEntered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        generationCancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => initialize);
+        Assert.False(generation.IsActive);
+        Assert.Equal(0, updateCalls);
+    }
+
+    [Fact]
+    public async Task SubscriptionGeneration_DeactivatedOldGenerationCannotSendLatestDesiredAssets()
+    {
+        var desiredAssets = new MarketDataWebSocketDesiredAssetSet(["asset-a"]);
+        var oldSends = new List<string>();
+        var oldGeneration = new MarketDataWebSocketSubscriptionGeneration(
+            desiredAssets,
+            batchSize: 10,
+            (batch, _) =>
+            {
+                oldSends.Add($"initial:{string.Join(",", batch)}");
+                return Task.CompletedTask;
+            },
+            (operation, batch, _) =>
+            {
+                oldSends.Add($"{operation}:{string.Join(",", batch)}");
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+        await oldGeneration.InitializeAsync(CancellationToken.None);
+        oldGeneration.Deactivate();
+        desiredAssets.Replace(["asset-b"]);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => oldGeneration.ReconcileAsync(CancellationToken.None));
+
+        var newSends = new List<string>();
+        var newGeneration = new MarketDataWebSocketSubscriptionGeneration(
+            desiredAssets,
+            batchSize: 10,
+            (batch, _) =>
+            {
+                newSends.Add($"initial:{string.Join(",", batch)}");
+                return Task.CompletedTask;
+            },
+            (operation, batch, _) =>
+            {
+                newSends.Add($"{operation}:{string.Join(",", batch)}");
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+        await newGeneration.InitializeAsync(CancellationToken.None);
+
+        Assert.Equal(["initial:asset-a"], oldSends);
+        Assert.Equal(["initial:asset-b"], newSends);
+    }
+
+    [Fact]
     public async Task FrameHandoff_ReceivesLaterFramesWhileMakerReceiptAdmissionIsHeld_ThenDrainsCloseInFifoOrder()
     {
         var firstReceivedAtUtc = new DateTimeOffset(2026, 9, 16, 6, 0, 0, TimeSpan.Zero);
@@ -528,6 +976,23 @@ public sealed class MarketDataWebSocketFrameProcessingTests
                 text,
                 new DateTimeOffset(2026, 9, 16, 6, 0, 0, TimeSpan.Zero).AddMilliseconds(millisecondOffset)),
             null);
+    }
+
+    private static string ReadRepositorySource(params string[] segments)
+    {
+        var relativePath = Path.Combine(segments);
+        var repositoryPath = Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(GetThisSourceFilePath())!,
+            "..",
+            "..",
+            relativePath));
+        return File.ReadAllText(repositoryPath);
+    }
+
+    private static string GetThisSourceFilePath(
+        [System.Runtime.CompilerServices.CallerFilePath] string filePath = "")
+    {
+        return filePath;
     }
 
     private static async Task WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)

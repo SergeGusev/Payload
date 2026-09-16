@@ -355,6 +355,8 @@ public sealed class MarketDataWebSocketOptions
 
     public int HeartbeatSeconds { get; init; } = 10;
 
+    public int FirstFrameTimeoutSeconds { get; init; } = 10;
+
     public int ReconnectBaseDelaySeconds { get; init; } = 2;
 
     public int ReconnectMaxDelaySeconds { get; init; } = 60;
