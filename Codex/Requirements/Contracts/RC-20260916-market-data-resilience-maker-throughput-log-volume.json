@@ -67,8 +67,8 @@
         {
           "id": "VER-001",
           "kind": "test",
-          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~OperationalLoggingTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests\"",
-          "expected": "Focused logging and queue tests pass and demonstrate the exact event-level, compact/full evidence, aggregation, recovery and error-bypass contract without changing persisted runs.",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~OperationalLoggingTests|FullyQualifiedName~MarketDataSideEffectQueueTests\"",
+          "expected": "Focused logging and queue tests pass and demonstrate the exact event-level, compact/full evidence, aggregation, recovery and error-bypass contract without changing persisted runs. The unrelated legacy strategy-catalog test class is not part of this focused filter.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -95,8 +95,8 @@
         {
           "id": "VER-002",
           "kind": "test",
-          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~OkxExpiryFuturesReference\"",
-          "expected": "All parser/configuration and new service-resilience tests pass deterministically without external network or application database access.",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~OkxExpiryFuturesReferenceServiceTests|Name~ResponseParser_\"",
+          "expected": "All OKX parser and new service-resilience tests covering this change pass deterministically without external network or application database access. The unrelated legacy strategy-count assertion is not part of this focused filter.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -142,7 +142,7 @@
       "sourceQuote": "Ок, действуй",
       "acceptanceCriteria": [
         "Add MarketDataWebSocket.MakerGtdWalletMaximumConcurrency with default 8 and validated range 1..16; replace only the current hard-coded value 4. Within one event, different normalized wallet groups may execute up to that bound, while candidates for the same normalized wallet remain sequential and every event completes before the next event starts.",
-        "After a Maker order is atomically persisted as Filled or Expired, its ID is removed from already queued later work items before expensive updater work. An item is skipped only when all of its eligible IDs are proven terminal; any still-Pending ID keeps the original full event, source/receipt timestamps, prices, snapshot, ordering and drain/preflight visibility.",
+        "Only after a Maker order is successfully atomically persisted as Filled or Expired, an explicit terminal notification removes its ID from already queued later work items before expensive updater work. Generic failure cleanup, cache synchronization, rejected/not-eligible mutations and nonterminal statuses never publish terminal notification or prune queued evidence. An item is skipped only when all of its eligible IDs are proven terminal; any still-Pending ID keeps the original full event, source/receipt timestamps, prices, snapshot, ordering and drain/preflight visibility.",
         "No Maker event admission limit, generic coalescing/drop, same-asset parallel event processing, price/touch evaluator, execution source/contract, fee, fill, position, expiry, publication fence, error isolation or atomic persistence behavior changes.",
         "A deterministic 28-distinct-wallet test demonstrates a maximum of 8 concurrently active wallet groups and unchanged event FIFO; same-wallet seriality, independent-wallet failure isolation, CAS conflict retry, terminal-tail pruning, no-prune-for-Pending and expiry/fill race/drain tests pass.",
         "Every description of these exact-family results retains: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. Live submission remains disabled and no other strategy inherits the exception."
@@ -155,8 +155,11 @@
         "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
         "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
         "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperPlacementHandoff.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
         "src/PolyCopyTrader.Service/appsettings.json",
         "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperPlacementHandoffTests.cs",
         "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
         "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs"
       ],
@@ -165,7 +168,7 @@
           "id": "VER-004",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtd|FullyQualifiedName~ConfigurationTests\"",
-          "expected": "Concurrency bound 8, wallet seriality, event FIFO, no-drop evidence, terminal-only pruning, expiry/fill/drain races and the exact Maker exception/parity tests pass.",
+          "expected": "Concurrency bound 8, wallet seriality, event FIFO, no-drop evidence, explicit post-persistence terminal-only pruning, no notification/pruning from generic failure or nonterminal paths, expiry/fill/drain races and the exact Maker exception/parity tests pass.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -178,8 +181,8 @@
       "sourceQuote": "Продолжай",
       "acceptanceCriteria": [
         "README and configuration reference describe the new log policy, OKX independent bounded retry, WebSocket frame channel/capacity, Maker concurrency/pruning and all unchanged safety boundaries; they do not claim deployment or measured Production improvement.",
-        "The full PolyCopyTrader.Tests suite and Release service build pass using one marked D:/CodexTemp run with TEMP/TMP/TMPDIR and explicit artifacts/results paths. No service is started and no application database or external exchange fixture is used.",
-        "git diff --check, requirement WorkingTree/Staged validation and an independent reviewer comparison of all verbatim requests, approved contract, actual diff and evidence pass with no findings. Unrelated dirty files remain unmodified/uncommitted; approval record precedes product edits in Git history.",
+        "The Release service build and every focused test covering changed behavior pass using marked D:/CodexTemp runs with TEMP/TMP/TMPDIR and explicit artifacts/results paths. The full PolyCopyTrader.Tests suite is also executed and its exact result is recorded; independently reproduced clean-HEAD failures from untouched/stale strategy catalogs, tests that explicitly require the application PostgreSQL fixture excluded by scope, and source-path tests incompatible with the mandated external artifacts layout are baseline evidence rather than failures introduced or repaired by this task. No service is started and no application database or external exchange fixture is used.",
+        "git diff --check, requirement WorkingTree/Staged validation and an independent reviewer comparison of all verbatim requests, amended approved contract, actual diff and evidence pass with no findings. The reviewer verifies both the changed-area passing tests and the independent clean-HEAD classification of full-suite failures. Unrelated dirty files remain unmodified/uncommitted; both approval records precede the governed implementation commit in Git history.",
         "After all processes and reviewers finish, the owned marked temporary run is removed by the protected lifecycle script and verified absent."
       ],
       "implementationPaths": [
@@ -195,6 +198,7 @@
         "src/PolyCopyTrader.Service/MarketData/MakerGtdPaperMarketDataQueue.cs",
         "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
         "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperPlacementHandoff.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
         "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
         "src/PolyCopyTrader.Service/MarketData/SlowProcessingWarningAggregator.cs",
         "src/PolyCopyTrader.Service/appsettings.json",
@@ -203,6 +207,8 @@
         "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs",
         "tests/PolyCopyTrader.Tests/MarketDataWebSocketFrameProcessingTests.cs",
         "tests/PolyCopyTrader.Tests/MarketDataWebSocketReconnectBackoffTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperLifecycleIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdPaperPlacementHandoffTests.cs",
         "tests/PolyCopyTrader.Tests/OkxExpiryFuturesReferenceTests.cs",
         "tests/PolyCopyTrader.Tests/OkxExpiryFuturesReferenceServiceTests.cs",
         "tests/PolyCopyTrader.Tests/OperationalLoggingTests.cs",
@@ -213,7 +219,7 @@
           "id": "VER-005",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results",
-          "expected": "The complete local test suite passes with zero failures and no external service/application database mutation.",
+          "expected": "The complete local test suite is executed without external service/application database mutation. Every test covering changed behavior passes, and the remaining failed-test set is independently reproduced on clean HEAD or is exactly attributable to the prohibited PostgreSQL fixture or mandated external artifacts layout; no whole-repository green-suite claim is made and none of those baseline failures is repaired in this task.",
           "result": "pending",
           "evidence": "pending"
         },
@@ -237,12 +243,35 @@
     }
   ],
   "assumptions": [],
-  "deviations": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "The repository-wide suite and the two original broad legacy-name filters are evidence runs rather than zero-failure completion gates when their failures are independently reproduced on clean HEAD, require the application PostgreSQL fixture expressly excluded by scope, or depend on source-tree build-output placement incompatible with the mandated external D:/CodexTemp artifacts path. Completion instead requires a zero-error Release build, every focused changed-behavior test passing, exact full-suite result recording, and independent classification that this diff introduces no failed test.",
+      "impact": "This task does not repair or claim success for pre-existing stale catalog expectations, excluded PostgreSQL integration fixtures, or source-path assumptions outside the approved behavior. It makes only the narrower evidenced claim that the changed logging, OKX, WebSocket and Maker paths build and pass their focused tests without adding a full-suite regression.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260916-market-data-resilience-maker-throughput-log-volume sha256:4eae71202bf842a8ec8f3147648e6cf3e7c67ad78b4afe170984a277c1ee11dd",
+        "semanticDigest": "sha256:4eae71202bf842a8ec8f3147648e6cf3e7c67ad78b4afe170984a277c1ee11dd"
+      }
+    },
+    {
+      "id": "DEV-002",
+      "text": "Add PaperTradingProcessor.cs plus the existing Maker lifecycle and handoff test files to the implementation map so terminal-tail notification is moved from generic cleanup to the exact successfully persisted Filled/Expired paths required by REQ-004.",
+      "impact": "One additional existing service file and two focused test files enter scope. The change only narrows queue pruning to proven terminal persistence; order expiry/fill decisions, persistence, prices, accounting and Live behavior remain unchanged.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260916-market-data-resilience-maker-throughput-log-volume sha256:4eae71202bf842a8ec8f3147648e6cf3e7c67ad78b4afe170984a277c1ee11dd",
+        "semanticDigest": "sha256:4eae71202bf842a8ec8f3147648e6cf3e7c67ad78b4afe170984a277c1ee11dd"
+      }
+    }
+  ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260916-market-data-resilience-maker-throughput-log-volume sha256:ce8a97a16210f0655b85fd371388391f90594b00ecff9e7b99d554e54d8e044a",
-    "semanticDigest": "sha256:ce8a97a16210f0655b85fd371388391f90594b00ecff9e7b99d554e54d8e044a"
+    "evidenceText": "APPROVE RC-20260916-market-data-resilience-maker-throughput-log-volume sha256:4eae71202bf842a8ec8f3147648e6cf3e7c67ad78b4afe170984a277c1ee11dd",
+    "semanticDigest": "sha256:4eae71202bf842a8ec8f3147648e6cf3e7c67ad78b4afe170984a277c1ee11dd"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
