@@ -8,6 +8,10 @@
     {
       "source": "user",
       "text": "Удали все стратегии, где Enabled = false. Вместе с историей ставок"
+    },
+    {
+      "source": "user",
+      "text": "Продолжай удаление стратегий, у которых Enabled = false и их истории"
     }
   ],
   "scope": {
@@ -317,7 +321,8 @@
       "id": "REQ-001",
       "text": "Delete exactly the disabled production strategy identities after their own dependencies are removed.",
       "sourceRequestIndexes": [
-        0
+        0,
+        1
       ],
       "sourceQuote": "Удали все стратегии, где Enabled = false.",
       "acceptanceCriteria": [
@@ -336,7 +341,7 @@
           "command": "Run the task script in Preview mode against production with explicit READ ONLY transactions; compare frozen IDs/codes/flags and independent baseline.",
           "expected": "Exact276 disabled targets and no unexpected active state or cross-scope ownership.",
           "result": "pending",
-          "evidence": "Initial276 identity count/hash and no Live/openPaper/Child/LossDiff references verified; full preflight remains pending. Independent disabled_delete_preview_review read the full final draft and original request, recomputed276 unique IDs/codes and matchingIDhash, then checked fresh Production identities/names/flags at2026-09-15T19:39:59.094564Z with0mismatches: draft semantic review PASS/no findings for approval presentation only. Implementation and canary review remain pending."
+          "evidence": "Fresh independent raw Production checks at2026-09-16T18:49:00Z,18:49:23Z,18:49:54Z and root at18:50:20Z each confirmed exact276 Enabled=false identities and frozen hash293def10788fe14d05af1b908ac97d49; all target LiveStakes=false. Prior complete ownership preflight passed; it must be refreshed before resumed writes."
         },
         {
           "id": "VER-002",
@@ -344,7 +349,7 @@
           "command": "After approved Apply batches run Verify mode and compare exact target absence and retained strategy baselines independently.",
           "expected": "All276 absent and no task-caused out-of-scope changes; report exact partial completion if stopped.",
           "result": "pending",
-          "evidence": "No mutation has occurred."
+          "evidence": "One verified canary financial chain was deleted at2026-09-15T20:43:59Z; all276 strategy definitions remain. Final target absence verification is pending."
         }
       ]
     },
@@ -352,7 +357,8 @@
       "id": "REQ-002",
       "text": "Delete each target's complete exclusively owned structured bet history together with the strategy, using gentle auditable atomic batches.",
       "sourceRequestIndexes": [
-        0
+        0,
+        1
       ],
       "sourceQuote": "Вместе с историей ставок",
       "acceptanceCriteria": [
@@ -372,7 +378,7 @@
           "command": "Independently review the one-shot SQL/script dependency ownership and transaction boundaries against current source/FKs, read-only counts and retained-row baselines; run non-mutating syntax/plan checks and the approved one-chain canary.",
           "expected": "Independent review passes before canary; exact canary affected counts, preserved retained rows and post-health pass before larger bounded batches.",
           "result": "pending",
-          "evidence": "All276 core ledger/archive counts completed with bounded indexed read-only queries:681106orders/fills/signals each,919822rawruns,681091positions/settlements each,openpositions0,archivev1 824828/v2 0,rollups16802. No apply script or canary yet; auxiliary ownership preflight remains pending."
+          "evidence": "Original complete preflight passed. The one-chain canary independently passed with exact deletion of one order/fill/run/signal/position/settlement and no retained-row or health regression. Fresh resumed preview confirms681105orders and919821runs, with fills/signals681105,positions/settlements681090 derived from independently verified baseline minus the exact canary; archive-v1 remains824828,archive-v2 0,rollups16802; open target Paper orders/positions and Live orders remain0. Full-run implementation and refreshed independent review remain pending."
         },
         {
           "id": "VER-004",
@@ -390,8 +396,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260915-delete-disabled-production-strategies sha256:7a12408763ae709a7095e3262023407ad30627c9808a1b05781eda07591c1e8c",
-    "semanticDigest": "sha256:7a12408763ae709a7095e3262023407ad30627c9808a1b05781eda07591c1e8c"
+    "evidenceText": "APPROVE RC-20260915-delete-disabled-production-strategies sha256:9ca16143ed8370a09b90ef6c104a24e92c0a3a385d6b977a288ea1f449a0d8a7",
+    "semanticDigest": "sha256:9ca16143ed8370a09b90ef6c104a24e92c0a3a385d6b977a288ea1f449a0d8a7"
   },
   "independentReview": {
     "reviewer": "agent:/root/disabled_delete_preview_review",
