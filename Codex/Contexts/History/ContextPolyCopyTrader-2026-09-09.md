@@ -67,3 +67,10 @@ Request:
 
 Result:
 Completed approved contract RC-20260909-copied-performance-aggregate-latency. The selected-wallet aggregate now materializes orders, positive-size positions and settlements once, resolves latest Gamma category once per distinct required condition, aggregates fills per selected order through ix_paper_fills_order_time, and reduces each source before the unchanged category/OVERALL formulas. Pre-edit Production READ ONLY evidence covered 25 wallets with 127,552 orders/fills and 124,147 settlements; the optimized prototype completed in 1,972.808ms with no paper_fills sequential scan, and a five-wallet comparison returned zero differences both ways. Final disposable-loopback PostgreSQL tests passed 21/21 with exact legacy/persisted equivalence and indexed fill lookup; Release solution build exited zero with 0 errors and 125 existing out-of-scope warnings. Independent review passed with no findings after correcting one stale README CTE name. The disposable database was removed; Production remained unchanged.
+
+## 2026-09-09T20:30:00Z
+Request:
+Выложил, проверяй
+
+Result:
+Verified the post-deploy Production runtime read-only from server logs. One service start occurred at 2026-09-09T19:58:37.661Z; Live heartbeats and current strategy/HTTP activity remained fresh, with no ERR/FTL, copied-performance failure or second restart. The copied-performance worker repeatedly processed 30 wallets and wrote 60 rows per cycle, its queue drained materially despite producer bursts, and the first 48 cadence-derived cycle durations were 3.915-28.268 seconds with none reaching 30 seconds. Paper logs showed fresh nonzero entries and hundreds of FAK fill decisions. Early Maker-GTD latency bursts cleared; latest side-effect metrics were empty and failure-free. Exact deployed hash, last_error and database persistence/order/cancel invariants could not be independently verified because Production rejected the available read-only PostgreSQL connection via pg_hba and does not support SSL. No Production or source mutation occurred.

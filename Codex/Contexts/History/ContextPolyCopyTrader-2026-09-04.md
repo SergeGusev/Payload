@@ -281,3 +281,31 @@ APPROVE RC-20260904-eth-progress34-resilient-apply sha256:9dbe1254a7b39ff2ced134
 
 Result:
 Exact prepared execution approval received and matched semantic digest. Contract status/approval changed to approved with verbatim evidence; no scope, assumption or deviation change. Preparing the required approval-only commit/push before any Production write, then fresh build/read-only preview and exact bounded apply. History remains32/31612 at this checkpoint.
+
+## 2026-09-04T18:55:00.2528130Z
+Request:
+Повтори
+
+Result:
+Paused before heavy report queries because a fresh read-only Production preflight found the separately approved Progress34 restoration actively reading the same database: application_name eth_progress34_history, state active, wait_event_type IO, wait_event DataFileRead at cutoff 2026-09-04T18:54:42.224507Z. Endpoint 192.168.0.101:5432/polycopytrader, transaction read-only on, zero waiting locks; Service Running/Live build eab41015744d4d2fcc04b042d946529efeb13084, heartbeat18:54:06.960828Z, blank error. No ranking/export queries, workbook marker, output files or Production writes. Protected cleanup removed marked run manual-c628e43ddc02420eb44c174c1781676e (4files/8370bytes), absence verified. Requested user choice whether to wait for the restoration before repeating on a fresh cutoff.
+
+## 2026-09-04T19:42:00Z
+Request:
+Да, не будем мешать
+
+Result:
+User chose not to compete with the active Progress34 restoration. Direct task-status waits only; no Production report queries. Local process/log read confirmed the importer is alive and at 2026-09-04T19:41:13.360883Z had completed928/31612, waiting for service projections with no active write transaction, so this is a multi-hour operation rather than a short wait. Created heartbeat automation progress34 ("Отчёты после Progress34"), every5minutes, attached to this thread: while restoration thread01a02d31-4303-7d70-819a-5d6186653877 is active it remains silent and does not query Production; after successful completion it runs the exact fresh ordinary-only BTC/ETH/SOL lifetime Settled Net report package, verifies and delivers three embedded JPGs plus three XLSX links, then pauses itself; on restoration failure it reports and pauses. No report artifacts, workbook marker, financial calculation or Production mutation in this handoff turn.
+
+## 2026-09-04T20:16:00Z
+Request:
+Heartbeat progress34
+
+Result:
+Restoration task completed without task error after4868190ms. Fresh short read-only Production preflight at20:15:05.881157Z confirmed endpoint192.168.0.101/polycopytrader, read_only on, Service Running/Live eab41015, heartbeat20:14:07.922908Z and blank error, but found17waiting locks, active service BuffileRead/DataFileRead,17PolyCopyTrader.Service advisory waiters and eth_progress34_history idle/ClientRead. Stopped before ranking/history/price queries as required; no report output, workbook marker or Production mutation. Updated heartbeat progress34 to stay quiet while this same post-restoration drain persists, retry only short preflight, and run exact six-file ordinary-only Net report when importer connection disappears, waiting locks=0 and active service I/O is absent. New/different blocker pauses and reports. Protected cleanup removed own marked run manual-48ee992f523e4f0e8c591c75c078003c,7files/15341bytes; absence verified.
+
+## 2026-09-04T20:50:00Z
+Request:
+ЛАдно, прерывайся
+
+Result:
+Cancelled the pending report workflow and deleted heartbeat automation progress34 ("Отчёты после Progress34"). No further monitoring or report queries will run. No report artifacts or Production mutation were created by the cancellation.

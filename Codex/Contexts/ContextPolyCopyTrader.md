@@ -1,3 +1,471 @@
+## Active Update 2026-09-16 Market Data Resilience Maker Throughput Log Volume
+Goal: Implement the user-approved corrections for excessive logs, external market-data head-of-line failures and Maker-GTD backlog without changing trading semantics.
+Status: Completed
+Done:
+- Preserved the requirement lifecycle as separate commits: original approval `9ec05f24`, amended approval `d82b0597` with DEV-001/DEV-002, and implementation `6862e2b0`; pushed the complete chain to `origin/master`.
+- Reduced routine file-log volume: standard HttpClient lifecycle logging is Warning+, routine skips use compact Information plus a lowercase SHA-256 fingerprint and full Debug when enabled, Maker/actionable evidence stays complete, and repeated slow warnings use first/30-second aggregate/recovery reporting.
+- Split OKX catalog, fixed-expiry ticker and per-asset index work into independent loops; retained one-second success polling, two-second attempt timeout and five-second stale rejection; added one bounded retry for timeout/429/5xx, post-parse fetch timestamps, incident aggregation/recovery, one-second retry after failed catalog refresh and configured catalog interval after success.
+- Added a bounded no-drop per-shard WebSocket receipt-to-dispatch FIFO with capacity64, receipt timestamp before backpressure, saturation diagnostics, normal-close drain and unchanged reconnect/subscription rules.
+- Made exact-family Maker-GTD independent-wallet concurrency configurable with default8/range1..16; same-wallet and event FIFO remain serialized. Queued tail pruning now occurs only after explicit atomically persisted Filled/Expired results; generic cleanup, failure, Pending, cache synchronization and rejected mutation paths do not prune.
+- Verification passed: logging/queue38/38; OKX service13/13 plus parser2/2; WebSocket/config77/77; Maker292 pass/1 conditional PostgreSQL skip plus exact81/81 and160000-item FIFO1/1; Release service build0 warnings/0 errors. Final full suite1719 pass/173 baseline failures/95 skip; failure-name set unchanged (SHA-256 `826ca7e244356bad633bf9b8215a6966ab4805576401528bd27bd0ddafb59e43`) and clean HEAD independently reproduced every failure. Independent semantic review passed with no findings; staged, isolated WorkingTree and Range requirement gates passed.
+Next: None
+Notes: Production, application databases, service runtime, strategies, orders, execution intent, prices, fills, accounting and Live behavior were not touched. Exact Maker label remains `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. Unrelated dirty context/history, deletion report and operations files remain uncommitted.
+Blockers: None
+
+## Active Update 2026-09-16 Production Problem Solution Analysis
+Goal: Give evidence-based solution options for the external-feed instability, Maker-GTD latency bursts, and excessive production log volume found in the immediately preceding read-only health check.
+Status: Completed read-only source/runtime-evidence analysis; no fix was authorized or applied.
+Done:
+- OKX code polls one futures endpoint plus BTC/ETH/SOL index endpoints every second with a 2s client timeout, awaits the slowest request, has no retry/backoff/jitter, timestamps freshness before the request, and rejects cache older than 5s. Safest proposal: independent poll loops, one bounded transient retry inside the unchanged freshness budget, post-success fetch timestamp, and coalesced failure/recovery logging. Do not extend the stale threshold without an explicit behavior decision.
+- The critical Polymarket WebSocket performs Maker-GTD receipt/admission plus parse/dispatch before the next receive, creating a verified local head-of-line risk during slow Maker work; the remote cause of close code 1013 remains unknown. Proposed transport/dispatch separation is a bounded per-shard FIFO channel with receive-time timestamping and explicit fail-closed saturation handling. Reconnect backoff also resets after any accepted frame, so short-lived connections repeatedly return to the 2s base; changing that policy is a separate resilience decision, not a claimed close-cause fix.
+- Maker-GTD accepts every eligible event as non-replaceable into an unbounded single-worker FIFO. One touch can process up to 28 strategies in wallet groups with hard-coded concurrency4, about seven waves of separate atomic PostgreSQL mutations, while later evidence queues. Proposed smallest semantics-preserving order: configurable measured wallet concurrency; prune terminal order IDs from already queued later items; aggregate slow warnings; reject only evaluator-proven impossible-trigger events. Generic coalescing/drop or same-asset parallelism is excluded because transient touch evidence/FIFO expiry semantics could change. Mandatory label remains: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.
+- A measured 50MB/19.5m production log contained 87.0% routine skip messages with full diagnostics JSON and 11.3% standard HttpClient Information lifecycle messages; warnings were negligible volume. Proposed smallest logging fix: System.Net.Http.HttpClient=Warning, compact Information skip audit with required evidence/hash while retaining exceptional mandatory diagnostics, periodic slow-warning aggregates with first/recovery/error always immediate, then reassess retention rather than only increasing disk use.
+Next: If the user requests implementation, lock and approve an exact requirement contract. Lowest behavior-risk first slice is logging reduction/aggregation; external polling/WebSocket changes and Maker throughput changes require focused tests, with Maker concurrency chosen from production-shaped measurements rather than assumed.
+Notes: Read current implementation and focused tests only; no database, service, strategy, order, configuration, source, deployment, or Git mutation. Existing worktree changes were preserved.
+Blockers: None for the analysis. Exact Polymarket remote close cause and the safe final Maker concurrency are unknown from current evidence.
+
+## Active Update 2026-09-16 Production Server Bets And Logs Check
+Goal: Read-only verify current production service health, Paper/Live betting lifecycle, delays, cancellations, and server logs.
+Status: Completed; service and betting lifecycle are operational, with active external-feed instability, Maker-GTD latency bursts, and excessive log volume identified.
+Done:
+- Production 192.168.0.101:5432/polycopytrader only; all SQL sessions forced READ ONLY with 15s statement and 1s lock timeouts. Final health cutoff 2026-09-16T05:31:47.564502Z: Running/Live, start 2026-09-15T19:18:53.764860Z, exact build fce6b1d070b87a0c1fa84d084c9a9c645ace9465, last_error NULL, heartbeat age 48.493s, waiting locks 0.
+- Fixed activity cutoff 2026-09-16T05:18:17.955833Z: Paper orders/fills 85/85 in 5m, 500/500 in 15m, 1769/1769 in 60m; all Filled and no open Paper orders. Entry lag avg1.977s/p95 2.773s. Settled runs/settlement rows independently matched 135/480/1787 in 5/15/60m across 36 recent conditions; settlement lag avg60.587s/p95 154.625s/max154.998s. Latest Paper order/fill 05:30:01.093296Z and settlement 05:30:08.378979Z confirm continued activity after the fixed window.
+- Five enabled Live strategies, none paused/auto-paused. Last24h one Matched, zero Cancelled/Rejected/Error, no open Live orders. Latest Live order 2026-09-15T23:40:00.788333Z settled 23:50:20.467066Z with remaining0 and applied balance. All3349 historical Matched rows settled, zero unapplied balance effects and parity Pending. Three strategies had no Live order in24h, while retained decisions/runs show threshold or parent-loss-diff non-entry rather than a stuck lifecycle.
+- Last2000 Paper fills had11 above120s, all exact Maker-GTD resting lifecycle rather than processing blockage. Required classification: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.
+- Server-log window 2026-09-16 06:14:30.780..08:28:10.850 Europe/Sofia across closed rotations _022.._028 and a fixed snapshot of _029:996 WRN,0 ERR,0 FTL. Warnings:918 Maker-GTD slow,14 queued market-data side-effect slow,18 WebSocket closes plus1 reconnect failure,24 OKX expiry ticker failures,10 OKX index failures,2 order-book timeouts,6 dashboard drift repairs,2 parity deferrals,1 successful Paper settlement warning. Maker-GTD sample showed about4.9s processing/queue delay with pending backlog near192; DB evidence shows no resulting stuck orders.
+- External degradation was still active at 2026-09-16T05:31:46.008115Z: OKX 2s timeouts and a critical crypto-updown Polymarket WebSocket reconnect at05:31:42Z. Service/Paper writes continued throughout, so this is partial feed instability, not a full outage.
+- Log retention is materially compressed:30 files totaling1,480,065,057bytes at05:28Z,29 full50MB rotations, approximately one full file every15-20 minutes. Dominant volume is INFO Paper-run-skip diagnostics with large JSON plus HTTP tracing and repeated Maker-GTD warnings; configured retainedFileCountLimit30 therefore preserves only roughly8 hours at the observed rate.
+Next: No automatic repair was authorized. If requested, prioritize external-feed resilience/visibility, Maker-GTD queue latency, then log-volume/retention correction.
+Notes: No database, strategy, order, service, config, source, or deployment mutation. Two initial read-only diagnostics failed because of an incorrectly parsed local connection-string wrapper/SSL attempt; production identity was then explicitly confirmed and all consequential evidence was independently reproduced with bounded indexed queries. One broader run-backlog query hit the 15s read-only timeout and was abandoned in favor of bounded indexed checks.
+Blockers: None for the check. Historical server logs before the retained roughly8-hour window are no longer present in the share.
+
+## Active Update 2026-09-16 ETH Up4 Progress Cap1 Standard Chart And Excel
+Goal: Create the standard chart and Excel report for exact ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 1, all available history to current cutoff in UTC as explicitly clarified.
+Status: Completed
+Done:
+- Exact Production192.168.0.101:5432/polycopytrader UUID b7c50005-0000-4000-8236-000000000001, code eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_1; one exact name/UUID match, Enabled=true/LiveStakes=false. Fixed cutoff2026-09-15T20:53:47.967491Z. Source strategy_market_paper_runs, exactUUID/status=Settled/settled_at_utc<=cutoff; one REPEATABLE READ READ ONLY export.1337unique runs/markets,0missingfee/accountingmismatch,105Skippedexcluded. Firstsettlement2026-07-03T07:42:25.787706Z,last2026-09-14T20:30:07.831638Z. Net289.42831110=Gross551.13198110-fee261.70367000,stake8027.22660002;762positive575negativeNet. Source snapshotSHA73FD012CC829E5551BAD806993AC1E2783E1D8515860D7DC7DF783342732A0CF.
+- Historical1132 rows match exactapproved exception/source/model/ordinaryincluded flags,205laterPaper. Their ResearchOnly sufficient-depth parent-average full-fill historical model is included in Paper under the closed exception and is not Live-equivalent; fees include retrospectively modeled schedules. Provenance disclosed on chart and workbook.
+- Standard1800x1000solid true-step Net+archivedETHUSDT PNG with initial0 and maxDDpeak-to-recovery band. Independent forwardpeak/backwardsuffix calculations matchDD183.61513715:peak301.94698641 at2026-08-18T23:55:04.981037Z,trough118.33184926 at2026-08-23T21:35:14.277189Z,recovery2026-09-14T18:55:07.991794Z. Rootandrenderer both visually reviewed finalPNG.
+- Price source crypto_up_down_5m_odds_ticks;asset_symbol=ETH,binance_symbol=ETHUSDT,sampled_at_utc within[firstsettlement,cutoff]. Latest sampled_at_utc each UTCminute,idDESC tie-break,actualsampletime retained;75sequential readonlydaily indexedreads,15sstatement/1slock/maxparallel0.1212393rawticks,102650/107352minutes95.620016percent,4702missingminutes/162minute gaps;149actualtimestampgaps>2min drawn asbreaks.0invalidprices/tietimestampconflicts,SQLdailyprice aggregates independentlyDecimalmatched;fieldsNOTNULL. Diagnostics.price_source464812BinanceCryptoTradeWebSocket/747581NULL,therefore labelarchivedETHUSDT. PriceSHA A217AC765225B607C8FA88D03DE1FECE0CAE446F673866ECEF6F172D6A262116.
+- One-sheet Daily Net PnL XLSX:75continuousUTCdatesJul3-Sep15,66dateswithsettlements/9zero dates,77DailyTotal/Total formulas,B2freeze,red-on-white negatives withvisibleminus,Net-only displayedvalues. Independent nativeExcel checks matchall150daily monetarycells/rawaggregation,42negativeformats,noerrors,unsavedB2+1perturbationandrestorePASS;diskunchanged. RootvisuallyreviewedExcel-renderedtop/bottom. AuthoringnativePowerShell/.NETandExcelCOM followsprojectnoNode/Python rule.
+- Exactlytwo durableoutputs: outputs/01a0a6d6-0ef4-7cf2-bcc9-b164f05d2076/eth-cap1-report-20260915-2053z/eth-cap1-net-pnl.png SHA0916055D4554E531B7658EF8ACCF432397C47A5F4E065561224B372E5D16EB67; siblingeth-cap1-daily-net-pnl.xlsx SHA4EE9B828FD39B43C7BDE0A0D03848566FDE8A1F7D5EA1952FF72D5E51689AAE4. Bothcopiedhashverified. Independent semantic/row/workbook and separatechart reviewsPASS/noopenfindings.
+Next: None.
+Notes: No product/strategy/DB/service/order/Git mutation. Onlyignoredrequestedoutputs andexemptcontext/history;parallelproductiondeletionfilespreserved. Ownedtempeth-cap1-report-20260915-01 protectedcleanupPASS afterallagentprocessesfinished:Removed=true,33files27116799bytes,runabsenceverified. Initialpriceagentdefault-hostdiagnosticwasLocalanddiscarded; stalledownedpsqlterminated,explicitProductionhostusedthereafter. ExcelverifierCOMshutdowncompletednaturally,notermination. Legacyunmarkedtempdirectoriesrefusedanduntouched.
+Blockers: None; archivepricegaps and modeledhistorical provenance disclosed.
+
+## Active Update 2026-09-15 BTC Fixed Turn3 TP3 Full August Check
+Goal: Check the previously selected best BTC TurnSize3/groupNetTP3 strategy across all August2026UTC with no retuning.
+Status: Completed; full month Net is negative for either possible missing outcome.
+Done:
+- Fixed1h current-inclusive mean/TurnSize3/1USD stake/price0.5/user-modeled fee3.33percent. Preserved existing monthly convention: cumulative loadedAugust C, noJulywarmup,12consecutive states, firstthreshold excursion seeds direction only, no dailyreset. Existing gapAug5 15:00UTC retains frozen14:55order asUnknown withfee, terminatesgroup without deletingPnL, resetsdetector/rewarm/newconfirmedturn. This is ResearchOnly full-fill/instant-outcome-availability model, not measured venueexecution.
+- Preview8927rawoutcomes4445Up4482Down of8928calendar,onegap;8905validmeans22nullwarmup states. InputauditSHA C4C2A2B468B176F4B75155249192A4CBEE9BA0FC18B05E17FA454350B8C34FF4 andrawSHA E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. Rootregression reproduced oldmonthlybaseline8856rows andpriorfreshwinner50rows Net18.335 exactly;16causalprefix runs and31daily sumchecksPASS.
+- Wholemonth3489placed/3488settled/1unknown,1788W1700L,WR51.2614678899percent amongknown. KnownGross88,settledfees116.1504,settledNet-28.1504; allfees116.1837 inclunknownfee; fullGross range87..89 andNet range-29.1837..-27.1837. Never report midpoint-28.1837 as exactPnL. UnknownDown targetAug5 15:00,decisionID3337763 at14:55,Mnumerator-460;group25Netbase-3.4662/range-4.4662..-2.4662. Thus153groups92certainpositive61certainnegative;92TP,151NextTurn/1Gap/1PeriodEnd boundaries,allloss/tailretained.
+- Aug1-30 slice3421placed/1unknown,Gross71..73,Net-42.9193..-40.9193. Aug31continuous68bets42W26L,Gross16/fees2.2644/Net13.7356. Exact50freshwinner overlapmatches;extra18monthlytargets01:15..02:40group148Up confirmed01:10,7W11L,Gross-4/fee0.5994/Net-4.5994 explain18.335-4.5994=13.7356. Carried detector confirmsUp at01:10 whereas fresh startup only establishes direction; rules unchanged.
+- Independent raw-derived PowerShell reviewer verified3489bets/48846fields,153groups/2295fields,153confirmationtime/side pairs,39summaryfields,31days/434fields,8group-summaryfields,0mismatches;dailyoverlap350fieldsPASS. Separate semantic/code reviewPASS including postgapC/Mconstant-offset invariance andunknownNetbounds. Parameters remain selectedonAug31; fullmonthincludesselectionday,not untouchedholdout. Fee-model break-evenWR51.665percent derives(1+0.0333)/2; observedWRbelowthat.
+- Durable report D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/btc_august_2026_turn3_tp3_mean1h.json SHA ED6B219BFBFBD821F5ABE1C2D7F5B3C2A26A506D77F712E3960D22E46CC37B48 containsallbets/groups/days/provenance. Sibling Calculate-BtcAugustTurn3Tp3.ps1 SHA6EC3D957A90DFC1E02B55D87E80FF7F9C5ADCB79D8A84CE0A5C2F9F63D7BEF95 preservesreproducible calculation. OldmonthlybaselineSHA3A6541ED89EDB0432B38F0C2EEFB9DAFB5F2F3883D6B575DA09667B35E4983A7 anddailywinnerSHA6AF3054BDA2B59B642F2BEDA1BAE0D581C6BCB3C5E86A3A7B713A39303533CD9 usedonlyregression,notanotheroptimization.
+Next: None; report negative fullmonth Net interval andknown-result breakdown.
+Notes: No product/rawdata/DB/service/orders/Git changes; externalresearch files andexemptcontext/historyonly,concurrentproductiontaskpreserved. Temp skill ownedbtc-turn3-tp3-august-20260915-01 cleanedafterreviewers/processesfinished/durablehashmatch:Removed=true/4files1541293bytes/runabsent. Auxiliaryreadonly PS sumcheck initiallyusedinvalid0m literal;reportedimmediately,correctedto[decimal],rerun31daytotalsPASS;maincalculation unaffected. Legacyunmarkedotherdirsuntouched.
+Blockers: None for bounded check; missingmarketoutcome preventsoneexactfullNetvalue, butbothboundsnegative.
+
+## Active Update 2026-09-15 Approved Disabled Strategy Deletion In Progress
+Goal: Execute only approved276 disabled Production strategies and complete exclusively owned history deletion, with gentle auditable batches.
+Status: In Progress; mandatory read-only preflight and one-shot implementation, NO DB mutation yet.
+Done:
+- Exact user APPROVE RC-20260915-delete-disabled-production-strategies sha256:7a12408763ae709a7095e3262023407ad30627c9808a1b05781eda07591c1e8c recorded; approval-only commitf5fe7d9d precedes material script/report. Semantic validation still exacthash. Currentmaster contains ownapprovalcommit only on fce6b1d0; unrelated dirty context/history from parallel user work preserved.
+- Created approved scripts/operations/Delete-DisabledStrategies-20260915.ps1 and Codex/Reports/2026-09-15-disabled-strategies-deletion.json. Report contains exact276allowlist and2369retainedidentity/flag baseline. Fresh sequential core preview19:54:56..20:00:00UTC reproduced681106orders/fills/signals,919822runs,681091positions/settlements,824828archivev1,0v2,16802rollups,0signalrejections/openorders/openpositions/Liveorders. All276chain-shape checks completed20:xxUTC: maxordersperasset2,0assets acrossconditions,0unlinked entered/settled runs,0unexpected runstates/future runs. Configured stake inSkipped/Observed runs is not evidence of an actual entry (source constructor stores PaperStakeAmount beforeentry); initial overbroad orphanprobe corrected without making an orphanclaim.
+- Currentprocessexpectedstart2026-09-15T19:18:53.764860Z/fullversioninfo=1.0.0+fce6b1d070b87a0c1fa84d084c9a9c645ace9465; assembly=1.0.0.0; mvid=613426b7f265. FreshchecksRunning/Live/errorNULL. Transient1..4waitinglocks recorded at severalcheckpoints then independentlycleared; no causeclaimed, no serviceactions. Read-only scan pauses initiallylostinmemoryIDset; root clarified strict no-waiters gate for mutation, RO can recheckclearwithoutterminating/reloading eachtime.
+- Independentpreapplyreviewer disabled_delete_preview_review verifiedFKs/triggers/fences and earlyscriptfindings. Mainfinancialbuilder now includeswallet+asset chaincount<=100, fourauditkindsPaperRun/PaperPosition/PaperSettlement/PaperSellFill, exactclosure/crossscopeguards, walletfence, parentNO KEYUPDATE, sourceFORUPDATE, fills-beforeorders, audit-after-source, postdeletionclosure. RuntimeApply requiresrecomputedcontractdigest, approvalancestor,fullpreflight,independentreviewscriptSHA; all remainfailclosed. ActualApply hasNOTbeenrun. Purebuilder one-chainpreview returns1order/1fill/1run/1signal/1position/1settlement/0audit; AST0errors; incompletepreflight gate rejectsasexpected. Canary/fullrun and independentcompleteSQLreview remainpending; FullRun intentionallystillblocked/unimplemented.
+- Auxagent delete_aux_preflight finished758733audits/76boundedPKpages:96ownPaperRun audits (8183-10576;8191-11512;8183-1086;8183-1102),0ownershipconflicts. Feeevents187599/19pages:6own8191-115events,exactID/codeagree. Ownpositionfacts681091 matchall276walletpositionIDs bycounts+SHA; recentfacts11300sequential snapshot,1638sourceabsent and0crossowner. Derivedcountsarevolatile, mustfreshfreezeunderexistingworkerfence. Smallonchain/copiedleader/stagingtablesempty; maintenance2378rows0targetrefs. Auxdurablehandoffpending scratch/aux-preflight.json; rootmustmergecompactevidence only, notrawpayload. Onealltargetrecentjoinhit15stimeoutROrollback; narrowedindexedcheckscompleted, failedquerynotcounted. OnecanaryreadonlyauditOR-INplanseqscan was detected and replacedwithindexedlateral per-source lookup beforefurtherreads.
+- Sourceownershipagent delete_source_ownership fullPaperorderPKaudit stillrunning(~1.69m of~3.7m at20:13UTC),0conflictssofar; all681106targetsignalIDsloadedinmemory. All3901Liveorders/0dryrun/2327shadowdecisions independentlycheckedtargetID/signal/orderreferences0 at20:08UTC. Its child run_signal_refs checksall276runlinks/reverseforeignruns andsignalsharing; stillpending. No incompletefullauditclaim. Rootmustawaitbothbeforecanary.
+Next: Finishfullownership/auxhandoff, complete/review one-shotSQL and remainingresidual/final/Verify branches; freshcompletepreflight and exactcanaryreview beforefirstDBwrite, thenonechaincanary/postDB+independentverify/measuredETA beforefullgentlerun. No backup/schema/service/config/catalog/tradingchanges. Existingapprovedlimits100completewalletasset chains/1000residualrows/1finalstrategy;15sstatement/1slock; stop/reconcile anymutationgatefailure.
+Notes: Ownedtemp skill root D:/CodexTemp/runs/delete-disabled-20260915-01, markerverified; TEMP/TMP/TMPDIR=temp, onlyscratchIDs/SQL/evidence, nohistorypayloadbackup. MustawaitallprocessesandprotectedComplete-CodexTempRun beforefinal. Maincore/shapeprocessesfinished; agentreadprocessesremain. InitialPowerShellJSONDateTimecomparison bug stoppedROguard; fixedConvertFrom-Json-DateKindString preservesexactUTC, noDBwrites. ToolJSbackticksyntaxerror causednoedit andwasfixed. Do notcommitunrelatedbookkeeping ormarkcontractcompleteuntiloperationdone.
+Blockers: No newuserapprovalneeded forlockedcontract; fullpreflight/independentcanaryclearance incomplete. No rowsdeleted; report.mutationsStarted=false,batchesempty.
+
+## Active Update 2026-09-15 BTC Turn Variant Sweep Positive Day
+Goal: Try variants of the same BTC August31 2026UTC turn-follow strategy until finding positive Net for this day, without product or live changes.
+Status: Completed; positive results found in first full192-case grid, no subsequent search.
+Done:
+- Source numbered audit SHA256 EE54FC9A6D7589FC6B15F9A2E5816147810BF51EED61B9C262CA91BE761BD3FC and rawCSV E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. Preview288outcomes142Up146Down/no gaps, sameFresh00:00 detector and warmed1h mean fromAug30. Stake1USD/price0.5/user-modeled3.33percent fee on every bet; ResearchOnly, not demonstrated venue fills/latency/ordinaryPaper/Live.
+- Prespecified grid6TurnSize values0.5,0.75,1,1.5,2,3 x4continuation rules Hold,Cross,SlopeOpposed,SlopeNonPositive x8groupNet risk rules None,SL2,SL3,TP1,TP2,TP3,Trail1,Trail2=192unique parameter sets;93positiveNet. Cross pauses when side*(C-M)<=0; slope filters use last5m mean change; all pauses persist until new confirmedturn. NetSL<=-2/-3,TP>=1/2/3,trailpositivepeak drawdown>=1/2USD. Current target settles prior frozen side, then detector/newgroup/stops, then next5m order; no future outcome decisions. Tail and losses retained.
+- Baseline264bets126W138L/Gross-12/fees8.7912/Net-20.7912,10negativegroups. Cross0.5 no riskstop116bets62W54L/Gross8/fees3.8628/Net4.1372,8negativegroups and2emptygroups. Hold1.5 without riskstop261bets141W120L/Gross21/fees8.6913/Net12.3087,2negativegroups. Best tested Hold3 with groupNetTP>=3:50bets35W15L/WR70percent/Gross20/fees1.665/Net18.335,5positivegroups/0negative;maxdrawdown5.1665. Best groupNet3.8668,3.8002,3.4672,3.4006,3.8002,allTPpaused;lastgroupturn22:35,stop23:05 is included but its next-turn boundary is outside day(Complete=false). Not five completed turn intervals. Threshold3 is mean movement, NOT3h; mean remains1h.
+- Main baseline264rows matched,277mean sums,574causal prefix runs and192summary arithmetic PASS. Independent verify_btc_aug31 raw-to-all288daystates and baseline2640fields/75turnfields PASS; different PowerShell group algorithm independently reproduced all192variants/3072summaryfields/192sortedpositions,691ledgerrows/7601fields,40groups/520fields and40scalar totals,0mismatches. Separate review_turn_sweep semantic/code reviewPASS. No rule is claimed out-of-sample or optimal beyond tested grid; parameters deliberately selected on same day.
+- Durable external report D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/btc_august31_2026_turn_variant_sweep.json SHA256 6AF3054BDA2B59B642F2BEDA1BAE0D581C6BCB3C5E86A3A7B713A39303533CD9 includes all192results and4fullledgers. Sibling Calculate-BtcAugust31TurnVariants.ps1 SHA256 A87F9099C6EEEFA506B0421A2783B5144B56E31599328F08E99885F5AF49E901 is reproducible nativeC#/PowerShell calculation accepting an ownedRunPath; a fresh rerun correctly requires new independent review.
+Next: None; hand off best and simple positive variants with in-sample limitation.
+Notes: No product/DB/service/order/source-data/Git mutation. External research artifacts plus exemptcontext/history only; existingunrelatedchanges preserved. Temp skill run btc-turn-sweep-20260915-01 cleaned after both reviewers finished, durable hashes matched:Removed=true/3files367036bytes/runabsent. Stale scanner refused legacy/unmarked other folders without touching them. Independent command preparation JS interpolation error occurred before calculation, reported and corrected; finalprocess exit0/no data impact. No test/build of product necessary; targeted research verification passed.
+Blockers: None; future profitability and execution realism remain unverified.
+
+## Active Update 2026-09-15 BTC Negative Numbered Groups Analysis
+Goal: Analyze negative groups from the existing BTC August31 2026UTC Fresh00:00 mean1h/TurnSize0.5 chart and advise possible strategy changes; no alternative backtest or implementation.
+Status: Completed read-only analysis; proposed changes remain untested hypotheses.
+Done:
+- Exact source charts/btc_august31_2026_middle1h_turn05_numbered_bets.audit.json under D:/My/Business/PolyMarketData/CryptoUpDown5m, SHA256 EE54FC9A6D7589FC6B15F9A2E5816147810BF51EED61B9C262CA91BE761BD3FC unchanged. Preview288outcomes/264bets/15groups; ten negative groups2,3,5,6,7,8,11,12,13,14 are complete boundaries. Group15 is day-truncated, not a completed-cycle claim. Whole-day126W/138L/Gross-12/fee8.7912/Net-20.7912USD unchanged, stake1/price0.5/user-modeled3.33percent fee including losses, ResearchOnly.
+- Negative groups total126bets47W79L/Gross-32/fee4.1958/Net-36.1958. Eight already Gross-negative; groups7 and12 alone change nonnegative Gross to negative Net: respectively0/-0.4662 and+1/-0.1655USD. Groups5,8,14 are short6/7/8bets with0/6,1/6,1/7 W/L and Gross-6/-5/-6, not simply long fee accumulation. Groups2,3,5,11,14 never positiveNet;6,7,8,12,13 had positive groupNet before negative finish. Historical peaks are not causal attainable exits.
+- Actual Calculate-BtcAugustTurnFollow.ps1 dispatch holds side between opposite confirmed turns. Exact mean increment identity (C_t-C_t-12)/12 verified on all264decision points. Decision slope aligned174bets83W91L/Gross-8/Net-13.7942; flat64bets31W33L/Gross-2/Net-4.1312; opposed26bets12W14L/Gross-2/Net-2.8658. This is existing-bet classification, not a simulated filter. Group14 six of eight decisions had flat mean.
+- Known-at-decision C/M contradictions verified08:35 group5 Down C-27>M-27.3333;11:25 group8 Up C-27<M-26.3333 while mean still rising;22:00 group14 Up C-30<M-29.6667 while mean flat. Entry-only C/M alignment passes13/15groups, excludes negative2 and positive10, does not exclude5/8/14. Independent verify_btc_aug31 confirmed accounting, groups, decision cases, entry conditions and slope totals PASS; no files changed by reviewer.
+- Advice limited to hypotheses for later testing: separate entry and continuation/exit; pause after adverse C/M cross until next confirmed turn; consider stronger entry confirmation separately from exit threshold; optionally protect accumulated group profit with acknowledged recovery/profit-cutting tradeoffs. No claimed improvement without full chronological out-of-sample evaluation. Primary https://otexts.com/fpp3/tscv.html supports causal chronological validation; optional secondary paper returned429 and was not relied on.
+Next: Deliver evidence-backed diagnosis and explicitly untested candidates only; no strategy changes authorized or made.
+Notes: No new artifacts/temp run/product/source dataset/DB/service/orders/build/tests/commit/push. In-memory PowerShell checks and independent verification only; exempt context/history bookkeeping, unrelated context preserved.
+Blockers: None for requested analysis; profitability of proposed changes remains unknown.
+
+## Active Update 2026-09-15 BTC Numbered Turns And Grouped Bet Table
+Goal: Repeat the same Fresh BTC August31 2026UTC one-hour TurnSize0.5 chart with UpDiff dots, sequential confirmed-turn numbers and all264bets grouped by those numbers with group/global cumulative Gross/Net.
+Status: Completed
+Done:
+- Added288small neutral vertex dots and labels1..15 linked by solid leaders to filled confirmation circles; preserved original288points/287coloredsegments/mean/15extreme-confirmation pairs and2000x1200 geometry. Labels moved into empty plot space without opaque backgrounds hiding UpDiff. Main and independent visual inspection PASS.
+- Group each existingFresh bet by last confirmation<=DecisionUnix; the outcome at the next confirmation belongs to previous group, new group starts on next target. All14internal boundaries verified. Group15 ends23:55 because this is a daily report, not an assertion of a completed turn interval. Fifteen group counts25,5,11,37,6,13,14,7,25,34,13,35,14,8,17 cover264unique bets,126W/138L. Group cumulative resets0; global carries acrossgroups. TotalsGross-12,fee8.7912,Net-20.7912USD unchanged; stake1/price0.5/modeledfee3.33percent preserved, ResearchOnly.
+- Durable external base D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/btc_august31_2026_middle1h_turn05_numbered_bets: .png SHAB9654F57101AFA189C04B4FBB210488A100BCF366B1C519235498250F044880F; .audit.json SHAEE54FC9A6D7589FC6B15F9A2E5816147810BF51EED61B9C262CA91BE761BD3FC; .bets.md SHAEC7914A7846FA3DD112EAD4F4F49A6C1C4A5BD239D559D26053F28EB717203CA. CompleteMarkdown table has15separate headings,264rows,perbetGross/Net,groupGross/Net,totalGross/Net andgroupfooter totals. Sibling Render-BtcAugust31NumberedTurnsAndBets.ps1 SHA120ABA69A2655C082ABE8FA6A987C89DC71A499E349636A5468E3C7572F08DD0. File-panel open request returnedqueued, not claimed alreadyopened.
+- Main264row/1584tableamount/source/boundary/coverage checksPASS. Independent verify_btc_aug31 matched4224betfields,210groupfields,45numberfields,2376Markdowncells plus15headings/footers,0mismatches. Previous1728pointfields/2870segmentfields/165eventfields unchanged; semantic/visualPASS. Sourcehashes unchanged, no new strategy or raw-data model.
+Next: None; deliver embeddedPNG and full groupedtable link with concise group totals.
+Notes: No product/source dataset/DB/service/orders/commit/push; unrelated production-check context preserved. Temp skill used owned btc-numbered-turns-20260915-01, allreviewers/processesfinished, durablecopy hashesmatch, protectedcleanupRemoved=true/5files507549bytes/runabsent.
+Blockers: None.
+
+## Active Update 2026-09-15 Disabled Production Strategy Deletion Preview
+Goal: Delete strategies with Enabled=false and their own complete bet history on Production, after mandatory exact-scope approval and safe preflight.
+Status: Blocked before mutation on exact new contract approval; read-only core preview and draft review completed.
+Done:
+- Verbatim user request: "Удали все стратегии, где Enabled = false. Вместе с историей ставок". Production only192.168.0.101:5432/polycopytrader, no LocalDB. Preview2026-09-15T19:26:29.563872Z froze276 UUID/code/name rows, allEnabled=false/LiveStakes=false;2369enabled retained,2645total. Exact276identities preserved in draftRC-20260915-delete-disabled-production-strategies; sortedUUIDcommajoinMD5 293def10788fe14d05af1b908ac97d49. Repeat19:39:46.299502Z count/hash unchanged. Name-based descriptive groups only, not mutation predicates:237FollowMarket(69BTC/89ETH/79SOL),39FuturesBasis/Revert. Mutation allowlist must be exactUUID/code, never a new broadEnabledfilter.
+- Bounded indexed per-ID core counts over all276:681106Paperorders,681106fills,919822rawstrategy_market_paper_runs,681106signals by exact strategy:Code wallet,681091positions,681091settlements,824828archive-v1 rows,0archive-v2,16802rollups. OpenPaperorders0,openpositions0,Liveorders0. Orders span2026-07-10T22:59:30.658854Z..2026-09-14T19:24:30.735991Z; this is observed order range, not an imposed deletion cutoff. Signals/positions exactwalletmapping verified Domain/Models.cs4034. Counts sequential, not one global snapshot; auxiliary ownership and full dependency preflight are NOT yet complete.
+- Independent reviewer checked276disabled identityhash at19:30:20.906970Z;40indexedPKpages/397041Childassignment rows checked19:30:21.206948Z..19:30:37.177109Z,0targetparent/childreferences,capnotreached. Rootindependentactiveparentassignments0/ownchildassignments0/LossDiffstateparentORchild0. No Child deletion or shared-link expansion required by observed rows. Separate fresh reviewer DBsnapshot19:39:59.094564Z matches all276draftIDs/codes/names/Enabled/LiveStakes,0mismatches.
+- Read current19strategyFKs, chain indexes and auxiliary audit/fee schemas. No non-system immutable audit trigger observed. Genericstrategy-delete API not found; oldSep10scratchscripts were disposed and oldallowlist/approval cannot be reused. Current source supports exactwallet ownership, existingwalletadvisoryserialization and workerfences; compiledLowerEnter metadata alone adds no DBdependency blocker (ownsignals/wallet; historicalmatcher resolvescompiledcatalog and currentfallback donorPolicydisabled). Ordinary shared signal/order ownership still needs complete preflight.
+- Newdraft Codex/Requirements/Contracts/RC-20260915-delete-disabled-production-strategies.json, semanticSHA2567a12408763ae709a7095e3262023407ad30627c9808a1b05781eda07591c1e8c. Exactverbatimrequest,276identities,2REQs/4verificationitems,0assumptions/deviations; approvalpending. Proposed onlyone-shot scripts/operations/Delete-DisabledStrategies-20260915.ps1 plus durable minimaljournal Codex/Reports/2026-09-15-disabled-strategies-deletion.json, neither created. No genericframework, source/catalog/schema/config/deployment changes, backups, whole-operationtransaction, or service stop/restart. Planonecompletechaincanary then<=100financialchains/batch,<=1000residualrows/batch,onefinalstrategy/batch;15sstatement/1slock bounds, currenthealth/ownership/countgates, unknowncommitstop/reconcile. Existingconstraints/triggers kept enabled. Successfully committedbatches are irreversible; rollback covers only uncommittedbatch. Duration transparently stated severalhours, measuredETA aftercanary required beforefullrun.
+- Fullauxiliarytablecounts/ownership/exclusiveforeignsignalreferences, dependencyIDallowlists, retained-row baselines, plan/syntax/independentSQLreview, actualcanary and allmutations remain pending. Draft explicitly forbids ANYmutation before completepreflight and review; approval alone cannot waive those gates. Unexpectedstate wouldstopwithout silentlyaddingtargets/shareddata or newmechanisms.
+- Independent disabled_delete_preview_review fullfinaldraft/originalrequest/IDs/flags review PASS/no findings for presentation only; mechanical Contract-AllowDraft-PrintSemanticDigest PASS. Implementation/canary/final review stillpending. Initial too-long shell command was rejected by Windows os206 before SQLexecution; reportedimmediately and replacedby shortfixedUUIDqueries. No DBqueryfailure or write fromthaterror. Onecorequery outlived10scommandyield but completednormally andits session wasawaited; allsessionsfinished.
+- Final deletion-safety heartbeat19:39:46Z Running/Live/errorNULL/age52.310871s,lockwaiters0, expectedcurrentstart2026-09-15T19:18:53.764860Z/versioninfo=1.0.0+fce6b1d070b87a0c1fa84d084c9a9c645ace9465;assembly1.0.0.0;mvid613426b7f265. This independently observed newer process supersedes priorcheck's271e860a version, but no broadhealthcheck/deployment action performedhere.
+Next: Obtain exact APPROVE RC-20260915-delete-disabled-production-strategies sha256:7a12408763ae709a7095e3262023407ad30627c9808a1b05781eda07591c1e8c; commit approval-only record before any governedimplementation, thenfinishpreflight/one-shotscript/review/canary and executeonlyapprovedgentlescope. Do not reuse oldSept10approvals.
+Notes: AllSQLexplicitBEGINREADONLY/15s/defaultreadonly/UTC/locktimeout2s/maxparallel0; no production/localDBmutation, source/product edits, service operations, build/tests, temporaryfiles, backups, deletion, commit/push. Only newdraft and exemptcontext/history edits; existingdirtybookkeepingpreserved. No newtemp root or runningprocess remains.
+Blockers: Exact new contract userapproval; afterwards mandatory completeexclusiveownershippreflight and independentimplementationreview beforeANYmutation.
+
+## Active Update 2026-09-15 Production Check And Observed Restart
+Goal: Check production server, Paper/Live bets and server logs read-only for the user's exact request, including an independently occurring restart during the check.
+Status: Completed
+Done:
+- Verified PostgreSQL192.168.0.101:5432/polycopytrader with explicit BEGIN READ ONLY, statement_timeout15s, default_read_onlyon, lock_timeout2s, UTC and maxparallel0. Initial fixed window [2026-09-15T18:43:00Z,19:13:00Z): Paper orders0/fills0/Liveorders0. Live query covered all2645 strategy IDs through strategy-time index plus NULL IDs;2369enabled,5Live-enabled/unpaused. No application Local DB or production writes.
+- At19:13:40.460744Z persisted Running/Live heartbeat was stale79199.198835s: last2026-09-14T21:13:41.262008Z, oldstart2026-09-14T19:35:40.117170Z, last_errorNULL, versioninfo=1.0.0+271e860a8edbc33de66ecf3185f9d81bbc160ce3;assembly1.0.0.0;mvid03ad0d8b3ce9. Running was not treated as live process evidence. Latest Paper order/fill aaaf1157-c62e-4e7a-8cff-9622d19fcaf9 at21:10:01.579329Z; latest BTC/ETH/SOL reference samples21:14:07.828037/.829408/.831535Z.
+- Server log polycopytrader-service-20260915.log actual initial length33089949bytes ended2026-09-14T21:14:09.750Z. Independent prod_logs_sep15 read in-memory only: full bounded file59903 timestamp records from21:00:00.058Z,7ERR/177WRN/0FTL. ERR were6Binance stream failures21:01:39..21:02:31 and1Paper position mark timeout21:02:22.502Z; later fresh data/activity recovered. Final10MB21:09:30.971Z..21:14:09.750Z had0ERR/FTL,2WRN (SOL age diagnostic and historical parity deferral), no explicit shutdown/unhandled event. These earlier errors do not establish the cause of the final activity gap.
+- During read-only inspection an independent new process start appeared2026-09-15T19:15:45.379462Z, SAME oldversion271e860a, Running/Live/errorNULL. Root did not start/restart/deploy anything. Read-only SCM query for exact configured name PolyCopyTrader.Service returned1060 (not registered as Windows service); this does not contradict application process DB/log activity or establish how it was launched.
+- Postrestart fixed window [2026-09-15T19:15:45.379462Z,19:17:00Z):2new Paperorders, bothFilled,2distinct fill/order rows;0newLiveorders. LatestPaper3c39a22a-7849-4b6f-8635-fec805131fd9 at19:15:57.442739Z. Independent log cycle19:15:57.555Z Entries=2/Skipped=73 agrees. Fresh BTC/ETH/SOL references resumed. Log12338 timestamp records through19:16:59.894Z:0ERR/FTL,3initial reference-tick skip warnings before first connected markers19:15:52.049Z; no broad all-runtime correctness claim.
+- Before restart exactly1matched Liveorder d0bfc3e7-23cf-44d7-a66e-ae2d40561870 for ETH Up or Down 5m Up 50 bps Instant (strategy b7c50005-0000-4000-8079-000000000150), createdSep14 21:05:01.011912Z,filled9.677418/remaining0,had settled_atNULL/balance_effectfalse. LinkedPaper a615e380-635d-428e-8fc7-4c02238d555a and actual-shadow fill435d1806-ef66-40c8-a517-cc8c655622f6 independently agree. After restart DBsettled2026-09-15T19:15:49.766118Z/balance_effecttrue/net3.517819USD; independent log19:15:49.831Z agrees,availablebalance26.372427USD. Initial unresolved-state conclusion superseded, not still an open incident. No venue API verification performed.
+- Final DBsnapshot2026-09-15T19:17:47.651481Z: heartbeat19:17:45.609934Z/age2.041547s,Running/Live/last_errorNULL,same newstart/oldversion. OpenLive remaining-size-positive0; unappliedMatched0; lockwaiters0 at19:17:19Z. Old gap approximately22h and its cause remain unknown; fresh recovery does not explain it. Current local/master/upstream fce6b1d070b87a0c1fa84d084c9a9c645ace9465 divergence0/0; latest connection-aware fix is not in the observed running271e860a process.
+Next: None for this one-shot check. No repair or recurring monitor authorized.
+Notes: Native bounded indexed SQL and read-only shared server FileStreams; no source/config/order/DB/service mutations, builds/tests, temporary artifacts, commits/pushes. Only exempt context/history bookkeeping; existing overlapping dirty changes preserved. Log and DB independent evidence checked together; stale initial observations explicitly superseded after restart.
+Blockers: No blocker to reporting the check; exact reason for prior activity cessation and OS process termination state are not established by available evidence.
+
+## Active Update 2026-09-15 BTC Turn05 Fresh Outcome Colored Chart
+Goal: Redraw the last BTC August31 2026UTC one-hour-mean chart, onlyTurnSize0.5, coloring UpDiff by Fresh00:00 bet outcomes explicitly selected by user «1».
+Status: Completed
+Done:
+- Preserved288daily points, original2000x1200 geometry/axes, warmed unrounded1h mean and15pairs of0.5 extreme/confirmation circles. Removed allTurnSize1 drawing. UpDiff has287visible segments:126greenWins,138redLosses,23blueNoBet. Segment ending at outcome t is colored by the existing Fresh bet decided at t-5m; no lookahead or strategy changes. First bet decision01:55→target02:00; blue ends at01:55.
+- Durable PNG D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/btc_august31_2026_middle1h_turn05_fresh_outcome_colors.png SHA59444337BE66B3BBE9E8E0A82578DB3FBD9D199223391F8170FCB3993AE74084. Same-basename audit.json SHA725320450E405E6D711F20C844299CF87F79E1C8B99EFDC6301A3943CD46CA10; sibling Render-BtcAugust31Turn05FreshOutcomeColors.ps1 SHADB02D68961D0A07D7D53E7219E63403491551187C7C965AD56668216A2C33F0F.
+- Source audits unchanged: daySHA4A64AF186E2F2D082898DD25AC951A93F2CF02B39DA62EDAC5313539DDFC6102 and bothstartsSHA216DC18A147D205E451213F3665024F76CA999F9EC444D41DCB812E9F971D4A3. Main source/point/segment/accounting/boundary/marker assertions PASS. Independent verify_btc_aug31 checked1728pointfields,165eventfields,2870segmentfields,0mismatches; Fresh mapping/only0.5/solid-line rendering semantics PASS. Both main and reviewer visually inspected PNG; labels/legend and requested colors readable, no cropping.
+Next: None for this redraw; deliver the verified durablePNG directly in final response.
+Notes: External research visualization only, no product/source dataset/DB/service/orders or new strategy calculations/commits/pushes. Existing dirty bookkeeping preserved. Temp skill used owned btc-turn-colors-20260915-01; durablecopies hashmatched, reviewer/processes finished, protectedcleanup Removed=true,4files316286bytes,run absent. An unrelated output-path preview PS foreach-pipeline parser error was reported immediately, corrected read-only, and did not affect chart or user data.
+Blockers: None.
+
+## Active Update 2026-09-15 BTC Turn Chart Outcome Colors Preview
+Goal: Redraw the last BTC August31 2026UTC one-hour-mean chart with onlyTurnSize0.5 and green-winning/red-losing UpDiff segments.
+Status: Blocked
+Done:
+- Inspected existing PNG and full Render-BtcAugust31MiddleTurns.ps1 plus daily audit and both-starts report. InputSHA unchanged: daily4A64AF186E2F2D082898DD25AC951A93F2CF02B39DA62EDAC5313539DDFC6102, bothstarts216DC18A147D205E451213F3665024F76CA999F9EC444D41DCB812E9F971D4A3. Same288points,1h warmedmean,15daily0.5turns. No new chart created before required initialization choice.
+- Asked focused async choice: Fresh00:00 (no-bet UpDiff remains blue) or Continuous carried state. Previous user approved calculating both but requested one colored chart without selecting a bet stream. Color differs before02:00; do not choose silently.
+- Main plus independent verify_btc_aug31 confirmed segment[i-1→i] uses target outcome i and side chosen at i-1. All551 displayable bets across both variants match timestamps/marketIDs/mean/outcome/Gross,0mismatches. Fresh287segments=126win138loss23noBet; Continuous=135win152loss0noBet. Continuous extra00:00loss has no incoming segment inside day-chart and must not be shifted onto00:00→00:05.
+Next: Await Fresh versus Continuous selection, then redraw only requested chart and embed inspected durablePNG. Preserve causal confirmation markers separately from retrospective extrema; no TurnSize1.
+Notes: Read-only preview, no temp run or material/artifact edits, no product/source/DB/service/orders/commit/push. Only exempt context/history. One PowerShell foreach-pipeline parse error was reported immediately and corrected in read-only command; no user data affected. Agent finished with no files/processes. Inspected visualize routing permits standard static figures; existing native System.Drawing chart renderer remains applicable after choice.
+Blockers: Which of the two saved bet sequences should supply the segment colors is not specified.
+
+## Active Update 2026-09-15 BTC August31 Both Strategy Starts
+Goal: Calculate both explicitly requested initialization variants of the same BTC TurnSize0.5 strategy for August31 2026 UTC.
+Status: Completed
+Done:
+- User resolved prior boundary question with «Посчитай оба варианта». Day contains288 outcomes,142Up/146Down, no gaps or unknowns. Shared model: unrounded warmed1h mean, confirmed0.5 reversal following on immediately next5m market, constant1USD at0.5, modeledfee3.33percent on every bet. Both daily PnL baselines0; no previous-day profit/loss included.
+- Fresh detectorUnknown00:00, mean warmed fromAug30:15confirmedturns, firstdecision01:55 for02:00 outcome;264bets,126W/138L,WinRate47.7272727273percent,Gross-12,fees8.7912,Net-20.7912USD. Bet canonicalSHA89DC2A7125BB17EB68F8C36B0C5E8A255FC2FD8AB5BBB4886B4B611C26CA89E8.
+- Continuous monthly state retained, filter target ends[Aug31,Sep1):288bets,135W/153L,WinRate46.875percent,Gross-18,fees9.5904,Net-27.5904USD. Includes carrydecisionAug30 23:55 forAug31 00:00. Bet canonicalSHA5701867514156B13C25E5BA1C1CC8B168E09D759E6C5B8A7CB4724F564CCD259.
+- All264 overlapping bets ending02:00..23:55 are identical. Difference only24earlycontinuous bets ending00:00..01:55:9W/15L,Gross-6,fees0.7992,Net-6.7992USD, exactly reconciling both totals.
+- Durable external report D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/btc_august31_2026_turn_follow_05_both_starts.json SHA216DC18A147D205E451213F3665024F76CA999F9EC444D41DCB812E9F971D4A3; sibling reproduction script Calculate-BtcAugust31TurnFollowBothStarts.ps1 SHAF2589BC0038D966293931ABD0A505B74477E7673AD8D16632268AE184C2B425C. Report contains both complete ledgers, exact inputs/hashes/methods/events/accounting/independent evidence. Re-running script correctly leaves new report reviewPending rather than inheriting review.
+- Main source/timing/accounting checks552 and exactoverlap264 PASS. Independent verify_btc_aug31 reconstructed raw cumulative/means and both detector paths;6072canonicalfield,1104timestamp,165fresheventfield,22summaryfield checks,0mismatches; canonicalhashes equal, semantic scope/causal-next-market reviewPASS. Continuous raw replay used last verifiedAug30 22:30 DownTurn seed and necessary pre-day state only, not a new monthly run.
+Next: None for the requested two-variant calculation.
+Notes: ResearchOnly hypothetical fills/fees/outcome availability, not real execution or venue billing. Raw/daily/monthly inputSHA unchanged. No new chart, product/source/DB/service/order edits, commits/pushes, or unrelated changes adopted; only external research files and exempt bookkeeping. Temp skill used owned btc-aug31-both-starts-20260915-01; all processes finished, durable hashes matched; protectedcleanup Removed=true,3files271490bytes,run absent.
+Blockers: None.
+
+## Active Update 2026-09-15 BTC August31 Strategy Start Boundary
+Goal: Recalculate the same BTC TurnSize0.5 strategy for August31 2026 UTC only.
+Status: Blocked
+Done:
+- Read-only source/parameter preview: mean1h, stake1USD, price0.5, fee3.33percent, next5m bet after confirmed reversal remain unchanged. Daily chart audit has288points, warmed mean fromAugust30, detectorUnknown from00:00 and first0.5turnDown at01:55 (nexttarget02:00). Its hash4A64AF186E2F2D082898DD25AC951A93F2CF02B39DA62EDAC5313539DDFC6102 unchanged.
+- Monthly strategy report explicitly has no daily detector reset, a Down state inherited beforeAugust31 and288 existing target-day bets. Report hash3A6541ED89EDB0432B38F0C2EEFB9DAFB5F2F3883D6B575DA09667B35E4983A7 unchanged. Narrowing the analysis period alone does not prove permission to reset state; referring to the daily chart also makes a fresh00:00 detector plausible. These two starts must not be silently conflated.
+Next: Ask one focused choice: fresh strategy/detector start00:00 with already-warmed mean as on daily chart, or August31 results from continuous monthly strategy carrying prior state. Do not recalculate PnL until choice is resolved.
+Notes: No new simulation/PnL/graph/artifact/temp run, product/data/DB/service/order change or commit/push. Only exempt context/history. Prior monthly and chart results are not invalidated; their different initial states are explicitly recorded.
+Blockers: Strategy initialization versus reporting-only date filter is not yet specified.
+
+## Active Update 2026-09-15 BTC Turn-Following Loss Explanation
+Goal: Explain the existing August BTC loss despite following confirmed turns, without changing or backtesting another strategy.
+Status: Completed
+Done:
+- Read actual calculation script and saved report (SHA2563A6541ED89EDB0432B38F0C2EEFB9DAFB5F2F3883D6B575DA09667B35E4983A7), confirmed8855settled/1unknown and source scope. Main grouped saved known bets by sign(sideSign*(Mdecision-MdecisionPrevious5m)); independent verify_btc_aug31 rebuilt raw-prefix means and matched all8855decision slopes/means,0missingpreviousmeans.
+- Aligned5892,W2870/L3022,Gross-152,fees196.2036,Net-348.2036. Opposed806,W392/L414,Gross-22,fees26.8398,Net-48.8398. Flat2157,W1064/L1093,Gross-29,fees71.8281,Net-100.8281. TotalsGross-203,fees294.8715,Net-497.8715. These are observed accounting groups, not causal effects of removing groups or proposed trading filters.
+- Exact real example Aug31UTC: base00:55C-27,mean-354/12=-29.5(ID3988140); targets01:00/01:05/01:10 allDown, C-28/-29/-30, meanNumerators-350/-348/-346. Allthree saved sidesUp after confirmedUpTurn00:35; targetsIDs3988157/3988210/3988235; Gross-3,Net-3.0999. Mean rises throughout three losingUp bets. Raw independent row/mean/side/fee checkPASS.
+- Verified mechanism: for contiguous windows DeltaM=(C_t-C_(t-12))/12, not C_t-C_(t-1). At01:00 oldC00:00=-32 exits and currentC01:00=-28 enters; mean rises4/12 although latestC falls-27to-28. Raw last12outcomes8Up4Down. Subsequent outgoingC=-31/-32 yields mean increases2/12 each. An average of past cumulative states is not a guarantee of next binary outcome; hold-until0.5 confirmation also differs from following every instantaneous slope.
+Next: None; explanatory request only.
+Notes: Explicitly do not claim lag alone caused the entire loss, randomness/anti-correlation established, or inverse-strategy profitability. Aligned subset alreadyGross-152. Wholemonth accounting below50percent and fixed fees explains realized Net, but no new production rule or out-of-sample conclusion. No simulation changes, new charts/files/temp run, DB/service/order operations, commit/push; only exempt context/history. All independent processes ended.
+Blockers: None for this bounded explanation; exact fullmonth Net still has the previously documented one-unknown-outcome interval.
+
+## Active Update 2026-09-15 BTC August Turn-Following Simulation
+Goal: Calculate the user-confirmed BTC August2026 UTC one-hour-mean TurnSize0.5 follow-the-turn strategy, fixed1USD at0.5 with3.33percent fee.
+Status: Completed
+Done:
+- User approved the preceding explicit model with «Да, так». ResearchOnly local historical calculation; no product/DB/service/orders. Cumulative August UpDiff, no July warmup/daily resets, mean12 consecutive current-inclusive states, Unknown initial detector, first established direction not a turn. On confirmedUpTurn holdUp, DownTurn holdDown; each immediately next5m target uses side known before its outcome, no former premarket extra lag. Gap clears mean continuity/detector/side, retains cumulative level and waits full rewarm plus new confirmed turn.
+- Source preview unchanged8927/8928rows,4445Up4482Down, sole missingAug5 15:00UTC. 8905valid means and22initial/gap warmup nulls. Model8856placed bets:8855settled and1unknown;4326wins4529losses, WinRate48.85375494071146percent. Settled Gross-203USD, fees294.8715, Net-497.8715. 407confirmedturns(203Up/204Down),72calendar slots withnoorder. First decisionAug1 03:40→03:45; postgap nextdecisionAug5 17:15→17:20.
+- Unknown order was already chosenAug5 14:55 for15:00, sideUp, meanNumerator-460, decisionID3337763. Not retrospectively cancelled; modeledfee0.0333 retained. Allplacedfees294.9048; fullmonthGross lies[-204,-202], fullmonthNet[-498.9048,-496.9048], not an exact point claim. Rewarming/reset makes postgap turning decisions translation-invariant to restoring missing outcome±1; only that order's payoff changes, independently verified.
+- Durable external report D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/btc_august_2026_turn_follow_05_mean1h.json (SHA2563A6541ED89EDB0432B38F0C2EEFB9DAFB5F2F3883D6B575DA09667B35E4983A7) contains complete bets/events, sources/filter/method/exclusions/tests and summary. Reproduction script Calculate-BtcAugustTurnFollow.ps1 SHA256AC02C1ECA300A3324EB9C2CD480ED506CE7DAB81A59297F7E3BB8C3B8718B4BD. No unrequested chart generated.
+-9focused synthetic detector/timing/gap/accounting tests passed;8905direct mean checks,22warmup checks. Independent verify_btc_aug31 raw-prefix model fully matches8856bet and407event canonical hashes;29summary/hash/count,26568time/lag and26567accountingchecks0differences; full approved-semantics/code and translation-invariance review PASS. Bet hash3384860CCBC68DE8D4C6A21585F17E2174A35AAF17F40175581B55CA1136DD63; eventhashA4C0C535F2C52FF211026FBABB5D02A8A3F1E7900F959036D8193A4F31151A58.
+Next: None for the requested simulation.
+Notes: Source rawCSV E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F and monthlyaudit C4C2A2B468B176F4B75155249192A4CBEE9BA0FC18B05E17FA454350B8C34FF4 unchanged. Fullfill/0.5/instant expected-end outcome availability and fee3.33percent are user-supplied modeling premises, not observed execution/venue billing. Mandatory temp skill used owned btc-turn-follow-20260915-01; reviewers/processes finished; durablecopy hashes matched; protectedcleanup removed3files4112291bytes,Removed=true,Test-Path=false. Only exempt repository bookkeeping, no commits/pushes or unrelated changes adopted.
+Blockers: None for computed observed results and bounded whole-month result; exact whole-month Net remains unknown because one outcome is missing.
+
+## Active Update 2026-09-15 BTC August Turn-Following Preview
+Goal: Model BTC August2026 UTC following confirmed one-hour-middle reversals with TurnSize0.5; no product or trading changes.
+Status: Blocked
+Done:
+- User asks Down after a downward turn and Up after an upward turn, for the whole BTC August. Read previous detector audit: current-inclusive unrounded mean12, threshold6 numerator units, causal confirmation, Unknown initialization and first established direction not a reversal. Previous chart's daily detector reset must not silently become a daily strategy reset.
+- Independent verify_btc_aug31 raw-source preview and root monthly-audit reconstruction agree:8927/8928 August slots,4445Up4482Down, sole missing Aug5 15:00UTC, no invalid/duplicate/off-grid rows. Source and monthly-audit hashes unchanged. Agent also verified11 July31 23:05..23:55UTC warmup rows exist; not applied. Existing monthly audit intentionally has no July warmup, with22null one-hour values from initial warmup and gap.
+- Inspected exact prior shifted mean-reversion report/script: stake1, price0.5, fee0.033 each bet including losses, target end=cutoff+600seconds (one intervening outcome unused), ResearchOnly hypothetical fills. Latest user's earlier LIFO description says commission3.33; cannot silently conflate this with0.033 or inherit premarket timing into the new strategy.
+Next: Obtain confirmation of proposed research model: fixed1USD at0.5, fee3.33percent of each stake; bet the immediately following market after confirmation until opposite confirmation; before first confirmed turn skip; mean warmup from August start/no daily resets; missing Aug5 slot pauses strategy, resets detector and requires full window/new turn without resetting cumulativeUpDiff. This proposal is not approved/applied. Explicit alternative timing if desired is the former one-market premarket delay.
+Notes: Read-only preview only; no new detector sweep, PnL, chart, scratch file, data/product/DB/service/order mutation or commit/push. Only exempt context/history changes. UTC captured2026-09-14T21:21Z corresponds to local2026-09-15; history remains in UTC-day file. Unrelated dirty bookkeeping preserved.
+Blockers: Exact execution-model timing/stake/fee and gap handling confirmation before simulation.
+
+## Active Update 2026-09-14 BTC One-Hour Middle Both Turn Thresholds
+Goal: Show BTC August31 2026 UTC cumulative UpDiff, one-hour mean and both requested TurnSize0.5/1 in different colors.
+Status: Completed
+Done:
+- Created external durable chart D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/btc_august31_2026_middle1h_turns_05_1.png plus same-basename audit.json and Render-BtcAugust31MiddleTurns.ps1. PNG SHA256 CA0E103943B5D1A549ECF73A695C6FE52FE5AD0D60E85F6514942BBD54CF70F3; audit SHA256 4A64AF186E2F2D082898DD25AC951A93F2CF02B39DA62EDAC5313539DDFC6102. Main visually inspected PNG; solid lines, blue UpDiff, orange mean, green circles0.5 and purple diamonds1; hollow extreme and filled confirmation, nested at shared points.
+- Raw CSV hash E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F; monthly input audit hash C4C2A2B468B176F4B75155249192A4CBEE9BA0FC18B05E17FA454350B8C34FF4. 8927 loaded AugustBTC outcomes, known Aug5 gap not imputed; displayed288 Aug31 points,142Up146Down, no day/window gaps. Cumulative sinceAug1, no daily reset; unrounded mean12 current-inclusive states, warmed byAug30. Mean endpoints -31.5 and -37.666666666666664.
+- Detector explicitly starts Unknown at00:00; first threshold excursion establishes direction, not a turn. Track running extreme; reverse on retreat>=threshold; reset opposite tracker at confirmation. Last attaining timestamp selected on ties. Exact numerator thresholds6/12. No final unconfirmed marker. TurnSize0.5:15 events(7up/8down); TurnSize1:7(3up/4down). No predictive, PnL or production claim.
+- Eight synthetic detector checks passed and all288 means recomputed from monthly cumulative states. Independent verify_btc_aug31 rebuilt raw CSV cumulative/mean and compared every point/event:1980checks,0mismatches, exact integer/time/ID and float tolerance1e-12; semantic review PASS. Initial PowerShell default JSON date conversion showed local+03; corrected before calculation using DateKind String and explicit DateTimeOffset UTC; source timestamps unchanged.
+Next: None for the requested chart.
+Notes: Native PowerShell/System.Drawing only; no product/source dataset/DB/service/orders changes. codex-temp-lifecycle confined temporary outputs to owned D:/CodexTemp/runs/btc-middle-turns-20260914-01; protected cleanup Removed=true,4files216939bytes,Test-Path=false after durable hash-verified copies. Existing unrelated dirty bookkeeping preserved; no commit/push.
+Blockers: None.
+
+## Active Update 2026-09-14 UpDiffMiddle Turning-Point Advice
+Goal: Advise how to track turns of the orange two-hour UpDiffMiddle line in the supplied BTC August31 image; no implementation or historical backtest.
+Status: Completed
+Done:
+- Inspected the explicit attached PNG via view_image, not a different clipboard source. Treat 'turn' explicitly as rising-to-falling/falling-to-rising direction reversal, not a mathematical curvature inflection. No exact timestamps/extrema or detection performance inferred from pixels.
+- Proposed causal detection: step=Mnow-Mprevious; zeros preserve prior nonzero direction. For larger visible swings, use a separate positive TurnSize: in rising mode track runningmax, confirm fall when max-M>=TurnSize; in falling mode track runningmin, confirm rise when M-min>=TurnSize, then switchmode and initialize opposite tracker at currentM. Initialdirectionunknown, firstdirectionisnot a reversal. Suggested0.5/1 only as untested experimental magnitudes in UpDiff units, not optimal or productionvalidated.
+- Verified algebra for two consecutive full trailingW averages of cumulativeC: DeltaM=(C_t-C_(t-W))/W=sum(lastW Up/Downincrements)/W. W=24for2h on contiguous5m data; slope sign is window Up-minus-Down, not UpMiddle=C-M. Local audit indicator definition matches current-inclusive consecutive means. Missingdata/fullwarmup required; do not derive acrossgap.
+- Distinguish historical extreme/plateau from later confirmation timestamp; no tradingatpastpeak/futuredata. MinUpMiddle remains entry-deviation threshold, not turnsize. Detecting a mean reversal does not prove prediction of next outcome or profitability.
+Next: None; advice only, no strategy accepted or modified.
+Notes: Independent verify_btc_aug31 algebra/causalstate review PASS; native in-memory8syntheticidentitychecks PASS. Sources NIST single moving average and official SciPy find_peaks for retrospective neighbor/plateau handling. No files/tempoutputs/newchart/datafetch/backtest/product/DB/service/orders/commit/push;onlyexemptcontext/history. Concurrentfce6b1d0 sourcework preserved.
+Blockers: None for advice; parameter quality and trading edge untested.
+
+## Active Update 2026-09-14 Binance Connection-Aware Last-Price Implementation
+Goal: Implement approved RC-20260914-binance-connection-aware-last-price only, on master, with no production operations.
+Status: Completed
+Done:
+- Exact approval received: APPROVE RC-20260914-binance-connection-aware-last-price sha256:271261f5a83b8afa084bb5936407917a39a8d3afb8c97e4fc1d438dfd2d1fec9. Contract digest verified unchanged; approval-only commit7965d6f2 created before product edits. Unrelated dirty context/history preserved.
+- Both stream implementations now use internal BeginConnection/EndConnection/ProcessMessage generation seams, actual socket state and lifetime cancellation in synchronized publication/getter checks; native CreateSocket10/10, no getter age expiry, original timestamps/sampling/backoff unchanged. ETH/SOL age-based diagnostic calls removed without changing helper. README limited to approved semantics. Root owns ETH/SOL+README; btc_connection_impl completed BTC-only source; binance_connection_tests owns exactly the two approved test paths.
+- Initial service Release build succeeded in33.52s with0errors/121warnings emitted from unchanged Storage/PaperFakFeeBackfillProcessor code. No warning from the two edited stream files. Final separate incremental Release build succeeded1.61s with0warnings/0errors.
+- Marked temporary run created through codex-temp-lifecycle: D:/CodexTemp/runs/binance-connection-policy-20260914-01, sessionId same. All build TEMP/TMP/TMPDIR/artifacts/results/logs rooted there; UseSharedCompilation=false/MSBUILDDISABLENODEREUSE=1. Old invalid/unmarked orphan directories were protected and left untouched. Initial build log is logs/service-build.log. No service/DB/exchange connection or deployment performed.
+- Exact focused filter passed57/57 (40newconnection-policy +17adapteddiagnostics); exact regression filter18/18 (12timedclose+3oddsarchive+1BTCparser+2FAK/Live-shadow);0failed/0skipped. Root and independent reviewer separately read raw TRX/counters and confirmed75total. TRX hashes and exact commands preserved in completed contract; no fullsuite/runtime claim.
+- Independent health_semantics_sep14 final originalRequests/approvedcontract/all5pathdiff/source/testevidence review PASS/no open findings. Reviewer considered and withdrew a proposed BTC payload-symbol guard: existing dedicated btcusdt@trade channel/typedparser is preserved; adding new payload-schema validation would be out-of-scope hardening. No guard/parser rewrite was introduced. Same-generation ownership provides the approved reconnection isolation; this is not a claim of protection against malformed cross-asset upstream payloads.
+- Protected Complete-CodexTempRun removed368files/98485401bytes;Removed=true and repeated Test-Path=false. Contract,WorkingTree,Staged,Range and whitespace checks passed. Range covers2commits/5governedpaths (approval7965d6f2 then implementationfce6b1d0).
+- Committed exactly5approved product/test/docpaths plus completedcontract in fce6b1d070b87a0c1fa84d084c9a9c645ace9465, then pushed master. Final origin refs/heads/master independently read as that samehash; localupstreamdivergence0/0. Existing unrelated dirty bookkeeping, including overlapping activecontext/dailyhistory, remains unstaged rather than being adopted wholesale.
+Next: User-controlled deployment of fce6b1d070b87a0c1fa84d084c9a9c645ace9465. No further local implementation work required by this contract.
+Notes: Source implementation and local verification complete; deployment/production runtime not performed or verified in this task. Original quote timestamps, samplecadence/backoff, separate timed-close and frozen/submitted order/accounting behavior remain unchanged. Mandatory temp skill confined all disposable outputs to D: and verified cleanup before completion.
+Blockers: None for the approved local implementation. Production confirmation requires user deployment and a later scoped check.
+
+## Active Update 2026-09-14 Binance Connection-Aware Last-Price Contract Draft
+Goal: Record the accepted10/10-second liveness policy and prepare its exact BTC/ETH/SOL implementation contract for hash approval.
+Status: Blocked
+Done:
+- Exact new user prompt: «Согласуем». This accepts the separately proposed native Ping interval10s/Pong timeout10s and the disclosed possibility that delayed local reading can abort an otherwise healthy connection. The previous timing-choice blocker is resolved; this is not yet exact contract approval.
+- Mandatory rules/context/Git initialization and read-only source preview completed on master271e860a8edbc33de66ecf3185f9d81bbc160ce3; origin/master0/0. Exactly two existing reference stream implementations serve BTC and ETH/SOL through shared singleton/hosted-client DI. Product tree remains unchanged; unrelated dirty history/context preserved.
+- New draft: Codex/Requirements/Contracts/RC-20260914-binance-connection-aware-last-price.json. Semantic digest sha256:271261f5a83b8afa084bb5936407917a39a8d3afb8c97e4fc1d438dfd2d1fec9. Contains verbatim «Давай не признавать устаревшей», «1. Для всех.\n2. А как ты считаешь?», «Фиксируем», «Согласуем»; three REQs and six verification items, no assumptions/deviations.
+- Exact five planned paths: two Binance stream classes, existing BinanceCryptoReferenceDiagnosticsTests.cs, new BinanceReferenceConnectionPolicyTests.cs, README.md. No getter age expiry while connection available; detected close/error/abort or stop invalidates availability; new connection requires first valid same-asset trade, not Ping/Pong or another asset; original quote timestamps remain unchanged. Native10/10 options preserve the existing receive architecture/backoff and accepted delayed-local-read caveat. Age-based stale/recovery calls stop; diagnostic helper is not redesigned.
+- Scope explicitly preserves independent timed-close age/market-end checks, Polymarket order-book/execution constraints, frozen/submitted orders and accounting, sampling cadence and original quote timestamps in repeated history samples. No alternate source, public configuration/schema, pump/framework, DB/service/deployment action, or retrospective repair.
+- Draft Contract -AllowDraft -PrintSemanticDigest validation PASS twice with the same digest. Independent health_semantics_sep14 read the full draft, compared the four original prompts/adopted proposals and exact source/test paths: draft semantic review PASS/no open findings. Selected parser, timed-close and FAK/Live-shadow regression names exist. Implementation verification and independent final diff/test review remain pending, not marked passed.
+Next: Obtain later exact user command APPROVE RC-20260914-binance-connection-aware-last-price sha256:271261f5a83b8afa084bb5936407917a39a8d3afb8c97e4fc1d438dfd2d1fec9; persist approval in a separate approval-only commit before product edits, then implement and verify only this contract on master.
+Notes: No builds/tests, temporary artifacts, database access, service operations, external trading or production monitoring in this draft turn. Only exempt new contract/context/history edits; no unrelated dirty files staged/committed or old completed contract altered. Source/test/README diff empty; context diff whitespace check passed with only normal LF/CRLF warning.
+Blockers: New contract exact semantic-digest approval only. Natural-language agreement has resolved policy choices but does not substitute for RequirementGate checkpoint B.
+
+## Active Update 2026-09-14 Binance Connection Policy Adopted Timing Unresolved
+Goal: Fix the user's adopted BTC/ETH/SOL last-price policy without silently choosing connection-liveness timing or its failure semantics.
+Status: Blocked
+Done:
+- Exact new user prompt: «Фиксируем». The previously proposed policy is now adopted: all three existing Binance reference assets BTC/ETH/SOL have no price-age expiry while their channel is usable; detected connection loss prevents use of the retained price for new current-reference-dependent decisions; reconnect requires a new valid trade independently per asset; original source/fetched timestamps and already frozen/submitted orders remain unchanged. No other source, timed-close constraint, strategy/order semantics or accounting is included.
+- Required initialization and read-only Git/source preview repeated: master HEAD271e860a8edbc33de66ecf3185f9d81bbc160ce3, origin/master0/0; two stream classes, three assets, no production data period or DB mutation. Both existing socket loops receive then synchronously process/log before the next ReceiveAsync; no explicit keepalive timeout. Existing dirty context/history preserved.
+- Exact connection timing remains a new decision, not supplied by «Фиксируем». Proposed for user choice only: native ClientWebSocket KeepAliveInterval10s and KeepAliveTimeout10s, with no trade-price-age gate. In .NET documented semantics, a Ping follows communication inactivity and missing timely processed Pong aborts the socket. This is not a guarantee of network-only failure or outage detection within20s. Delayed local processing may prevent a pending ReceiveAsync and cause an otherwise healthy peer connection to be aborted.
+- Root and independent health_semantics_sep14 both verified that limitation against the actual two receive loops and official https://learn.microsoft.com/en-us/dotnet/fundamentals/networking/websockets#keep-reading-to-process-pongs . Binance official websocket documentation also inspected; no replacement feed, receive-pump/framework, configuration fields, arbitrary timeout or sidecar silently chosen.
+- RequirementGate checkpoint A cannot finalize an exact implementation contract while this behavior/risk choice is unresolved. No product/configuration changes, new contract, approval record, build/test, temporary artifacts, DB access, service restart or deployment performed. Current turn only records adopted policy and asks the focused timing/risk question.
+Next: Obtain explicit acceptance or correction of proposed10s interval/10s timeout and local-processing false-disconnect caveat; then draft the exact contract including this new user prompt and request its later semantic digest approval before any product edit. Old completed diagnostics-only contract is immutable and does not authorize the behavior change.
+Notes: Scope remains only two Binance reference stream implementations, focused tests and required concise documentation; no broader diagnostics or production audit. Draft preparation discovered this blocking detail; no claimed implementation completion. Bookkeeping changes are exempt and unrelated dirty files are not adopted/committed.
+Blockers: Exact liveness timing/failure semantics need user choice; then new contract hash approval is required.
+
+## Active Update 2026-09-14 All Binance Assets Connection Policy Recommendation
+Goal: Record confirmed BTC/ETH/SOL scope and answer the user's requested opinion on using the last trade price after connection loss.
+Status: Blocked
+Done:
+- Exact new user prompt: «1. Для всех.\n2. А как ты считаешь?» Currency scope is now all three existing Binance reference assets BTC/ETH/SOL; this does not extend to OKX or other price sources. User asked for an opinion about connection loss, not adoption of a particular new guard or implementation.
+- Reinitialized required rules/context/Git; HEAD271e860a and origin/master0/0, existing dirty bookkeeping preserved. Read-only inspection of both complete stream paths confirms BTC has no business connection state, ETH/SOL only best-effort internal diagnostic state; neither getter checks connection health. Both create ClientWebSocket without explicit KeepAliveInterval/KeepAliveTimeout. Diagnostic best-effort state must not silently become business authorization state.
+- Recommendation, explicitly not yet accepted/implemented: remove price-age expiry for BTC/ETH/SOL while the corresponding channel is usable; once close/error/connection-liveness failure is detected, stop supplying that retained point for new decisions requiring a current reference price. After reconnect, require a new valid trade from that connection separately for each affected asset. Preserve original SourceUpdatedAtUtc/FetchedAtUtc and do not alter already frozen/submitted orders or existing fill/accounting processing.
+- Official .NET documentation checked: https://learn.microsoft.com/en-us/dotnet/fundamentals/networking/websockets#keep-alive-strategies and ClientWebSocketOptions.KeepAliveTimeout. Default timeout is InfiniteTimeSpan (unsolicited PONG); positive finite PING/PONG timeout can detect unresponsive peers, with pending Receive required to process replies and avoid false positives. Socket.State.Open alone is not proof of peer responsiveness. Exact liveness mechanism/timing is NOT selected or approved here; no promise of instantaneous outage detection, no arbitrary replacement price-age timeout.
+- Independent health_semantics_sep14 recommendation review PASS with those boundaries: all three assets, detected disconnection versus quiet trades, per-asset post-reconnect quote, original timestamps and unchanged in-flight orders/accounting. No source/config/DB/service changes, builds/tests, temporary artifacts or new monitoring performed.
+Next: User selects the recommended connection-aware policy or another explicit behavior; then draft the machine-readable contract with exact liveness semantics and obtain its later digest approval before material edits. Prior completed diagnostics contract remains immutable and cannot authorize this behavior change.
+Notes: This turn completes the requested opinion; implementation remains unstarted. Only exempt context/history bookkeeping updated; unrelated changes not committed or adopted. Existing timed-close/market-end constraints are separate and not silently removed.
+Blockers: Connection policy is proposed, not user-approved; exact contract and digest approval still required for implementation.
+
+## Active Update 2026-09-14 Binance Price Age Removal Scope Clarification
+Goal: Prepare the user's request «Давай не признавать устаревшей» without silently choosing currency scope or behavior during connection loss.
+Status: Blocked
+Done:
+- Mandatory Workflow/AGENTS/CodingRules/RequirementGate/context/Git initialization performed. HEAD271e860a8edbc33de66ecf3185f9d81bbc160ce3, origin/master0/0; product paths remain clean and existing dirty context/history preserved. No production/local DB, network-data collection, build/test, temporary artifacts or material edits in this turn.
+- Read-only source preview confirmed two separate implementations and DI paths: BinanceBtcUsdTradeStreamService.GetBtcUsdPriceAsync and BinanceCryptoReferenceTradeStreamService.GetPriceAsync for ETH/SOL. Both reject age exceeding their own StaleAfterSeconds; root did not assume that the new request includes the separately implemented BTC path.
+- ETH/SOL getter checks cancellation, existence of a point and age, but not connection state. Full stream retains latestByAsset across disconnect/reconnect; assignment is in ProcessMessage and there is no cache clear/remove on connection loss. Therefore simple age-check removal permits the retained point even after connection loss until replacement/restart; a new connected-only guard would be an additional behavior requiring the user's choice. Never-seen/cancellation behavior and actual SourceUpdatedAtUtc/FetchedAtUtc must not be silently changed.
+- Independent health_semantics_sep14 read-only review confirmed the ambiguity and identified that timed-close validation in CryptoUpDown5mResultPollingProcessor257..267 is a separate age/market-end gate, not automatically removed by changing the reference getter. Diagnostic ObserveStale currently originates in the getter age check; its future event semantics must be explicit in the eventual contract. Focused existing diagnostics/timed-close tests located; none run or changed.
+Next: Obtain currency scope (ETH/SOL only or BTC too) and whether age rejection is removed unconditionally or only while connected. Then draft a new machine-readable requirement contract from all verbatim prompts, present digest and await exact approval before any material edits. Do not reuse the completed diagnostics-only contract or invent a protective fallback/connected guard.
+Notes: Only exempt context/history bookkeeping written. No implementation contract/digest presented yet because the two choices change runtime behavior and risk. Unknown paths/glob syntax in initial narrow searches were corrected using rg --files and exact paths; no user system affected.
+Blockers: User clarification of those two behavior choices, followed by approval of the new exact requirement digest. No code or production change has been authorized by a contract yet.
+
+## Active Update 2026-09-14 Binance Public Trade History Gap Comparison
+Goal: Compare only the six previously observed ETH/SOL stale/recovery pairs and the SOL history skip with public Binance trade history, following user permission «Разрешаю».
+Status: Completed
+Done:
+- Scope: read-only public spot ETHUSDT/SOLUSDT history for the exact September14 UTC seconds below, matched to production log window [07:54:23.137713Z,08:12:15.298880Z) from deployed271e860a. No credentials, account endpoints, trading, production/local DB access, source/config/service changes or new monitoring. HEAD271e860a and upstream0/0 unchanged; existing dirty bookkeeping preserved.
+- Official Binance docs read: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#compressedaggregate-trades-list, #old-trade-lookup, faqs/market_data_only.md and web-socket-streams.md#trade-streams. Aggregate start/end/fromId are inclusive, maximum1000, database-backed; raw historical lookup by fromId is a separate confirmation. Aggregate count is not raw trade count. Public data-api host supports aggTrades without auth; historicalTrades was verified on documented api.binance.com, not assumed supported on the market-data-only host.
+- Public server time response1789374092017=2026-09-14T08:21:32.017Z independently confirmed date. Seven bounded GETs on https://data-api.binance.vision/api/v3/aggTrades, symbol as below, startTime=(left source UTC minus1s) and endTime=(right source UTC plus1s), limit1000. Extra SH query used07:59:28Z..07:59:46Z. HTTP200 all; aggregate row counts3/3/4/5/5/70/12, total102, response bodies12158bytes, max reported used weight28. All six exact diagnostic intervals included both source-time boundary records, zero records strictly inside, no limit saturation or observed aggregate-ID gaps. Numeric counts/boundary checks independently recalculated in functions JavaScript from the retained native response, without disk artifacts.
+- Independent health_semantics_sep14 made seven raw GETs on https://api.binance.com/api/v3/historicalTrades?symbol=<symbol>&fromId=<left raw ID>&limit=2, HTTP200 all,14 rows total, no authorization,15s timeout; used weight25..175. Captures08:23:08.3721348Z and08:23:35.3534253Z..08:23:37.4182649Z. Every pair matched aggregate IDs/timestamps and the six log SourceUpdatedAt boundary pairs. Verified published-history gaps:
+  - S1 SOLUSDT: raw2054519503->2054519504, aggregate672184078->672184079,07:55:14.248Z->07:55:19.898Z,5.650s.
+  - S2 SOLUSDT: raw2054520012->2054520013, aggregate672184182->672184183,07:56:27.698Z->07:56:33.560Z,5.862s.
+  - S3 SOLUSDT: raw2054520229->2054520230, aggregate672184243->672184244,07:57:55.188Z->07:58:01.642Z,6.454s.
+  - S4 SOLUSDT: raw2054520427->2054520428, aggregate672184302->672184303,07:59:08.304Z->07:59:15.228Z,6.924s.
+  - E1 ETHUSDT: raw4353761818->4353761819, aggregate2079732388->2079732389,08:03:40.552Z->08:03:47.749Z,7.197s.
+  - S5 SOLUSDT: raw2054527231->2054527232, aggregate672185384->672185385,08:11:24.636Z->08:11:30.036Z,5.400s. Two aggregate groups at the right boundary share the millisecond; this does not add an interior trade.
+  - SH SOLUSDT: raw2054520453->2054520454, aggregate672184310->672184311,07:59:30.476Z->07:59:37.990Z,7.514s. The history skip logged07:59:37.952Z lies inside this exchange gap. Root independently filtered this narrower strict interval from the12-row SH response and found0 interior rows.
+- Fresh server_logs_sep14 reread51729423 bytes (_038[0,45437967) and _037[43716680,50008136)) confirmed all12 diagnostic source/fetched/accepted/frame records. The _037 slice began07:54:31.357Z and did not cover startup URL; no claim that the URL was freshly reverified by that slice. Additional SH evidence found in two actual strategy log payloads:07:59:30.741Z sol_up_down_5m_up_bps_3_fak_premarket and07:59:30.778Z sol_up_down_5m_2_bps_confirmed_average_premarket both record source07:59:30.476Z and fetched07:59:30.6044557Z. History warning07:59:37.952Z still contains only Age7.348, not that timestamp; log timestamp minus independently recorded fetched time=7.3475443s, rounding to7.348. Sampled-log07:59:38.118Z records source07:59:37.990Z, no exact fetched value. These observations supersede the provisional claim that SH's preceding local point could not be recovered; no full RawDecisionJson exposed.
+- Exact implementation rechecked: GetPriceAsync rejects local fetched age>StaleAfterSeconds (5 in runtime logs); ProcessMessage updates current price per accepted trade before60s sampling; parser SourceUpdatedAt uses T then E then fetched fallback. Six full diagnostic pairs and the separate SH history-skip interval now have independent evidence of real between-trade gaps in published exchange history, matching retained local source observations. A lost intermediate trade is not supported for these enumerated intervals. This replaces the previous unknown whether trades existed inside the checked source-time gaps; it does not establish global network health, unique mapping to a raw trade ID (not retained locally), absence of every local delay, or a change to the freshness policy.
+- Independent public-history method/raw-row review health_semantics_sep14 PASS. Original partial ambiguity over exchange inactivity is resolved for these enumerated pairs; fresh local SH evidence also aligns with its independently confirmed7.514s exchange gap. No number of missed entries or financial effect inferred.
+Next: None for the approved bounded public-data comparison. Freshness threshold, data source and behavior remain unchanged; any change to their meaning requires a separate explicit requirement contract.
+Notes: First JSON parse failed because PowerShell case-insensitive conversion conflated Binance m/M fields; corrected reader to ConvertFrom-Json -AsHashtable and repeated only that small read. No user system affected. Web preview refused direct JSON API URLs, while native HTTP evidence had already been collected successfully; no retry/workaround of that preview restriction. No temporary files/builds/tests created. Only exempt active context/daily history changed; unrelated uncommitted history was not adopted into a commit.
+Blockers: None for comparison. Published trade timestamps do not measure precise delivery latency to our process; conclusions apply only to the enumerated intervals.
+
+## Active Update 2026-09-14 Binance ETH SOL Gap Investigation
+Goal: Continue read-only investigation of ETH/SOL freshness gaps using the newly deployed diagnostics, exact production identity and matching history records.
+Status: Completed
+Done:
+- User request: «Ок, продолжай разбираться». Scope was production 192.168.0.101:5432/polycopytrader and server logs, no source/configuration/DB/order/service changes. Git HEAD and origin/master remained 271e860a8edbc33de66ecf3185f9d81bbc160ce3, divergence 0/0; unrelated dirty context/history preserved.
+- Fixed half-open evidence window [2026-09-14T07:54:23.137713Z,2026-09-14T08:12:15.298880Z). Initial DB check 08:12:15.298880Z: Running/Live, last_error NULL, expected version271e860a, process start07:54:23.137713Z, heartbeat08:11:23.513491Z/age51.785420s. Final independent DB check08:16:19.646304Z same version/start/status/error, heartbeat08:15:23.549019Z/age56.097285s. ETH/SOL later history samples08:16:18.274511Z/.275727Z prove later availability, not continuous freshness.
+- server_logs_sep14 scanned _037 tail12582912 bytes plus _038 fixed45437967 bytes, total58020879 bytes, available timestamp coverage07:50:00.927Z..08:14:10.387Z and filtered to the fixed window. Exact window80925 timestamped events=80908INF+17WRN+0ERR/FTL. SMB file metadata was stale; actual FileStream.Length was used. No subsequent Binance close/reconnect/parser-skipped logs or matching `was slow.` warnings in this window; startup/connect07:54:26.707Z/07:54:27.794Z.
+- Twelve new diagnostic events: ETH1 stale/1 recovery, SOL5 stale/5 recovery. Every snapshot Connected/generation1, ReceivedFrames=CompletedMessages, rejected/ignored0; stale phaseReceive, recoveryIdle. Stale ages5.1129485..7.1245190s while active Receive durations74.2921..451.9121ms. These prove recent common-channel reception despite an older per-asset published quote, not where the per-asset gap originated. In two SOL stale-to-recovery intervals common messages increased78 and103 while SOL accepted count increased1; no full common-receive stall explains those intervals.
+- Emitted stale UTC times: SOL07:55:19.876,07:56:33.296,07:58:01.773,07:59:14.878,08:11:29.877; ETH08:03:47.808. Corresponding recovery log UTC times07:55:20.026,07:56:33.694,07:58:01.775,07:59:15.357,08:11:30.175; ETH08:03:47.915. Full fetched timestamp gaps, independently recalculated in native PowerShell, SOL5.6497180/5.8687758/6.4046324/6.9209286/5.4089000s and ETH7.2267777s. Recovery source-to-fetched lag0.1284591..0.1617561s for these six records, not all stream messages. Reported suppressed counters SOL stale4/recovery3, ETH0/0; these are not complete outage or suppressed-candidate totals at cutoff.
+- Largest saved last measurements among12 snapshots: parse0.013ms, publication wait0.0003ms, hold0.0551ms, sampled log0.0955ms. They are last measurements at observation, NOT per-gap/all-message maxima; earlier local delays remain unexcluded. Current source update is per accepted trade, not once per60s: stream latestByAsset assignment precedes the sample gate. Source timestamps use parser T/E/fetched fallback; no trade ID/complete sequence is retained, so absence of exchange trades cannot be established from these records.
+- Confirmed concrete effect: SOL history attempt07:59:37.952Z failed in GetPriceAsync with stale AgeSeconds7.348 and threshold5, before Upsert. Root independently read _038 offsets0..16777216 and confirmed the exception/call path, separately from log agent. Matching indexed DB records bracket gap07:59:27.939388Z..07:59:47.941219Z=20.001831s. Exact-window successful history rows106ETH/105SOL; native raw-row aggregation independently matched SQL counts and maxima. No other >15s sampled-time gap; ETH max sampled age3.085811s, SOL4.497559s; successful-point source lag maxima0.917241s/0.492023s. These history writes are10s, distinct from60s stream sample logging. Three initial never-seen warnings are separate startup events. No detailed snapshot at07:59:37 because of the already active60s diagnostic throttle.
+- Independent health_semantics_sep14 review PASS: snapshot common receive is frame-level evidence; small last-duration values do not rule out earlier delays; history stale rejection precedes DB write; strategy lookup failure is local to an evaluation cache, not permanent. Specific missed trading entries were not counted or inferred from diagnostic event counts.
+Next: None for this bounded investigation. Root cause of per-asset gaps remains unknown; proving exchange inactivity versus delivery/processing requires evidence absent from the current logs (a per-trade sequence/source comparison). No fix, freshness relaxation, fallback or new monitor was performed.
+Notes: All SQL forced BEGIN READ ONLY and SET LOCAL statement_timeout='15s', default read-only, lock_timeout2s, UTC and max_parallel_workers_per_gather0; asset/time index verified before bounded 211-row history inspection. No local DB, unindexed api_errors scan, build/test run or disposable artifact. Only exempt context/history bookkeeping changed; pre-existing uncommitted history was not adopted into a commit.
+Blockers: Definitive upstream cause cannot be established from retained telemetry. No claim that gaps are fixed, that all local delay is excluded, or that observed event counts equal missed bets.
+
+## Active Update 2026-09-14 Binance Diagnostics Production Deployment Verification
+Goal: Verify the user deployment, server/Paper activity and new Binance ETH/SOL diagnostic events using Production DB and server logs read-only.
+Status: Completed
+Done:
+- Production identity192.168.0.101:5432/polycopytrader/read_onlyon confirmed at07:55:36.780317Z. New deployedversion info=1.0.0+271e860a8edbc33de66ecf3185f9d81bbc160ce3;assembly1.0.0.0;mvid03ad0d8b3ce9. Running/Live,last_errorNULL,start2026-09-14T07:54:23.137713Z. Finalheartbeatcheck07:59:15.739663Z sameversion/start,statusRunning,errorNULL,heartbeat07:58:23.35895Z/age52.380713s. Logheartbeats07:54:23.330Z/07:55:23.333Z independently confirm activity; new diagnostic payload independently proves code path is live.
+- Exact half-open poststart window[2026-09-14T07:54:23.137713Z,2026-09-14T07:55:36.780317Z),73.642604s. Papercreated169 allFilled=122btc_updown5m_fak_taker_paper+47btc_updown5m_child_mirror_fak_paper. Indexedfilled_at query169/169distinctorders; independent raw-row calculation169uniquefills/169uniqueorders/0unmatched/0nonFilled agrees. Firstfill07:54:30.679826Z,last07:55:02.429157Z. Independentlogs122FAK+47Child(10mirrormessages). Settledstrategy_market_paper_runs123/123strategies,DBlast07:55:05.790347Z;123settlementlogrecords(last07:55:05.839Z). These are runs,notpositioncount.
+- NewLiveordersinwindow0 viaallstrategiesindexedlateral plusseparateNULLquery. CurrentopenLive0 byactualoperationalstatuses/ownershipNone;Matchedwithoutbalanceeffect0. CurrentPending/PartiallyFilledPaperquery0rows;lockwaiters0. No venueAPI verification or conclusion about why no Live entry. FreshBTC/ETH/SOLreferenceDBsamples07:56:57.865063/.866355/.870959Z,fetched07:56:57.023711/07:56:56.905116/07:56:57.034345Z;thisproveslateravailability,notuninterruptedfeedcoverage.
+- Serverlogs exactwindow8451timestampedevents=8446INF+5WRN+0ERRFTL. WRN3startupnever-seenBTC/ETH/SOL07:54:27Z,1SOLstale07:55:19.876Z,1PMcrypto-criticalCloseFrame1013at07:55:31.077Z. ETH/SOLstreamconnected07:54:27.794Z,SampleInterval60/StaleAfter5 unchanged. New SOLstaleObservedAge5.4960064s->recovery07:55:20.026Zage0.0000089s,150msbylogtimestamps;gen1/Connectedboth,SuppressedCount0both,acceptedSOL151->152,frames/messages539->540,rejected/ignored0. Realdiagnosticstale/recoverybranchconfirmed,notcausefixed.
+- SOLstalesnapshotActivePhaseReceive451.9121ms,lastcommonreceive07:55:19.4215676Z,lastSOLFetched07:55:14.3767411Z/source14.248Z. Latestparse0.013ms,publicationwait0.0001ms/hold0.0011ms,samplelog0.0955ms;thesearelastmeasurements,notwindowmaxima. RecoveryFetched07:55:20.0264591Z/source19.898Z. CommonstreamreceivedamessageduringtheSOLgap;thisdoesnotprovethenetwork/exchangecauseorexcludeallpriorlocaldelays.
+- PMmain/crypto-criticalDBConnected,stale=false,last_errorNULL,disconnect07:55:31.074791Z/reconnect07:55:33.277273Z(~2.202482s),lastmessage07:58:18Z;shard001alsoConnected,lastmessage07:58:39.775023Z. IndependentlogclosureandDBrecoveryconfirmshortinterruptionrecovered.
+- Independent final health_semantics_sep14 semantic review PASS: distinguish150ms warning-to-recovery log interval from full SOL update gap; last durations are not maxima; late heartbeat/feed snapshots separated from exact73.6s counting window.
+Next: None for this post-deploy check. Root cause of intermittent Binance per-asset gaps remains unknown; no fix or ongoing monitoring authorized by this check.
+Notes: ForcedBEGINREADONLY/SETLOCALstatement_timeout15s/defaultreadonlyon/lock_timeout2s/UTC/maxparallel0;alltimequeriesindexed/bounded. Logagentserver_logs_sep14 read_037last12MiB+_038fixed3184038bytes,15766950bytesfinalcoverage;initialinsufficient4MiBtaildiscarded,notdoublecounted. No newserver/source/config/order/DBwrites,restart/deploy/build/test/temp artifacts or automation. Onlyexemptcontext/history;unrelateddirtyrecords preserved,no commit/push.
+Blockers: None for completed bounded verification; no full-session ERR/FTL negative claim or Live execution claim, and no claim all latency/freshness gaps are fixed.
+
+## Active Update 2026-09-14 Binance ETH SOL Stale Diagnostics Implemented
+Goal: Deliver only approved bounded Binance ETH/SOL freshness diagnostics without changing prices, freshness/trading rules or production state.
+Status: Completed
+Done:
+- User approved RC-20260914-binance-eth-sol-stale-diagnostics / sha256:e583b4a7f19aa508137ca21b6012741533d136da88ed16bddd8dcaecee8fe495; recorded verbatim and committed approval-only d959393e before source edits. User UpCounter commitfe027ce6 preserved unchanged; no separate branch created.
+- Exactly four product paths changed: BinanceCryptoReferenceTradeStreamService, new BinanceCryptoReferenceDiagnostics helper, new focused test class, README. Helper tracks connection/receive/parse/publication/sample-log timings, ETH/SOL accepted/source/fetched state and global rejected/ignored counters. New stale Warning and recovery Information events have separate monotonic60s limits per asset/kind and suppressed counters. Recovery requires a later accepted publication and a fresh observation; suppressed recovery is not replayed without a new transition. New logs outside locks; existing sampled log remains inside original cache lock. Diagnostic clock/state/log failures cannot replace business results/exceptions.
+- Final focused72/72 passed,0 failed/skipped:17 diagnostic tests+49 ConfigurationTests+3 CryptoUpDown5mOddsArchiveProcessorTests+3 PolymarketAutoRedeemConfigurationTests (approved substring filter). Exact5s and >5s boundaries, never-seen/cancel, per-trade publication, invalid/ignored/other-asset messages, accepted-but-aged point, failure isolation, phase durations, per-kind/asset throttles, wall jumps, suppression, concurrent readers/getters/InFlight logging and publication ordering covered. Separate final Release Service build exit0, incremental0 warnings/0 errors. Earlier70/71 verification runs passed; new xUnit1031 warning corrected before final tests. Full suite not run; unrelated existing warnings not changed.
+- Independent health_semantics_sep14 final semantic review PASS/no open findings against verbatim prompts/contract/four-file diff/final TRX/build evidence. Initial lock-hold end timing corrected to occur before releasing cache lock. Final strict Contract/WorkingTree/Staged and staged diff checks passed,4 governed files/1 contract. Completed contract stores exact evidence and reviewed file hashes; final TRX SHA256037a52ec3bcd21b556683a1fbea8479b7a2efe47b147cd8ecbcfaed477721d3a.
+- Implementation committed as271e860a and pushed to origin/master; own implementation Range gate PASS (one commit/four governed paths/one contract). Product paths and contract are clean, upstream divergence0/0; remaining dirty context/history are pre-existing bookkeeping and preserved. Own temporary directory remains absent.
+Next: User-controlled deployment; runtime evidence after deployment is not yet verified and instrumentation is not a proven fix of the input-gap cause.
+Notes: No production/application Local DB access, server log check, service launch/restart/deployment, order/config/schema/trading changes. Skill codex-temp-lifecycle confined all builds/tests/logs to marked D:/CodexTemp/runs/binance-stale-diagnostics-20260914-01; protected cleanup removed370 files/98664058 bytes and directory absence verified. Old malformed/unmarked orphan directories untouched. All unrelated dirty context/history preserved outside staged product change.
+Blockers: None for approved implementation; actual cause and post-deploy behavior remain unverified.
+
+## Active Update 2026-09-14 Binance Diagnostics Resume Checkpoint
+Goal: Verify the user's UpCounter commit and resume only the existing Binance ETH/SOL diagnostics scope under the required approval checkpoint.
+Status: Blocked
+Done:
+- User message: "Закоммитил". Verified HEAD fe027ce6 (Fix), exactly Strategies/UpCounter.txt +12/-1; that file now clean. Service/tests/README/RequirementGate unchanged by the user commit. Upstream origin/master divergence1/0, no fetch/push performed. Full WorkingTree -AllowPendingEvidence passed before redrafting, governedFiles0/contracts0; old UpCounter blocker is resolved.
+- RequirementGate section B explicitly makes a later user prompt a new checkpoint before further material edits, even when it only confirms resolution of the blocker. The implementation has not started. Added only verbatim originalRequests[2]="Закоммитил" to the existing diagnostic contract, reset status/approval to draft/pending, and preserved scope, requirements, acceptance criteria, implementation paths, verification, assumptions and deviations exactly.
+- New pending digest sha256:e583b4a7f19aa508137ca21b6012741533d136da88ed16bddd8dcaecee8fe495; Contract/AllowDraft/PrintSemanticDigest and diff checks PASS. Independent structural comparison confirms unchanged scope/requirements/assumptions/deviations. Earlier795bb716 approval remains durably in59c434da but does not approve this later-prompt revision. Independent reviewer health_semantics_sep14 compared actual draft against59c434da and returned PASS/no scope or behavior changes; this is preapproval review only.
+Next: Obtain APPROVE RC-20260914-binance-eth-sol-stale-diagnostics sha256:e583b4a7f19aa508137ca21b6012741533d136da88ed16bddd8dcaecee8fe495, commit approval-only before source edits, then implement the same four-path diagnostic-only change.
+Notes: Reinitialized Workflow/AGENTS/CodingRules/RequirementGate/active context/current contract and Git. No product/source/tests/README/UpCounter changes, no production/DB/log access, builds/tests/temp artifacts or service actions. Only pending contract revision and exempt context/history records changed; existing unrelated context/history preserved. No commit/push of draft or user commit.
+Blockers: New approval required by the literal later-prompt checkpoint, not a technical change or the resolved UpCounter worktree issue.
+
+## Active Update 2026-09-14 Binance Diagnostics Approval And Worktree Gate Blocker
+Goal: Implement only the user-approved Binance ETH/SOL stale diagnostics, preserving all price and trading behavior.
+Status: Blocked
+Done:
+- Exact user approval recorded verbatim for RC-20260914-binance-eth-sol-stale-diagnostics / sha256:795bb716eacc1f5096b20d1c3df0f4feb5b031a99dc5a64e7c8c31141bb9f55d. Contract semantic digest revalidated unchanged; approval-only Staged gate passed with governedFiles=0/contracts=1 and was committed as 59c434da before product edits.
+- Full WorkingTree -AllowPendingEvidence preflight after approval commit failed PATH_NOT_COVERED for Strategies/UpCounter.txt. Its pre-existing user edit is +12/-1, blob790bd987ffaa5ffdf0cbf9c432cdc171b0413e27 versus HEAD50c6b605a055dd3b2e35d310b10b5edeb4b72899. No source/tests/README edits made. Initial pre-approval-commit WorkingTree failure was CONTRACT_NOT_PREAPPROVED because that unrelated governed edit was already present; approval-only commit did not include it.
+- Independent health_semantics_sep14 review confirms full WorkingTree gate has no path filter and cannot be replaced by selective Staged validation. Completed Sep12 adoption covers only the old618-byte UpCounter content, explicitly not its new1902-byte version; none of20 currently approved contracts covers this path. No gate bypass, stash, move, reset, adoption or unrelated commit performed.
+- Approval-only Range validation passed (commits1/governedFiles0/contracts1); pushed59c434da to origin/master. Context/history records remain unstaged to preserve pre-existing unrelated edits; no product commit exists for this task.
+Next: User resolves/commits their separate UpCounter change before implementation can pass the mandatory full-worktree gate. Do not broaden the approved Binance contract or reuse old UpCounter approval for new content.
+Notes: Workflow/AGENTS/CodingRules/RequirementGate/relevant active context and contract initialized; master initially1a0976a8/upstream0/0. Local Service/Storage diff against deployed6774eb16 remains empty. Approval-only Contract/Staged/diff checks passed; implementation verification did not run. No DB/server/log access, source/config/order changes, deployment/restart/build/test/temp artifacts. Temp-lifecycle skill inspected prospectively only; no marked run created. Preserve all pre-existing context/history and UpCounter changes.
+Blockers: Mandatory WorkingTree requirement gate rejects the unrelated unapproved Strategies/UpCounter.txt edit. Diagnostic implementation remains unstarted, not complete.
+
+## Active Update 2026-09-14 Binance ETH SOL Freshness Diagnostic Contract
+Goal: Address first-priority Binance ETH/SOL price-update pauses without changing price freshness or trading behavior before exact approval.
+Status: Blocked
+Done:
+- Scope locked to reference-stream freshness only; settlement telemetry and Dashboard work excluded. Reinitialized Workflow/AGENTS/CodingRules/RequirementGate/currentcontext andGit. LocalHEAD1a0976a8/master,upstream0/0;Service/Storage unchangedfromdeployed6774eb16. Read-onlyProductionheartbeat06:29:39.619447Z Running,last_errorNULL,startSep13 12:33:46.890919Z,heartbeat06:28:57.241915Z,version6774eb166155e04bfc8655dbcf00b19fdc77751f.
+- Independentonepassfixed94,467,207bytesofserver20260914_027/_028 confirmedALL29warningsinUTC[04:49:41.580783Z,05:19:41.580783Z) areInvalidOperationException/GetPriceAsyncline42/priceage>5s:ETH12,min5.095/max10.851s;SOL17,min5.178/max9.330s. NoDB/otherexceptionamongthese29. This replacespreviousunknowncauseclassificationforremaining23, butrootcauseofupdatepausesstillunknown.
+- Samewindow0Binancecrypto connect/close/failed/parser-skipped events;ETH29andSOL29samplelogs,maxsource-to-loglag216ms/218ms. Later sameasset sample insidewindow existsfor28of29warnings;lastETH05:19:11.226Zhasnonebeforecutoff. Samplelogcadence60s doesnotmeasureindividualtradegap/exactrecoverytime. Neitherexchange/networkstallnorlocalblockingproved.
+- IndependentcodeauditprovesoneDI singletonishostedreceiverandclient;everyacceptedtradeupdateslatestpricebefore60ssamplegate;FetchedAtUtcissetatlocalProcessMessagestart,notsocketreceiveinstant. Parser/source/pricegetter/historydispatchmatchdeployedcode. PotentialwaitatReceiveAsync/cachelock/synchronoussamplelog/errorpersistencecannotbeclaimedasobservedcausewithoutnewtimings.
+- Drafted RC-20260914-binance-eth-sol-stale-diagnostics,finalsemantic sha256:795bb716eacc1f5096b20d1c3df0f4feb5b031a99dc5a64e7c8c31141bb9f55d. Fourproposedpaths:existingETH/SOLstream,newin-processdiagnosticstate,newfocusedtestclass,README. Diagnostic-only statecoversconnection/receive/parse/publicationtimings,perassetaccepted/source/fetchedtimes,andnon-inferredrejectcounters. NewstaleWarning/recoveryInformationeventseachlimitedperassetto1/60smonotonic,withdefinedsuppressedcountsandrecoverytransitionsemantics. Existing sampled-loglocation,gates,prices,parser,socket/reconnect/sampling/strategies/accountingunchanged;noBTC/fallback/DBschema/productionactions.
+- ContractAllowDraft/PrintSemanticDigestPASS. Independentpreapprovalreviewinitiallyfound5ambiguities;allcorrectedbeforepresentingdigest:existinglock/logplacementpreserved,actualConfigurationTeststestfilter,recoveryrequiresfreshnessrecheck,explicitloglevels/monotonicthrottling/suppression,unknownparserassetsnotguessed. Reviewer health_semantics_sep14 finalpreapprovalPASS/noopencriticalfindings;thisisnotuserapprovalorimplementationreview. No source edits/build/testdone.
+Next: Obtain exact APPROVE RC-20260914-binance-eth-sol-stale-diagnostics sha256:795bb716eacc1f5096b20d1c3df0f4feb5b031a99dc5a64e7c8c31141bb9f55d before material source edits. This instrumentation must not be presented as a proven root-cause fix.
+Notes: NativePS/.NETreadonlylogstreamandforcedBEGINREADONLYSQL15s only. No server/source/config/order/deploy/restart/backup/temporaryartifact changes. Temp-lifecycle skill inspected prospectively,but no temporaryrun/artifactcreated. Onlydraftcontractandexemptcontext/historychanged;dirtyUpCounterandotherunrelatededits preserved;noGitcommit/push.
+Blockers: Exactdiagnostic-contractapprovalrequired;actualcauseofinputpausescannotbedistinguishedfromcurrentlogs. No behavioral fix justified yet.
+
+## Active Update 2026-09-14 Production Improvement Priorities
+Goal: Assess whether the last health-check findings justify further work, without implementing changes.
+Status: Completed
+Done:
+- Prioritized reference-data freshness diagnosis first. One bounded first8MiB read of server20260914_027.log covered04:49:30.856Z..04:54:08.354Z and recovered6of29previouswindow exceptions: ETHages6.715s/10.851s;SOL7.204s/5.186s/9.330s/5.178s,allInvalidOperationException fromBinanceCryptoReferenceTradeStreamService.GetPriceAsync line42/StaleAfterSeconds5. NoDBwriteexceptioninthese6;remaining23causesunverified. This supersedes unknown-cause status only for these6,notall29.
+- Main independently verified getterchecksageofFetchedAtUtcandthrowsbeforehistoryCreateCurrentTickreturns;historyworkerthereforedoesnotUpsert/addtocachesforthefailedpoint. RunSockethasReceiveAsyncwithglobalcancellationandouterreconnectonreturn/exception,noownidledeadline;thisdoesnotproveanactualsocketstallorwhyupdatespaused. Do notsilentlyrelax5s freshness/useoldquotesorchoosefallbackbeforebehaviorapproval.
+- Secondpriority: addboundedphase-durationdiagnosticstoactualordinarystrategy-runsettlementpath(TryAddPaperPositionSettlement/UpsertPaperPosition/UpdateStrategyMarketPaperRun). ExistingPaperSettlementProcessorcompletionloggercoversaseparatepath;thisisobservabilitygap,notproofcurrentpersistenceisslow. Noimplementationornewthresholdselected.
+- Lowerpriority: investigate2Dashboarddriftrepairs frompreviouswindow,notclaimfinancial/tradingdefect. VerifiedreconciliationValuesChangedcoversmissingexistingstateorchangedlifetime/recentvalues;workerwarnsonthatflagafterreconciliation. Isolated1.25squeueandrecovered2.2sWSclosurealone donotestablishurgentfixneed. Priorhealthyservicechecksupportsnoobservedstop-requiringfault,notanewlivehealthsnapshot.
+Next: User chooses further diagnosis/implementation; no source changes authorized by this status/ideas question.
+Notes: Workflow/source/localGitinitialized;Service/Storagediffdeployed6774..HEAD1a0976a8empty. api_errorscatalogonlypreviewfoundestimated577686rows/15095pagesandUUIDPKonly; noexpensiveunindexedhistoryqueryexecuted. Productionaccessonlyread-onlycatalogmetadatawith15stimeout;log8MiBread-only,independentsemanticreviewPASS. NoDBdata/source/config/service/orderchanges/restarts/builds/tests/tempfiles/commit/push;onlyexemptcontext/history,unrelateddirtyUpCounterandotherchangespreserved.
+Blockers: Rootcauseofpriceupdatepausesand23remainingwarningcausesunknown;do notinventfixorapplypolicychanges.
+
+## Active Update 2026-09-14 Production Server Bets And Logs Check
+Goal: Check current Production server, Paper/Live bets and server logs, including post-index settlement latency observations; read-only only.
+Status: Completed
+Done:
+- Exact Production identity192.168.0.101:5432/polycopytrader/read_onlyon at2026-09-14T05:19:41.580783Z; fixed half-open UTC window [2026-09-14T04:49:41.580783Z,2026-09-14T05:19:41.580783Z). ServiceRunning/Live,last_errorNULL,started2026-09-13T12:33:46.890919Z,versioninfo=1.0.0+6774eb166155e04bfc8655dbcf00b19fdc77751f;assembly1.0.0.0;mvidb2cd7498838f. Finalsnapshot05:24:57.633934Z:heartbeat05:24:56.579999Z,age1.053935s,samestart/version. Migration0009 appliedSep13 12:33:46.805923Z/exactchecksum aacc7783a6dc585df7f7e8e1980e2e6adccb8fe8913d5daf06028615efde6704;exactindexvalid/readytrue.
+- Papercreatedwindow984allcurrentFilled=742normalFAK/252strategies+242Child/103strategies. Indexedfilled_at_utc window986fills=742+242+2Maker;independentrawcount986,all986distinctorders,0unmatchedorderjoins. TwoMakerorders57fae32d-065a-4880-bdf2-f9f5ccb3ef9a and611507e2-55b2-4627-87f2-99b181f47cf7,exactstrategy8223-101/102,created04:49:31.069461Z/04:49:30.991650Z beforecutoffwindowstart,filled04:50:37.861Z,currentFilled. optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. CurrentPending/PartiallyFilledPaper0. Freshfill05:24:30.997011Z,idf800270f-1017-44ef-845c-4ccff51bb712.
+- Settledstrategy_runs946/348strategies,first04:50:00.791036Z/latest05:16:56.298247Z;notpositioncount. Independentlog742normalFAKfills,46childmirroreventstotaling242children,946settled-runrecords. NoMakeracceptance/mismatch/slowlogeventinwindow; no inference about fill absence, since2fillsindependentlyverifiedDB.
+- NewLiveorderswindow0 acrossallstrategyIDs via indexedlateralquery plus separateNULLquery. CurrentCancelled/CancelFailedupdatedinsidewindow0(notfullcancellationjournal),currentopenLive0/Matchedwithoutbalanceeffect0. FiveLive-enabledstrategiescurrentlyenabled/unpaused. LatestUp50Liveorder8c3bccda-11cc-48d6-8a36-92566834a080,createdSep14 00:30:00.902794Z,DBMatched/filled10.714286/remaining0/settled00:40:23.458575Z/balanceappliedtrue;notvenueAPIverification. No inference why no newLiveorders.
+- DashboardcontrolRunning/noerror,eventapplied05:21:12.172239Z;lockwaiters0. At~05:23:05Z latestBTC/ETH/SOLreferencesamples05:23:01.352672/.354067/.355179Z,sourceupdates05:23:00.860Z/05:23:00.239Z/05:22:57.317Z,Binancewebsockets. CurrentPolymarketmain+crypto-criticalConnected/stalefalse/errorNULL,lastdisconnect05:18:55.116105Z/reconnect05:18:57.324010Z. Old inactive shard status rows ignored; no uninterruptedfeedcoverageclaim.
+- Exactserverlogs20260914_027/_028fixed-lengthreadonlysharedstreams cover04:49:30.856Z throughatleast05:20:39Z. Withinfixedwindow148543timestampedevents=148510INF+33WRN+0ERRFTL. Warnings29skippedreferencepoints,2dashboarddriftrepairs,1queuedsideeffect(queue1251.8159ms,processing52.9159ms),1WSclose1013at05:18:55.117Z;subsequentreconnectindependentlyconfirmedDB~2.2slater. NoOKX/Maker/settlement-persistencewarninggroupinthiswindow,notproofallhistoricalproblemsresolved.
+- RepairIDs b7c50005-0001-4000-8175-000000000004/codebtc_up_down_5m_4_diff_reference_average_lower_enter_premarket at05:06:00.438Z/2023.8563ms; b7c50005-0000-4000-8195-000000000007/codeeth_up_down_5m_7_child_roi at05:10:41.440Z/1871.031ms. Exactcauses/maxageof29referencepointskips remainunknown: timestampedwarningaggregate didnotretainseparateexceptionlines. First2assetETHexamples do notestablishall29composition;genericcatchcoversCreateCurrentTick/Upsert,so do notlabelall29networkfaults. Finalbounded8MiBtailstarted05:19:30.736Z andaddednocause/reconnectevidencebeforecutoff;no furtherread.
+- Independentdeployed-sourceaudit: Service/Storageunchangedbetween6774eb16andlocalHEAD1a0976a8;onlyproductdifferenceDashboardcategoryclassification. PaperSettlementProcessor successfulattemptlogsWarningtotal>=1s/Debugotherwise,Debugsuppressed;ordinaryBTCstrategy-runsettlementusesaseparatepathwithoutthiscompletionlogger. Noresolutioncompletionlogsinwindow doesnotproveallpersistencefastorlastindexeliminatedlatency.
+Next: None for this requested check; exact reference-skip causes and per-stage persistence latency remain unverified, no fixes or monitor authorized.
+Notes: Nativepsql explicitBEGINREADONLY/SETLOCALstatement_timeout15s/defaultread_onlyon/lock_timeout2s/UTC/maxparallel0,boundedindexedqueries. Independentserver_logs_sep14audit andhealth_semantics_sep14semanticreviewPASS. NoDB/service/config/order/sourcechanges,restarts,deployments,builds/tests,tempartifacts,commit/push;onlyexemptcontext/history. DirtyUpCounterandunrelatedhistory/contextpreserved;localHEAD1a0976a8/masterupstream0/0notdeployedbuild.
+Blockers: None for completedhealthcheck; missingwarningcausesandsettlementdurationmetrics disclosed,notfilledwithassumptions.
+
+## Active Update 2026-09-13 Disable All Existing FollowMarket Locally And On Server
+Goal: Set Enabled=false for all existing FollowMarket strategies in the local and server databases.
+Status: Completed
+Done:
+- Verified exact catalog family: BTC/ETH/SOL groups8233/8234/8235, delays30..270 step30, thresholds50..95 step5; ID b7c50005-0000-4000-{group}-{delay*1000+threshold:D12}, code {asset}_up_down_5m_follow_market_{delay}_{threshold}. Local127.0.0.1:5432/polycopytrader has270, all previously enabled. Server192.168.0.101:5432/polycopytrader has237 (BTC69/ETH89/SOL79),236 previously enabled; BTC8233-000000060060 was already false. Independent ID/code lookup proved33 other catalog rows absent on server; no unexpected name/code matches.
+- Updated only enabled=false and native updated_at_utc in six exact ID/code/name batches: local90/90/90 at19:33:21Z..19:33:35Z; server68/89/79 at19:33:54Z..19:34:08Z. Each transaction checked exact count and all other target columns unchanged. Other strategies' Enabled count/hash stayed unchanged: local3379/7fd319a9f5c315851c3493663777b62d; server2408/529c8fad3791d1cef7b5a6804cb8ae4b. All post-batch lock waiters0; server Running,last_errorNULL,unchanged start12:33:46.890919Z and fresh heartbeat.
+- Independent final raw ID/Enabled reads and separate SQL aggregates at19:34:44Z confirmed local270 disabled/server237 disabled, enabled0 in both, identical candidate IDs and no enabled broad FollowMarket name/code matches. Independent reviewer verify_followmarket_scope PASS with zero open findings and exact506 changed-ID coverage.
+Next: None.
+Notes: PostgreSQL UTC read-only previews and verification; writes bounded by statement_timeout5s/lock_timeout1s. Migration0005 already applied with expected checksum on both; no source edits, migrations, inserts, order actions or service restarts. Local heartbeat is stale and does not establish local service health. Only exempt context/history bookkeeping; concurrent unrelated changes and HEAD advancement preserved, no task commit/push. Protected cleanup removed marked followmarket-disable-20260913-01 run (20 files/364844 bytes), absence verified.
+Blockers: None.
+
 ## Active Update 2026-09-13 Historical Net Recalculation Current Status
 Goal: Report the current Production status of the historical Net PnL recalculation.
 Status: Completed
@@ -9,6 +477,17 @@ Done:
 Next: None for this status-only request.
 Notes: Native psql forced transaction READ ONLY,UTC,12s statement/1s lock,maxparallel0; SMB FileStream reads bounded10–12MiB per current file. No code/data/config/service/order/deployment/build/test/temp artifact changes. Previous expensive missing-Gross fallback remains in source but current snapshot Gross coverage and successful pages show it is not the present blocker.
 Blockers: None observed for the currently running historical recalculation; total remaining duration was not calculated.
+
+## Active Update 2026-09-13 LIFO Stake Zero-UpDiff Counterexample
+Goal: Answer only the user's request for a counterexample where UpDiff reaches zero on a stake greater than1; historical BTC simulation remains unstarted.
+Status: Completed
+Done:
+- User confirmed losing any active stake pushes its full amount to LIFO, next fresh stake1; popped stake becomes saved+1. New proposed strategy uses sign of cumulativeUpDiff, opposite-side bets; after recoverywins active stake decreases1 and on0 another saved+1 is popped. The user has not yet resolved all earlier questions (zero handling on enlargedwin, empty-stack active remainder, exact3.33fee interpretation); do not treat this proof as implementation approval.
+- Verified hypothetical outcomes Up,Up,Up,Down,Up,Down,Down,Down fromUpDiff0/emptystack; firstUp has no bet. ActualDown stakes onsteps2..8:1,1,1,2,1,3,2. UpDiffafter:1,2,3,2,3,2,1,0. Stacksafter scheduling throughstep7:[],[1],[1,1],[1],[1,2],[1],[1]. Atstep8 a winning$2 reducesUpDiff1->0 while stackstill[1] BEFORE any zero-clear policy.
+- Mechanism:step5loses$2 and saves2;step6wins$1 atUpDiff2,pops2and schedules3,leavingstack[1]. Thus stake3 exceeds remainingUpDiff2;twoDowns reachzero onwinningstake2. Counterexample never depends on handling an empty stack during recovery. No historical rows/PnL/fee computation.
+Next: Await the user's zero-boundary rule; do not run the requested eventual historical simulation yet.
+Notes: Native in-memory8-step integer check with finalassertions plus independent verify_btc_aug31 manual review PASS. No temporaryfiles/newresearchoutputs/product/source/DB/service/orders/commit/push;onlyexemptcontext/history. Concurrent HEADc54a64bc and dirty Strategies/UpCounter.txt preserved.
+Blockers: None for the counterexample; simulation semantics still require clarification.
 
 ## Active Update 2026-09-13 Split ETH LossDiff Progress Dashboard Categories
 Goal: Separate Dashboard categories for the exact ETH Up 4 bps and Up 8 bps LossDiff Positive Progress Cap families.
@@ -32,6 +511,150 @@ Done:
 Next: Obtain exact-form approval for this contract and explicit approval of ASM-001 labels, commit the approval checkpoint before product edits, then implement and verify the scoped category split.
 Notes: Only new draft contract and exempt context/history bookkeeping changed. Existing unrelated context/history worktree changes preserved; origin/master local divergence0/0. No product edits, builds/tests, temporary artifacts, DB/service/production actions, commit or push before approval.
 Blockers: RequirementGate.md checkpoint B requires later exact-form user approval bound to the digest before product edits; ASM-001 labels also require explicit approval.
+
+## Active Update 2026-09-13 Settlement Index Production Deployment Verified
+Goal: Verify the user's deployment of the settlement retention wallet index fix and post-start server/bet/log health, read-only only.
+Status: Completed
+Done:
+- Production identity192.168.0.101:5432/polycopytrader and transaction_read_only=on verified at2026-09-13T12:34:59.950021Z. Service now Running/Live,last_errorNULL,started2026-09-13T12:33:46.890919Z; versioninfo=1.0.0+6774eb166155e04bfc8655dbcf00b19fdc77751f;assembly1.0.0.0;mvidb2cd7498838f. Final12:39:11.158832Z heartbeat12:38:47.121398Z,age24.037434s,unchangedstart/version. Old-build/index-absent conclusion from prior check is superseded by this new runtime evidence.
+- Migration0009-strategy-retention-wallet-index applied2026-09-13T12:33:46.805923Z with exactchecksum aacc7783a6dc585df7f7e8e1980e2e6adccb8fe8913d5daf06028615efde6704. Exactindexoid53152604,valid/readytrue; complete current source CompletionCheckSql separately returnedtrue. Definition CREATE INDEX ix_strategies_retention_wallet_lookup ON public.strategies USING hash (lower(('strategy:'::text || code))). Independent local reviewer verified6a888595fix is ancestor of running6774eb16,unchangedmigrationimplementation and independently recomputedSQLchecksum. No migration/index writes by agent.
+- Natural EXPLAIN(noANALYZE) for SELECTid FROMpublic.strategies WHERE lower('strategy:'||code)=lower('strategy:eth_up_down_5m_up_bps_50_instant') ORDERBYid chooses BitmapIndexScan on the exact new index with heap equality recheck and sort. Real strategyid b7c50005-0000-4000-8079-000000000150/code verified first. This proves planner selection for this lookup, not runtime latency reduction or all trigger plans.
+- Fixed initial half-open UTC window [2026-09-13T12:33:46.890919Z,2026-09-13T12:36:00Z):212Paperorders/fills=177btc_updown5m_fak_taker_paper+35btc_updown5m_child_mirror_fak_paper,allcurrentordersFilled,212distinctorders/0unmatchedjoins/rawfillcount212. Independent logs177normalfillrecords+9childmirror events totaling35children. Latestanyfill12:38:30.245448Z,idb9717d4b-35dc-44ad-b661-309f3826fb3d in finalfreshnesscheck. No Maker order/result included in these totals.
+- Initialwindow newLiveorders0 acrossallstrategyIDs via indexedlateralqueries plus separateNULL-strategyquery; currentCancelled/CancelFailedupdatedwindow0,notfullcancelhistory. CurrentopenLive0/Matchedwithoutbalanceeffect0. DashboardcontrolRunning/noerror/eventapplied12:36:57.130926Z; lockwaiters0. No venueAPIordercheck or proof why noLiveorders.
+- Settledstrategy_runs0 in initialwindow; extended half-open [processstart,2026-09-13T12:37:35Z) has259runs/259strategies,latest12:37:34.678931Z,independently re-counted. This is strategy-run count,not position/settlementrow count; short post-start observation does not prove all previous delays eliminated.
+- Read-only serverlog polycopytrader-service-20260913_056.log,sharedFileStreamReadWrite. Exactinitialwindow12476timestampedevents=12467INF+9WRN+0ERR/FTL;warnings5skippedreferenceticks,2OKXindexfailures(ETH12:34:33.966Z,BTC12:34:39.244Z),2OKXexpiryfailures12:34:39.244Z/12:34:44.252Z. Threeheartbeats/latest12:35:47.104Z. Separatefirstscanextendedthrough12:36:56.740Z:26WRN/0ERRFTL,including12skippedticks,11OKXfailures,2booktimeouts,1dashboarddriftrepaired;do notmixcutoffs. BinanceBTCandETH/SOLstreamconnections explicitlylogged12:33:51.343Z. No exactmigration/versionlogmarkerfound in this onefile; DBledger/index/sourceverification provides deployment evidence. No assertion all feeds recovered.
+- Final bounded same-file tail through12:39:36.574Z independently confirmed259settled-run messages and0Paper-resolution-settlement-completed metrics: actual persistence-stage durations remain unmeasured. Completepoststart coverage46WRN/0ERRFTL (9before12:36,37after),not justinitial9. OKXBTC/ETHindex+expiryfailures report TaskCanceledException/HttpClient.Timeout2s;no expirycontractID or recoveryproof. BinanceETH/SOL stalequotes reached67.472s(threshold5s),streamclosed12:37:45.313ZPolicyViolation/Pongtimeout,reconnected12:37:48.220Z;reconnectnotall-feedrecovery. TwoMaker slowwarnings12:39:32Z,publicationwait1.0649795s/queue1.0817063s; optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. SettleMarketResolutioncallback3.0325ms/queue1574.5044ms is not persistence duration for259runs. No further scans/monitoring scheduled.
+Next: None for this requested post-deployment check; residual OKX/reference-data warnings and end-to-end latency remain separately unproven, not automatically authorized fixes.
+Notes: AllProductionSQL explicit BEGIN READ ONLY/SETLOCALstatement_timeout15s/defaultread_onlyon/lock_timeout2s/UTC/maxparallel0,bounded/indexed. Independent source/deployment and semantic review PASS; no Production/applicationLocalDB writes,source/config/order/service changes/restarts/deployment/build/test/temp artifacts/commit/push. Only exemptcontext/history updates; unrelatedworktreechangespreserved.
+Blockers: None for deployment/bet verification; no claim all warnings resolved or performance improvement established.
+
+## Active Update 2026-09-13 Production Health Check Access Restored
+Goal: Repeat the requested Production server, bets and server-log check after client access failure; read-only only.
+Status: Completed
+Done:
+- Access to PostgreSQL192.168.0.101:5432/polycopytrader and SMB\\192.168.0.101\CodexLogs restored; DB identity and transaction_read_only=on independently verified at11:24:16.439165Z. This establishes restored client access, not a preceding service outage or its cause. Fixed half-open UTC analysis window [2026-09-13T10:54:51.897100Z,2026-09-13T11:24:51.897100Z).
+- Service Running/Live/last_errorNULL, started2026-09-11T18:37:22.243806Z. Version info=1.0.0+538c726cf2691461bbb2a0c5b788342fb088cedc; assembly=1.0.0.0; mvid=4baaa088c53b. Final heartbeat snapshot11:34:15.460517Z: heartbeat11:33:48.314307Z,age27.146210s; start/version unchanged. DB ledger has no0009-strategy-retention-wallet-index and exact ix_strategies_retention_wallet_lookup is absent. Previously delivered settlement-index correction is not active on this running build; no causal speedup/latency claim.
+- Indexed paper_orders.created_at_utc window:1748 orders=1513btc_updown5m_fak_taker_paper+209btc_updown5m_child_mirror_fak_paper+26eth_reference_average_maker_gtd_paper, all currentFilled. Indexed paper_fills.filled_at_utc window independently1752 raw rows=1513normal+209Child+30Maker; join by order identity has0unmatched and1752distinctorders. Ordinary non-Maker fills1722; four Maker fills belong to orders created before window. Exact28exception IDs/source verified,all30Maker orderstatusesFilled; optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills. Latest any Paper fill at11:34:25.767710Z snapshot is11:34:00.089712Z,id d1a31878-ecf2-4bcd-acd2-34bc0c5a2e54. No pending/partiallyfilled Paper orders at11:28:39Z.
+- strategy_market_paper_runs Settled with settled_at_utc in window:1816 runs/561 strategies,latest11:20:18.630289Z; not a position-settlement count. Independent server logs confirm1513normal FAK fill records,26Maker resting acceptances,1816settled-run records and30heartbeats. Logs/rawfill counts are different entity sets and are not interchangeable.
+- Live neworders0 across all strategy IDs using strategy/time index plus separate NULL-strategy query; liveevents0. Five live-enabled strategies all enabled/unpaused:8079-150,8225-4,8225-13,8229-3,8229-16 under b7c50005-0000-4000 prefixes. Current Cancelled/CancelFailed rows updated inside window0; this is not a full historical cancellation-event journal. Current openLive0 andMatched-without-balance-effect0. Latest Live order252e20cd-f6aa-479f-99b1-0bcf3ab44467 for ETH Up50,created09:35:01.884596Z,DBMatched/remaining0/settled09:44:55.376673Z; no venue API verification or claim why newLive0.
+- Exact log files polycopytrader-service-20260913_050.log,_051.log,_052.log:138826 timestamped events in fixed window=138661INF+165WRN+0ERR/FTL. Actual coverage10:49:30.720Z through at least11:31:07.376Z; post-cutoff excluded. Active052 share metadata was stale,not a log gap; readonly FileStream FileShare.ReadWrite overcame default StreamReader sharing denial without production impact.
+- Warnings:117Maker slow(maxprocessing4.3619568s),35market-data sideeffectslow(maxqueue5.9158153s/maxprocessing2.9795884s),3settlementslow(allattempt1,PersistenceFailedStageNULL,maxpersistence2.8267394s,UpsertPositions slowest each/max1.4704667s);4WS1013;3OKX refreshfailures;1booktimeout;1skippedreferencetick;1dashboarddriftrepaired. First3WS closures recovered~2.2-2.3s later by ConnectedAtUtc evidence; recovery after fourth11:23:56.550Z and3OKX failures not established. No assertion all network feeds recovered.
+- Dashboard control Running/last_errorNULL,eventapplied11:28:35.590960Z; newest snapshot11:27:30.771893Z at11:28:39.814349Z. Copied-performance queue progressed228(oldest11:20:05.065138Z)to170(oldest11:24:00.502688Z) by11:29:38.871234Z,not proof everystrategy refreshed. One lockwaiter at11:29:38,none at11:29:53.354658Z; no persistent blocking established.
+Next: None for this requested read-only check. Deployment remains user-controlled; latest settlement-index migration/index absent, and latency/network warnings remain open observations.
+Notes: Explicit BEGIN READ ONLY/SET LOCAL statement_timeout15s,default_transaction_read_only=on,lock_timeout2s,max_parallel_workers_per_gather0,UTC; only bounded/indexed SQL. Final extra fill query used nonexistent order_id,failed read-only and was corrected to verified id/filled_at_utc fields; no data effects. Independent server_logs_sep13_retry audit and health_schema_sep13 final semantic review PASS with scoped cancellation/deployment wording. Only exempt context/history updates; no Production/application Local DB writes,source/config/service/orders/restart/deploy/build/test/temp artifacts/commit/push. Unrelated worktree changes preserved.
+Blockers: None for completed check; network recovery for the specified last WS/OKX episodes and actual venue Live state remain unverified.
+
+## Active Update 2026-09-13 Production Health Check Access Blocked
+Goal: Check Production server, current bets and server logs, including deployment of the previously delivered settlement index fix; read-only only.
+Status: Blocked
+Done:
+- Intended scope: PostgreSQL192.168.0.101:5432/polycopytrader and SMB\\192.168.0.101\CodexLogs, latest30-minute operational window in UTC. No actual data cutoff/counts were obtained because access failed; do not reuse earlier heartbeat/bet/log results as current.
+- At2026-09-13T11:20:17.2731456Z direct TCP5432 connection timed out after4s. SMB directory enumeration returned Cannot find path \\192.168.0.101\CodexLogs. Independent follow-up through11:21:16.9417749Z: TCP445 timed out after4s, ICMP timed out after2s. Verified selected route is Wi-Fi source192.168.100.41, default route via192.168.100.1; this is route evidence, not proof of the outage cause or absence of all VPNs.
+- At2026-09-13T11:22:15.6509555Z штатный psql independently failed connection with timeout expired/exit2 using explicit host192.168.0.101,port5432,databasepolycopytrader and PGCONNECT_TIMEOUT5. Attempt configured default_transaction_read_only=on,statement_timeout15000,lock_timeout2000 and BEGIN READ ONLY/SET LOCAL statement_timeout15s before its identity SELECT. No connection/session/query actually reached the database. Credentials stayed in memory and were not printed. Earlier local credential-parser attempt stopped before psql; corrected the .NET connection-string setter without any server action.
+- Independent health_schema_sep13 semantic review PASS: evidence supports only inaccessibility from this PC on the tested channels, not server-down, service-stop, lost bets or log errors. No fresh heartbeat/version/start time, index/migration ledger, bet counts/fills/cancels, settlements, projection freshness or log content could be verified.
+Next: Restore/confirm this computer's network access to the server, then repeat the requested read-only check. Do not restart or repair the server on the basis of these client-side timeouts alone.
+Notes: LocalHEAD6774eb16/master,origin/master divergence0/0 at initialization; unchanged source not evidence of current deployed version. No Production/application Local DB access, SQL writes, service/config/order changes, builds/tests/temp artifacts, commit or push. Only exempt context/history bookkeeping; preserve unrelated worktree records.
+Blockers: Production PostgreSQL and server log share unreachable from this machine; current service/bet/log/deployment health remains unknown.
+
+## Active Update 2026-09-12 Fresh Top Ordinary Net Strategy Reports
+Goal: Repeat the established fresh Net PnL chart and daily Excel package for the best ordinary 5m strategy in BTC, ETH, and SOL.
+Status: Completed
+Done:
+- Fixed one Production read-only cutoff at 2026-09-12T19:02:58.316008Z and selected the lifetime Settled Net PnL leader per asset after excluding every strategy whose name contains Progress. Full eligible and enabled/unpaused eligible winners matched: BTC b7c50005-0001-4000-8191-000000000115 (2357 settlements, Net 268.27057339), ETH b7c50005-0000-4000-8137-000000000104 (2013, Net 427.32771554), SOL b7c50005-0000-4000-8081-000000000125 (1694, Net 307.87415101).
+- Created three 1800x1000 JPG charts with cumulative settled Net PnL after fees, archived Binance spot price, and the maximum-drawdown peak-to-recovery band. Created three one-sheet daily XLSX reports through 2026-09-12 UTC with formula-driven Daily Total and Total, negative red-on-white values with visible minus, and B2 freeze panes.
+- Today's UTC Net PnL: BTC 12.50756936, ETH 17.75717374, SOL 4.04421466. Maximum drawdowns: BTC 156.40404669, ETH 186.56619623, SOL 253.35891408 USD.
+Next: None
+Notes: Production 192.168.0.101:5432/polycopytrader was read-only with UTC/timeouts/max_parallel_workers_per_gather=0; exports waited for a free service/vacuum window. Authoritative aggregate was independently confirmed by the dashboard snapshot. Raw-row count/identity/status/fee equation/unique-id/total checks PASS. Artifact-tool export/reopen/recalculate/inspect/render and zero formula-error scans PASS. Native Excel checks PASS for formulas, calculated totals, one sheet, date range, B2 freeze, conditional format, visible minus/red font/white fill. All three charts visually inspected; exactly six final files, JPG dimensions 1800x1000. No product, strategy, database, service, or order mutation; only durable outputs and exempt context/history updates. Unrelated worktree changes preserved.
+Blockers: None
+
+## Active Update 2026-09-12 Maker Rebate Break-Even Loss Rate
+Goal: Calculate the maximum loss percentage offset by Maker Rebates at the discussed0.50 purchase price.
+Status: Completed
+Done:
+- Fresh official Fees and MakerRebates docs confirm current crypto feeRate0.07/makerfee0/rebate20%. Conditional fully executed equal$1 buys at0.50 held to settlement, credited rebate0.007 each, noothercosts/LiquidityRewards: Net perbet=1-2*LossRate+0.007.
+- Break-even LossRate50.35%, required WinRate49.65%. This is0.35percentage-point tolerance beyond50%losses, not a proven actualfilled-trade performance. Independent integercheck10000trades:4965wins5035losses,Gross-70,rebates+70,Net0.
+Next: None
+Notes: Native decimal arithmetic+independent maker_docs_verify algebra/integercheck PASS. Theoreticalthresholdonly,no historicalPnL/data/product/order/account/DB/service/temp/commit/push changes;onlyexemptcontext/history. Prior3.3%taker-model assumption not changed in saved backtests.
+Blockers: None for conditional threshold; actualrebates andexecution remain unverified.
+
+## Active Update 2026-09-12 Buy And Sell Liquidity Definition
+Goal: Clarify whether providing liquidity means Sell orders only.
+Status: Completed
+Done:
+- Confirmed official Prices&Orderbook and MarketMaking docs: both resting Buy bids and Sell asks provide executable offers to other traders. Providing liquidity means adding an order to the book; immediately trading against an existing resting order consumes liquidity. Buy/Sell direction alone does not determine maker/taker role.
+- Applied conditionally to the discussed Buy Up/Down at0.5: a resting buy can provide liquidity; no actual placement/fill or automatic LiquidityRewards eligibility claimed.
+Next: None
+Notes: Two current official documentation pages crosschecked; definition only. Only exemptcontext/history, no backtest/data/order/service/DB/product/temp/commit/push changes.
+Blockers: None.
+
+## Active Update 2026-09-12 Liquidity Rewards Explanation
+Goal: Explain Liquidity Rewards and distinguish them from Maker Rebates; no new backtest or reward estimate.
+Status: Completed
+Done:
+- Official docs/programs/liquidity-rewards and Help13364466 confirm rewards for qualifying resting limit orders, without requiring fills; Maker Rebates separately require executed maker liquidity. Market-specific minimum qualifying shares, max distance from midpoint and reward allocation apply. Size, price proximity and time-sampled relative score determine reward share; two-sided quotes favored but not always mandatory.
+- $1 at0.5 means2shares; eligibility for LiquidityRewards unknown without actual market qualifying minimum and quote history. Cannot derive reward from8655bet count or assume an additional fixed percentage. No currentmarketsettings or account data queried.
+- Help explicitly confirms per-day minimum$1; below-threshold daily earnings unpaid and do not roll over/combine. This is verified only for LiquidityRewards, not transferred to MakerRebates. No invented total payout, rollout timing or Augustpool estimate.
+Next: None
+Notes: Main freshofficialwebsources and independent maker_docs_verify review PASS. Only exemptcontext/history;no researchdata/results/product/config/DB/service/orders/temporaryfiles/commit/push changes. Unrelated changes preserved.
+Blockers: None for definition; actual reward amount and $1 eligibility remain unmeasured.
+
+## Active Update 2026-09-12 Maker Rebate Estimate For 8655 Dollar Stakes
+Goal: Estimate only the maker premium for the user's 8655 BTC5m stakes of $1, using verified published rules and explicit fullfill0.5 premises.
+Status: Completed
+Done:
+- Current official docs /trading/fees, /programs/maker-rebates and Help article13364478 independently confirm crypto feeRate0.07, makerfee0, makerrebate20%, feeEquivalent=C*0.07*p*(1-p). Rebate is ownfeeEquivalent/totalfeeEquivalent times marketrebatepool; conditional20%pool yields0.2*ownfeeEquivalent. Only liquidity-adding executed orders qualify, not unfilled submissions.
+- Conditional arithmetic: $1 at0.5=2shares, feeEquivalent0.035, estimatedrebate0.007;8655*=60.585 (~$60.59). This is currentpublished-schedule estimate, not verified Augusthistorical or creditedwalletpayout. Retaining old hypothetical3.3%fee base instead gives57.123 (~$57.12); no priorreport/result mutated. Currentformula at0.5 corresponds3.5%ofstake, not oldmodel3.3%.
+- Published makerrebate payout is daily with at least$1accrued; no explicitrolloverpromise. Docs/Help differonpUSD/USDC wording, so answerin dollar-equivalent only. SeparateLiquidityRewards dependonqualifying size/spread/quoting and are not inferredfrom8655count. Actualacceptance,minordereligibility,fillshare/pools/periodfees/accountcredits not inspected; no guaranteedpremium claim.
+Next: None
+Notes: Independent maker_docs_verify review and native decimal/integer arithmetic PASS. Referenced report3D19F9C3A64B70E193686C88DBF30EE10484FDBD5C5F3F2ECB224008BAEAE33D unchanged,8655bets confirmed. Read-onlyweb/localcalculation plus exemptcontext/history only;no files/tempoutputs/newbacktest/DB/service/orders/product/commit/push changes.
+Blockers: None for a conditional estimate; exact actual payout unknown.
+
+## Active Update 2026-09-12 BTC August Shifted 1h Versus 2-24h Means
+Goal: Repeat BTC August 2026 UTC mean-reversion comparison for each long mean 2..24h against 1h, with the explicitly confirmed earlier cutoff.
+Status: Completed
+Done:
+- User confirmed target12:00-12:05 uses outcomes through11:55, not ongoing11:55-12:00; cutoff=target end minus600s. This new approval supersedes the immediately preceding no-shift timing clarification for this calculation only. M1>MH ->Down;M1<MH ->Up;equal skip. Each H separate, fixed stake1, no threshold/consensus/progression/crossing-only filters.
+- Source8927 unique valid BTC August outcomes (4445Up4482Down); only missing Aug5 15:00UTC, raw SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. Calendar8928 target end slots [Aug1,Sep1). Each H:2before dataset,1missing outcome,1missing cutoff,2*(12H-1)incomplete window;eligible8926-24H. Intermediate market outcome is unused and not a gate. Cumulative UpDiff never resets; own12H consecutive means required, noJulywarmup; queues restart after gap.
+- ResearchOnly fullfillprice0.5/stake1,fee0.033everybet:only1h/11h positiveNet,8655bets4473W4182L,WR51.68110918544194%,Gross291,fees285.615,Net5.385. Other22 variants Netnegative. Shifted1h/3h:8765bets4405W4360L,WR50.25670279520821%,Gross45,fees289.245,Net-244.245. ActualMakerfills/availability/latency not measured; agreed3.3% retained.
+- Durable charts/Calculate-BtcAugustMeanReversion1hVs2to24Shifted.ps1 SHA256 F51A37CDCA415451F170FFD732A1FA9EE79E3279D6598B93017D2DB252316784 and btc_august_2026_mean_reversion_1h_vs_2to24_shifted.json SHA256 3D19F9C3A64B70E193686C88DBF30EE10484FDBD5C5F3F2ECB224008BAEAE33D under D:\My\Business\PolyMarketData\CryptoUpDown5m; oldfiles preserved,copy hashes checked. Report has sources,formulas,preview/exclusions,23summaries and23canonicalbet hashes;script reproduces it.
+Next: None
+Notes: NativePowerShell rollingqueues versus independentrawCSV prefixmeans:391comparisons0differences including23fullbet hashes;semanticsPASS. Main5directiontests,8927savedN1/N2regressionrows,23accounting/reopenchecksPASS. Temp-lifecycle ownrun removed4files33297bytes,absenceverified;reviewer exited0/no tempfiles. Only externalresearch and exemptcontext/history;no product/DB/service/orders/build/commit/push changes. Unrelated changes preserved.
+Blockers: None for the requested historical simulation.
+
+## Active Update 2026-09-12 Clarify Immediate Next-Market Maker Timing
+Goal: Correct the interpretation of the user's intended entry timing without recalculation or execution changes.
+Status: Completed
+Done:
+- User means: preceding market interval ends;its result becomes known;immediately submit to the next chronological5m market. Not a quote5m before that next market starts. Verified contiguous example3235409(02:50-02:55UTC)->3235430(02:55-03:00UTC);if result is learned after a hypothetical30s delay,4.5m remain until targetEND,notSTART. Actual30s availability is not claimed/measured.
+- Withdraw applicability of prior T-5/lookahead objection to this clarified scenario;no mandatory one-market signal shift backward. Outcome-to-next-market pairing matches the verified historical model. Prior numerical research result remains valid under its original assumptions,not a demonstrated Maker result.
+- Real outcome publication latency and0.50Makeracceptance/fills remain unverified;do not claim immediate boundary availability,allfills,or50.67%WinRate among actualMakerfills. No order,deadline orlate-result handling policy added.
+Next: None
+Notes: Independent timing semantic review PASS. Only exempt context/history;no newdatafetch/backtest/chart/tempartifact,source/config/DB/service/orderchange,commit orpush. Unrelated edits preserved.
+Blockers: None for clarifying the intended sequence.
+
+## Active Update 2026-09-12 Maker 0.50 Five Minutes Before Start Feasibility
+Goal: Explain feasibility of maker BUY0.50 at T-5m before5m-market start;read-only,no liveorders or newbacktest.
+Status: Completed
+Done:
+- Current official docs and independent maker_docs_verify review confirm venue maker trading fee0 (docs.polymarket.com/trading/fees and help.polymarket.com/en/articles/13364478-trading-fees). Guaranteed passive maker intent uses GTC/GTD pluspostOnly;an immediately matching quote is rejected rather than taking. FAK does not rest/postOnly is not compatible withFAK. Confirmed by PlaceOrders/MarketMaking docs and official Polymarket agent-skills/SDK. This is protocol support,not measured acceptance/fill success on a specific futuremarket.
+- A listed market can precede opening of its orderbook;T-5 eligibility requires acceptingOrders/active/notclosed and appropriatebook state. Tick/minimumsize are market-specific;do not promise existingresearchstake1 is valid or infer liveparameters from documentationexamples. No fresh actual futurebook/order acceptance inspected. Percentage filled at0.50,T-5 remains unknown;limitorders can partiallyfill orremainunfilled. CSV used for backtest has outcome/metadata,notbookqueue/orderfills. Executedsubset winrate cannot be assumed equal to allsignal winrate;adverse selection is a risk,not an observed causal result here.
+- Timing independently verified for all8766 existing Bet targets against rawCSV:8766matched/0unmatched,DecisionUtc=target.market_start_utc,SettlementUtc=expected_market_end_utc,duration300s. Target3235430 Aug1 02:55-03:00UTC uses decision02:55 from3235409(02:50-02:55);T-5placement would be02:50 beforethatinputfinished. Last4014753 Aug31 23:50-23:55 decision23:50,T-5=23:45. Reusing final-at-start signal atT-5 would be lookahead;50.67% andGross+118 cannot simply become expected MakerNet by deletingfees.
+Next: None
+Notes: Officialcurrentwebsources+independentdocs reviewer;unchangedlocalreport SHA256C188FD1FE7314F3227016949DF32E783E6906FAAF6FB8DC58D941A3E9EDE3170 and independent raw timingjoin. No newstrategy test,tempartifact,DB/account/service/order/productchange,commit orpush;onlyexemptcontext/history. Livefillrate,market-open leadtime distribution and result availability latency remain unmeasured.
+Blockers: None for conditionalfeasibility explanation;quantitativefillclaims unsupported.
+
+## Active Update 2026-09-12 BTC Corrected 1h 3h Mean-Reversion Result
+Goal: Recalculate BTC August2026UTC with the confirmed reversed mean-comparison direction and show Gross,WinRate and standing Net accounting.
+Status: Completed
+Done:
+- Confirmed rule: UpDiffMiddle1h>UpDiffMiddle3h ->Down;1h<3h ->Up;equalityskip. Equivalently D=3*N1-N3=36*(M3-M1):D<0 Down,D>0 Up. Every eligible next5m market,no threshold/consensus/progression/crossover-only filter. Same cumulativeAugust UpDiff,12/36 current-inclusive contiguous means,noJulywarmup/no dailyreset,targetsAug1 00:05..Aug31 23:55,noSeptember outcome.
+- Recomputed direction and all step/cumulative accounting from hash-locked prior exactnumerator/outcome report63BA58DB9CD987BD5EA56DD9E774EDE176976B416825D6F6BB1F772E0E9E203F; rawCSV unchanged E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Preview8927valid uniqueBTCrows,onlymissingAug5 15:00UTC.8855eligible,70incomplete,1missingoutcome/1missingdecision,89equalityskips.
+- 8766bets,4442wins4324losses,WinRate50.673054985169975%;Up4472/Down4294. Hypotheticalfullfillprice0.5,stake1,fee0.033everybet:Gross+118,fees289.278,Net-171.278. ResearchOnly,not actual Live/Paper execution. First targetAug1 03:00UTC,lastAug31 23:55UTC.
+- Durable D:\My\Business\PolyMarketData\CryptoUpDown5m\charts\Calculate-BtcAugust1h3hMeanReversion.ps1 SHA2565FE27DAD4E0B99971AB27233F396311F954CCAF4F3F82129518D20E508842578 and btc_august_2026_1h_3h_mean_reversion_strategy.json SHA256C188FD1FE7314F3227016949DF32E783E6906FAAF6FB8DC58D941A3E9EDE3170. Prior files untouched,copy hashes verified.
+- Five direction/equality tests,8766per-bet inversion checks and8927reopened cumulative checks PASS. Independent rawCSV prefix-mean recomputation and all8927ledger/160686fields PASS,0differences;canonicalbets F2B043EE91DFDA6970CA2F9BB9F4F4EEF489FC392B768B02036B0451FB5EED6E (noUpDiffcolumn).
+Next: None
+Notes: Temp-lifecycle run removed4files/5084230bytes,absence verified after reviewer exit. One preparation PowerShell CLR0x80131506 crash reported immediately;new no-profile process succeeded,calculation unaffected. Only ownexemptcontext/history;no chart requested,no product/service/DB/orders/settings/build/commit/push changes. Other concurrent source/contracts/context/history preserved.
+Blockers: None
 
 ## Active Update 2026-09-12 Settlement Index Source Delivered
 Goal: Finish delivery of the approved unchanged settlement index fix and user-owned UpCounter notes.
@@ -99,6 +722,42 @@ Next: Obtain later exact approval: APPROVE RC-20260912-settlement-retention-wall
 Notes: Draft Contract-mode validation PASS. Independent settlement_trigger_review preapproval review PASS/no open findings on final digest; this is not implementation approval. FullWorkingTree gate sees unrelated untracked Strategies/UpCounter.txt plus new draft and failsCONTRACT_NOT_PREAPPROVED; preserve unrelated concurrent context/history/research changes. Draft cannot be committed before approval under the existing gate; attempted selective staging of own exempt diagnostic records was rejected by execution policy before the shell started; independently verified index is empty. No commit/push and no bypass; own records remain saved locally. Independent product-diff review remains pending until implementation.
 Blockers: No exact-digest user approval for this new correction; no source fix or Production improvement claimed. Selective Git staging blocked by execution policy; do not absorb unrelated changes or bypass the restriction.
 
+## Active Update 2026-09-12 Clarify Mean-Reversion Direction
+Goal: Record the user's correction of intended 1h/3h direction without a simulation or strategy implementation.
+Status: Completed
+Done:
+- User quoted the prior fastmean>slowmean ->Up / fastmean<slowmean ->Down mapping and explicitly said it was intended the other way around,expecting the hourly line to return to the three-hour line. Corrected intended mapping for the means UpDiffMiddle: M1>M3 ->Down;M1<M3 ->Up;equality remains skip.
+- Since UpMiddle1-UpMiddle3=M3-M1, equivalent deviation-line mapping is UpMiddle1<UpMiddle3 ->Down;UpMiddle1>UpMiddle3 ->Up. Keep means UpDiffMiddle distinct from deviations UpMiddle;do not reuse the old deviation comparison under the corrected mean direction.
+- Prior49.326945% and associated PnL remain verified only for the former opposite direction,not as evaluation of this clarified intention. No new WinRate/PnL calculated or claimed;old scripts/reports unchanged.
+Next: None; no recalculation requested in this clarification.
+Notes: Exempt context/history bookkeeping only,no simulation,artifact,product/settings/service/DB/order change,commit orpush. Unrelated edits preserved.
+Blockers: None for recording the direction clarification.
+
+## Active Update 2026-09-12 Explain BTC 1h vs 3h WinRate
+Goal: Explain the current WinRate and the user's longer-period mean-reversion intuition, without changing or rerunning the strategy.
+Status: Completed
+Done:
+- Re-read unchanged calculator/report hashes 4C917F6BFBCB35CC101762350B00F662CD104061B9202F4810EBFF6AA27118C3 / 63BA58DB9CD987BD5EA56DD9E774EDE176976B416825D6F6BB1F772E0E9E203F. Exact algebra U1-U3=(C-M1)-(C-M3)=M3-M1: current requested rule chooses Up when M1>M3 and Down when M1<M3. It is fast-vs-slow average direction selection, not a direct C-vs-M3 mean-reversion test. Explicit common C cancels; both means still depend on C/history. No code error or invalidation of verified49.326945% results implied.
+- Actual BTC Aug2 20:15UTC decision market3273887: C=4,M1=3,M3=2,U1=1,U3=2,D=-36,sideUp. Direct means from36 source states independently agree with report numerators12/72. This shows entryUp even though C exceeds both means, without alleging that this one bet caused the monthly loss.
+- Mean-reversion is a hypothesis, not an implication of defining an average. Moving averages themselves change; possible later convergence does not establish a predictive advantage for the very next5m outcome. Random-walk theory reference https://otexts.com/fpp3/stationarity.html,not claimed as a validated BTC model. Exact cause of49.33% rather than50%,persistence/statistical significance not established;no new tests performed.
+- Commission does not change WinRate. Verified hypothetical payouts+.967/-1.033 give E=2p-1.033 and break-even51.65%. Independent semantic/math reviewer PASS on implementation/algebra/accounting and uncertainty boundaries.
+Next: None
+Notes: Read-only bounded explanation plus exempt context/history;no new simulation,chart,temporary artifact,product/config/DB/service/trading change,commit orpush. Unrelated changes preserved.
+Blockers: None for explanation; economic cause/statistical significance remain untested.
+
+## Active Update 2026-09-12 BTC August 1h vs 3h WinRate
+Goal: Repeat the previous BTC August2026UTC comparison strategy with Period1h and3h.
+Status: Completed
+Done:
+- Source unchanged: raw CSV SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F;8927 BTC August rows,0 invalid/duplicates,only missing Aug5 15:00UTC. Main uses monthly indicator audit C4C2A2B468B176F4B75155249192A4CBEE9BA0FC18B05E17FA454350B8C34FF4 and all-calendar target outcomes 0847CDE9DED2EB51968ACF4F1868621485A2F1D76885D5D0F6746165FF14FBBE,not their former trading gates.
+- Cumulative August UpDiff,unrounded means over12/36 consecutive5m states,current included,noJulywarmup/no dailyreset. Rebuilt3h numerator from rolling sum. Compare D=3*N1-N3 over36:positive Down,negative Up,equality skip;every eligible decision t targets exact t+300s. No abs threshold,consensus,progression or crossover-only condition. Calendar targetsAug1 00:05..Aug31 23:55;no inheritedbet/noSeptember outcome.
+- 8855 eligible decisions,70 incomplete-window targets,1 missing outcome,1 missing decision;89 equal-line skips.8766 bets,4324 wins,4442 losses,WinRate49.326945014830025%;4294 Up and4472 Down bets. First targetAug1 03:00UTC,lastAug31 23:55UTC. ResearchOnly hypothetical fullfills at0.5,fixedstake1,fee0.033 everybet:Gross-118,fees289.278,Net-407.278,not actual Live/Paper performance.
+- Durable charts/Calculate-BtcAugust1h3h.ps1 SHA256 4C917F6BFBCB35CC101762350B00F662CD104061B9202F4810EBFF6AA27118C3 and charts/btc_august_2026_1h_3h_strategy.json SHA256 63BA58DB9CD987BD5EA56DD9E774EDE176976B416825D6F6BB1F772E0E9E203F under D:\My\Business\PolyMarketData\CryptoUpDown5m. Prior files untouched;hash-verified copies.
+- Five signed/equality boundary cases,8351 prior exact-numerator regression rows and8927 reopened cumulative accounting rows PASS. Independent rawCSV computation and full8927 ledger/160686 field checks PASS,0 differences;all8766 bets canonical SHA256 BB5F62993A8505819687B8A7C93F6E6EF3841ABD814F1A9B255E2C10A82EA84D.
+Next: None
+Notes: Native PowerShell JSON analysis/temp-lifecycle. Own marked run cleaned4files/5092214bytes,absence verified;reviewer processes finished. No graph requested. Only exempt context/history bookkeeping;no product/service/DB/orders/settings/build/commit/push changes,unrelated concurrent edits preserved.
+Blockers: None
+
 ## Active Update 2026-09-12 Follow-up Repair Priorities
 Goal: Answer "Есть что исправлять?" using the completed September12 Production check, without starting implementation.
 Status: Completed
@@ -110,6 +769,46 @@ Done:
 Next: None; user question requests assessment, not implementation authorization.
 Notes: No freshProductionquery/logscan,source/config/service/trading mutation,build/test or tempartifact. Recommendations refer to Sep12 06:13:37.639021..06:43:37.639021Z log/Paper window and service through06:47:51.902508Z. Only ownexemptcontext/history bookkeeping; preserve unrelated edits and Strategies/UpCounter.txt,which blocks fullWorkingTree gate; stagedownrecords separately validated.
 Blockers: None for advice; specific SQL latency cause remains unproved.
+
+## Active Update 2026-09-12 BTC August Blue Orange WinRate
+Goal: Calculate August2026UTC WinRate for BTC betting Down when blueUpMiddle1h>orangeUpMiddle2h andUp whenblue<orange.
+Status: Completed.
+Done:
+- Reused monthly indicator JSON SHA256C4C2A2B468B176F4B75155249192A4CBEE9BA0FC18B05E17FA454350B8C34FF4 and prior joint ledger target outcomes SHA2560847CDE9DED2EB51968ACF4F1868621485A2F1D76885D5D0F6746165FF14FBBE,raw CSV unchanged SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Independent rawCSV preview8927BTCrows,invalid/duplicates0,onlymissingAug5 15:00UTC.
+- Exact comparison D=2*N1-N2,denominator24;D>0 Down,D<0 Up,D=0skip. Every eligible market,not just crossover events. No absolute threshold,same-sign consensus,other-period/strict-order/progression filters. CumulativeAugust UpDiff,unrounded12/24pointmeans,currentincluded,noJulywarmup/no dailyreset/imputation. Decisiont -> exactnext5m outcome,targetsAug1 00:05..Aug31 23:55,initialPnL0/noinheritedbet.
+- Calendar8927targets:8879eligible,46incompletewindows,1missingoutcome,1missingdecision.234equalline skips,8645bets4245wins4400losses,WinRate49.10352805089647%. Up4180bets,Down4465bets. Standingfee-inclusive model fixedstake1,price0.5,fee0.033everybet:Gross-155,fees285.285,Net-440.285. ResearchOnly hypotheticalfullfills,notactual Live/Paper performance.
+- First decisionAug1 01:55 ->02:00UTC Upwin,D=-36;lastAug31 23:50 ->23:55UTC Downloss,D=56. Main5signed/equality boundary cases and all8927reopened cumulative accounting rows PASS. Independent rawCSV rolling-sum comparison matches totals and all8645bets canonical SHA2563D48008E6E6E5591ACEDF3591ECF24DE7FA308B5D129551E4127B4CCFAB2D162 (both timestamps/IDs,UpDiff,N1,N2,D,side,outcome,Gross,fee/net milliunits).
+- Durablecharts Calculate-BtcAugustBlueOrange.ps1 SHA25618E3ECA17ACF4A1724AE1296CE04F198BD7B0E4B29A8C655F2E68885762D07BE;btc_august_2026_blue_orange_strategy.json SHA256072259BBE50CA997470997423DD93CF86BB2DDD7E7C57FDD1842D33A14234B3B. Copies hashverified,priorfilesunchanged. Ownmarkedrun protectedcleanup4files/5083710bytes,absenceverified.
+Next: None.
+Notes: NativePowerShell JSON analysis and independent rawCSV calculation;temp-lifecycle used. No chart requested. Only exempt context/history repository edits;unrelated/concurrentchanges preserved. HEADa7ab1c9a,upstream0ahead/0behind atstart;no product/service/database/orders/settings/build/test/commit/pushchanges bythis task.
+Blockers: None.
+
+## Active Update 2026-09-12 BTC August31 UpMiddle 1h And 2h Chart
+Goal: Show the previous BTC UpMiddle1h/2h overlay only for the last day of August2026UTC.
+Status: Completed.
+Done:
+- Filtered immutable monthly audit SHA256C4C2A2B468B176F4B75155249192A4CBEE9BA0FC18B05E17FA454350B8C34FF4 to Aug31 00:00..23:55UTC. All288 points and both576values retained,no missing/nulls. Raw source hash remains E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F.
+- No indicator recalculation or midnight reset;Aug30 warmup remains. Same cumulativeAugustUpDiff,unrounded1h/2h trailingmeans,currentstate timestamps,no tradingfilter/PnL/shift/aggregation. Only chart display period changed.
+- Main reopened dailydata canonical SHA25619080D03A3435E3026A4492A7AF62F3454A430196296447D01F56D7072874095 matches independent288timestamp/UpDiff/N1/N2 slice of previously raw-verified source. First1h=-6/12,2h=-34/24;last1h=8/12,2h=-32/24. Allfive-minute timestamps and numerator/value identities checked.
+- Rendered/visuallyinspected2200x1100PNG,solidblue1h/orange2h,sharedaxes,hour ticks,previouslightstyle. Durablecharts btc_august31_2026_upmiddle_1h_2h.png SHA25695898E9C2544AA5A5164BB1988D2D64FEDEA1303CDE30E24526BF5D5B58AB859;.audit.json SHA2566BD29CC93BDD8315917B8C9139E30E3BE3C7A49015DEA48903C5E75868B2AE8B;Render-BtcAugust31UpMiddle1h2h.ps1 SHA256303EB4192C48ED2738A585B5C7D08250CF5CA601CB7BA49A5E8DE9978B64800A. Copies hashverified,previous artifacts unchanged.
+- Own markedrun protectedcleanup5files/267032bytes,absenceverified.
+Next: None.
+Notes: NativePowerShell/.NET GDI staticfigure and temp-lifecycle. Only exempt context/history repository edits;otherconcurrentcontext/history content and allunrelateddirtyfiles preserved. No product/service/database/orders/settings/build/test/commit/push changes.
+Blockers: None.
+
+## Active Update 2026-09-12 BTC August UpMiddle 1h And 2h Chart
+Goal: Show BTC August2026UTC UpMiddle for Period1h and2h together on one chart,without strategy filters or PnL.
+Status: Completed.
+Done:
+- Reused verified joint ledger SHA2560847CDE9DED2EB51968ACF4F1868621485A2F1D76885D5D0F6746165FF14FBBE:8926 known DecisionUtc/MarketId/UpDiff states plus last recorded target outcome reconstruct all8927 August source states including Aug31 23:55. RawCSV unchanged SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F;independent rawCSV preview confirmed onlymissingAug5 15:00UTC,invalid/duplicates0.
+- Indicators use cumulativeAugust UpDiff minus unrounded arithmetic mean of12 or24 consecutive5m states,currentincluded. Separate per-Period validity,noJulywarmup/no dailyreset/imputation. No threshold/consensus/strictorder filters. Timestamp is current source state,not next-bet settlement. Allsourcepoints retained;lines broken at gaps/nulls,no downsampling/data smoothing.
+- 1h8905valid/22null states,firstAug1 00:55,lastAug31 23:55,min/max-5.5/+5.5. 2h8881valid/46null,firstAug1 01:55,lastAug31 23:55,min/max-232/24,+212/24. Internal8351row priorjoint regression passed bothnumerators.
+- Independent raw-source weighted-prefix and direct-mean verification matched all17786 valid values. Canonical SHA256C4C14B1DD65EF2884C562F81392CD08C18F00ED1A2E929742AD2C2300693018F matches8927rows(timestamp,UpDiff,nullable1h/2h exactnumerators). Main reopened savedJSON canonical matched independent result.
+- Created and visually inspected2200x1100PNG with shared axes andsolidblue1h/orange2h lines,in prior light style. Durablecharts btc_august_2026_upmiddle_1h_2h.png SHA2560F73D177243A84B96D9DD732E645FC007C125E2105B499832C043D5EEAEC6759;matching .audit.json SHA256C4C2A2B468B176F4B75155249192A4CBEE9BA0FC18B05E17FA454350B8C34FF4;Render-BtcAugustUpMiddle1h2h.ps1 SHA25682A598D9E4B401665117A42CDFFBEB59266708D0E2D9544AF9B682D724BB63BD. Copies hashverified;oldfiles untouched.
+- Ownmarkedrun protectedcleanup removed5files/2549946bytes;absenceverified.
+Next: None.
+Notes: NativePowerShell/.NET GDI static figure;temp-lifecycle used,visualize inspected but static scientific figure uses standardtools. No workbook/trading/product/service/database/settings changes. Only exempt context/history repository edits;unrelateddirtyfiles preserved,no build/test/commit/push.
+Blockers: None.
 
 ## Active Update 2026-09-12 Production Server Bets And Logs
 Goal: Check Production server, Paper/Live bets and server logs read-only for the user's current request.
@@ -127,6 +826,179 @@ Done:
 Next: None; inspection only, no fix or deployment authorized by this request.
 Notes: Full WorkingTree requirement validation is blocked by pre-existing untracked Strategies/UpCounter.txt (CONTRACT_REQUIRED); only exempt owncontext/history are staged and independently validated, without touching that file. No source/config/strategy/order/service/DB mutations,build/tests or disposableartifacts. Only required owncontext/history bookkeeping; preserve all unrelateddirtycontext/history and untrackedStrategies/. No broadupdated-oldLive scan or all-historyaudit; residualscope limitations explicit.
 Blockers: None for bounded health report; RESTbook recovery and latest4Child evaluations not independently confirmed.
+
+## Active Update 2026-09-11 BTC August Strict Period Order
+Goal: Add user-confirmed strict ordering to the previous joint24-window BTC August2026UTC strategy: Down iff U1>U2>...>U24>=1;Up iff U1<U2<...<U24<=-1.
+Status: Completed.
+Done:
+- Main reused hash-verified prior joint JSON (SHA2560847CDE9DED2EB51968ACF4F1868621485A2F1D76885D5D0F6746165FF14FBBE);raw CSV unchanged SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Independent raw preview confirmed8927BTC rows,4445Up/4482Down,invalid/duplicates0,onlymissingAug5 15:00UTC.
+- Exact rational cross-products compare all23 adjacent Period pairs,strictly;any equality/order violation skips. Original fixedstake1,price0.5,fee0.033 everybet,next exact5m outcome,cumulative August UpDiff,unrounded12*P-point mean,currentincluded,noJulywarmup/no dailyreset/noimputation unchanged. ResearchOnly hypothetical fullfills,not actual Live/Paper results.
+- All2237 previous joint candidates rejected by strict order. Bets/Wins/Losses/Gross/Fees/Net all0;winrate and first/lastbet unavailable(NULL),not0% winrate. Coverage remains8351 full-window decisions,574 incomplete-warmup targets,1missingoutcome,1missingdecision. Other eligible skips6074BelowThreshold+40MixedSigns unchanged.
+- Main7 boundary cases passed (both signed valid chains,both signed equality cases,reversed pair,belowthreshold,missingwindow). Reopened8927ledger zeroaccounting/nullside/won checks PASS. Independent raw-prefix audit matched200424 exactnumerators/8351vectors and all8927time/ID/UpDiff/status/accounting rows;51451 adjacent comparisons across2237candidates,zero differences. Independent script semantic review PASS.
+- Durable external charts Calculate-BtcAugustStrictPeriods.ps1 SHA2567D6E8F8938F0F8A1540C8839DDB667D073E4D2E81AC1BF8D4B76FF152FA4D265 andbtc_august_2026_strict_period1to24_min1.json SHA25670A247D64A05087293D92764A4B9FC3F9195CD2B9E33DB44E44A544F92F093D3 saved with matching hashes,prior files untouched. Own protected cleanup removed4files/7714353bytes;run absence verified.
+Next: None.
+Notes: NativePowerShell JSON analysis and independent rawCSV verification;temp-lifecycle used. No chart/workbook requested. Only exempt context/history repository edits,no production/database/service/orders/settings/build/test/commit/push changes;unrelated dirty files preserved.
+Blockers: None.
+
+## Active Update 2026-09-11 BTC August Joint Periods 1 To 24
+Goal: Backtest one joint BTC August2026UTC fixed-stake strategy requiring all24 Period1..24h UpMiddle values to have the same sign and absolute value at least1, as explicitly confirmed by the user.
+Status: Completed.
+Done:
+- Fresh raw CSV preview: SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged;8927 BTC rows,4445 Up/4482 Down,invalid/duplicate IDs/times/offgrid0. Only missing source Aug5 15:00UTC. No downloads,imputation,July warmup or daily reset.
+- Preserved cumulative August UpDiff and unrounded mean of12*P consecutive5m cumulative values in(t-P,t],current included. All24 UpMiddle>=1 gives ONE Down stake1;all24<=-1 gives ONE Up stake1;otherwise skip. No progression/per-window orders. Next exact5m target only,price0.5,fee0.033 everybet includinglosses. ResearchOnly hypotheticalfullfills,not actual Live/Paper execution.
+- Calendar targets Aug1 00:05..Aug31 23:55:8927 slots;8351 all-window eligible,574 incomplete-warmup targets,1 missing outcome,1 missing decision. Eligible splits2237 bets,6074 any-window below-threshold skips,40 remaining mixed-sign skips. BelowThreshold has priority when both skip reasons apply.
+- Results2237 bets1174 wins1063 losses,winrate52.48100134108181%,Gross111,fees73.821,Net37.179. Up1126bets/Down1111bets;151 bets have at least one window exactly at threshold. First decision Aug2 00:45 ->00:50UTC Up loss,last Aug31 23:20 ->23:25UTC Up win. No inherited starting bet or September outcome.
+- Main rolling-window calculator and independent raw-source weighted-increment prefix calculation agree. Independent audit matched all8927 calendar rows,8351 vectors/200424 exact numerators,2237 bet IDs/timing/side/outcome/accounting,all cumulative rows and skip classifications,zero errors;semantic script inspection PASS. Root reopened timing/gate/decimal cumulative checks PASS.
+- Durable external charts artifacts: Calculate-BtcAugustJointPeriods.ps1 SHA256 D6CC199554EE7C9B25C24CC7B11538E687143600F9BA7985E7BD050260EADA6C;btc_august_2026_joint_period1to24_min1.json SHA256 0847CDE9DED2EB51968ACF4F1868621485A2F1D76885D5D0F6746165FF14FBBE. Copies hashverified;prior files unchanged. Own marked run cleanup removed4files/7750227bytes;absence verified.
+Next: None.
+Notes: Spreadsheet source/reconciliation guidance applied via native PowerShell;codex-temp-lifecycle used. No chart/workbook requested. Only exempt context/history repository edits,no product/database/service/orders/settings/build/test/commit/push changes;unrelated dirty files preserved. Local task date Sep12,UTC evidence date Sep11.
+Blockers: None.
+
+## Active Update 2026-09-11 BTC August Period 1 To 24 Min1
+Goal: Keep MinUpMiddle=1 and sweep Period1..24hours step1 for the same BTC August2026UTC fixed1 research model.
+Status: Completed.
+Done:
+- Fresh main and independent source preview: rawCSV SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged,8927AugBTCrows4445Up4482Down,invalid/duplicates0,only missingAug5 15:00UTC. Source/period/asset unchanged; noJulywarmup,no dailyreset,noimputation.
+- Each P has unrounded mean12*P consecutive5m cumulativeAugustUpDiff values in(t-P,t],currentincluded. Exactabs(signal numerator)>=12*P, equalityincluded,positiveDown/negativeUp,constantstake1,next5m outcome,price0.5,fee0.033everybet includinglosses. TargetsAug1 00:05..Aug31 23:55,initialPnL0/noinheritedbet. ResearchOnlyfullfillmodel,notactual Live/Paper execution.
+- Mainrollingqueue and independentprefixsum(d)/prefixsum(index*d) matched all24summaryrows. P1 regression topriorreport PASS5553bets2873W2680L,Gross193,fee183.249,Net9.751. NetP1..24=[9.751,-81.550,-132.047,-115.482,-99.290,-106.415,-106.065,-103.342,-57.497,-59.213,-42.444,-14.860,-2.530,-10.002,-22.464,-42.157,-71.368,-98.160,-96.249,-105.942,-148.361,-151.262,-150.295,-151.130]. OnlyP1positive;P13closestnegative.
+- Periodspecificeligible=8927-24*P,warmupexclusions=24*P-2,plus1missingoutcome+1missingdecision. Different warmup coverage explicitlyannounced;P24firstbettargetAug2 00:00. Independent72directSMA spotchecks passed; savedreport552fieldchecks/0differences (exactcounts/economics/signalnumerators/timestamps, ratios1e-12andwinrates1e-10tolerance). Reopeneddecimalaccounting/coverage checksPASS.
+- Externalcharts Calculate-BtcAugustPeriodSweep.ps1 SHA256477E32AAE5978F7F44811D37C0F0A8F0CD8BA7370426DE3E0F1836FC87A1102C and btc_august_2026_min1_period1to24.json SHA256C586CD620E2C58B30A4CBCB7AE09FDE900C9B2F7CBFEAB5C052A2DBAF7919B3D saved with hashverifiedcopies,previousoutputsuntouched. Protectedownrun cleanup3files/29173bytes;absenceverified.
+Next: None.
+Notes: Spreadsheet source/reconciliation guidance via nativePowerShell;temp-lifecycle used,nochart/workbookrequested. Onlyexemptcontext/historyrepositoryedits,no production/database/service/strategy/source/order/settings/build/test/commit/pushchanges;preserveunrelateddirtyfiles. ResultperiodAugust2026UTC; tasklocaldateSep12 whilecompletionUTC Sep11,history filedbyUTC.
+Blockers: None.
+
+## Active Update 2026-09-11 BTC August MinUpMiddle 1 To 10
+Goal: Calculate BTC August2026UTC fixed1 contrarian with MinUpMiddle thresholds1..10, inclusiveabs(signal) entry, keeping Period1h and the previous August startup/gap model.
+Status: Completed.
+Done:
+- Main reused exact8927slot August ledger SHA256C30927D4935B1EDB29BD50CED06513DBCEEC76422FB66943DD2EAD1C046FD98E; rawCSV SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. Independent rawCSV preview8927BTCrows/8903eligibledecisions,22incomplete+1missingoutcome+1missingdecision,old8573bets330zeros confirmed. No Julywarmup,calendarreset,imputation or sourcechanges.
+- Exact abs(SignalNumerator)>=12*MinUpMiddle includes equality, no rounding. SignalpositiveDown/negativeUp,next5m outcome. Stake stays1 regardless ofthreshold;price0.5,fee0.033eachstakeincludinglosses. ResearchOnly hypotheticalfullfill,notLive/Paper performance. All prior timing/filter rules preserved.
+- Main ledgerfilter and independent rawCSV weighted11increment replay agree thresholds [1,2,3,4,5]: bets[5553,2638,1008,286,51],wins[2873,1345,493,138,23],losses[2680,1293,515,148,28],Gross[193,52,-22,-10,-5],fees[183.249,87.054,33.264,9.438,1.683],Net[9.751,-35.054,-55.264,-19.438,-6.683]. Inclusiveequalitycounts[551,331,171,64,20]. Thresholds6..10zero bets/Gross/fees/Net,undefinedwinrateNULL. MaxobservedeligibleabsUpMiddle66/12=5.5 independentlyconfirmed.
+- Reopened10row report accounting/coverage/nestedfilterchecks passed. Externalcharts Calculate-BtcAugustMinUpMiddle.ps1 SHA25650DCCECE5572BBDB1553AD11729B4ADE7EBD7FE0D410DA4F0957F30F2C1F7DCF and btc_august_2026_upmiddle1h_fixed1_min1to10.json SHA25605A570BE1B29AB4B12A0460D6E2106256365517A7D571A20B5FBE619EDFA63BB hashverifiedcopies;previousartifactsuntouched. Protectedownruncleanup3files/9168bytes,absenceverified.
+Next: None.
+Notes: MainJSONanalysis/nativePowerShell,independentrawCSV verification;codex-temp-lifecycle used,no chart/workbook requested. Onlyexemptcontext/historyrepositoryedits,no production/database/service/strategy/source/order/settings/build/test/commit/pushchanges,preserveunrelateddirtyfiles. PositiveT1 result applies onlyto thissample,notprovedfutureprofitability.
+Blockers: None.
+
+## Active Update 2026-09-11 BTC Full History Fixed1 UpMiddle Backtest
+Goal: Extend unchanged BTC fixed1 contrarian UpMiddle1h to the whole loaded history requested by "Посчитай за весь период".
+Status: Completed.
+Done:
+- Read-only preview main and independent: CSV SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F,70392BTC binary outcomes,35329Up35063Down,invalid/duplicateIDs/times/offgrid0. UTC2025-12-18 04:30 market956686 through2026-09-04 19:10 market4195250. Expected75057slots,4665missing in18gaps,including4622missing2026-01-26 23:30..2026-02-12 00:35. Coverage and latestavailabledate explicitly announced; no imputation or new downloads.
+- Same strategy: cumulative loaded UpDiff from firstoutcome, no calendarreset/priorhistorywarmup; mean12 consecutive5m cumulativevalues inclusivecurrent, unrounded exactsign. PositiveUpMiddle->Down,negative->Up,zeroSkip; next-exact5m outcome,stake1,price0.5,fee0.033everybet includinglosses. ResearchOnly full-fill hypothetical,not Live/Paper performance.
+- Calendar targets2025-12-18 04:35..2026-09-04 19:10UTC:75056slots,67675bets,2527zeros,171incompletewindow,18missingdecision,4665missingoutcome. Firsttrade06:00->06:05Dec18,Upwin;last19:05->19:10Sep4,Downloss. Initialoutcome no inheritedbet, no futuretarget included.
+- Mainqueue and independentrawCSV/weighted11increment calculation matched70202eligible signals and totals:34366W33309L,winrate50.780938308090136%,Gross1057,fee2233.275,Net-1176.275. Down34090bets17250W16840L,Gross410,fee1124.970,Net-714.970;Up33585bets17116W16469L,Gross647,fee1108.305,Net-461.305.
+- Mainreopened JSON checks75056cumulativeGross/Fee/Net rows and70391unique known targetIDs;all8903eligiblepriorAugustrows match12signal/accounting fields exactly. Cumulativebaseline+325 and meanNumerator+3900 cancel inUpMiddle. Externalcharts Calculate-BtcFullHistoryFixed1.ps1 SHA25663CE60017EB6926BA9F2AE60E4E96453D1823846DF72A67A8ABDFB231A4B5DBF and btc_fullhistory_upmiddle1h_fixed1_backtest.json SHA25668591099E7EE3E7C47B9131B2C639288408D3003311150815A910C5018E6CC90 saved/hashverified,previousoutputsunchanged.
+- Independent durable-ledger audit matched all75056timestamps/statuses/cumulativevalues and70202eligible sourceIDs/UpDiff/mean/signal/side/outcome/accountingrows with0differences. Protectedownruncleanup removed3files/44662677bytes,runabsenceverified.
+Next: None.
+Notes: Spreadsheet source/protocol/reconciliation skill used via nativePowerShell,no chart/workbook requested. Ownmarkedrun D:/CodexTemp/runs/btc-fixed1-allhistory-20260911. Onlyexemptcontext/historyrepositoryedits;no production/database/service/source/order/settings/build/test/commit/pushchanges,preserveunrelateddirtyfiles.
+Blockers: None; incomplete rawcoverage isexplicitly excluded, not synthesized.
+
+## Active Update 2026-09-11 BTC August Fixed1 UpMiddle Backtest
+Goal: Extend the current BTC 1h UpMiddle contrarian fixed-stake1 model to all August2026UTC, as requested: "Ок, посчитай за весь август".
+Status: Completed.
+Done:
+- Source CSV SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged;8927/8928 expected BTC outcomes,4445Up/4482Down,invalid/duplicate IDs/timestamps0. Only absent timestamp Aug5 15:00UTC. No imputation,Julywarmup,daily reset or source changes.
+- Preserved cumulativeAugustUpDiff, arithmetic mean12 consecutive5m points inclusivecurrent and exact unrounded signal sign. Positive->Down,negative->Up,zeroSkip; constantstake1,price0.5,fee0.033 everybet. Next exact5m outcome only, ResearchOnly full-fill model, not actual execution/Paper performance.
+- Calendar targets Aug1 00:05..Aug31 23:55:8927 slots.8573bets,330zero skips,22incomplete-mean targets (11startup+11postgap),1missingtarget,1missingdecision. Initial00:00 outcome has no inherited bet. First bet decisionAug1 00:55 targets01:00;lastdecisionAug31 23:50 targets23:55. No Sep1 settlement included.
+- Main queue and independent rawCSV/weighted11increment replay agree4365wins/4208losses,winrate50.91566546133209%,Gross+157,fee282.909,Net-125.909. Down4242bets2171W2071L,Gross100,fee139.986,Net-39.986;Up4331bets2194W2137L,Gross57,fee142.923,Net-85.923. Independent8903eligible signal identities matched.
+- Reopened8927slot JSON reconciled decimal totals; all287 priorAug31 ledger rows matched13 relevant fields exactly, excluding only that earlier run's initial00:00 outcome. Externalcharts Calculate-BtcAugustFixed1.ps1 SHA256BAC092C47A4226C656026B3790F41CE40909CDDE2AE994E7DE41C19DAE04431A and btc_august_2026_upmiddle1h_fixed1_backtest.json SHA256C30927D4935B1EDB29BD50CED06513DBCEEC76422FB66943DD2EAD1C046FD98E saved with hashverifiedcopies; no priorfiles overwritten.
+- Independent rawCSV-to-serialized-ledger audit matched all8927timestamps/statuses/cumulativeGrossFeeNet and all8903eligible row identifiers/signals/side/outcome/accounting fields with0differences. Protectedcleanup removed ownrun3files/5300471bytes; runabsence verified.
+Next: None.
+Notes: Spreadsheet skill source/protocol/independent reconciliation guidance applied via nativePowerShell perprojectconstraint; no workbook/graph requested or created. Ownmarkedrun D:/CodexTemp/runs/btc-fixed1-august-20260911. Startup refused unrelatedlegacy malformed/unowned orphanfolders; none changed. Only exemptcontext/historyrepositoryedits; preserveunrelateddirtyfiles,no production/database/service/orders/source/settings/build/test/commit/push.
+Blockers: None; source coverage exclusion explicitly reported.
+
+## Active Update 2026-09-11 BTC Fixed1 Win Loss Explanation
+Goal: Explain the previous BTC August31UTC 1hmean fixed1 strategy's137wins/144losses without changing strategy or data.
+Status: Completed read-only diagnosis.
+Done:
+- Re-read exact calculator and287row ledger SHA25643523048183619E43C03424CCC365CCA802F37BA2C52246C0E70C79C5C50E2E1; unique targetIDs287. Main side aggregates and independent rawCSV reconciliation agree: Down138bets68W70L;Up143bets69W74L;6zero skips. Gross-7 and fees9.273 remain Net-16.273. Fees cannot change outcome-match counts.
+- Verified actual UTC00:15->01:05 interval:10Downbets4W6L; cumulative UpDiff-31->-29, mean-382/12->-348/12, UpMiddle10/12->0. Hence mean convergence does not imply more reverse outcomes; movingmean rose34/12 while cumulativeUpDiff rose2. Gross-2,fees0.330,Net-2.330 for this interval.
+- Independent reviewer matched all287ledger rows tosource and286adjacent mean shifts, plus weighted-history identity12*UpMiddle=11*d_t+10*d_t-1+...+d_t-10. All144individual losses increasedabsoluteUpMiddle; no claim that a losing step itself closed the gap. Current UpDiff is cumulative, not former rolling-count UpDiff.
+Next: None.
+Notes: This establishes arithmetic and a concrete mechanism for mean-crossing intuition failure, not an external causal explanation of BTC outcomes or proof of persistent predictive momentum/randomness fromoneday. JSON onlymainanalysis,inmemory; no newartifact,source/strategy/CSV/database/service/orders/build/test/temp/commit/push changes. Exemptcontext/historyonly; preserveunrelateddirtyfiles. ConvertFrom-Json displayed dates inlocal+03 initially; finalexamples explicitly convertedbacktoUTC.
+Blockers: None for explanation; causal market dynamics not established or claimed.
+
+## Active Update 2026-09-11 BTC August 31 Fixed1 UpMiddle Contrarian Backtest
+Goal: Calculate the requested positive-UpMiddle/Down, negative-UpMiddle/Up strategy for the previous1h-mean BTC chart, with user-confirmed constant stake1.
+Status: Completed.
+Done:
+- Same rawCSV SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F; BTC August31UTC has288 chartpoints/no gaps/duplicates/invalids. UpDiff cumulative sinceAug1; mean12 consecutive5m values inclusivecurrent, previous-daywarmup retained. Exact integer numerator determines sign; no abs>=1 threshold; exactzero skips.
+- Chart00:00 has PnL0/no inherited order. Its signal targets00:05; target outcomes continue through23:55. Thus287 candidate outcomes; initial00:00 outcome andSep1 settlement excluded. Reported timing to user before calculation. Hypothetical fullfill0.5, stake1, Gross+1/-1 and fee0.033 per settled stake, including losing bets; ResearchOnly, no actual execution claim.
+- Independent exact-timestamp method and main rollingqueue replay matched281bets,137wins,144losses,6zero skips,143Upbets/138Downbets,winrate48.7544483985765%,Gross-7,fees9.273,Net-16.273. Reopened serialized287row ledger and reconciled all gross/fee/net totals exactly with decimal arithmetic.
+- Preserved reproducible script Calculate-BtcAugust31Fixed1.ps1 and btc_august31_2026_upmiddle1h_fixed1_backtest.json in external data charts folder; old charts/source unchanged. EvidenceJSON SHA25643523048183619E43C03424CCC365CCA802F37BA2C52246C0E70C79C5C50E2E1,hashverifiedcopies.
+Next: None.
+Notes: Initial temporary-script run failed on C#style0m literal inPowerShell; immediately reported, replaced with explicitdecimalcasts, rerunPASS. Source unaffected. Spreadsheet source/protocol/independentverification guidance used withnativePowerShell; no new chart/workbook requested. Protected ownruncleanup3files/170709bytes,absenceverified. Onlyexemptcontext/historyrepositorychanges; preserve unrelateddirtyfiles,no product/database/service/orders/build/test/commit/push.
+Blockers: None.
+
+## Active Update 2026-09-11 BTC August 31 Periods 2h And 1h
+Goal: Repeat the previous BTC August31 UTC chart and UpMiddle extrema for Period2h and1h separately.
+Status: Completed.
+Done:
+- Preserved August-start cumulative UpDiff and previous-day warmup; only mean windows changed to24 and12 consecutive5m values in (t-Period,t]. Same rawCSV SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Day288rows,142Up/146Down,no gaps/duplicates/invalids; both have288 valid means, first/last cumulative-32/-37.
+- Independent exact-timestamp replay matched queue calculation. Period2h: UpMiddle min-178/24 at12:50UTC,max148/24 at06:05 and06:20; first/last mean-734/24,-856/24. Period1h: min-60/12=-5 at11:55 and22:50,max52/12 at09:00; first/last mean-378/12,-452/12. Integer numerators verified tied extrema.
+- Two2000x1040 PNGs visually inspected with identical solidblue/orange styling and axes, no table. External data charts folder: btc_august31_2026_updiff_middle2h.png and middle1h.png, matching auditJSONs and Render-BtcAugust31Periods12.ps1. Old plots/rawsource unchanged; durablecopieshashverified. PNG hashes2h0D70E7A0E6E57D214BD5A7036F65E6A04B7E580EA1CB54B52C8212D47B9A14A6,1hD4264C5FF99263BC7E020FAA6C198306BBA95412EB7E7B010E426E648365455F.
+Next: None.
+Notes: Spreadsheet skill applied for source/protocol/verification and preservation of chart style, native.NET/PowerShell, no workbook. Protected tempcleanup removed ownrun6files/223902bytes, absenceverified. Onlyexemptcontext/historyrepositorychanges; no source/strategy/PnL/database/service/orders/build/test/commit/push changes; preserve unrelateddirtyfiles. KnownAug5 missingoutcome remainsunfilled as before.
+Blockers: None.
+
+## Active Update 2026-09-11 BTC August 31 Chart And UpMiddle Extrema
+Goal: Repeat the previous BTC chart for August 31, 2026 UTC and calculate min/max UpMiddle=UpDiff-UpDiffMiddle.
+Status: Completed.
+Done:
+- Preserved August-start cumulative UpDiff and unrounded rolling3h mean; narrowed display only to [2026-08-31,2026-09-01) UTC by expected_market_end_utc. Same CSV SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Day288 binary outcomes,142Up/146Down,no gaps; all288 means fully warmed with prior-day points.
+- Independent exact-timestamp dictionary replay matched rolling-queue calculation. First UpDiff/mean -32/-30, last -37/(-1212/36). UpMiddle minimum -306/36=-8.5 uniquely12:50UTC,market4001262; maximum244/36=6.777777777777778 uniquely06:20UTC,market3993894. Integer numerator comparisons verified extrema and ties.
+- Generated and visually inspected same-style2000x1040 solid blue UpDiff/orange Middle PNG without table. Durable outputs in D:/My/Business/PolyMarketData/CryptoUpDown5m/charts: btc_august31_2026_updiff_middle3h.png, matching auditJSON, Render-BtcAugust31Cumulative.ps1; copies hash-verified. Existing monthly plot/rawsource untouched.
+Next: None.
+Notes: Spreadsheet skill preserved source/protocol and independent checks; native PowerShell/.NET rendering, no workbook. Protected cleanup removed own marked run4files/114026bytes, absence verified. Only exempt context/history edits in repository; no source/strategy/PnL/database/service/orders/build/test/commit/push changes; preserve all unrelated dirty files. The known Aug5 missing outcome remains unfilled as in previous cumulative chart.
+Blockers: None.
+
+## Active Update 2026-09-11 ETH Up4 Cap2 Fresh Full-History Chart
+Goal: Repeat the cumulative Gross and Net PnL chart for `ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 2` over all currently available history.
+Status: Completed read-only Production report and visually verified PNG.
+Done:
+- Resolved exact strategy `b7c50005-0000-4000-8236-000000000002` / `eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_2` and fixed cutoff `2026-09-11T19:42:12.762071Z` in UTC.
+- Read-only preview/export returned 1,307 unique Settled rows, entered from `2026-07-03T07:34:30.151403Z` and settled through `2026-09-11T15:32:40.558487Z`; 72 Skipped rows were excluded. This is 29 new Settled rows after the prior `2026-09-09T05:28:58.805437Z` cutoff, all entered and settled after that cutoff.
+- PostgreSQL aggregation and an independent CSV replay agree exactly: Gross `945.72301652`, fee `443.52181000`, Net `502.20120652` USD; all 1,307 rows satisfy stored `Net = Gross - fee` within `0.00000001`.
+- Provenance is 1,132 approved historical `ResearchOnly` rows plus 175 subsequent native Paper rows. Generated and visually inspected `C:/Users/serge/.codex/visualizations/2026/09/08/01a082be-e105-7da2-b970-180ba5aa641c/eth-up4-cap2-full-history-gross-net-20260911-1942z.png`, 2000x1300, SHA256 `CFDB69B30E31511437B6BDACAC757F6EB9169F03C1B54490EB274B082A753E9E`; all plot and guide lines are solid and labels are unclipped.
+Next: None.
+Notes: Production `192.168.0.101:5432/polycopytrader` was queried only with forced read-only, UTC, 15-second statement timeout, 2-second lock timeout, no parallel workers and the exact indexed strategy ID. Final health at `2026-09-11T19:45:49.026183Z` was Running/Live, heartbeat age 26.024 seconds, NULL error, zero lock waiters. Historical parent-average full-fill accounting remains ResearchOnly and does not prove depth or Live equivalence. Protected cleanup removed 3 files / 235313 bytes and the exact marked run is absent. No Production, service, strategy, order, source or configuration mutation.
+Blockers: None.
+
+## Active Update 2026-09-11 BTC August Cumulative UpDiff Chart
+Goal: Show BTC for August 2026, cumulative UpDiff since month start and its rolling 3-hour arithmetic mean, following the user's period clarification.
+Status: Completed.
+Done:
+- Read-only source `D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv`, SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. BTC binary outcomes by expected_market_end_utc in [2026-08-01,2026-09-01) UTC:8927 rows,4445 Up,4482 Down, final cumulative UpDiff -37; no invalid results/duplicate timestamps or market IDs.
+- One missing timestamp 2026-08-05T15:00Z; absent from saved raw/btc/page-00618.json.gz as well. Reported coverage to user; no imputation/source mutation. Cumulative line uses loaded outcomes and breaks at gap. Mean uses (t-3h,t],36 consecutive five-minute values inclusive current, unrounded; no July warmup or daily reset.35 startup and35 post-gap mean values omitted.
+- Independent exact-timestamp dictionary calculation confirmed rolling-queue results:8857 valid means,70 null; cumulative min/max -83/26; mean min/max -80.66666666666667/23.22222222222222; first mean244/36 at Aug1 02:55, last -1212/36 at Aug31 23:55.
+- Rendered and visually inspected 2000x1040 solid blue/orange PNG. Durable chart, audit JSON and reproducible PowerShell/.NET renderer stored in external data charts folder as btc_august_2026_updiff_middle3h.png, matching .audit.json, and Render-BtcAugust2026Cumulative.ps1. No PnL, strategy, other-asset, source, database, service, or order changes.
+Next: None.
+Notes: Spreadsheet skill applied for source provenance, missing-data handling and verification; native .NET renderer respects project no-Python/Node constraint. Durable copies hash-verified; PNG SHA2561718023BD492C4447EF694F099D3334CEB16BD51742E77A42250F0AAEFFF0A53. Protected cleanup removed own marked run (4 files/156180 bytes), absence verified; temporary artifacts only, durable chart/evidence preserved. Diff check passed. Preserve unrelated dirty repository files; no commit/push. Temp startup refused legacy unowned/malformed orphan folders; none deleted or repaired.
+Blockers: None; incomplete source coverage explicitly labeled.
+
+## Active Update 2026-09-11 Latest Outcome Progress Logic Explained
+Goal: Describe the latest strategy used in this thread's historical experiments, without changing it.
+Status: Completed read-only source/report verification.
+Done:
+- Resolved subject as the joint eight-window signed Progress with own UpDiff3..24h and Middle over N latest all-market values, not native LowEnter or the separately reported Production winners. Previous research candidates remain BTC N21 and ETH/SOL N35; N is mean length, not stake cap.
+- Verified exact strict all-to-all gate, common nonzero UpDiff sign, +1/Down or -1/Up initialization, fixed direction, uncapped abs-counter stake, next-market settlement before literal Up+1/Down-1 update, first-zero closure and same-close-state reentry only for next market. Indicators keep updating, active series ignores their new entry signal; no fixed SeriesMiddle or stack.
+- Preserved historical model boundaries:576-result startup/gap warmup, no calendar reset, gap/EOF censoring and wholeunfinished accounting exclusion, ideal fullfills0.5/base1/3.3% every stake. Maker GTC post-only was proposed separately and is not the execution model underlying these results.
+Next: None.
+Notes: Read Calculate-BtcMiddleOddMarkets.ps1, BTC and ETH/SOL saved reports, stored independent verification PASS and independent reviewer comparison with Verify-BtcMiddleOddSweep.cs. No backtest/rawCSV/build/tests/temp/source/settings/database/orders changes; exempt context/history only. Local HEAD538c726c/upstream0ahead0behind; preserve unrelated dirty history files.
+Blockers: None for description; no Production execution-state claim.
+
+## Active Update 2026-09-11 Fresh Top Ordinary Net Reports
+Goal: Repeat the graph-and-Excel package for the best ordinary BTC, ETH and SOL 5m strategies by lifetime Settled Net PnL, excluding Progress.
+Status: Completed
+Done:
+- Fixed one Production read-only cutoff at 2026-09-11T18:26:40.831744Z. Candidate filters were BTC/ETH/SOL `Up or Down 5m` names, case-insensitive Progress exclusion, at least one Settled row, complete nonnegative Calculated/VenueReported fees, and exact stored Net=realized-fee. Counts were BTC 836 catalog/809 with settlements/203 eligible; ETH 791/711/173; SOL 530/523/92.
+- Full and enabled/unpaused rankings matched. Winners: BTC b7c50005-0001-4000-8191-000000000115, `BTC Up or Down 5m 15 bps Futures Basis Revert LowerEnter Premarket`, 2212 Settled, Net269.94604124; ETH b7c50005-0000-4000-8137-000000000104, `ETH Up or Down 5m Up 4 bps Reference Average Premarket`, 1996 Settled, Net409.57054180; SOL b7c50005-0000-4000-8081-000000000125, `SOL Up or Down 5m Up 25 bps Instant`, 1683 Settled, Net296.91150341.
+- Independent dashboard lifetime snapshot ranking matched all three identities and totals. Raw winner rows independently reconciled count, unique IDs, complete fees and exact Net identity. Cutoff-day 2026-09-11 UTC Net: BTC -55.21386100, ETH -18.85173312, SOL -22.37607104.
+- Created exactly six outputs under `outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/top-ordinary-net-strategies-by-asset-20260911-1826z/`: three visually inspected 1800x1000 solid-line cumulative Net+price JPGs with maximum-drawdown bands and three one-sheet daily XLSX files through 2026-09-11 with continuous UTC dates, formula Daily Total/Total cells, red-on-white visible-minus negatives and B2 freeze panes.
+- Maximum drawdowns: BTC156.40404669, ETH186.56619623, SOL253.35891408 USD. Artifact-tool create/recalculate/inspect/formula-error/reopen/render checks and native Excel COM checks passed; totals, first/middle/last formulas, one sheet, date range, conditional format, visible minus, red font, white fill and frozen row/column all verified. ETH endpoint labels were separated after visual review and all three final JPGs were re-inspected.
+Next: None
+Notes: Production 192.168.0.101:5432/polycopytrader stayed read only. Initial ranking attempt failed before reading data because the local SQL used obsolete table name `copy_strategies`; current source proved `public.strategies`, and only the corrected query was used. Queries enforced UTC, statement/lock timeouts and no parallel workers. Final health had zero lock waiters and active sessions. No database/service/order/strategy/source/config changes, build/tests, commit or push. Preserve unrelated working-tree edits.
+Blockers: None
 
 ## Active Update 2026-09-11 Settlement Persistence Phase Telemetry Implemented
 Goal: Implement only approved settlement persistence diagnostics under RC-20260911-settlement-persistence-phase-telemetry.
@@ -179,6 +1051,19 @@ Done:
 - Dashboard Running,last_errorNULL,eventqueue0 at05:28:18.660039Z,last_event05:28:11.579617Z. Separate copied-performance queue330(allhigh)+25inflight at05:28:18.660039Z,then282queued at05:29:11.995122Z; oldest request05:22:34.615595Z(~6m37s). Queue is processing but delayed; do not claim all latency warnings fixed or infer its state from the empty market-data queue.
 Next: None
 Notes: Read-only check completed, not a fix or deployment. Production/service/orders/strategies/config unchanged. No build/tests appropriate; only mandatory context/history bookkeeping, requirement validators and scoped diff checks. Independent agents verified Live and logs. No disposable artifacts created; preserve unrelated working-tree edits.
+Blockers: None
+
+## Active Update 2026-09-10 Fresh Top Ordinary Net Reports
+Goal: Repeat the fresh graph-and-Excel package for the best ordinary BTC, ETH and SOL 5m strategies by lifetime Settled Net PnL, excluding Progress.
+Status: Completed
+Done:
+- Fixed one Production read-only cutoff at 2026-09-10T19:19:30.308026Z. Candidate filters: names beginning BTC/ETH/SOL Up or Down 5m, case-insensitive Progress exclusion, at least one Settled row, complete nonnegative Calculated/VenueReported fees, and exact stored Net=realized-fee. Counts BTC 836 catalog/809 with settlements/188 eligible; ETH 791/711/153; SOL 530/523/61.
+- Full and enabled/unpaused rankings matched. Winners: BTC b7c50005-0001-4000-8191-000000000115, BTC Up or Down 5m 15 bps Futures Basis Revert LowerEnter Premarket, 2108 Settled, Net311.64699661; ETH b7c50005-0000-4000-8137-000000000104, ETH Up or Down 5m Up 4 bps Reference Average Premarket, 1965 Settled, Net425.99042867; SOL b7c50005-0000-4000-8081-000000000125, SOL Up or Down 5m Up 25 bps Instant, 1650 Settled, Net331.52711731.
+- Independent dashboard lifetime snapshot ranking at 2026-09-10T19:20:47Z matched all three identities; BTC snapshot had one later settlement after the fixed cutoff, correctly excluded from this package. Raw winner rows independently reconciled count, unique IDs, Net=realized-fee and zero fee/status mismatches. Fixed-cutoff 2026-09-10 UTC Net: BTC33.11509564, ETH3.40627853, SOL36.70867832.
+- Created exactly six outputs under outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/top-ordinary-net-strategies-by-asset-20260910-1919z/: three visually inspected 1800x1000 solid-line cumulative Net+price JPGs with maximum-drawdown bands, and three one-sheet daily XLSX files through 2026-09-10 with continuous UTC dates, formula Daily Total/Total cells, red-on-white visible-minus negatives and B2 freeze panes.
+- Maximum drawdowns: BTC156.40404669, ETH186.56619623, SOL253.35891408 USD. Artifact-tool create/recalculate/inspect/formula-error/reopen/render checks and native Excel COM checks passed; totals reconciled, sample first/middle/last formulas passed, one sheet, date range, conditional format, visible minus, red font, white fill and frozen row/column verified. One transient ETH JPEG rendering defect was caught by visual inspection and corrected before delivery.
+Next: None
+Notes: Production 192.168.0.101:5432/polycopytrader was read only throughout. Ranking/export queries used UTC, statement and lock timeouts, no parallel workers, and health pauses around service/vacuum load. Final health had no lock waiters; no database/service/order/strategy/source/config changes. No implementation build/tests required. Preserve unrelated working-tree edits; no commit/push.
 Blockers: None
 
 ## Active Update 2026-09-10 Current Maker Strategy Availability
@@ -316,6 +1201,7 @@ Next: Ask whether deleting those611 historical parent-assignment links is permit
 Notes: No Production writes, source/config changes, service actions, backups, triggers bypassed or temporary artifacts. No deletion method or batch size approved/selected yet. Existing unrelated context/history changes preserved.
 Blockers: Shared history belongs also to enabled children, outside the initial disabled-strategy allowlist; explicit scope choice required. Full dependent history counts and operational plan remain incomplete.
 
+
 ## Active Update 2026-09-10 Production Server Bets And Logs Check
 Goal: Read-only verify current Production service, Paper/Live bets and server logs.
 Status: Completed. Service and betting are operating; copied-performance queue latency, short settlement bursts and one historical deferral remain.
@@ -345,6 +1231,20 @@ Done:
 Next: Await an explicit user request selecting a correction target before drafting a requirement contract or editing product code.
 Notes: Conclusions use the immediately preceding read-only Production/DB/log evidence; no new Production query or mutation, source edit, configuration change, restart or deployment occurred.
 Blockers: None.
+
+## Active Update 2026-09-09 Copied-Performance Deployment Verification
+Goal: Verify the user-controlled Production deployment of copied-performance aggregate commit `a3f92a7c` without changing Production.
+Status: Runtime healthy and aggregate operating; exact deployed hash and database persistence remain unverified because Production PostgreSQL rejected the available read-only client connection.
+Done:
+- Production logs show one service start at `2026-09-09T19:58:37.661Z`, Mode `Live`, minute heartbeats through at least `2026-09-09T20:28:38.4975857Z`, and continuing HTTP/strategy activity after that. No unexpected second restart occurred.
+- Across the post-start log window, no `ERR`/`FTL` or copied-performance cycle failure appeared. The aggregate repeatedly processed `30` wallets and wrote `60` projection rows per cycle; the high-priority queue reached `610`, then drained substantially despite new producer bursts, with latest observed value `363` at `2026-09-09T20:28:46.666Z`. Every reported Paper-position sequential-scan counter was zero.
+- Derived from the fixed 30-second worker cadence plus ordered completion timestamps, the first 48 post-start cycles completed in approximately `3.915..28.268s` (median `15.244s`, average `13.999s`), with none reaching 30 seconds. This is source-plus-runtime evidence, not a directly logged SQL duration.
+- Paper logs independently show nonzero entry cycles and hundreds of FAK fill decisions after restart, with fresh BTC/ETH/SOL activity. The live-maintenance worker started at five-second cadence and logged no failure or nonzero Live maintenance event.
+- Maker-GTD had three early warning bursts totaling `100` slow-event warnings through `2026-09-09T20:04:33.708Z` (maximum queue delay `9,176.1ms`, processing `8,533.1ms`, pending `74`) plus one `1,402.4ms` publication wait at `2026-09-09T20:24:32.783Z`. Latest side-effect metrics at `2026-09-09T20:29:38.075Z` were `Pending=0`, `PendingMaker=0`, `Failed=0`, `FailedMaker=0`.
+- Two Polymarket WebSocket premature closes reconnected and dispatched full 184-asset frames about three seconds later. Intermittent OKX/reference warnings continued, while subsequent successful HTTP 200s, Binance BTC/ETH/SOL samples and odds-archive cycles with fresh data confirmed recovery.
+Next: Restore an allowed read-only Production PostgreSQL connection, then verify `service_heartbeats.version`, `last_error`, exact Paper order/fill persistence and Live order/cancel counts independently from the logs.
+Notes: The attempted SQL session used explicit server `192.168.0.101:5432/polycopytrader`, forced read-only/UTC/15-second timeout settings, and executed no SQL because the server rejected the connection: non-SSL had no applicable `pg_hba.conf` entry for `192.168.0.100`/user `serge`, while SSL is unsupported. No Production, service, strategy, order, configuration or source mutation was performed; only required context/history bookkeeping changed locally.
+Blockers: Exact build/version and database-level betting claims are unknown until Production PostgreSQL read-only access is restored.
 
 ## Active Update 2026-09-09 Production Server Bets And Logs Check
 Goal: Read-only verify current Production service health, Paper/Live betting, Maker-GTD lifecycle, queues, market data and server logs.
@@ -414,6 +1314,1161 @@ Done:
 Next: User-controlled build/deployment, then verify Production backfill telemetry and ordinary market-data queue latency on the deployed version.
 Notes: Approved contract `RC-20260909-legacy-backfill-and-paper-mark-isolation` retained digest `sha256:0339b09d754e909ad54ec97403e96b0ebb8e566ab8fc88bfa6aa6ab096b51fc1`; approval checkpoint commit is `0e2247e42d57`. Production was read only and received no data/schema/service/configuration/trading mutation. Exact disposable database `pct_codex_skip_v2_20260909000000_75184437` was deleted after zero-session preview. Protected cleanup removed 432 files / 115,977,907 bytes from exact marked run `manual-7518443776e7453990812c820ea40288`, which is verified absent. Unrelated pre-existing context/history changes were preserved.
 Blockers: None.
+
+## Active Update 2026-09-09 ETH Up4 Cap2 Full-History Gross Net Chart
+Goal: Repeat the cumulative Gross and Net PnL chart for `ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 2` over all available history.
+Status: Completed read-only Production report and visually verified PNG.
+Done:
+- Resolved exact strategy `b7c50005-0000-4000-8236-000000000002` / `eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_2` and fixed report cutoff `2026-09-09T05:28:58.805437Z` in UTC.
+- Read-only preview/export returned 1,278 Settled rows from `2026-07-03T07:42:25.787706Z` through `2026-09-09T02:50:09.846162Z`; 46 Skipped rows were excluded. All rows have Gross/Fee/Net, and every stored `Net = Gross - fee` within `0.00000001`.
+- Final totals independently matched in PostgreSQL and a separate CSV aggregation: Gross `924.13330717`, fee `433.64508000`, Net `490.48822717` USD. Provenance is 1,132 approved historical `ResearchOnly` rows plus 146 subsequent native Paper rows.
+- Generated and visually inspected `C:/Users/serge/.codex/visualizations/2026/09/08/01a082be-e105-7da2-b970-180ba5aa641c/eth-up4-cap2-full-history-gross-net.png`, 2000x1300, SHA256 `44E6F9C7BAD44535651AC7845CBE8FDAEDB2604EBBE4047281DDD22E806DCBC4`; Gross/Net and all guides use solid lines.
+Next: None.
+Notes: Production `192.168.0.101:5432/polycopytrader` was queried only with forced read-only, UTC, bounded timeouts and the exact indexed strategy ID. Final service heartbeat was Running/Live, age 25.801 seconds, NULL error and zero waiting locks. No database, service, strategy, order or repository-product mutation. The marked temp run removed 4 files / 230153 bytes and its exact directory is absent.
+Blockers: None.
+
+## Active Update 2026-09-09 Production Restart Verification
+Goal: Verify the manually restarted Production service, betting activity and accessible server logs.
+Status: Service and Paper betting are operational; fresh filesystem logging is unavailable and recurring database latency remains.
+Done:
+- Queried only `192.168.0.101:5432/polycopytrader` in forced read-only UTC transactions with 15-second statement timeout and bounded/indexed queries. Final cutoff `2026-09-09T05:46:43.888877Z`: service `Running`/`Live`, new start `2026-09-09T05:24:13.812527Z`, heartbeat age `29.091s`, `last_error=NULL`, deployed version `f324a2321bba21090cf776f31044421199911c2c`.
+- Since restart, 1,309 Paper orders and 1,309 fills were persisted; latest fill `2026-09-09T05:46:30.465771Z`. Earlier exact cross-check found 912/912 Filled orders with zero Filled-without-fill and zero still-open recent orders. There were 1,132 settlements, latest `2026-09-09T05:45:18.904633Z`.
+- Five strategies remain enabled for Live and unpaused. No Live orders or Live cancels were created since restart. The immediate Up50 strategy has fresh Observed runs; the other four are LossDiff children whose exact parents have fresh Observed runs and whose state rows were refreshed at `05:39:30..05:39:31Z`, so absence of child rows is explained by no parent entry, not by a stopped child worker.
+- Current Polymarket critical WebSocket rows were Connected/non-stale with fresh messages. Historical backfill event telemetry recorded completed cycles/pages and 100 committed targets after restart, with zero Warning/Error/Fatal events through `2026-09-09T05:46:44.990352Z`.
+- A transient burst at `2026-09-09T05:45:04.927363Z` had 17 service sessions waiting on locks while a copied-performance aggregate was active for about 20 seconds; it cleared by `05:45:39.696472Z`. The same aggregate was independently observed at about 31 seconds earlier and another active service query remained about 21.5 seconds old at the final snapshot, so recurring database latency is not resolved.
+- `\\192.168.0.101\CodexLogs` contains a new `polycopytrader-service-20260909_024.log` timestamped `2026-09-09T05:40:13Z`, but it remains zero bytes. No ordinary post-restart ERR/WARN log content can therefore be verified from the authorized share.
+Next: Source fixes remain gated by exact approval of `RC-20260909-legacy-backfill-and-paper-mark-isolation`; filesystem logging and copied-performance aggregate latency require separate scope if the user requests corrections.
+Notes: No Production or source mutation, restart, cancellation or deployment. Initial connection guard rejected the locally targeted environment variable before SQL; the successful checks explicitly overrode only the host to the authorized Production address and reused credentials without printing them.
+Blockers: Fresh post-restart service logs are unavailable because the only new shared log file is empty.
+
+## Active Update 2026-09-09 Legacy Backfill And Paper Mark Isolation
+Goal: Fix the verified Legacy historical-backfill lookup timeouts and synchronous Paper position-mark persistence that stalls ordinary market-data processing.
+Status: Blocked at the mandatory requirement-approval checkpoint; no product code changed.
+Done:
+- Reconfirmed exact local call paths and drafted `RC-20260909-legacy-backfill-and-paper-mark-isolation`; after adding the user's later verbatim continuation request, the current semantic digest is `sha256:0339b09d754e909ad54ec97403e96b0ebb8e566ab8fc88bfa6aa6ab096b51fc1`.
+- The proposed bounded implementation drives Legacy old-payload membership from the current candidate batch through the deployed expression index and disables synchronous batch mark persistence only in the DI-wired market-data handler, leaving the existing dedicated PaperPositionMarkWorker and every order/fill/expiry/settlement path unchanged.
+- During read-only Production preflight, independently verified that the service stopped doing work near `2026-09-09T03:29:25Z`: stale heartbeat, zero service database connections and no newer orders/fills; accessible service logs ended without shutdown, fatal or unhandled-exception evidence, so the cause remains unknown.
+Next: Obtain exact user approval of the contract digest, commit the approval checkpoint, then edit and verify local source only.
+Notes: Production was queried read-only only. No database, service, strategy, order, configuration, deployment or product-source mutation. An accidental successful `git fetch --quiet` occurred during initialization before approval; it changed no working-tree/source/Production data and HEAD still matched origin/master.
+Blockers: User must reply exactly `APPROVE RC-20260909-legacy-backfill-and-paper-mark-isolation sha256:0339b09d754e909ad54ec97403e96b0ebb8e566ab8fc88bfa6aa6ab096b51fc1` before product edits.
+
+## Active Update 2026-09-08 Production Server, Bets And Logs Check
+Goal: Read-only check Production service health, current Paper/Live betting activity, cancels/backlogs, database pressure and fresh server logs.
+Status: Service and betting flows are operational, but two recurring performance problems are verified and remain unresolved.
+Done:
+- Queried only `192.168.0.101:5432/polycopytrader` with explicit READ ONLY, UTC, 15-second statement timeout and bounded/indexed queries. Final checkpoint `2026-09-08T20:52:13.637803Z`: service `Running`/`Live`, start `2026-09-08T08:55:00.447715Z`, heartbeat age `4.462s`, `last_error=NULL`, exact deployed version `f324a2321bba21090cf776f31044421199911c2c`; no waiting locks.
+- Fixed Paper measurement window started at `2026-09-08T20:16:53.004390Z`: 1,128 Filled orders and 1,128 fill rows, zero Filled-without-fill; 1,169 Settled runs with zero NULL Gross/Net. Latest independently rechecked Paper order/fill was `2026-09-08T20:52:00.150622Z`; latest Settled run `2026-09-08T20:50:10.611997Z`. No old Pending/PartiallyFilled Paper orders and no overdue Entered/Resting runs at the checked cutoff.
+- Exact active Live scope contains five enabled/non-paused strategies. Since current process start there were two Matched Live orders and no Live cancellations. Both were ordinary settled losses of exact strategy `b7c50005-0000-4000-8079-000000000150`; fee-inclusive losses `6.15433` and `6.21840` exactly explain balance `100 -> 87.62727000`. No open Live orders and no Matched rows awaiting balance application.
+- Scanned service logs `20:18..20:52 UTC` across rotations `_083.._085`: 34 ERR/FTL lines: 11 recurring Legacy historical-accounting candidate-query read timeouts, 12 CLOB `/book` failures, five Binance stream failures and six Paper position-mark failures/timeouts. The external-network cluster near `20:23 UTC` included DNS/WebSocket/HTTP timeout failures; later CLOB refresh reported `refreshed=4, failed=0`, HTTP responses were fresh, and final BTC/ETH/SOL reference samples at `20:52:13Z` were all younger than one second.
+- The same log window contained 1,090 warnings. A current burst in `_085` alone had 433 slow queued market-data events; observed maxima across inspected bursts were queue delay `9,766.7168ms`, processing `8,299.0885ms`, and pending queue `337`. The worst current phase was `TryUpdatePaperPositionMarks/ExecuteCommand` (`8,259.4651ms`). The queue later drained and Paper activity continued, but the burst pattern recurred.
+- One bounded diagnostic query itself hit the 15-second timeout during transient read pressure. Production activity snapshots independently observed a service aggregate query at `DataFileRead` for `20.673s` and later another active query age `18.713s`; each cleared on the next snapshot. Autovacuum was also active, but there were no lock waits or idle-in-transaction backlog at final checks.
+Next: No mutation was authorized. Await user direction if source-code diagnosis/fix of the Legacy candidate query and Paper-position mark SQL latency is requested.
+Notes: No database, service, strategy, order, configuration or source mutation. The accessible share contained service logs; no separately named PostgreSQL log file was present.
+Blockers: None for the read-only check.
+
+## Active Update 2026-09-08 ETH Up4 Cap16 Full-History Gross Net Chart
+Goal: Plot cumulative Gross and Net PnL for `ETH 5m Up 4 bps Reference Average Premarket LossDiff Positive Progress Cap 16` over all available history.
+Status: Completed read-only Production report and visually verified PNG.
+Done:
+- Resolved exact strategy `b7c50005-0000-4000-8236-000000000016` / `eth_up_down_5m_up_bps_4_fak_premarket_lossdiff_positive_progress_cap_16` and fixed report cutoff `2026-09-08T20:45:34.215419Z` in UTC.
+- Read-only preview/export returned 1,268 Settled rows from `2026-07-03T07:42:25.787706Z` through `2026-09-08T18:30:13.784340Z`; 46 Skipped rows were excluded. All rows have Gross/Fee/Net, and every stored `Net = Gross - fee` within `0.00000001`.
+- Final totals independently matched in PostgreSQL and a separate CSV aggregation: Gross `1984.00644716`, fee `1178.91828000`, Net `805.08816716` USD. Provenance is 1,132 approved historical `ResearchOnly` rows plus 136 subsequent native Paper rows.
+- Generated and visually inspected `C:/Users/serge/.codex/visualizations/2026/09/08/01a082be-e105-7da2-b970-180ba5aa641c/eth-up4-cap16-full-history-gross-net.png`, 2000x1300, SHA256 `8B0F615AE1914533A8F2B366289BCEA96074CDE8EBCE95E8E3CF6299C8DAFAA7`; Gross/Net and all guides use solid lines.
+Next: None.
+Notes: Production `192.168.0.101:5432/polycopytrader` was queried only with forced read-only, UTC, bounded timeouts and the exact indexed strategy ID. Final service heartbeat was Running/Live, age 29.931 seconds, NULL error and zero waiting locks. No database, service, strategy, order or repository-product mutation. The marked temp run removed 4 files / 271242 bytes and its exact directory is absent.
+Blockers: None.
+
+## Active Update 2026-09-08 ETH LossDiff Progress Dashboard Category
+Goal: Put the exact 34 ETH LossDiff Positive Progress strategies in a dedicated Dashboard category named `ETH 5m LossDiff Progress`.
+Status: Completed locally; independent semantic review passed.
+Done:
+- Added exact-name classification for the existing Up4 Cap 1..16 and Up8 Cap 1..18 families. Close names, other bps values, and caps outside those ranges remain outside the category.
+- The existing Dashboard option and filter paths consume `StrategyDisplayCategories.GetCategory`, so the new category appears once and selects these exact strategies without Dashboard state or data changes.
+- Added focused catalog and negative-boundary tests. No strategy logic, history, metrics, configuration, database, service, deployment, or Production state changed.
+Next: Deploy/restart the Dashboard build when the user is ready to see the category in the running application.
+Notes: Approved contract RC-20260908-eth-lossdiff-progress-dashboard-category retains digest sha256:949abc1de0633a66846db2f4e9f70f13eca71416c6dbee15563bb9a977e3dc7a. Acceptance-focused tests passed 84/84 and Dashboard build passed with 0 errors; existing warnings remain. The broader StrategyDisplayCategoryTests run passed 103/109, with six pre-existing stale catalog-count assertions failing before classification. A broader LossDiffPositiveProgress run passed 36/42; its six PostgreSQL integration tests require the unavailable POLYCOPYTRADER_TEST_POSTGRES_CONNECTION. Independent review PASS. Unrelated pre-existing dirty context/history files were preserved.
+Blockers: None for this category change; full unrelated catalog-count and PostgreSQL integration suites are not green in the current local environment.
+
+## Active Update 2026-09-08 Per-Asset Research Candidates Recommended
+Goal: Recommend a strategy mode for BTC, ETH and SOL from saved experiments, without implementation or trading changes.
+Status: Completed read-only evidence comparison and independent semantic review.
+Done:
+- Recommended joint eight-window signed Progress with own UpDiff windows3..24h and Middle over all recent markets: BTC N21, ETH N35, SOL N35 as further research candidates only, not globally proven best or Live recommendations. N is Middle market count, not stake cap; original abs-counter stake remains uncapped.
+- Reaggregated selected per-cycle JSON using exact1000Gross-33Volume and checked against original summaries plus separate independent FIFO summaries: BTC26series/1050bets/Gross538/fee275.748/Net262.252/maxstake21; ETH60/998/529/181.071/347.929/max14; SOL54/362/208/43.164/164.836/max13. All three selected variants negativecompleted0/excludedunfinished0. Detail SHA values match prior durable evidence. Source period2025-12-18 04:30..2026-09-04 19:10UTC; source rows70392/68432/68436; unknown/duplicates/offgrid/unmatched0 per saved coverage; startup/gap warmup retained.
+- Compared older signed1h/2h/3h, BTCcap and joint-window reports: some higher completed Net excludes unfinished series; rolling/fixedMiddle sweeps cover only last30days. Independent older-family reviewer found no contradiction to research-only selection. No universal profit ranking across unlike periods/exclusions or native LowEnter performance claim.
+- Execution proposal separated from historical selection: maker GTC post-only for all three is an untested research direction to avoid venue maker trading fees, not a proven replacement with inherited historical PnL. Official current Fees/Place Orders reread. No out-of-sample proof; BTC26series small, ETH/SOL35 boundary optimum unestablished, observed maxstake not a future bound.
+Next: None.
+Notes: No new backtest/rawCSV replay/tests/build/temp/source/app/settings/database/deployment/orders changes; exempt context/history only. One additional agent spawn and followup hit thread limit; root used existing independent FIFO evidence and successful older-family reviewer instead, with no material delay. Existing dirty files preserved.
+Blockers: None for conditional research recommendation; executable profitability, capital sufficiency and live-safe settings remain unverified.
+
+## Active Update 2026-09-08 Polymarket Fee Avoidance Explained
+Goal: Explain how to avoid Polymarket trading fees in the LowEnter FAK context without changing strategies.
+Status: Completed read-only local/official-source review with independent confirmation.
+Done:
+- Current official Fees and Maker Rebates pages independently confirm zero maker trading fees. Current Place Orders confirms postOnly with GTC/GTD rejects immediate crossing and guarantees maker role, not execution. Local native LowEnter remains PaperOnly FAK cap0.50/PostOnly=false; a maker proposal changes execution semantics, not just fee accounting.
+- Explained waiting, missing/partial fills and stale-signal risks; historical FAK trades cannot simply be retained while setting fees to zero. No assertion that maker execution improves actual Net profitability.
+- Official maker rebates are conditional on executed liquidity; current taker rebates return only a tier-dependent portion of fees, not all. Account eligibility/actual rebates not inspected. For short premarket waits, no promise of a30second GTD expiration; official current GTD minimum differs, explicit cancellation has execution races.
+Next: None.
+Notes: Official https://docs.polymarket.com/trading/fees, /trading/place-orders, /programs/maker-rebates and /programs/taker-rebates opened on2026-09-08; independent reviewer confirmed. Local catalog and FAK intent reread at HEAD f324a232. No tests/build/temp/source/config/database/deployment/order changes; exempt context/history only. Existing3.3% research assumption not changed or represented as actual venue fee.
+Blockers: None for explanation; maker fill rate and resulting Net remain untested.
+
+## Active Update 2026-09-08 Native LowEnter Explained
+Goal: Explain current native LowEnter strategy logic and whether execution uses FAK.
+Status: Completed read-only local implementation review; no deployed-state claim.
+Done:
+- Traced native BTC/ETH/SOL LowEnter Average and ETH 3Hour LowEnter Average from catalog through shared signal and execution dispatch. Catalog sets PaperOnly and inclusive FAK cap0.50, planned entry30seconds before five-minute market start; LiveStakes cannot override PaperOnly.
+- Signal uses Binance reference prices, not historical Up/Down outcome counters. Ordinary family compares current price against available positive sampled averages from configured24h/12h/6h/3h/90m/45m/20m/10m windows; above maximum by threshold selects Down, below minimum selects Up. ETH3Hour uses only3h signal average. Both normalize deviation using first available24h bucket price. Incomplete windows are accepted; missing denominator rejects.
+- Frozen FAK BUY intent consumes immediate ask depth at or below0.50, may fill cheaper or partially, cancels unfilled remainder, and skips ordinary no-fill/price rejections without waiting for price to fall. Temporary dependency deferrals are distinct and prevent an absolute no-retry claim. No fixed stake amount claimed; configured sizing can include optional shared LostCounter adjustment.
+Next: None.
+Notes: Root read signal/cache/DI/catalog and focused test bodies; independent reviewer confirmed catalog/FAK dispatch/estimator/partial cancellation/Live guard and matching tests. Tests not executed; no temp, source, application, database or order mutations. Only exempt context/history bookkeeping. Local HEAD f324a232; deployed version and runtime settings not inspected.
+Blockers: None for local-code explanation; Production activation/version remain unknown.
+
+## Active Update 2026-09-08 No-Loss Strategy Claim Assessed
+Goal: Explain whether latest ETH/SOL no-loss history proves a lossless strategy and identify the model's limitations.
+Status: Completed; read-only source/evidence review and independent mathematical verification passed.
+Done:
+- Verified latestN35 ETH60 andSOL54 completed series have no negative Net and no gap/EOF exclusions. Their observed maxstakes14/13 are not future caps. Same current BTCN35 already has completed negative cycle33 (1121bets,2026-06-09 15:10..2026-06-13 12:35UTC): Gross561,volume20575,fee678.975,Net-117.975,max36. No prior result withdrawn.
+- Derived from literal signed-counter code: deltaGross=-c*r=[1-((c+r)^2-c^2)]/2; afterT bets Gross=(T+1-c_final^2)/2. First-zero completed Gross=(T+1)/2, Net=(T+1)/2-.033Volume, so positive completed Gross is mechanical and does not establish predictive edge or positive Net guarantee.
+- Independently checked logical, not historical, +1/Down counterexample100Up+101Down:201bets/firstzero/Gross101/volume10201/fee336.633/Net-235.633/interimminimumNet-5216.650. No empirical frequency inferred.
+- Evidence-backed limitations: no bankroll or stake cap, ideal fullfills0.5, completed-only gap censoring, same-history Nselection/no out-of-sample test; actual result availability before premarket/order timing not modeled. ETH/SOL no-loss outcomes cannot be attributed to removed unfinished series because none were removed.
+Next: None.
+Notes: Root source/fullJSON and independent reviewer/source/rawcycle aggregates/savedindependentproof agree. Official Polymarket Order Lifecycle and Help Limit Orders pages confirm partial-fill and balance constraints, not guaranteed fullfill0.5. No new sweep/report/temp/source/app/database/orders mutations; exemptcontext/historyonly. One in-memory PowerShell decimal-literal parse error corrected before successful arithmetic check; no files affected.
+Blockers: None; future loss probability, bankroll sufficiency and real executable profitability remain unestablished.
+
+## Active Update 2026-09-08 ETH SOL Middle Odd Market-Count Sweep Completed
+Goal: Repeat the BTC Middle odd-N sweep separately for ETH and SOL.
+Status: Completed; independent numerical and semantic checks passed.
+Done:
+- Preserved exact BTC logic: own UpDiff windows3,6,9,12,15,18,21,24h; own Middle over last N all-market UpDiff values inclusive current/unrounded, odd N3..35; common nonzero sign and strict all-to-all magnitude gate. Signed uncapped fixed-side series, prior-counter stake/next-market settlement, first-zero/reentry,576-result warmup/gap reset/censor, completed-only and fee3.3% every stake unchanged.
+- Whole loaded2025-12-18 04:30..2026-09-04 19:10UTC. ETH68432rows/34253Up/34179Down/22gaps/6625missing/23segments/9eligible/6637warmup/61795valid; SOL68436/34193/34243/20/6621/21/8/6065/62371. Unknown/duplicates/offgrid/unmatched0 both. SourceSHA E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged.
+- Both assets' maximum tested completed Net atN35: ETH60series/998bets/Gross529/fee181.071/Net347.929/maxstake14; SOL54/362/208/43.164/164.836/maxstake13. No negative completed or gap/EOF-excluded series in any of34 variants. No entry ETH N3/5, SOL N3/5/7. Results are in-sample ResearchOnly base1/ideal0.5fullfills, not verified Live executions.
+- Saved11 new nativePS/C#/JSON/MD files under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts. Report eth-sol-middle-odd3to35-markets-report-20260908.md SHA F10B84717552123214C0AAF071EB9A50D083CBEFB79555B7F0446CF48BF50EEB; ETHdetail8F6423239D9BB36D109002402B3E6DDF5574CD5038D368448E4939B1FFE6FA80; SOLdetail711517472C6907213D567BD6DB0776DB2D67CDA504F8D03017D470509FFD5F7D; comparisonB21C637DD7AE1EFE7B0F04ED17EC60CC227679542744254C946F82F76EAA0A2A.
+Next: None.
+Notes: Independent FIFO/literal64 gate versus prefix sums PASS34hashes/2110822warmedNstates,1254candidates,610cycles12200fields,714summaryfields,8root tests perasset/7independent groups. Core equality to prior BTC verified except asset label; report semantic review and238numericcellchecks PASS. Cross-N totals are not unique events. Allcopyhashesverified/nooverwrites/processesended; protectedcleanup removed46files1541286bytes,exactrunabsent. No source/BTC/prioroutputs/app/database/orderschanges, no charts requested, exempt context/history only.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Middle Odd Market-Count Sweep Completed
+Goal: Run BTC joint eight-window Progress with Middle over N latest markets, including skipped markets, for odd N from 3 to 35.
+Status: Completed; independent numerical and semantic verification passed.
+Done:
+- Changed only Middle length: mean of last N own UpDiff values, inclusive current/all observed markets/unrounded. UpDiff windows remain 3,6,9,12,15,18,21,24 hours; strict common nonzero sign and all-to-all min(abs(UpDiff)) > max(abs(Middle)) entry. Seventeen independent variants, not a combined portfolio.
+- Preserved uncapped signed +1/Down or -1/Up series, prior-counter stake/next-market settlement, literal Up+1/Down-1, first-zero closure/reentry, 576-result startup/gap warmup, gap censor/reset, completed-only and fee 3.3% every stake. ResearchOnly base1/ideal 0.5 full fills.
+- Whole loaded BTC history 2025-12-18 04:30..2026-09-04 19:10 UTC: 70392 rows, 35329 Up/35063 Down, 18 gaps/4665 missing slots, 19 segments/9 eligible, 6638 warmup rows/63754 valid states; unknown/duplicates/offgrid/unmatched0. Source SHA E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged.
+- N3/5/7/9 no entries. Completed Net for N11..35 respectively: 1.934,13.581,45.044,51.021,164.841,262.252,158.076,130.444,172.674,180.536,187.919,206.685,220.665. Maximum tested N21: 26 completed/1050 bets/Gross538/fee275.748/Net262.252; no unfinished excluded. N25/27/29/31/33/35 each exclude one gap-censored series; EOF exclusions0 throughout. These are conditional completed-only results, not overall profitability or out-of-sample validation.
+- Saved9 new native PS/C#/JSON/MD evidence files under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts; report btc-middle-odd3to35-markets-report-20260908.md SHA9BD016F401804BF480E23780CEF35D9C3A8B23CC9927DE2AEF66249336A50581; detail39BF04A32378B05C150A95163892B278AE0614EE9A09CFB02F26BEE613B03571; comparison9892C261600AF454DDB5FCFBFD7B6DC57ADE5C6AEBABF0E637928CE4DFEC3EB0.
+Next: None.
+Notes: Independent FIFO/literal64 gate versus prefix sums matched17 indicator hashes/1083818 warmed N-states,1123 candidate pairs,331 cycles/6620 fields,357 summary fields; 8 root tests and7 independent groups PASS, no differences. Cross-N totals are not unique events. Verified153 report numeric cells/all copy hashes/no overwrites. All processes ended; protected cleanup removed27 files/898802 bytes, exact marked run absent. Source/prior outputs/app/database/orders unchanged; no graphs requested, exempt context/history only.
+Blockers: None.
+
+## Active Update 2026-09-08 Shortest Negative BTC Joint-Filter Series Chart Completed
+Goal: Show the shortest completed negative-Net BTC series from the latest joint eight-window simulation.
+Status: Completed; numerical and visual verification passed.
+Done:
+- Selected unique shortest ID35 among3negative-Net completed BTC cycles (911 versus1089/3447bets). UTC2026-02-20 15:45..2026-02-23 19:40, duration3d3h55m, indices13916..14827, IDs1397830..1415820. This is the joint3..24h filter, not the old single3h variant.
+- Reconstructed912states from sourceCSV, initialcounter+1/fixedDown/X0PnL0, nointeriorzero, firstzeroX911/no nextseries;911bets,456wins455losses,maxstake44,Gross456,fee692.604,Net-236.604. No gaps/duplicates/unknown/unmatched in selectedrange; sourcehashE8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged.
+- Saved PNG btc-shortest-completed-negative-series-35-multiframe-20260220-gross-net.png under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts,2000x1300/171118bytes/SHA75375F3D05948EDC1BB50A96FA7C08CA1E28F5FD436344CF62DE9D652EE270AD. Orangecounter and greenGross/redNet, two alignedpanels,solidlines,allpoints,no table. Saved associated exactstateJSON/nativePS/verification evidence,8newfiles/nooverwrites.
+Next: None.
+Notes: Independent raw replay/direct entryindicator recomputation verified selection,576outcomewarmup,64all-to-all gate comparisons,912states12768fieldchecks/16entryindicators,0mismatches; root/reviewer visualPASS. StateJSONSHA9349926CFA5B7670AE7F97CE2907E82F528FA0ACFC21B223C293100430ADAA7E;comparison6AA6C1D7718CD3CD25908175BDD09980AE7C25BE3A3E1F44A680AF14E1BB200F. Allcopyhashesverified/processesended;protectedcleanupremoved9files863735bytes,exactmarkedrunabsent;oldinvalidunrelatedtempdirsuntouched. Temporary script issues corrected before render/check success. ResearchOnlybase1/ideal0.5fill/3.3%every-stakefee;no model/source/app/database/orderschanges,exemptcontext/historyonly.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Completed Profit And Loss Groups Confirmed
+Goal: Confirm whether the three losing BTC completed series offset the242 profitable series in the joint eight-window simulation.
+Status: Completed; read-only aggregates agree across root and independent FIFO evidence.
+Done:
+- BTC242 positive-Net completed series: Gross2312, fee1139.424, Net+1172.576. Three negative-Net completed series: Gross2725, fee4995.573, Net-2270.573. Combined245series Net-1097.997; the three losses exceed all242 profits.
+Next: None.
+Notes: Same wholeloaded2025-12-18 04:30..2026-09-04 19:10UTC period, uncapped joint3..24h filter, base1 and3.3%fee; unfinished excluded. Rechecked saved BTC JSON and independent FIFO JSON hashes and recomputed group Net from Gross minus0.033Volume. No source/model/data/report/app changes or temporary artifacts; exempt context/history only.
+Blockers: None.
+
+## Active Update 2026-09-08 Joint Eight-Window Progress Simulation Completed
+Goal: Simulate BTC, ETH and SOL with the user-confirmed common-sign and all-to-all magnitude entry filter across 3,6,9,12,15,18,21,24-hour windows.
+Status: Completed; independent numerical and semantic checks passed.
+Done:
+- Each window uses its own UpDiff and unrounded same-window Middle. Entry requires all eight UpDiffs to share a nonzero sign AND min(abs(UpDiff)) > max(abs(Middle)), strictly. This replaces the old single-window threshold; one joint-filter series per asset, not eight parallel PnLs.
+- Preserved signed +1/Down or -1/Up initialization, fixed side, uncapped abs(counter) stake, next-market execution, literal Up+1/Down-1 update, first-zero exit and next-market reentry; completed-only, gap reset/censoring, longest-window576-result warmup, no calendar resets. ResearchOnly base1/ideal0.5 fills/fee3.3% of every stake.
+- Whole loaded history2025-12-18 04:30 through2026-09-04 19:10UTC; source CSV hash E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. BTC70392/ETH68432/SOL68436 rows; gaps18/22/20; missing slots4665/6625/6621; unknown/duplicates/offgrid/unmatched0.
+- Completed-only BTC245series/9829bets/Gross5037/fee6134.997/Net-1097.997; ETH231/6165/3198/2506.482/+691.518; SOL241/11841/6041/10684.641/-4643.641. Negative-Net completed series3/2/2. Excluded unfinished gap series3/2/1; end-of-file exclusions0/0/0.
+- Saved10 new nativePS/JSON/MD files under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts. Report multiwindow-progress-report-20260908.md SHA FB6A7444EAA40D04888DD39CE08C0FA097EACD68B8E9BE8D9A74E4E63EDC8135; summary1743BF04543F492F0E8D7FA70EACBDFCC03DA92568B69B1B956A968E01575F44; comparison84FB20235756C8100399F34640695B6929D644423C78ACF7817BA5C8765F830F.
+Next: None.
+Notes: Independent FIFO versus root prefix sums matched723cycles/29643cycle fields,3164candidate states and canonical hashes over187920warmed states/3194640indicator-sign values;36154explicit field checks,8root+10independent tests,0mismatches. Report42numeric cells and all copy hashes verified. Initial script parse error fixed before data read. All processes ended; protected temp cleanup removed11files/2064931bytes and exact marked run is absent. No source/prior-output/app/database/Paper/Live changes or charts; exempt context/history only.
+Blockers: None.
+
+## Active Update 2026-09-08 Fresh Top Ordinary Net Reports Retry Deferred For Production Load
+Goal: Retry the fresh best-ordinary BTC/ETH/SOL Net PnL charts with price overlays and matching daily Excel reports.
+Status: Blocked before rankings by active Production workload; no report files created.
+Done:
+- Retried from a new read-only Production session. PostgreSQL port recovered and preflight fixed cutoff 2026-09-08T18:01:20.882633Z; database polycopytrader at192.168.0.101, transaction_read_only=on and waiting_locks=0.
+- Initial snapshot already showed five active PolyCopyTrader.Service sessions including one IO/DataFileRead wait plus an autovacuum VacuumDelay. After20seconds activity temporarily fell to three service sessions including one10.6-second query and one ExecuteGather. After another30seconds it rose again to five service sessions: four working up to19.17seconds, one IO/DataFileRead wait, with VacuumDelay active again.
+- Applied the standing gentle-Production gate: did not start the expensive full catalog rankings or any price/run exports while service workload and disk-read activity were increasing.
+Next: Retry from another fresh cutoff only after Production activity is calm enough for the report queries.
+Notes: No ranking/data extract completed, no old report reused, and no workbook/chart/output folder was created. Production database/service/orders/application were not mutated. Only bounded health queries ran read-only; unrelated old invalid/unmarked temp directories remained untouched. Only exempt context/history bookkeeping changed.
+Blockers: Production service currently has sustained/rising active database workload and disk-read waits; running report scans now would violate the project gentle-operation rule.
+
+## Active Update 2026-09-08 Fresh Top Ordinary Net Reports Blocked By Database Port
+Goal: Repeat the fresh best-ordinary BTC/ETH/SOL Net PnL charts with price overlays and matching daily Excel reports.
+Status: Blocked before data access; no report files created.
+Done:
+- Locked the prior report scope unchanged: ordinary 5m strategies only, Progress excluded, lifetime Settled fee-inclusive Net PnL, one fresh UTC cutoff, full eligible winner must match enabled/unpaused winner, three charts plus three daily XLSX files.
+- Attempted the initial read-only Production preflight twice against 192.168.0.101:5432 using default_transaction_read_only=on, 10-second connect timeout and bounded statement/lock settings. Both connections timed out before reaching PostgreSQL, so no cutoff, ranking or data rows were obtained.
+- Verified the host itself responds to ICMP while a separate five-second TCP probe to port5432 also times out. This isolates the immediate blocker to PostgreSQL port reachability rather than general host reachability; it does not establish the underlying cause.
+Next: Repeat from a new fresh cutoff after 192.168.0.101:5432 becomes reachable.
+Notes: No stale report was reused and no output folder/workbook/chart was created. No Production query completed and no database, service, order or application state changed. Spreadsheet/chart instructions and temporary lifecycle were initialized; unrelated old invalid/unmarked temp directories were reported and left untouched. Only exempt context/history bookkeeping changed.
+Blockers: Production PostgreSQL endpoint 192.168.0.101:5432 is unreachable from this host (two psql timeouts plus one independent TCP timeout).
+
+## Active Update 2026-09-08 Worst BTC Uncapped Series Chart Completed
+Goal: Show the most negative-Net completed BTC3h/3h series, after user explicitly selected no stake cap.
+Status: Completed; independently verified and visually inspected.
+Done:
+- Source CSV SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F and baselineSHA256C7E51F3C6B0936DBE8A0C18129B788B4B490850605941C4CF467BDC8EDC3AD40 unchanged. Unique worst among568completed fullhistorycycles is466. Selected rawBTCindices61775..63890,marketIDs3347152..3535680,2116states/2115bets,2026-08-05 21:05..2026-08-13 05:20UTC. No gaps/duplicates/unknown/unmatched withinseries.
+- Initial signedcounter-1, fixedUp, stakeabspriorcounter uncapped. X0Gross/Net0; settle thenliteraloutcomeupdate, firstzeroatX2115, nofollowingseries plotted. Gross1058,volume48178,fee1589.874,Net-531.874,maxstake43. Rootchecked everywalkidentity andsettlement; independentrawreplayof568completedcycles/4544fields verifiesrank andall2116chartstates/29624fields match0mismatches.
+- Preserved prior2panelstyle: orangeSeriesUpDiff above,greenGross/redNet below; sharedXandUTCticks,solidlines,allpoints unaggregated,noembeddedtable. Durable2000x1300PNG charts/btc-worst-completed-series-466-3h-uncapped-20260805-gross-net.png,220959bytes,SHA25676133E224749AE858D07DC011E433363D7822497B4C6E690E2ABD08333728FB0. Root/reviewervisualQApassed. JSONSHA256767DF3CB7A6924443A89C2F3F4F4D7AFDE2027FA54BBCAEC55048104D6601D2A; independentcomparisonDF5FF02256BC6894D7F19C122BF9E8C971C4D7081957D83E66E2AF99DCAE6D98. Native replay/render/verifier andindependentstates preserved alongside;7newfiles,noneoverwritten.
+- Allprocessesended; protectedcleanupbtc-worst-series466-chart-20260908 removed8files/1798371bytes,exactrunabsent.
+Next: None.
+Notes: ResearchOnlyideal0.5fullfill/base1/fee3.3%everysettledstake. Spreadsheetsread-onlysource preservation andcodex-temp-lifecycleused. No otherassets/windows/caps/strategy/app/sourcechanges;onlyexemptcontext/historyrepoedits.
+Blockers: None.
+
+## Active Update 2026-09-08 Worst BTC Three Hour Series Chart Scope
+Goal: Show the most negative-Net completed BTC series with3h indicators.
+Status: Awaiting user choice of uncapped versus capped stake model; chart not started.
+Done:
+- Read-only selection from saved baseline and capdetails finds cycle466 as the worst completed series both uncapped and atcap20, but Gross/Net paths differ. Current user prompt does not select cap; prior discussion compared both. Do not silently choose or overlay unrequested variants.
+- No new calculation, source data, artifacts, chart or application changes. Existing chart search found prior cycle389 renderers for reuse once scope is resolved.
+Next: Ask whether the chart should use no stake cap or N20; preserve prior chart format and verify raw states after choice.
+Notes: Repository changes limited to exempt context/history bookkeeping.
+Blockers: Stake model for plotted PnL is not specified.
+
+## Active Update 2026-09-08 BTC Completed Series Loss Causes
+Goal: Investigate losses in completed BTC series from the latest3h/3h fullhistory model, caps1..20 and uncapped, without strategy changes.
+Status: Completed; independent causal and arithmetic verification passed.
+Done:
+- Preview unchanged source SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F, baseline C7E51F3C6B0936DBE8A0C18129B788B4B490850605941C4CF467BDC8EDC3AD40, capdetails70F006B517DF36C88A0FBC733DC9D69AE060730E1416B97BA13D6434ED816F0B. Exact approved period2025-12-18 04:30..2026-09-04 19:10UTC,70392BTCsourceoutcomes,568completed/17940bets,14unfinishedexcluded; no new raw-row replay or new strategy variant.
+- Inspected actual Replay and cap settlement. For completed firstzero walks starting atabs1, each loss atdistance d pairs with eventual return win atd+1, plus final win1. Uncapped Gross=(Bets+1)/2>0; pairNet=1-.033(2d+1), negative ford>=15. Net<0 iff meanstake>(Bets+1)/(.066Bets). Duration alone insufficient; stakevolume (area underabs counter) determines fees.
+- For capped stakes, Gross_N=1+sum(losses atd<N)>=1; pair atd>=N haszeroGross andNet=-.066N. Checked1975levelcrossing identities,568uncapped and11360capped results; independent reviewer compared prior direct-per-bet ledger,0mismatches and48focused path/sign/cap checks.
+- Uncapped7negativecycles389,417,479,535,82,544,466: combinedGross3423,volume132447,fee4370.751,Net-947.751. All568uncapped and11360cappedcompletedGrosspositive. Example389 B495/G248/V8776/F289.608/Net-41.608/mean17.7293; longer463 B551/G276/V7976/F263.208/Net+12.792/mean14.4755. Cap20 negative11 adds172,194,396,463 with no recovered uncappednegative. Cycle389cap20 G134/F258.852/Net-124.852:133belowcappairs Net24.661,114at/abovecappairs Net-150.480,terminal+.967.
+- Saved reproducible nativePS and JSON outside repository under CryptoUpDown5m/charts: Analyze-BtcCompletedLosses-3h.ps1 SHA256FC90C5C359099FFF6E2DDA301E3DB7F90678F0D876C58B51B939DE2B5245BF64; btc-completed-loss-causes-3h-20260908.json SHA256AF7364F1CC3791B12CA54588E8B4A2E796F62B8983EA224DFD2012CF6BA2F381. No overwrites; copies hashverified. Protected cleanup btc-completed-loss-causes-20260908 removed3files/47627bytes, exactrunabsent, allprocessesended.
+Next: None.
+Notes: Read-only diagnosis of ResearchOnly idealfullfill0.5/base1/fee3.3%every stake, not live results or overall profitability. No otherasset/window/strategy/runtime/source changes or recommendations; no chartrequested. codex-temp-lifecycle used, exemptcontext/historyonly.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Three Hour Stake Cap Sweep Completed
+Goal: Repeat BTC stake-cap N1..20 analysis with both rolling indicators3h, after explicit user confirmation that markets remain5min.
+Status: Completed;20variants independently verified.
+Done:
+- User superseded the proposed return-to-loss-causes discussion with a3h recalculation and confirmed same5minBTC markets, UpDiff/CurrentMiddle3h, wholehistory, caps1..20,fee3.3%,completed-only. Stake=min(abs(unbounded SeriesUpDiff),N); entrythreshold1, signedcounter, fixedside, firstzero closure and72-outcome gap/startwarmup unchanged.
+- Read-only preview70392BTCrows,35329Up/35063Down,18gaps/4665missingslots,2025-12-18 04:30..2026-09-04 19:10UTC; unknown/duplicates/offgrid/unmatched0. SourceSHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F and prior3hbaselineSHA256C7E51F3C6B0936DBE8A0C18129B788B4B490850605941C4CF467BDC8EDC3AD40 unchanged.
+- Preserved582opened/568completed/17940completedbets;13gap+1endseriesexcluded;1018warmuprows/69374validstates. ResearchOnly base1,ideal0.5fullfill,fee.033ofeverycappedsettledstake. N1Net-24.020;N2..20allpositive. BestinrequestedrangeN20Gross7341,fee6526.443,Net+814.557; unchangeduncapped3hGross9254,fee7285.212,Net+1968.788. Completed-only remains conditional, notwhole-strategyPnL.
+- Root perlevelhistograms checked all582baselinecycles;3focusedtests passed. IndependentFIFO/directperbet calculation matched582cycles/13968fields,11360cycle-caprows/90880fields,20summaries/280fields,0mismatches;6independenttests passed. Root reaggregated all20summaries; independentreport20rows/80numericcells andscopeverified.
+- Saved8newhash-verified durablefiles under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts. Report btc-stake-caps-1to20-3h-report-20260908.md SHA256A7E952DBD79F313BFF24C4E292F0ECFE091CC639D2DAF4D211D2771893C39054; summaryJSON2611D8113B2A4736B8464636194A26CA13514138F103CF317228389968888690; seriesJSON70F006B517DF36C88A0FBC733DC9D69AE060730E1416B97BA13D6434ED816F0B; independentcomparisonB7F97AEF66517E10C5E38533C01D5B694AFCCB43A5DC1A5F9C6B231FCFC29B4F. Native scripts preserved alongside; prioroutputsunchanged.
+- All processesended; protectedcleanup btc-stake-cap-1to20-3h-20260908 removed9files/6210403bytes, exactrunabsent. Olderinvalidmarkersreportedbystart remaineduntouched.
+Next: None.
+Notes: Spreadsheets read-only source preservation andcodex-temp-lifecycle used. No source/priorresult/app/Paper/Live/production changes, no charts; exemptcontext/historyonly.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Stake Cap Conclusion
+Goal: Clarify whether the tested stake cap solved the Net-PnL problem.
+Status: Completed.
+Done:
+- Read-only rechecked durable cap report,40-row summary and independent comparison. All BTC caps1..20 in separate1h/2h completed-only runs have lower Net than the unchanged uncapped baseline. Bestcap20:1h330.260 versus1303.607;2h565.453 versus1888.549.
+- Atcap20 Gross falls2529/2646 while fee savings are1555.653/1322.904, so Net falls973.347/1323.096 respectively. A decline in Gross alone is not enough to establish failure; verified Net comparison establishes this specific conclusion.
+- The cap limits individual stake only, does not shorten series or limit the unbounded counter. Conclusion restricted to BTC,1h/2h,caps1..20, full loaded history2025-12-18..2026-09-04UTC, completed-only ideal model; no universal claim about other models/assets or overall profitability.
+Next: None.
+Notes: Saved evidence read and exact decimal arithmetic only; no research outputs, tempfiles, data/model/runtime changes. Exempt context/history bookkeeping only.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Stake Cap Sweep Completed
+Goal: Recalculate current BTC strategy with maximum stake coefficient N1..20, preserving other behavior.
+Status: Completed;40variants independently verified.
+Done:
+- Scope retained prior separate1h/2h windows over whole loadedBTC history2025-12-18 04:30..2026-09-04 19:10UTC, completed-only. N now means stake cap only: min(abs(unbounded SeriesUpDiff),N). Entry threshold remains1; signed counter, fixed side, firstzero closure,2Kwarmup and gap handling unchanged. No counter clamping.
+- Read-only source preview70392BTC rows,35329Up/35063Down,18gaps/4665missing5minslots, no unknown/duplicate/offgrid/unmatched rows. Source SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F and priorBTCJSON hashes unchanged.
+- Every cap retains590completed/20756bets/13excluded series at1h and677completed/22857bets/14excluded at2h. ResearchOnly base1, ideal fullfill0.5, fee3.3%ofeverycappedsettledstake. Caps1..12 negativeNet,13..20 positiveNet for bothwindows. Best withinrequestedrangeN20:1h Gross8144,fee7813.740,Net+330.260;2h Gross9121,fee8555.547,Net+565.453. Uncapped priorNet1303.607/1888.549 remainsunchanged; completed-only is not whole-strategy profitability.
+- Main histogram-based recalculation verified all1294originalseries;3focused captests passed. Independent FIFO lifecycle and direct perbet capsettlement matched1294series/31056fields,25340cycle-caprows/202720fields,40summaries/560fields,0mismatches;6independenttests passed. Report20rows/120numericcells plus10exclusioncells independentlychecked,0mismatches.
+- Saved8newhash-verified durablefiles under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts. Report btc-stake-caps-1to20-1h2h-report-20260908.md SHA2569229F7C06B890A5BD6529814C389DC7FC9FF83BA52035798F1E964A9A9EE0ABF; summary JSON SHA256759C8DB5FC31903274E1BBBD5A122D983084DB7CAB953499FAF52CF5A92E2213; detailedseriesJSON SHA256596180917706B7A5AF838800DC94B38047166C96044DC21D43E396ECDE37E1A3; independentcomparison SHA256BC3D30B53031EE92F9B3BF5901C1995A9E0C9C60B96BECD67349ACDE02298679. Native calculation/verification scripts preserved alongside.
+- All processes ended; protected cleanup of btc-stake-cap-1to20-1h2h-20260908 removed9files/13791341bytes, exactrun absent. Older invalid/orphan markers reported by start lifecycle were untouched; no cleanup expansion.
+Next: None.
+Notes: Spreadsheets read-only source preservation and codex-temp-lifecycle applied; local research outputs only. No rawsource/priorresult/app/Paper/Live/production changes; exempt context/history bookkeeping only. No chart requested or generated.
+Blockers: None.
+
+## Active Update 2026-09-08 Completed Series Loss Mechanism
+Goal: Explain whether duration and commissions cause negative completed-series Net in the saved BTC/ETH/SOL 1h/2h N1 analysis.
+Status: Completed; independent numerical and implementation checks passed.
+Done:
+- Read-only preview confirmed exact six result JSON hashes,4486opened/4405completed series, period2025-12-18 04:30..2026-09-04 19:10UTC; no expanded windows, parameters or unfinished-series accounting.
+- Root and independent reviewer verified all4405completed cycles: Gross=(T+1)/2 always positive; Fee=.033*sum(stakes); Net=(T+1)/2-.033*sum(stakes). Zero mismatches;4341positive/64negative. Completed Net losses are fully fee-driven in this specified ideal-fill model, but duration alone is insufficient; stake-path area/average magnitude is decisive.
+- Same-duration BTC2h examples from saved JSON: cycle611 (2026-08-18 19:00..08-20 19:45UTC) and624 (2026-08-21 07:00..08-23 07:45UTC), each585bets/48h45m/Gross293. First Volume10143,avg17.33846,fee334.719,Net-41.719; second Volume8361,avg14.29231,fee275.913,Net+17.087. Individual long-cycle mean-stake breakeven approaches15.1515; exact(T+1)/(.066*T).
+- Actual Replay confirms CurrentMiddle only authorizes idle entry; active counter firstzero, not rolling mean, closes the series. Finite-bankroll and execution/liquidity constraints are absent. Completed-only result remains conditional and cannot establish overall profitability.
+Next: None.
+Notes: Read-only saved-JSON/source inspection and in-memory arithmetic; no artifacts, temp directories, raw CSV processing, strategy edits, or app/Paper/Live/production changes. Exempt context/history bookkeeping only.
+Blockers: None.
+
+## Active Update 2026-09-08 One And Two Hour Three Asset Analysis Completed
+Goal: Six separate full-loaded-history calculations: BTC, ETH and SOL, equal UpDiff/CurrentMiddle windows of 1h or 2h, N=1, completed series only, as confirmed by the user.
+Status: Completed; independent replay and accounting verification passed.
+Done:
+- Source D:\My\Business\PolyMarketData\CryptoUpDown5m\crypto_updown_5m_results.csv unchanged, SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Coverage 2025-12-18 04:30 through 2026-09-04 19:10 UTC; BTC70392, ETH68432, SOL68436 rows; unknown/duplicate/unmatched rows0. Gaps18/22/20 respectively.
+- Latest signed SeriesUpDiff model: entry signal UpDiff minus unrounded CurrentMiddle, abs(signal)>=1; positive initializes+1/fixed Down, negative initializes-1/fixed Up. Stake abs(prior counter); settle next outcome, then literal Up+1/Down-1; first zero closes. Reentry at the closing observed state may place the next market's bet. No fixed Middle target inside a series.
+- Both rolling windows use12 outcomes for1h or24 for2h; warmup24/48 consecutive outcomes at start and after gaps; no calendar resets. Censor full active series at gaps/end, never force close; exclude their entire accounting. ResearchOnly model: ideal full fills at0.5, base stake1, fee3.3% of every settled stake, including losses.
+- Completed count / negative-Net count / Gross / fee / Net: BTC1h 590/8/10673/9369.393/+1303.607; BTC2h 677/10/11767/9878.451/+1888.549; ETH1h 802/11/17492/19480.890/-1988.890; ETH2h 954/8/16299/17143.731/-844.731; SOL1h 821/11/21349/31805.301/-10456.301; SOL2h 561/16/27440/46886.796/-19446.796. Excluded series respectively13,14,14,14,13,13. These are conditional completed-only results, not whole-strategy PnL.
+- Independent FIFO-indicator/per-settlement integer replay matched all4486 opened series and116768 fields,0 mismatches. Root focused tests8 passed, independent integer aggregate/partition checks and report table checks passed. Completed aggregate invariant2*Gross=Bets+completedCount held in every run.
+- Saved13 durable report/JSON/nativePowerShell reproducibility and independent verification files under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts, all new destinations and copy hashes verified. Main report signed-series-1h2h-completed-only-report-20260908.md SHA2566EADAB589E1932E9B73BE652A5EE57E45F5F3E0A2AE472572E0AEFB734C8DFC4; summary signed-series-1h2h-completed-only-summary-20260908.json SHA2563631E96BECF04BA6BD6DFB51912D1B2C8838791F5AB5E024D9816F935ADAB831; independent comparison SHA256DA7EEDC616CB57D2571F28536F989C0A52B55991FDA32EA8E2EF3C43C335263E.
+- All processes ended; protected cleanup of signed-series-1h2h-three-assets-20260908 removed14files/8299541bytes; exact marked run absent.
+Next: None.
+Notes: Read-only historical data analysis with local research outputs only; no source data, app, Paper/Live or production mutations. Spreadsheets read-only source checks and codex-temp-lifecycle used. Repository changes limited to exempt context/history bookkeeping. No chart requested or produced for this calculation.
+Blockers: None.
+
+## Active Update 2026-09-08 One And Two Hour Three Asset Analysis Scope
+Goal: Analyze BTC, ETH and SOL with the latest signed-SeriesUpDiff strategy and rolling windows1h/2h.
+Status: Awaiting scope clarification; calculation not started.
+Done:
+- Read current saved full-history BTC replay Model/Rules/Indicator/Exclusions and actual entry condition in Calculate-BtcSignedFullHistory.ps1. Last verified model uses N1, equal UpDiff/CurrentMiddle windows3h, signed entry+1/fixedDown or-1/fixedUp, literal outcome updates and firstzero closure. The latest Middle chart addition is visualization only, not a strategy revision.
+- Current request explicitly names all three assets and1h/2h windows but does not explicitly identify reporting period, N selection or inclusion of unfinished series. Do not substitute lookback window for analysis period or silently infer completed-only/all-series accounting.
+Next: Ask user to confirm entire loaded history, N1, both indicator windows changed together, and completed-only accounting.
+Notes: Read-only supporting inspection only; no raw data scan, calculations, temporary artifacts, research output edits, app/runtime changes or new workstreams. Exempt context/history bookkeeping only.
+Blockers: User confirmation of analysis scope.
+
+## Active Update 2026-09-08 BTC Cycle389 CurrentMiddle Overlay
+Goal: Add rolling CurrentMiddle and the fixed entry-Middle comparison level to the upper panel of the same BTC cycle389 chart, preserving SeriesUpDiff/Gross/Net.
+Status: Completed; independent numerical and visual verification passed.
+Done:
+- Read-only preview: source CSV SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. Selected567 BTC rows at global55994..56560,2026-07-16 19:15..2026-07-18 18:25UTC,71precedingrows plus496 plotted states. No gaps/duplicates/unknown/unmatched; entryMarketId2941671/end2961607.
+- UpDiff=sum last36 binary outcomes inclusive current; CurrentMiddle=unrounded mean last36 UpDiff inclusive current. Prefix-sum root calculation agrees with independent triangular71-outcome weighting at all496states/1984integerfields,0mismatches; canonical SHA25601ABBBBFD0490C756541A61480A9B0854AEBDC23FB778338CE945980C66DBC02.
+- Entry at2026-07-17 01:10UTC: UpDiff-4,Middle=-86/36=-2.3888889,signalnumerator-58 agrees with originalcatalog. FinalMiddle10/36=0.2777778; min-390/36 atX177,max314/36 atX439. Middle line is blue; purple horizontal line is entryMiddle, explicitly visual reference only. Current signed-counter strategy uses Middle for entry, not inside-series sizing/closure; strategy was not changed.
+- Original496 ledgerstates/6944fields unchanged, old JSON/PNG hashes unchanged. Counter starts-1/firstzeroX495,495Upbets,Gross248,fee289.608,Net-41.608. Lower Gross/Net panel retained. Source values unshifted; only label display uses3decimals.
+- New durable2000x1300PNG D:\My\Business\PolyMarketData\CryptoUpDown5m\charts\btc-shortest-completed-negative-series-389-3h-n1-20260717-gross-net-middle.png,193325bytes,SHA256FFA3FE9A943A6FA5A394BE564B311E380EC1C676AA5F7EFD1FE64476437137AB. Root/reviewer visually inspected final PNG and copies hash-verified. Matching btc-series389-current-middle.json SHA256771F34BBFD47120744AFDEDEF8C85D4DF0B0946313C5AED09FA55E7EE1AAA564, independent JSON and both nativePowerShell scripts saved alongside.
+- All processes ended; protected cleanup of marked btc-series389-middle-overlay-20260908 removed6files/573906bytes; exactrun absent.
+Next: None.
+Notes: Chart-only local artifact addition, no fullhistory strategy replay, source data/app/Paper/Live/production edits. Spreadsheets source-preservation/read-only CSV rules and codex-temp-lifecycle applied; native drawing honors project noPython/Node constraint. Repository edits only exempt context/history.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Cycle389 Gross Added To Net Chart
+Goal: Add Gross PnL to the same shortest completed negative-Net cycle chart, explicitly preserving Net.
+Status: Completed.
+Done:
+- Same BTC H3/N1 cycle389,496 states/495 Up bets,2026-07-17 01:10..2026-07-18 18:25 UTC. Source chart JSON hash F608E939E4C75F19438234B007ABCC87C8C0E091D3CAF7E9567CFCDD47592166 unchanged; no strategy or history resimulation.
+- Kept upper signed SeriesUpDiff panel unchanged and added solid green Gross beside solid red Net on the lower shared-scale panel. Endpoints Gross+248,Net-41.608,fee289.608; both PnLs start0 atX0; first counter0 atX495. Base1,ideal0.5fullfill,modeled3.3%eachstake,ResearchOnly.
+- Native renderer checked all state timing, Gross identities/settlements and Net=Gross-.033*Volume. Independent read-only comparison of496states/2976fields to independent JSON and495recurrences PASS0mismatches.
+- New durable PNG D:\My\Business\PolyMarketData\CryptoUpDown5m\charts\btc-shortest-completed-negative-series-389-3h-n1-20260717-gross-net.png,2000x1300,174416bytes,SHA256FF4C81C104D94927413AABB0573E5DC39ADC8C7750F650F7D026B2B74891E3EA, visually inspected and copy-hash verified. Renderer Render-BtcSeries389GrossNet.ps1 saved alongside, SHA25671D987E32BD481D6AA5F5A8BD7F7B544EF6ED134DB93BB826BF0A43A8A1236F3. Original PNG hash6F7DCA36B94C32C5DF384B7C08F94A66603BA59E1F24557454207450B6F62D23 unchanged.
+- codex-temp-lifecycle run btc-series389-gross-overlay-20260908 protected cleanup removed3files/183118bytes; exact run absent.
+Next: None.
+Notes: Only requested chart addition; no table, app/source data/runtime changes. Exempt context/history bookkeeping only in repository.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Shortest Completed Negative Series Chart
+Goal: Show the shortest genuinely completed negative-Net BTC series from the verified full-history H3/N1 replay.
+Status: Completed; raw-row replay, independent verification, final image inspection and protected temporary cleanup passed.
+Done:
+- Unique shortest among seven completed negative-Net cycles is ID389: 2026-07-17 01:10 through 2026-07-18 18:25 UTC, fixed Up direction, 495 settled bets. Selected 496 contiguous unique raw BTC states, global indices56065..56560, market IDs2941671..2961607; no gaps, unmatched rows or duplicate states.
+- Signed SeriesUpDiff starts -1 at X0 with Net0, first reaches zero exactly at X495. The endpoint excludes any next-series initialization. Gross248, volume8776, modeled fee289.608, final Net-41.608; minimum counter-33. ResearchOnly ideal full fill0.5, base stake1, fee3.3% of every settled stake.
+- Root and independent native PowerShell scripts independently selected/replayed the series. Comparison of4960 mapped fields across496 states found0 mismatches; canonical path SHA256 FC7CF27E55C21A190FB560305C74B156932B3B69993686186062D478CF73993F. Raw CSV hash remains E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F.
+- Durable chart D:\My\Business\PolyMarketData\CryptoUpDown5m\charts\btc-shortest-completed-negative-series-389-3h-n1-20260717.png is2000x1300,155855bytes,SHA2566F7DCA36B94C32C5DF384B7C08F94A66603BA59E1F24557454207450B6F62D23. Two aligned panels show signed counter and cumulative Net with solid lines and shared X/UTC labels; no embedded table. Final durable PNG visually inspected. Matching JSON SHA256 F608E939E4C75F19438234B007ABCC87C8C0E091D3CAF7E9567CFCDD47592166 and both replay scripts/independent evidence saved alongside it.
+- All artifact generation used marked D:\CodexTemp\runs\btc-shortest-signed-chart-20260908 with redirected temp variables. After durable hash-checked copies and all processes ending, protected cleanup removed6files/465552bytes; exact run no longer exists.
+Next: None.
+Notes: User requested chart only. Existing source data, previous outputs, application code, Paper/Live and production untouched; repository edits limited to exempt context/history bookkeeping. Spreadsheets read-only CSV handling and codex-temp-lifecycle applied; native PowerShell/System.Drawing honored project language constraints.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Unfinished-Series Boundary Causes
+Goal: Explain whether missing-data gaps account for the number of unfinished BTC H3/N1 series.
+Status: Completed read-only boundary/code verification.
+Done:
+- Unchanged main JSON identifies13Gap cycles (IDs13,50,70,80,115,119,140,141,192,245,298,465,580) and1EndOfData cycle(ID582). Each has nonzeroLastCounter, nullEndIndex, and LastObservedIndex exactly at its corresponding gap'sPreviousIndex or finaldatasetrow70391. Current Replay code marks activecounter asGap before reset on segment change and EndOfData only at the terminal boundary; neither branch closes atzero or applies a fictitious outcome.
+- Independent JSON with unchanged hashB4B5D03477EC032A640B58D1E8003F82D002E716F5100D55E1A8C347BDC2F36F confirms18gaps in total. The other5gaps follow segments1,2,6,8,12 with1,14,1,1,7rows respectively, zeroValidStates and no openedseries: they occur during warmup, so create no unfinishedcycle.
+- Thus13of14 censoredrecords are due to observing an active series at a gap under the approvedresetpolicy; the remaining1 is due to reaching endofdata beforezero. This does not prove what the interruptedseries' eventualclosure/Net would have been if missingoutcomes were known.
+Next: None.
+Notes: Same fullBTC H3/N1 researchdataset,2025-12-18 04:30..2026-09-04 19:10UTC. No simulation, data/output/code/runtime modifications, newartifacts or temporaryfiles; exempt context/history only, unrelated changes preserved.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Completed-Only Net Confirmed
+Goal: Calculate Net excluding all unfinished series, as explicitly requested.
+Status: Completed read-only.
+Done:
+- Same fullBTC H3/N1 research sample,2025-12-18 04:30..2026-09-04 19:10UTC. Filtered saved Series.Status=Completed and checked each finalcounter0:568series,17940bets,Gross9254,volume220764,fee7285.212,Net+1968.788 base-stake units. All14unfinishedseries and all their stakes/fees excluded from this requested aggregate.
+- Main/independentJSON hashes unchanged C7E51F3C6B0936DBE8A0C18129B788B4B490850605941C4CF467BDC8EDC3AD40/B4B5D03477EC032A640B58D1E8003F82D002E716F5100D55E1A8C347BDC2F36F. Integer sum of completedseries Gross/volume/Net matched independent replay Summary exactly, includingcounts; Net=Gross-0.033*volume PASS.
+Next: None.
+Notes: Base1,ideal fullfill0.5,fee3.3%everysettledstake; completed-only selection, not whole-strategy performance. No resimulation, research-artifact edits, temporary files, data/runtime mutations or commit/push; exempt context/history only.
+Blockers: None.
+
+## Active Update 2026-09-08 BTC Signed-Series Overall Net Explained
+Goal: Answer the overall Net PnL question for the same full-history BTC H3/N1 research replay.
+Status: Completed read-only aggregation; no resimulation or research-output edits.
+Done:
+- Reopened and hash-verified main JSON C7E51F3C6B0936DBE8A0C18129B788B4B490850605941C4CF467BDC8EDC3AD40 and independent JSON B4B5D03477EC032A640B58D1E8003F82D002E716F5100D55E1A8C347BDC2F36F under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts. Same BTC70392sourceoutcomes,2025-12-18 04:30..2026-09-04 19:10UTC,H3bothwindows,N1,base1,ideal0.5fullfill,fee3.3%everystake and approvedgapreset/warmup rule.
+- All582series include69050settledbets: Gross-6767,volume4741985,fee156485.505,Net-163252.505. Completed568series/17940bets: Gross9254,volume220764,fee7285.212,Net+1968.788. Censored14series/51110alreadysettledbets: Gross-16021,volume4521221,fee149200.293,Net-165221.293. Parts sum exactly toall. Seven completednegativecycles remainNet-947.751, not the overall result.
+- Root explicitly summed each series' integerGross/volume/Netnumerator and checkedNet=Gross-0.033*volume. Independent reviewer separately summed ownJSONSeries and comparedSummary:PASS0mismatches for all/completed/censored totals and betcounts. Sourcecode confirms gap/end exclusion changes cycleclassification, not alreadysettledbet accounting; no artificial terminal trade or missingoutcome is added.
+Next: None.
+Notes: Overall means all modeled settledbets on known continuoussegments under gapreset policy, not a gap-free venuehistory claim. Unfinishedcycle losses must not disappear when discussing overallPnL. No new artifacts/tempfiles, rawdata/output/product/runtime writes or commits/push; exempt context/history only, unrelated changes preserved.
+Blockers: None.
+
+## Active Update 2026-09-08 Full BTC Signed-Series Negative Net Search
+Goal: Find genuinely completed negative-Net signed SeriesUpDiff cycles over the entire loaded BTC history with H3 N1.
+Status: Completed; full-history search and independent verification passed, protected temporary cleanup complete.
+Done:
+- User's exact approval "Разрешаю" accepts the previously proposed gap policy: exclude active cycles at gaps, reset counter and indicators, restart72-consecutive-outcome warmup. No daily/monthly resets or forced closure. Positive entrydifference starts+1/fixedDown, negative starts-1/fixedUp; nextstakeAbs(priorcounter), literalUp+1/Down-1, firstzero closure and eligible immediate reentry without double-applying an outcome.
+- Source preview and independent rawCSV scan agree:70392 BTC binaryresolved outcomes,35329Up/35063Down, zero unknown/duplicate/unmatched rows, settlement-time coverage2025-12-18 04:30 through2026-09-04 19:10UTC. Source SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged.18gaps/4665missing slots yield19segments;14 have sufficient warmup,1018warmupstates excluded,69374validsignalstates.
+- Opened582series, completed568, excluded13atgaps and1atend (gap exclusions include one zero-bet entry intent). Exactly7 completed negative-Net cycles. Sorted by betcount: ID389,2026-07-17 01:10..07-18 18:25UTC,Up,495bets,Gross248,fee289.608,Net-41.608,maxstake33; ID417,07-23 11:35..07-25 13:50,Up,603,Gross302,fee351.846,Net-49.846,max34; ID479,08-14 04:40..08-16 13:15,Up,679,Gross340,fee343.992,Net-3.992,max31; ID535,08-21 05:50..08-24 04:55,Down,853,Gross427,fee497.475,Net-70.475,max31; ID82,01-21 19:25..01-24 19:10,Down,861,Gross431,fee675.411,Net-244.411,max40; ID544,08-24 09:35..08-28 16:20,Down,1233,Gross617,fee622.545,Net-5.545,max28; ID466,08-05 21:05..08-13 05:20,Up,2115,Gross1058,fee1589.874,Net-531.874,max43. Every selected cycle starts signed1 and reaches its FIRST0 exactly at recordedexit. No open cycle is presented as completed.
+- ResearchOnly ideal fullfill0.5, base stake1, fee3.3% of EVERY settled stake, including wins/losses; exactNet=(1000*Gross-33*Volume)/1000. Seven selected cycles combined Gross3423,volume132447,fee4370.751,Net-947.751. This selection is not whole-strategy performance: gap/end-censored cycles are excluded.
+- Root nativePowerShell prefix replay passed4focusedtests and everycycle signed-walk/weighted-stake identities. Independent nativeC# queue replay starts from rawCSV, directly recomputes all69374rollingwindows and replays all582cycles separately. Root comparison of11789mapped fields across582cycles/19segments/18gaps:0mismatches, including UTC boundaries, direction, signedcounter, stakes/Gross/volume/exactNet. Additional directrawselectedcycle loop confirms exactlyonezero at the finalrow for each of7cycles.
+- Five durable files copied/hash-verified under D:\My\Business\PolyMarketData\CryptoUpDown5m\charts: btc-signed-series-updiff-3h-n1-full-history-20260908.json SHA256C7E51F3C6B0936DBE8A0C18129B788B4B490850605941C4CF467BDC8EDC3AD40; same-stem.md SHA256E4E9AA01028BA33E1EF4060013A1F61495B40A982138FEDD58CDE125E893CF6E; independent-btc-signed-full-history.json SHA256B4B5D03477EC032A640B58D1E8003F82D002E716F5100D55E1A8C347BDC2F36F; Calculate-BtcSignedFullHistory.ps1 SHA256EC00EA8CAEC5BFC17258B45FB7285B696FBCA5ABF581F37D54E2408057051383; Verify-BtcSignedFullHistory.ps1 SHA256BEA12AA07C1859A3F10770D00F8E4DF1E0566DBF101CEB2610A026877A8D882F. Old unsigned and bounded signed artifacts remain unchanged.
+- Independent reviewer confirmed14234mapped checks with0mismatches and identical canonicalcycles SHA25605ADCB6252F0F6EDF2BB6802BE1BCF4004332512AE573963090D2E5E15627DAC. All reviewer processes ended. Protected cleanup removed exact markedrun D:\CodexTemp\runs\btc-signed-full-history-20260908,6files1237209bytes; five durable outputs remain onD:.
+Next: None. No graph was requested or generated this turn.
+Notes: Spreadsheets read-only source-preservation rules and codex-temp-lifecycle used; nativePowerShell/C# retained per explicit language restriction. No workbook export, data/app/source-strategy/Production/Paper/live mutation. Repository changes only exempt context/history, preserving unrelated dirty files. No commit/push.
+Blockers: None for analysis.
+
+## Active Update 2026-09-08 Full BTC Signed-Series Search Awaiting Gap Rule
+Goal: Search the entire loaded BTC history for genuinely completed signed SeriesUpDiff series with negative Net, retaining H3 N1 and fee3.3%.
+Status: Read-only source preview complete; full strategy search paused pending explicit missing-outcome handling.
+Done:
+- Resolved full source D:\My\Business\PolyMarketData\CryptoUpDown5m\crypto_updown_5m_results.csv,83389355bytes, SHA256E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Direct Import-Csv BTC-only scan confirms70392 binaryresolved outcomes,35329Up/35063Down, zero unknown/duplicate market IDs, strictly chronological on5-minute grid. Settlement-time coverage2025-12-18 04:30 through2026-09-04 19:10UTC, consistent with separately read manifest.json counts/start/end metadata (manifest uses market-start times5minutes earlier).
+- Raw timeline independently matches manifest's18gap ranges and4665 missing5-minute slots; largest gap is between observed endtimes2026-01-26 23:25 and2026-02-12 00:40UTC,4622missing slots. Missing slots must not be invented as Up/Down/zero or silently traversed.
+- Independent code review confirms Calculate-BtcSignedSeries.ps1 currently asserts a continuous valid timeline and has no recovery policy for an active signed series across missing outcomes. Render-MiddleMonth3h.ps1 restarts rollingindicatorwarmup after gaps and skips cross-gap settlement, but contains no signed strategy counter; it does not authorize counter reset or carry-forward.
+Next: Ask whether to exclude series intersecting any gap, reset series state at each gap and restart the existing full indicator warmup before new entries on each uninterrupted segment. This method is proposed only, not approved or executed. No daily/monthly reset is proposed.
+Notes: Spreadsheets read-only source-preservation/coverage rules used; native .NET/PowerShell retained per explicit project language restriction rather than JS/Python. No workbook export or CSV change, no strategy calculation/candidate list produced yet, no temporary run/artifact created, no Production/runtime mutation. Only exempt context/history bookkeeping; existing verified bounded-segment results remain unchanged.
+Blockers: User decision required for active signed-series state when intervening outcomes are absent. No claim about whether completed negative-Net cycles exist in the full BTC history is yet verified.
+
+## Active Update 2026-09-08 Signed SeriesUpDiff BTC Segment Recalculated
+Goal: Recalculate the same previously reviewed BTC H3 N1 period using the user's clarified signed counter and absolute stake coefficient.
+Status: Completed for the locked period; no completed series exists inside it.
+Done:
+- Scope remains BTC only, UpDiff/CurrentMiddle windows3h, N1,2026-08-05 21:05 through2026-08-06 04:20UTC, globalX23..110/localX0..87. Preview verified88 distinct states,87 subsequent outcomes, valid warmed indicators at every point, no gaps/unknowns/unmatched rows. BaselineX0 initializes the strategy and PnL0; no earlier or later bet is settled.
+- New external research calculation implements positive entrydifference:+1/fixedDown, negative:-1/fixedUp; activecounter!=0, stakeAbs(priorcounter), Up+1/Down-1, first-zero closure and eligible immediate reentry without double-applying an outcome. Four focused tests passed for both signs, side fixation, absolute stakes, zero/reentry, threshold, idle and final unfilled intent boundaries.
+- Result: exactly1 Up series enteredX0 at-1 and NEVER reachedzero; completedseries0, completednegativeNetseries0. All87bets Up,38wins/49losses, maxsettledstake15, signedcounter range-15..-1 and finalcounter-12. Stakevolume718; Gross-28; fee23.694; Net-51.694 in base-stake units at ideal fullfill0.5 and fee3.3% on every settledstake. These are settled-bet totals within an OPEN series, not the final result of a completed cycle. Prepared nextUp12 is outside the calculation.
+- Independent reviewer recalculated from a separate original rolling JSON, checking per-state cumulative outcomes, ledger and signed-walk identity. Root compared1672 mapped fields over88states plus88UTC/87outcome/176fee-Netdelta checks:0mismatches; canonical path SHA256072CA56DF7700E25D7C800623D9E5E024D773C7941D9B943C03135BB763A703D. Independent winningvolume345 minuslosing373 corroboratesGross-28.
+- Saved new2000x1320 solid-line SeriesUpDiff/Net PNG and88-row Gross/fee/Net Markdown table, separate from old unsigned outputs. Visually inspected final PNG after fixing UTC tick formatting; table UTC/counter/Gross/fee/Net checks allPASS. Durable stem D:\My\Business\PolyMarketData\CryptoUpDown5m\charts\btc-signed-series-updiff-3h-n1-segment-20260805: JSON SHA2562D901EF4A3368161B2C598FE7DF7053276AD95C598DDCFF25CC1629C42707D89, PNG EE12B3B53D03C14AF7A1E100D0293153213217BE626217D4BE5D9F217A630B11, MD8EBBAF1DBE32495099817675B327E82D1FC5F777C402E51267EAB96A7123CA72. Calculate-BtcSignedSeries.ps1,Render-BtcSignedSeries.ps1,Verify-SignedSeriesUpDiff.ps1 and independent-signed-series-updiff.json preserved alongside.
+Next: None for this bounded recalculation. No whole-history search or extension beyond04:20UTC was performed; the withdrawn14 closed-loss cycles are not reinstated.
+Notes: Root input middle-fixed-3h-evidence.json SHA2565460F9DC6E28AAAF4A8925A47537DA2671B8B0C8F69F4548B1B0B22269E8D166; independent input middle-diff-progress-last-30d-mean3h.json SHA256AFB21FB9F3C32756F1690D044B4F236A4BC210C8FF8602365E33DA00C9C3BE00. Old source/results unchanged. Used codex-temp-lifecycle;7 durable files copied and hash-checked, taskrunD:\CodexTemp\runs\btc-signed-series-20260908 removed8files355286bytes after processes ended. Independent verifier's Generic.List serialization error was corrected withToArray before its finalPASS; no source data affected. No production/Paper/live strategy or runtime mutation; repository changes limited to exempt context/history.
+Blockers: None.
+
+## Active Update 2026-09-08 Signed SeriesUpDiff Clarification Supersedes Unsigned Results
+Goal: Record the user's corrected signed SeriesUpDiff meaning and invalidate dependent unsigned-model conclusions without rerunning or editing the strategy.
+Status: Clarification completed; signed-model simulation not run and old calculation code remains unchanged.
+Done:
+- Authoritative user clarification: at an eligible entry with UpDiff>CurrentMiddle initialize SeriesUpDiff=+1 and bet Down throughout that series; with UpDiff<CurrentMiddle initialize SeriesUpDiff=-1 and bet Up throughout that series. Stake multiplier is Abs(SeriesUpDiff). Existing result update remains Up:+1, Down:-1; first zero completes the series. Negative values are active series, not idle. Existing entry threshold and close/reentry timing were not changed by this clarification.
+- With the verified first BTC H3 N1 entry difference-40/36 at2026-08-05 21:05UTC and next outcomeDown at21:10UTC, the clarified state transition is-1 to-2, not1 to0. Independent reviewer confirmed the source and deduction. The first Up stake1 loss remains a valid individual bet outcome, but is not a completed cycle result under the clarified logic.
+- WITHDRAWN for the clarified signed strategy until recalculated: all prior results produced by the always-positive-initialization SeriesUpDiff implementation, including whole-segment accounting as signed-strategy performance, the list of14 completed negative cycles, their boundaries/completeness/ranking and the selected shortest-cycle graph/table with endpoint0. Older models' reports and raw market/rolling inputs are not relabeled as recomputed or changed. Existing output files are retained as old unsigned-model evidence, not valid signed-model results.
+Next: None for this clarification; no simulation or implementation was requested or started in this turn.
+Notes: Read actual Calculate-BtcSeriesUpDiff.ps1 and saved source SHA256792DDA3604B7690E3CDFC144158842F0A01190294A8E99FF8D195853BCDC78A4. Old code still initializes1 for both directions and requires counter>0, so it must not be reused unmodified for a later signed-model calculation. Only exempt context/history bookkeeping; no artifact, source-strategy, market data or runtime mutation.
+Blockers: None for clarification. No signed-model results are currently verified.
+
+## Active Update 2026-09-08 SeriesUpDiff Sign Versus Entry Direction Explained
+Goal: Explain why the shortest BTC series bets Up despite a positive SeriesUpDiff counter.
+Status: Completed read-only explanation; no strategy change.
+Done:
+- Verified actual entry dispatch in Calculate-BtcSeriesUpDiff.ps1 and saved BTC H3 N1 series1 X0,2026-08-05 21:05UTC, MarketId3347152. Direction uses the sign of rolling UpDiff minus CurrentMiddle, then the series counter is initialized to positive1 regardless of the chosen direction; counter supplies stake size and does not select side.
+- Exact entry inputs: UpDiff-2, CurrentMiddle-32/36=-8/9, difference-40/36=-10/9. Negative difference selects Up; initialized counter1 yields Up stake1. Separate-source independent reviewer confirmed these exact values, direction and initialization, PASS.
+Next: None; no alternate strategy or inferred user-intent change proposed.
+Notes: Main result SHA256792DDA3604B7690E3CDFC144158842F0A01190294A8E99FF8D195853BCDC78A4 unchanged. No graph, recalculation of other series, temporary file or product/data/runtime mutation; exempt context/history only, unrelated changes preserved.
+Blockers: None.
+
+## Active Update 2026-09-08 Shortest Losing Series Chart And Table
+Goal: Choose the shortest completed losing BTC series and show its standalone graph with a table below.
+Status: Completed.
+Done:
+- Read-only selection from the current H3 N1 segment found14 completed negative-Net candidates, minimum1bet with8ties. Chose earliest series1, localX0..1, 2026-08-05 21:05..21:10 UTC, baselineMarketId3347152 and settledMarketId3347166.
+- Verified baselinecounter1/PnL0, Up stake1, next outcomeDown, first-zero closure. Gross-1, fee0.033, Net-1.033 in base-stake units; ResearchOnly ideal fullfill0.5 with3.3% fee on every stake. AtX1 used CounterAfterOutcome0 and excluded the same-state initialization1 belonging to series2. Independent separate-source reviewer confirmed shortest selection, state alignment and accounting with zero mismatches.
+- Rendered and visually inspected standalone1600x1100PNG with solid SeriesUpDiff and Net panels, exactlytwoXpoints and no table embedded. The requested two-row Gross/fee/Net table is delivered below the image. Durable PNG: D:\My\Business\PolyMarketData\CryptoUpDown5m\charts\btc-series-updiff-3h-n1-series01.png; SHA2563A714283C8DA4D7AC35F4D4EDC6DC77DCAFC1A0570816B5412799343FC472125. Render-BtcShortestSeries.ps1 preserved beside it for reproducibility, SHA256F89C2DF26750C01A99C6ECDFF67D9C99197E62296ADBDB22EE3109230972F472.
+Next: None.
+Notes: Main source SHA256792DDA3604B7690E3CDFC144158842F0A01190294A8E99FF8D195853BCDC78A4; independent source SHA25641E41CD5AFEB17FF58E8A8FE2903CE8BB260857CE4880F7D5E5CE13F96C62589. PowerShell7 temp-start failed with internalCLR0x80131506 before the requested run existed; bounded WindowsPowerShell5.1 retry succeeded. Unrelated invalid/unmarked old temp directories were not removed. Marked taskrunD:\CodexTemp\runs\btc-shortest-series-20260908 cleaned after durable PNG/script extraction. No strategy, trading data, product/runtime mutation; exempt context/history only in repository, unrelated edits preserved.
+Blockers: None.
+
+## Active Update 2026-09-08 Completed Losing SeriesUpDiff Cycles Selected
+Goal: Select individual fully completed negative-Net BTC SeriesUpDiff cycles from the previously reviewed period, as explicitly permitted by the user.
+Status: Completed selection; no chart or strategy change.
+Done:
+- Read-only scope: BTC, UpDiff/CurrentMiddle windows3h, N1, 2026-08-05T21:05:00Z through2026-08-06T04:20:00Z. Preview verified88 distinct market states,87 observed outcomes, no5-minute gaps or unknown outcomes;15 opened series,14 complete and1 unfinished.
+- Selected exactly complete negative-Net series IDs1..14, all fixed Up direction. Each begins at counter1 and ends at its first0; settled bets belong to StartX+1..EndX, excluding the preceding series settlement on StartX and any same-X next-series initialization. Start/end pairs:0..1,1..4,4..5,5..12,12..13,13..36,36..37,37..38,38..45,45..50,50..51,51..52,52..53,53..80.
+- Replayed each selected cycle from saved individual outcomes with its own initial counter1; verified positive counter before closure, fixed side, prior-state stake, first-zero endpoint, saved per-cycle totals and independent cumulative end-minus-start accounting, with zero mismatches. Selected80 bets: Gross-47, volume185, fee6.105, Net-53.105 in base-stake units under ideal fullfill0.5 and fee3.3% on every settled stake. Incomplete Down series15 startingX80 is excluded, not force-closed.
+- Independent reviewer reconstructed entries, fixed sides and first-zero closures from independent-series-updiff.json (SHA25641E41CD5AFEB17FF58E8A8FE2903CE8BB260857CE4880F7D5E5CE13F96C62589), recalculated every stake and compared only afterward: all14 cycle boundaries and totals PASS, zero mismatches; no reviewer files changed.
+Next: None for selection; the user may identify an individual cycle for later analysis.
+Notes: Durable source D:\My\Business\PolyMarketData\CryptoUpDown5m\charts\btc-series-updiff-3h-n1-segment-20260805.json, SHA256792DDA3604B7690E3CDFC144158842F0A01190294A8E99FF8D195853BCDC78A4; current calculation code inspected. No whole-history rerun claimed, no graph, temporary artifact, product/runtime/data mutation; only exempt context/history bookkeeping, preserving unrelated changes.
+Blockers: None.
+
+## Active Update 2026-09-08 SeriesUpDiff Zero And New Series Display Explained
+Goal: Explain whether the plotted SeriesUpDiff really ends a series at zero and starts a new one.
+Status: Completed explanation; no redraw or strategy change requested.
+Done:
+- Verified actual close/reentry state transitions in the saved new-strategy BTC H3 N1 segment. Series1 runs X0..1 with counter1,0; series2 starts at the sameX1 with a fresh1 then has2,1,0 atX2..4; series3 starts atX4 with1 and ends atX5 with0. They are different series IDs, not continuation of the closed counter.
+- The renderer connects the old-series zero to the new-series one with a same-X vertical orange line. This reset is initialization, not an extra Up outcome or bet. Blue zero markers denote closures; using one color and connecting separate series can make them look continuous. Immediate reentry still requires the rolling entry condition, and a new series can select the same direction again.
+Next: None; explanation only.
+Notes: Inspected current calculation/render code, exact savedX0..5/first3series and the existing PNG. PNG and JSON hashes matched verified delivered versions. No new graph, simulation, temporary file, product/data/runtime change; only exempt context/history updates, preserving concurrent unrelated work.
+Blockers: None.
+
+## Active Update 2026-09-08 Post-Deploy Future Live Balance Fix Check
+Goal: Verify the Production deployment of f324a232 and the future-only historical Live-balance correction without changing runtime state.
+Status: Completed read-only check; deployment and non-replay guard are confirmed, while the corrected Live balance-application branch has not yet received a post-deploy Live event.
+Done:
+- Production PostgreSQL independently confirmed endpoint 192.168.0.101:5432/polycopytrader, READ ONLY and UTC. PolyCopyTrader.Service is Running/Live on exact version info=1.0.0+f324a2321bba21090cf776f31044421199911c2c, MVID26c4c66baf0c; started2026-09-08T08:55:00.447715Z. Final heartbeat2026-09-08T09:08:00.907058Z was36.354seconds old and last_error was NULL; waiting locks and idle-in-transaction sessions were both0.
+- Exact ETH Up50 strategy b7c50005-0000-4000-8079-000000000150 remained at live_available_balance=100 and updated_at_utc=2026-09-08T06:34:29.839780Z. Independent Dashboard snapshot also showed100 and refreshed at2026-09-08T09:05:31.378634Z. Its historical scope remains exactly405 Completed rows, and there were zero new audit operations for those rows since this process start: deployment/startup did not replay them or overwrite the manual100.
+- Current process logs show the Historical Gross/Net parity lane started with cutoff2026-08-10, batch50 and v1. Three observed Exact pages each applied50/50 with Deferred0; ERR/FTL0 and parity warnings0. All three reported LiveBalancesApplied0, so the new replay-delta branch itself has not yet been exercised by a future Live initial/revision event and cannot yet be claimed runtime-proven.
+- Normal processing continued after restart:665 Paper orders since process start were Filled with exactly665 fill rows, latest2026-09-08T09:07:30.032888Z. A bounded settled-run check found778 rows from08:56:56.932114Z through09:05:18.268184Z, zero missing Gross/Net and did not hit its5000-row cap.
+Next: No immediate action from this check; runtime confirmation of the new formula requires the first future parity cycle with LiveBalancesApplied>0 and corresponding V2 replay audit.
+Notes: One broad settled-run aggregate exceeded the mandatory15-second statement timeout in a READ ONLY transaction; it was replaced with an indexed ORDER BY/LIMIT5000 query that completed in2.2seconds. Two broad SMB tail attempts returned no content within their bounded waits; exact current files were then checked with targeted searches. No Production write, balance/strategy/order/config change, service control, deployment or source change occurred; only exempt context/history bookkeeping, preserving unrelated dirty files.
+Blockers: No operational blocker. Full runtime proof of the changed branch is pending naturally occurring eligible Live parity work.
+
+## Active Update 2026-09-08 Future Historical Live Balance Replay Fixed
+Goal: Fix only future historical Gross-to-Net Live balance applications/revisions without replaying completed history or overwriting current/manual balances on deployment.
+Status: Completed locally; user deployment remains separate.
+Done:
+- User approved RC-20260908-historical-live-balance-replay-delta at digest sha256:9c20f622a39c9d20a4b2f11940f22a6584ef333435b3dcf2cf02d71e109b07f9. Approval-only checkpoint is b70bfa64; implementation commit is f324a232.
+- Future InitialBalanceApplication and genuinely newer VenueReportedRevision events now calculate only their marginal balance effect from two strategy-scoped chronological settled-Live replays. Both start from 100, order by settled_at_utc then lower(order id), and clamp after every contribution; before/after differ only in the target contribution. The replay delta is added to the current locked balance rather than replacing it with a historical absolute result.
+- Existing Completed rows are not reopened without a newer valid revision, no migration/startup sweep/backfill was added, and the manually restored ETH Up 50 balance 100 is not changed merely by deployment/startup. The previously previewed 2708 None rows across33strategies remain future first applications and will use the corrected formula after deployment.
+- Focused owned-PostgreSQL class passed8/8; combined historical parity regressions passed57/57; final service build passed with0errors and121pre-existing warnings. Independent reviewer compared verbatim requests, approved contract, exact four-path diff and evidence: PASS/no findings. WorkingTree, Staged and Range requirement gates passed.
+- Protected temp cleanup stopped the exact loopback PostgreSQL, removed its temporary worktree, deleted the marked run (8373files/598480866bytes) and verified absence. No Production access/mutation, service control, deployment, strategy/order/balance change or push occurred. Unrelated context/history changes remain unstaged.
+Next: User deploys commit f324a232 when ready; then only future eligible historical parity events use the fix.
+Notes: Product scope is limited to PostgresAppRepository.HistoricalGrossNetParity.cs, its focused integration tests, README, PAPER_LIVE_PARITY and the completed requirement contract. Approval and implementation are separate commits.
+Blockers: None in the requested local source fix.
+
+## Active Update 2026-09-08 New SeriesUpDiff BTC Segment Recalculated
+Goal: Complete the new-strategy recalculation of the same previously losing BTC H3 N1 interval after the user approved immediate reentry.
+Status: Completed.
+Done:
+- User resolved the only remaining timing choice with "Давай сразу проверять." On a counter-zero outcome, close the old series and immediately check abs(UpDiff-CurrentMiddle)>=1 at that same state. New direction is opposite that difference and fixed for the new series; initialize SeriesUpDiff=1 without reapplying the current outcome. Active counter updates literally Up+1/Down-1 regardless of direction; no SeriesMiddle or mirrored-counter rule.
+- Recalculated exactly Aug5 2026 21:05Z..Aug6 04:20Z, BTC 3h UpDiff/CurrentMiddle windows, N1, globalX23..110/localX0..87. All88 states valid;87 known outcomes(38Up/49Down),zero gaps;87 bets,35wins/52losses,80Up/7Down,zero skipped markets. Gross=-51,volume197,fee6.501,Net=-57.501 base-stake units. Old same-period Net=-11.510222222222222. Existing ideal fullfill0.5/fee3.3% every stake ResearchOnly assumptions unchanged.
+- Opened15 series and completed14. Entries X0,1,4,5,12,13,36,37,38,45,50,51,52,53,80; closures at all except0. First14series Up; finalseries Down remains active atX87 withcounter4. Max settled/prepared stake6. No continuation beyond the specified period was settled; this is a fixed-period comparison, not an assertion that all new series completed.
+- Saved the new2000x1320 solid-line two-panel PNG and separate88-rowMarkdown table under external CryptoUpDown5m/charts/btc-series-updiff-3h-n1-segment-20260805.png/.md/.json. Upper panel shows SeriesUpDiff with zero-close markers and same-X vertical0-to1 resets; lower panel shows cumulative Gross/Net from0. Table rows show settled prior-state bets and post-result counter;0-to1 denotes immediate reentry. Old files remain unchanged.
+- Durable reproduction/evidence files: Calculate-BtcSeriesUpDiff.ps1, Verify-SeriesUpDiff.ps1, independent-series-updiff.json, series-updiff-final-review.json. All7 files copied with matching hashes. PNGSHA DC8727287CA4D1B7FEE1C30353B6C9B51EAAF6725C0BEA5AFA06D53B9CBD19CD; JSONSHA792DDA3604B7690E3CDFC144158842F0A01190294A8E99FF8D195853BCDC78A4; proofSHA7251A79E8D88393C83D88254196EE8553AC62DF86C83A582377D44E7F454001A.
+Next: None for this requested recalculation.
+Notes: Main source fixed-evidence CurrentMiddle fields and independent original rolling-indicator JSON produced identical canonical88-state path SHA1870701AC4521CB169ABA78B02F9B650362CFCEA481152537277DC696C901755. Two focused main self-tests passed. Independent reviewer compared88states/87bets/2199statefields/704tablecells/15series/150seriesfields with0mismatches and visually passed the PNG; root also inspected the image and separately compared1496fields+87outcomes+704cells. Temp-lifecycle skill kept scratch files in marked D:/CodexTemp/runs/btc-series-updiff-20260908; protectedcleanup removed8temporaryfiles and verified run absence after durable copies. Pre-existing unmarked legacy temp directories were not touched. No application, production database/service/order mutation; concurrent unrelated repository edits preserved, only exempt context/history bookkeeping, no commit/push.
+Blockers: None.
+
+## Active Update 2026-09-08 New SeriesUpDiff BTC Segment Recalculation Preview
+Goal: Recalculate the previously selected losing BTC segment with the newly specified SeriesUpDiff strategy.
+Status: Blocked before calculation pending the exact post-close reentry timing.
+Done:
+- Read-only preview resolved the same BTC H3 N1 interval: Aug5 2026 21:05Z..Aug6 04:20Z, globalX23..110/localX0..87; 88 states and 87 known consecutive outcomes, 38 Up/49 Down, zero unknowns or nonadjacent steps. Entry market3347152, first outcome Down market3347166, final outcome Up market3352720. Cycle JSON SHA256 remains7001E6BDF0662E0D491D77F0E444E2E26A46909036D389B93B7CBF5D2A38950B. Old model Net was -11.510222222222222 base-stake units; no new total has been calculated.
+- Latest user rules supersede the fixed-series-mean model: rolling UpDiff and CurrentMiddle determine entry; entry direction uses the sign of UpDiff-CurrentMiddle, positive=>Down/negative=>Up, fixed for that entire series. SeriesMiddle is removed. SeriesUpDiff starts at1 and changes literally +1 for Up/-1 for Down, independent of bet direction or win/loss; current SeriesUpDiff is the stake coefficient; zero ends the series. No mirrored counter rule is authorized.
+- The user's step3 resumes entry monitoring from the next market; the previously asked question whether this entails one full skipped market was not answered. This affects the requested interval immediately because its first Down would take the newly initialized counter from1 to0. Need exact choice: may the market immediately following closure already be bet, or must it finish without a bet before entry is rechecked?
+Next: Obtain that one timing clarification, then recalculate only this exact segment under the existing ideal fullfill0.5/3.3%-of-every-stake ResearchOnly accounting and independently verify results.
+Notes: Read Workflow, CodingRules, RequirementGate, AGENTS and temp-lifecycle skill; no temporary run or artifact was created. Only exempt context/history changes. Concurrent unrelated historical Live accounting edits and git HEAD b70bfa64 ahead1 were preserved; no source/chart/data/service/order mutation or commit/push.
+Blockers: Post-close reentry timing changes which markets are bet and the numerical result; do not silently choose it.
+
+## Active Update 2026-09-08 Rolling UpDiff Can Remain Unchanged
+Goal: Explain consecutive identical Signal values despite fixed SeriesMiddle and a newly settled market.
+Status: Completed.
+Done:
+- Clarified that UpDiff is recalculated after each outcome but need not change: for the current 36-outcome window, UpDiff_t=UpDiff_previous+incoming contribution-outgoing contribution. Up is +1 and Down is -1, so continuous full-window changes are -2, 0 or +2. Frozen SeriesMiddle implies the same changes in Signal within that series.
+- Fresh inspection of the selected BTC H3 N1 cycle confirmed X0..2 at Aug5 2026 21:05/21:10/21:15 UTC: UpDiff=-2, SeriesMiddle=-32/36 and Signal=-40/36 at all three points. Incoming outcomes Down then Up are compensated by outgoing Down then Up, as derived from the verified window formula and point values. A cumulative counter without evictions would instead change by +/-1; that is not the current sliding-window definition.
+Next: None; no strategy change requested.
+Notes: Root and independent reviewer separately inspected the indicator calculation and saved points. Cycle JSON SHA256 remains 7001E6BDF0662E0D491D77F0E444E2E26A46909036D389B93B7CBF5D2A38950B; source scope is the existing 88-state/87-bet cycle only. No CSV analysis, new chart, calculation run, code/data/runtime mutation or temporary artifacts; exempt context/history only.
+Blockers: None.
+
+## Active Update 2026-09-08 Active Series Signal Formula Clarification
+Goal: Confirm whether Signal equals UpDiff minus SeriesMiddle.
+Status: Completed.
+Done:
+- Confirmed Signal=UpDiff-SeriesMiddle throughout an active series, with SeriesMiddle frozen and UpDiff updating over its rolling window. Before entry, the comparison uses UpDiff-CurrentMiddle; on entry SeriesMiddle captures CurrentMiddle.
+Next: None.
+Notes: Read-only confirmation against the current FixedMiddle.cs reference selection and entry assignment. No formula, naming, code, chart, data or runtime change; only exempt context/history bookkeeping, preserving unrelated entries.
+Blockers: None.
+
+## Active Update 2026-09-08 Historical Live Balance Fix Scope Choice
+Goal: Fix the confirmed historical Gross-to-Net backfill defect that can zero a profitable strategy's capped Live balance.
+Status: In Progress; future-only scope is fixed and the requirement contract awaits exact user approval before product edits.
+Done:
+- Locked the requested change to the historical Live-balance accounting defect. Trading decisions, order execution, Paper accounting, strategy configuration, Production mutation, deployment and service control remain out of scope.
+- Recovered the existing completed historical parity contract and current deployed path. The old approved design deliberately rebases per-order retrospective deltas onto the current locked balance and states that original clamp history cannot be reconstructed. New Production evidence disproves that approach for the exact ETH Up 50 case: current canonical settled Live rows support a deterministic chronological fee-inclusive replay, while manual balance writes are not durably actor/reason-audited.
+- The user selected `1. Только будущие пересчёты`. Contract RC-20260908-historical-live-balance-replay-delta therefore excludes any automatic repair/replay of 405 already Completed pre-cutoff rows and preserves the current/manual balance 100 on deployment/startup. Existing 2708 None pre-cutoff rows across 33 strategies remain future first-time events; a genuinely newer accepted fee revision is also a future event.
+- Draft contract specifies the corrected future effect: two ordered replays from 100 with [0,100] clamp after every settled Live contribution, differing only in the target event; apply only final-after minus final-before to the current locked balance. Validator produced semantic digest sha256:9c20f622a39c9d20a4b2f11940f22a6584ef333435b3dcf2cf02d71e109b07f9.
+Next: Obtain the exact user approval for that contract digest, record and commit the approval checkpoint, then implement only the approved paths and run focused owned-PostgreSQL tests/build.
+Notes: Mandatory Workflow, AGENTS, CodingRules, RequirementGate and codex-temp-lifecycle instructions were read. Git HEAD is 208e0643; pre-existing context/history changes were preserved. Only the new draft contract and exempt context/history changed; no product code, test, configuration, database, service, order, strategy or balance change was made.
+Blockers: Product edits are fail-closed until exact `APPROVE RC-20260908-historical-live-balance-replay-delta sha256:9c20f622a39c9d20a4b2f11940f22a6584ef333435b3dcf2cf02d71e109b07f9`.
+
+## Active Update 2026-09-08 ETH Up 50 Live Balance Diagnosis
+Goal: Explain why `ETH Up or Down 5m Up 50 bps Instant` showed a zero strategy balance despite positive performance.
+Status: Completed read-only diagnosis; the zero was caused by historical fee-backfill balance accounting, and the later return to 100 was user-confirmed manual restoration.
+Done:
+- Verified exact Production strategy `b7c50005-0000-4000-8079-000000000150` in read-only PostgreSQL sessions. Its aggregate results are positive: 573 settled Paper runs have fee-inclusive Net PnL +222.59267928 USD; 570 settled Live orders have fee-inclusive Net PnL +193.41255983 USD and Dashboard Live Net ROI 6.35484012%.
+- Independently replayed the 570 Live settlements in settlement order using the deployed per-settlement `[0,100]` balance clamp. The fee-inclusive chronological result is 53.22945700 USD, not zero. Aggregate profit and capped sequential bankroll are distinct metrics because gains above 100 are discarded while later losses still reduce the bankroll.
+- Historical Gross/Net parity audit proves the zero transition. From 2026-09-03T06:30:43.796757Z through 08:07:55.403403Z, 405 Live-order balance audits started from 53.22945700, requested -64.69758017 of retrospective fee adjustments, actually applied -53.22945700, and left -11.46812317 unapplied after the floor. At 08:03:08.273474Z one -0.19980000 adjustment changed 0.12027499 to 0. The deployed implementation applies retrospective deltas to the current capped balance; that is not equivalent to replaying the fees at their historical settlement positions, which independently yields 53.22945700.
+- At final cutoff 2026-09-08T06:51:38.085923Z both `strategies` and the refreshed Dashboard snapshot showed live_available_balance=100.00000000, with strategy updated_at_utc=2026-09-08T06:34:29.839780Z. The user confirmed this 0-to-100 change was made manually.
+Next: None in this diagnostic request; no fix was implemented.
+Notes: Production database only, explicit READ ONLY transactions, statement_timeout 15s, lock_timeout 2s, UTC, bounded/indexed queries. Deployed build source `eab41015744d4d2fcc04b042d946529efeb13084` and runtime audit rows were inspected independently. No strategy, balance, database, service, order, configuration or source mutation occurred; only exempt context/history bookkeeping changed. Pre-existing dirty files were preserved, with no commit or push.
+Blockers: None for the diagnosis. The historical backfill balance algorithm remains defective until separately requested and approved for implementation.
+
+## Active Update 2026-09-08 UpDiff Terminology Preference
+Goal: Replace the explanatory term Balance with UpDiff as explicitly requested.
+Status: Completed.
+Done:
+- Use UpDiff for the rolling UpCount minus DownCount over the selected H-hour window in subsequent explanations and newly requested charts/tables. It denotes the same indicator previously called Balance; no formula, period, strategy or accounting change.
+- CurrentMiddle remains the rolling average of UpDiff; SeriesMiddle remains the mean captured at series entry; active Signal=UpDiff-SeriesMiddle and idle entry signal=UpDiff-CurrentMiddle. Other terminology is unchanged.
+Next: None.
+Notes: Persisted only the naming preference in exempt context/history. Existing source identifiers, data files and rendered charts were not rewritten; no recalculation or product/runtime mutation. Prior history and unrelated dirty changes preserved.
+Blockers: None.
+
+## Active Update 2026-09-08 Production Server, Bets, And Logs Check
+Goal: Inspect current Production service, Paper/Live betting activity, settlements, and server/application logs without changing runtime state.
+Status: Completed read-only check; Paper trading and settlement are active, while Live has no recent successful executions and operational timeouts/latency remain.
+Done:
+- Verified the database-reported endpoint `192.168.0.101:5432/polycopytrader`, UTC, and READ ONLY sessions. Final cutoff `2026-09-08T06:24:20.084083Z`: PolyCopyTrader.Service was Running/Live on `eab41015744d4d2fcc04b042d946529efeb13084`, MVID `0b7cc2c4a796`, started `2026-09-04T11:11:00.526857Z`, heartbeat age `14.326s`, and NULL last_error. Deployed commit exists locally and is an ancestor of HEAD. Final waiting locks, idle-in-transaction sessions, and blocked sessions were all zero.
+- Exact Paper window `2026-09-08T06:04:38.137306Z..06:19:38.137306Z`: 952 orders total. Ordinary FAK sources had 941 Filled orders (813 direct plus 128 child mirror), each with a fill. Eleven exact ETH Reference Average Maker-GTD orders were freshly Pending at the window boundary, then independently reached Filled with 11 fill rows; their runs remained Entered immediately after `06:24:00Z` market end and were not overdue. Mandatory classification: optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.
+- An earlier exact runtime window found 1,018 Settled runs, zero NULL realized PnL, and zero non-Calculated/non-VenueReported fee states. Final checks found zero Entered or Resting runs more than 15 minutes overdue. Latest ordinary Paper order/fill at `06:18:00.532836Z` matched exactly and a later settled run at `06:15:21.467142Z` had Calculated fees.
+- Exactly five enabled, unpaused, non-auto-paused Live strategies exist. Since the current service start, Live orders are 23 PreflightRejected only; there are no open Live orders or Matched orders awaiting balance settlement. The last successful Matched Live order was created `2026-09-04T04:34:31.146338Z` and settled `04:44:47.956934Z`; the last Cancelled order remains `2026-09-01T18:45:01.028036Z`.
+- During the last 24 hours only `b7c50005-0000-4000-8079-000000000150` / ETH Up or Down 5m Up 50 bps Instant produced Live-shadow order attempts: 13, none Filled. Exact current strategy state has internal live_available_balance=0. Its latest two attempts at `02:40:01Z` and `02:45:02Z` were independently recorded as PreflightRejected plus StrategyLiveBalance Error because Available/Reserved/AvailableForNewStake were 0 and Required was 6. The other four Live strategies produced zero Paper/live-shadow orders in that 24-hour window; this does not prove a fault because no qualifying signal was established.
+- Fixed application-log snapshot window `2026-09-08T05:56:15.3517647Z..06:11:15.3517647Z` contained six ERR and 609 WRN. All six ERR were Legacy historical-accounting candidate-read cycles failing with Npgsql read timeouts; independently indexed event rows showed six failures lasting 10,227..10,324ms, latest later failure at `06:12:47.311915Z`. No other ERR/FTL appeared in the current service-log snapshots.
+- The same log window had 601 latency warnings: 378 dedicated Maker-GTD and 223 general queued market-data. Maximum queue delay was 12,875.347ms, processing 12,616.1667ms, and slowest phase 12,106.0354ms. Later queue metrics at `06:17:01.565Z` showed seven pending plus one in-flight general update, zero Maker backlog, and zero rejected/failed/dropped updates; the queue continued processing.
+- Six OKX expiry-futures refresh warnings were confirmed as 2-second HTTP timeouts; one SOL and one ETH reference tick were skipped at source ages 5.018s and 5.096s. Independent latest indexed ticks at `06:22:24Z` were 4.156..4.160s old; source age at sampling was 0.150s BTC, 0.297s ETH, and 3.486s SOL. The three current WebSocket components were Connected/non-stale with NULL errors.
+- The complete current PostgreSQL log for September 8 (bounded 198KB read) contained zero deadlock records and eight serialization conflicts, the last at `04:46:38Z`; the final snapshots had no blocker. The numerous statement cancellations correspond at least in the checked current window to the independently confirmed Legacy timeouts; no broader causal attribution was made.
+Next: None within this read-only request; no repair, balance/configuration/order, restart, deployment, import, or database mutation was performed.
+Notes: The ambient connection variable pointed at local `127.0.0.1`; the first command failed closed before connecting. Subsequent sessions explicitly pinned Production and PostgreSQL independently confirmed it. Every SQL transaction explicitly began READ ONLY with statement_timeout=15s, lock_timeout=2s, UTC, and bounded/indexed access; `api_errors` was not scanned because it lacks a time index and is approximately 144MB. Two diagnostic SELECTs and one PostgreSQL-log parsing SELECT had local schema/syntax errors and were rerun read-only after inspection. Fixed-size/shared-read log snapshots only; no temporary artifacts. Only exempt context/history bookkeeping changed; existing dirty files were preserved and no commit/push was attempted.
+Blockers: No blocker to inspection. Live balance rejection, Legacy timeouts, queue latency bursts, and earlier serialization conflicts remain unresolved.
+
+## Active Update 2026-09-08 Current MiddleDiffProgress Terminology Explanation
+Goal: Explain the current calculation and terminology in maximum detail without changing strategy, data, or charts.
+Status: Completed.
+Done:
+- Reconciled the external ResearchOnly fixed-mean MiddleDiffProgress path, not the older UpCountProgress/DownCountProgress or production strategies. Balance is rolling Up minus Down over H hours; CurrentMiddle averages the last m=12H Balance observations; SeriesMiddle captures CurrentMiddle on entry. Active Signal uses Balance minus SeriesMiddle, while idle entry uses Balance minus CurrentMiddle.
+- Confirmed N is an entry/exit threshold, not a stake cap. Entry abs(live signal)>=N; existing series ends at abs(frozen signal)<=N after settling the prior-state bet; immediate same-state reentry is allowed and the new series is not reclosed at that state. Opposite-sign next stake multiplier is abs(Signal)-(N-1). Current mean continues updating; only the series reference freezes. No PnL recovery condition or old stack/counter logic applies.
+- Confirmed chart alignment, distinct N-specific frozen references, and the isolated cycle endpoint retaining the closing series reference rather than the immediately following series. Current sweep remains Aug5 2026 19:10Z..Sep4 2026 19:10Z, UTC, not full source history. Warmup is 2m consecutive outcomes, restarted after gaps while series reference and booked PnL persist; no daily/monthly resets in this run.
+- Rechecked the BTC H3 N1 Aug5 21:05Z..Aug6 04:20Z example: 88 states, 87 bets, 38 wins/49 losses. Independent in-memory per-bet calculation from prior Balance and frozen mean -32/36 matches Gross64/36, volume14496/36, fee13.288, Net-414368/36000 exactly. X0..2 Balance-2 and Signal-40/36 remain flat despite Down then Up settlements; X87 old-cycle Signal32/36 closes the cycle.
+Next: None; explanation only.
+Notes: Root inspected current calculation, indicator, render and independent-verifier source plus saved cycle/proofs. Independent reviewer confirmed the same lifecycle/accounting semantics. Current raw source, FixedMiddle.cs and cycle JSON SHA256 values match their verified versions. Model is ideal fullfill at0.5, fee3.3% of every stake including losses, PnL in base-stake units; no actual execution/venue fee claim. Only exempt context/history updates; no new artifacts, temporary files, strategy/chart/application/database/service/order changes, commit or push.
+Blockers: None.
+
+## Active Update 2026-09-07 Fresh Top Ordinary Net Reports
+Goal: Repeat the three fresh best-ordinary-strategy Net PnL charts with asset-price overlays and matching daily Excel reports.
+Status: Completed.
+Done:
+- Fixed one read-only Production cutoff at 2026-09-07T19:56:39.268320Z and ranked lifetime Settled fee-inclusive Net PnL independently for all ordinary BTC/ETH/SOL 5m strategies, excluding every name containing Progress. Full eligible and enabled/unpaused winners matched for every asset; fee accounting required Calculated/VenueReported and exact stored Net=realized-fee.
+- Winners: BTC b7c50005-0001-4000-8148-000000000009, BTC Up or Down 5m Down 9 Diff LowerEnter Premarket, 1309 Settled, Net260.61647233; ETH b7c50005-0000-4000-8137-000000000104, ETH Up or Down 5m Up 4 bps Reference Average Premarket, 1908 Settled, Net393.63565231; SOL b7c50005-0000-4000-8081-000000000125, SOL Up or Down 5m Up 25 bps Instant, 1552 Settled, Net316.43377617. SOL is the changed leader in this repeat.
+- Created exactly three 1800x1000 solid-line JPGs with true cumulative step Net PnL, archived asset-price overlay, direct end labels and maximum-drawdown peak-to-recovery band. Max drawdowns: BTC102.04006293, ETH186.56619623, SOL253.35891408 USD; all recovered before cutoff. Cutoff-date partial Net: BTC+5.79, ETH-3.24376927, SOL-19.22411851 USD.
+- Created exactly three one-sheet XLSX daily reports with continuous UTC dates through 2026-09-07, formula Daily Total/Total cells, red-on-white visible-minus negatives and B2 freeze panes. Files are under outputs/019f88ae-b840-74e1-9392-4f7b2ef076c0/top-ordinary-net-strategies-by-asset-20260907-1956z/.
+Next: None for this repeat.
+Notes: Read-only Production preview found no waiting locks or active service database work; service was Running with a fresh heartbeat. Independent CSV recalculation matched 837/797/530 ordinary candidates, 163/133/47 eligible candidates, all three winners, every run count and every Net total with zero mismatches. Artifact-tool import/formula/error-scan/render checks and independent Excel COM checks passed: one sheet, expected ranges/dates/formulas/totals, B2 freeze and negative display. All six visible outputs were directly inspected; an initially defective ETH JPEG encoding was reported, regenerated, and then visually passed. No database/service/order/application mutation, commit or push; only requested durable outputs and exempt context/history bookkeeping.
+Blockers: None.
+
+## Active Update 2026-09-07 Explained Flat Signal Segments
+Goal: Explain why Signal has horizontal segments despite wins/losses in the selected BTC3h N1 cycle.
+Status: Completed.
+Done:
+- Verified actual dispatch/data path: Render-MiddleMonth3h.ps1 computes Balance from the last36 binary outcomes; Calculate-MiddleFixedSweep and cycle renderer retain that rolling Balance while freezing only the series reference. Within the cycle deltaSignal=deltaBalance=incoming outcome contribution minus outgoing contribution, hence0 or+/-2 on continuous five-minute steps.
+- Verified localX0/1/2, Aug5 2026 21:05/21:10/21:15UTC: each window(t-3h,t] has36continuousoutcomes,17Up/19Down,Balance-2; frozenmean-32/36 yieldsSignal-40/36 throughout. X0to1 incomingDown21:10 market3347166 replaces outgoingDown18:10 market3343552. X1to2 incomingUp21:15 market3347196 replaces outgoingUp18:15 market3343793. The replacements preserve the window counts, though the firstUpbet loses and the second wins.
+Next: None; explanation only, no strategy change.
+Notes: Root inspected prefix-sum implementation, actual cycle signal formula, four exact raw outcome rows and displayedX0..2. Independent reviewer directly counted allthree36-result windows from rawCSV, agreeing. RawSHA E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F andcycleJSONSHA7001E6BDF0662E0D491D77F0E444E2E26A46909036D389B93B7CBF5D2A38950B matched. Only exemptcontext/history persistence; no new artifacts/tempfiles or product/data/chart changes.
+Blockers: None.
+
+## Active Update 2026-09-07 Losing BTC Progress Cycle Chart And Bets Table
+Goal: Show the selected losing BTC H3 N1 cycle as a chart with its bets table separately below.
+Status: Completed.
+Done:
+- Created a2000x1320 solid-line two-panel PNG for Aug5 2026 21:05Z..Aug6 04:20Z, localX0..87 correspondingtoglobalX23..110. X0hasentrySignal-40/36andPnL0. Upperpanel showsSignal and frozenmean-32/36; lowerpanel Gross/Netaftereachprevious-statebet. FinalX87keepsoldcycleSignal32/36, notthenextseriesSignal252/36. No tableembeddedinthePNG.
+- Addedaseparate87-rowMarkdownbetstablewith X,resultUTC,outcome,Upcoefficient,post-resultSignal,per-betNet,cumulativeGross,cumulativeNet.87Upbets/38wins/49losses; finalGross64/36=1.777777...,fee13.288,Net-414368/36000=-11.510222...base-stakeunits. Onlydisplayroundingto3decimals;exactJSONnumeratorspreserved. ResearchOnlyfullfill0.5/3.3%feeunchanged.
+- DurablefilesinD:/My/Business/PolyMarketData/CryptoUpDown5m/charts/: btc-fixed-3h-n1-losing-cycle-20260805.png/.md/.json, Render-BtcLosingCycle.ps1 andindependent-btc-losing-cycle-verification.json. PNGSHA2565A8E96C0BD5240BB4F0EC638A2E99023B667DCF02EC109C0466CE19403A30F67; MDSHA25691DED539CE2F9AA99D765FF9FB02390BFF03250D0691A9FB11E8995AF71B6A96. Allcopieshash-verified.
+Next: None for this requested chart and table.
+Notes: Sourceevidencehashmatched5460F9DC6E28AAAF4A8925A47537DA2671B8B0C8F69F4548B1B0B22269E8D166. Independentlycompared88states/87bets/2975JSONfields/696MDcellsand13metadatafields,zero mismatches;rootandreviewervisuallyinspectedPNG,PASS. ProofSHA256C6BE595879C1C6CEF32C7E8DBC6F49BCC72BB117779DD6BCD5785A169DB084A3. One transient verifier-only PowerShell denominator-expressiontypeerrorwasreportedthenfixed;fullverificationpassedwithoutchangingdata. Protectedcleanupremovedmarkedrunbtc-losing-cycle-chart-20260907andverifiedabsence;unrelatedunmarkedoldtempdirectoriesnotchanged. Noapplication,productionDB/service/orderchanges;onlyexemptcontext/historyrepoedits.
+Blockers: None.
+
+## Active Update 2026-09-07 Selected Losing Complete BTC3h Progress Cycle
+Goal: Find one fully completed BTC3h Progress cycle with negative fee-inclusive Net, retaining N1 from the preceding example.
+Status: Completed.
+Done:
+- The first completed BTC H3 N1 cycle in the saved fixed-mean sweep qualifies: globalX23..110, Aug5 2026 21:05Z..Aug6 04:20Z,435minutes,87Upbets with38wins/49losses. Entry state3347152; first settlement3347166 at21:10Z; last settlement3352720 at04:20Z. No gaps, invalid states or intermediate closure.
+- Frozen SeriesMiddle=-32/36=-0.888888...; entry Balance=-2 yieldsSignal=-40/36=-1.111111...; final Balance=0 yields old-seriesSignal32/36=0.888888..., satisfyingabsSignal<=N1. AtX110 the series closes and a new one starts immediately; newreference-252/36 and newSignal252/36 do not belong to the selected cycle. Final settlementX110 is included; newnextbet is excluded.
+- Gross=64/36=1.777777...,Volume=14496/36=402.666666...,fee3.3%=13.288,Net=-414368/36000=-11.510222...base-stake units. This complete cycle has positiveGross but negativeNet because recorded modeled fees exceed Gross. ResearchOnly fullfill0.5 assumptions unchanged.
+Next: None for this requested example.
+Notes: Read-only source charts/middle-fixed-3h-evidence.json SHA2565460F9DC6E28AAAF4A8925A47537DA2671B8B0C8F69F4548B1B0B22269E8D166 matched deliverymanifest. Root cumulative differences and direct per-stake formulas matched an independent reviewer summing87bets without cumulative totals: winning stake numerator7280,losing7216; minimum old absSignal before exit40/36>1. Only exemptcontext/history persistence; no new artifacts/graphs, product/data/service/order changes or temporary files.
+Blockers: None.
+
+## Active Update 2026-09-07 Selected One Complete Progress Cycle
+Goal: Select one complete entry-to-exit cycle from the latest fixed-mean MiddleDiffProgress research sweep.
+Status: Completed.
+Done:
+- Selected BTC, H3 balance/Middle windows, N1: global states X405..423, Aug7 2026 04:55Z..06:25Z. This18-bet cycle was chosen before reviewing its PnL. Entry decision market3374924; first settled bet3375613 at05:00Z; final settled bet3376317 at06:25Z. All18bets Up,12wins/6losses; no missing or invalid states and no intermediate close.
+- Frozen SeriesMiddle=80/36=2.222222...; entry Balance=-4, Signal=-224/36=-6.222222...; exit Balance=2, old-series Signal=-8/36=-0.222222..., meeting abs(Signal)<=1. Both endpoints have transition3: prior-series settlement atX405 is excluded; next-series entry atX423 is excluded, but the selected cycle's final settlement atX423 is included. AtX423 the global chart already shows the NEW reference -74/36 and Signal146/36; these must not be mistaken for this cycle's exit signal.
+- Cycle-only Gross=1200/36=33.333333..., Volume=4464/36=124, fee3.3%=4.092, Net=1052688/36000=29.241333..., in base-stake units under the existing ideal fullfill0.5 research model.
+Next: None for selecting the requested cycle.
+Notes: Source D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-fixed-3h-evidence.json SHA2565460F9DC6E28AAAF4A8925A47537DA2671B8B0C8F69F4548B1B0B22269E8D166 matched delivery manifest. Root cumulative endpoint subtraction and separate direct formula sum matched an independent review of all18stakes: winning stake numerator2832, losing1632. Only read-only in-memory inspection and exempt context/history persistence; no new charts, simulation files, temporary artifacts, product/data/service/order changes.
+Blockers: None.
+
+## Active Update 2026-09-07 Fixed Mean Full Sweep Completed
+Goal: Complete the requested BTC/ETH/SOL MiddleDiffProgress fixed-series-mean sweep, N1..20 and matched balance/Middle windows3..24h by3h, for the same last30days.
+Status: Completed.
+Done:
+- User approved both outstanding lifecycle choices with "1 - да / 2 - да": immediately check a new entry after an existing series ends; preserve active series and SeriesMiddle across a data gap while suspending bets until the existing full indicator warmup completes.
+- Calculated480 cases for Aug5 2026 19:10Z..Sep4 2026 19:10Z, UTC. Exact source is external CryptoUpDown5m/crypto_updown_5m_results.csv, SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Verified8639 known settlements per asset against8640 expected, one missing chart outcomeSep3 15:25Z and a pre-chart gapAug5 15:00Z. Indicator warmup remains2m consecutive outcomes with m=12H; no invented outcomes or PnL during exclusions.
+- Implemented only external native C#/PowerShell research calculation: start inactive/PnL0 at chartbaseline; settle prior-state bet first; close existing series when abs(Balance-SeriesMiddle)<=N; immediately evaluate entry using CurrentMiddle, capture it when abs(liveSignal)>=N; do not close a newly entered series at the same state. Stake=abs(frozenSignal)-(N-1), opposite sign; rolling Balance and CurrentMiddle continue separately. Final-state series decisions are counted but no outside-period settlement. Fullfill0.5/fee3.3% of every reduced stake remains an ideal ResearchOnly model in base-stake units.
+- New results:75 positiveNet cases (BTC19, ETH15, SOL41),394 negative,11 no-bet. All24 N1 cases negative. PositiveNs: H3 BTC8..16/ETH18,19/SOL7..13; H6 BTC11..20/ETHnone/SOL11..19; H9 BTCnone/ETH14..20/SOL12..20; H12 BTCnone/ETH15..20/SOL12..20; H15 BTCnone/ETHnone/SOL14..20; H18/21/24 none. Selection is in-sample only.
+- Saved24 new solid-line PNGs in D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-fixed-mean-last-30d-{asset}-{H}h-positive-n.png. Retained prior two-panel style: upper effective N1 Signal and series reference (live Middle while idle); lower N1 Gross/Net plus75 additional positive-final-Net N curves, each with its own series. EachX shows current post-transition signal and PnL settled from previous-state bet. All24 images directly inspected; no clipping/label overlap, small positive curves may cluster on the baseline scale with legible final-value legends.
+- Full480row table is charts/middle-fixed-results-480.csv, SHA256 D8FBD7087F7B62B90ED561917C3D3D2BE2174C034EF215FE22DC5AB0451B7597. Saved8 detailed evidence JSONs, reproduction scripts Calculate-MiddleFixedSweep.ps1/FixedMiddle.cs/Render-MiddleFixedCharts.ps1, raw-independent verification script/results, boundary tests and proofs.54 files copied with matching SHA256; plus middle-fixed-delivery-manifest.json, SHA256 89EB4B41A2FBC580F4478FF6B68CEFDEA4F309DE5F218AC620DEC103A8238CB7.
+Next: None for this requested recalculation.
+Notes: Independent raw CSV queue implementation matched all480 cases/8160 exact fields,480 NetPath hashes and480 decision/state hashes covering4147200 observed states, zero mismatches. MainCSV additionally matched7680 exact numerical fields/960 hashes.12 main boundary tests and3 independent selftests passed. Reconciled24 baseline plotted paths and75 overlays to verified exact numerators;24 original indicator inputs unchanged. Final independent proof SHA256 23AD3E90AF15C50C422F7B1FEB132ECC21B2D6767E83D43F31B4775BF137FAC0. Protected cleanup removed marked run middle-fixed-sweep-20260907 and verified absence; durable deliverables remain. No application, database, service or order changes; only exempt context/history repository edits, no commit/push.
+Blockers: None.
+
+## Active Update 2026-09-07 Fixed Mean Full Sweep Awaiting Lifecycle Choices
+Goal: Run the requested full fixed-mean MiddleDiffProgress sweep for BTC/ETH/SOL, N1..20 and matching windows3..24h by3h.
+Status: In Progress; read-only preview completed, computation not started pending two behavior choices.
+Done:
+- Latest request is "Запусти полный пересчёт по новой логике - все валюты, все N, все периоды с шагом 3h". Proposed scope retains the previous30day analysis period Aug5 19:10Z..Sep4 19:10Z,480 combinations, existing3.3% fee/fullfill0.5 research model. No production/application change is requested.
+- Rechecked persisted approved fixed-mean definition and the actual previous warmup/exclusion implementation. Confirmed scope evidence:8639 known settlements per asset against8640 expected,1 missing chart outcome; pre-chart gapAug5 15:00Z and chart gapSep3 15:25Z. Source SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged.
+- The earlier acceptance explicitly leaves immediate same-event re-entry and active-series gap handling unspecified. Independent readiness review confirms both choices affect subsequent stakes/PnL. The old stateless implementation restarts indicator warmup after gaps and retains booked PnL, but cannot establish a frozen-series policy.
+- Asking whether to check a new entry immediately after a series ends (for the next market), and whether to preserve the active series/SeriesMiddle across the actual data gap while suspending bets until the previous full warmup completes. Neither candidate rule is approved or implemented yet.
+Next: Obtain those two lifecycle decisions, then execute only the requested local480-case recalculation with independent verification.
+Notes: No code, calculations, new charts/data, database, service or order mutations. No temporary artifacts created; only exempt context/history updated.
+Blockers: Same-event restart and frozen-series gap behavior await the user's decision.
+
+## Active Update 2026-09-07 Fixed Mean Series End Accepted
+Goal: Record the user's acceptance of the proposed fixed-mean Progress-series completion condition.
+Status: Completed clarification and persistence only; no implementation or recalculation performed.
+Done:
+- User accepted verbatim: "Да, принимаем твоё уточнение". The preceding question defines completion after each subsequent outcome when abs(Balance-SeriesMiddle)<=N; the comparison is against absolute Signal, not the reduced stake coefficient. At abs(Signal)=N the coefficient formula gives1.
+- Agreed core: CurrentMiddle continues rolling; SeriesMiddle captures CurrentMiddle at the first bet of a series and remains unchanged within that series; Signal=Balance-SeriesMiddle and coefficient=abs(Signal)-(N-1), with the existing opposite-sign direction. Balance remains rolling. The next series captures the then-current CurrentMiddle at its own first bet.
+- Independent semantic review confirms this matches the user's clarification. Immediate same-event restart and gap handling of the new frozen-series state were not specified by this acceptance; no behavior for them has been invented or implemented.
+Next: None for recording this clarification.
+Notes: Only exempt context/history changed. No code, data, charts, simulation, database, service or order changes; no temporary artifacts created.
+Blockers: None for the accepted clarification; any later implementation must resolve behavior choices not covered by it.
+
+## Active Update 2026-09-07 Fixed Mean Per Progress Series Clarification
+Goal: Clarify the requested MiddleDiffProgress change to freeze the current mean at a series' first bet while the ordinary rolling mean continues updating.
+Status: In Progress; awaiting the precise series-end condition before implementation or recalculation.
+Done:
+- Read the current threshold calculation: entry abs(Signal)>=N, coefficient abs(Signal)-(N-1), direction opposite Signal. The existing simulation has no explicit Progress-series lifecycle or frozen-mean state.
+- The requested core change is understood as retaining the normal rolling mean separately, capturing a series reference mean at its first bet, and using Balance minus that reference during the series. No balance-window change was requested.
+- Root and independent semantic review identified the unresolved phrase "прогрессия не вернулась в N": it could refer to abs(Balance-FixedMean) or the reduced coefficient; exact equality, <= versus <, and the post-outcome boundary must be resolved. With fractional means an exact equality to integer N need not occur. Asking whether the series ends after an outcome when abs(Balance-FixedMean)<=N, where equality corresponds to coefficient1. This is a clarification proposal, not approved behavior.
+Next: Obtain the user's exact series-end rule, then specify the remaining lifecycle without inventing boundary behavior.
+Notes: Read-only implementation inspection only; no simulation, strategy code, chart, data, database, service or order changes. No temporary artifacts created. Only exempt context/history updated.
+Blockers: Series-end meaning and boundary not yet confirmed.
+
+## Active Update 2026-09-07 MiddleDiffProgress Loss Attribution
+Goal: Explain what accumulates losses in the latest480 MiddleDiffProgress cases, without strategy or data changes.
+Status: Completed read-only accounting and signal-mechanism diagnosis.
+Done:
+- Scope unchanged: BTC/ETH/SOL, matching balance/Middle windows3..24h by3h, N1..20, Aug5 19:10Z..Sep4 19:10Z. Preview found480 unique cases,8639 known settlements and1 missing outcome per asset; source SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. Existing fullfill0.5 ResearchOnly accounting and3.3% of every reduced stake retained.
+- CSV accounting identities checked for all480 cases. Independent saved raw-CSV-derived JSON matched all480 cases/6720 exact numeric fields. Gross positive386/negative83/zero11; Net positive135/negative334/zero11. In251 of334 losing cases, positive Gross is outweighed by fees;83 already lose before fees. All11 zero cases have no bets. These are counts of overlapping alternatives, not aggregated portfolio PnL.
+- At N1,23/24 cases have positive Gross but only2 have positive Net (SOL3h,ETH12h). BTC3h Gross538.7222222222,fee1019.1591666667,Net-480.4369444444; ETH3h103.1666666667/1011.1548333333/-907.9881666667; SOL3h1163.4444444444/949.916/213.5284444444. Winning stake-volume shares respectively50.8722%,50.1683%,52.0209%. Verified formula Net/Volume=2*q-1.033, with q=(Volume+Gross)/(2*Volume), so break-even q=51.65%, not unweighted trade win rate.
+- BTC N1 comparison3h to24h: bets7156 to7234, average coefficient4.3158 to10.0561 (rounded); volume30883.6111111111 to72745.5347222222; fees1019.1591666667 to2400.6026458333; Gross538.7222222222 to430.7430555556; Net-480.4369444444 to-1969.8595902778. Larger realized stake volume increases fee drag in this comparison without a sufficient Gross improvement. High-N positive examples are sometimes tiny samples: ETH3h N19 has1bet/Net1.2356111111; BTC3h N16 has2bets/Net2.3637777778.
+- Mechanism verified from all three relevant source scripts: B is rolling sum of outcomes, M rolling mean of B, S=B-M. On continuous warmed data, deltaS=q_t-q_(t-m)-(B_t-B_(t-m))/m. Thus S returning toward0 can be caused by an outgoing outcome or mean shift and does not itself establish a win on the new outcome. Real BTC3h example Aug26 05:45Z(X5887) to05:50Z(X5888): B stays-2, M changes-1 to-44/36, S changes-1 to-28/36, but previous Up stake1 loses to Down, Grossdelta-1/Netdelta-1.033. New and outgoing02:50 outcomes are bothDown; mean replaces balance+6 with-2. Independent direct raw summation of72 consecutive rows matched37 balances and both states; root separately checked states and raw MarketIds3868665/3868678 (CSVlines67641/67642).
+Next: None.
+Notes: Results describe this historical covered-data model, not proof of a stable predictive edge or actual venue execution. No new recommendation, strategy, chart, CSV or application change. Existing CSV SHA256 C9602D1472FFF10185E023C34FFC9895E411521AC099CBEAC2F84C47E52DB995 and independent aggregate JSON903427B7E64793C0523064E6C4342892F05BBDEAB2BF8F77AB4BB9F0989796CD support reproducibility. Protected cleanup removed the empty marked diagnostic run middle-loss-diagnosis-20260907 and verified absence. Only required context/history updated.
+Blockers: None.
+
+## Active Update 2026-09-07 Threshold Sweep With Positive Net Overlays
+Goal: Calculate BTC/ETH/SOL for matching balance/Middle windows 3,6,9,12,15,18,21,24 hours and N=1..20; retain three previous-format charts per window and overlay only the N strategies with positive final Net.
+Status: Completed 480 local ResearchOnly calculations, 24 PNGs and independent verification.
+Done:
+- User confirmed the same last30day period, 2026-08-05T19:10Z through 2026-09-04T19:10Z. Source crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. Max support starts Aug3 19:10Z, 9215 rows per asset; each has 8640 observed states including baseline, 8639 known settlements and one missing chart outcome. No duplicates/invalid outcomes. Existing missing Aug5 15:00 and Sep3 15:25 restart indicator warmup, not PnL. Warmup remains 2m consecutive results, m=12H; warmup skips by H are 93,237,381,525,642,714,786,858 plus one noncontiguous-predecessor skip each.
+- Exact rule: abs(previous Signal)>=N; coefficient=abs(previous Signal)-(N-1), including coefficient1 at equality. Positive signal bets Down, negative bets Up on the next contiguous market. Retained unrounded mean, full-fill0.5 model, fee3.3% of every reduced stake, PnL0 at X0 and current-state/settled-prior-bet X alignment. H>=15 still lacks final rewarm after Sep3 gap.
+- Primary integer histogram aggregate and independent raw-CSV queue/direct-bet implementation matched all480 cases and 7200 exact fields. All24 N1 baselines match prior results. Independent hashes match all133 additional positive Net trajectories, 8640 states each (1,149,120 cumulative values), and actual arrays were rehashed. Final semantic review PASS; no findings.
+- Positive N by H: 3h BTC5..16/ETH19/SOL1..13; 6h BTC15..20/ETHnone/SOL9..18; 9h BTC6..8,17..20/ETHnone/SOL8,9,17,19,20; 12h BTCnone/ETH1..20/SOL7..20; 15h BTC5..12/ETHnone/SOL9..20; 18h BTC14..20/ETHnone/SOL11..20; 21h BTC18..20/ETHnone/SOL14..20; 24h none for all three. Total135 positive cases, including two N1 baselines;11 zero cases excluded from selection.
+- All24 charts preserve upper orange Signal/blue Middle and lower green Gross N1/red Net N1. Only positive-final-Net N>=2 trajectories are added, using solid colors and legends with N/finalNet; N1 is never duplicated. Empty selections retain baseline charts. All24 PNGs visually inspected (root8BTC, reviewers8ETH/8SOL); legends fit, no clipped labels. Some near-zero curves overlap on the shared baseline scale.
+- Saved40 hash-verified durable files in D:/My/Business/PolyMarketData/CryptoUpDown5m/charts: 24 middle-diff-progress-last-30d-{asset}-{H}h-positive-n.png, 8 middle-threshold-{H}h-evidence.json, middle-threshold-results-480.csv (all Gross/Fee/Net and exact numerators), Render-MiddleThresholdSweep.ps1, two independent calculation scripts, two independent calculation/hash reports, independent-threshold-final-review.json and middle-threshold-delivery-manifest.json. Final proof SHA256 CE30DF495FF74485834A81ED6E06255B7B536CD3BFF421BBC7E9060D83732E27. All24 original baseline PNG hashes unchanged.
+Next: None.
+Notes: Positive selection uses final Net on the same historical period, not out-of-sample validation or actual execution evidence. Protected cleanup removed the marked middle-threshold-sweep-20260907 temporary run (49 working files); absence verified, durable files preserved. Only external research artifacts and exempt context/history changed; no application, database, service or order changes.
+Blockers: None.
+
+## Active Update 2026-09-07 Matched Balance And Middle Window Sweep
+Goal: Repeat BTC/ETH/SOL last30day charts for matching balance/Middle windows6,9,12,15,18,21,24hours.
+Status: Completed21 local ResearchOnly calculations and21 visually checked PNGs.
+Done:
+- Applied the user's correction to BOTH windows: m=12*H five-minute observations for balance and mean,2m consecutive results required for warmup. Fixed chart baseline2026-08-05 19:10Z..2026-09-04 19:10Z; source support extended toAug3 19:10Z,9215 rows per asset. Source SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged. Each case has8640 displayed states,8639 known settlements,zero duplicates/invalid outcomes and1 missing chart outcome.
+- Retained fractional signal, abs>=1, next contiguous market using previous signal, fullfill0.5,fee3.3%every stake, PnL0 at baseline and no cumulative PnL reset after gaps. Known missingAug5 15:00 andSep3 15:25 restart indicator warmup. H6/9/12 are re-warmed by the final timestamp; H>=15 last valid signal isSep3 15:20Z, leaving the remainder without bets and flat booked PnL. Warmup-skipped known settlements byH:237,381,525,642,714,786,858; one noncontiguous-predecessor skip each.
+- Net byH6,9,12,15,18,21,24 in base stake units: BTC[-796.9847777778,-392.1792962963,-469.4407777778,-396.7076222222,-980.8578981481,-1656.4012222222,-1969.8595902778]; ETH[-320.6365833333,-1047.0361296296,177.438625,-186.4749,-968.72875,-1871.6901587302,-3014.2511805556]; SOL[-808.1201666667,-771.4287962963,-939.724,-1112.8571888889,-1447.7858148148,-847.7718333333,-830.8292152778]. Exact Gross/fees/volume/numerators/states retained in per-H reports.
+- Independent queue calculation matched all181440 state records by canonical SHA plus exact totals/counters/windows/time boundaries. Main uses prefix sums; weighted stake reconciliation passed. Independent final semantic review passed, no findings.
+- Saved21 PNGs D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-30d-{asset}-{H}h.png,7 exact-state JSONs middle-diff-progress-last-30d-{H}h.json, Render-MiddleWindowSweep.ps1 and independent verifier/evidence alongside. Every PNG was visually inspected: root7BTC, reviewers7ETH/7SOL. All31 durable copies hash-matched;3h originals remain unchanged.
+Next: None.
+Notes: This is a covered-data model, not actual execution evidence or complete Live PnL. Protected cleanup removed markedrun middle-window-sweep-20260907 and absence was verified. Only external analysis artifacts and exempt context/history changed; no application, database, service or order changes.
+Blockers: None.
+
+## Active Update 2026-09-07 Three-Hour Mean Last Thirty Days
+Goal: Repeat the current BTC/ETH/SOL MiddleDiffProgress charts for the last30days.
+Status: Completed three local research simulations, independent verification and three rendered charts.
+Done:
+- Chart baseline2026-08-05T19:10Z, end2026-09-04T19:10Z; support beginsAug5 13:10Z. Each asset has8711 support rows,8640 chart states including baseline,8639 observed settlements versus8640 expected. Source SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F unchanged; zero duplicates/invalid outcomes.
+- Retained3h balance, unrounded3h mean of36 balances, abs(signal)>=1, fractional prior-state next-market stake, full-fill-at0.5 ResearchOnly model, fee3.3% every stake, PnL0 at baseline. Warmup uses72 consecutive results under the existing sum-window-count convention. MissingAug5 15:00 affects initial warmup; missingSep3 15:25 restarts it. First valid signalAug5 21:00Z. Per asset93 observed settlements excluded for warmup and1 for noncontiguous predecessor; missing outcome not invented. Cumulative booked PnL never resets after gaps.
+- BTC7156bets/3598wins/3558losses: Gross538.7222222222,fee1019.1591666667,Net-480.4369444444. ETH7118bets/3559wins/3559losses: Gross103.1666666667,fee1011.1548333333,Net-907.9881666667. SOL7067bets/3652wins/3415losses: Gross1163.4444444444,fee949.916,Net213.5284444444. Amounts in base stake units; covered-data model, not complete live PnL.
+- Independent queue calculation matched all25920 observed state records and last13 indicator states per asset against prior hourly evidence. Canonical SHA BTC217122C195E3D6EF6CA5214DE70FED16B80275E60F8DC066F968868CCD2E6AC4; ETH039515478D204FA111CDF754C925809D3AFEEF512D6D5B509BB038D84A990CE4; SOL4AF0B1EDE2AC5603AA2F1D071421C68B82A2232D3537F8F0ECD753137D23DDE0. Weighted winning/losing stakes reconcile totals. Independent focused review passed after correcting skip-count footer label.
+- Replaced and visually inspected only the three last30d PNGs under D:/My/Business/PolyMarketData/CryptoUpDown5m/charts, retaining two panels/orange signal/blue mean/green Gross/red Net, solid lines, gaps as breaks and date/step alignment. Saved Render-MiddleMonth3h.ps1 and middle-diff-progress-last-30d-mean3h.json there for reproducibility. Hourly PNGs unchanged by hash.
+Next: None.
+Notes: Final PNG SHA BTC414C6BA692E7024AC8BA5F1BBC78C71424ECC9926186553C96C5EC4EEBFBC188; ETHA19CA003C3772E5BF79AE78B552802F621B6225647F5FD537551254C601E8596; SOL713B367D950F4644CDD70BF7143C120FD408490716760EF47FB712535D4ED56F. Exact durable copies hash-verified. Protected cleanup removed marked temporary run middle-month-3h-20260907 and absence was verified. No application, database, service or order changes; existing unrelated repository edits preserved.
+Blockers: None.
+
+## Active Update 2026-09-07 ETH SOL Three-Hour Mean Recalculation
+Goal: Calculate ETH and SOL for the same hour using the latest BTC three-hour-balance/three-hour-mean rules.
+Status: Completed two simulations, independent verification and two rendered charts.
+Done:
+- Used ETH and SOL only, same source hash and UTC chart hour 2026-09-04 18:10..19:10. Each has 85 uninterrupted support rows from12:10, zero gaps/duplicates/invalid outcomes, 13 displayed states and 12 settlements.
+- Retained balance in (t-3h,t], mean of36 balance values in (t-3h,t] without rounding, exact numerator/36 signal, threshold Abs(signal)>=1, prior-state next-market stakes at Abs(signal), X0 warmed indicator/PnL0, full-fill-at0.5 model and3.3% fee per stake.
+- Independent timestamp-window calculation matched all26 mean/signal/Gross/volume/Net state records. Weighted win/loss stakes reconciled totals.
+- ETH:12 Up bets,8wins4losses,no skips,volume719/9=79.8888888889,Gross34,fee2.6363333333,Net31.3636666667.
+- SOL:12 bets (11Up/1Down),8wins4losses,no skips,volume467/9=51.8888888889,Gross137/9=15.2222222222,fee1.7123333333,Net13.5098888889. Signal X10=-1 is included; X11=38/36 places the winning Down bet settling atX12. Final signal X12=-30/36 is below threshold and has no later settlement in this chart.
+- Replaced and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-eth.png and middle-diff-progress-last-1h-sol.png in the preferred format with blue mean and orange signal. Separated the close SOL X11 mean/signal labels. BTC PNG hash is unchanged.
+- Durable calculation/rendering: Render-EthSolMiddle3h.ps1; exact state evidence: middle-diff-progress-last-1h-eth-sol-mean3h.json in the same charts directory.
+Next: None.
+Notes: ETH PNG SHA256 BE7E3B2BCA30AE32FD026D4096519F538C024C102298CEBC2477CAD80979A677; SOL DAC26F84E20BEE0F031205118D980E5F968FA4B50AA319A5CC342560C4052C51. Source E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Existing ResearchOnly model. Marked temporary run eth-sol-middle-3h-20260907 was removed and absence verified. No application, database, service or order changes.
+Blockers: None.
+
+## Active Update 2026-09-07 BTC Three-Hour Mean Recalculation
+Goal: Recalculate the same BTC chart using a three-hour mean instead of a one-hour mean.
+Status: Completed BTC-only simulation, independent verification and rendered chart.
+Done:
+- Kept the chart interval 2026-09-04 18:10..19:10 UTC, 13 state points, baseline PnL=0, three-hour outcome balance, fractional signals, threshold Abs(signal)>=1, prior-state next-market bets, full fill at 0.5 and 3.3% fee on each stake.
+- Changed only the mean lookback from one hour/12 balance observations to three hours/36 balance observations. Required support was extended to six hours before activation: 85 consecutive source rows spanning 12:10..19:10 UTC, with zero gaps, duplicates or invalid outcomes. Each nested balance window has 36 outcomes.
+- Used exact integer numerators over 36 for mean/signal/stakes/Gross/volume and over 36000 for Net. Independent raw timestamp-window calculation matched all 13 states; weighted winning/losing stakes reconciled totals.
+- Result: 12 Up bets, 8 wins/4 losses, no skips, volume 505/9=56.1111111111, Gross 169/9=18.7777777778, fee 1.8516666667, Net 16.9261111111. Initial balance remains0; initial mean is158/36=4.3888888889 and initial signal=-158/36. Final mean=3.5 and signal=-1.5.
+- Replaced and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-btc.png, SHA256 B2823686C6C8967C4CA8DF825367F7F83EADF287531F052A57E4947F7B56F547. Preserved the accepted two-panel layout, blue mean, orange signal, green Gross and red Net. Updated labels explicitly say the mean covers3hours.
+- Durable calculation/rendering reference: Render-BtcMiddle3h.ps1; exact state evidence: middle-diff-progress-last-1h-btc-mean3h.json, both in the same charts directory. ETH/SOL image hashes are unchanged.
+Next: None.
+Notes: Source SHA256 remains E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. This is the existing ResearchOnly full-fill model. Marked temporary run btc-middle-3h-20260907 was removed and absence verified. No application code, database, service or orders changed.
+Blockers: None.
+
+## Active Update 2026-09-07 BTC Initial UpDiffMiddle Warm-Up Explanation
+Goal: Explain whether BTC's first UpDiffMiddle value 3.167 uses previous-hour history or one observation.
+Status: Completed read-only verification.
+Done:
+- Independently recalculated the 12 UpDiff observations used at X=0, 2026-09-04 18:10 UTC: timestamps 17:15..18:10, rolling mean window (17:10,18:10], values [6,6,4,2,2,4,4,4,2,2,2,0]. Sum=38 and exact UpDiffMiddle=38/12=19/6. Every observation uses a complete 36-result three-hour window.
+- Matched sum and initial state against the saved BTC chart evidence: UpDiff=0, UMD=-19/6, Gross=0, Net=0. Indicator warm-up precedes betting activation; the mean is not calculated from only the first visible point and is not reset at the chart start.
+- The displayed 3.167 is a shortened label only; the calculation uses the full fractional mean.
+Next: None.
+Notes: Source hash remains E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Only required context/history changed.
+Blockers: None.
+
+## Active Update 2026-09-07 BTC UpDiffMiddle Overlay
+Goal: Show changes of UpDiffMiddle on the same current BTC chart.
+Status: Completed BTC-only chart update.
+Done:
+- Added a solid blue (#2879d0) UpDiffMiddle series with blue value labels to the existing upper orange UMD panel, sharing the same X coordinates and Y scale. Added a compact two-series legend. Preserved the accepted two-panel format.
+- Retained the exact BTC 2026-09-04 18:10..19:10 UTC interval and all 13 states. Verified all UMD, mean, stake, Gross, volume and Net numerator fields against previous evidence; independent raw timestamp-window calculation matched MiddleSum12=[38,30,22,18,14,12,6,0,-6,-8,-8,-8,-6]. Mean values are unrounded numerator/12.
+- Confirmed the lower PnL panel is pixel-identical to the previous BTC image. ETH/SOL image hashes remain unchanged. X7→X8 now visibly shows blue mean 0→-0.5 alongside orange UMD -2→-1.5.
+- Replaced and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-btc.png, SHA256 360811066CC32074C97673920462F1CC7400F888B7D7A88D85309E7DF239B4C6. Added the BTC-only rendering reference Render-BtcMiddleOverlay.ps1 and matching state evidence middle-diff-progress-last-1h-btc-middle.json in that same directory.
+Next: None.
+Notes: Source SHA256 remains E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Marked temp run btc-middle-overlay-20260907 was removed and absence verified. No strategy, source data, other currency chart, application code, database, service or order changes.
+Blockers: None.
+
+## Active Update 2026-09-07 BTC Fractional X7 To X8 Explanation
+Goal: Explain in detail why the current BTC UMD rises from X=7 to X=8 while PnL falls.
+Status: Completed read-only verification.
+Done:
+- Matched saved exact state evidence against original CSV rows. X=7 is 2026-09-04 18:45 UTC, UMD=-2 and Net=7.6843333333; it places Up with coefficient 2. X=8 is 18:50 UTC, market 4193869, actual outcome Down. Gross falls by 2 and Net falls by 2.066 (including fee 0.066), ending at Gross=6.3333333333 and Net=5.6183333333.
+- At X=8 the three-hour window gains the new Down and loses the old Down ending 15:50 (market 4190546). Counts therefore stay 17 Up/19 Down and UpDiff stays -2.
+- The hourly average removes UpDiff=4 at 17:50 (independently verified 20 Up/16 Down) and adds UpDiff=-2 at 18:50. Its 12-value sum changes 0 to -6, so unrounded UpDiffMiddle changes 0 to -0.5. UMD therefore rises from -2-0=-2 to -2-(-0.5)=-1.5 despite the Down outcome.
+- Clarification: the rising orange line is a derived rolling indicator, not the BTC price or a label of the latest Up/Down result. PnL settles the prior stake against the actual outcome. The X=8 signal -1.5 determines the following Up stake only.
+Next: None.
+Notes: Source hash remains E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Source rows plus saved integer-numerator evidence independently confirm the figures. Only required context/history changed.
+Blockers: None.
+
+## Active Update 2026-09-07 Preferred Strategy Chart Format
+Goal: Remember the user's approval of the current charts as the preferred format for subsequent strategy charts.
+Status: Completed preference persistence.
+Done:
+- User explicitly requested: "Запомни текущий формат графиков - он красивый и удобный". Use the current BTC/ETH/SOL fractional MiddleDiffProgress charts as the visual reference for future comparable requests.
+- One PNG per asset, two vertically stacked panels with aligned X coordinates: indicator above, cumulative Gross/Net PnL below. X labels include step number and UTC time. Preserve the agreed same-state alignment: initial warmed indicator and PnL=0 at X=0; later X shows updated indicator and PnL after that step's result.
+- Preferred visual style: 2000x1300 light-background image (#f7f9fc), Segoe UI, spacious layout, subtle solid grid/zero guides, solid colored series with circular markers, readable indicator value labels. UMD orange #f47a16, Gross green #08a44e, Net red #e53c49. No dashed/dotted lines.
+- Show the no-entry threshold zone as a pale gray band when applicable. Keep title, period, relevant entry rule, final Gross/Net labels, and compact stake/skip/volume/fee information. Keep tables outside the PNG and embed finished PNGs directly in the response.
+- Reference artifacts: D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-{btc,eth,sol}.png. Rendering reference: Render-FractionalMiddleDiffHour.ps1 in the same directory. This preference fixes presentation, not the requested analysis period, number of observations, strategy parameters or calculation rules.
+Next: Apply this format to subsequent comparable strategy-chart requests unless the user requests a change.
+Notes: Verified the existing rendering script and reference images. Only context/history preference records changed.
+Blockers: None.
+
+## Active Update 2026-09-07 Fractional MiddleDiffProgress Last Hour Charts
+Goal: Repeat BTC/ETH/SOL latest-hour charts with unrounded UpDiffMiddle and bets only when Abs(UpMiddleDiff)>=1.
+Status: Completed recalculation, independent verification and three rendered charts.
+Done:
+- Confirmed source counts BTC 70392, ETH 68432, SOL 68436 and common last result 2026-09-04T19:10:00Z. Retained the 18:10..19:10 UTC chart hour, 13 state points and 12 settlements; each asset has 61 continuous support rows from 14:10 with zero gaps, duplicates or invalid outcomes.
+- UpDiff remains the signed outcome sum in (t-3h,t]; UpDiffMiddle is now the unrounded mean of 12 UpDiff values in (t-1h,t]. Represented UMD exactly as an integer numerator divided by 12, and tested eligibility as Abs(numerator)>=12, including equality.
+- Retained state-aligned X: X=0 has warmed UMD and Gross/Net=0. Every later X settles the previous-state bet, then displays current UMD and cumulative PnL. Positive eligible UMD bets Down; negative bets Up; coefficient is the exact fractional Abs(UMD). Modeled full fill at 0.5 and fee 3.3% of every stake remain unchanged.
+- Independently matched all 39 UMD/Gross/volume/Net states against a separate raw timestamp-window calculation, and reconciled weighted winning and losing stake totals.
+- BTC: 11 bets, 5 wins/6 losses, volume 28.5, Gross 2.5, fee 0.9405, Net 1.5595. ETH: 11 bets, 7 wins/4 losses, volume 95/3, Gross 38/3, fee 1.045, Net 11.6216666667. SOL: 9 bets, 6 wins/3 losses, volume 18.5, Gross 49/6, fee 0.6105, Net 7.5561666667.
+- Replaced and visually inspected the three charts under D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-{btc,eth,sol}.png. Exact state evidence is in middle-diff-progress-last-1h-fractional.json and reproducible calculation/rendering in Render-FractionalMiddleDiffHour.ps1 in that same directory. Only displayed labels are shortened; calculation uses exact integer-scaled fractions. All lines are solid.
+Next: None.
+Notes: Source SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Image hashes BTC FAEA335F837A0F3034C009098BFEFA0D6D2977FC1BD5F5E593059928CFC9EF48; ETH 78B2F20DDE517FB7403F6F6C25AAF3F04F97D588BED96E96F7F2E1B934246989; SOL B4932AC1269F2EA77E7859FB00DC46C402C2A8DE73414DFBF48DF2125A2F433E. ResearchOnly model, not actual fill evidence. Marked temporary run middle-diff-fractional-hour-20260907 was removed and absence verified. Application code, database, service and orders were not changed.
+Blockers: None.
+
+## Active Update 2026-09-06 BTC Final Three Equal UMD Values
+Goal: Explain whether the last three equal BTC UMD values imply a changing UpDiffMiddle.
+Status: Completed read-only verification.
+Done:
+- Verified BTC market IDs 4194221, 4194429 and 4195250 at 2026-09-04 19:00, 19:05 and 19:10 UTC directly from the source CSV. All three outcomes are Up, three-hour counts are 19 Up/17 Down, UpDiff=2, rounded UpDiffMiddle=-1 and UMD=3.
+- Unrounded hourly means are -2/3, -2/3 and -1/2; the last change disappears under the agreed nearest-integer rounding with ties away from zero.
+- Independently matched timestamp-filtered rolling windows against prefix sums. Read-only preview: 62 BTC source rows from 14:05 through 19:10 UTC, zero duplicates or gaps; each target has 36 outcome observations and 12 hourly UpDiff observations.
+Next: None.
+Notes: Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Only required context/history bookkeeping changed.
+Blockers: None.
+
+## Active Update 2026-09-06 BTC State Point Nine Explanation
+Goal: Explain why BTC PnL falls between the eighth and ninth plotted markers although UpMiddleDiff remains negative.
+Status: Completed read-only point-level verification.
+Done:
+- Resolved ordinal point numbering: the eighth plotted marker is X=7 at 18:45 UTC and the ninth is X=8 at 18:50 UTC.
+- At point 8, the result was Up, UMD became -2, and the prior Up x3 bet won; Net rose from 5.406 to 8.307. UMD=-2 then placed a new Up x2 bet for the next market.
+- At point 9, the actual market result was Down, so that Up x2 bet lost. Gross changed by -2, the fee was 0.066, and Net fell by 2.066 from 8.307 to 6.241.
+- The new point-9 UMD=-1 is not a statement that the current result was Up; it is the instruction to place the next Up x1 bet. That next market at 18:55 was Up, so Net rose at point 10 from 6.241 to 7.208.
+- Verified why UMD increased from -2 to -1 despite the Down result: the three-hour UpDiff stayed -2 (17 Up/19 Down) while rounded UpDiffMiddle moved from 0 to -1, so UMD=-2-(-1)=-1.
+Next: None.
+Notes: Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. No graph, calculation rule, strategy implementation, database, service or order changed.
+Blockers: None.
+
+## Active Update 2026-09-06 MiddleDiff State-Aligned X Charts
+Goal: Correct the latest-hour BTC, ETH and SOL graphs so UpMiddleDiff and PnL share X as the current strategy state after each observed result.
+Status: Completed recalculation and replacement of three graph artifacts.
+Done:
+- Applied the user's explicit state sequence. X=0 contains the already-warmed UpMiddleDiff and Gross/Net=0 before any strategy bet; that UMD places the first bet. At each X=1..12, the prior bet is settled from the newly observed outcome, cumulative Gross/Net is updated, UMD is recomputed including the same outcome, and that new UMD determines the next bet.
+- Both upper and lower series now contain exactly 13 aligned states at X=0..12 and timestamps 18:10..19:10 UTC. There is no blank leading UMD position and no causal shift of PnL to the signal's X.
+- X=0 values are BTC UMD=-3/Gross=0/Net=0, ETH -3/0/0 and SOL 0/0/0. The 12 subsequent markets and final PnL totals remain unchanged.
+- Independently verified all 13 signals, the zero initial PnL and final monetary totals using a separate prefix-sum implementation.
+- Replaced and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-btc.png SHA256 18A96E6FD5F09EE663750274E4B63CD1AB7760AADA306A738C86A79735EA47DD; ETH SHA256 CC0F52DCBE2A2C7B6DBB55EC4BCA4D5995ACF8036513E73486C9E74D59FB2001; SOL SHA256 F04CB3ACF952C0D5CBAF1D6C6315667AAEF7B9C07CF09CC9AC682A1681DE48BF. All lines and guides are solid.
+Next: None.
+Notes: The immediately prior graph convention that aligned a signal with its future settled PnL is withdrawn. The corrected chart aligns the two variables as state at the same step, exactly matching the user's X=0/X=1 sequence. Final Gross/fee/Net remain BTC +1.000/1.023/-0.023, ETH +16.000/1.122/+14.878 and SOL +7.000/0.627/+6.373. Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. ResearchOnly optimistic full-fill model; no strategy implementation, database, service or order changed.
+Blockers: None.
+
+## Active Update 2026-09-06 MiddleDiff Signal-Result Aligned Charts
+Goal: Align each latest-hour UpMiddleDiff signal with the cumulative PnL observed after the market generated by that signal.
+Status: Completed recalculation and replacement of three graph artifacts.
+Done:
+- Reframed X as one causal pair: UpMiddleDiff at signal time t and cumulative Gross/Net after the corresponding market result at t+5 minutes share the same X coordinate.
+- Retained a separate leading `Старт` PnL point at zero. The 12 paired coordinates cover signals 18:10..19:05 UTC and their results 18:15..19:10 UTC; the 19:10 signal is not plotted because its resulting market lies outside the displayed hour.
+- Labeled the X axis with representative `signal time→result time` pairs and labeled every UpMiddleDiff point directly, so the one-step causal relationship is visible without mentally shifting either series.
+- Recomputed the pair mapping from raw timestamp-keyed outcomes and independently verified all 12 signals and monetary totals with a separate prefix-sum implementation.
+- Results remain unchanged: BTC Gross +1.000, fee 1.023, Net -0.023; ETH +16.000/1.122/+14.878; SOL +7.000/0.627/+6.373.
+- Replaced and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-btc.png SHA256 486EB8E9959A5E60F8FE5D06CEC3E32EF7974855B7F50E53A48D980910F7CC61; ETH SHA256 4675614D5D4489A7CDBA0A2E4D99A34463DA9BD5F52E45A3840A1FDF677D0AA6; SOL SHA256 91F403F8C8261EA7BD51CE162CDC506625D8685C49D82D2C6D0B3FE5DAF42DE4. All lines and guides are solid.
+Next: None.
+Notes: The prior graph alignment by observation timestamp is withdrawn and replaced by explicit signal-to-result pairing. Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Optimistic full-fill-at-0.5 ResearchOnly modeling; no strategy implementation, database, service or order changed.
+Blockers: None.
+
+## Active Update 2026-09-06 BTC MiddleDiff Point Eight Explanation
+Goal: Explain why the BTC latest-hour chart appears to show falling PnL near the eighth UpMiddleDiff point despite an Up result.
+Status: Completed read-only point-level verification.
+Done:
+- Verified point numbering from the 18:10 activation baseline: point 8 is 18:45 UTC, UpMiddleDiff=-2 and the completed market outcome is Up.
+- The market ending at 18:45 was entered from the prior 18:40 signal UpMiddleDiff=-3, so it was an Up bet with stake 3 and won. Gross rose from 6 to 9; Net rose from 5.406 to 8.307 after the 0.099 fee.
+- The falling segment after point 8 belongs to the next market ending at 18:50. Point-8 signal -2 placed an Up bet with stake 2; the 18:50 result was Down, so Gross fell from 9 to 7 and Net from 8.307 to 6.241.
+Next: None.
+Notes: The chart and calculation are internally consistent; the apparent issue is the required one-market signal lag, not a PnL error. Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. No graph, strategy, code, database, service or order changed.
+Blockers: None.
+
+## Active Update 2026-09-06 MiddleDiffProgress Last Hour Activation Baseline
+Goal: Correct the latest-hour BTC, ETH and SOL MiddleDiffProgress charts so the strategy is pre-warmed but PnL and betting begin exactly at the start of the displayed hour.
+Status: Completed recalculation and replacement of three graph artifacts.
+Done:
+- Applied the user's clarified activation model: indicator warm-up uses continuous outcomes from 2026-09-04T14:10:00Z onward; the displayed interval is 2026-09-04T18:10:00Z..2026-09-04T19:10:00Z; no bet before 18:10 is included.
+- Added the 18:10 activation point with Gross=0 and Net=0. The warmed UpMiddleDiff signal at 18:10 determines the first bet settling at 18:15; subsequent signals and settlements continue every five minutes through 19:10.
+- Each chart now contains 13 UpMiddleDiff points and 13 PnL points (the zero activation point plus 12 market settlements). Required support contains 61 consecutive five-minute timestamps per asset, with no gaps or duplicates.
+- Independently recalculated signals and PnL using a separate prefix-sum implementation. It matched the timestamp-window implementation exactly after correcting a false-negative verification condition caused by an over-compressed PowerShell `-ne` expression.
+- Final monetary results are unchanged from the earlier hour calculation: BTC 12 bets, Gross +1.000, fee 1.023, Net -0.023; ETH 12 bets, Gross +16.000, fee 1.122, Net +14.878; SOL 10 bets and two zero-signal no-bets, Gross +7.000, fee 0.627, Net +6.373.
+- Replaced and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-btc.png SHA256 9B584B448AE6F6412045F3A2A93BC9EAC7B8318306BF6D834F119112CFD4F81C; ETH SHA256 FFE2FF29C43B376A3BF6EE686B00F893771C74A0CAE4CC69823F94487010EE59; SOL SHA256 995FE5A1B9DB7C3ABE3CADA2163C362F64076CE6290D4AD2A3CD9D62900D3A68. All lines and guides are solid.
+Next: None.
+Notes: The prior final PnL totals remain verified, but the prior graphs' omission of the 18:10 zero baseline is withdrawn and corrected. Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Optimistic full-fill-at-0.5 ResearchOnly modeling; no application strategy, database, service, real orders or deployment changed.
+Blockers: None.
+
+## Active Update 2026-09-06 MiddleDiffProgress Last Hour Simulation
+Goal: Repeat the BTC, ETH and SOL MiddleDiffProgress simulation and charts for the latest common hour of loaded outcomes.
+Status: Completed read-only research simulation and three graph artifacts.
+Done:
+- Used `expected_market_end_utc` and the common UTC interval 2026-09-04T18:15:00Z..2026-09-04T19:10:00Z, with exactly 12 five-minute result points per asset.
+- Verified the required four-hour support interval contains 61 consecutive five-minute timestamps per asset, with zero duplicates, zero non-five-minute transitions and no warm-up exclusions.
+- Applied the previously confirmed rolling definitions and execution model without reset of indicator history: UpDiff on (t-3h,t], rounded last-hour UpDiff mean with exact x.5 away from zero, UpMiddleDiff signal after outcome t applied to the next market, price 0.5, optimistic full fill and 3.3% fee on every stake. Cumulative Gross and Net start at zero immediately before the displayed hour.
+- Independently recomputed every signal and bet directly from timestamp-keyed raw rows and matched the primary prefix/slice calculation and aggregate PnL exactly.
+- BTC: 12 outcomes (8 Up/4 Down), 12 bets, 5 wins/7 losses, volume 31, Gross +1.000, fee 1.023, Net -0.023; plotted UpMiddleDiff range -5..3, final 3.
+- ETH: 12 outcomes (8 Up/4 Down), 12 bets, 8 wins/4 losses, volume 34, Gross +16.000, fee 1.122, Net +14.878; plotted UpMiddleDiff range -5..4, final 2.
+- SOL: 12 outcomes (7 Up/5 Down), 10 bets, 6 wins/4 losses and two zero-signal no-bets, volume 19, Gross +7.000, fee 0.627, Net +6.373; plotted UpMiddleDiff range -3..4, final 2.
+- Created and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-1h-btc.png SHA256 E86C0151E31815A15E2ADF0B7C62EEAA3167E911612EF09FABD8291B1CE58927; ETH SHA256 F74DDA2175E5A0CD0374012115BC19B2518ED94B09AEF4F1611C1476CE4D2A6F; SOL SHA256 B82D4F708C844DFF6E20F8BC29E1FDA64A4ACBD97CBFFA5639871D7DD91F53E8. All chart lines and zero guides are solid.
+Next: None.
+Notes: Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Full-fill-at-0.5 is optimistic ResearchOnly modeling, not actual Paper/Live execution evidence. Initial temp-run invocation used an unavailable `ProjectName` parameter and failed before creating or changing data; rerunning with the inspected `WorkingDirectory` parameter succeeded. No application strategy, database, service, real orders or deployment changed.
+Blockers: None.
+
+## Active Update 2026-09-06 MiddleDiffProgress Last 30 Days Simulation
+Goal: Repeat the BTC, ETH and SOL MiddleDiffProgress simulation and charts for the latest 30 days of loaded outcomes.
+Status: Completed read-only research simulation and three graph artifacts.
+Done:
+- Used `expected_market_end_utc` and the common UTC interval 2026-08-05T19:15:00Z..2026-09-04T19:10:00Z, with 8,639 result points per asset.
+- Applied the previously confirmed rolling rules without daily or monthly reset: UpDiff on (t-3h,t], last-hour arithmetic mean rounded to nearest integer with exact x.5 away from zero, and UpMiddleDiff=UpDiff-rounded mean. A point is valid only after 48 consecutive five-minute results; a non-five-minute transition restarts warm-up.
+- Applied each valid nonzero signal after result t to the next contiguous five-minute market: positive signal bets Down, negative signal bets Up, coefficient Abs(signal), price 0.5, optimistic full fill, and 3.3% fee on every stake. Cumulative Gross and Net start at zero immediately before the displayed interval.
+- Preview identified one common missing five-minute result (one ten-minute gap) inside the interval for all assets. This produced 47 invalid plotted signal points and 48 outcomes without a bet around the gap per asset; no zero signal was substituted for warm-up.
+- Independently prefix-checked 8,593 signal points per asset with zero mismatches and reconciled Gross through both weighted winning/losing stakes and volume; all checks passed.
+- BTC: 7,274 bets, 3,698 wins/3,576 losses, volume 17,647, Gross +317.000, fee 582.351, Net -265.351; UpMiddleDiff range -10..8, final 3.
+- ETH: 7,300 bets, 3,672 wins/3,628 losses, volume 17,899, Gross +39.000, fee 590.667, Net -551.667; UpMiddleDiff range -9..8, final 2.
+- SOL: 7,205 bets, 3,702 wins/3,503 losses, volume 17,210, Gross +820.000, fee 567.930, Net +252.070; UpMiddleDiff range -9..8, final 2.
+- Created and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-30d-btc.png SHA256 3006982FADCF2BF44BBEC5CC2ED82F1B5945BE5F824998BC773995165E7E714C; ETH SHA256 74A864CF4E3EBD15EE5D2994299D769301CAA88108158BBBAE53E1C4F06C5388; SOL SHA256 D0864D9D1C2E26A9766827D7AFFCF946F19B651871C499BDF0D9FC508A870CE4. All plotted lines and zero guides are solid.
+Next: None.
+Notes: Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Full-fill-at-0.5 is optimistic ResearchOnly modeling, not actual Paper/Live execution evidence. No application strategy, database, service, real orders or deployment changed.
+Blockers: None.
+
+## Active Update 2026-09-06 MiddleDiffProgress Latest Day Simulation
+Goal: Simulate MiddleDiffProgress for BTC, ETH and SOL and chart rounded UpMiddleDiff plus cumulative Gross and Net PnL over the latest loaded 24 hours.
+Status: Completed read-only research simulation and three graph artifacts.
+Done:
+- Used expected_market_end_utc, common UTC interval 2026-09-03T19:15:00Z..2026-09-04T19:10:00Z and 288 five-minute result points per asset.
+- Signal definition: UpDiff on (t-3h,t]; raw one-hour arithmetic mean of UpDiff on (t-1h,t], rounded to nearest integer with exact x.5 away from zero; UpMiddleDiff=UpDiff-rounded mean. A point is valid only after 48 consecutive five-minute results; non-five-minute transitions restart warm-up.
+- Execution definition confirmed by user: signal after completed market t bets on the next contiguous five-minute market; positive signal bets Down, negative signal bets Up, coefficient Abs(signal), zero/invalid/gap means no bet. Price 0.5, optimistic full fill, fee 3.3% of every stake; plotted PnL resets to zero immediately before the first market in the displayed day.
+- A pre-day gap left the first two displayed UpMiddleDiff points invalid and prevented bets on the first three displayed outcomes for all assets; charts show the invalid signal interval as warm-up rather than plotting false zero values.
+- Independently prefix-checked every applicable plotted signal with zero mismatches and reconciled Gross as weightedWinStake-weightedLossStake and 2*weightedWinStake-volume, fee as 0.033*volume and Net as Gross-fee.
+- BTC: 243 bets, 123 wins/120 losses, volume 568, Gross -4.000, fee 18.744, Net -22.744; UpMiddleDiff range -7..7, final 3.
+- ETH: 243 bets, 131 wins/112 losses, volume 529, Gross 63.000, fee 17.457, Net 45.543; UpMiddleDiff range -5..5, final 2.
+- SOL: 232 bets, 127 wins/105 losses, volume 478, Gross 40.000, fee 15.774, Net 24.226; UpMiddleDiff range -6..5, final 2.
+- Created and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/middle-diff-progress-last-24h-btc.png SHA256 F1E1A569E839E7F1EDB2F45051F37173D1B72C858339D7F3836F365B281872DE; ETH SHA256 09DD12519ED241C3C405C8CA6865451F9B414D113575E7655BBFE6BB26C91858; SOL SHA256 0F0A28A7304FD67787D49CB30B4BBF76DC655439DD775F807A807B603D13B442. All plotted lines and zero guides are solid.
+Next: None.
+Notes: Source SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Full-fill-at-0.5 is optimistic ResearchOnly modeling, not actual Paper/Live execution evidence. One source-path typo and one malformed copy guard stopped before user-data access/write; corrected bounded operations completed. No application strategy, database, service, real orders or deployment changed.
+Blockers: None.
+
+## Active Update 2026-09-06 Full-History Rounded UpMiddleDiff Extrema
+Goal: Calculate Min and Max rounded UpMiddleDiff for BTC, ETH and SOL over all loaded history, excluding initial and post-gap warm-up.
+Status: Completed read-only calculation.
+Done:
+- Used expected_market_end_utc in UTC over each asset's full loaded range 2025-12-18T04:30:00Z..2026-09-04T19:10:00Z.
+- Applied the agreed validity rule: each point requires 48 consecutive five-minute results so all 12 last-hour UpDiff values have complete 36-result three-hour windows; every non-five-minute transition starts warm-up again.
+- Retained rounded UpDiffMiddle: arithmetic mean of 12 UpDiff values, nearest integer, exact x.5 away from zero; UpMiddleDiff=UpDiff-rounded UpDiffMiddle.
+- Preview found BTC 19 continuous segments/69710 valid/682 excluded points, ETH 23/67748/684, SOL 21/67798/638.
+- Full calculation result: BTC Min -10, Max 9; ETH Min -9, Max 10; SOL Min -10, Max 10.
+- Independently cross-checked every valid point using a separate prefix-sum formulation against the rolling-queue calculation; mismatches were zero for all three assets.
+Next: None.
+Notes: Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. No files, graphs, strategy, PnL, application code, database, service or orders changed except mandatory context/history bookkeeping.
+Blockers: None.
+
+## Active Update 2026-09-06 Rounded UpDiffMiddle Charts
+Goal: Redraw the latest-day BTC/ETH/SOL UpMiddleDiff charts after changing UpDiffMiddle to the last-hour mean rounded to the nearest integer.
+Status: Completed recalculation and graph replacement.
+Done:
+- Retained the prior exact source, UTC result-time basis, common 2026-09-03T19:15:00Z..2026-09-04T19:10:00Z interval, 288 points per asset, (t-3h,t] UpDiff window and (t-1h,t] UpDiffMiddle window.
+- Changed only UpDiffMiddle to Round(raw arithmetic mean, nearest integer, exact x.5 away from zero), as explicitly clarified by the user. UpMiddleDiff=UpDiff-rounded UpDiffMiddle is therefore integer at every point.
+- Revalidated the 36-observation three-hour and 12-observation one-hour windows and independently brute-force checked first, middle and last plotted points for each asset.
+- Replaced only the three existing PNG outputs after visual inspection and exact temp-to-target SHA256 comparison. BTC: min -7, max 7, final 3 (final UpDiff 2, raw middle -0.5, rounded middle -1). ETH: min -5, max 5, final 2 (final UpDiff 0, raw middle -1.5, rounded middle -2). SOL: min -6, max 5, final 2 (final UpDiff 0, raw and rounded middle -2).
+- Final files: D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/up-middle-diff-last-24h-btc.png SHA256 553DF7CD21B1A0FA89879511A444EA5ED600E144FD9D6E39894FD80E0777BB91; ETH SHA256 6206C6A1BE97032B9B6ADD016EA9DFC5E88CD9F539E399CD6322FAE1FDBAF8E8; SOL SHA256 5169D5A1AB3E92884524E4C720BC78E34958E817F958EE350D66175E0D727D7D.
+Next: None.
+Notes: Source hash remains E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Two malformed local preparation/copy commands failed before any user-file read or write; the corrected bounded operations completed. No strategy, PnL, application code, database, service, orders or external systems changed.
+Blockers: None.
+
+## Active Update 2026-09-06 UpMiddleDiff Latest Day Charts
+Goal: Calculate and chart UpMiddleDiff for BTC, ETH and SOL over the latest complete 24 hours available in the downloaded Up/Down result data.
+Status: Completed read-only calculation and three graph artifacts.
+Done:
+- Used expected_market_end_utc as the result timestamp, UTC, common plotted interval (t0,t1] represented by 288 five-minute observations from 2026-09-03T19:15:00Z through 2026-09-04T19:10:00Z. Each asset has the same cutoff, zero duplicate timestamps and zero non-five-minute gaps in the plotted day.
+- For every result timestamp t, calculated UpCount and DownCount on (t-3h,t], UpDiff=UpCount-DownCount, UpDiffMiddle as the arithmetic observation mean of UpDiff on (t-1h,t], and UpMiddleDiff=UpDiff-UpDiffMiddle.
+- Every plotted 3-hour window contains exactly 36 result observations and every 1-hour mean contains exactly 12 UpDiff observations. Independently brute-force checked the first, middle and final plotted points for each asset against the optimized rolling calculation.
+- BTC UpMiddleDiff: min -7.000000, max 6.833333, mean 0.002025, final 2.500000. Final components: UpCount 19, DownCount 17, UpDiff 2, UpDiffMiddle -0.5.
+- ETH UpMiddleDiff: min -5.000000, max 5.333333, mean 0.013021, final 1.500000. Final components: UpCount 18, DownCount 18, UpDiff 0, UpDiffMiddle -1.5.
+- SOL UpMiddleDiff: min -6.000000, max 5.166667, mean -0.164641, final 2.000000. Final components: UpCount 18, DownCount 18, UpDiff 0, UpDiffMiddle -2.0.
+- Created and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/charts/up-middle-diff-last-24h-btc.png, ...-eth.png and ...-sol.png. All chart lines and guides are solid.
+Next: None.
+Notes: Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. No strategy, PnL, application code, database, service, orders or external systems changed.
+Blockers: None.
+
+## Active Update 2026-09-06 UpCount Terminal Zero N3 Detail
+Goal: Repeat the constructed 100-outcome UpCountProgress simulation only for N=3.
+Status: Completed local simulation and graph.
+Done:
+- Reused the exact common input from the prior comparison: 50 Up followed by 50 Down.
+- Simulated N=3 with the latest LIFO/AbsDownCount state logic, pre-outcome Down bets at price 0.5, coefficient equal to UpCount, and 3.3% fee on every stake.
+- Verified UpCount remains positive after steps 1..99 and first becomes zero after step 100; final stack depth is zero and AbsDownCount is one.
+- Independently verified losing stake 97, winning stake 99, total volume 196 and Gross +2.000. Fee is 6.468 and final Net is -4.468; 99 bets comprise 50 wins and 49 losses, with no bet on the first outcome. Minimum cumulative Net is -100.201 after step 50.
+- Created and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/simulations/upcount-progress-terminal-zero-n3.png with outcomes, UpCount and cumulative Net PnL.
+Next: None.
+Notes: Synthetic constructed sequence only; no strategy, application code, database, service, order or external system changed.
+Blockers: None.
+
+## Active Update 2026-09-06 UpCount Terminal Zero Simulation
+Goal: Simulate 100 incoming outcomes for UpCountProgress where UpCount remains positive through step 99 and first becomes zero at step 100, for every N=1..20, and show the graph and final Net PnL.
+Status: Completed local simulation and graph.
+Done:
+- Constructed one common deterministic input for all N: 50 consecutive Up outcomes followed by 50 consecutive Down outcomes.
+- Simulated the exact latest UpCountProgress LIFO/AbsDownCount rules with the current market's Down bet determined by pre-outcome state, price 0.5, coefficient equal to UpCount and 3.3% fee on every stake.
+- Programmatically asserted for every N=1..20 that post-outcome UpCount is positive after steps 1..99 and first reaches zero after step 100; final stack depth is zero and final AbsDownCount is one.
+- Independently cross-checked simulated volume and Gross PnL with a closed-form stake calculation for the specific 50-Up/50-Down sequence.
+- All 20 configurations are Net-negative after fees. Best is N=1 at Net -2.267; worst is N=16 at Net -25.060. Each configuration has 99 bets: 50 wins, 49 losses and one initial no-bet market.
+- Created and visually inspected D:/My/Business/PolyMarketData/CryptoUpDown5m/simulations/upcount-progress-terminal-zero-n1-20.png. It shows the common input, all 20 UpCount paths as a heatmap, and directly labelled final Net PnL by N.
+Next: None.
+Notes: This is a synthetic constructed sequence, not historical evidence. No strategy, application code, database, service, order, deployment or external system changed.
+Blockers: None.
+
+## Active Update 2026-09-06 BTC ETH Exact Count Research
+Goal: Extend the detailed exact-Count Progress profitability search from SOL to the other two currencies, BTC and ETH.
+Status: Completed read-only analysis.
+Done:
+- Replayed BTC and ETH for both UpCountProgress and DownCountProgress, every N=1..20 and every exact active Count level, with UTC monthly resets, no warm-up, full source history, price 0.5 and the user-required 3.3% fee.
+- Independently reconciled all 120 aggregate asset/strategy/N rows against the saved full-history backtest with zero discrepancies; a second PowerShell LIFO replay reconciled the selected candidates' aggregate bet/win counts and exact-Count totals.
+- BTC UpCountProgress had only 3/210 full-history positive exact states and none positive in both Jan-May and Jun-Aug 2026. Its best full-only state, N=16 Count=6, was Net +29.547 fixed-size but Jan-May Net -8.329, so it was rejected as unstable.
+- BTC DownCountProgress had 12/210 states positive on full history and in both chronological windows. Best fixed-size Net was N=19 Count=7: 1129 bets, 615 wins, Gross +101, fee 37.257, Net +63.743, coefficient-7 Net +446.201; however Jan-May had only 104 bets and its unadjusted Wilson lower bound remained below the 51.65% fee hurdle.
+- ETH UpCountProgress had 13/210 states positive on full history and both windows. Best fixed-size Net was N=17 Count=2: 1570 bets, 839 wins, Gross +108, fee 51.810, Net +56.190, coefficient-2 Net +112.380; its Jan-May edge was only +8.343 on 929 bets and the unadjusted Wilson lower bound was below break-even.
+- ETH DownCountProgress had 16/210 states positive on full history and both windows. Strongest broad candidate was N=10 Count=3: 1520 bets, 826 wins, Gross +132, fee 50.160, Net +81.840, coefficient-3 Net +245.520, with Jan-May +36.691/373 bets and Jun-Aug +27.901/1003 bets. Its naive Wilson lower 95% bound, 51.8302%, exceeded the 51.65% break-even rate, but does not correct for 840 tested BTC/ETH states, serial dependence, or discovery on the same history.
+Next: None.
+Notes: Source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F; saved aggregate SHA256 BE0DF9D4F6271BB4A5D002B18C9CE524C4AAFE65AA9140CF529996BB1C57963A. Full-fill-at-0.5 results remain optimistic ResearchOnly evidence and are not Paper/Live performance. No strategy, code, database, service, orders, deployment or durable analysis artifact changed.
+Blockers: None.
+
+## Active Update 2026-09-06 Count-Level Analysis Scope Clarification
+Goal: Clarify whether the detailed Count-level profitability search covered only SOL.
+Status: Completed
+Done:
+- Confirmed the aggregate N=1..20 replay covered BTC, ETH and SOL for both UpCountProgress and DownCountProgress.
+- Confirmed the subsequent granular search by exact Count level and chronological subperiod covered only SOL UpCountProgress at N=8.
+Next: None
+Notes: Answer-only clarification; no calculations, strategy changes, orders, database, service or external mutation.
+Blockers: None
+
+## Active Update 2026-09-06 Progress Gross Edge Candidate
+Goal: Identify concrete ways the latest Progress strategy could obtain enough Gross edge for positive Net at the user-required 3.3% fee.
+Status: Completed
+Done:
+- Kept the analysis read-only and separated signal/price edge from fee reduction; no strategy, order, database, service or code change was made.
+- Independently replayed SOL UpCountProgress N=8 by actual LIFO stack and found a nonlinear state candidate: betting Down only at UpCount=6, while continuing to update state on every market.
+- Under the existing optimistic full-fill-at-0.5 model, Count=6 has 2314 bets, 1256 wins (54.2783%), fixed-size Gross +198, fee 76.362 and Net +121.638 (Net ROI 5.2566%). It was Net-positive in 6 of 7 months containing such bets.
+- Chronological diagnostic: fixed-size Count=6 produced Net +53.556 on Jan-May 2026 (1468 bets, 53.47% wins) and +68.082 on Jul-Aug 2026 (846 bets, 55.67% wins). Because the candidate was discovered using the complete history, this is not a clean untouched holdout and remains a research hypothesis.
+- Confirmed Count=5 did not persist in the later window: Jan-May Net +45.725 versus Jul-Aug Net -24.317. Reviewed official CLOB order-book data availability for future fill-aware tests.
+Next: If requested, formally backtest the exact Count=6-only candidate across all assets/directions with locked rules and execution-aware data.
+Notes: Source remains D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F. Two independent PowerShell implementations matched the Count-level totals; the second reconciled the original SOL Up N=8 aggregate exactly at 20165 bets, volume 86404, Gross 1736, fee 2851.332 and Net -1115.332.
+Blockers: None
+
+## Active Update 2026-09-06 Progress Strategy Loss Diagnosis
+Goal: Explain why the latest UpCountProgress and DownCountProgress monthly-reset backtests are loss-making and identify evidence-based experiments that could reach positive Net PnL.
+Status: Completed
+Done:
+- Reconciled a fresh C# replay of all BTC/ETH/SOL, both mirrored strategies and N=1..20 against the saved full-history UTC monthly-reset result: 120/120 configurations matched on bets, wins, losses, volume, Gross, fee and Net with zero errors.
+- Confirmed all 120 Net results are negative at the user-required 3.3% fee; 76 configurations have positive Gross, but the maximum Gross ROI is only 2.009166%, below the 3.3% fee hurdle.
+- Confirmed N does not change entry markets, bet count or win count; it changes only stake weights. N=1 is the least-negative Net result for all six asset/direction groups, while N=20 raises volume by 9.370x..10.239x and loss by 7.966x..12.943x.
+- Measured monthly/path dependence, one-step reversal rates, hypothetical break-even prices, and monthly-reset versus continuous-state behavior. Reviewed current official Polymarket FAK and fee documentation for execution caveats.
+Next: None
+Notes: Read-only analysis used source D:/My/Business/PolyMarketData/CryptoUpDown5m/crypto_updown_5m_results.csv SHA256 E8D28F146F06FDFBC65173DB60D8991662C54634F42128AFEA2EF2860D0CAA5F and saved summary SHA256 BE0DF9D4F6271BB4A5D002B18C9CE524C4AAFE65AA9140CF529996BB1C57963A. No strategy, database, service, orders, deployment, or durable data artifacts changed. Protected cleanup removed the owned D:/CodexTemp run and its absence was verified.
+Blockers: None
+
+## Active Update 2026-09-04 Fresh Top Ordinary Net Reports Cancelled
+Goal: Stop the pending report workflow at the user's request.
+Status: Completed.
+Done:
+- Deleted heartbeat automation progress34 / "Отчёты после Progress34".
+- No ranking/history/price queries or report generation will continue from this workflow.
+Next: None.
+Notes: No report artifacts or Production mutation were created by the cancellation.
+Blockers: None.
+
+## Active Update 2026-09-04 Fresh Top Ordinary Net Reports Post-Restoration Drain
+Goal: Repeat ordinary BTC/ETH/SOL lifetime Settled Net PnL charts with asset rates and daily Excel reports after Production is quiet.
+Status: Waiting through heartbeat automation progress34 for post-restoration service projections and locks to drain.
+Done:
+- Restoration task 01a02d31-4303-7d70-819a-5d6186653877 completed without task error after 4868190ms.
+- First short read-only preflight at 2026-09-04T20:15:05.881157Z confirmed Production endpoint/database and read_only=on, Service Running/Live eab41015 with blank last_error and heartbeat20:14:07.922908Z. It also found waiting_locks=17, PolyCopyTrader.Service active BuffileRead/DataFileRead plus17advisory waiters, and eth_progress34_history idle/ClientRead.
+- Stopped before all ranking/history/price queries. Updated heartbeat progress34 to remain quiet while this exact post-restoration drain persists, retry only the short preflight, run the report only after importer connection disappears, waiting locks=0 and active service I/O is absent, and pause/report on any different blocker.
+- Protected cleanup removed own marked run manual-48ee992f523e4f0e8c591c75c078003c (7files/15341bytes); absence verified.
+Next: Heartbeat retries short read-only health checks; when Production is quiet, it creates and verifies the exact six requested report artifacts.
+Notes: No report output, ranking/history/price query, workbook marker or Production mutation in this attempt.
+Blockers: Post-restoration service projections are still draining with 17 advisory lock waiters and active service I/O; no user action required.
+
+## Active Update 2026-09-04 Fresh Top Ordinary Net Reports Monitoring
+Goal: Repeat ordinary BTC/ETH/SOL lifetime Settled Net PnL charts with asset rates and daily Excel reports after Progress34 restoration no longer competes for Production resources.
+Status: Waiting through heartbeat automation progress34; no report Production reads while restoration remains active.
+Done:
+- User explicitly chose not to interfere with the active Progress34 restoration. Direct task-status waits confirmed thread 01a02d31-4303-7d70-819a-5d6186653877 remains active.
+- Read-only local process/log inspection only: importer dotnet process remains alive; at 2026-09-04T19:41:13.360883Z it had completed 928/31612 and was waiting for service projections with no active write transaction. This disproved the earlier short lower-bound expectation and indicates a multi-hour run.
+- Created thread heartbeat automation progress34 / "Отчёты после Progress34" every five minutes. It checks only the restoration task while active, stays silent and avoids Production; after successful completion it must run the exact fresh ordinary-only BTC/ETH/SOL Net report package, verify it, deliver three embedded JPGs plus three XLSX links, then pause itself. It also pauses and reports if restoration fails.
+Next: Heartbeat resumes this report only after restoration thread completion. Do not manually duplicate the report while automation is active.
+Notes: No report ranking/history/price query, report output, workbook authoring marker or Production mutation after the user chose to wait.
+Blockers: Progress34 restoration is still active; waiting is intentional and non-interfering.
+
+## Active Update 2026-09-04 Fresh Top Ordinary Net Reports Paused
+Goal: Repeat ordinary BTC/ETH/SOL lifetime Settled Net PnL charts with asset rates and daily Excel reports.
+Status: Blocked before heavy report queries because the approved Progress34 restoration is actively using Production I/O.
+Done:
+- Fresh read-only UTC preflight at 2026-09-04T18:54:42.224507Z confirmed 192.168.0.101:5432/polycopytrader, read_only=on, zero waiting locks, Service Running/Live build eab41015744d4d2fcc04b042d946529efeb13084, heartbeat 18:54:06.960828Z and blank last_error.
+- pg_stat_activity showed application eth_progress34_history active with wait_event_type=IO, wait_event=DataFileRead. Stopped before ordinary-strategy ranking/history/price queries to avoid competing with the approved Production restoration. No report output or Production mutation.
+- Protected cleanup removed marked run manual-c628e43ddc02420eb44c174c1781676e (4 files/8370 bytes); absence verified.
+Next: Await user direction whether to wait for the Progress34 restoration to finish, then repeat the report on a fresh cutoff.
+Notes: Existing unrelated working-tree and in-progress restoration state preserved. No workbook authoring marker was run and no output directory created.
+Blockers: User choice is required because continuing now would add heavy read I/O during an active Production restoration.
+
+## Active Update 2026-09-04 Progress34 Restoration Apply Running
+Goal: Complete the exact approved Progress34 historical restoration in gentle Production batches.
+Status: In Progress; standalone apply process active and confirmed commits advancing.
+Done:
+- Exact approval persisted and published alone with preparation records in commit208e0643329108ed0d0db2cefc9da58c7765ef2c; origin/master matches and upstream0/0 before runtime. No product change.
+- Owned marked run D:/CodexTemp/runs/manual-56eab54f834d45fabe0a54d1030cb32e. Source hash exact9A77FB8452E3C4FE7B86F842436202E43EB16DFC3E3E74CBF4C6B1847D06AFA3; buildPASS27.677s/121warnings/0errors. Fresh no-apply preview started18:54:01Z,exit0/PREVIEW_OK after116.479s:2830/1882/31612,verified32,writes0,original source/plan digests unchanged.
+- Exact approved apply started18:56:08.504690Z in unified exec session81247; log run/logs/apply.log. Its own full preview reconfirmed32existing/original plan before first write. By19:32:09.868358Z six windows/48new parent transactions committed768new Up4 histories; total completed800/31612,remaining30812. Each commit16trades/96primary rows; no all-history transaction.
+- Between windows the importer reports no active write transaction and waits for dashboard events plus16wallet refreshes. Observed service cycles roughly4–7minutes so old31-minute lower bound is invalid; actual completion may take many hours. Elapsed time alone is not a stop; do not loosen max8window/health/lock/projection/fatal guards.
+- Two transient batch55P03 cases observed through this checkpoint. Each explicitly reported rollback_confirmed=true,no active write transaction,waited5s and its exact parent batch then committed successfully. No fatal stop or unknown commit outcome observed.
+Next: Continue polling session81247 at <=59s waits and report progress. Never relaunch while this session is active. On exit0 perform independent exact34 native/accounting/protected-state/marker checks, zero-write repeat and ResearchOnly-excluded classification query; obtain independent final semantic review, update contract evidence/status only from proof, validate/commit/push and protected-clean owned run.
+Notes: Start skill reported unrelated stale invalid/unmarked run folders and left them untouched; user systems unaffected. The only current uncommitted file after approval checkpoint is this mandatory active runtime context update. No service/deploy/Live/schema/config change.
+Blockers: None. Runtime queues are slow but healthy behavior under the approved gentle policy; actual history not yet complete.
 
 ## Active Update 2026-09-04 Progress34 Restoration Apply Approved
 Goal: Execute the exact prepared Progress34 historical restoration after the user's matching approval.
@@ -32352,3 +34407,17 @@ Done:
 Next: Continue future tasks by reading workflow, active context, history, project memory, and Git status before acting.
 Notes: `git pull --ff-only` was attempted on 2026-04-30 and failed because branch `master` has no configured upstream. `git diff --check` passed. `dotnet test tests\PolyCopyTrader.Tests\PolyCopyTrader.Tests.csproj -c Verify --no-restore` passed 119/119. `dotnet build src\PolyCopyTrader.Service\PolyCopyTrader.Service.csproj -c Verify --no-restore` and `dotnet build src\PolyCopyTrader.Dashboard\PolyCopyTrader.Dashboard.csproj -c Verify --no-restore` passed with 0 warnings and 0 errors. Last commit before adoption was `d9d7984 Update Codex project memory`. The working tree contains the completed on-chain ingestion/leaders changes plus this context protocol setup.
 Blockers: Automatic pull/push cannot run until a Git upstream is configured.
+## Active Update 2026-09-09 Copied-Performance Aggregate Latency Contract
+Goal: Implement the first approved improvement target by reducing recurring Paper copied-trader performance aggregate latency without changing projection results.
+Status: Completed locally; awaiting user-controlled deployment and read-only Production verification.
+Done:
+- Production READ ONLY cutoff `2026-09-09T18:44:48.660423Z` showed the service healthy on build `7c72a0c6`, but the aggregate was active for `11.392s`, held `25` high-priority wallets in-flight, and had `229` more queued. A concrete 25-wallet source snapshot contained `127,552` orders, `127,552` fills, `12` open positions and `124,147` settlements; the plan used wallet indexes but performed repeated heap and Gamma category lookups.
+- A bounded one-wallet `EXPLAIN (ANALYZE, BUFFERS)` independently confirmed indexed access but thousands of heap/category probes: `1,946` orders/fills and `1,945` settlements took `118.527ms`, `117.777ms` and `48.136ms` for the three large branches, with no Paper-position sequential scan.
+- Prototyped a read-only query shape that materializes selected orders/open positions/settlements once, resolves Gamma category once per distinct required condition, folds fills through `ix_paper_fills_order_time`, and aggregates sources before the final rollup. A 25-wallet production prototype completed in `1,972.808ms` and its plan had no sequential `paper_fills` scan. A separate five-wallet legacy-versus-optimized `EXCEPT ALL` comparison returned `10/10` rows and zero differences in both directions at cutoff `2026-09-09T18:55:04.900189Z`.
+- Drafted and validated `RC-20260909-copied-performance-aggregate-latency`; semantic digest `sha256:b2fb7bb38f2d6eafe21df8d481f090278cd046cce62fb5069580ad63b9ed69a1`. It explicitly excludes schema/index changes, worker cadence/batch/queue behavior, other latency targets and every Production mutation.
+- Recorded the user's exact approval in separate parent commit `246b6918`. Reworked only the governed aggregate so selected orders, positive-size open positions and settlements are materialized once, Gamma category is resolved once per distinct required condition, fills are aggregated per selected order through `ix_paper_fills_order_time`, and each source is reduced before the unchanged category/`OVERALL` rollup.
+- Final focused tests passed `21/21` on a disposable loopback PostgreSQL database. The exact legacy-versus-persisted comparison returned zero differences in both directions, and the test plan used `ix_paper_fills_order_time` with no `paper_fills` sequential scan. The disposable database was dropped and verified absent.
+- Final Release solution build exited zero with `0` errors and `125` existing warnings outside the changed aggregate/test lines. `git diff --check` and WorkingTree requirement validation passed. Independent reviewer `agent:/root/reviewer` returned `PASS` with no findings after one stale README CTE name was corrected.
+Next: User deploys the resulting commit; then verify the exact deployed version and compare copied-performance cycle duration, queue depth and errors read-only on Production.
+Notes: All Production SQL used forced READ ONLY transactions, UTC, `statement_timeout='15s'` and `lock_timeout='2s'`. No Production, service, strategy, order, configuration, schema, worker cadence, queue behavior or deployment mutation occurred. Existing unrelated working-tree changes remain preserved and unstaged.
+Blockers: None.
