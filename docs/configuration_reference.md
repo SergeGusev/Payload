@@ -458,6 +458,15 @@ fewer than three contracts, or substitutes a perpetual contract.
 - `StaleAfterSeconds`: maximum accepted futures or index quote age, default `5`.
 - `UserAgent`: HTTP User-Agent header sent to OKX.
 
+The fixed-expiry ticker source and every configured asset index use independent
+poll loops at the configured success cadence. Timeout, HTTP `429`, and HTTP `5xx`
+responses receive at most one retry after `100..250ms` jitter; cancellation,
+payload/contract failures, and other statuses do not retry. Each attempt retains
+`RequestTimeoutMilliseconds`, `FetchedAtUtc` is assigned only after successful
+parsing, and `StaleAfterSeconds` is unchanged. The first failure in an endpoint
+incident is recorded immediately, repeats are summarized at most every 30 seconds,
+and recovery is recorded once.
+
 ## CryptoReferencePriceHistory
 
 Stores a clean market-independent BTC/ETH/SOL reference-price history in
@@ -832,12 +841,22 @@ diagnostic path only; it does not change strategy entry or settlement behavior.
 - `MaxShardConnections`: soft cap for shard connection count; default `64`, `0` means unlimited.
 - `ReconnectBaseDelaySeconds`: first reconnect delay and the delay restored after the first parsed market update is accepted by the side-effect queue (`Enqueued` or `Coalesced`); default `2`.
 - `ReconnectMaxDelaySeconds`: cap for exponential reconnect delay across repeated connect/close flaps without an accepted market update; default `60`. Malformed JSON, `PING`/`PONG`, zero-update payloads, rejected/dropped updates, failed dispatch, and cancellation do not reset the delay.
+- `ReceiveDispatchQueueCapacity`: bounded per-shard FIFO capacity between complete frame receipt and the existing admission/parse/dispatch path; default `64`, valid `1..1024`. It never silently drops or coalesces a received frame. A full queue applies backpressure and reports waits that reach `SideEffectSlowProcessingMilliseconds`.
 - `WatchdogIntervalSeconds`: supervisor cadence for subscription reconciliation and shard health checks; default `10`.
 - `WatchdogStaleSeconds`: protocol-stale threshold for reopening an otherwise open shard; default `90`, `0` disables stale restarts.
 - `PersistOrderBookSnapshots`: writes WebSocket top-of-book snapshots to `order_book_snapshots` when true; default `false` for all-active-market monitoring.
 - `PersistMarketDataEvents`: writes generic WebSocket events to `market_data_events` when true; default `false` for all-active-market monitoring.
 - `StatusPersistIntervalSeconds`: minimum interval for unchanged `market_data_status` upserts; default `60`.
 - `SideEffectSlowProcessingMilliseconds`: queue-delay or processing threshold for a slow side-effect warning; default `1000`. Position-mark warnings report the measured persistence stage as `OpenConnection`, `SerializeUpdates`, `ExecuteCommand`, or `ReadResults`, with the subsequent in-memory update reported separately as `ApplyExposureCache`. These labels add timing evidence only; they do not change the SQL, CAS predicates, queue, or persistence behavior.
+- `MakerGtdWalletMaximumConcurrency`: maximum independent normalized-wallet groups processed concurrently inside one exact-family Maker-GTD event; default `8`, valid `1..16`. Candidates for one normalized wallet remain sequential and the next event does not start until the current event completes.
+
+Repeated general and Maker-GTD processing warnings with the same component,
+event type, latency category, and active phase are summarized on the existing
+`SideEffectMetricsIntervalSeconds` cadence after the first immediate warning.
+The first subsequent non-slow completion reports recovery. Errors and Maker
+expiry-drain warnings remain immediate. Terminal Filled/Expired Maker order ids
+are removed from already queued later items; every item that still names any
+Pending order retains its original evidence and FIFO position.
 
 The service shards all desired asset ids across multiple WebSocket connections
 instead of using one huge all-active subscription. Outcomes belonging to the

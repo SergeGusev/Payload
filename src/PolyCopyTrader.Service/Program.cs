@@ -296,9 +296,7 @@ var serviceLogPath = ServiceLogPathResolver.Resolve(
     Console.Error);
 var logsDirectory = serviceLogPath.DirectoryPath;
 
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+Log.Logger = ServiceLoggerConfiguration.CreateBaseConfiguration()
     .Enrich.FromLogContext()
     .WriteTo.File(
         Path.Combine(logsDirectory, "polycopytrader-service-.log"),
@@ -634,4 +632,15 @@ static AppConfiguration LoadCommandConfiguration()
         .Build();
 
     return AppConfigurationLoader.Load(configuration);
+}
+
+internal static class ServiceLoggerConfiguration
+{
+    internal static LoggerConfiguration CreateBaseConfiguration()
+    {
+        return new LoggerConfiguration()
+            .MinimumLevel.Information()
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+            .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning);
+    }
 }

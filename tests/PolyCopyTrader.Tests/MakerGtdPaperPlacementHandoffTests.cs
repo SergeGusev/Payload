@@ -1,3 +1,4 @@
+using PolyCopyTrader.Domain;
 using PolyCopyTrader.Service.PaperTrading;
 
 namespace PolyCopyTrader.Tests;
@@ -283,5 +284,40 @@ public sealed class MakerGtdPaperPlacementHandoffTests
             acceptedAtUtc,
             expiresAtUtc,
             out _));
+    }
+
+    [Fact]
+    public void TerminalObserver_RequiresExplicitPersistedFilledOrExpiredStatus()
+    {
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var clearedOrderId = Guid.NewGuid();
+        var failedOrderId = Guid.NewGuid();
+        var pendingOrderId = Guid.NewGuid();
+        var filledOrderId = Guid.NewGuid();
+        var expiredOrderId = Guid.NewGuid();
+        foreach (var orderId in new[]
+                 {
+                     clearedOrderId,
+                     failedOrderId,
+                     pendingOrderId,
+                     filledOrderId,
+                     expiredOrderId
+                 })
+        {
+            handoff.TrackMakerGtdPaperOrder(
+                orderId,
+                MakerGtdPaperExecutionContract.ExecutionSource);
+        }
+
+        var observedTerminalOrderIds = new List<Guid>();
+        handoff.RegisterTerminalOrderObserver(observedTerminalOrderIds.Add);
+
+        handoff.ClearMarketDataFailures(clearedOrderId);
+        handoff.MarkFailed(failedOrderId);
+        handoff.NotifyTerminalOrderPersisted(pendingOrderId, PaperOrderStatus.Pending);
+        handoff.NotifyTerminalOrderPersisted(filledOrderId, PaperOrderStatus.Filled);
+        handoff.NotifyTerminalOrderPersisted(expiredOrderId, PaperOrderStatus.Expired);
+
+        Assert.Equal(new[] { filledOrderId, expiredOrderId }, observedTerminalOrderIds);
     }
 }

@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PolyCopyTrader.Domain;
@@ -23776,22 +23778,107 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     private void LogSkippedRun(StrategyMarketPaperRun run, BtcUpDown5mStrategyVariant variant)
     {
-        if (run.SkipDiagnosticsJson is null)
+        LogSkippedRun(logger, run, variant);
+    }
+
+    internal static void LogSkippedRun(
+        ILogger logger,
+        StrategyMarketPaperRun run,
+        BtcUpDown5mStrategyVariant variant)
+    {
+        if (run.SkipDiagnosticsJson is not { } diagnosticsJson)
         {
             logger.LogInformation(
-                "BTC Up or Down 5m paper run skipped. Strategy={StrategyCode} Market={MarketSlug} Reason={Reason}",
+                "BTC Up or Down 5m paper run skipped. RunId={RunId} Strategy={StrategyCode} StrategyId={StrategyId} MarketId={MarketId} ConditionId={ConditionId} Market={MarketSlug} Reason={Reason}",
+                run.Id,
                 variant.Code,
+                run.StrategyId,
+                run.MarketId,
+                run.ConditionId,
                 run.MarketSlug,
                 run.SkipReason);
             return;
         }
 
+        var diagnosticsCharacterLength = diagnosticsJson.Length;
+        var diagnosticsUtf8ByteLength = Encoding.UTF8.GetByteCount(diagnosticsJson);
+        var diagnosticsSha256 = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(diagnosticsJson)))
+            .ToLowerInvariant();
+
+        if (RequiresFullInformationDiagnostics(run.SkipReason, diagnosticsJson))
+        {
+            var paperModelLabel = diagnosticsJson.Contains(
+                    StrategyIds.OptimisticTouchNoDepthPaperLabel,
+                    StringComparison.Ordinal)
+                ? StrategyIds.OptimisticTouchNoDepthPaperLabel
+                : null;
+            logger.LogInformation(
+                "BTC Up or Down 5m paper run skipped with mandatory diagnostics. RunId={RunId} Strategy={StrategyCode} StrategyId={StrategyId} MarketId={MarketId} ConditionId={ConditionId} Market={MarketSlug} Reason={Reason} DiagnosticsCharacterLength={DiagnosticsCharacterLength} DiagnosticsUtf8ByteLength={DiagnosticsUtf8ByteLength} DiagnosticsSha256={DiagnosticsSha256} PaperModelLabel={PaperModelLabel} Diagnostics={Diagnostics}",
+                run.Id,
+                variant.Code,
+                run.StrategyId,
+                run.MarketId,
+                run.ConditionId,
+                run.MarketSlug,
+                run.SkipReason,
+                diagnosticsCharacterLength,
+                diagnosticsUtf8ByteLength,
+                diagnosticsSha256,
+                paperModelLabel,
+                diagnosticsJson);
+            return;
+        }
+
         logger.LogInformation(
-            "BTC Up or Down 5m paper run skipped. Strategy={StrategyCode} Market={MarketSlug} Reason={Reason} Diagnostics={Diagnostics}",
+            "BTC Up or Down 5m paper run skipped. RunId={RunId} Strategy={StrategyCode} StrategyId={StrategyId} MarketId={MarketId} ConditionId={ConditionId} Market={MarketSlug} Reason={Reason} DiagnosticsCharacterLength={DiagnosticsCharacterLength} DiagnosticsUtf8ByteLength={DiagnosticsUtf8ByteLength} DiagnosticsSha256={DiagnosticsSha256}",
+            run.Id,
             variant.Code,
+            run.StrategyId,
+            run.MarketId,
+            run.ConditionId,
             run.MarketSlug,
             run.SkipReason,
-            run.SkipDiagnosticsJson);
+            diagnosticsCharacterLength,
+            diagnosticsUtf8ByteLength,
+            diagnosticsSha256);
+        logger.LogDebug(
+            "BTC Up or Down 5m paper run skipped diagnostics. RunId={RunId} Strategy={StrategyCode} StrategyId={StrategyId} MarketId={MarketId} ConditionId={ConditionId} Market={MarketSlug} Reason={Reason} DiagnosticsCharacterLength={DiagnosticsCharacterLength} DiagnosticsUtf8ByteLength={DiagnosticsUtf8ByteLength} DiagnosticsSha256={DiagnosticsSha256} Diagnostics={Diagnostics}",
+            run.Id,
+            variant.Code,
+            run.StrategyId,
+            run.MarketId,
+            run.ConditionId,
+            run.MarketSlug,
+            run.SkipReason,
+            diagnosticsCharacterLength,
+            diagnosticsUtf8ByteLength,
+            diagnosticsSha256,
+            diagnosticsJson);
+    }
+
+    private static bool RequiresFullInformationDiagnostics(
+        string? skipReason,
+        string diagnosticsJson)
+    {
+        if (skipReason?.StartsWith("maker_gtd_", StringComparison.Ordinal) == true)
+        {
+            return true;
+        }
+
+        return ContainsExplicitDiagnosticCode(skipReason, "shape_mismatch") ||
+            ContainsExplicitDiagnosticCode(skipReason, "shape-mismatch") ||
+            ContainsExplicitDiagnosticCode(skipReason, "evidence_unavailable") ||
+            ContainsExplicitDiagnosticCode(skipReason, "evidence-unavailable") ||
+            ContainsExplicitDiagnosticCode(diagnosticsJson, "shape_mismatch") ||
+            ContainsExplicitDiagnosticCode(diagnosticsJson, "shape-mismatch") ||
+            ContainsExplicitDiagnosticCode(diagnosticsJson, "evidence_unavailable") ||
+            ContainsExplicitDiagnosticCode(diagnosticsJson, "evidence-unavailable");
+    }
+
+    private static bool ContainsExplicitDiagnosticCode(string? value, string code)
+    {
+        return value?.Contains(code, StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private static StrategyMarketPaperRun CreateSkippedRun(

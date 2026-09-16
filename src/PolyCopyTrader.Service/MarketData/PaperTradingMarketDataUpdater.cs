@@ -21,7 +21,8 @@ public sealed class PaperTradingMarketDataUpdater(
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const int MakerPositionCasMaximumAttempts = 3;
-    private const int MakerWalletMaximumConcurrency = 4;
+    private readonly int makerWalletMaximumConcurrency =
+        (marketDataWebSocketOptions ?? new MarketDataWebSocketOptions()).MakerGtdWalletMaximumConcurrency;
     private readonly TimeSpan makerMaximumEventAge = TimeSpan.FromSeconds(
         Math.Max(1, (marketDataWebSocketOptions ?? new MarketDataWebSocketOptions()).StaleAfterSeconds));
     private readonly IMakerGtdPaperPlacementHandoff makerGtdHandoff =
@@ -133,10 +134,10 @@ public sealed class PaperTradingMarketDataUpdater(
             EnterPhase(
                 MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
                 "ApplyMakerGtdWalletGroups",
-                $"PaperTradingMarketDataUpdater.ApplyMakerGtdWalletGroups(MaxConcurrency={MakerWalletMaximumConcurrency})");
+                $"PaperTradingMarketDataUpdater.ApplyMakerGtdWalletGroups(MaxConcurrency={makerWalletMaximumConcurrency})");
             using var walletConcurrency = new SemaphoreSlim(
-                MakerWalletMaximumConcurrency,
-                MakerWalletMaximumConcurrency);
+                makerWalletMaximumConcurrency,
+                makerWalletMaximumConcurrency);
             var groupTasks = walletGroups
                 .Select(group => ProcessMakerGtdWalletGroupAsync(
                     group,
@@ -835,14 +836,15 @@ public sealed class PaperTradingMarketDataUpdater(
             return;
         }
 
-        executionTrace?.EnterPhase(
-            MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
-            "MakerGtdPlacementHandoff.ClearMarketDataFailures",
-            DateTimeOffset.UtcNow);
-        makerGtdHandoff.ClearMarketDataFailures(order.Id);
-
         if (mutation.PaperOrder is { } persistedOrder)
         {
+            executionTrace?.EnterPhase(
+                MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
+                "MakerGtdPlacementHandoff.NotifyTerminalOrderPersisted",
+                DateTimeOffset.UtcNow);
+            makerGtdHandoff.NotifyTerminalOrderPersisted(
+                persistedOrder.Id,
+                persistedOrder.Status);
             executionTrace?.EnterPhase(
                 MarketDataSideEffectPhases.ApplyMakerGtdPaperUpdate,
                 "ExposureSnapshotCache.ApplyPaperOrder",

@@ -1142,10 +1142,11 @@ public sealed class PaperTradingProcessor(
                 return false;
             }
 
-            makerGtdHandoff.ClearMarketDataFailures(order.Id);
-
             if (mutation.PaperOrder is { } persistedOrder)
             {
+                makerGtdHandoff.NotifyTerminalOrderPersisted(
+                    persistedOrder.Id,
+                    persistedOrder.Status);
                 exposureCache.ApplyPaperOrder(persistedOrder);
             }
 

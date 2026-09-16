@@ -28,9 +28,14 @@ internal sealed class MakerGtdPaperMarketDataQueue(
     private readonly LinkedList<string> readyAssetKeys = [];
     private readonly List<PaperOrderDrainRequest> drainRequests = [];
     private readonly SemaphoreSlim signal = new(0);
+    private readonly SlowProcessingWarningAggregator slowWarningAggregator = new(
+        logger,
+        TimeSpan.FromSeconds(options.SideEffectMetricsIntervalSeconds),
+        "Dedicated Maker-GTD evidence processing");
     private MarketDataSideEffectWorkItem? inFlightUpdate;
     private Task? workerTask;
     private bool accepting;
+    private bool terminalOrderObserverRegistered;
     private int pendingUpdateCount;
     private long enqueuedUpdates;
     private long rejectedUpdates;
@@ -44,6 +49,12 @@ internal sealed class MakerGtdPaperMarketDataQueue(
             if (workerTask is not null)
             {
                 return Task.CompletedTask;
+            }
+
+            if (!terminalOrderObserverRegistered)
+            {
+                makerGtdHandoff.RegisterTerminalOrderObserver(PruneTerminalOrder);
+                terminalOrderObserverRegistered = true;
             }
 
             accepting = true;
@@ -420,6 +431,7 @@ internal sealed class MakerGtdPaperMarketDataQueue(
         }
 
         var processingDuration = Stopwatch.GetElapsedTime(processingStarted);
+        var activePhase = completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing;
         if (queueDelay.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds ||
             processingDuration.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds)
         {
@@ -430,20 +442,28 @@ internal sealed class MakerGtdPaperMarketDataQueue(
                 : queueDelayWasSlow
                     ? "QueueDelay"
                     : "Processing";
-            logger.LogWarning(
-                "Dedicated Maker-GTD evidence processing was slow. EventType={EventType} AssetId={AssetId} LatencyCategory={LatencyCategory} QueueDelayMs={QueueDelayMs} ProcessingDurationMs={ProcessingDurationMs} PendingMakerUpdates={PendingMakerUpdates} ActivePhase={ActivePhase} ActiveOperation={ActiveOperation} ActivePhaseDurationMs={ActivePhaseDurationMs} SlowestPhase={SlowestPhase} SlowestOperation={SlowestOperation} SlowestPhaseDurationMs={SlowestPhaseDurationMs}",
-                workItem.Update.EventType,
+            slowWarningAggregator.RecordSlow(new SlowProcessingWarningObservation(
+                ComponentName,
+                workItem.Update.EventType.ToString(),
                 workItem.Update.AssetId,
                 latencyCategory,
                 queueDelay.TotalMilliseconds,
                 processingDuration.TotalMilliseconds,
                 GetMetrics().PendingUpdates,
-                completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing,
+                activePhase,
                 completedTrace?.Operation,
                 completedTrace?.PhaseAgeMilliseconds ?? processingDuration.TotalMilliseconds,
                 completedTrace?.SlowestPhase ?? completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing,
                 completedTrace?.SlowestOperation ?? completedTrace?.Operation,
-                completedTrace?.SlowestPhaseDurationMilliseconds ?? processingDuration.TotalMilliseconds);
+                completedTrace?.SlowestPhaseDurationMilliseconds ?? processingDuration.TotalMilliseconds));
+        }
+        else
+        {
+            slowWarningAggregator.RecordNonSlow(
+                ComponentName,
+                workItem.Update.EventType.ToString(),
+                activePhase,
+                workItem.Update.AssetId);
         }
     }
 
@@ -470,19 +490,83 @@ internal sealed class MakerGtdPaperMarketDataQueue(
                 inFlightUpdate = null;
             }
 
-            for (var index = drainRequests.Count - 1; index >= 0; index--)
+            CompleteSatisfiedDrainRequestsUnderLock();
+        }
+    }
+
+    private void PruneTerminalOrder(Guid paperOrderId)
+    {
+        if (paperOrderId == Guid.Empty)
+        {
+            return;
+        }
+
+        var fullyPrunedCount = 0;
+        lock (sync)
+        {
+            foreach (var assetEntry in pendingUpdatesByAsset.ToArray())
             {
-                var request = drainRequests[index];
-                if (CountOutstanding(
-                        request.PaperOrderId,
-                        request.AssetId,
-                        request.ConditionId,
-                        request.AcceptedAfterUtc,
-                        request.ExpiresBeforeUtc) == 0)
+                var pending = assetEntry.Value;
+                for (var node = pending.Items.First; node is not null;)
                 {
-                    drainRequests.RemoveAt(index);
-                    request.Completion.TrySetResult(true);
+                    var next = node.Next;
+                    var eligibleOrderIds = node.Value.EligiblePaperOrderIds;
+                    if (eligibleOrderIds is { Count: > 0 } && eligibleOrderIds.Contains(paperOrderId))
+                    {
+                        if (eligibleOrderIds.Count == 1)
+                        {
+                            pending.Items.Remove(node);
+                            pendingUpdateCount--;
+                            fullyPrunedCount++;
+                        }
+                        else
+                        {
+                            node.Value = node.Value with
+                            {
+                                EligiblePaperOrderIds = eligibleOrderIds
+                                    .Where(orderId => orderId != paperOrderId)
+                                    .ToHashSet()
+                            };
+                        }
+                    }
+
+                    node = next;
                 }
+
+                if (pending.Items.Count == 0)
+                {
+                    pendingUpdatesByAsset.Remove(assetEntry.Key);
+                    if (pending.Scheduled)
+                    {
+                        readyAssetKeys.Remove(assetEntry.Key);
+                        pending.Scheduled = false;
+                    }
+                }
+            }
+
+            if (fullyPrunedCount > 0)
+            {
+                Interlocked.Add(ref processedUpdates, fullyPrunedCount);
+            }
+
+            CompleteSatisfiedDrainRequestsUnderLock();
+        }
+    }
+
+    private void CompleteSatisfiedDrainRequestsUnderLock()
+    {
+        for (var index = drainRequests.Count - 1; index >= 0; index--)
+        {
+            var request = drainRequests[index];
+            if (CountOutstanding(
+                    request.PaperOrderId,
+                    request.AssetId,
+                    request.ConditionId,
+                    request.AcceptedAfterUtc,
+                    request.ExpiresBeforeUtc) == 0)
+            {
+                drainRequests.RemoveAt(index);
+                request.Completion.TrySetResult(true);
             }
         }
     }

@@ -3,7 +3,7 @@
   "contractId": "RC-20260916-market-data-resilience-maker-throughput-log-volume",
   "title": "Reduce production log volume, isolate external market-data stalls, and shorten Maker-GTD evidence backlog without changing trading semantics",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -69,8 +69,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~OperationalLoggingTests|FullyQualifiedName~MarketDataSideEffectQueueTests\"",
           "expected": "Focused logging and queue tests pass and demonstrate the exact event-level, compact/full evidence, aggregation, recovery and error-bypass contract without changing persisted runs. The unrelated legacy strategy-catalog test class is not part of this focused filter.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final amended VER-001 filter passed 38/38 in Release: OperationalLoggingTests and MarketDataSideEffectQueueTests. It proves compact routine Info/full Debug call semantics, full Maker/actionable evidence, first/30-second aggregate/recovery behavior, immediate errors and bounded 160000-item queue throughput; the isolated 160000-item FIFO test also passed in 4 seconds."
         }
       ]
     },
@@ -97,8 +97,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~OkxExpiryFuturesReferenceServiceTests|Name~ResponseParser_\"",
           "expected": "All OKX parser and new service-resilience tests covering this change pass deterministically without external network or application database access. The unrelated legacy strategy-count assertion is not part of this focused filter.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final amended command passed all 13 OkxExpiryFuturesReferenceServiceTests; the Name filter selected the service tests, so a supplemental exact FullyQualifiedName parser filter passed both 2/2 ResponseParser tests. Deterministic coverage includes retry classification, independent loops, post-parse timestamps, stale rejection, incident aggregation/recovery, failed catalog retry at normal poll cadence and configured interval after success."
         }
       ]
     },
@@ -130,8 +130,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~MarketDataWebSocketFrameProcessingTests|FullyQualifiedName~MarketDataWebSocketReconnectBackoffTests|FullyQualifiedName~ConfigurationTests\"",
           "expected": "Bounded ordered frame handoff, timestamp, saturation, close/failure and unchanged reconnect/configuration contracts pass without an external WebSocket or database.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final Release filter passed 77/77: bounded no-drop FIFO frame handoff, original receipt timestamps, saturation, normal-close drain, consumer failure/reconnect propagation, reconnect backoff and configuration validation."
         }
       ]
     },
@@ -169,8 +169,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~PaperTradingMarketDataUpdaterQueueTests|FullyQualifiedName~MarketDataSideEffectQueueTests|FullyQualifiedName~MakerGtd|FullyQualifiedName~ConfigurationTests\"",
           "expected": "Concurrency bound 8, wallet seriality, event FIFO, no-drop evidence, explicit post-persistence terminal-only pruning, no notification/pruning from generic failure or nonterminal paths, expiry/fill/drain races and the exact Maker exception/parity tests pass.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final Release filter passed 292 tests with 1 conditional PostgreSQL integration test skipped because no application database was allowed. Separate exact terminal-path run passed 81/81 and the isolated 160000-item FIFO burst passed 1/1. Evidence covers concurrency 8 across 28 wallets, same-wallet/event FIFO, terminal-only tail pruning, generic cleanup/Pending/rejected no-prune, successful atomic Filled/Expired notification, races, drain and exact exception/parity rules."
         }
       ]
     },
@@ -220,24 +220,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results",
           "expected": "The complete local test suite is executed without external service/application database mutation. Every test covering changed behavior passes, and the remaining failed-test set is independently reproduced on clean HEAD or is exactly attributable to the prohibited PostgreSQL fixture or mandated external artifacts layout; no whole-repository green-suite claim is made and none of those baseline failures is repaired in this task.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final full Release suite was executed without an application database: 1719 passed, 173 failed, 95 skipped, 1987 total. The sorted 173-name failure set is byte-identical to the pre-final run (SHA-256 826ca7e244356bad633bf9b8215a6966ab4805576401528bd27bd0ddafb59e43; 0 added/removed), and independent clean-HEAD 9ec05f24 verification contained every one of those 173 failures plus one checkout-EOL-only Storage assertion. All four new final tests passed; changed-behavior union was 335 passed, 0 failed, 1 conditional PostgreSQL skip. This satisfies approved DEV-001 without claiming the legacy full suite is green."
         },
         {
           "id": "VER-006",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path <marked-run>/artifacts",
           "expected": "Release service build succeeds with zero errors; the service is not started or deployed.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Final Release service build completed with 0 warnings and 0 errors using explicit D:/CodexTemp artifacts and without starting or deploying the service."
         },
         {
           "id": "VER-007",
           "kind": "inspection",
           "command": "Independent verbatim-request/approved-contract/actual-diff/test-evidence review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree and -Mode Staged; git diff --check; protected marked-run cleanup.",
           "expected": "No unapproved behavior or path, all acceptance criteria evidenced, reviewer pass with no findings, mechanical gates pass, unrelated work is preserved and the owned temp run is absent.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Independent reviewer agent:/root/semantic_reviewer compared all verbatim requests, amended approved contract/deviations, every final product/test/docs diff and all test/build/baseline evidence, then reported PASS with no open findings. Product diff check passed; unrelated dirty work remained excluded. Approval commits 9ec05f24 and d82b0597 precede the implementation commit. Protected cleanup removed the owned run (394 files, 105492278 bytes) and Test-Path returned False. WorkingTree and Staged requirement validation plus staged diff check are rerun for the completed contract before commit."
         }
       ]
     }
@@ -274,9 +274,9 @@
     "semanticDigest": "sha256:4eae71202bf842a8ec8f3147648e6cf3e7c67ad78b4afe170984a277c1ee11dd"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/semantic_reviewer",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

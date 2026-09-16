@@ -1,6 +1,8 @@
 using System.Net.WebSockets;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Polymarket;
@@ -328,32 +330,41 @@ public sealed class MarketDataWebSocketShardRunner(
         MarketDataWebSocketReconnectBackoff reconnectBackoff,
         CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested && socket.State == WebSocketState.Open)
-        {
-            var received = await ReceiveTextMessageAsync(socket, cancellationToken);
-            if (received.CloseFrame is not null)
+        return await MarketDataWebSocketFrameHandoff.RunAsync(
+            options.ReceiveDispatchQueueCapacity,
+            TimeSpan.FromMilliseconds(options.SideEffectSlowProcessingMilliseconds),
+            async token =>
             {
-                return received.CloseFrame;
-            }
+                if (socket.State != WebSocketState.Open)
+                {
+                    return new MarketWebSocketReceivedMessage(null, null);
+                }
 
-            var message = received.Text ?? string.Empty;
-            await using (await makerGtdHandoff.EnterMarketDataReceiptAsync(cancellationToken))
+                return await ReceiveTextMessageAsync(socket, token);
+            },
+            async (frame, token) =>
             {
-                DateTimeOffset receivedAtUtc = DateTimeOffset.UtcNow;
-                SetLastMessageUtc(receivedAtUtc);
-                await ProcessTextMessageAndResetBackoffAsync(
-                    processTextMessageAsync,
-                    Component,
-                    message,
-                    receivedAtUtc,
-                    reconnectBackoff,
-                    cancellationToken);
-            }
+                await using (await makerGtdHandoff.EnterMarketDataReceiptAsync(token))
+                {
+                    await ProcessTextMessageAndResetBackoffAsync(
+                        processTextMessageAsync,
+                        Component,
+                        frame.Text,
+                        frame.ReceivedAtUtc,
+                        reconnectBackoff,
+                        token);
+                }
 
-            await PublishStatusAsync(MarketDataConnectionState.Connected, null, cancellationToken);
-        }
-
-        return null;
+                await PublishStatusAsync(MarketDataConnectionState.Connected, null, token);
+            },
+            _ => { },
+            waitDuration => logger.LogWarning(
+                "Market WebSocket shard {Component} receive dispatch channel was saturated. Capacity={ReceiveDispatchQueueCapacity} WaitDurationMilliseconds={WaitDurationMilliseconds}",
+                Component,
+                options.ReceiveDispatchQueueCapacity,
+                waitDuration.TotalMilliseconds),
+            socket.Abort,
+            cancellationToken);
     }
 
     internal static async Task ProcessTextMessageAndResetBackoffAsync(
@@ -399,7 +410,13 @@ public sealed class MarketDataWebSocketShardRunner(
         }
         while (!result.EndOfMessage);
 
-        return new MarketWebSocketReceivedMessage(Encoding.UTF8.GetString(message.ToArray()), null);
+        var receivedAtUtc = DateTimeOffset.UtcNow;
+        SetLastMessageUtc(receivedAtUtc);
+        return new MarketWebSocketReceivedMessage(
+            new MarketWebSocketDispatchFrame(
+                Encoding.UTF8.GetString(message.ToArray()),
+                receivedAtUtc),
+            null);
     }
 
     private string BuildDisconnectDiagnostic(
@@ -834,14 +851,170 @@ public sealed class MarketDataWebSocketShardRunner(
         DateTimeOffset? LastConnectedUtc,
         DateTimeOffset? LastDisconnectedUtc);
 
-    private sealed record MarketWebSocketReceivedMessage(
-        string? Text,
-        MarketWebSocketCloseFrame? CloseFrame);
+}
 
-    private sealed record MarketWebSocketCloseFrame(
-        WebSocketCloseStatus? Status,
-        string? Description,
-        DateTimeOffset ObservedAtUtc);
+internal sealed record MarketWebSocketDispatchFrame(
+    string Text,
+    DateTimeOffset ReceivedAtUtc);
+
+internal sealed record MarketWebSocketReceivedMessage(
+    MarketWebSocketDispatchFrame? Frame,
+    MarketWebSocketCloseFrame? CloseFrame);
+
+internal sealed record MarketWebSocketCloseFrame(
+    WebSocketCloseStatus? Status,
+    string? Description,
+    DateTimeOffset ObservedAtUtc);
+
+internal static class MarketDataWebSocketFrameHandoff
+{
+    public static async Task<MarketWebSocketCloseFrame?> RunAsync(
+        int capacity,
+        TimeSpan saturationThreshold,
+        Func<CancellationToken, Task<MarketWebSocketReceivedMessage>> receiveAsync,
+        Func<MarketWebSocketDispatchFrame, CancellationToken, Task> dispatchAsync,
+        Action<MarketWebSocketDispatchFrame> onFrameReceived,
+        Action<TimeSpan> onSaturation,
+        Action onConsumerFailure,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
+        var channel = Channel.CreateBounded<MarketWebSocketDispatchFrame>(
+            new BoundedChannelOptions(capacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = true,
+                AllowSynchronousContinuations = false
+            });
+        using var handoffCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var producer = ProduceAsync(
+            channel.Writer,
+            saturationThreshold,
+            receiveAsync,
+            onFrameReceived,
+            onSaturation,
+            handoffCts.Token);
+        var consumer = ConsumeAsync(channel.Reader, dispatchAsync, handoffCts.Token);
+
+        var firstCompleted = await Task.WhenAny(producer, consumer);
+        if (firstCompleted == consumer)
+        {
+            try
+            {
+                await consumer;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                await handoffCts.CancelAsync();
+                await SuppressAsync(producer);
+                throw;
+            }
+            catch
+            {
+                onConsumerFailure();
+                await handoffCts.CancelAsync();
+                await SuppressAsync(producer);
+                throw;
+            }
+        }
+
+        MarketWebSocketCloseFrame? closeFrame;
+        try
+        {
+            closeFrame = await producer;
+        }
+        catch
+        {
+            await handoffCts.CancelAsync();
+            await SuppressAsync(consumer);
+            throw;
+        }
+
+        try
+        {
+            await consumer;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            onConsumerFailure();
+            throw;
+        }
+
+        return closeFrame;
+    }
+
+    private static async Task<MarketWebSocketCloseFrame?> ProduceAsync(
+        ChannelWriter<MarketWebSocketDispatchFrame> writer,
+        TimeSpan saturationThreshold,
+        Func<CancellationToken, Task<MarketWebSocketReceivedMessage>> receiveAsync,
+        Action<MarketWebSocketDispatchFrame> onFrameReceived,
+        Action<TimeSpan> onSaturation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var received = await receiveAsync(cancellationToken);
+                if (received.CloseFrame is not null || received.Frame is null)
+                {
+                    return received.CloseFrame;
+                }
+
+                onFrameReceived(received.Frame);
+                if (writer.TryWrite(received.Frame))
+                {
+                    continue;
+                }
+
+                var started = Stopwatch.GetTimestamp();
+                try
+                {
+                    await writer.WriteAsync(received.Frame, cancellationToken);
+                }
+                finally
+                {
+                    var waitDuration = Stopwatch.GetElapsedTime(started);
+                    if (waitDuration >= saturationThreshold)
+                    {
+                        onSaturation(waitDuration);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            writer.TryComplete();
+        }
+    }
+
+    private static async Task ConsumeAsync(
+        ChannelReader<MarketWebSocketDispatchFrame> reader,
+        Func<MarketWebSocketDispatchFrame, CancellationToken, Task> dispatchAsync,
+        CancellationToken cancellationToken)
+    {
+        await foreach (var frame in reader.ReadAllAsync(cancellationToken))
+        {
+            await dispatchAsync(frame, cancellationToken);
+        }
+    }
+
+    private static async Task SuppressAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch
+        {
+        }
+    }
 }
 
 internal sealed class MarketDataWebSocketReconnectBackoff

@@ -417,11 +417,70 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
     }
 
     [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_NotifiesTerminalOrderAfterAtomicFill()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var order = AddMakerOrder(repository, receivedAtUtc, "strategy:maker-terminal");
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        handoff.TrackMakerGtdPaperOrder(
+            order.Id,
+            MakerGtdPaperExecutionContract.ExecutionSource);
+        Guid? terminalOrderId = null;
+        handoff.RegisterTerminalOrderObserver(orderId => terminalOrderId = orderId);
+        var updater = CreateMakerUpdater(repository, makerGtdPaperPlacementHandoff: handoff);
+
+        await updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid> { order.Id },
+            CancellationToken.None);
+
+        Assert.Equal(PaperOrderStatus.Filled, Assert.Single(repository.PaperOrders).Status);
+        Assert.Equal(order.Id, terminalOrderId);
+    }
+
+    [Fact]
+    public async Task ApplyMakerGtdUpdateAsync_DoesNotNotifyTerminalOrderWhenAtomicFillIsRejected()
+    {
+        var repository = new TestAppRepository();
+        var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var order = AddMakerOrder(repository, receivedAtUtc, "strategy:maker-rejected-terminal");
+        repository.BeforeTryApplyMakerGtdPaperFullFill = (_, _) =>
+        {
+            var currentOrder = Assert.Single(repository.PaperOrders);
+            repository.PaperOrders.Clear();
+            repository.PaperOrders.Add(currentOrder with
+            {
+                Status = PaperOrderStatus.Cancelled,
+                CancelledAtUtc = receivedAtUtc
+            });
+        };
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        handoff.TrackMakerGtdPaperOrder(
+            order.Id,
+            MakerGtdPaperExecutionContract.ExecutionSource);
+        Guid? terminalOrderId = null;
+        handoff.RegisterTerminalOrderObserver(orderId => terminalOrderId = orderId);
+        var updater = CreateMakerUpdater(repository, makerGtdPaperPlacementHandoff: handoff);
+
+        await updater.ApplyMakerGtdUpdateAsync(
+            MakerBookUpdate(receivedAtUtc),
+            receivedAtUtc,
+            new HashSet<Guid> { order.Id },
+            CancellationToken.None);
+
+        Assert.Equal(PaperOrderStatus.Cancelled, Assert.Single(repository.PaperOrders).Status);
+        Assert.Empty(repository.PaperFills);
+        Assert.Null(terminalOrderId);
+    }
+
+    [Fact]
     public async Task ApplyMakerGtdUpdateAsync_BoundsIndependentWalletsAndWaitsBeforeNextEvent()
     {
         var repository = new TestAppRepository();
         var receivedAtUtc = DateTimeOffset.UtcNow.AddSeconds(-1);
-        var orders = Enumerable.Range(1, 6)
+        var orders = Enumerable.Range(1, 28)
             .Select(index => AddMakerOrder(repository, receivedAtUtc, $"strategy:maker-{index}"))
             .ToArray();
         var feeService = new CoordinatedMakerFeeAccountingService();
@@ -434,12 +493,12 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
             orders.Select(order => order.Id).ToHashSet(),
             CancellationToken.None,
             trace);
-        await feeService.WaitForStartedCountAsync(4);
+        await feeService.WaitForStartedCountAsync(8);
 
-        Assert.Equal(4, feeService.StartedCount);
-        Assert.Equal(4, feeService.MaximumActiveCount);
+        Assert.Equal(8, feeService.StartedCount);
+        Assert.Equal(8, feeService.MaximumActiveCount);
         Assert.Equal(
-            "PaperTradingMarketDataUpdater.ApplyMakerGtdWalletGroups(MaxConcurrency=4)",
+            "PaperTradingMarketDataUpdater.ApplyMakerGtdWalletGroups(MaxConcurrency=8)",
             trace.Capture(DateTimeOffset.UtcNow).Operation);
 
         var secondReceivedAtUtc = receivedAtUtc.AddMilliseconds(1);
@@ -454,10 +513,10 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
         feeService.Release();
         await Task.WhenAll(firstApply, secondApply).WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.Equal(6, feeService.StartedCount);
-        Assert.Equal(4, feeService.MaximumActiveCount);
+        Assert.Equal(28, feeService.StartedCount);
+        Assert.Equal(8, feeService.MaximumActiveCount);
         Assert.Equal(1, repository.MakerGtdLinkedRunLookupCalls);
-        Assert.Equal(6, repository.PaperFills.Count);
+        Assert.Equal(28, repository.PaperFills.Count);
     }
 
     [Fact]
@@ -971,7 +1030,8 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
     private static PaperTradingMarketDataUpdater CreateMakerUpdater(
         TestAppRepository repository,
         IPolymarketFeeAccountingService? feeAccountingService = null,
-        IExposureSnapshotCache? exposureCache = null)
+        IExposureSnapshotCache? exposureCache = null,
+        IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null)
     {
         return new PaperTradingMarketDataUpdater(
             NullLogger<PaperTradingMarketDataUpdater>.Instance,
@@ -981,7 +1041,8 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
             new ConservativePaperGtdFillEstimator(new BtcUpDown5mStrategyOptions()),
             repository,
             feeAccountingService,
-            new MarketDataWebSocketOptions { StaleAfterSeconds = 30 });
+            new MarketDataWebSocketOptions { StaleAfterSeconds = 30 },
+            makerGtdPaperPlacementHandoff);
     }
 
     private static MarketDataSideEffectExecutionTrace CreateTrace(DateTimeOffset receivedAtUtc)

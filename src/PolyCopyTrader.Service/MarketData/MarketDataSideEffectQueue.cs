@@ -145,6 +145,10 @@ public sealed class MarketDataSideEffectQueue(
         paperTradingMarketDataUpdater,
         repository,
         makerGtdPaperPlacementHandoff ?? NoOpMakerGtdPaperPlacementHandoff.Instance);
+    private readonly SlowProcessingWarningAggregator slowWarningAggregator = new(
+        logger,
+        TimeSpan.FromSeconds(options.SideEffectMetricsIntervalSeconds),
+        "Queued market-data side effect");
     private readonly Dictionary<string, PendingAssetUpdates> pendingUpdatesByAsset = new(StringComparer.OrdinalIgnoreCase);
     private readonly LinkedList<string> readyAssetKeys = [];
     private readonly List<PaperOrderDrainRequest> paperOrderDrainRequests = [];
@@ -967,6 +971,7 @@ public sealed class MarketDataSideEffectQueue(
         }
 
         var processingDuration = Stopwatch.GetElapsedTime(processingStarted);
+        var activePhase = completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing;
         if (queueDelay.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds ||
             processingDuration.TotalMilliseconds >= options.SideEffectSlowProcessingMilliseconds)
         {
@@ -977,21 +982,28 @@ public sealed class MarketDataSideEffectQueue(
                 : queueDelayWasSlow
                     ? "QueueDelay"
                     : "Processing";
-            logger.LogWarning(
-                "Queued market-data side effect was slow. Component={Component} EventType={EventType} AssetId={AssetId} LatencyCategory={LatencyCategory} QueueDelayMs={QueueDelayMs} ProcessingDurationMs={ProcessingDurationMs} PendingUpdates={PendingUpdates} ActivePhase={ActivePhase} ActiveOperation={ActiveOperation} ActivePhaseDurationMs={ActivePhaseDurationMs} SlowestPhase={SlowestPhase} SlowestOperation={SlowestOperation} SlowestPhaseDurationMs={SlowestPhaseDurationMs}",
+            slowWarningAggregator.RecordSlow(new SlowProcessingWarningObservation(
                 workItem.Component,
-                workItem.Update.EventType,
+                workItem.Update.EventType.ToString(),
                 workItem.Update.AssetId,
                 latencyCategory,
                 queueDelay.TotalMilliseconds,
                 processingDuration.TotalMilliseconds,
                 GetPendingUpdateCount(),
-                completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing,
+                activePhase,
                 completedTrace?.Operation,
                 completedTrace?.PhaseAgeMilliseconds ?? processingDuration.TotalMilliseconds,
                 completedTrace?.SlowestPhase ?? completedTrace?.Phase ?? MarketDataSideEffectPhases.Processing,
                 completedTrace?.SlowestOperation ?? completedTrace?.Operation,
-                completedTrace?.SlowestPhaseDurationMilliseconds ?? processingDuration.TotalMilliseconds);
+                completedTrace?.SlowestPhaseDurationMilliseconds ?? processingDuration.TotalMilliseconds));
+        }
+        else
+        {
+            slowWarningAggregator.RecordNonSlow(
+                workItem.Component,
+                workItem.Update.EventType.ToString(),
+                activePhase,
+                workItem.Update.AssetId);
         }
     }
 

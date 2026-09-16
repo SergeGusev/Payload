@@ -1,23 +1,66 @@
+using System.Net;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
 
 namespace PolyCopyTrader.Service.ExternalPrices;
 
-public sealed class OkxExpiryFuturesReferencePriceService(
-    ILogger<OkxExpiryFuturesReferencePriceService> logger,
-    OkxExpiryFuturesReferenceOptions options,
-    IHttpClientFactory httpClientFactory,
-    IAppRepository repository) : BackgroundService, IExpiryFuturesReferencePriceClient
+public sealed class OkxExpiryFuturesReferencePriceService : BackgroundService, IExpiryFuturesReferencePriceClient
 {
     private const string HttpClientName = "OkxExpiryFuturesReference";
+    private const int RetryJitterMinimumMilliseconds = 100;
+    private const int RetryJitterMaximumMilliseconds = 250;
+    private static readonly TimeSpan IncidentSummaryInterval = TimeSpan.FromSeconds(30);
+
+    private readonly ILogger<OkxExpiryFuturesReferencePriceService> logger;
+    private readonly OkxExpiryFuturesReferenceOptions options;
+    private readonly IHttpClientFactory httpClientFactory;
+    private readonly IAppRepository repository;
+    private readonly Func<DateTimeOffset> utcNow;
+    private readonly Func<TimeSpan, CancellationToken, Task> delayAsync;
+    private readonly Func<int, int, int> nextRandom;
     private readonly object sync = new();
-    private readonly HashSet<string> enabledAssetSymbols = NormalizeSymbols(options.AssetSymbols);
+    private readonly HashSet<string> enabledAssetSymbols;
+    private readonly OkxSourceIncidentTracker incidentTracker = new(IncidentSummaryInterval);
     private IReadOnlyList<OkxExpiryFuturesInstrument> instruments = [];
     private IReadOnlyDictionary<string, OkxExpiryFuturesTicker> tickers =
         new Dictionary<string, OkxExpiryFuturesTicker>(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, OkxUsdIndexTicker> indicesByAsset = new(StringComparer.OrdinalIgnoreCase);
-    private DateTimeOffset instrumentsFetchedAtUtc = DateTimeOffset.MinValue;
+
+    public OkxExpiryFuturesReferencePriceService(
+        ILogger<OkxExpiryFuturesReferencePriceService> logger,
+        OkxExpiryFuturesReferenceOptions options,
+        IHttpClientFactory httpClientFactory,
+        IAppRepository repository)
+        : this(
+            logger,
+            options,
+            httpClientFactory,
+            repository,
+            static () => DateTimeOffset.UtcNow,
+            static (delay, cancellationToken) => Task.Delay(delay, cancellationToken),
+            static (minimum, exclusiveMaximum) => Random.Shared.Next(minimum, exclusiveMaximum))
+    {
+    }
+
+    internal OkxExpiryFuturesReferencePriceService(
+        ILogger<OkxExpiryFuturesReferencePriceService> logger,
+        OkxExpiryFuturesReferenceOptions options,
+        IHttpClientFactory httpClientFactory,
+        IAppRepository repository,
+        Func<DateTimeOffset> utcNow,
+        Func<TimeSpan, CancellationToken, Task> delayAsync,
+        Func<int, int, int> nextRandom)
+    {
+        this.logger = logger;
+        this.options = options;
+        this.httpClientFactory = httpClientFactory;
+        this.repository = repository;
+        this.utcNow = utcNow;
+        this.delayAsync = delayAsync;
+        this.nextRandom = nextRandom;
+        enabledAssetSymbols = NormalizeSymbols(options.AssetSymbols);
+    }
 
     public Task<IReadOnlyList<ExpiryFuturesReferencePricePoint>> GetNearestExpiryPricesAsync(
         string assetSymbol,
@@ -62,7 +105,7 @@ public sealed class OkxExpiryFuturesReferencePriceService(
             throw new InvalidOperationException($"OKX {normalizedAsset}-USD index ticker has not received a price yet.");
         }
 
-        var nowUtc = DateTimeOffset.UtcNow;
+        var nowUtc = utcNow();
         EnsureFresh("USD index ticker", indexTicker.FetchedAtUtc, indexTicker.SourceUpdatedAtUtc, nowUtc);
         var prices = new ExpiryFuturesReferencePricePoint[requiredExpiryCount];
         for (var index = 0; index < requiredExpiryCount; index++)
@@ -118,28 +161,58 @@ public sealed class OkxExpiryFuturesReferencePriceService(
             options.StaleAfterSeconds);
 
         var pollInterval = TimeSpan.FromMilliseconds(Math.Max(1, options.PollIntervalMilliseconds));
-        var instrumentRefreshInterval = TimeSpan.FromSeconds(Math.Max(1, options.InstrumentRefreshIntervalSeconds));
-        while (!stoppingToken.IsCancellationRequested)
+        var loops = new List<Task>
         {
-            if (DateTimeOffset.UtcNow - instrumentsFetchedAtUtc >= instrumentRefreshInterval)
-            {
-                await TryRefreshInstrumentsAsync(stoppingToken);
-            }
+            RunInstrumentPollingLoopAsync(stoppingToken),
+            RunPollingLoopAsync(pollInterval, TryRefreshTickersAsync, stoppingToken)
+        };
+        loops.AddRange(enabledAssetSymbols
+            .OrderBy(symbol => symbol, StringComparer.OrdinalIgnoreCase)
+            .Select(assetSymbol => RunPollingLoopAsync(
+                pollInterval,
+                cancellationToken => TryRefreshIndexTickerAsync(assetSymbol, cancellationToken),
+                stoppingToken)));
 
-            var marketDataRefreshes = enabledAssetSymbols
-                .OrderBy(symbol => symbol, StringComparer.OrdinalIgnoreCase)
-                .Select(assetSymbol => TryRefreshIndexTickerAsync(assetSymbol, stoppingToken))
-                .Prepend(TryRefreshTickersAsync(stoppingToken));
-            await Task.WhenAll(marketDataRefreshes);
-
-            await Task.Delay(pollInterval, stoppingToken);
+        try
+        {
+            await Task.WhenAll(loops);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
         }
 
         logger.LogInformation("OKX expiry futures reference price service stopped.");
     }
 
-    private async Task TryRefreshInstrumentsAsync(CancellationToken cancellationToken)
+    internal async Task RunInstrumentPollingLoopAsync(CancellationToken cancellationToken)
     {
+        var failedRefreshRetryInterval = TimeSpan.FromMilliseconds(Math.Max(1, options.PollIntervalMilliseconds));
+        var successfulRefreshInterval = TimeSpan.FromSeconds(Math.Max(1, options.InstrumentRefreshIntervalSeconds));
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var refreshed = await TryRefreshInstrumentsAsync(cancellationToken);
+            await delayAsync(
+                refreshed ? successfulRefreshInterval : failedRefreshRetryInterval,
+                cancellationToken);
+        }
+    }
+
+    private async Task RunPollingLoopAsync(
+        TimeSpan interval,
+        Func<CancellationToken, Task> refreshAsync,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await refreshAsync(cancellationToken);
+            await delayAsync(interval, cancellationToken);
+        }
+    }
+
+    internal async Task<bool> TryRefreshInstrumentsAsync(CancellationToken cancellationToken)
+    {
+        const string source = "instruments";
+        const string operation = "FetchExpiryFuturesInstruments";
         try
         {
             var payload = await GetPayloadAsync("/api/v5/public/instruments?instType=FUTURES", cancellationToken);
@@ -165,8 +238,10 @@ public sealed class OkxExpiryFuturesReferencePriceService(
             lock (sync)
             {
                 instruments = parsed;
-                instrumentsFetchedAtUtc = DateTimeOffset.UtcNow;
             }
+
+            ReportRecovery(source, operation);
+            return true;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -174,13 +249,15 @@ public sealed class OkxExpiryFuturesReferencePriceService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "OKX expiry futures instrument refresh failed.");
-            await TryRecordApiErrorAsync("FetchExpiryFuturesInstruments", ex.Message, cancellationToken);
+            await ReportFailureAsync(source, operation, ex, cancellationToken);
+            return false;
         }
     }
 
-    private async Task TryRefreshTickersAsync(CancellationToken cancellationToken)
+    internal async Task TryRefreshTickersAsync(CancellationToken cancellationToken)
     {
+        const string source = "fixed-expiry-tickers";
+        const string operation = "FetchExpiryFuturesTickers";
         try
         {
             IReadOnlySet<string> instrumentIds;
@@ -196,11 +273,10 @@ public sealed class OkxExpiryFuturesReferencePriceService(
                 return;
             }
 
-            var fetchedAtUtc = DateTimeOffset.UtcNow;
             var payload = await GetPayloadAsync("/api/v5/market/tickers?instType=FUTURES", cancellationToken);
             if (!OkxExpiryFuturesResponseParser.TryParseFuturesTickers(
                     payload,
-                    fetchedAtUtc,
+                    DateTimeOffset.MinValue,
                     instrumentIds,
                     out var parsed,
                     out var error))
@@ -208,10 +284,17 @@ public sealed class OkxExpiryFuturesReferencePriceService(
                 throw new InvalidOperationException(error ?? "OKX expiry futures tickers response could not be parsed.");
             }
 
+            var fetchedAtUtc = utcNow();
+            var timestamped = parsed.ToDictionary(
+                pair => pair.Key,
+                pair => pair.Value with { FetchedAtUtc = fetchedAtUtc },
+                StringComparer.OrdinalIgnoreCase);
             lock (sync)
             {
-                tickers = parsed;
+                tickers = timestamped;
             }
+
+            ReportRecovery(source, operation);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -219,21 +302,21 @@ public sealed class OkxExpiryFuturesReferencePriceService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "OKX expiry futures ticker refresh failed.");
-            await TryRecordApiErrorAsync("FetchExpiryFuturesTickers", ex.Message, cancellationToken);
+            await ReportFailureAsync(source, operation, ex, cancellationToken);
         }
     }
 
-    private async Task TryRefreshIndexTickerAsync(string assetSymbol, CancellationToken cancellationToken)
+    internal async Task TryRefreshIndexTickerAsync(string assetSymbol, CancellationToken cancellationToken)
     {
+        var source = "index-" + NormalizeSymbol(assetSymbol);
+        const string operation = "FetchUsdIndexTicker";
         try
         {
-            var fetchedAtUtc = DateTimeOffset.UtcNow;
             var path = "/api/v5/market/index-tickers?instId=" + Uri.EscapeDataString(assetSymbol + "-USD");
             var payload = await GetPayloadAsync(path, cancellationToken);
             if (!OkxExpiryFuturesResponseParser.TryParseIndexTicker(
                     payload,
-                    fetchedAtUtc,
+                    DateTimeOffset.MinValue,
                     assetSymbol,
                     out var parsed,
                     out var error) ||
@@ -242,10 +325,13 @@ public sealed class OkxExpiryFuturesReferencePriceService(
                 throw new InvalidOperationException(error ?? $"OKX {assetSymbol}-USD index ticker response could not be parsed.");
             }
 
+            var timestamped = parsed with { FetchedAtUtc = utcNow() };
             lock (sync)
             {
-                indicesByAsset[parsed.AssetSymbol] = parsed;
+                indicesByAsset[timestamped.AssetSymbol] = timestamped;
             }
+
+            ReportRecovery(source, operation);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -253,12 +339,29 @@ public sealed class OkxExpiryFuturesReferencePriceService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "OKX USD index ticker refresh failed. Asset={AssetSymbol}", assetSymbol);
-            await TryRecordApiErrorAsync("FetchUsdIndexTicker", ex.Message, cancellationToken);
+            await ReportFailureAsync(source, operation, ex, cancellationToken);
         }
     }
 
-    private async Task<byte[]> GetPayloadAsync(string pathAndQuery, CancellationToken cancellationToken)
+    internal async Task<byte[]> GetPayloadAsync(string pathAndQuery, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await GetPayloadOnceAsync(pathAndQuery, cancellationToken);
+            }
+            catch (Exception ex) when (attempt == 0 && IsRetryable(ex, cancellationToken))
+            {
+                var jitterMilliseconds = nextRandom(
+                    RetryJitterMinimumMilliseconds,
+                    RetryJitterMaximumMilliseconds + 1);
+                await delayAsync(TimeSpan.FromMilliseconds(jitterMilliseconds), cancellationToken);
+            }
+        }
+    }
+
+    private async Task<byte[]> GetPayloadOnceAsync(string pathAndQuery, CancellationToken cancellationToken)
     {
         var client = httpClientFactory.CreateClient(HttpClientName);
         var uri = new Uri(options.RestBaseUrl.TrimEnd('/') + pathAndQuery);
@@ -266,11 +369,69 @@ public sealed class OkxExpiryFuturesReferencePriceService(
         var payload = await response.Content.ReadAsByteArrayAsync(cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(
+            throw new OkxHttpStatusException(
+                response.StatusCode,
                 $"OKX public market data returned HTTP {(int)response.StatusCode} {response.ReasonPhrase}: {DecodeBody(payload)}");
         }
 
         return payload;
+    }
+
+    private static bool IsRetryable(Exception exception, CancellationToken callerCancellationToken)
+    {
+        if (exception is OperationCanceledException)
+        {
+            return !callerCancellationToken.IsCancellationRequested;
+        }
+
+        return exception is OkxHttpStatusException statusException &&
+            (statusException.StatusCode == HttpStatusCode.TooManyRequests ||
+             (int)statusException.StatusCode >= 500);
+    }
+
+    private async Task ReportFailureAsync(
+        string source,
+        string operation,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        var report = incidentTracker.RecordFailure(source, utcNow());
+        if (!report.ShouldReport)
+        {
+            return;
+        }
+
+        var message = report.IsFirst
+            ? $"OKX source {source} failed. IncidentStartedAtUtc={report.StartedAtUtc:O}; FailureCount={report.FailureCount}; Error={exception.Message}"
+            : $"OKX source {source} failure incident continues. IncidentStartedAtUtc={report.StartedAtUtc:O}; LastFailureAtUtc={report.LastFailureAtUtc:O}; FailureCount={report.FailureCount}; Error={exception.Message}";
+        logger.LogWarning(
+            exception,
+            "OKX source refresh failed. Source={Source} Operation={Operation} IncidentStartedAtUtc={IncidentStartedAtUtc} LastFailureAtUtc={LastFailureAtUtc} FailureCount={FailureCount} IsFirstFailure={IsFirstFailure}",
+            source,
+            operation,
+            report.StartedAtUtc,
+            report.LastFailureAtUtc,
+            report.FailureCount,
+            report.IsFirst);
+        await TryRecordApiErrorAsync(operation, message, cancellationToken);
+    }
+
+    private void ReportRecovery(string source, string operation)
+    {
+        var recovery = incidentTracker.RecordRecovery(source, utcNow());
+        if (recovery is null)
+        {
+            return;
+        }
+
+        logger.LogInformation(
+            "OKX source refresh recovered. Source={Source} Operation={Operation} IncidentStartedAtUtc={IncidentStartedAtUtc} RecoveredAtUtc={RecoveredAtUtc} IncidentDurationMilliseconds={IncidentDurationMilliseconds} FailureCount={FailureCount}",
+            source,
+            operation,
+            recovery.StartedAtUtc,
+            recovery.RecoveredAtUtc,
+            recovery.Duration.TotalMilliseconds,
+            recovery.FailureCount);
     }
 
     private void EnsureFresh(
@@ -296,7 +457,7 @@ public sealed class OkxExpiryFuturesReferencePriceService(
         try
         {
             await repository.AddApiErrorAsync(
-                new ApiError(Guid.NewGuid(), "OkxExpiryFuturesReferencePriceService", operation, message, DateTimeOffset.UtcNow),
+                new ApiError(Guid.NewGuid(), "OkxExpiryFuturesReferencePriceService", operation, message, utcNow()),
                 cancellationToken);
         }
         catch (Exception ex)
@@ -325,3 +486,91 @@ public sealed class OkxExpiryFuturesReferencePriceService(
             : symbol.Trim().ToUpperInvariant();
     }
 }
+
+internal sealed class OkxHttpStatusException(HttpStatusCode statusCode, string message) : InvalidOperationException(message)
+{
+    public HttpStatusCode StatusCode { get; } = statusCode;
+}
+
+internal sealed class OkxSourceIncidentTracker(TimeSpan summaryInterval)
+{
+    private readonly object gate = new();
+    private readonly Dictionary<string, IncidentState> incidents = new(StringComparer.OrdinalIgnoreCase);
+
+    public OkxSourceFailureReport RecordFailure(string source, DateTimeOffset observedAtUtc)
+    {
+        lock (gate)
+        {
+            if (!incidents.TryGetValue(source, out var state))
+            {
+                state = new IncidentState(
+                    observedAtUtc,
+                    observedAtUtc,
+                    FailureCount: 1,
+                    NextSummaryAtUtc: observedAtUtc + summaryInterval);
+                incidents[source] = state;
+                return new OkxSourceFailureReport(
+                    ShouldReport: true,
+                    IsFirst: true,
+                    state.StartedAtUtc,
+                    state.LastFailureAtUtc,
+                    state.FailureCount);
+            }
+
+            state = state with
+            {
+                LastFailureAtUtc = observedAtUtc,
+                FailureCount = state.FailureCount + 1
+            };
+            var shouldReport = observedAtUtc >= state.NextSummaryAtUtc;
+            if (shouldReport)
+            {
+                state = state with { NextSummaryAtUtc = observedAtUtc + summaryInterval };
+            }
+
+            incidents[source] = state;
+            return new OkxSourceFailureReport(
+                shouldReport,
+                IsFirst: false,
+                state.StartedAtUtc,
+                state.LastFailureAtUtc,
+                state.FailureCount);
+        }
+    }
+
+    public OkxSourceRecoveryReport? RecordRecovery(string source, DateTimeOffset recoveredAtUtc)
+    {
+        lock (gate)
+        {
+            if (!incidents.Remove(source, out var state))
+            {
+                return null;
+            }
+
+            return new OkxSourceRecoveryReport(
+                state.StartedAtUtc,
+                recoveredAtUtc,
+                recoveredAtUtc - state.StartedAtUtc,
+                state.FailureCount);
+        }
+    }
+
+    private sealed record IncidentState(
+        DateTimeOffset StartedAtUtc,
+        DateTimeOffset LastFailureAtUtc,
+        long FailureCount,
+        DateTimeOffset NextSummaryAtUtc);
+}
+
+internal sealed record OkxSourceFailureReport(
+    bool ShouldReport,
+    bool IsFirst,
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset LastFailureAtUtc,
+    long FailureCount);
+
+internal sealed record OkxSourceRecoveryReport(
+    DateTimeOffset StartedAtUtc,
+    DateTimeOffset RecoveredAtUtc,
+    TimeSpan Duration,
+    long FailureCount);

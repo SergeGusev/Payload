@@ -1,3 +1,5 @@
+using PolyCopyTrader.Domain;
+
 namespace PolyCopyTrader.Service.PaperTrading;
 
 public interface IMakerGtdPaperPlacementHandoff
@@ -46,6 +48,12 @@ public interface IMakerGtdPaperPlacementHandoff
         out MakerGtdPaperMarketDataFailure? failure);
 
     void ClearMarketDataFailures(Guid paperOrderId);
+
+    void NotifyTerminalOrderPersisted(Guid paperOrderId, PaperOrderStatus persistedStatus);
+
+    void RegisterTerminalOrderObserver(Action<Guid> observer)
+    {
+    }
 
     MakerGtdPaperHandoffDiagnosticSnapshot GetPreflightDiagnosticSnapshot(
         DateTimeOffset capturedAtUtc)
@@ -102,6 +110,7 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
     private readonly object pendingSync = new();
     private readonly object failureSync = new();
     private readonly object receiptExpirySync = new();
+    private readonly object terminalObserverSync = new();
     private readonly LinkedList<ExpiryAdmissionWaiter> pendingExpiryAdmissions = [];
     private readonly Dictionary<Guid, PendingOrder> pendingOrders = [];
     private readonly Dictionary<string, HashSet<Guid>> pendingOrderIdsByAsset = new(StringComparer.Ordinal);
@@ -117,6 +126,7 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
     private int activeMarketDataReceipts;
     private int untrackedActiveMarketDataReceipts;
     private int trackedOrderFailureCount;
+    private Action<Guid>? terminalOrderObservers;
 
     public async ValueTask<IMakerGtdPaperPlacementAdmission> EnterPlacementAdmissionAsync(
         string assetId,
@@ -516,6 +526,29 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
 
     public void ClearMarketDataFailures(Guid paperOrderId)
     {
+        ClearTrackedOrderFailures(paperOrderId);
+    }
+
+    public void NotifyTerminalOrderPersisted(Guid paperOrderId, PaperOrderStatus persistedStatus)
+    {
+        if (paperOrderId == Guid.Empty ||
+            persistedStatus is not (PaperOrderStatus.Filled or PaperOrderStatus.Expired))
+        {
+            return;
+        }
+
+        ClearTrackedOrderFailures(paperOrderId);
+        Action<Guid>? observers;
+        lock (terminalObserverSync)
+        {
+            observers = terminalOrderObservers;
+        }
+
+        observers?.Invoke(paperOrderId);
+    }
+
+    private void ClearTrackedOrderFailures(Guid paperOrderId)
+    {
         if (paperOrderId == Guid.Empty)
         {
             return;
@@ -528,6 +561,15 @@ public sealed class MakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacementHando
             {
                 trackedOrderFailureCount -= removedFailures.Count;
             }
+        }
+    }
+
+    public void RegisterTerminalOrderObserver(Action<Guid> observer)
+    {
+        ArgumentNullException.ThrowIfNull(observer);
+        lock (terminalObserverSync)
+        {
+            terminalOrderObservers += observer;
         }
     }
 
@@ -893,6 +935,10 @@ internal sealed class NoOpMakerGtdPaperPlacementHandoff : IMakerGtdPaperPlacemen
     }
 
     public void ClearMarketDataFailures(Guid paperOrderId)
+    {
+    }
+
+    public void NotifyTerminalOrderPersisted(Guid paperOrderId, PaperOrderStatus persistedStatus)
     {
     }
 

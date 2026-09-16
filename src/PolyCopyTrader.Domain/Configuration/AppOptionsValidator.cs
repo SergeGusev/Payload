@@ -122,6 +122,7 @@ public static class AppOptionsValidator
             $"Market WebSocket max shard connections: {configuration.MarketDataWebSocket.MaxShardConnections}",
             $"Market WebSocket watchdog interval seconds: {configuration.MarketDataWebSocket.WatchdogIntervalSeconds}",
             $"Market WebSocket watchdog stale seconds: {configuration.MarketDataWebSocket.WatchdogStaleSeconds}",
+            $"Market WebSocket receive dispatch queue capacity: {configuration.MarketDataWebSocket.ReceiveDispatchQueueCapacity}",
             $"Market WebSocket persists order book snapshots: {configuration.MarketDataWebSocket.PersistOrderBookSnapshots}",
             $"Market WebSocket persists market data events: {configuration.MarketDataWebSocket.PersistMarketDataEvents}",
             $"Market WebSocket persists frame diagnostics: {configuration.MarketDataWebSocket.PersistFrameDiagnostics}",
@@ -130,6 +131,7 @@ public static class AppOptionsValidator
             $"Market WebSocket side-effect diagnostic queue capacity: {configuration.MarketDataWebSocket.SideEffectDiagnosticQueueCapacity}",
             $"Market WebSocket side-effect metrics interval seconds: {configuration.MarketDataWebSocket.SideEffectMetricsIntervalSeconds}",
             $"Market WebSocket side-effect slow processing milliseconds: {configuration.MarketDataWebSocket.SideEffectSlowProcessingMilliseconds}",
+            $"Market WebSocket Maker-GTD wallet maximum concurrency: {configuration.MarketDataWebSocket.MakerGtdWalletMaximumConcurrency}",
             $"Market WebSocket critical frame diagnostic sample every: {configuration.MarketDataWebSocket.CriticalFrameDiagnosticSampleEvery}",
             $"Market trade diagnostics enabled: {configuration.MarketTradeDiagnostics.Enabled}",
             $"BTC/order-book lag diagnostics enabled: {configuration.BtcOrderBookLagDiagnostics.Enabled}",
@@ -532,6 +534,11 @@ public static class AppOptionsValidator
             errors.Add("MarketDataWebSocket.ReceiveBufferBytes must be at least 4096.");
         }
 
+        if (options.ReceiveDispatchQueueCapacity is < 1 or > 1_024)
+        {
+            errors.Add("MarketDataWebSocket.ReceiveDispatchQueueCapacity must be between 1 and 1024.");
+        }
+
         if (options.SubscriptionBatchSize <= 0)
         {
             errors.Add("MarketDataWebSocket.SubscriptionBatchSize must be greater than zero.");
@@ -586,6 +593,11 @@ public static class AppOptionsValidator
         if (options.SideEffectSlowProcessingMilliseconds <= 0)
         {
             errors.Add("MarketDataWebSocket.SideEffectSlowProcessingMilliseconds must be greater than zero.");
+        }
+
+        if (options.MakerGtdWalletMaximumConcurrency is < 1 or > 16)
+        {
+            errors.Add("MarketDataWebSocket.MakerGtdWalletMaximumConcurrency must be between 1 and 16.");
         }
 
         if (options.CriticalFrameDiagnosticSampleEvery < 0)

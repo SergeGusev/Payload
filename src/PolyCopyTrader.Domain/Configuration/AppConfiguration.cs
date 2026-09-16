@@ -365,6 +365,8 @@ public sealed class MarketDataWebSocketOptions
 
     public int ReceiveBufferBytes { get; init; } = 65_536;
 
+    public int ReceiveDispatchQueueCapacity { get; init; } = 64;
+
     public int SubscriptionBatchSize { get; init; } = 1_000;
 
     public int ShardMaxAssets { get; init; } = 3_000;
@@ -390,6 +392,8 @@ public sealed class MarketDataWebSocketOptions
     public int SideEffectMetricsIntervalSeconds { get; init; } = 30;
 
     public int SideEffectSlowProcessingMilliseconds { get; init; } = 1_000;
+
+    public int MakerGtdWalletMaximumConcurrency { get; init; } = 8;
 
     public int CriticalFrameDiagnosticSampleEvery { get; init; } = 100;
 

@@ -59,6 +59,7 @@ public sealed class ConfigurationTests
         Assert.Equal(64, configuration.MarketDataWebSocket.MaxShardConnections);
         Assert.Equal(10, configuration.MarketDataWebSocket.WatchdogIntervalSeconds);
         Assert.Equal(90, configuration.MarketDataWebSocket.WatchdogStaleSeconds);
+        Assert.Equal(64, configuration.MarketDataWebSocket.ReceiveDispatchQueueCapacity);
         Assert.False(configuration.MarketDataWebSocket.PersistOrderBookSnapshots);
         Assert.False(configuration.MarketDataWebSocket.PersistMarketDataEvents);
         Assert.True(configuration.MarketDataWebSocket.PersistFrameDiagnostics);
@@ -67,6 +68,7 @@ public sealed class ConfigurationTests
         Assert.Equal(256, configuration.MarketDataWebSocket.SideEffectDiagnosticQueueCapacity);
         Assert.Equal(30, configuration.MarketDataWebSocket.SideEffectMetricsIntervalSeconds);
         Assert.Equal(1_000, configuration.MarketDataWebSocket.SideEffectSlowProcessingMilliseconds);
+        Assert.Equal(8, configuration.MarketDataWebSocket.MakerGtdWalletMaximumConcurrency);
         Assert.Equal(100, configuration.MarketDataWebSocket.CriticalFrameDiagnosticSampleEvery);
         Assert.Equal(60, configuration.MarketDataWebSocket.StatusPersistIntervalSeconds);
         Assert.Equal(1000, configuration.Polymarket.RetryBaseDelayMilliseconds);
@@ -349,10 +351,12 @@ public sealed class ConfigurationTests
                 MaxShardConnections = -1,
                 WatchdogIntervalSeconds = 0,
                 WatchdogStaleSeconds = 1,
+                ReceiveDispatchQueueCapacity = 0,
                 SideEffectMaxPendingUpdatesPerAsset = 0,
                 SideEffectDiagnosticQueueCapacity = 0,
                 SideEffectMetricsIntervalSeconds = 0,
                 SideEffectSlowProcessingMilliseconds = 0,
+                MakerGtdWalletMaximumConcurrency = 17,
                 CriticalFrameDiagnosticSampleEvery = -1,
                 StatusPersistIntervalSeconds = 0
             },
@@ -389,11 +393,13 @@ public sealed class ConfigurationTests
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.MaxShardConnections", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.WatchdogIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.WatchdogStaleSeconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.ReceiveDispatchQueueCapacity", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.StatusPersistIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectMaxPendingUpdatesPerAsset", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectDiagnosticQueueCapacity", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectMetricsIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.SideEffectSlowProcessingMilliseconds", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.MakerGtdWalletMaximumConcurrency", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("MarketDataWebSocket.CriticalFrameDiagnosticSampleEvery", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.RefreshIntervalSeconds", StringComparison.Ordinal));
         Assert.Contains(errors, error => error.Contains("Dashboard.StrategyRefreshIntervalSeconds", StringComparison.Ordinal));

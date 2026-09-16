@@ -379,7 +379,17 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         var scenario = CreateScenario(now, expiresAtUtc: now.AddSeconds(-1));
         var cache = CreateHealthyCache(scenario.Order, reconnectCount: 2);
         var clobClient = new CountingClobClient();
-        var processor = CreateProcessor(scenario.Repository, cache, clobClient);
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        handoff.TrackMakerGtdPaperOrder(
+            scenario.Order.Id,
+            MakerGtdPaperExecutionContract.ExecutionSource);
+        Guid? terminalOrderId = null;
+        handoff.RegisterTerminalOrderObserver(orderId => terminalOrderId = orderId);
+        var processor = CreateProcessor(
+            scenario.Repository,
+            cache,
+            clobClient,
+            makerGtdPaperPlacementHandoff: handoff);
 
         var result = await processor.ProcessOpenOrdersAsync();
 
@@ -388,6 +398,7 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         Assert.Equal(0, clobClient.OrderBookCalls);
         Assert.Empty(scenario.Repository.PaperFills);
         Assert.Equal(PaperOrderStatus.Expired, Assert.Single(scenario.Repository.PaperOrders).Status);
+        Assert.Equal(scenario.Order.Id, terminalOrderId);
         var skippedRun = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
         Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, skippedRun.Status);
         Assert.Equal(MakerGtdPaperExecutionContract.ExpiredUnfilledReasonCode, skippedRun.SkipReason);
@@ -1685,6 +1696,9 @@ public sealed class MakerGtdPaperLifecycleIntegrationTests
         }
 
         public void ClearMarketDataFailures(Guid paperOrderId) => inner.ClearMarketDataFailures(paperOrderId);
+
+        public void NotifyTerminalOrderPersisted(Guid paperOrderId, PaperOrderStatus persistedStatus) =>
+            inner.NotifyTerminalOrderPersisted(paperOrderId, persistedStatus);
 
         private sealed class CoordinatedExpiryLease(
             CoordinatedExpiryHandoff owner,

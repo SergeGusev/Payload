@@ -15,6 +15,183 @@ public sealed class MarketDataWebSocketFrameProcessingTests
         "{\"event_type\":\"last_trade_price\",\"asset_id\":\"asset-1\",\"market\":\"condition-1\",\"price\":\"0.51\",\"size\":\"2\",\"side\":\"BUY\",\"timestamp\":\"1752580800000\"}";
 
     [Fact]
+    public async Task FrameHandoff_ReceivesLaterFramesWhileMakerReceiptAdmissionIsHeld_ThenDrainsCloseInFifoOrder()
+    {
+        var firstReceivedAtUtc = new DateTimeOffset(2026, 9, 16, 6, 0, 0, TimeSpan.Zero);
+        var secondReceivedAtUtc = firstReceivedAtUtc.AddMilliseconds(1);
+        var closeFrame = new MarketWebSocketCloseFrame(
+            System.Net.WebSockets.WebSocketCloseStatus.NormalClosure,
+            "test close",
+            firstReceivedAtUtc.AddMilliseconds(2));
+        var received = new Queue<MarketWebSocketReceivedMessage>(
+        [
+            new(new MarketWebSocketDispatchFrame("first", firstReceivedAtUtc), null),
+            new(new MarketWebSocketDispatchFrame("second", secondReceivedAtUtc), null),
+            new(null, closeFrame)
+        ]);
+        var receiveCalls = 0;
+        var observedReceipts = new List<MarketWebSocketDispatchFrame>();
+        var dispatched = new List<MarketWebSocketDispatchFrame>();
+        var handoff = new MakerGtdPaperPlacementHandoff();
+        var placementAdmission = await handoff.EnterPlacementAdmissionAsync("asset-1");
+
+        var run = MarketDataWebSocketFrameHandoff.RunAsync(
+            capacity: 2,
+            saturationThreshold: TimeSpan.FromHours(1),
+            _ =>
+            {
+                Interlocked.Increment(ref receiveCalls);
+                return Task.FromResult(received.Dequeue());
+            },
+            async (frame, cancellationToken) =>
+            {
+                await using (await handoff.EnterMarketDataReceiptAsync(cancellationToken))
+                {
+                    await using (await handoff.EnterMarketDataAdmissionAsync("asset-1", cancellationToken))
+                    {
+                        dispatched.Add(frame);
+                    }
+                }
+            },
+            observedReceipts.Add,
+            _ => throw new InvalidOperationException("The channel should not saturate in this test."),
+            () => throw new InvalidOperationException("The consumer should not fail in this test."),
+            CancellationToken.None);
+
+        await WaitUntilAsync(() => Volatile.Read(ref receiveCalls) == 3, TimeSpan.FromSeconds(3));
+        Assert.False(run.IsCompleted);
+        Assert.Empty(dispatched);
+        Assert.Equal([firstReceivedAtUtc, secondReceivedAtUtc], observedReceipts.Select(frame => frame.ReceivedAtUtc));
+
+        await placementAdmission.DisposeAsync();
+        var observedClose = await run;
+
+        Assert.Same(closeFrame, observedClose);
+        Assert.Equal(["first", "second"], dispatched.Select(frame => frame.Text));
+        Assert.Equal([firstReceivedAtUtc, secondReceivedAtUtc], dispatched.Select(frame => frame.ReceivedAtUtc));
+    }
+
+    [Fact]
+    public async Task FrameHandoff_BoundedSaturationWaitsAndReportsWithoutDroppingFrames()
+    {
+        var received = new Queue<MarketWebSocketReceivedMessage>(
+        [
+            Frame("first", 0),
+            Frame("second", 1),
+            Frame("third", 2),
+            new(null, new MarketWebSocketCloseFrame(null, "done", DateTimeOffset.UtcNow))
+        ]);
+        var receiveCalls = 0;
+        var dispatched = new List<string>();
+        var firstDispatchEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstDispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var saturationDurations = new List<TimeSpan>();
+
+        var run = MarketDataWebSocketFrameHandoff.RunAsync(
+            capacity: 1,
+            saturationThreshold: TimeSpan.FromMilliseconds(5),
+            _ =>
+            {
+                Interlocked.Increment(ref receiveCalls);
+                return Task.FromResult(received.Dequeue());
+            },
+            async (frame, _) =>
+            {
+                dispatched.Add(frame.Text);
+                if (frame.Text == "first")
+                {
+                    firstDispatchEntered.TrySetResult();
+                    await releaseFirstDispatch.Task;
+                }
+            },
+            _ => { },
+            saturationDurations.Add,
+            () => throw new InvalidOperationException("The consumer should not fail in this test."),
+            CancellationToken.None);
+
+        await firstDispatchEntered.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await WaitUntilAsync(() => Volatile.Read(ref receiveCalls) >= 3, TimeSpan.FromSeconds(3));
+        await Task.Delay(20);
+        Assert.False(run.IsCompleted);
+
+        releaseFirstDispatch.TrySetResult();
+        await run;
+
+        Assert.Equal(["first", "second", "third"], dispatched);
+        Assert.NotEmpty(saturationDurations);
+        Assert.All(saturationDurations, duration => Assert.True(duration >= TimeSpan.FromMilliseconds(5)));
+    }
+
+    [Fact]
+    public async Task FrameHandoff_ConsumerFailureCancelsProducerAndPropagatesOriginalFailure()
+    {
+        var receiveCalls = 0;
+        var producerCanceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var consumerFailureCallbacks = 0;
+
+        var run = MarketDataWebSocketFrameHandoff.RunAsync(
+            capacity: 1,
+            saturationThreshold: TimeSpan.FromHours(1),
+            async cancellationToken =>
+            {
+                if (Interlocked.Increment(ref receiveCalls) == 1)
+                {
+                    return Frame("first", 0);
+                }
+
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    throw new InvalidOperationException("Unreachable test path.");
+                }
+                catch (OperationCanceledException)
+                {
+                    producerCanceled.TrySetResult();
+                    throw;
+                }
+            },
+            (_, _) => Task.FromException(new InvalidOperationException("simulated dispatch failure")),
+            _ => { },
+            _ => { },
+            () => Interlocked.Increment(ref consumerFailureCallbacks),
+            CancellationToken.None);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => run);
+
+        Assert.Equal("simulated dispatch failure", exception.Message);
+        await producerCanceled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(1, consumerFailureCallbacks);
+    }
+
+    [Fact]
+    public async Task FrameHandoff_ServiceCancellationPropagatesWithoutConsumerFailureCallback()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var receiveStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var consumerFailureCallbacks = 0;
+        var run = MarketDataWebSocketFrameHandoff.RunAsync(
+            capacity: 1,
+            saturationThreshold: TimeSpan.FromHours(1),
+            async cancellationToken =>
+            {
+                receiveStarted.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                throw new InvalidOperationException("Unreachable test path.");
+            },
+            (_, _) => Task.CompletedTask,
+            _ => { },
+            _ => { },
+            () => Interlocked.Increment(ref consumerFailureCallbacks),
+            cancellation.Token);
+
+        await receiveStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+        Assert.Equal(0, consumerFailureCallbacks);
+    }
+
+    [Fact]
     public async Task ProcessTextMessageAndResetBackoffAsync_MalformedPayloadDoesNotReset()
     {
         var queue = new ControlledSideEffectQueue(MarketDataSideEffectEnqueueOutcome.Enqueued);
@@ -342,6 +519,29 @@ public sealed class MarketDataWebSocketFrameProcessingTests
             sideEffectQueue,
             repository,
             makerGtdPaperPlacementHandoff);
+    }
+
+    private static MarketWebSocketReceivedMessage Frame(string text, int millisecondOffset)
+    {
+        return new MarketWebSocketReceivedMessage(
+            new MarketWebSocketDispatchFrame(
+                text,
+                new DateTimeOffset(2026, 9, 16, 6, 0, 0, TimeSpan.Zero).AddMilliseconds(millisecondOffset)),
+            null);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> predicate, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!predicate())
+        {
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new TimeoutException("The expected condition was not reached before the test timeout.");
+            }
+
+            await Task.Delay(10);
+        }
     }
 
     private static PaperOrder MakerOrder(DateTimeOffset receivedAtUtc)
