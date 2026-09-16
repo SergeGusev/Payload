@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260916-websocket-first-frame-readiness",
+  "title": "Bound silent Polymarket WebSocket reconnects and serialize initial subscriptions",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Это решаемо?"
+    },
+    {
+      "source": "user",
+      "text": "Действуй"
+    }
+  ],
+  "scope": {
+    "goal": "Implement the immediately preceding client-side WebSocket recovery correction: a reconnecting Polymarket shard must not be reported recovered while its socket is open but has delivered no frame, it must leave that silent state after a bounded first-frame wait instead of relying on the 90-second watchdog, and dynamic subscription updates must not race ahead of the initial subscription sequence.",
+    "inScope": [
+      "Prospective local C#/.NET changes to the shared Polymarket market WebSocket shard runner, configuration, validation, focused tests and documentation; the user retains deployment control.",
+      "A configurable MarketDataWebSocket.FirstFrameTimeoutSeconds with exact default and service value 10 seconds, measured after every initial-subscription batch has been sent for the connection generation.",
+      "Readiness on the first complete non-empty inbound text frame, observed immediately after full transport receipt and before Maker admission, parsing or application dispatch, consistently with the existing transport last-message timestamp semantics.",
+      "Connecting status until readiness; first-frame timeout aborts that socket, emits and persists an explicit bounded FirstFrameTimeout/FirstFrameWait diagnostic, and returns to the existing reconnect loop and backoff.",
+      "A connection-generation subscription barrier that prevents dynamic subscribe/unsubscribe writes before the initial sequence completes and preserves desired asset changes that arrive during initialization.",
+      "Focused deterministic tests, Release service build, requirement validation, documentation and independent semantic review in a marked D:/CodexTemp run."
+    ],
+    "outOfScope": [
+      "Any Production or application Local database access/mutation, service start/stop/restart, strategy/order/configuration mutation, deployment, backup or live-order action.",
+      "Eliminating, interpreting or claiming the remote cause of Polymarket close status 1013; changing endpoint, selected assets, subscription scope, shard allocation/count, subscription batch size or remote-provider policy.",
+      "Changing heartbeat cadence, reconnect delays, reconnect-backoff reset rules, StaleAfterSeconds, the post-readiness 90-second watchdog, or adding a ConnectAsync timeout or post-first-frame idle/read timeout.",
+      "Changing frame parsing, FIFO/no-drop handoff, Maker admission, side-effect queues, strategy decisions, execution intent, Paper/Live behavior, fills, settlement, accounting, PnL, balances or risk rules.",
+      "Treating binary, close or empty messages as readiness; requiring parse or application-dispatch success for transport readiness; guaranteeing a total recovery time because connect latency, existing backoff, repeated remote failures and provider availability remain outside this fix.",
+      "Schema/migration/package changes, a generalized WebSocket framework, unrelated refactoring or cleanup."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Prospective behavior only after a future user-controlled deployment. The evidence window is the production process that started 2026-09-16T08:19:45.795511Z; no historical records are changed.",
+    "firstVerification": "Inspect the current runner's connection/status/heartbeat/close path, subscription update ordering, configuration validation and focused tests; confirm the observed 95-second episode was not a close-drain delay and preserve unrelated dirty files."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Require first-frame readiness and reconnect an open-but-silent Polymarket shard after exactly 10 seconds instead of waiting for the 90-second watchdog.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "Add MarketDataWebSocket.FirstFrameTimeoutSeconds with a code default and explicit appsettings value of 10. Validation requires a positive value and, when WatchdogStaleSeconds is enabled, a value strictly below WatchdogStaleSeconds; the startup configuration summary and documentation expose the value.",
+        "After ConnectAsync and all initial-subscription batches succeed, the connection remains Connecting. Socket State=Open, subscription-send completion and outbound heartbeat activity must not publish Connected or count as readiness.",
+        "The first complete non-empty inbound text frame marks transport readiness immediately after full receipt, before channel waiting, Maker admission, parsing and application dispatch. This uses the existing transport-liveness meaning of lastMessageUtc; malformed or zero-update text may still prove transport receipt while retaining their existing parse/dispatch diagnostics and without resetting reconnect backoff unless the existing accepted-update rule does so.",
+        "The 10-second timer begins only after the full initial-subscription sequence completes. If readiness is not observed before it expires, the exact socket is aborted, a warning and persisted API diagnostic identify Reason=FirstFrameTimeout and Phase=FirstFrameWait with component, attempt, subscribed count, timeout and socket state but no raw frame or secret, and the existing reconnect loop/backoff continues.",
+        "A close or connection failure before readiness follows the existing immediate close/failure path; service cancellation propagates without a timeout warning. After readiness, existing receive/dispatch, heartbeat, stale/watchdog and reconnect-reset semantics remain unchanged.",
+        "Deterministic tests prove no early Connected state, readiness on transport receipt before a blocked consumer, timeout abort/diagnostic/reconnect propagation, close-before-readiness, cancellation, and unchanged accepted-update reconnect-backoff reset behavior."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataWebSocketShardRunner.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketFrameProcessingTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketReconnectBackoffTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~MarketDataWebSocketFrameProcessingTests|FullyQualifiedName~MarketDataWebSocketReconnectBackoffTests|FullyQualifiedName~MarketWebSocketDisconnectDiagnosticBuilderTests|FullyQualifiedName~ConfigurationTests\"",
+          "expected": "All focused readiness, timeout, cancellation, diagnostic, reconnect-backoff and configuration tests pass without an external WebSocket or application database.",
+          "result": "pending",
+          "evidence": "Filled after execution."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Serialize dynamic asset-subscription changes behind the complete initial subscription for each connection generation without losing changes made during initialization.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "No UpdateAssetsAsync subscribe/unsubscribe write may be sent on a connection generation before every initial-subscription batch for that generation has completed.",
+        "Asset additions/removals arriving during connect or initial send are retained as the latest desired set and reconciled against the exact set sent initially before that generation is declared ready; alternatively that generation is explicitly aborted so the next initial subscription uses the latest desired set. No change is silently lost.",
+        "All outbound subscription writes remain serialized. A failed, closed, cancelled or superseded connection generation cannot receive a later dynamic update.",
+        "The existing subscription scope, asset selector, batching, shard plan and post-barrier dynamic update meaning remain unchanged.",
+        "Deterministic tests cover an update held behind initial subscription, additions and removals arriving during initialization, failure/cancellation, no write to an old generation, and preservation of send ordering."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/MarketData/MarketDataWebSocketShardRunner.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketFrameProcessingTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~MarketDataWebSocketFrameProcessingTests\"",
+          "expected": "All subscription-generation barrier, delta reconciliation, ordering, cancellation and old-generation exclusion tests pass deterministically.",
+          "result": "pending",
+          "evidence": "Filled after execution."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Document and verify only the bounded WebSocket recovery change without touching Production or claiming that remote 1013 closes are eliminated.",
+      "sourceRequestIndexes": [0, 1],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "README and configuration reference document the 10-second first-frame readiness rule, subscription barrier, unchanged post-readiness watchdog/backoff, and the limitation that remote 1013 closes may continue.",
+        "The focused tests and Release service build pass using a marked D:/CodexTemp run with TEMP/TMP/TMPDIR and explicit artifacts/results paths; no service is started and no application database or external exchange fixture is used.",
+        "git diff --check, requirement WorkingTree/Staged validation and an independent reviewer comparison of the verbatim requests, approved contract, actual diff and evidence pass with no findings. Unrelated dirty files remain unmodified and uncommitted; the approved contract commit precedes product edits.",
+        "After all verification/review processes finish, the owned marked temporary run is removed by the protected lifecycle script and verified absent."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "docs/configuration_reference.md",
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataWebSocketShardRunner.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketFrameProcessingTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataWebSocketReconnectBackoffTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path <marked-run>/artifacts",
+          "expected": "Release service build succeeds with zero errors; the service is not started or deployed.",
+          "result": "pending",
+          "evidence": "Filled after execution."
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; independent verbatim-request/approved-contract/actual-diff/test-evidence review; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; protected marked-run cleanup",
+          "expected": "The bounded change has no unapproved path or behavior, mechanical gates and reviewer pass, unrelated work is preserved, and the owned temp run is absent.",
+          "result": "pending",
+          "evidence": "Filled after execution."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260916-websocket-first-frame-readiness sha256:47b92d782852d5b7884b3ca7389b0d2f9895d967cbe8830b0d665f96ac1f2e26",
+    "semanticDigest": "sha256:47b92d782852d5b7884b3ca7389b0d2f9895d967cbe8830b0d665f96ac1f2e26"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/websocket-first-frame-reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
