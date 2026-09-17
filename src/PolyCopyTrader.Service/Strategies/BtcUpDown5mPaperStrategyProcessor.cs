@@ -8425,6 +8425,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         OpeningLimitFillSummary fillSummary,
         DateTimeOffset nowUtc)
     {
+        if (order.Status == PaperOrderStatus.PartiallyFilledExpired)
+        {
+            return order;
+        }
+
         if (fillSummary.SizeShares >= order.SizeShares - FillSizeTolerance)
         {
             return order with

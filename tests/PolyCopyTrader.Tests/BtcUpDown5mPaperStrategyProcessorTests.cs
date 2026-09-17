@@ -4400,6 +4400,128 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_SettlementPreservesPartiallyFilledExpiredFakWhenStoredSizeEqualsFill()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cancelledAtUtc = now.AddMinutes(-4);
+        var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
+            item.Code == "btc_up_down_5m_futures_basis_bps_2_revert_fak_premarket");
+        var repository = new TestAppRepository();
+        var paperOrderId = Guid.NewGuid();
+        var run = new StrategyMarketPaperRun(
+            Guid.NewGuid(),
+            variant.Id,
+            "market-1",
+            "condition-1",
+            "btc-updown-5m-1778067900",
+            "Bitcoin Up or Down - partial FAK settlement test",
+            "Crypto",
+            now.AddMinutes(-6),
+            now.AddMinutes(-1),
+            now.AddMinutes(-6),
+            now.AddMinutes(-5),
+            StrategyMarketPaperRunStatuses.Entered,
+            "asset-down",
+            "Down",
+            0.50m,
+            3m,
+            6m,
+            Guid.NewGuid(),
+            paperOrderId,
+            now.AddMinutes(-5),
+            SettlementPrice: null,
+            SettlementValueUsd: null,
+            RealizedPnlUsd: null,
+            SettledAtUtc: null,
+            SkipReason: null,
+            now.AddMinutes(-6),
+            now.AddMinutes(-5));
+        repository.StrategyMarketPaperRuns.Add(run);
+        const string rawDecisionJson = """
+            {
+              "order_type": "FAK",
+              "paper_fak_requested_notional_usd": 4.00,
+              "paper_fak_filled_notional_usd": 3.00,
+              "paper_fak_partial_fill": true,
+              "execution_intent_order_type": "FAK",
+              "execution_intent_requested_notional_usd": 4.00
+            }
+            """;
+        repository.PaperOrders.Add(new PaperOrder(
+            paperOrderId,
+            run.SignalId!.Value,
+            variant.CopiedTraderWallet,
+            PaperOrderStatus.PartiallyFilledExpired,
+            TradeSide.Buy,
+            "asset-down",
+            "condition-1",
+            "Down",
+            0.50m,
+            6m,
+            3m,
+            now.AddMinutes(-5),
+            now.AddMinutes(-1),
+            FilledAtUtc: null,
+            CancelledAtUtc: cancelledAtUtc,
+            StrategyId: variant.Id,
+            RawDecisionJson: rawDecisionJson,
+            ExecutionSource: "btc_updown5m_fak_taker_paper"));
+        var fill = new PaperFill(
+            Guid.NewGuid(),
+            paperOrderId,
+            0.50m,
+            6m,
+            now.AddMinutes(-4),
+            "partial FAK fill evidence",
+            FeeLiquidityRole: "Taker");
+        repository.PaperFills.Add(fill);
+        repository.PaperPositions.Add(new PaperPosition(
+            "asset-down",
+            "condition-1",
+            "Down",
+            6m,
+            0.50m,
+            3m,
+            0m,
+            now.AddMinutes(-4),
+            variant.CopiedTraderWallet));
+        var metadata = new[]
+        {
+            TokenMetadata("asset-up", "Up", "Down"),
+            TokenMetadata("asset-down", "Down", "Down")
+        };
+        var processor = CreateProcessor(repository, metadata, variant.Code);
+
+        var result = await processor.ProcessAsync();
+
+        Assert.Equal(1, result.RunsSettled);
+        var updatedRun = Assert.Single(repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Settled, updatedRun.Status);
+        Assert.Equal(6m, updatedRun.SizeShares);
+        Assert.Equal(0.50m, updatedRun.EntryPrice);
+        Assert.Equal(3m, updatedRun.StakeUsd);
+        Assert.Equal(6m, updatedRun.SettlementValueUsd);
+        Assert.Equal(3m, updatedRun.RealizedPnlUsd);
+
+        var updatedOrder = Assert.Single(repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, updatedOrder.Status);
+        Assert.Null(updatedOrder.FilledAtUtc);
+        Assert.Equal(cancelledAtUtc, updatedOrder.CancelledAtUtc);
+        Assert.Equal(6m, updatedOrder.SizeShares);
+        Assert.Equal(3m, updatedOrder.NotionalUsd);
+        Assert.Equal(rawDecisionJson, updatedOrder.RawDecisionJson);
+        Assert.Equal("btc_updown5m_fak_taker_paper", updatedOrder.ExecutionSource);
+        Assert.Equal(fill, Assert.Single(repository.PaperFills));
+
+        var settlement = Assert.Single(repository.PaperPositionSettlements);
+        Assert.True(settlement.Won);
+        Assert.Equal(6m, settlement.SettledSizeShares);
+        Assert.Equal(3m, settlement.CostBasisUsd);
+        Assert.Equal(3m, settlement.RealizedPnlUsd);
+        Assert.Equal(0m, Assert.Single(repository.PaperPositions).SizeShares);
+    }
+
+    [Fact]
     public async Task ProcessAsync_DirectSkipCompactionDoesNotCompactPaperSettlementFailure()
     {
         var now = DateTimeOffset.UtcNow;
