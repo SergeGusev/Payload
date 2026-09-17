@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260917-preserve-partial-fak-terminal-status",
+  "title": "Preserve terminal partial FAK status during settlement",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Ок, сделай это исправление"
+    }
+  ],
+  "scope": {
+    "goal": "Implement the immediately referenced source correction: a genuine partially filled Paper FAK order that is already terminal PartiallyFilledExpired must not be promoted to Filled during later BTC/ETH/SOL five-minute settlement merely because the persisted order size and notional were reduced to the actual partial execution and therefore equal its fill.",
+    "inScope": [
+      "Prospective local C#/.NET correction in the existing BtcUpDown5m settlement status synchronizer; the user retains deployment control.",
+      "Preservation of an input Paper order status PartiallyFilledExpired, its non-null CancelledAtUtc, and its null FilledAtUtc when settlement reads the already persisted partial FAK fill.",
+      "Continued settlement of the linked run and position from the actual persisted fill shares, VWAP, notional and fee accounting without creating another fill or retry.",
+      "A deterministic regression reproducing the observed reduced-size FAK shape, plus focused strategy tests, Release build, requirement validation and independent semantic review."
+    ],
+    "outOfScope": [
+      "Repair, rewrite or reclassification of the eight existing Production rows or any other historical row; database access or mutation of any kind.",
+      "Deployment, service start/stop/restart, configuration or strategy mutation, and Paper or Live order action.",
+      "Changes to FAK execution intent, side, cash request, maximum price, order type, time-in-force, order-book simulation, liquidity, partial-fill decision, remainder cancellation, persisted executed size/notional, fills, positions, settlement values, PnL, fees, risk or Live behavior.",
+      "Schema, migration, catalog, Dashboard metric/query or status-grouping changes, documentation expansion, unrelated refactoring or cleanup."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Prospective behavior after a future user-controlled deployment only; no historical data period is modified.",
+    "firstVerification": "Inspect the current FAK producer, BtcUpDown5m settlement synchronizer, Paper/live parity contract, existing partial-settlement tests and unrelated working-tree changes before implementation."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Preserve the terminal PartiallyFilledExpired state of a genuine partial Paper FAK order throughout later five-minute run settlement while retaining settlement from its actual fill.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "сделай это исправление",
+      "acceptanceCriteria": [
+        "When settlement receives an order already marked PartiallyFilledExpired whose persisted SizeShares equals the actual partial fill, the order remains PartiallyFilledExpired after settlement.",
+        "Settlement leaves the existing non-null CancelledAtUtc unchanged and does not synthesize FilledAtUtc for that terminal partial order.",
+        "The order SizeShares, NotionalUsd, fill rows and execution evidence remain unchanged; no retry, replacement order or additional fill is created.",
+        "The linked run, position and settlement still complete from the actual filled shares, average fill price, notional and existing fee accounting.",
+        "A true full fill continues to be Filled, while existing nonterminal partial and expiry behavior remains unchanged."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~ProcessAsync_SettlementPreservesPartiallyFilledExpiredFakWhenStoredSizeEqualsFill|FullyQualifiedName~ProcessAsync_SettlesOpeningLimitRunUsingOnlyFilledShares\"",
+          "expected": "The new exact reduced-size FAK regression demonstrably fails against the pre-fix implementation, then both the new terminal-status regression and the existing nonterminal-partial settlement regression pass after the correction.",
+          "result": "pending",
+          "evidence": "Pending approval and implementation."
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests\"",
+          "expected": "All BtcUpDown5m processor tests pass, including existing full-fill, partial-fill, settlement, Paper/Live parity and accounting coverage.",
+          "result": "pending",
+          "evidence": "Pending approval and implementation."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep the correction prospective and bounded to source/test behavior, with no operational or historical mutation and no change to execution or financial semantics.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "это исправление",
+      "acceptanceCriteria": [
+        "The governed diff contains only the settlement status correction and its focused regression test; context, history and this requirement contract are bookkeeping exceptions.",
+        "No Production or Local database, service, deployment, strategy, configuration, Paper order or Live order action occurs.",
+        "The Release service build succeeds with zero errors and the actual diff confirms that intent, fill, settlement accounting, PnL, fees, risk and Live submission logic are unchanged.",
+        "git diff --check, requirement WorkingTree and Staged validation, and an independent comparison of the verbatim request, approved contract, actual diff and test/build evidence pass with no findings.",
+        "All disposable build/test artifacts stay in one marked D:/CodexTemp run, all processes finish, and protected cleanup removes that exact run."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj -c Release --artifacts-path <marked-run>/artifacts",
+          "expected": "Release service build succeeds with zero errors; the service is not started or deployed.",
+          "result": "pending",
+          "evidence": "Pending approval and implementation."
+        },
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "git diff --check; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; independent verbatim-request/approved-contract/actual-diff/test-evidence review; scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged; scripts/Complete-CodexTempRun.ps1 -SessionId <session-id>",
+          "expected": "The bounded change has no unapproved path or behavior, all mechanical and semantic gates pass, unrelated work is preserved, and the owned marked temporary run is absent.",
+          "result": "pending",
+          "evidence": "Pending approval and implementation."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260917-preserve-partial-fak-terminal-status sha256:e3cde6ee5685e7a3af1c3c18ca12769da7aee8340432bc2b9bc1f813eda7aa4d",
+    "semanticDigest": "sha256:e3cde6ee5685e7a3af1c3c18ca12769da7aee8340432bc2b9bc1f813eda7aa4d"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/fak_terminal_status_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
