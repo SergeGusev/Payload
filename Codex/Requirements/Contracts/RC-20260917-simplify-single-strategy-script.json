@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260917-simplify-single-strategy-script",
+  "title": "Critically simplify the single-strategy deletion script; local code work only",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Нет. Твоя следующая задача - критически пересмотреть свой скрипт и удалить всё, кроме того, что ДЕЙСТВИТЕЛЬНО необходимо"
+    },
+    {
+      "source": "user",
+      "text": "Ок, удали эту проверку из плана удаления"
+    },
+    {
+      "source": "user",
+      "text": "Возьми первую стратегию с Enabled = false и прогони её по своему плану. При этом сделай логгирование времени работы каждого шага. Потом проанилизируем"
+    }
+  ],
+  "scope": {
+    "goal": "Critically reduce the existing single-target deletion executor to mechanisms with a verified correctness, production-load or requested timing purpose, and locally verify the reduced implementation. The latest request replaces execution with code work; this contract does not authorize running deletion.",
+    "inScope": [
+      "Only scripts/operations/Delete-OneDisabledStrategy-20260917.ps1 and its focused Test-Delete-OneDisabledStrategy-20260917.ps1 harness, plus required contract/context bookkeeping. Existing exact target UUID b7c50005-0000-4000-8182-000000000103, code btc_up_down_5m_futures_basis_bps_3_fak_premarket and canonical wallet remain fixed. No other strategy or new reusable cleanup framework.",
+      "Remove the unused journal revision hash chain, hardcoded agent-name/reviewer/test boolean gates, old execution-contract digest and Git-ancestor/validator machinery from the runtime executor. Approval, review and tests remain development workflow requirements; a future Production run requires its own explicit user instruction and mutation mode. Keep endpoint/target validation, read-only default, SQL/script identity and an atomic durable batch journal.",
+      "Remove the blanket audit-JSON UUID search prerequisite and archive-UUID repeat scan. Remove checks of historical maintenance snapshots/static markers that have no verified operational dependency on this target. Keep real FK, direct typed source-key, shared ownership and soft-reference checks; a paper-order signal_id is not protected by an FK, so its actual retained references must not be silently ignored. Replace generic scan-complete flags with the necessary concrete relational checks, without adding indexes or broad JSON/content scans.",
+      "Consolidate stable deployed-source/schema/FK/trigger validation into one necessary preflight per invocation rather than repeating full index/function inventories in every batch. Retain enabled constraints/triggers and the particular dependency semantics relied on by DELETE. Do not replace a necessary unprotected soft-reference check with an assumption or an unrelated global audit.",
+      "Remove global zero-queue observations, unconditional bans on other database clients or unrelated cluster lock waits, and the veto on any closed-history update since service start. Retain a source-backed target producer/quiescence check, its service-process continuity, exact-target inactive-state checks, actual worker/wallet/row coordination, finite SQL/lock/transaction/client timeouts and direct health/load checks between serial batches. A service/process change invalidates the quiescence evidence.",
+      "Replace manual externalHealth passports and the forced separate script invocation after every batch with one serial execution path that performs its own bounded between-batch checks. Preserve the initial one-chain calibration and measured batch limits/pauses as simple execution behavior, without manual agent-specific review fields or a separate approval protocol embedded in the executor.",
+      "Remove captured derived-row snapshots, predicted trigger/queue counts, duplicate pre/post cleanup and duplicate assertions. Keep one source/target-scoped derived cleanup after source deletion within the same financial transaction, reject foreign owners and log actual affected counts. Preserve complete financial source IDs, one ownership/state/closure validation, exact DELETE counts, post-commit verification and definition deletion last. Residual pages use bounded keys and guarded DELETE/count rather than recounting every remaining row for every page; a LIMIT 1 final check establishes empty/nonempty.",
+      "Remove the cached-worker telemetry completion fence, two-global-sweep wait, sentinel-event lifecycle and their worker/sweep/sequence bookkeeping. Telemetry cleanup deletes the existing exact target-owned diagnostic rows in bounded batches and verifies the immediate final count. A later diagnostic event from the running service is possible; the reduced script must state that this is point-in-time cleanup, not proof that no future telemetry can appear. This does not change the ownership or financial-history deletion scope and does not add a historical cutoff.",
+      "Consolidate the repeated batch lifecycle into one small task-specific helper: persist intent and exact identifiers before mutation, execute, reconcile acknowledgement/absence, check health and persist elapsed time/outcome. Preserve all-present/all-absent/mixed handling and stop on an unknown or mixed result; no blind retry. Use an owned temporary SQL file with psql -f and one bounded process transport instead of synchronous stdin writing before the timeout.",
+      "Adjust only tests affected by this simplification. Exercise the actual reduced SQL/transport against synthetic data in an isolated native PostgreSQL fixture under an owned D:/CodexTemp run. Remove duplicated import/fixture/debug plumbing and tests of removed machinery; retain meaningful deletion/foreign-owner/active-state/concurrency/timeout/rollback/lost-COMMIT/resume/residual/final-order tests. Preserve requested per-step timing, past evidence and unrelated dirty files.",
+      "Record the reasons for retained and removed mechanisms in this contract's verification evidence and concise final response. No additional audit system, documentation project, broad application refactor or Production readiness claim. Estimated local implementation and focused verification after approval: 20-35 minutes; no long-running Production action is included."
+    ],
+    "outOfScope": [
+      "Every Production connection, including read-only queries, pilot, Apply, Verify or Reconcile against Production; no actual strategy/history deletion is authorized by this code-edit contract.",
+      "Source/catalog/schema/index/trigger changes, migration, deployment, service stop/restart, configuration, Live exchange actions, backup or restoration.",
+      "The 276-strategy operation, its existing report/contract, the prior one-strategy execution report and historical evidence; these are not rewritten or relabelled as successful execution.",
+      "Unrelated project changes, global scans of arbitrary identifiers/content, a generalized deletion framework or a new approval/monitoring infrastructure."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Current local single-target script and tests only; preserve all own-history/UTC semantics for any separately authorized future run, with point-in-time diagnostic telemetry verification explicitly documented.",
+    "firstVerification": "Read the exact current script, harness, schema/trigger and writer call paths locally, and independently challenge each costly or duplicated prerequisite before editing; do not connect to Production."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Critically simplify the single-strategy script to verified necessary execution mechanisms and remove the concrete redundant or unsupported machinery listed in scope.",
+      "sourceRequestIndexes": [0],
+      "sourceQuote": "критически пересмотреть свой скрипт и удалить всё, кроме того, что ДЕЙСТВИТЕЛЬНО необходимо",
+      "acceptanceCriteria": [
+        "The runtime no longer requires agent identities, hardcoded approval digests/Git ancestry, manual health passports, journal hash chains, global idle/zero-queue conditions, repeated full schema inventories, predicted trigger counts, repeated residual totals or perpetual telemetry-drain proof.",
+        "Every remaining guard has a specific source-backed role in exact scope, actual dependencies, active-state/writer exclusion, bounded load, transaction outcome or requested timing. Real soft references without FK protection remain checked.",
+        "The reduced operation retains read-only default and explicit mutation mode, fixed endpoint/target, short atomic measured batches, exact financial counts, durable intent, unknown-commit reconciliation, source-scoped cleanup and final verification. No unconditional success is substituted for a removed check.",
+        "The code explains point-in-time telemetry verification and possible subsequent diagnostic events without describing them as financial-data recreation or claiming an unobserved permanent absence.",
+        "Independent review compares the actual diff to this request and source evidence; local focused synthetic tests pass, and no Production connection or execution occurs under this task."
+      ],
+      "implementationPaths": [
+        "scripts/operations/Delete-OneDisabledStrategy-20260917.ps1",
+        "scripts/operations/Test-Delete-OneDisabledStrategy-20260917.ps1"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Independently compare the exact script diff with the verbatim request, the approved local-only contract and current source/schema/writer evidence; account for each removed and retained mechanism.",
+          "expected": "Concrete simplification with no unsupported safeguard, hidden scope expansion, lost real dependency check or Production action; no open review findings.",
+          "result": "pending",
+          "evidence": "Local read-only review of baseline operation SHA3dd76c82d133cf82029c2a969cce6d95cce3c9ef29dcac2cb83c1532fed81644 (1188 lines) and harness SHA42cc00341fdf0a1917ad64d72eabc62be2b69572209cd22ce60e3c66c616bd97 (514 lines) identified the concrete scope reductions. Root plus deletion_dependencies, bounded_writer_review and native_test_harness independently inspected SQL, writers, transport and tests. No implementation change or Production connection has occurred."
+        },
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "Parse/import the reduced operation without executing its driver; run Test-Delete-OneDisabledStrategy-20260917.ps1 with synthetic data in an owned isolated native PostgreSQL fixture, exercise actual operation SQL/transport and clean the fixture/run afterward.",
+          "expected": "Target deletion and preserved retained fixtures, guarded failures, concurrent exclusion, bounded rollback, lost acknowledgement/reconciliation and final cleanup pass; no Production endpoint is reachable from the fixture transport.",
+          "result": "pending",
+          "evidence": "Not run for this revision; prior tests describe the unsimplified baseline only."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep the requested per-step elapsed-time logging while simplifying its implementation.",
+      "sourceRequestIndexes": [2],
+      "sourceQuote": "При этом сделай логгирование времени работы каждого шага.",
+      "acceptanceCriteria": [
+        "Executed operational steps/batches retain UTC start/end, monotonic elapsed time, exact target, expected/actual counts, outcome and error; stopped and unexecuted phases are not represented as successful or zero-duration work.",
+        "The durable journal is saved before mutation and after outcome changes; unnecessary revision hash chains and duplicate bookkeeping are removed without deleting past evidence."
+      ],
+      "implementationPaths": [
+        "scripts/operations/Delete-OneDisabledStrategy-20260917.ps1",
+        "scripts/operations/Test-Delete-OneDisabledStrategy-20260917.ps1"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Inspect synthetic success/failure/lost-acknowledgement journal output and match each executed step to real timestamps, elapsed time, outcome and batch identifiers.",
+          "expected": "The simpler journal retains requested timing and safe resume evidence; historical Production results remain unchanged and no current Production run is claimed.",
+          "result": "pending",
+          "evidence": "Pending approved implementation and focused tests."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Apply the already requested removal of blanket UUID searches inside audit JSON without silently reinstating an equivalent prerequisite.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Ок, удали эту проверку из плана удаления",
+      "acceptanceCriteria": [
+        "allAuditPayloadSourceIdsScanComplete and arbitrary old/new/evidence JSON UUID scan requirements are absent from the executor; archived UUIDs do not trigger a replacement whole-audit scan.",
+        "Actual typed dependencies are distinguished from historical UUID mentions; the executor does not fabricate a passed JSON scan or change old evidence."
+      ],
+      "implementationPaths": [
+        "scripts/operations/Delete-OneDisabledStrategy-20260917.ps1",
+        "scripts/operations/Test-Delete-OneDisabledStrategy-20260917.ps1"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect operation and tests for removed audit-JSON scan gates and preservation of real direct-reference checks.",
+          "expected": "No blanket JSON scan prerequisite or false passed-scan evidence remains.",
+          "result": "pending",
+          "evidence": "Removal identified precisely at baseline Assert-SingleApplyGate; implementation pending."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260917-simplify-single-strategy-script sha256:e472693433cdf9646cbe0c544193b734eb541c3812351531ec3ac3b078b806c5",
+    "semanticDigest": "sha256:e472693433cdf9646cbe0c544193b734eb541c3812351531ec3ac3b078b806c5"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/bounded_writer_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
+    "findings": []
+  }
+}
