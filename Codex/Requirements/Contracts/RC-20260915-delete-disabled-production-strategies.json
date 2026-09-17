@@ -12,6 +12,10 @@
     {
       "source": "user",
       "text": "Продолжай удаление стратегий, у которых Enabled = false и их истории"
+    },
+    {
+      "source": "user",
+      "text": "Ок, продолжай задачу с удалением Enabled=false стратегий и их истории"
     }
   ],
   "scope": {
@@ -322,7 +326,8 @@
       "text": "Delete exactly the disabled production strategy identities after their own dependencies are removed.",
       "sourceRequestIndexes": [
         0,
-        1
+        1,
+        2
       ],
       "sourceQuote": "Удали все стратегии, где Enabled = false.",
       "acceptanceCriteria": [
@@ -358,7 +363,8 @@
       "text": "Delete each target's complete exclusively owned structured bet history together with the strategy, using gentle auditable atomic batches.",
       "sourceRequestIndexes": [
         0,
-        1
+        1,
+        2
       ],
       "sourceQuote": "Вместе с историей ставок",
       "acceptanceCriteria": [
@@ -396,13 +402,13 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260915-delete-disabled-production-strategies sha256:9ca16143ed8370a09b90ef6c104a24e92c0a3a385d6b977a288ea1f449a0d8a7",
-    "semanticDigest": "sha256:9ca16143ed8370a09b90ef6c104a24e92c0a3a385d6b977a288ea1f449a0d8a7"
+    "evidenceText": "APPROVE RC-20260915-delete-disabled-production-strategies sha256:38cdbd50b06052381f30ada417cc9a7f22f5df6313af5a70df6c5b5f807f508f",
+    "semanticDigest": "sha256:38cdbd50b06052381f30ada417cc9a7f22f5df6313af5a70df6c5b5f807f508f"
   },
   "independentReview": {
-    "reviewer": "agent:/root/disabled_delete_preview_review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/delete_resume_contract_final_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }
