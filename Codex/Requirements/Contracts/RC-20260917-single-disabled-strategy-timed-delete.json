@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260917-single-disabled-strategy-timed-delete",
+  "title": "Delete the selected first disabled strategy and its own history with per-step timings",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Продумай детальный план удаления ненужных стратегий и их историй. Этот план должен включать в себя необходимые шаги и быть максимально безопасен для продакшен сервера"
+    },
+    {
+      "source": "user",
+      "text": "Возьми первую стратегию с Enabled = false и прогони её по своему плану. При этом сделай логгирование времени работы каждого шага. Потом проанилизируем"
+    },
+    {
+      "source": "user",
+      "text": "1"
+    },
+    {
+      "source": "user",
+      "text": "Убирай из плана восстановление"
+    }
+  ],
+  "scope": {
+    "goal": "Delete exactly the UUID-first disabled strategy selected by the user, together with all exclusively owned structured history, following the production-safe plan with restoration removed and retaining reproducible per-step timing evidence.",
+    "inScope": [
+      "Production PostgreSQL 192.168.0.101:5432/polycopytrader only. Exact target UUID=b7c50005-0000-4000-8182-000000000103; code=btc_up_down_5m_futures_basis_bps_3_fak_premarket; name=BTC Up or Down 5m 3 bps Futures Basis Premarket; wallet=strategy:btc_up_down_5m_futures_basis_bps_3_fak_premarket. User reply 1 selects the previously displayed UUID-first candidate, not the name/code-first candidate. The selected target is frozen; do not select a replacement automatically if its state changes.",
+      "All exclusively owned structured history without a date restriction: Paper orders/fills, strategy-market runs, signals/rejections, closed positions/settlements, skip archives/rollups, exclusively attributable historical accounting audit and fee-backfill telemetry, strategy/wallet derived projections, performance snapshots, states and queues. Prove exact ownership and source-row dependency before deletion; shared or retained-strategy references block that deletion.",
+      "Fresh preliminary read-only preview on 2026-09-17T19:16Z..19:20Z: target Enabled=false/LiveStakes=false; 12168 orders/fills/signals, 16300 raw runs, 12167 zero-size positions/settlements, 2158 archive-v1 rows, 0 archive-v2 rows, 94 rollups, 0 signal rejections; 12167 position projection facts. These are measured preliminary counts, not a complete ownership proof or complete audit/telemetry inventory. Complete and refresh the required dependency/ownership/writer/schema/health preview before mutation.",
+      "Use one task-specific native PowerShell/SQL operation restricted to this exact UUID/code/wallet, with a separate journal and focused isolated synthetic-data test harness. Reuse verified bounded SQL concepts from the existing 276-target implementation without invoking its full driver, changing its targets, or changing its existing report/contract. No generalized deletion framework.",
+      "Run one complete owned financial chain as a real mutation pilot after all pre-apply gates pass. Choose subsequent chain batch sizes and residual-row limits from measured transaction duration, source closure size and current load; record exact expected rows, batch counts and revised ETA before proceeding. Process serially, with a durable resume journal, and delete the strategy definition last. An oversized indivisible chain or a need for materially different coordination stops work for a separate decision.",
+      "Each financial chain batch is independently atomic and preserves referential/accounting closure. Acquire verified target-row/wallet and required existing worker-coordination locks only within reviewed bounded transactions; explicitly bound and log total transaction/coordination duration, not only individual SQL statements. Preserve race protection and recheck identity/flags/ownership before committing. Do not hold the existing unbounded guardian transaction throughout the whole strategy cleanup. Constraints and triggers remain enabled; account for DELETE-generated events and cached-worker telemetry before final completion.",
+      "Use transaction-local statement and lock timeouts, conservative single-worker execution and measured pauses. Stop before another batch on unexpected affected rows, new active/future/Live state, non-target ownership, changed deployed process/schema, errors/latency/queue/lock/load deterioration beyond the predeclared measured baseline gates, or unknown commit outcome. Reconcile exact identifiers before retrying. Do not interrupt unrelated service sessions or remove safeguards to make progress.",
+      "Recovery/restoration is removed from the plan by the user's explicit latest instruction. Do not create or require a backup, dump, archival copy, restore test or existing recovery proof. Confirmed deletion batches are irreversible in this operation; rollback protects only the current uncommitted transaction. Keep commit-outcome reconciliation and safe resumption, which are not restoration of deleted data.",
+      "Record UTC start/end, monotonic elapsed time, step/substep, target, batch identity, expected/actual row counts where applicable, outcome and error for every executed operational phase and SQL batch, including failed attempts, postchecks and cleanup. Record pending/skipped phases without invented zero durations. Keep query/script hashes and distinguish client elapsed time from server timestamps and user approval waits. Preserve earlier read-only timing evidence and disclose that initial bootstrap/source exploration was not instrumented.",
+      "Verify the exact final target graph is absent, every batch is reconciled, and task-caused effects remain inside the approved identifiers. Verify retained strategy identities and relevant history baselines with legitimate concurrent activity reported separately; limited hash samples are not proof about all retained history. Require independent semantic and operation review before apply and final completion.",
+      "Read-only preflight and later pilot provide the execution estimate; full deletion duration is unknown before calibration. Report measured throughput and remaining ETA without treating elapsed time alone as a stop condition. Any single new long-running/resource-intensive action outside the explicit deletion request requires separate authorization."
+    ],
+    "outOfScope": [
+      "Every other strategy and its own history, including enabled LowerEnter UUID b7c50005-0001-4000-8182-000000000103 and the other 275 previously frozen disabled strategies; no dependency deletion, reassignment or automatic replacement target.",
+      "Shared market data, prices, reference feeds, shared archive dictionaries and retained-strategy source records; no broad cleanup or retrospective performance analysis.",
+      "Application source/catalog changes, new schemas/indexes/triggers, migration edits, service stop/restart/deployment, configuration or strategy flag changes, Live exchange/order actions and local user-database writes.",
+      "Backup, dump, clone, archival copy, restoration or a restore-evidence gate, as explicitly removed by the user; no VACUUM FULL, table rewrite, broad table lock or trigger bypass.",
+      "Changes to scripts/operations/Delete-DisabledStrategies-20260915.ps1, Codex/Reports/2026-09-15-disabled-strategies-deletion.json or the prior 276-target contract; unrelated dirty work remains untouched."
+    ],
+    "mode": "mutation",
+    "periodOrFilter": "One frozen UUID/code/wallet selected as option 1 from Enabled=false ordered by UUID; all exclusively owned structured history, no date cutoff, UTC evidence. Recheck Enabled=false and LiveStakes=false immediately before each bounded mutation.",
+    "firstVerification": "Timed read-only identity/health query using explicit BEGIN READ ONLY, statement_timeout=15s, lock_timeout=1s, UTC and sequential queries, then per-table counts, exact ownership and cross-reference closure, active-state/writer gates, deployed build and migration/schema proof."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Run the deletion plan for exactly the selected first disabled strategy and all its exclusively owned structured history while protecting the production service and every retained strategy.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Возьми первую стратегию с Enabled = false и прогони её по своему плану.",
+      "acceptanceCriteria": [
+        "Only b7c50005-0000-4000-8182-000000000103 and proven exclusively owned dependent rows are deleted; no selected strategy replacement or deletion of its enabled LowerEnter variant.",
+        "A complete fresh preflight, independently reviewed exact script/SQL, bounded coordination and transaction design, and healthy writer/active-state gates precede even the pilot.",
+        "Before the pilot, focused isolated native PostgreSQL tests with synthetic fixtures verify exact owned/unowned rows, foreign references and DELETE triggers, concurrent writers, bounded timeout/rollback, replay/resumption and lost acknowledgement around COMMIT. No production data clone or user database is used; disposable files and database live only in the owned marked D:/CodexTemp run. The test runtime must support the relevant production PostgreSQL semantics; an unavailable required runtime or material resource expansion is reported before provisioning.",
+        "The pilot and all subsequent batches have exact expected/actual identifiers and counts, finite transaction/lock durations and unambiguous or reconciled commit outcomes; stopped work reports exact completed and remaining scope.",
+        "Final definition and approved history absence, retained-boundary checks, delayed-writer/telemetry checks and continuing production activity are independently verified; no excluded source, schema, service or order actions are performed."
+      ],
+      "implementationPaths": [
+        "scripts/operations/Delete-OneDisabledStrategy-20260917.ps1",
+        "scripts/operations/Test-Delete-OneDisabledStrategy-20260917.ps1",
+        "Codex/Reports/2026-09-17-single-disabled-strategy-deletion.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "inspection",
+          "command": "Review exact one-target script syntax, immutable target restrictions, source/schema/trigger/worker interactions, complete read-only ownership preview and bounded transaction/resume behavior independently before apply.",
+          "expected": "No open scope, ownership, race, unbounded-lock or commit-reconciliation finding; exact deployed identity and fresh preflight evidence bind the review.",
+          "result": "pending",
+          "evidence": "Preliminary timed identity/core/direct-reference checks completed; full source closure, retained JSON/source references, audit/telemetry inventory and executable review remain pending."
+        },
+        {
+          "id": "VER-002",
+          "kind": "runtime",
+          "command": "Run the approved one-chain pilot, independently verify its exact effects and production health, then execute measured serial batches and final one-target absence/retained-boundary verification.",
+          "expected": "All intended exact target-owned records removed and independently verified, no unintended task-caused effects, no unreconciled batch or service degradation accepted as completion.",
+          "result": "pending",
+          "evidence": "No mutation performed for this request."
+        },
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "Run scripts/operations/Test-Delete-OneDisabledStrategy-20260917.ps1 against an owned isolated native PostgreSQL synthetic fixture; exercise exact ownership and foreign references, DELETE triggers, concurrent writer exclusion, timeouts, repeated batches/resumption and lost acknowledgement around COMMIT.",
+          "expected": "All focused safety and reconciliation cases pass with bounded lock/transaction duration and preserved non-target fixtures; no production clone, backup or user-database write occurs.",
+          "result": "pending",
+          "evidence": "Test harness has not been implemented or run; approval and subsequent focused verification are required before the production pilot."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Log the elapsed time and outcome of each operational step for the user's later analysis.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "При этом сделай логгирование времени работы каждого шага.",
+      "acceptanceCriteria": [
+        "Every executed step and batch, including failed attempts and postchecks, records UTC start/end and measured monotonic elapsed time with target and outcome; nested steps are identified to avoid double-counting.",
+        "The durable timing report retains SQL/script hashes, actual row counts, errors and pending/skipped stages; no unexecuted deletion time or retrospective bootstrap time is fabricated.",
+        "The final response links the timing evidence and states precisely whether deletion completed or stopped, leaving broader timing/performance analysis for the user's later request."
+      ],
+      "implementationPaths": [
+        "scripts/operations/Delete-OneDisabledStrategy-20260917.ps1",
+        "Codex/Reports/2026-09-17-single-disabled-strategy-deletion.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "inspection",
+          "command": "Reconcile executed step and batch records with monotonic timers, failures, SQL/script hashes and durable journal; inspect partial and final reports independently.",
+          "expected": "No executed operational phase missing a duration/outcome; uninstrumented preparatory exploration is disclosed and pending phases are not represented as executed.",
+          "result": "pending",
+          "evidence": "Initial selection and selected-target read-only SQL timings are retained under outputs/single-disabled-timing-20260917; apply timings do not exist yet."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Remove restoration from the plan and its execution gates without removing transaction rollback and commit-outcome reconciliation.",
+      "sourceRequestIndexes": [3],
+      "sourceQuote": "Убирай из плана восстановление",
+      "acceptanceCriteria": [
+        "No backup/restore or recovery-evidence requirement blocks this task; no backup, dump, clone or archival copy is created by it.",
+        "The report distinguishes rollback of an uncommitted transaction from irreversible committed deletion and retains reconciliation/resumption safeguards."
+      ],
+      "implementationPaths": [
+        "scripts/operations/Delete-OneDisabledStrategy-20260917.ps1",
+        "Codex/Reports/2026-09-17-single-disabled-strategy-deletion.json"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "inspection",
+          "command": "Inspect the exact script and reports for absence of backup/restore actions or gates and presence of rollback/commit-reconciliation safeguards.",
+          "expected": "The latest user instruction is applied literally and no removed restoration requirement is silently reintroduced.",
+          "result": "pending",
+          "evidence": "The earlier recovery-location check is retained as historical timing evidence only; the user explicitly removed restoration before mutation."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260917-single-disabled-strategy-timed-delete sha256:43cf129dcdf6d5da5d08f9ae80eb4fe3340b4d520c741eab1807a1c4b6169a02",
+    "semanticDigest": "sha256:43cf129dcdf6d5da5d08f9ae80eb4fe3340b4d520c741eab1807a1c4b6169a02"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/single_contract_reviewer",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
+    "findings": []
+  }
+}
