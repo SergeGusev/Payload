@@ -16,13 +16,14 @@
       "Prospective local C#/.NET correction in the existing BtcUpDown5m settlement status synchronizer; the user retains deployment control.",
       "Preservation of an input Paper order status PartiallyFilledExpired, its non-null CancelledAtUtc, and its null FilledAtUtc when settlement reads the already persisted partial FAK fill.",
       "Continued settlement of the linked run and position from the actual persisted fill shares, VWAP, notional and fee accounting without creating another fill or retry.",
-      "A deterministic regression reproducing the observed reduced-size FAK shape, plus focused strategy tests, Release build, requirement validation and independent semantic review."
+      "A deterministic regression reproducing the observed reduced-size FAK shape, plus exact pre-fix/post-fix class-test differential evidence, Release build, requirement validation and independent semantic review."
     ],
     "outOfScope": [
       "Repair, rewrite or reclassification of the eight existing Production rows or any other historical row; database access or mutation of any kind.",
       "Deployment, service start/stop/restart, configuration or strategy mutation, and Paper or Live order action.",
       "Changes to FAK execution intent, side, cash request, maximum price, order type, time-in-force, order-book simulation, liquidity, partial-fill decision, remainder cancellation, persisted executed size/notional, fills, positions, settlement values, PnL, fees, risk or Live behavior.",
-      "Schema, migration, catalog, Dashboard metric/query or status-grouping changes, documentation expansion, unrelated refactoring or cleanup."
+      "Schema, migration, catalog, Dashboard metric/query or status-grouping changes, documentation expansion, unrelated refactoring or cleanup.",
+      "Repair of ProcessAsync_SettlesOpeningLimitRunUsingOnlyFilledShares, whose removed btc_up_down_5m_middle_100 fixture is verified to fail before its test body, or repair/causal diagnosis of any of the other 123 pre-existing BtcUpDown5mPaperStrategyProcessorTests failures."
     ],
     "mode": "local-edit",
     "periodOrFilter": "Prospective behavior after a future user-controlled deployment only; no historical data period is modified.",
@@ -41,7 +42,7 @@
         "Settlement leaves the existing non-null CancelledAtUtc unchanged and does not synthesize FilledAtUtc for that terminal partial order.",
         "The order SizeShares, NotionalUsd, fill rows and execution evidence remain unchanged; no retry, replacement order or additional fill is created.",
         "The linked run, position and settlement still complete from the actual filled shares, average fill price, notional and existing fee accounting.",
-        "A true full fill continues to be Filled, while existing nonterminal partial and expiry behavior remains unchanged."
+        "A true full fill continues to be Filled, while the implementation branches for nonterminal partial and expiry behavior remain unchanged."
       ],
       "implementationPaths": [
         "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
@@ -51,16 +52,16 @@
         {
           "id": "VER-001",
           "kind": "test",
-          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~ProcessAsync_SettlementPreservesPartiallyFilledExpiredFakWhenStoredSizeEqualsFill|FullyQualifiedName~ProcessAsync_SettlesOpeningLimitRunUsingOnlyFilledShares\"",
-          "expected": "The new exact reduced-size FAK regression demonstrably fails against the pre-fix implementation, then both the new terminal-status regression and the existing nonterminal-partial settlement regression pass after the correction.",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts/<phase> --results-directory <marked-run>/results/<phase> --filter \"FullyQualifiedName~ProcessAsync_SettlementPreservesPartiallyFilledExpiredFakWhenStoredSizeEqualsFill\" --logger \"trx;LogFileName=<phase>.trx\"; run once with phase=prefixed before the source correction and once with phase=focused after it.",
+          "expected": "The exact reduced-size FAK regression fails before the source correction only on expected PartiallyFilledExpired versus actual Filled, then passes after the correction while also proving unchanged order size/notional/evidence/fill and successful run/position settlement from actual fill values.",
           "result": "pending",
           "evidence": "Pending approval and implementation."
         },
         {
           "id": "VER-002",
           "kind": "test",
-          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests\"",
-          "expected": "All BtcUpDown5m processor tests pass, including existing full-fill, partial-fill, settlement, Paper/Live parity and accounting coverage.",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-build --no-restore --artifacts-path <marked-run>/artifacts/prefixed --results-directory <marked-run>/results/class-prefixed --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests\" --logger \"trx;LogFileName=class-prefixed.trx\"; dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj -c Release --no-build --no-restore --artifacts-path <marked-run>/artifacts/focused --results-directory <marked-run>/results/class --filter \"FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests\" --logger \"trx;LogFileName=class.trx\"; parse both TRX UnitTestResult testName/outcome sets with PowerShell, compare discovered names and Compare-Object the unique Failed name sets.",
+          "expected": "Both TRX files discover the same 321 test names. Pre-fix is exactly 196 passed / 125 failed; post-fix is exactly 197 passed / 124 failed. The pre-fix-minus-post-fix failed-name set is exactly PolyCopyTrader.Tests.BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_SettlementPreservesPartiallyFilledExpiredFakWhenStoredSizeEqualsFill; the post-fix-minus-pre-fix failed-name set is empty; every other test outcome is identical. The 124 remaining pre-existing failures are reported and not repaired or assigned a generalized cause under this contract.",
           "result": "pending",
           "evidence": "Pending approval and implementation."
         }
@@ -105,12 +106,24 @@
     }
   ],
   "assumptions": [],
-  "deviations": [],
+  "deviations": [
+    {
+      "id": "DEV-001",
+      "text": "Replace the originally planned passing named nonterminal control plus all-green BtcUpDown5mPaperStrategyProcessorTests gate with the exact new regression and a reproducible pre-fix/post-fix TRX outcome-set comparison; do not modify the failing named control or any other pre-existing failing test.",
+      "impact": "The current class baseline has 124 pre-existing failures. Only the named control's missing btc_up_down_5m_middle_100 fixture cause was established; causes of the other 123 are outside this contract and remain unknown here. Completion instead requires the exact regression to pass post-fix, the Release build to pass, identical 321-test discovery, zero new failure names, unchanged outcomes for every other test, and the new regression to be the sole failure removed by the product correction.",
+      "approval": {
+        "status": "approved",
+        "approvedBy": "user",
+        "evidenceText": "APPROVE RC-20260917-preserve-partial-fak-terminal-status sha256:2310aaa2b96b9e2ae0ab137ad6c4eab054107c0c3dd9d970f38caff39b882644",
+        "semanticDigest": "sha256:2310aaa2b96b9e2ae0ab137ad6c4eab054107c0c3dd9d970f38caff39b882644"
+      }
+    }
+  ],
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260917-preserve-partial-fak-terminal-status sha256:e3cde6ee5685e7a3af1c3c18ca12769da7aee8340432bc2b9bc1f813eda7aa4d",
-    "semanticDigest": "sha256:e3cde6ee5685e7a3af1c3c18ca12769da7aee8340432bc2b9bc1f813eda7aa4d"
+    "evidenceText": "APPROVE RC-20260917-preserve-partial-fak-terminal-status sha256:2310aaa2b96b9e2ae0ab137ad6c4eab054107c0c3dd9d970f38caff39b882644",
+    "semanticDigest": "sha256:2310aaa2b96b9e2ae0ab137ad6c4eab054107c0c3dd9d970f38caff39b882644"
   },
   "independentReview": {
     "reviewer": "agent:/root/fak_terminal_status_reviewer",
