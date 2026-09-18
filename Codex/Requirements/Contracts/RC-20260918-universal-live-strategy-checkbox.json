@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260918-universal-live-strategy-checkbox",
+  "title": "Рабочая галочка Live для всех стратегий; Child копирует первоначальный запрос родителя",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Проверь - не пропускаем ли мы Live ставки для ETH Up or Down 5m 22 Child ROI ? Мне кажется Paper ставки идут, а Live - нет"
+    },
+    {
+      "source": "user",
+      "text": "Последние 24 часа"
+    },
+    {
+      "source": "user",
+      "text": "Это неправильное поведение. Любая стратегия должна иметь возможность делать Live ставки, если стоит нужная галочка."
+    },
+    {
+      "source": "user",
+      "text": "Первоначально запрошенная сумма родителя.  "
+    }
+  ],
+  "scope": {
+    "goal": "Обеспечить рабочий Live-путь каждой стратегии текущего каталога при включённом LiveStakes; новые Live-заявки динамических Child используют первоначально запрошенную сумму родителя.",
+    "inScope": [
+      "Текущий каталог StrategyIds.AllStrategyIds: существующие Live-пути и отсутствующие/заблокированные пути ChildMirror, ChildRoiMirror, ChildProgressMirror, ChildProgressRoiMirror, FollowMarketFak, LowerEnter, LowEnter Average, 3Hour LowEnter Average, Optimized Average и ETH Reference Average Maker GTD.",
+      "Исполнение принятого сигнала при установленном LiveStakes с существующими условиями Enabled, pause, глобального Live, авторизации, баланса, риска и допустимости заявки; тип стратегии и прежний PaperOnly не являются самостоятельным запретом Live.",
+      "FAK и достижимые текущими стратегиями GTD-пути: передача неизменяемого намерения, отправка, сохранение связей, обработка ответа, фактических исполнений и завершения заявки через существующие компоненты.",
+      "Регрессионный случай b7c50005-0000-4000-8195-000000000022 / eth_up_down_5m_22_child_roi и общие пути всех присутствующих в каталоге активов и динамических Child-режимов.",
+      "Только необходимые локальные изменения C#/.NET, связанные тесты и точечное обновление описаний/правил, которые сейчас объявляют эти семейства неспособными отправлять Live. Новое требование отменяет прежний запрет транспорта Live, включая exact28 Maker-GTD; исторические исключения и модель Paper не расширяются.",
+      "Обязательное ведение контракта, контекста/истории, независимое ревью и проверка изменений; утверждённый контракт фиксируется отдельным коммитом до продуктового кода по RequirementGate."
+    ],
+    "outOfScope": [
+      "Развёртывание, запуск/остановка/перезапуск сервиса, изменение Production-конфигурации или галочек, реальные заявки и отмены, любые изменения Production-БД.",
+      "Догоняющая отправка пропущенных исторических ставок, пересчёт/импорт/удаление истории, изменение схемы, миграции, резервные копии и отдельные инфраструктурные работы.",
+      "Изменение правил сигналов, порогов, lookback/ROI, состава допустимых родителей, формул существующих LossDiff fixed/positive/progress, возобновление отключённых источников сигналов и восстановление удалённых стратегий.",
+      "Изменение экономической модели Paper при выключенной галочке Live, исторической TouchNoDepth-модели и её маркировки; обещание одинакового фактического исполнения Paper и Live.",
+      "Общий рефакторинг, переименование соседних сущностей, новая система исполнения/логирования/миграций, исправление посторонних проблем и включение чужих незавершённых изменений в коммиты."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Будущие принятые сигналы стратегий текущего каталога после отдельного развёртывания. Предыдущий диагностический период 24 часа уже проверен и не становится периодом replay/backfill. На этапе реализации используются локальные тестовые данные и подставной торговый клиент, без Production и реального транспорта.",
+    "firstVerification": "До продуктовых правок сверить текущий каталог, полный путь UI LiveStakes -> repository -> processor -> transport/reconciler, все PaperOnly/behavior-фильтры и места копирования родительского намерения; отдельно зафиксировать неизменяемый состав допустимых родителей. Источники уже прочитаны, но новые изменения рабочей копии перепроверяются после утверждения."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Любая стратегия текущего каталога имеет действующий путь Live при LiveStakes=true; существующие общие проверки сохраняются, скрытых запретов по семейству/PaperOnly нет.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "Любая стратегия должна иметь возможность делать Live ставки, если стоит нужная галочка.",
+      "acceptanceCriteria": [
+        "Для принятого сигнала при проходящих общих проверках LiveStakes=true приводит к вызову торгового клиента с идентификатором соответствующей стратегии и предварительно сохранёнными намерением/связями; LiveStakes=false не отправляет внешнюю заявку.",
+        "Проверка каталога покрывает каждый текущий StrategyIds.AllStrategyIds и сопоставляет его с реально вызываемым путём исполнения; интегрированные тесты процессора покрывают каждый отдельный путь и ранее заблокированные семейства. Наличие метода без достижимого вызова не считается поддержкой.",
+        "Существующий FollowLeader Live-путь остаётся рабочим при переданном ему принятом сигнале; отключённые источники и планировщики сигналов не включаются этой задачей.",
+        "FollowMarket сохраняет собственное правило минимального FAK-размера, лимит 0.99, отсутствие depth/no-fill pre-submit фильтра и отсутствие повторной ставки; LowEnter/LowerEnter сохраняют исходные ценовые ограничения. Включение Live не подменяет специальные правила размера общим LiveStakeAmount и не делает результат симуляции условием отправки.",
+        "Удаление транспортного запрета PaperOnly не расширяет выбор родителей Child: существующие фильтры, текущий набор допустимых родителей и активные связи сохраняют прежнюю семантику.",
+        "Прежние описания и нормативные запреты Live для затронутых семейств приведены в соответствие с новым правилом; изменения ограничены необходимыми утверждениями о Live, без переименования/переклассификации исторических данных."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/ChildMirrorStrategyCatalogTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyLiveDispatchCoverageTests.cs",
+        "README.md",
+        "AGENTS.md",
+        "Codex/Rules/CodingRules.md",
+        "Codex/Rules/Workflow.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~StrategyLiveDispatchCoverageTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~ChildMirrorStrategyCatalogTests' --artifacts-path $taskRunPath/artifacts --results-directory $taskRunPath/results/live-dispatch",
+          "expected": "PASS: полное сопоставление текущего каталога с Live-путями, интегрированный захват submit для отдельных путей/ранее блокированных семейств, выключенная галочка не отправляет, состав родителей и специальные FAK-параметры не изменены. taskRunPath берётся из принадлежащей задаче маркированной сессии D:/CodexTemp/runs; TEMP/TMP/TMPDIR указывают на её temp.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-002",
+          "kind": "inspection",
+          "command": "Независимо сопоставить StrategyIds.AllStrategyIds, реальные диспетчеры и все вхождения PaperOnly/IsPaperOnlyVariant/LiveStakes; сравнить набор допустимых родителей до и после; проверить точечный diff нормативных файлов.",
+          "expected": "Нет текущего типа без достижимого Live-пути, скрытого family veto, изменения выбора родителей, оживления источников сигналов или изменения исторических исключений сверх снятия запрета Live-транспорта.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Новая Live-заявка динамического Child / Child ROI использует первоначальный зафиксированный запрос родителя, а не фактически исполненную сумму родителя или собственную Live-сумму ребёнка.",
+      "sourceRequestIndexes": [
+        0,
+        2,
+        3
+      ],
+      "sourceQuote": "Первоначально запрошенная сумма родителя.",
+      "acceptanceCriteria": [
+        "Для ChildMirror, ChildRoiMirror, ChildProgressMirror и ChildProgressRoiMirror копируются исходные RequestedNotionalUsd и нормализованные TargetNotionalUsd/TargetSizeShares родительского намерения с теми же денежными/долевыми единицами. Уже выполненная нормализация не пересчитывается из fill/VWAP.",
+        "Пример: исходный запрос родителя $10, его частичное исполнение $3, собственная Live-сумма Child $1 — Child отправляет первоначальный запрос $10. Исполнение самого Child может отличаться и учитывается по его фактическим данным.",
+        "У Child собственные strategy/order/signal/decision/correlation ID, проверки Live-баланса и риска; ссылка на исходный запрос родителя сохранена. Его LiveStakeAmount/Lost-коэффициенты не масштабируют зеркальный запрос. Существующие формулы LossDiff fixed/positive/progress не меняются.",
+        "Покрыта матрица parent Paper/Live и child Paper/Live. При допустимом событии входа родителя собственная галочка Child управляет его submit независимо от галочки родителя. При выключенном Child Live сохраняется прежний Paper-путь и экономика.",
+        "Сохраняются token, side, исходный ценовой лимит, тип заявки, post-only и срок действия. Для premarket-родителя Child использует подтверждённое разрешённое окно исходного входа, а не ошибочно отклоняется только из-за собственного EntryDelaySeconds=0.",
+        "Оценка или результат исполнения Child не изменяет уже зафиксированный запрос Child. Критерии входа/назначения родителя не расширяются. Повторный цикл не отправляет тот же Child intent повторно."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/FakBuyExecutionIntent.cs",
+        "src/PolyCopyTrader.Service/Strategies/LimitBuyExecutionIntent.cs",
+        "src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/FakBuyExecutionParityTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyLiveDispatchCoverageTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests|FullyQualifiedName~FakBuyExecutionParityTests|FullyQualifiedName~StrategyLiveDispatchCoverageTests' --artifacts-path $taskRunPath/artifacts --results-directory $taskRunPath/results/child-live",
+          "expected": "PASS: exact ETH22 Child ROI и общие Child-пути/активы, parent requested10/filled3/child configured1 -> child requested10, четыре комбинации флагов, premarket, FAK/GTD shape, уникальность отправки и неизменность существующих LossDiff формул.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Универсальная возможность Live включает Maker-GTD и копируемые GTD-заявки с их исходной семантикой, с учётом только реальных Live-исполнений.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "Любая стратегия должна иметь возможность делать Live ставки, если стоит нужная галочка.",
+      "acceptanceCriteria": [
+        "ETH Reference Average Maker GTD с LiveStakes=true передаёт исходное frozen post-only GTD намерение в существующий торговый клиент. Сохраняются S0-формула цены, лимит, нормализация размера, expiration и существующий предел попыток; нет подмены GTD заявкой FAK.",
+        "Для достижимой pending/GTD копии Child сохраняется настоящий post-only-флаг родителя, включая false: принудительная подмена обычной GTD заявки post-only Maker заявкой запрещена.",
+        "Повтор Maker-заявки с новым намерением допустим только после однозначного crossing rejection без order ID согласно существующему MakerGtdLivePlacementClassifier. При известном order ID используется существующий reconciliation. Неоднозначный ответ без order ID сохраняется как неразрешённый исход и не допускает слепого повторного submit; автоматический поиск такой заявки через отсутствующий API не обещается и не добавляется.",
+        "Сверка Live и Paper shadow читает ожидаемые тип, post-only, исходный лимит/размер и expiry из неизменяемого намерения. Фактическая средняя цена fill не подменяет исходный GTD-лимит при проверке соответствия и не вызывает ложное отключение Live.",
+        "При включённом Live исполнение/частичное исполнение/отмена/истечение и Paper shadow учитываются через существующий механизм фактических Live-исполнений. Принятая resting GTD заявка сохраняет pending shadow для polling, а не отменяется из-за отсутствия немедленного Matched. Оптимистический TouchNoDepth не изображает исполнение реальной заявки.",
+        "При выключенном Live exact28 Maker-GTD сохраняет прежний Paper-путь, v1/v2 историю, формулу, lifecycle, показатели и обязательную optimistic TouchNoDepth маркировку. Снятие прежнего запрета Live не распространяет историческое исключение на другие стратегии.",
+        "Все pre-submit ограничения подтверждены существующими типами и актуальной официальной документацией Polymarket; после freeze нет нового стакана для изменения FAK суммы/лимита и нет post-fill решения об отмене уже состоявшегося исполнения."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/MakerGtdBuyExecutionIntent.cs",
+        "src/PolyCopyTrader.Service/Strategies/LimitBuyExecutionIntent.cs",
+        "src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/MakerGtdPaperExecutionContract.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/ReferenceAverageMakerGtdPremarketStrategyTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdExecutionParityTests.cs",
+        "tests/PolyCopyTrader.Tests/MakerGtdLivePlacementClassifierTests.cs",
+        "tests/PolyCopyTrader.Tests/LiveTradingGatingTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyLiveDispatchCoverageTests.cs",
+        "README.md",
+        "AGENTS.md",
+        "Codex/Rules/CodingRules.md",
+        "Codex/Rules/Workflow.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~MakerGtd|FullyQualifiedName~LiveTradingGatingTests|FullyQualifiedName~StrategyLiveDispatchCoverageTests|FullyQualifiedName~BtcUpDown5mPaperStrategyProcessorTests' --artifacts-path $taskRunPath/artifacts --results-directory $taskRunPath/results/gtd-live",
+          "expected": "PASS: настоящий интегрированный вызов подставного клиента, GTD/post-only/expiry parity, definitive crossing retry, неоднозначный ответ без дубликата, resting/partial/terminal actual fills, неизменённый Paper-off TouchNoDepth; тесты не подключаются к Production и бирже.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Сверить исходные намерения и транспорт с https://docs.polymarket.com/trading/place-orders и существующими FakBuyExecutionParity/MakerGtdExecutionParity; зафиксировать дату, ссылки и проверенные поля перед завершением реализации.",
+          "expected": "Ни один новый Live-путь не требует выдуманной API-семантики; все экономические поля отправленного запроса совпадают с предварительно сохранённым намерением. Официальная страница повторно открыта 2026-09-18 на этапе подготовки; проверку реализации ещё предстоит выполнить.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Исправление галочки проверяется реальными путями процессора в локальных тестах, сохраняет общие Live-ограничения и различает отправку, отказ и результат исполнения.",
+      "sourceRequestIndexes": [
+        0,
+        2
+      ],
+      "sourceQuote": "Любая стратегия должна иметь возможность делать Live ставки, если стоит нужная галочка.",
+      "acceptanceCriteria": [
+        "Перед внешней отправкой сохранены обязательные intent/decision/signal/order links. Ошибка их сохранения не приводит к внешнему submit. Отказы общих проверок и ошибки отправки имеют явную причину в существующих диагностических записях.",
+        "Сохраняются kill switch, глобальное разрешение Live, авторизация, Enabled/pause, риск/баланс, ценовые ограничения и допустимые рыночные сроки. Возможность Live не означает гарантированного исполнения заявки или обхода ограничений.",
+        "Native .NET build и связанные тесты проходят; независимый ревьюер сравнивает дословные запросы, утверждённый контракт, фактический diff и результаты. Проверки без реальных заказов и Production; все временные результаты в маркированной сессии D:/CodexTemp с последующей защищённой очисткой.",
+        "Механическая проверка RequirementGate проходит для собственного изменения и индекса перед коммитом. Посторонние незавершённые изменения сохраняются и не включаются в задачу."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/LiveTradingGatingTests.cs",
+        "tests/PolyCopyTrader.Tests/StrategyLiveDispatchCoverageTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-006",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $taskRunPath/artifacts",
+          "expected": "Успешная сборка C#/.NET с TEMP/TMP/TMPDIR внутри принадлежащей задаче маркированной сессии D:/CodexTemp/runs.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-007",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'Category!=PostgresIntegration' --artifacts-path $taskRunPath/artifacts --results-directory $taskRunPath/results/regression",
+          "expected": "Связанные тесты и полный набор без PostgresIntegration проходят; тестовые подключения к Production не используются. Пересекающиеся проверки VER-001/003/004 могут быть подтверждены единственным этим запуском, если TRX доказывает выполнение всех нужных тестов; повторять уже пройденные проверки без изменений не требуется.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-008",
+          "kind": "inspection",
+          "command": "Независимый review дословных запросов, approved contract, diff и тестов; git diff --check; ./scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree; ./scripts/requirements/Validate-RequirementContract.ps1 -Mode Staged перед коммитом.",
+          "expected": "Независимое PASS без открытых замечаний, отсутствие нарушений утверждённого объёма и прохождение механической проверки. Наличие прежних чужих dirty-файлов фиксируется отдельно и не даёт разрешения их исправлять или включать.",
+          "result": "pending",
+          "evidence": "2026-09-18 independent DRAFT semantic review agent:/root/verify_live_evidence PASS, no open findings. This reviews the proposed contract only; product diff, execution tests and final independent review remain pending."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260918-universal-live-strategy-checkbox sha256:2801c8a4df6a05fd9ef2d0ab41936cd968de527bd1afaa5fe8de65da3917a7cd",
+    "semanticDigest": "sha256:2801c8a4df6a05fd9ef2d0ab41936cd968de527bd1afaa5fe8de65da3917a7cd"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/verify_live_evidence",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
