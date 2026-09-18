@@ -1361,6 +1361,247 @@ public sealed class LiveTradingGatingTests
         Assert.Single(repository.LiveTradingEvents, item => item.Action == "PaperLiveShadowDiscrepancy");
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task LiveProcessorGtdUsesFrozenIntentAcrossRestingPartialFillAndRestart(
+        bool postOnly,
+        bool matched)
+    {
+        var (repository, intent) = CreateFrozenGtdShadow(postOnly);
+        var restingClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult("0xgtd", "LIVE", "10000000", "0", "0.50", "{}")
+        };
+        await CreateGtdLiveProcessor(repository, restingClient).ProcessOpenOrdersAsync();
+        Assert.Empty(repository.PaperFills);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(repository.PaperOrders).Status);
+
+        var partialClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult("0xgtd", "LIVE", "10000000", "3000000", "0.40", "{}")
+        };
+        await CreateGtdLiveProcessor(repository, partialClient).ProcessOpenOrdersAsync();
+        Assert.Equal(PaperOrderStatus.PartiallyFilled, Assert.Single(repository.PaperOrders).Status);
+        var partialFill = Assert.Single(repository.PaperFills);
+        Assert.Equal(3m, partialFill.SizeShares);
+        Assert.Equal(0.40m, partialFill.Price);
+
+        var terminalClient = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult(
+                "0xgtd", matched ? "MATCHED" : "CANCELED", "10000000",
+                matched ? "10000000" : "3000000", matched ? "0.45" : "0.40", "{}")
+        };
+        await CreateGtdLiveProcessor(repository, terminalClient).ProcessOpenOrdersAsync();
+        var terminalPaper = Assert.Single(repository.PaperOrders);
+        Assert.Equal(matched ? PaperOrderStatus.Filled : PaperOrderStatus.PartiallyFilledExpired, terminalPaper.Status);
+        var terminalFill = Assert.Single(repository.PaperFills);
+        Assert.Equal(matched ? 10m : 3m, terminalFill.SizeShares);
+        Assert.Equal(matched ? 0.45m : 0.40m, terminalFill.Price);
+        Assert.Equal(partialFill.Id, terminalFill.Id);
+        Assert.Equal(partialFill.FilledAtUtc, terminalFill.FilledAtUtc);
+        if (postOnly)
+        {
+            Assert.Equal("Maker", terminalFill.FeeLiquidityRole);
+        }
+
+        // A new processor revalidates the matched shadow before settlement after
+        // reconciliation has replaced Paper.Price with the actual fill price.
+        var reconciliationCalls = repository.PaperLiveShadowFillReconciliationCalls;
+        var restartedClient = new CapturingTradingClient();
+        await CreateGtdLiveProcessor(repository, restartedClient).ProcessOpenOrdersAsync();
+        Assert.Equal(reconciliationCalls, repository.PaperLiveShadowFillReconciliationCalls);
+        Assert.True(repository.StrategySettings[intent.StrategyId].LiveStakes);
+        Assert.Empty(repository.PaperLiveShadowDiscrepancies);
+        Assert.DoesNotContain(repository.LiveTradingEvents, item => item.Status == "Error");
+        Assert.Equal(0, restingClient.PlaceCalls + partialClient.PlaceCalls + terminalClient.PlaceCalls + restartedClient.PlaceCalls);
+        Assert.Equal(0, restingClient.CancelOrderCalls + partialClient.CancelOrderCalls + terminalClient.CancelOrderCalls + restartedClient.CancelOrderCalls);
+    }
+
+    [Theory]
+    [InlineData("price", "limit_price mismatch")]
+    [InlineData("amount", "target_notional_usd mismatch")]
+    [InlineData("size", "target_size_shares mismatch")]
+    [InlineData("type", "order_type mismatch")]
+    [InlineData("post_only", "post_only mismatch")]
+    [InlineData("expiry", "expires_at_utc mismatch")]
+    public async Task LiveProcessorGtdRejectsChangesToOriginalRequest(string field, string expectedMismatch)
+    {
+        var (repository, intent) = CreateFrozenGtdShadow(postOnly: true);
+        var liveOrder = Assert.Single(repository.LiveOrders);
+        repository.LiveOrders[0] = field switch
+        {
+            "price" => liveOrder with { Price = 0.51m },
+            "amount" => liveOrder with { NotionalUsd = 5.01m },
+            "size" => liveOrder with { SizeShares = 10.01m },
+            "type" => liveOrder with { OrderType = "FAK" },
+            "post_only" => liveOrder with { PostOnly = false },
+            "expiry" => liveOrder with { ExpiresAtUtc = liveOrder.ExpiresAtUtc.AddSeconds(1) },
+            _ => throw new ArgumentOutOfRangeException(nameof(field))
+        };
+        var client = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult("0xgtd", "LIVE", "10000000", "0", "0.50", "{}")
+        };
+
+        await CreateGtdLiveProcessor(repository, client).ProcessOpenOrdersAsync();
+
+        Assert.False(repository.StrategySettings[intent.StrategyId].LiveStakes);
+        Assert.Equal(1, client.CancelOrderCalls);
+        Assert.Equal(0, client.PlaceCalls);
+        Assert.Empty(repository.PaperFills);
+        Assert.Contains(expectedMismatch, Assert.Single(repository.PaperLiveShadowDiscrepancies).Details, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("execution_intent_limit_price")]
+    [InlineData("execution_intent_target_notional_usd")]
+    [InlineData("execution_intent_target_size_shares")]
+    [InlineData("execution_intent_order_type")]
+    [InlineData("execution_intent_post_only")]
+    [InlineData("execution_intent_created_at_utc")]
+    [InlineData("execution_intent_expires_at_utc")]
+    [InlineData("execution_intent_clob_gtd_expiration_utc")]
+    public async Task LiveProcessorGtdDoesNotSubstituteMutablePaperValuesForMissingFrozenMetadata(string field)
+    {
+        var (repository, intent) = CreateFrozenGtdShadow(postOnly: true);
+        var paperOrder = Assert.Single(repository.PaperOrders);
+        var metadata = System.Text.Json.Nodes.JsonNode.Parse(paperOrder.RawDecisionJson!)!.AsObject();
+        metadata.Remove(field);
+        repository.PaperOrders[0] = paperOrder with { RawDecisionJson = metadata.ToJsonString() };
+        var client = new CapturingTradingClient
+        {
+            StatusResult = new LiveOrderStatusResult("0xgtd", "LIVE", "10000000", "0", "0.50", "{}")
+        };
+
+        await CreateGtdLiveProcessor(repository, client).ProcessOpenOrdersAsync();
+
+        Assert.False(repository.StrategySettings[intent.StrategyId].LiveStakes);
+        Assert.Contains("missing or invalid", Assert.Single(repository.PaperLiveShadowDiscrepancies).Details, StringComparison.Ordinal);
+        Assert.Empty(repository.PaperFills);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LimitBuyIntentPreservesGtdShapeAndOriginalExpiry(bool postOnly)
+    {
+        var (_, intent) = CreateFrozenGtdShadow(postOnly);
+        var request = LimitBuyExecutionParity.CreateLiveRequest(intent, Wallet, Signer, ClobV2SignatureType.EOA);
+        var wireOrder = new ClobV2OrderBuilder(new OrderAmountCalculator()).Build(request);
+
+        Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
+        Assert.Equal(postOnly, request.PostOnly);
+        Assert.Equal(intent.AssetId, request.TokenId);
+        Assert.Equal(intent.Side, request.Side);
+        Assert.Equal(intent.LimitPrice, request.Price);
+        Assert.Equal(intent.TargetSizeShares, request.SizeShares);
+        Assert.Equal(intent.ClobGtdExpirationUtc, request.GtdExpirationUtc);
+        Assert.Null(request.MarketBuyAmountUsd);
+        Assert.Equal("5000000", wireOrder.MakerAmount);
+        Assert.Equal("10000000", wireOrder.TakerAmount);
+        Assert.Equal(intent.ClobGtdExpirationUtc.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture), wireOrder.Expiration);
+    }
+
+    [Theory]
+    [InlineData(179, false)]
+    [InlineData(180, true)]
+    public void LimitBuyIntentValidatesVenueMinimumWithoutExtendingOriginalExpiry(int wireLifetimeSeconds, bool valid)
+    {
+        var (_, original) = CreateFrozenGtdShadow(postOnly: false);
+        var intent = original with
+        {
+            EffectiveExpiresAtUtc = original.CreatedAtUtc.AddSeconds(wireLifetimeSeconds - 60),
+            ClobGtdExpirationUtc = original.CreatedAtUtc.AddSeconds(wireLifetimeSeconds)
+        };
+
+        var validation = LimitBuyExecutionParity.Validate(intent);
+
+        Assert.Equal(valid, validation.IsValid);
+        Assert.Equal(original.CreatedAtUtc.AddSeconds(wireLifetimeSeconds), intent.ClobGtdExpirationUtc);
+        if (!valid)
+        {
+            Assert.Contains("180 seconds", validation.RejectionReason, StringComparison.Ordinal);
+            Assert.Throws<ArgumentException>(() => LimitBuyExecutionParity.CreateLiveRequest(intent, Wallet, Signer, ClobV2SignatureType.EOA));
+        }
+    }
+
+    [Fact]
+    public void LimitBuyIntentFromMakerRetainsNormalizedAndRequestedAmounts()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var book = new OrderBookSnapshot("123456789", [], [], now, "gtd-condition", TickSize: 0.01m, MinOrderSize: 1m);
+        var maker = MakerGtdBuyExecutionIntent.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "gtd-condition", book.AssetId,
+            0.99m, 0.50m, 6.172835m, 12.34567m, book, now, now.AddMinutes(4), now.AddMinutes(5));
+
+        var limit = LimitBuyExecutionIntent.FromMakerGtd(maker);
+
+        Assert.Equal(maker.StrategyId, limit.StrategyId);
+        Assert.Equal(maker.DecisionId, limit.DecisionId);
+        Assert.Equal(6.172835m, limit.RequestedNotionalUsd);
+        Assert.Equal(12.34567m, limit.RequestedSizeShares);
+        Assert.Equal(6.17m, limit.TargetNotionalUsd);
+        Assert.Equal(12.34m, limit.TargetSizeShares);
+        Assert.True(limit.PostOnly);
+        Assert.Equal(maker.ClobGtdExpirationUtc, limit.ClobGtdExpirationUtc);
+        Assert.Equal(maker.EffectiveExpiresAtUtc, limit.EffectiveExpiresAtUtc);
+        Assert.Equal(
+            MakerGtdExecutionParity.CreateLiveRequest(maker, Wallet, Signer, ClobV2SignatureType.EOA),
+            LimitBuyExecutionParity.CreateLiveRequest(limit, Wallet, Signer, ClobV2SignatureType.EOA));
+    }
+
+    private static (TestAppRepository Repository, LimitBuyExecutionIntent Intent) CreateFrozenGtdShadow(bool postOnly)
+    {
+        var repository = new TestAppRepository();
+        var now = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var strategyId = StrategyIds.BtcUpDown5mUpSimple;
+        var correlationId = Guid.NewGuid();
+        var signalId = Guid.NewGuid();
+        var paperOrderId = Guid.NewGuid();
+        var intent = new LimitBuyExecutionIntent(
+            strategyId, correlationId, "gtd-condition", "123456789", TradeSide.Buy,
+            5m, 10m, 5m, 10m, 0.50m, 0.01m, 1m, false, postOnly,
+            now, now.AddMinutes(5), now.AddMinutes(6));
+        repository.StrategySettings[strategyId] = StrategyRuntimeSettings.Default(strategyId) with { LiveStakes = true };
+        var raw = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            live_order_type = "GTD",
+            execution_intent_order_type = "GTD",
+            execution_intent_post_only = intent.PostOnly,
+            execution_intent_limit_price = intent.LimitPrice,
+            execution_intent_target_notional_usd = intent.TargetNotionalUsd,
+            execution_intent_target_size_shares = intent.TargetSizeShares,
+            execution_intent_created_at_utc = intent.CreatedAtUtc,
+            execution_intent_expires_at_utc = intent.EffectiveExpiresAtUtc,
+            execution_intent_clob_gtd_expiration_utc = intent.ClobGtdExpirationUtc
+        });
+        repository.PaperOrders.Add(new PaperOrder(
+            paperOrderId, signalId, StrategyIds.BtcUpDown5mUpSimpleCode, PaperOrderStatus.Pending,
+            TradeSide.Buy, intent.AssetId, intent.ConditionId, "Up", intent.LimitPrice,
+            intent.TargetSizeShares, intent.TargetNotionalUsd, now, intent.EffectiveExpiresAtUtc,
+            StrategyId: strategyId, RawDecisionJson: raw, CorrelationId: correlationId, ExecutionSource: "paper_live_shadow_test"));
+        repository.LiveOrders.Add(new LiveOrder(
+            Guid.NewGuid(), signalId, LiveOrderStatus.Live, "0xgtd", TradeSide.Buy,
+            intent.AssetId, intent.ConditionId, "Up", intent.LimitPrice, intent.TargetSizeShares,
+            intent.TargetNotionalUsd, "GTD", now, intent.EffectiveExpiresAtUtc, now, "live",
+            0m, intent.TargetSizeShares, string.Empty, "{}", string.Empty, now,
+            StrategyId: strategyId, CorrelationId: correlationId, ExecutionSource: "paper_live_shadow_test",
+            PostOnly: postOnly, PaperOrderId: paperOrderId));
+        return (repository, intent);
+    }
+
+    private static LiveTradingProcessor CreateGtdLiveProcessor(TestAppRepository repository, CapturingTradingClient client)
+    {
+        return new LiveTradingProcessor(
+            NullLogger<LiveTradingProcessor>.Instance, new LiveTradingOptions(), new RiskOptions(),
+            new FakeGammaClient([]), client, repository, new ExposureSnapshotCache(repository),
+            new DefaultPaperTradingEngine(), new ServiceControlState());
+    }
+
     [Fact]
     public async Task LiveProcessorDoesNotSettleShadowFillFromAggregateDataApiPosition()
     {

@@ -128,8 +128,12 @@ exception and every other parity rule remain unchanged.
   the order. Submit the unchanged hard-limit intent and let the venue determine
   the fill. Purely local payload validation (price/tick/size/format) is allowed;
   it must not read market data or change the intent.
-- `PaperOnly` disables external submission; outside the closed exception below, it
-  does not permit execution semantics that are unavailable in Live. Counterfactual
+- Under `RC-20260918-universal-live-strategy-checkbox`, every current strategy's
+  `LiveStakes` checkbox controls eligibility for external submission, subject to
+  the existing Live, pause, authorization, balance and risk gates. The catalog
+  `PaperOnly` flag retains its Paper-exception and Child-parent selection meaning;
+  it does not override an enabled Live checkbox. Outside the closed exception below,
+  it does not permit execution semantics that are unavailable in Live. Counterfactual
   logic without a proven Live equivalent must be classified `ResearchOnly` and
   excluded from Paper PnL and Paper performance claims.
 - Closed exception approved explicitly by the user on 2026-08-09: ordinary Paper
@@ -147,9 +151,11 @@ exception and every other parity rule remain unchanged.
   These exact 28 PaperOnly strategies intentionally contribute orders, positions, PnL, win rate,
   and performance to ordinary Paper metrics even though their optimistic
   `TouchNoDepth` full-fill inference is not Live-equivalent and may overstate
-  fills. Every result must carry the label
-  `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. Live
-  submission remains disabled. No
+  fills. Every result of this optimistic Paper model must carry the label
+  `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`.
+  With Live off this Paper model and its historical records remain unchanged.
+  With Live on, the same frozen post-only GTD intent may be submitted and its
+  linked Paper shadow records actual Live fills only. No
   alias, clone, descendant, future strategy, or changed execution semantic inherits
   this exception; all other unsupported behavior remains `ResearchOnly`.
 - Never simulate atomicity, rollback, post-fill rejection, or aggregate fill-price

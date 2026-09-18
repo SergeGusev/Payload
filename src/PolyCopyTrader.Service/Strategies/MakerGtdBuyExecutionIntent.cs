@@ -4,10 +4,9 @@ using PolyCopyTrader.Polymarket.Auth;
 namespace PolyCopyTrader.Service.Strategies;
 
 /// <summary>
-/// Immutable economic intent shared by the conservative Paper model and a
-/// possible Live Polymarket post-only GTD submission. The current strategy is
-/// hard PaperOnly; the Live request projection exists solely to prove that the
-/// frozen order shape is supported by the venue without changing it.
+/// Immutable economic intent used by Paper placement and Live Polymarket
+/// post-only GTD submission. The strategy's Live checkbox selects transport;
+/// both paths preserve this frozen order shape and account for fills separately.
 /// </summary>
 internal sealed record MakerGtdBuyExecutionIntent(
     Guid StrategyId,

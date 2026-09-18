@@ -1361,11 +1361,14 @@ public static class StrategyIds
         ];
 
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcUpDown5mVariants =
-        ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineBtcUpDown5mVariants);
+        ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineBtcUpDown5mVariants)
+            .Select(WithLiveCheckboxDescription).ToArray();
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> BtcLowerEnterPremarketVariants =
-        ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineBtcLowerEnterPremarketVariants);
+        ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineBtcLowerEnterPremarketVariants)
+            .Select(WithLiveCheckboxDescription).ToArray();
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> CryptoUpDown5mVariants =
-        [.. ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineCryptoUpDown5mVariants),
+        [.. ExcludeDisabledAndDependentLowerEnterPurgeTargets(LegacyBaselineCryptoUpDown5mVariants)
+             .Select(WithLiveCheckboxDescription),
          .. CreateEthLossDiffPositiveProgressVariants(LegacyBaselineCryptoUpDown5mVariants)];
     public static readonly IReadOnlyList<BtcUpDown5mStrategyVariant> UpDown5mStrategyVariants =
         [
@@ -1378,6 +1381,29 @@ public static class StrategyIds
 
     public static readonly IReadOnlyList<Guid> AllStrategyIds =
         [FollowLeader, .. UpDown5mStrategyVariants.Select(variant => variant.Id)];
+
+    private static BtcUpDown5mStrategyVariant WithLiveCheckboxDescription(BtcUpDown5mStrategyVariant variant)
+    {
+        // The factories also feed the immutable SQL baseline. Update only current catalog records.
+        var description = variant.Description
+            .Replace("submit one minimum-size Paper BUY FAK intent capped at 0.99.",
+                "submit one minimum-size BUY FAK intent capped at 0.99; the Live checkbox controls external submission.", StringComparison.Ordinal)
+            .Replace("Paper-only LowerEnter clone of", "LowerEnter clone of", StringComparison.Ordinal)
+            .Replace("Live execution is disabled.",
+                "Live submission follows the Live checkbox and preserves the same FAK price cap.", StringComparison.Ordinal)
+            .Replace("Live execution is not supported for this Paper experiment.",
+                "Live submission follows the Live checkbox and preserves the same FAK price cap.", StringComparison.Ordinal)
+            .Replace("Live execution is not supported for this optimized Paper experiment.",
+                "Live submission follows the Live checkbox with the same signal and frozen FAK intent.", StringComparison.Ordinal)
+            .Replace("Paper-only Maker GTD clone of", "Maker GTD clone of", StringComparison.Ordinal)
+            .Replace("Every result must be labeled optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.",
+                "Every result of this optimistic Live-off Paper model must be labeled optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills.", StringComparison.Ordinal)
+            .Replace("Live submission is disabled, and no alias, clone, descendant, future strategy",
+                "Live submission follows the Live checkbox, uses the same frozen post-only GTD intent, and records actual venue fills in its Paper shadow. With Live off, the existing labeled optimistic Paper model remains unchanged. No alias, clone, descendant, future strategy", StringComparison.Ordinal)
+            .Replace("While the parent link is active, copy each accepted parent entry in the same market, outcome, notional, and share size.",
+                "While the parent link is active and Live is off, copy each accepted parent entry in the same market, outcome, notional, and share size. With this child's Live checkbox on, submit the parent's original requested amount and normalization with the same token, side, price cap, order type, post-only flag, and expiry, independently of the parent's Live checkbox. The child's own Live balance applies, and its shadow records actual venue fills.", StringComparison.Ordinal);
+        return description == variant.Description ? variant : variant with { Description = description };
+    }
 
     public static Guid Normalize(Guid strategyId)
     {

@@ -35,7 +35,10 @@ contains the full safety and project rules.
 - Never re-fetch an order book after freezing a FAK/FOK intent in order to validate
   liquidity, resize, or reprice it. Local request-shape validation may only accept
   or reject the unchanged intent; the venue determines the actual fill.
-- `PaperOnly` is a transport restriction, not a general semantic exemption. Logic
+- `LiveStakes` controls every current strategy's Live transport eligibility under
+  `RC-20260918-universal-live-strategy-checkbox`, subject to the existing common
+  Live gates. The catalog `PaperOnly` flag retains the existing Paper-exception
+  predicates and Child-parent exclusions; it does not veto enabled Live. Logic
   without a proven Live equivalent is `ResearchOnly` and must not contribute to
   Paper PnL except for the closed exception explicitly approved by the user
   on 2026-08-09: the exact 28 `ETH` neutral Reference Average Maker-GTD strategies
@@ -49,8 +52,11 @@ contains the full safety and project rules.
   one-tick-improvement formula; persisted version/formula fields separate the two
   regimes. This family
   intentionally enters ordinary Paper metrics under the mandatory label
-  `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`; Live
-  submission is disabled. No alias, clone, descendant, future strategy, or changed
+  `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills` when
+  using that Paper model. Live-off execution and historical records remain
+  unchanged; Live-on execution submits the frozen post-only GTD intent and its
+  Paper shadow records actual venue fills only. No alias, clone, descendant,
+  future strategy, or changed
   execution semantic inherits the
   exception, and the broad parity/ResearchOnly rule remains unchanged otherwise.
 - Do not silently ignore API errors; persist/log explicit failure reasons.

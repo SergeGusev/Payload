@@ -63,6 +63,25 @@ public sealed class MakerGtdExecutionParityTests
     }
 
     [Fact]
+    public void LimitIntentProjectionPreservesMakerNormalizationAndProducesIdenticalLiveRequest()
+    {
+        var maker = CreateIntent(targetSizeShares: 12.34567m);
+        var limit = LimitBuyExecutionIntent.FromMakerGtd(maker);
+        const string makerAddress = "0x1111111111111111111111111111111111111111";
+        const string signerAddress = "0x2222222222222222222222222222222222222222";
+
+        Assert.Equal(maker.RequestedNotionalUsd, limit.RequestedNotionalUsd);
+        Assert.Equal(maker.RequestedSizeShares, limit.RequestedSizeShares);
+        Assert.Equal(maker.TargetNotionalUsd, limit.TargetNotionalUsd);
+        Assert.Equal(maker.TargetSizeShares, limit.TargetSizeShares);
+        Assert.Equal(maker.EffectiveExpiresAtUtc, limit.EffectiveExpiresAtUtc);
+        Assert.Equal(maker.DecisionId, limit.DecisionId);
+        Assert.Equal(
+            MakerGtdExecutionParity.CreateLiveRequest(maker, makerAddress, signerAddress, ClobV2SignatureType.EOA),
+            LimitBuyExecutionParity.CreateLiveRequest(limit, makerAddress, signerAddress, ClobV2SignatureType.EOA));
+    }
+
+    [Fact]
     public void Validate_RejectsWireExpirationNotExactlyOneMinuteAfterEffectiveExpiry()
     {
         var intent = CreateIntent();

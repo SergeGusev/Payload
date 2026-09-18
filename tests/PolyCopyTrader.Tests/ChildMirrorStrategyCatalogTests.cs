@@ -1,9 +1,51 @@
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Service.Strategies;
+using System.Reflection;
 
 namespace PolyCopyTrader.Tests;
 
 public sealed class ChildMirrorStrategyCatalogTests
 {
+    [Fact]
+    public void CurrentCatalogHasLiveDispatchRouteAndEveryVariantHonorsItsOwnCheckbox()
+    {
+        var variants = StrategyIds.UpDown5mStrategyVariants.ToDictionary(item => item.Id);
+        var processor = typeof(BtcUpDown5mPaperStrategyProcessor);
+        MethodInfo Predicate(string name) => processor.GetMethod(name, BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException($"Live dispatcher predicate {name} was not found.");
+        var childDispatch = Predicate("IsChildMirrorStrategy");
+        var makerDispatch = Predicate("IsFixedOutcomeMaker");
+        var openingDispatch = Predicate("UsesOpeningLimitEntry");
+        var liveEnabled = Predicate("HasEffectiveLiveStakes");
+        var covered = new HashSet<Guid>();
+        foreach (var strategyId in StrategyIds.AllStrategyIds)
+        {
+            Assert.True(covered.Add(strategyId), $"Duplicate catalog strategy {strategyId}.");
+            if (strategyId == StrategyIds.FollowLeader)
+            {
+                Assert.False(StrategyRuntimeSettings.Default(strategyId).EffectiveLiveStakes);
+                Assert.True((StrategyRuntimeSettings.Default(strategyId) with { LiveStakes = true }).EffectiveLiveStakes);
+                continue;
+            }
+
+            Assert.True(variants.TryGetValue(strategyId, out var variant), $"No dispatch variant for {strategyId}.");
+            var hasRoute = (bool)childDispatch.Invoke(null, [variant])! ||
+                (bool)makerDispatch.Invoke(null, [variant])! ||
+                (bool)openingDispatch.Invoke(null, [variant])!;
+            Assert.True(hasRoute, $"Strategy {variant!.Code} ({strategyId}) has no current Live entry dispatcher.");
+            var disabled = StrategyRuntimeSettings.Default(strategyId);
+            var enabled = disabled with { LiveStakes = true };
+            Assert.False((bool)liveEnabled.Invoke(null, [variant, disabled])!);
+            Assert.True(
+                (bool)liveEnabled.Invoke(null, [variant, enabled])!,
+                $"Strategy {variant.Code} still masks the checked Live flag.");
+        }
+
+        Assert.Equal(variants.Count + 1, covered.Count);
+        Assert.Contains(StrategyIds.FollowLeader, covered);
+        Assert.Contains(Guid.Parse("b7c50005-0000-4000-8195-000000000022"), covered);
+    }
+
     [Fact]
     public void StrategyIds_IncludeChildMirrorVariantsForEachAssetAndLookback()
     {

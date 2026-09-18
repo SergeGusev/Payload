@@ -5,6 +5,7 @@ using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Polymarket.Auth;
 using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.PaperTrading;
+using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Storage;
 using PolyCopyTrader.Strategy;
 
@@ -766,6 +767,11 @@ public sealed class LiveTradingProcessor(
                     $"FAK target_notional_usd mismatch: paper_intent={expectedTargetNotionalUsd:0.########}; live={liveOrder.NotionalUsd:0.########}");
             }
         }
+        else if (string.Equals(expectedOrderType, "GTD", StringComparison.OrdinalIgnoreCase) &&
+                 HasFrozenGtdIntent(paperOrder))
+        {
+            ValidateFrozenGtdShadowOrderShape(paperOrder, liveOrder, mismatches);
+        }
         else if (Math.Abs(paperOrder.Price - liveOrder.Price) > ShadowPriceTolerance)
         {
             mismatches.Add($"limit_price mismatch: paper={paperOrder.Price:0.########}; live={liveOrder.Price:0.########}");
@@ -786,13 +792,100 @@ public sealed class LiveTradingProcessor(
         return new ShadowOrderShapeValidation(mismatches, incidents);
     }
 
-    private static bool GetExpectedShadowPostOnly(PaperOrder _)
+    private static void ValidateFrozenGtdShadowOrderShape(
+        PaperOrder paperOrder,
+        LiveOrder liveOrder,
+        ICollection<string> mismatches)
     {
-        return false;
+        CompareFrozenAmount("execution_intent_limit_price", "limit_price", liveOrder.Price, ShadowPriceTolerance);
+        CompareFrozenAmount("execution_intent_target_notional_usd", "target_notional_usd", liveOrder.NotionalUsd, ShadowPriceTolerance);
+        CompareFrozenAmount("execution_intent_target_size_shares", "target_size_shares", liveOrder.SizeShares, FillSizeTolerance);
+        if (!TryReadStringFromRawDecisionJson(paperOrder.RawDecisionJson, "execution_intent_order_type", out var orderType) ||
+            !string.Equals(orderType, "GTD", StringComparison.OrdinalIgnoreCase))
+        {
+            mismatches.Add("GTD frozen order_type is missing or invalid");
+        }
+        if (!TryReadBooleanFromRawDecisionJson(paperOrder.RawDecisionJson, "execution_intent_post_only", out _))
+        {
+            mismatches.Add("GTD frozen post_only is missing or invalid");
+        }
+        if (liveOrder.PostOnly is null)
+        {
+            mismatches.Add("GTD Live post_only is missing");
+        }
+
+        var hasCreatedAt = TryReadTimestampFromRawDecisionJson(
+            paperOrder.RawDecisionJson, "execution_intent_created_at_utc", out var createdAtUtc);
+        var hasExpiresAt = TryReadTimestampFromRawDecisionJson(
+            paperOrder.RawDecisionJson, "execution_intent_expires_at_utc", out var expiresAtUtc);
+        var hasWireExpiresAt = TryReadTimestampFromRawDecisionJson(
+            paperOrder.RawDecisionJson, "execution_intent_clob_gtd_expiration_utc", out var wireExpiresAtUtc);
+        if (!hasCreatedAt || !hasExpiresAt || !hasWireExpiresAt)
+        {
+            mismatches.Add("GTD frozen expiration metadata is missing or invalid");
+        }
+        else
+        {
+            // PostgreSQL timestamps may round a serialized .NET timestamp by five ticks.
+            if (Math.Abs((expiresAtUtc - liveOrder.ExpiresAtUtc).Ticks) > 5)
+            {
+                mismatches.Add($"GTD expires_at_utc mismatch: paper_intent={expiresAtUtc:O}; live={liveOrder.ExpiresAtUtc:O}");
+            }
+            if (expiresAtUtc <= createdAtUtc ||
+                wireExpiresAtUtc < expiresAtUtc.AddSeconds(MakerGtdBuyExecutionIntent.VenueEarlyExpirationSeconds) ||
+                wireExpiresAtUtc < createdAtUtc.AddSeconds(MakerGtdBuyExecutionIntent.MinimumWireLifetimeSeconds))
+            {
+                mismatches.Add("GTD frozen expiration metadata violates the original GTD lifetime");
+            }
+        }
+
+        void CompareFrozenAmount(string property, string name, decimal actual, decimal tolerance)
+        {
+            if (!TryReadDecimalFromRawDecisionJson(paperOrder.RawDecisionJson, property, out var expected))
+            {
+                mismatches.Add($"GTD frozen {name} is missing or invalid");
+            }
+            else if (Math.Abs(expected - actual) > tolerance)
+            {
+                mismatches.Add($"GTD {name} mismatch: paper_intent={expected:0.########}; live={actual:0.########}");
+            }
+        }
+    }
+
+    private static bool HasFrozenGtdIntent(PaperOrder paperOrder)
+    {
+        if (string.IsNullOrWhiteSpace(paperOrder.RawDecisionJson))
+        {
+            return false;
+        }
+        try
+        {
+            using var document = JsonDocument.Parse(paperOrder.RawDecisionJson);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object &&
+                (root.TryGetProperty("execution_intent_limit_price", out _) ||
+                 root.TryGetProperty("execution_intent_expires_at_utc", out _) ||
+                 root.TryGetProperty("execution_intent_clob_gtd_expiration_utc", out _));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool GetExpectedShadowPostOnly(PaperOrder paperOrder)
+    {
+        return string.Equals(GetExpectedShadowOrderType(paperOrder), "GTD", StringComparison.OrdinalIgnoreCase) &&
+            TryReadBooleanFromRawDecisionJson(paperOrder.RawDecisionJson, "execution_intent_post_only", out var postOnly) &&
+            postOnly;
     }
 
     private static string GetExpectedShadowOrderType(PaperOrder paperOrder)
     {
+        if (TryReadStringFromRawDecisionJson(paperOrder.RawDecisionJson, "execution_intent_order_type", out var intentOrderType))
+        {
+            return intentOrderType;
+        }
         if (TryReadStringFromRawDecisionJson(paperOrder.RawDecisionJson, "live_order_type", out var liveOrderType))
         {
             return liveOrderType;
@@ -889,6 +982,39 @@ public sealed class LiveTradingProcessor(
         }
 
         return false;
+    }
+
+    private static bool TryReadBooleanFromRawDecisionJson(string? rawDecisionJson, string propertyName, out bool value)
+    {
+        value = false;
+        if (string.IsNullOrWhiteSpace(rawDecisionJson))
+        {
+            return false;
+        }
+        try
+        {
+            using var document = JsonDocument.Parse(rawDecisionJson);
+            if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty(propertyName, out var property) &&
+                property.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                value = property.GetBoolean();
+                return true;
+            }
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+        return false;
+    }
+
+    private static bool TryReadTimestampFromRawDecisionJson(string? rawDecisionJson, string propertyName, out DateTimeOffset value)
+    {
+        value = default;
+        return TryReadStringFromRawDecisionJson(rawDecisionJson, propertyName, out var text) &&
+            DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out value);
     }
 
     private async Task RecordShadowDiscrepancyAndDisableLiveAsync(

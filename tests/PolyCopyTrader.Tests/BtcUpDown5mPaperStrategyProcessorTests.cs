@@ -16,7 +16,7 @@ using PolyCopyTrader.Strategy;
 
 namespace PolyCopyTrader.Tests;
 
-public sealed class BtcUpDown5mPaperStrategyProcessorTests
+public sealed partial class BtcUpDown5mPaperStrategyProcessorTests
 {
     public static TheoryData<decimal?> InvalidFollowMarketCacheMinOrderSizes =>
     [
@@ -2006,6 +2006,214 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
 
         Assert.Empty(repository.PaperFills);
         Assert.Empty(repository.PaperPositions);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PendingGtdChild_UsesOwnCheckboxAndParentPremarketRequest(bool childLive)
+    {
+        var context = CreatePendingGtdChildContext(childLive);
+        context.Trading.BeforePlaceCheck = request =>
+        {
+            var parentOrder = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == context.Parent.Id);
+            var childOrder = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == context.Child.Id);
+            Assert.Contains(context.Repository.Signals, s => s.Id == parentOrder.SignalId);
+            Assert.Contains(context.Repository.StrategyMarketPaperRuns, r => r.PaperOrderId == parentOrder.Id);
+            var decision = Assert.Single(context.Repository.PaperLiveShadowDecisions);
+            Assert.Equal(childOrder.Id, decision.PaperOrderId);
+            Assert.Equal(childOrder.Id, Assert.Single(context.Repository.LiveOrders).PaperOrderId);
+            Assert.Equal(parentOrder.Price, request.Price);
+            Assert.Equal(parentOrder.SizeShares, request.SizeShares);
+            Assert.False(request.PostOnly);
+            Assert.Empty(context.Repository.PaperFills);
+        };
+
+        await context.Processor.ProcessAsync();
+
+        Assert.Equal(childLive ? 1 : 0, context.Trading.PlaceCalls);
+        var parent = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == context.Parent.Id);
+        var child = Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == context.Child.Id);
+        Assert.Equal(parent.Price, child.Price);
+        Assert.Equal(parent.SizeShares, child.SizeShares);
+        Assert.Equal(parent.NotionalUsd, child.NotionalUsd);
+        Assert.Equal(parent.ExpiresAtUtc, child.ExpiresAtUtc);
+        Assert.Equal(PaperOrderStatus.Pending, child.Status);
+        Assert.Empty(context.Repository.PaperFills);
+        Assert.Empty(context.Repository.PaperPositions);
+        if (childLive)
+        {
+            var request = Assert.Single(context.Trading.Requests);
+            Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
+            Assert.Null(request.MarketBuyAmountUsd);
+            using var parentRaw = JsonDocument.Parse(parent.RawDecisionJson!);
+            using var childRaw = JsonDocument.Parse(child.RawDecisionJson!);
+            foreach (var field in new[] { "requested_notional_usd", "requested_size_shares", "target_notional_usd", "target_size_shares", "limit_price", "expires_at_utc", "clob_gtd_expiration_utc" })
+            {
+                Assert.Equal(parentRaw.RootElement.GetProperty("execution_intent_" + field).ToString(),
+                    childRaw.RootElement.GetProperty("execution_intent_" + field).ToString());
+            }
+            Assert.Equal(parentRaw.RootElement.GetProperty("raw_target_notional_usd").GetDecimal(),
+                childRaw.RootElement.GetProperty("execution_intent_requested_notional_usd").GetDecimal());
+            Assert.Equal(request.GtdExpirationUtc, child.ExpiresAtUtc.AddSeconds(60));
+            Assert.True(child.NotionalUsd > 1m);
+        }
+        await context.Processor.ProcessAsync();
+        Assert.Equal(childLive ? 1 : 0, context.Trading.PlaceCalls);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PendingGtdChild_UncertainSubmissionStaysPendingWithoutRetry(bool knownOrderId)
+    {
+        var context = CreatePendingGtdChildContext(true,
+            new LiveOrderPlacementResult(false, knownOrderId ? "0xknown-gtd" : null, "error",
+                "HTTP 503 Service Unavailable", null, null, "{}", "{}", HttpStatusCode: 503));
+
+        await context.Processor.ProcessAsync();
+        await context.Processor.ProcessAsync();
+
+        Assert.Equal(1, context.Trading.PlaceCalls);
+        var live = Assert.Single(context.Repository.LiveOrders);
+        Assert.Equal(LiveOrderStatus.Submitted, live.Status);
+        Assert.Equal(knownOrderId ? "0xknown-gtd" : null, live.OrderId);
+        Assert.Equal(PaperOrderStatus.Pending, Assert.Single(context.Repository.PaperOrders, o => o.StrategyId == context.Child.Id).Status);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Entered,
+            Assert.Single(context.Repository.StrategyMarketPaperRuns, r => r.StrategyId == context.Child.Id).Status);
+        Assert.Equal("live_submit_unresolved", Assert.Single(context.Repository.PaperLiveShadowDecisions).Status);
+        Assert.Empty(context.Repository.PaperFills);
+        Assert.Equal(0, context.Trading.CancelOrderCalls);
+    }
+
+    [Fact]
+    public async Task PendingGtdChild_DoesNotSubmitWhenParentPersistenceFails()
+    {
+        var context = CreatePendingGtdChildContext(true);
+        context.Repository.PaperEntryPersistenceBatchFailuresToThrow = 1;
+
+        await context.Processor.ProcessAsync();
+
+        Assert.Equal(0, context.Trading.PlaceCalls);
+        Assert.Empty(context.Repository.LiveOrders);
+        Assert.DoesNotContain(context.Repository.PaperOrders, o => o.StrategyId == context.Child.Id);
+    }
+
+    [Fact]
+    public async Task StrategyLiveDispatchCoverage_SolChildProgressUsesOriginalFakRequest()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var parent = SolDownBps2InstantVariant;
+        var child = StrategyIds.UpDown5mStrategyVariants.First(v => v.ReferenceAssetSymbol == "SOL" &&
+            v.Behavior == BtcUpDown5mStrategyBehavior.ChildProgressMirror);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(now, now.AddMinutes(5), 0.50m, 0.50m,
+            slug: $"sol-updown-5m-{now.ToUnixTimeSeconds()}", seriesSlug: "sol-up-or-down-5m",
+            question: "SOL Up or Down - child progress", marketId: "sol-market-1", conditionId: "sol-condition-1",
+            upAssetId: "sol-asset-up", downAssetId: "sol-asset-down"));
+        var closeBooks = AddCryptoCloseBookResults(repository, "SOL", now, "Up");
+        var previousStart = now.AddMinutes(-5);
+        repository.CryptoUpDown5mWebSocketResolvedMarkets.Add(CreateWebSocketDiffResult("SOL", previousStart, "Up"));
+        var suffix = previousStart.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        foreach (var (seconds, price) in new[] { (0, 150m), (299, 150.03m) })
+        {
+            AddCryptoOddsTick(repository, "SOL", "sol-ws-market-" + suffix, "sol-ws-condition-" + suffix,
+                previousStart, seconds, price, 150m, "sol-close-up-" + suffix, "sol-close-down-" + suffix);
+        }
+        repository.StrategySettings[parent.Id] = StrategyRuntimeSettings.Default(parent.Id) with
+        {
+            Enabled = true, PaperStakeAmount = 1m, LiveStakes = false
+        };
+        repository.StrategySettings[child.Id] = StrategyRuntimeSettings.Default(child.Id) with
+        {
+            Enabled = true, LiveStakes = true, LiveStakeAmount = 1m, LiveAvailableBalance = 100m
+        };
+        AddDynamicChildLiveAssignment(repository, parent, child, now);
+        OrderBookSnapshot[] books =
+        [
+            OrderBook("sol-asset-up", [new OrderBookLevel(0.37m, 100m)], [new OrderBookLevel(0.39m, 100m)], now, 5m, 0.01m) with { ConditionId = "sol-condition-1" },
+            OrderBook("sol-asset-down", [new OrderBookLevel(0.60m, 100m)], [new OrderBookLevel(0.64m, 100m)], now, 5m, 0.01m) with { ConditionId = "sol-condition-1" }
+        ];
+        var trading = new PendingGtdTradingClient(new LiveOrderPlacementResult(true, "0xsol-child", "matched", null,
+            "3", "5", "{\"status\":\"matched\",\"makingAmount\":\"3\",\"takingAmount\":\"5\"}", "{}"));
+        var processor = CreateProcessorCoreWithOptions(repository, [], books, _ => { }, closeBooks,
+            CreateBtcOptions(false, [parent.Code, child.Code]), tradingClient: trading,
+            botOptions: new BotOptions { Mode = BotMode.Live, EnableLiveTrading = true },
+            paperTradingOptions: new PaperTradingOptions { InitialBankrollUsd = 10000m, RunInLiveMode = true },
+            liveTradingOptions: new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 100m },
+            timeProvider: new ManualTimeProvider(now));
+
+        await processor.ProcessPreviousResultDueEntriesAsync();
+
+        Assert.True(trading.PlaceCalls > 0, JsonSerializer.Serialize(new { repository.StrategyMarketPaperRuns, repository.LiveOrders, repository.ApiErrors }));
+        var request = Assert.Single(trading.Requests);
+        var parentOrder = Assert.Single(repository.PaperOrders, o => o.StrategyId == parent.Id);
+        var childOrder = Assert.Single(repository.LiveOrders, o => o.StrategyId == child.Id);
+        Assert.Equal(ClobV2OrderType.FAK, request.OrderType);
+        Assert.False(request.PostOnly);
+        using var parentRaw = JsonDocument.Parse(parentOrder.RawDecisionJson!);
+        Assert.Equal(parentRaw.RootElement.GetProperty("execution_intent_target_size_shares").GetDecimal(), request.SizeShares);
+        Assert.Equal(parentOrder.NotionalUsd, childOrder.NotionalUsd);
+        Assert.Equal(parentOrder.NotionalUsd, request.MarketBuyAmountUsd);
+        Assert.Equal(3m, childOrder.FilledNotionalUsd);
+    }
+
+    private static (BtcUpDown5mPaperStrategyProcessor Processor, TestAppRepository Repository,
+        PendingGtdTradingClient Trading, BtcUpDown5mStrategyVariant Parent, BtcUpDown5mStrategyVariant Child)
+        CreatePendingGtdChildContext(bool childLive, LiveOrderPlacementResult? placement = null)
+    {
+        var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
+        var parent = StrategyIds.UpDown5mStrategyVariants.Single(v => v.Code == "btc_up_down_5m_preopen_half_up_49");
+        var child = StrategyIds.UpDown5mStrategyVariants.First(v => v.ReferenceAssetSymbol == "BTC" && v.Behavior == BtcUpDown5mStrategyBehavior.ChildRoiMirror);
+        var repository = new TestAppRepository();
+        repository.PolymarketGammaMarkets.Add(CreateMarket(now.AddMinutes(5), now.AddMinutes(10), 0.5m, 0.5m, orderMinSize: 5m));
+        repository.StrategySettings[parent.Id] = StrategyRuntimeSettings.Default(parent.Id) with
+        {
+            Enabled = true, LiveStakes = false, PaperStakeAmount = 2m
+        };
+        repository.StrategySettings[child.Id] = StrategyRuntimeSettings.Default(child.Id) with
+        {
+            Enabled = true, LiveStakes = childLive, LiveStakeAmount = 1m, LiveLostCoeff = 2m,
+            LiveLostCounter = 3, LiveAvailableBalance = 100m
+        };
+        AddDynamicChildLiveAssignment(repository, parent, child, now);
+        OrderBookSnapshot[] books =
+        [
+            OrderBook("asset-up", [new OrderBookLevel(0.48m, 100m)], [new OrderBookLevel(0.60m, 100m)], now, 5m, 0.01m),
+            OrderBook("asset-down", [new OrderBookLevel(0.38m, 100m)], [new OrderBookLevel(0.40m, 100m)], now, 5m, 0.01m)
+        ];
+        var trading = new PendingGtdTradingClient(placement ?? new LiveOrderPlacementResult(true, "0xpending-gtd", "live", null, null, null, "{}", "{}"));
+        var processor = CreateProcessorCoreWithOptions(repository, [], books, _ => { }, books,
+            CreateBtcOptions(false, [parent.Code, child.Code]), tradingClient: trading,
+            botOptions: new BotOptions { Mode = BotMode.Live, EnableLiveTrading = true },
+            paperTradingOptions: new PaperTradingOptions { InitialBankrollUsd = 10000m, RunInLiveMode = true },
+            liveTradingOptions: new LiveTradingOptions { ManualEnableCode = "LIVE_TRADING_ENABLED", MaxOrderNotionalUsd = 100m },
+            timeProvider: new ManualTimeProvider(now));
+        return (processor, repository, trading, parent, child);
+    }
+
+    private sealed class PendingGtdTradingClient(LiveOrderPlacementResult placement) : IPolymarketTradingClient
+    {
+        public int PlaceCalls { get; private set; }
+        public int CancelOrderCalls { get; private set; }
+        public List<ClobV2OrderRequest> Requests { get; } = [];
+        public Action<ClobV2OrderRequest>? BeforePlaceCheck { get; set; }
+        public Task<ClobV2DryRunOrderResult> PrepareDryRunOrderAsync(ClobV2OrderRequest request, CancellationToken ct) => throw new NotSupportedException();
+        public Task<LiveOrderPlacementResult> PlaceLiveOrderAsync(ClobV2OrderRequest request, CancellationToken ct)
+        {
+            BeforePlaceCheck?.Invoke(request);
+            PlaceCalls++;
+            Requests.Add(request);
+            return Task.FromResult(placement);
+        }
+        public Task<LiveOrderCancellationResult> CancelOrderAsync(string orderId, CancellationToken ct)
+        {
+            CancelOrderCalls++;
+            return Task.FromResult(new LiveOrderCancellationResult(true, [orderId], new Dictionary<string, string>(), "{}"));
+        }
+        public Task<LiveOrderCancellationResult> CancelAllOrdersAsync(CancellationToken ct) =>
+            Task.FromResult(new LiveOrderCancellationResult(true, [], new Dictionary<string, string>(), "{}"));
+        public Task<LiveOrderStatusResult?> GetLiveOrderStatusAsync(string orderId, CancellationToken ct) => Task.FromResult<LiveOrderStatusResult?>(null);
     }
 
     [Fact]
@@ -10921,6 +11129,238 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         });
     }
 
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdLivePersistsFrozenIntentBeforeSubmitAndWaitsForActualFill()
+    {
+        var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
+        TestAppRepository? capturedRepository = null;
+        var trading = new MakerGtdSequencedTradingClient([MakerLiveResult(true, "0xmaker", "live")])
+        {
+            BeforePlace = request =>
+            {
+                var repository = Assert.IsType<TestAppRepository>(capturedRepository);
+                var order = Assert.Single(repository.PaperOrders);
+                var decision = Assert.Single(repository.PaperLiveShadowDecisions);
+                var live = Assert.Single(repository.LiveOrders);
+                var run = Assert.Single(repository.StrategyMarketPaperRuns);
+                Assert.Equal(order.Id, decision.PaperOrderId);
+                Assert.Equal(order.Id, live.PaperOrderId);
+                Assert.Equal(order.Id, run.PaperOrderId);
+                Assert.Equal(order.SignalId, Assert.Single(repository.Signals).Id);
+                Assert.Equal("GTD", decision.OrderType);
+                Assert.True(decision.PostOnly);
+                Assert.Equal(request.Price, decision.LimitPrice);
+                Assert.Equal(request.SizeShares, decision.RequestedSizeShares);
+                Assert.Equal(PaperOrderStatus.Pending, order.Status);
+                Assert.Empty(repository.PaperFills);
+            }
+        };
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [MakerGtdOrderBook(now, 0.48m, 0.51m, now.AddMilliseconds(-1), "live-s0")],
+            liveStakes: true,
+            tradingClient: trading,
+            configureRepository: repository =>
+            {
+                capturedRepository = repository;
+                var id = StrategyIds.UpDown5mStrategyVariants.Single(item =>
+                    item.Code == "eth_up_down_5m_reference_average_bps_9_maker_gtd_premarket").Id;
+                repository.StrategySettings[id] = repository.StrategySettings[id] with
+                {
+                    PaperStakeAmount = 10m,
+                    LiveStakeAmount = 2m,
+                    LiveLostCoeff = 2m,
+                    LiveLostCounter = 1
+                };
+            },
+            processTwice: true);
+
+        Assert.Equal(1, scenario.Result.EntriesPlaced);
+        Assert.Equal(1, scenario.ClobClient.GetOrderBookCalls);
+        var request = Assert.Single(trading.Requests);
+        Assert.Equal(ClobV2OrderType.GTD, request.OrderType);
+        Assert.True(request.PostOnly);
+        Assert.Equal(0.50m, request.Price);
+        // Live base 2 + loss add-on 2 gives multiplier 4; min 1 * 0.50 * 1.10 * 4
+        // is rounded from 2.20 to 3 USD by the existing limit sizing policy.
+        Assert.Equal(6m, request.SizeShares);
+        Assert.Equal(scenario.MarketEndUtc, request.GtdExpirationUtc);
+        var shadow = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, shadow.Status);
+        Assert.Equal("paper_live_shadow_test", shadow.ExecutionSource);
+        Assert.Equal(3m, shadow.NotionalUsd);
+        Assert.Equal(scenario.MarketEndUtc.AddMinutes(-1), shadow.ExpiresAtUtc);
+        Assert.Empty(scenario.Repository.PaperFills);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Resting, Assert.Single(scenario.Repository.StrategyMarketPaperRuns).Status);
+        Assert.Equal(LiveOrderStatus.Live, Assert.Single(scenario.Repository.LiveOrders).Status);
+        using var evidence = JsonDocument.Parse(shadow.RawDecisionJson!);
+        Assert.Equal("GTD", evidence.RootElement.GetProperty("execution_intent_order_type").GetString());
+        Assert.True(evidence.RootElement.GetProperty("execution_intent_post_only").GetBoolean());
+        Assert.Equal(0.50m, evidence.RootElement.GetProperty("execution_intent_limit_price").GetDecimal());
+        Assert.False(evidence.RootElement.TryGetProperty("paper_model_label", out _));
+        var attempt = Assert.Single(evidence.RootElement.GetProperty("maker_gtd").GetProperty("attempts").EnumerateArray());
+        Assert.False(attempt.TryGetProperty("s1", out _));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdLiveRetriesOnlyDefinitiveCrossingWithNewFrozenIntent()
+    {
+        var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
+        var trading = new MakerGtdSequencedTradingClient(
+        [
+            MakerLiveResult(false, null, "rejected", "INVALID_POST_ONLY_ORDER"),
+            MakerLiveResult(true, "0xmaker-second", "live")
+        ]);
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [
+                MakerGtdOrderBook(now, 0.48m, 0.51m, now.AddMilliseconds(-1), "first-s0"),
+                MakerGtdOrderBook(now, 0.46m, 0.49m, now.AddMilliseconds(-1), "second-s0")
+            ],
+            liveStakes: true,
+            tradingClient: trading,
+            processTwice: true);
+
+        Assert.Equal(2, trading.Requests.Count);
+        Assert.Equal(2, scenario.ClobClient.GetOrderBookCalls);
+        Assert.Equal(0.50m, trading.Requests[0].Price);
+        Assert.Equal(0.48m, trading.Requests[1].Price);
+        Assert.Equal(2, scenario.Repository.PaperLiveShadowDecisions.Select(item => item.CorrelationId).Distinct().Count());
+        Assert.Equal(2, scenario.Repository.PaperOrders.Count);
+        Assert.Equal(PaperOrderStatus.Cancelled, scenario.Repository.PaperOrders[0].Status);
+        var resting = scenario.Repository.PaperOrders[1];
+        Assert.Equal(PaperOrderStatus.Pending, resting.Status);
+        Assert.Equal(resting.Id, Assert.Single(scenario.Repository.StrategyMarketPaperRuns).PaperOrderId);
+        Assert.Empty(scenario.Repository.PaperFills);
+    }
+
+    [Theory]
+    [InlineData(false, null, "GatewayTimeout", "ReconcileAmbiguous")]
+    [InlineData(true, "0xmaker-pending", "delayed", "ReconcilePending")]
+    [InlineData(true, "0xmaker-matched", "matched", "ReconcileInvariantViolation")]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdLiveDoesNotRetryUncertainOrIdentifiedSubmission(
+        bool success,
+        string? orderId,
+        string responseStatus,
+        string disposition)
+    {
+        var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
+        var trading = new MakerGtdSequencedTradingClient([MakerLiveResult(success, orderId, responseStatus)]);
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [MakerGtdOrderBook(now, 0.48m, 0.51m, now.AddMilliseconds(-1), "uncertain-s0")],
+            liveStakes: true,
+            tradingClient: trading,
+            processTwice: true);
+
+        Assert.Single(trading.Requests);
+        Assert.Equal(1, scenario.ClobClient.GetOrderBookCalls);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+        Assert.Equal(orderId, Assert.Single(scenario.Repository.LiveOrders).OrderId);
+        Assert.Equal(order.Id, Assert.Single(scenario.Repository.StrategyMarketPaperRuns).PaperOrderId);
+        Assert.Empty(scenario.Repository.PaperFills);
+        using var evidence = JsonDocument.Parse(order.RawDecisionJson!);
+        Assert.Equal(disposition, evidence.RootElement.GetProperty("maker_gtd").GetProperty("terminal_outcome").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdLiveStopsAfterTenDefinitiveCrossingRejections()
+    {
+        var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
+        var trading = new MakerGtdSequencedTradingClient(
+            Enumerable.Repeat(MakerLiveResult(false, null, "rejected", "INVALID_POST_ONLY_ORDER"), 10).ToArray());
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            Enumerable.Range(1, 10).Select(attempt =>
+                (OrderBookSnapshot?)MakerGtdOrderBook(now, 0.48m, 0.51m, now.AddMilliseconds(-1), $"live-{attempt}")).ToArray(),
+            liveStakes: true,
+            tradingClient: trading,
+            processTwice: true);
+
+        Assert.Equal(10, trading.Requests.Count);
+        Assert.Equal(10, scenario.ClobClient.GetOrderBookCalls);
+        Assert.Equal(0, scenario.Result.EntriesPlaced);
+        Assert.Equal(1, scenario.Result.RunsSkipped);
+        var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal("maker_gtd_post_only_attempts_exhausted", run.SkipReason);
+        Assert.Equal(scenario.Repository.PaperOrders.Last().Id, run.PaperOrderId);
+        Assert.All(scenario.Repository.PaperOrders, order => Assert.Equal(PaperOrderStatus.Cancelled, order.Status));
+        Assert.Empty(scenario.Repository.PaperFills);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdLiveTransportTimeoutPersistsUnresolvedWithoutRetry()
+    {
+        var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
+        var trading = new MakerGtdSequencedTradingClient([])
+        {
+            PlacementFailure = new TimeoutException("submission outcome is unknown")
+        };
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [MakerGtdOrderBook(now, 0.48m, 0.51m, now.AddMilliseconds(-1), "timeout-s0")],
+            liveStakes: true,
+            tradingClient: trading,
+            processTwice: true);
+
+        Assert.Single(trading.Requests);
+        var live = Assert.Single(scenario.Repository.LiveOrders);
+        Assert.Equal(LiveOrderStatus.Submitted, live.Status);
+        Assert.Null(live.OrderId);
+        var shadow = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Pending, shadow.Status);
+        Assert.Equal(shadow.Id, Assert.Single(scenario.Repository.StrategyMarketPaperRuns).PaperOrderId);
+        using var evidence = JsonDocument.Parse(shadow.RawDecisionJson!);
+        Assert.Equal("ReconcileAmbiguous", evidence.RootElement.GetProperty("maker_gtd").GetProperty("terminal_outcome").GetString());
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdLiveDoesNotRetryTerminalVenueRejection()
+    {
+        var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
+        var trading = new MakerGtdSequencedTradingClient(
+            [MakerLiveResult(false, null, "rejected", "not enough balance")]);
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [MakerGtdOrderBook(now, 0.48m, 0.51m, now.AddMilliseconds(-1), "terminal-s0")],
+            liveStakes: true,
+            tradingClient: trading,
+            processTwice: true);
+
+        Assert.Single(trading.Requests);
+        Assert.Equal(1, scenario.ClobClient.GetOrderBookCalls);
+        var shadow = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(PaperOrderStatus.Cancelled, shadow.Status);
+        var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns);
+        Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
+        Assert.Equal(shadow.Id, run.PaperOrderId);
+        Assert.Equal(MakerGtdLivePlacementClassifier.TerminalFailureReason, run.SkipReason);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_ReferenceAverageMakerGtdWithLiveOffRetainsPaperAcceptanceAndTouchNoDepthLabel()
+    {
+        var now = new DateTimeOffset(2026, 9, 18, 12, 0, 0, TimeSpan.Zero);
+        var trading = new MakerGtdSequencedTradingClient([]);
+        var scenario = await RunReferenceAverageMakerGtdScenarioAsync(
+            now,
+            [
+                MakerGtdOrderBook(now, 0.48m, 0.51m, now.AddMilliseconds(-1), "paper-s0"),
+                MakerGtdOrderBook(now, 0.48m, 0.51m, now.AddMilliseconds(1), "paper-s1")
+            ],
+            tradingClient: trading);
+
+        Assert.Empty(trading.Requests);
+        Assert.Empty(scenario.Repository.LiveOrders);
+        Assert.Empty(scenario.Repository.PaperLiveShadowDecisions);
+        Assert.Equal(2, scenario.ClobClient.GetOrderBookCalls);
+        var order = Assert.Single(scenario.Repository.PaperOrders);
+        Assert.Equal(MakerGtdPaperExecutionContract.ExecutionSource, order.ExecutionSource);
+        Assert.Contains(StrategyIds.OptimisticTouchNoDepthPaperLabel, order.RawDecisionJson, StringComparison.Ordinal);
+        Assert.Equal(PaperOrderStatus.Pending, order.Status);
+    }
+
     [Theory]
     [InlineData("eth_up_down_5m_up_optimized_average_bps_9_fak_premarket", 3204, true, "Down", "eth-optimized-down", "maximum")]
     [InlineData("eth_up_down_5m_down_optimized_average_bps_9_fak_premarket", 3146, false, "Up", "eth-optimized-up", "minimum")]
@@ -11236,7 +11676,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_EthOptimizedAveragePremarketCannotSubmitLive()
+    public async Task ProcessAsync_EthOptimizedAveragePremarketSubmitsLiveWhenEnabled()
     {
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_down_optimized_average_bps_1_fak_premarket",
@@ -11245,12 +11685,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             liveStakes: true);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
-        Assert.Equal(0, scenario.TradingClient.PlaceCalls);
-        Assert.Empty(scenario.Repository.LiveOrders);
-        Assert.Empty(scenario.Repository.PaperLiveShadowDecisions);
+        Assert.Equal(1, scenario.TradingClient.PlaceCalls);
+        Assert.Single(scenario.Repository.LiveOrders);
+        Assert.Single(scenario.Repository.PaperLiveShadowDecisions);
         var paperOrder = Assert.Single(scenario.Repository.PaperOrders);
-        Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
-        Assert.Equal("btc_updown5m_fak_taker_paper", paperOrder.ExecutionSource);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, paperOrder.Status);
+        Assert.Equal("paper_live_shadow_actual_fill", paperOrder.ExecutionSource);
     }
 
     [Fact]
@@ -11385,7 +11825,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_BtcDownOptimizedAveragePremarketCannotSubmitLiveOrShadow()
+    public async Task ProcessAsync_BtcDownOptimizedAveragePremarketSubmitsLiveAndShadowWhenEnabled()
     {
         var scenario = await RunOptimizedAverageScenarioAsync(
             "btc_up_down_5m_down_optimized_average_bps_1_fak_premarket",
@@ -11394,12 +11834,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             liveStakes: true);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
-        Assert.Equal(0, scenario.TradingClient.PlaceCalls);
-        Assert.Empty(scenario.Repository.LiveOrders);
-        Assert.Empty(scenario.Repository.PaperLiveShadowDecisions);
+        Assert.Equal(1, scenario.TradingClient.PlaceCalls);
+        Assert.Single(scenario.Repository.LiveOrders);
+        Assert.Single(scenario.Repository.PaperLiveShadowDecisions);
         var paperOrder = Assert.Single(scenario.Repository.PaperOrders);
-        Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
-        Assert.Equal("btc_updown5m_fak_taker_paper", paperOrder.ExecutionSource);
+        Assert.Equal(PaperOrderStatus.PartiallyFilledExpired, paperOrder.Status);
+        Assert.Equal("paper_live_shadow_actual_fill", paperOrder.ExecutionSource);
     }
 
     [Fact]
@@ -12366,7 +12806,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     }
 
     [Fact]
-    public async Task ProcessAsync_LowEnterAveragePremarketCannotSubmitLive()
+    public async Task ProcessAsync_LowEnterAveragePremarketSubmitsLiveWhenEnabled()
     {
         var scenario = await RunOptimizedAverageScenarioAsync(
             "eth_up_down_5m_low_enter_average_bps_1_fak_premarket",
@@ -12375,12 +12815,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             liveStakes: true);
 
         Assert.Equal(1, scenario.Result.EntriesPlaced);
-        Assert.Equal(0, scenario.TradingClient.PlaceCalls);
-        Assert.Empty(scenario.Repository.LiveOrders);
-        Assert.Empty(scenario.Repository.PaperLiveShadowDecisions);
+        Assert.Equal(1, scenario.TradingClient.PlaceCalls);
+        Assert.Single(scenario.Repository.LiveOrders);
+        Assert.Single(scenario.Repository.PaperLiveShadowDecisions);
         var paperOrder = Assert.Single(scenario.Repository.PaperOrders);
         Assert.Equal(PaperOrderStatus.Filled, paperOrder.Status);
-        Assert.Equal("btc_updown5m_fak_taker_paper", paperOrder.ExecutionSource);
+        Assert.Equal("paper_live_shadow_actual_fill", paperOrder.ExecutionSource);
+        Assert.Equal(0.50m, scenario.TradingClient.LastRequest!.Price);
         Assert.Contains("\"low_enter_average_enabled\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
         Assert.Contains("\"paper_only\":true", paperOrder.RawDecisionJson, StringComparison.Ordinal);
     }
@@ -12390,7 +12831,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
     [InlineData("btc_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket", 51, false)]
     [InlineData("eth_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket", 50, true)]
     [InlineData("eth_up_down_5m_down_optimized_average_bps_1_fak_lower_enter_premarket", 51, false)]
-    public async Task ProcessAsync_OptimizedLowerEnterPremarketUsesInclusivePaperFakCapAndCannotSubmitLive(
+    public async Task ProcessAsync_OptimizedLowerEnterPremarketUsesInclusiveFakCapWithLiveEnabled(
         string cloneCode,
         int entryPriceCents,
         bool shouldEnter)
@@ -12405,11 +12846,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         var variant = StrategyIds.UpDown5mStrategyVariants.Single(item => item.Code == cloneCode);
         var run = Assert.Single(scenario.Repository.StrategyMarketPaperRuns, item => item.StrategyId == variant.Id);
 
-        Assert.Equal(0, scenario.TradingClient.PlaceCalls);
-        Assert.Empty(scenario.Repository.LiveOrders);
-        Assert.Empty(scenario.Repository.PaperLiveShadowDecisions);
         if (shouldEnter)
         {
+            Assert.Equal(1, scenario.TradingClient.PlaceCalls);
+            Assert.Single(scenario.Repository.LiveOrders);
+            Assert.Single(scenario.Repository.PaperLiveShadowDecisions);
+            Assert.Equal(0.50m, scenario.TradingClient.LastRequest!.Price);
             Assert.Equal(1, scenario.Result.EntriesPlaced);
             Assert.Equal(StrategyMarketPaperRunStatuses.Entered, run.Status);
             Assert.Equal(entryPrice, run.EntryPrice);
@@ -12419,20 +12861,18 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             Assert.Contains("\"paper_only\":true", order.RawDecisionJson, StringComparison.Ordinal);
             using var diagnostics = JsonDocument.Parse(Assert.IsType<string>(order.RawDecisionJson));
             Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_worst_price").GetDecimal());
-            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_maximum_order_price").GetDecimal());
-            Assert.True(diagnostics.RootElement.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
+            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("execution_intent_maximum_order_price").GetDecimal());
+
         }
         else
         {
+            Assert.Equal(0, scenario.TradingClient.PlaceCalls);
+            Assert.Empty(scenario.Repository.LiveOrders);
+            Assert.Empty(scenario.Repository.PaperLiveShadowDecisions);
             Assert.Equal(0, scenario.Result.EntriesPlaced);
             Assert.Equal(StrategyMarketPaperRunStatuses.Skipped, run.Status);
             Assert.Equal(SignalReasonCodes.BestAskAboveMaxEntry, run.SkipReason);
             Assert.Empty(scenario.Repository.PaperOrders);
-            using var diagnostics = JsonDocument.Parse(Assert.IsType<string>(run.SkipDiagnosticsJson));
-            Assert.Equal(JsonValueKind.Null, diagnostics.RootElement.GetProperty("paper_fak_average_fill_price").ValueKind);
-            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_worst_price").GetDecimal());
-            Assert.Equal(0.50m, diagnostics.RootElement.GetProperty("paper_fak_maximum_order_price").GetDecimal());
-            Assert.True(diagnostics.RootElement.GetProperty("paper_fak_order_price_cap_applied").GetBoolean());
         }
     }
 
@@ -14730,11 +15170,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         {
             PlacementResult = new LiveOrderPlacementResult(
                 true,
-                "0xoptimized-should-not-submit",
+                "0xoptimized-live",
                 "matched",
                 null,
                 "1.00",
-                "1.00",
+                "2.00",
                 "{}",
                 "{}")
         };
@@ -14780,7 +15220,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         IReadOnlyList<OrderBookSnapshot?> directOrderBooks,
         StrategyRunRetentionOptions? strategyRunRetentionOptions = null,
         string subscribedUpAssetId = "eth-maker-up",
-        bool useIncompleteReferenceAverages = false)
+        bool useIncompleteReferenceAverages = false,
+        bool liveStakes = false,
+        IPolymarketTradingClient? tradingClient = null,
+        Action<TestAppRepository>? configureRepository = null,
+        bool processTwice = false)
     {
         const string upAssetId = "eth-maker-up";
         const string downAssetId = "eth-maker-down";
@@ -14793,8 +15237,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
         repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
         {
             Enabled = true,
-            PaperStakeAmount = 1m
+            PaperStakeAmount = 1m,
+            LiveStakes = liveStakes,
+            LiveStakeAmount = 2m
         };
+        configureRepository?.Invoke(repository);
         repository.PolymarketGammaMarkets.Add(CreateMarket(
             marketStartUtc,
             marketEndUtc,
@@ -14866,6 +15313,15 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
                 paperTakerPricingEnabled: false,
                 [variant.Code],
                 paperTakerMaxQuoteAgeMilliseconds: 1_500),
+            tradingClient: tradingClient,
+            botOptions: liveStakes
+                ? new BotOptions { Mode = BotMode.Live, EnableLiveTrading = true }
+                : new BotOptions { Mode = BotMode.Paper },
+            paperTradingOptions: new PaperTradingOptions
+            {
+                InitialBankrollUsd = 10_000m,
+                RunInLiveMode = liveStakes
+            },
             cryptoReferencePriceClient: cryptoPriceClient,
             clobClient: clobClient,
             timeProvider: new ManualTimeProvider(nowUtc),
@@ -14874,7 +15330,53 @@ public sealed class BtcUpDown5mPaperStrategyProcessorTests
             strategyRunRetentionOptions: strategyRunRetentionOptions);
 
         var result = await processor.ProcessAsync();
+        if (processTwice)
+        {
+            await processor.ProcessAsync();
+        }
         return (result, repository, clobClient, persistenceQueue, marketEndUtc);
+    }
+
+    private static LiveOrderPlacementResult MakerLiveResult(
+        bool success,
+        string? orderId,
+        string status,
+        string? error = null)
+    {
+        return new LiveOrderPlacementResult(success, orderId, status, error, null, null, "{}", "{}");
+    }
+
+    private sealed class MakerGtdSequencedTradingClient(IReadOnlyList<LiveOrderPlacementResult> results)
+        : IPolymarketTradingClient
+    {
+        public List<ClobV2OrderRequest> Requests { get; } = [];
+
+        public Action<ClobV2OrderRequest>? BeforePlace { get; init; }
+
+        public Exception? PlacementFailure { get; init; }
+
+        public Task<LiveOrderPlacementResult> PlaceLiveOrderAsync(ClobV2OrderRequest request, CancellationToken ct)
+        {
+            BeforePlace?.Invoke(request);
+            Requests.Add(request);
+            if (PlacementFailure is { } failure)
+            {
+                return Task.FromException<LiveOrderPlacementResult>(failure);
+            }
+            return Task.FromResult(results[Requests.Count - 1]);
+        }
+
+        public Task<ClobV2DryRunOrderResult> PrepareDryRunOrderAsync(ClobV2OrderRequest request, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<LiveOrderCancellationResult> CancelOrderAsync(string orderId, CancellationToken ct)
+            => Task.FromResult(new LiveOrderCancellationResult(true, [orderId], new Dictionary<string, string>(), "{}"));
+
+        public Task<LiveOrderCancellationResult> CancelAllOrdersAsync(CancellationToken ct)
+            => Task.FromResult(new LiveOrderCancellationResult(true, [], new Dictionary<string, string>(), "{}"));
+
+        public Task<LiveOrderStatusResult?> GetLiveOrderStatusAsync(string orderId, CancellationToken ct)
+            => Task.FromResult<LiveOrderStatusResult?>(null);
     }
 
     private static OrderBookSnapshot MakerGtdOrderBook(

@@ -16,6 +16,23 @@ The default has one closed exception, defined under **Closed user-approved
 ordinary-Paper exception** below. It is a classification decision, not evidence
 of Live-equivalent fills, and cannot be inferred for any other strategy.
 
+## Current strategy Live eligibility
+
+Approved contract `RC-20260918-universal-live-strategy-checkbox` makes the
+strategy's own Live checkbox the transport switch for every current catalog
+strategy, subject to the existing enablement, pause, authentication, balance,
+risk, and kill-switch gates. `PaperOnly` remains an existing catalog marker for
+Paper exception and Child parent-selection predicates; it no longer vetoes Live
+submission. Signal generation, source scheduling, parent selection, and existing
+history are unchanged.
+
+Dynamic Child Live uses the selected parent's original requested entry amount
+and its existing normalization, not the parent's filled notional or the child's
+configured Live stake. Its own identities and Live balance apply independently
+of the parent's Live checkbox. Token, side, price cap, order type, post-only flag,
+and expiry are inherited from the parent intent. Existing LossDiff sizing and
+Live-off Paper behavior are unchanged.
+
 ## Verified Polymarket FAK equivalent
 
 The current official Polymarket CLOB V2 documentation defines FAK as an
@@ -97,8 +114,9 @@ service does not re-fetch after intent freeze to resize, reprice, authorize, or
 reject the intent. Cumulative ask depth is retained as evidence but is not a
 pre-submit entry predicate. Paper consumes the same intent and records the actual
 snapshot-derived full, partial, or no-fill FAK result; the unfilled remainder is
-cancelled immediately and the strategy never retries that market. Every variant
-has `PaperOnly=true`, so this family does not submit Live orders.
+cancelled immediately and the strategy never retries that market. With Live
+enabled, the same venue-minimum intent is submitted without a configured-stake
+multiplier or a Paper fill acceptance gate.
 
 ## Maker post-only GTD intent and Paper approximation
 
@@ -126,7 +144,14 @@ of ten attempts. A Live replacement is allowed only after an unambiguous
 identifier or ambiguous transport/server result requires reconciliation and
 must not be retried blindly.
 
-The named Paper-only Maker experiment uses the deliberately optimistic
+With Live enabled, the Maker strategy uses its existing Live amount and loss
+coefficient settings when freezing S0. Its decision, signal, order, run, and
+Live intent are persisted before submission. It does not obtain a simulated S1
+acceptance book or apply TouchNoDepth. A resting order stays pending for status
+polling, and only actual venue fills update its Paper shadow. An ambiguous result
+without an order identifier remains unresolved and cannot trigger a blind retry.
+
+With Live off, the named Maker experiment uses the deliberately optimistic
 `TouchNoDepth` outcome model after acceptance. For the exact token, the first
 authoritative post-acceptance and pre-expiry `last_trade_price <= limit`, or a
 current reconstructed `bestAsk <= limit`, marks the entire Paper order filled
@@ -153,14 +178,15 @@ only when every predicate below is true:
 - persisted execution source is `eth_reference_average_maker_gtd_paper`;
 - new placements use `maker_gtd_paper_v2` and S0 pricing exactly
   `floor_to_tick(min(S0.bestAsk - S0.tickSize, 0.99))`;
-- the strategy has `PaperOnly=true`, and no Live submission path is enabled.
+- the strategy has `PaperOnly=true`, and these optimistic records are produced
+  by the Live-off Paper path, not the Live shadow.
 
 Exact-family orders and results already persisted under `maker_gtd_paper_v1` are
 grandfathered within this same closed exception with their original
 `floor_to_tick(min(S0.bestBid + S0.tickSize, S0.bestAsk - S0.tickSize, 0.99))`
 pricing. They remain eligible for lifecycle completion and historical accounting;
 the persisted contract version and formula distinguish them from v2. Runtime v2
-placement is fail-closed unless the exact asset, behavior, ID, threshold, code,
+optimistic Paper placement is fail-closed unless the exact asset, behavior, ID, threshold, code,
 timing, Paper-only flag, and `0.99` cap predicates pass.
 
 The acceptance-evidence lifetime check permits only the verified one-sided
@@ -172,7 +198,8 @@ fails closed as `maker_gtd_evidence_unavailable` with detail
 but before effective expiry remain valid. Effective-expiry equality, the upper
 lifetime bound, root/nested accepted-timestamp identity, subscription,
 stale/reconnect/market-data continuity, exact-family, TouchNoDepth, pricing,
-GTD/PostOnly, PaperOnly, and Live-disabled gates do not change. The correction
+GTD/PostOnly, and PaperOnly exception predicates do not change. The approved Live
+checkbox controls transport independently of this historical correction, which
 does not reopen, replay, or rewrite a record already terminal before deployment.
 
 Expiry evaluation for this exact family uses a starvation-free market-data
@@ -217,7 +244,8 @@ real pre-expiry touch that completes after the deadline and can therefore
 understate Paper fills, positions, and PnL; it does not affect Live behavior.
 
 For these exact 28 strategies, ordinary Paper orders, positions, fills, PnL, win
-rate, and performance inclusion is intentional. Every result must carry the label
+rate, and performance inclusion is intentional. Every result of this optimistic
+Live-off Paper model must carry the label
 `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. The
 exception does not claim that a Live order would fill or fill completely. It does
 not relax immutable-intent, PostOnly acceptance, GTD expiry, atomic persistence,
@@ -232,10 +260,11 @@ its window is complete or incomplete, and gaps or incomplete coverage alone do n
 block the signal. The explicitly named 3h families remain 3h-only but accept a
 usable incomplete 3h average. The exact ETH Maker-GTD family inherits this signal
 change only: `maker_gtd_paper_v2` pricing, immutable post-only GTD intent,
-acceptance, expiry, `TouchNoDepth` fill/lifecycle rules, `PaperOnly=true`, disabled
-Live submission, exact exception predicates, and the mandatory
+acceptance, expiry, `TouchNoDepth` fill/lifecycle rules, `PaperOnly=true`,
+exact exception predicates, and the mandatory
 `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills` label are
-unchanged.
+unchanged for the Live-off Paper path. The later approved Live-checkbox contract
+adds genuine GTD submission and actual-fill shadow accounting.
 
 Authoritative references, verified 2026-08-10:
 
@@ -368,9 +397,10 @@ an open Paper FAK that already has a persisted fill is a fail-safe no-op. The
 processor must neither duplicate uncertain accounting nor terminalize and hide
 the order; explicit reconciliation is required.
 
-`PaperOnly` means that the intent is not sent externally. It does not relax any
-rule in this contract except the ordinary-Paper classification explicitly granted
-to the exact closed exception above; that exception still cannot submit Live.
+`PaperOnly` does not veto the strategy's own Live checkbox or relax execution
+parity. The ordinary-Paper classification explicitly granted to the exact closed
+exception above applies only to its optimistic Live-off model. Its Live shadow
+records actual venue fills.
 
 ## BTC/ETH/SOL five-minute Paper settlement authority
 
@@ -716,8 +746,10 @@ Before completing a new or changed Paper execution feature:
 5. Run the relevant test suite. Outside the exact closed exception, missing
    evidence, an unsupported guarantee, or a failing parity test blocks completion
    and Paper performance claims. For the exception, a predicate mismatch, missing
-   mandatory label, enabled Live path, or failing exception contract test blocks
-   completion and ordinary Paper performance claims.
+   mandatory label on optimistic Paper, TouchNoDepth fills used as Live outcomes,
+   or failing exception contract test blocks completion and ordinary Paper
+   performance claims. Enabling genuine GTD submission through the strategy's
+   Live checkbox does not grant TouchNoDepth accounting to its Live shadow.
 
 ## Persistence and audit evidence
 

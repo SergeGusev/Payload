@@ -74,8 +74,8 @@ public sealed class ReferenceAverageMakerGtdPremarketStrategyTests
                 "optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills",
                 maker.Description,
                 StringComparison.Ordinal);
-            Assert.Contains("Live submission is disabled", maker.Description, StringComparison.Ordinal);
-            Assert.Contains("no alias, clone, descendant, future strategy", maker.Description, StringComparison.Ordinal);
+            Assert.Contains("Live submission follows the Live checkbox", maker.Description, StringComparison.Ordinal);
+            Assert.Contains("No alias, clone, descendant, future strategy", maker.Description, StringComparison.Ordinal);
             Assert.Contains(
                 "different execution source, predicate mismatch, or changed execution semantic",
                 maker.Description,

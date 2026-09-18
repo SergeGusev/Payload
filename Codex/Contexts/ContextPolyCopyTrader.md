@@ -1,3 +1,14 @@
+## Active Update 2026-09-18 Universal Live Strategy Checkbox
+Goal: Honor the Live checkbox for every current catalog strategy and copy the parent's original request for dynamic Child Live.
+Status: Completed
+Done:
+- Removed family/PaperOnly transport veto without expanding parent selection. Dynamic Child Live copies original requested and normalized FAK/GTD amounts, price, side, token, PostOnly and expiry, with its own identifiers and balance/risk checks. Parent Live + dynamic Child Live off retains its prior absence of Paper copies; existing LossDiff formulas unchanged.
+- Added Maker-GTD Live and pending Child-GTD dispatch with durable intent/decision/signal/order/run links before submit. Resting/ambiguous requests remain pending, actual fills are reconciled against immutable GTD metadata, and only definitive post-only crossing rejection permits Maker retry. FollowMarket retains venue-minimum size,0.99cap,no depth/no-fill submit gate and no repeat.
+- Verified all3298catalogIDs, ETH22four-flag matrix, original10/parentfill3/childconfigured1, SOLChildProgress and BTCpendingGTD. Focused306pass0fail1conditionalPostgresSkip; full1767pass157baselinefail1skip. Independent clean approvalHEAD has identical157failed names AND messages; zero added/removed. Service build0warnings0errors, independent overall semantic reviewPASS, exactlegacySQLchecksum preserved.
+- Both approval-only commits precede product edits/commit:adce098f(original) and f28ba0af(verification-onlyDEV001). Approved final semantic digest:e780d43655931ddc1bb22429543edff7115861506ec3552b44b3b30bd6f9d38f. Contract contains exact157failure allowlist, fileSHA256manifest and durable test evidence; full suite is not claimed green.
+Next: None.
+Notes: Local implementation only; no production connection/mutation, real order, service restart or deployment. Unrelated dirty files remain excluded. Finalization validates WorkingTree in isolated checkout and Staged on exact own files, performs protected temp cleanup and commits/pushes to origin/master; Git history records the resulting commit. No further approval or code change is pending.
+Blockers: None.
 ## Active Update 2026-09-16 WebSocket First-Frame Post-Deploy Verification
 Goal: Read-only verify the deployed WebSocket first-frame readiness change, production service health, bets and server logs.
 Status: Completed

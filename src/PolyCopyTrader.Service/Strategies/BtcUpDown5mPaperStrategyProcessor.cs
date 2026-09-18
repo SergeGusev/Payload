@@ -2378,7 +2378,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             BtcUpDown5mStrategyBehavior.LossDiffPositiveProgressMirror;
     }
 
-    private static bool HasEligibleLiveLossDiffChild(
+    private static bool HasEligibleLiveChild(
         IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> childAssignmentsByParent,
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         BtcUpDown5mStrategyVariant parentVariant)
@@ -2392,9 +2392,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         return assignments.Any(assignment =>
         {
-            if (!IsLossDiffMirrorStrategy(assignment.ChildVariant) ||
-                assignment.LossDiffState is not { } state ||
-                state.CurrentValue < state.Threshold)
+            if (!IsDynamicChildMirrorStrategy(assignment.ChildVariant) &&
+                (!IsLossDiffMirrorStrategy(assignment.ChildVariant) ||
+                 assignment.LossDiffState is not { } state || state.CurrentValue < state.Threshold))
             {
                 return false;
             }
@@ -4792,6 +4792,207 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new ChildMirrorEntryResult(entriesPlaced, runsSkipped);
     }
 
+    private async Task<PaperLiveShadowOrderBookSnapshotResult> GetPendingGtdIntentSnapshotAsync(
+        PolymarketGammaMarket market,
+        string assetId,
+        TakerOrderBookLookupResult? parentLookup,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var snapshot = parentLookup?.OrderBook is { } capturedBook
+            ? PaperLiveShadowOrderBookSnapshotResult.Found(capturedBook, parentLookup.Source, parentLookup.Age)
+            : await GetPaperLiveShadowOrderBookSnapshotAsync(assetId, nowUtc, cancellationToken);
+        if (snapshot.OrderBook is not { } book)
+        {
+            return snapshot;
+        }
+        book = ApplyFallbackMinOrderSize(book, market.OrderMinSize);
+        book = book.TickSize is > 0m ? book : book with { TickSize = market.OrderPriceMinTickSize };
+        if (book.TickSize is not > 0m || book.MinOrderSize is not > 0m)
+        {
+            return PaperLiveShadowOrderBookSnapshotResult.Reject("parent_gtd_execution_metadata_missing", snapshot.Source);
+        }
+        return snapshot with { OrderBook = book };
+    }
+
+    private static LimitBuyExecutionIntent FreezePendingGtdIntent(
+        BtcUpDown5mStrategyVariant variant,
+        Guid decisionId,
+        PolymarketGammaMarket market,
+        string assetId,
+        decimal limitPrice,
+        decimal requestedNotionalUsd,
+        decimal requestedSizeShares,
+        decimal targetNotionalUsd,
+        decimal targetSizeShares,
+        OrderBookSnapshot book,
+        OpeningLimitExpirationDecision expiration,
+        DateTimeOffset nowUtc)
+    {
+        return new LimitBuyExecutionIntent(
+            variant.Id, decisionId, market.ConditionId, assetId, TradeSide.Buy,
+            requestedNotionalUsd, requestedSizeShares,
+            targetNotionalUsd, targetSizeShares,
+            limitPrice, book.TickSize!.Value, book.MinOrderSize!.Value, book.NegativeRisk, false,
+            nowUtc, expiration.LocalExpiresAtUtc!.Value, expiration.ClobGtdExpirationUtc!.Value);
+    }
+
+    private async Task PersistPendingGtdShadowAsync(
+        Signal signal,
+        PaperOrder order,
+        StrategyMarketPaperRun run,
+        BtcUpDown5mStrategyVariant variant,
+        PolymarketGammaMarket market,
+        BtcUpDown5mOutcomeQuote outcome,
+        LimitBuyExecutionIntent intent,
+        PaperLiveShadowOrderBookSnapshotResult snapshot,
+        CancellationToken cancellationToken)
+    {
+        var book = snapshot.OrderBook ?? throw new InvalidOperationException("GTD decision snapshot missing before persistence.");
+        var decision = new PaperLiveShadowDecision(
+            intent.DecisionId, variant.Id, market.MarketId, market.ConditionId, outcome.AssetId, outcome.Outcome,
+            intent.Side, intent.LimitPrice, intent.TargetNotionalUsd, intent.TargetSizeShares, intent.TargetNotionalUsd,
+            LimitBuyExecutionIntent.TimeInForce, intent.PostOnly,
+            SerializePaperLiveShadowOrderBookSnapshot(book, snapshot.Source, snapshot.Age),
+            (int)Math.Round(GetSnapshotAge(book.SnapshotAtUtc).TotalMilliseconds), PaperLiveShadowTestSource,
+            book.SnapshotAtUtc, intent.CreatedAtUtc, run.MarketStartUtc, market.EndDateUtc,
+            intent.CreatedAtUtc.AddSeconds(Math.Min(10, Math.Max(1, options.EntryGraceSeconds))),
+            intent.EffectiveExpiresAtUtc, Status: "decision_created", UpdatedAtUtc: intent.CreatedAtUtc);
+        await repository.AddPaperLiveShadowDecisionAsync(decision, cancellationToken);
+        await repository.AddPaperEntryPersistenceBatchAsync(
+            new PaperEntryPersistenceBatch([signal], [order], [], [], [], [run]), cancellationToken);
+        await repository.UpdatePaperLiveShadowDecisionLinksAsync(
+            intent.DecisionId, signal.Id, order.Id, null, "paper_shadow_created", intent.CreatedAtUtc, cancellationToken);
+        MarkLocallyFinalizedEntryRuns([run]);
+        exposureCache.ApplyPaperOrder(order);
+    }
+
+    private async Task ApplyPendingGtdLiveOutcomeAsync(
+        PaperOrder order,
+        StrategyMarketPaperRun run,
+        PaperLiveShadowPlacementResult placement,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        if (placement.LiveOrder is { FilledSize: > 0m } liveOrder)
+        {
+            var reconciliation = await shadowFillReconciler.ReconcileAsync(order.Id, liveOrder.Id, cancellationToken);
+            var fill = reconciliation.PaperFill;
+            await repository.UpdateStrategyMarketPaperRunAsync(
+                ApplyFeeAccounting(run, [fill]) with
+                {
+                    EntryPrice = fill.Price,
+                    StakeUsd = fill.Price * fill.SizeShares,
+                    SizeShares = fill.SizeShares,
+                    UpdatedAtUtc = liveOrder.UpdatedAtUtc
+                }, cancellationToken);
+        }
+        else if (!placement.Placed && placement.LiveOrder?.Status != LiveOrderStatus.Submitted)
+        {
+            await repository.UpdateStrategyMarketPaperRunAsync(
+                MarkPaperLiveShadowRunSkipped(run, placement, nowUtc), cancellationToken);
+        }
+    }
+
+    private async Task<ChildMirrorEntryResult> AddChildPendingEntriesAsync(
+        IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> assignmentsByParent,
+        IReadOnlyDictionary<Guid, StrategyRuntimeSettings> settings,
+        BtcUpDown5mStrategyVariant parent,
+        PolymarketGammaMarket market,
+        BtcUpDown5mOutcomeQuote outcome,
+        StrategyMarketPaperRun parentRun,
+        Signal parentSignal,
+        PaperOrder parentOrder,
+        BtcMinimumStakeSizing parentSizing,
+        OpeningLimitExpirationDecision expiration,
+        TakerOrderBookLookupResult? parentLookup,
+        DateTimeOffset nowUtc,
+        DeferredPaperEntryPersistence deferredPersistence,
+        CancellationToken cancellationToken,
+        LimitBuyExecutionIntent? frozenParentIntent = null,
+        PaperLiveShadowOrderBookSnapshotResult? frozenSnapshot = null,
+        bool parentAlreadyPersisted = false)
+    {
+        var parentId = StrategyIds.Normalize(parent.Id);
+        var liveAssignments = assignmentsByParent.TryGetValue(parentId, out var allAssignments)
+            ? allAssignments.Where(assignment => IsDynamicChildMirrorStrategy(assignment.ChildVariant) &&
+                HasEffectiveLiveStakes(assignment.ChildVariant, GetStrategySettings(settings, assignment.ChildVariant.Id))).ToArray()
+            : [];
+        if (liveAssignments.Length == 0)
+        {
+            if (!parentAlreadyPersisted)
+            {
+                deferredPersistence.AddPendingPaperEntry(parentSignal, parentOrder, parentRun);
+            }
+            return AddChildPendingPaperEntries(assignmentsByParent, parent, market, outcome, parentRun,
+                parentSignal.Id, parentOrder.Id, parentOrder.Price, parentRun.EntryPrice ?? parentOrder.Price,
+                parentOrder.NotionalUsd, parentOrder.SizeShares, parentOrder.ExpiresAtUtc, nowUtc,
+                BtcChildMirrorPaperExecutionSource, deferredPersistence);
+        }
+
+        var paperAssignments = allAssignments!.Except(liveAssignments).ToArray();
+        var paperResult = AddChildPendingPaperEntries(
+            new Dictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> { [parentId] = paperAssignments },
+            parent, market, outcome, parentRun, parentSignal.Id, parentOrder.Id, parentOrder.Price,
+            parentRun.EntryPrice ?? parentOrder.Price, parentOrder.NotionalUsd, parentOrder.SizeShares,
+            parentOrder.ExpiresAtUtc, nowUtc, BtcChildMirrorPaperExecutionSource, deferredPersistence);
+        var snapshot = frozenSnapshot ?? await GetPendingGtdIntentSnapshotAsync(market, outcome.AssetId, parentLookup, nowUtc, cancellationToken);
+        if (snapshot.OrderBook is not { } book)
+        {
+            if (!parentAlreadyPersisted)
+            {
+                deferredPersistence.AddPendingPaperEntry(parentSignal, parentOrder, parentRun);
+            }
+            foreach (var assignment in liveAssignments)
+            {
+                deferredPersistence.AddStrategyRun(CreateChildSkippedRun(parentRun, assignment.ChildVariant,
+                    snapshot.RejectionReason ?? "parent_gtd_execution_metadata_missing",
+                    BuildChildMirrorRawDecisionJson(parent, assignment.ChildVariant, assignment.Assignment,
+                        parentRun, parentSignal.Id, parentOrder.Id, parentOrder.Price,
+                        parentRun.EntryPrice ?? parentOrder.Price, parentOrder.NotionalUsd, parentOrder.SizeShares,
+                        PaperLiveShadowTestSource, nowUtc), nowUtc));
+            }
+            return new ChildMirrorEntryResult(paperResult.EntriesPlaced, paperResult.RunsSkipped + liveAssignments.Length);
+        }
+
+        var parentIntent = frozenParentIntent ?? FreezePendingGtdIntent(parent, parentRun.Id, market, outcome.AssetId,
+            parentOrder.Price, parentSizing.RawTargetNotionalUsd, parentSizing.RawTargetNotionalUsd / parentOrder.Price,
+            parentOrder.NotionalUsd, parentOrder.SizeShares, book, expiration, parentOrder.CreatedAtUtc);
+        if (!parentAlreadyPersisted)
+        {
+            parentOrder = parentOrder with { RawDecisionJson = AttachLimitExecutionIntentJson(parentOrder.RawDecisionJson ?? "{}", parentIntent) };
+            await repository.AddPaperEntryPersistenceBatchAsync(
+                new PaperEntryPersistenceBatch([parentSignal], [parentOrder], [], [], [], [parentRun]), cancellationToken);
+            MarkLocallyFinalizedEntryRuns([parentRun]);
+            exposureCache.ApplyPaperOrder(parentOrder);
+        }
+
+        var placed = paperResult.EntriesPlaced;
+        var skipped = paperResult.RunsSkipped;
+        foreach (var assignment in liveAssignments)
+        {
+            var child = assignment.ChildVariant;
+            var intent = parentIntent with { StrategyId = child.Id, DecisionId = Guid.NewGuid() };
+            var raw = BuildChildMirrorRawDecisionJson(parent, child, assignment.Assignment, parentRun,
+                parentSignal.Id, parentOrder.Id, intent.LimitPrice, intent.LimitPrice,
+                intent.TargetNotionalUsd, intent.TargetSizeShares, PaperLiveShadowTestSource, nowUtc);
+            var root = JsonNode.Parse(AttachLimitExecutionIntentJson(raw, intent))!.AsObject();
+            root["parent_execution_intent"] = JsonNode.Parse(AttachLimitExecutionIntentJson("{}", parentIntent));
+            var signal = CreateSignal(market, outcome, child, intent.LimitPrice, intent.TargetSizeShares, intent.TargetNotionalUsd, nowUtc);
+            var order = CreatePendingOpeningLimitPaperOrder(signal, outcome, child, intent.LimitPrice,
+                intent.TargetSizeShares, intent.TargetNotionalUsd, nowUtc, intent.EffectiveExpiresAtUtc,
+                root.ToJsonString(), intent.DecisionId, PaperLiveShadowTestSource);
+            var run = CreateChildEnteredRun(parentRun, child, intent.LimitPrice, intent.TargetNotionalUsd,
+                intent.TargetSizeShares, signal.Id, order.Id, nowUtc);
+            await PersistPendingGtdShadowAsync(signal, order, run, child, market, outcome, intent, snapshot, cancellationToken);
+            var placement = await TryPlacePaperLiveShadowOrderAsync(signal, outcome, child, order, intent, intent.DecisionId,
+                run.MarketStartUtc, market.EndDateUtc, nowUtc, cancellationToken, executionWindowVariant: parent);
+            await ApplyPendingGtdLiveOutcomeAsync(order, run, placement, nowUtc, cancellationToken);
+            if (placement.Placed) placed++; else skipped++;
+        }
+        return new ChildMirrorEntryResult(placed, skipped);
+    }
+
     private ChildMirrorEntryResult AddChildFilledPaperEntries(
         IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> childAssignmentsByParent,
         BtcUpDown5mStrategyVariant parentVariant,
@@ -5034,7 +5235,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return new ChildMirrorEntryResult(1, 0);
     }
 
-    private async Task<ChildMirrorEntryResult> AddLossDiffChildrenAfterParentEntryAsync(
+    private async Task<ChildMirrorEntryResult> AddChildEntriesAfterParentEntryAsync(
         IReadOnlyDictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> childAssignmentsByParent,
         IReadOnlyDictionary<Guid, StrategyRuntimeSettings> strategySettings,
         BtcUpDown5mStrategyVariant parentVariant,
@@ -5062,10 +5263,14 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return ChildMirrorEntryResult.Empty;
         }
 
-        var lossDiffAssignments = allAssignments
-            .Where(assignment => IsLossDiffMirrorStrategy(assignment.ChildVariant))
+        var childAssignments = allAssignments
+            .Where(assignment => IsChildMirrorStrategy(assignment.ChildVariant))
+            .Where(assignment => actualParentLiveOrder is null ||
+                !IsDynamicChildMirrorStrategy(assignment.ChildVariant) ||
+                HasEffectiveLiveStakes(assignment.ChildVariant,
+                    GetStrategySettings(strategySettings, assignment.ChildVariant.Id)))
             .ToArray();
-        if (lossDiffAssignments.Length == 0 || parentSnapshot.OrderBook is not { } snapshotOrderBook)
+        if (childAssignments.Length == 0 || parentSnapshot.OrderBook is not { } snapshotOrderBook)
         {
             return ChildMirrorEntryResult.Empty;
         }
@@ -5079,11 +5284,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             EntryPrice = actualParentLiveOrder.AverageFillPrice
         };
 
-        var paperAssignments = lossDiffAssignments
+        var paperAssignments = childAssignments
             .Where(assignment =>
             {
-                var gatePassed = assignment.LossDiffState is { } state &&
-                    state.CurrentValue >= state.Threshold;
+                var gatePassed = assignment.LossDiffState is null ||
+                    assignment.LossDiffState.CurrentValue >= assignment.LossDiffState.Threshold;
                 var settings = GetStrategySettings(strategySettings, assignment.ChildVariant.Id);
                 return !gatePassed || !HasEffectiveLiveStakes(assignment.ChildVariant, settings);
             })
@@ -5115,11 +5320,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
         var entriesPlaced = result.EntriesPlaced;
         var runsSkipped = result.RunsSkipped;
-        foreach (var assignment in lossDiffAssignments.Except(paperAssignments))
+        foreach (var assignment in childAssignments.Except(paperAssignments))
         {
             var childVariant = assignment.ChildVariant;
-            var state = assignment.LossDiffState ??
-                throw new InvalidOperationException($"LossDiff state missing for child {childVariant.Code}.");
+            var state = assignment.LossDiffState;
             var correlationId = Guid.NewGuid();
             var childIntent = parentExecutionIntent with
             {
@@ -5131,7 +5335,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             if (childVariant.Behavior == BtcUpDown5mStrategyBehavior.LossDiffPositiveProgressMirror)
             {
                 childIntent = CreateLossDiffPositiveProgressIntent(
-                    childVariant, state, progressParentRun, parentExecutionIntent, snapshotOrderBook, nowUtc)!
+                    childVariant, state!, progressParentRun, parentExecutionIntent, snapshotOrderBook, nowUtc)!
                     with { DecisionId = correlationId };
                 childEstimate = EstimatePaperFakFill(childIntent, snapshotOrderBook);
                 childSizing = parentSizing with
@@ -5166,7 +5370,10 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 nowUtc,
                 parentExecutionIntent.MaximumOrderPrice,
                 childIntent);
-            rawDecisionJson = AttachPositiveProgressJson(rawDecisionJson, childVariant, state, progressParentRun, childIntent, snapshotOrderBook, childEstimate);
+            if (state is not null)
+            {
+                rawDecisionJson = AttachPositiveProgressJson(rawDecisionJson, childVariant, state, progressParentRun, childIntent, snapshotOrderBook, childEstimate);
+            }
             var quoteAgeMs = (int)Math.Round(GetSnapshotAge(snapshotOrderBook.SnapshotAtUtc).TotalMilliseconds);
             var decision = new PaperLiveShadowDecision(
                 correlationId,
@@ -5262,7 +5469,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 BtcUpDown5mMarketAnalyzer.GetWindowStartUtc(market),
                 market.EndDateUtc,
                 nowUtc,
-                cancellationToken);
+                cancellationToken,
+                executionWindowVariant: parentVariant);
             if (placement.Placed && placement.LiveOrder is { } liveOrder &&
                 await ApplyActualLiveFillToPaperShadowAsync(
                     childOrder,
@@ -5756,6 +5964,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 run,
                                 market,
                                 variant,
+                                settings,
                                 limitDecision.SelectedOutcome,
                                 limitDecision.RawDecisionJson,
                                 stakeMultiplier,
@@ -5770,7 +5979,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             {
                                 nowUtc = GetUtcNow();
                                 await PersistReferenceAverageMakerGtdSkippedRunAsync(
-                                    run,
+                                    makerPlacement.PersistedRun ?? run,
                                     variant,
                                     makerPlacement.SkipReason ?? "maker_gtd_post_only_attempts_exhausted",
                                     nowUtc,
@@ -6052,7 +6261,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             PaperFill? fakFill = null;
                             StrategyMarketPaperRun? fakEnteredRun = null;
                             var currentBid = fakOrderBook.BestBid ?? fakEstimate.AverageFillPrice;
-                            var hasEligibleLiveLossDiffChild = HasEligibleLiveLossDiffChild(
+                            var hasEligibleLiveLossDiffChild = HasEligibleLiveChild(
                                 childAssignmentsByParent,
                                 strategySettings,
                                 variant);
@@ -6157,37 +6366,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     nowUtc,
                                     cancellationToken);
 
-                                var normalizedParentId = StrategyIds.Normalize(variant.Id);
-                                var nonLossDiffAssignments = childAssignmentsByParent.TryGetValue(
-                                        normalizedParentId,
-                                        out var allChildAssignments)
-                                    ? allChildAssignments
-                                        .Where(assignment => !IsLossDiffMirrorStrategy(assignment.ChildVariant))
-                                        .ToArray()
-                                    : [];
-                                var nonLossDiffResult = nonLossDiffAssignments.Length == 0
-                                    ? ChildMirrorEntryResult.Empty
-                                    : AddChildFilledPaperEntries(
-                                        new Dictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>>
-                                        {
-                                            [normalizedParentId] = nonLossDiffAssignments
-                                        },
-                                        variant,
-                                        market,
-                                        limitSelectedOutcome,
-                                        fakEnteredRun,
-                                        fakSignal.Id,
-                                        fakOrder.Id,
-                                        fakExecutionIntent,
-                                        fakEstimate.AverageFillPrice,
-                                        fakEstimate.SizeShares,
-                                        fakEstimate.NotionalUsd,
-                                        currentBid,
-                                        nowUtc,
-                                        BtcChildMirrorFakPaperExecutionSource,
-                                        fakFill.FeeLiquidityRole,
-                                        deferredPersistence);
-                                var lossDiffResult = await AddLossDiffChildrenAfterParentEntryAsync(
+                                fakChildEntryResult = await AddChildEntriesAfterParentEntryAsync(
                                     childAssignmentsByParent,
                                     strategySettings,
                                     variant,
@@ -6209,9 +6388,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     nowUtc,
                                     deferredPersistence,
                                     cancellationToken);
-                                fakChildEntryResult = new ChildMirrorEntryResult(
-                                    nonLossDiffResult.EntriesPlaced + lossDiffResult.EntriesPlaced,
-                                    nonLossDiffResult.RunsSkipped + lossDiffResult.RunsSkipped);
                             }
 
                             entriesPlaced += 1 + fakChildEntryResult.EntriesPlaced;
@@ -6281,19 +6457,21 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 continue;
                             }
 
-                            var shadowFakOrderBook = ApplyFallbackMinOrderSize(
-                                shadowSnapshot.OrderBook,
-                                market.OrderMinSize);
+                            var shadowFakOrderBook = IsFollowMarketFakEntry(variant)
+                                ? shadowSnapshot.OrderBook
+                                : ApplyFallbackMinOrderSize(shadowSnapshot.OrderBook, market.OrderMinSize);
                             shadowSnapshot = shadowSnapshot with { OrderBook = shadowFakOrderBook };
                             shadowFakLookup = TakerOrderBookLookupResult.Found(
                                 shadowFakOrderBook,
                                 shadowSnapshot.Source,
                                 shadowSnapshot.Age);
-                            shadowFakSizing = CreateLimitMinimumStakeSizing(
-                                shadowFakOrderBook,
-                                orderPrice,
-                                paperLiveShadowStakeUsd,
-                                shadowSnapshot.Source);
+                            shadowFakSizing = IsFollowMarketFakEntry(variant)
+                                ? CreateFollowMarketMinimumStakeSizing(shadowFakOrderBook, orderPrice, shadowSnapshot.Source)
+                                : CreateLimitMinimumStakeSizing(
+                                    shadowFakOrderBook,
+                                    orderPrice,
+                                    paperLiveShadowStakeUsd,
+                                    shadowSnapshot.Source);
                             var shadowFakRawDecisionJson = AttachOpeningLimitStakeSizingJson(
                                 limitPricing.RawDecisionJson,
                                 paperLiveShadowStakeUsd,
@@ -6348,7 +6526,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 shadowFakEstimate.RejectionReason,
                                 nowUtc,
                                 executionIntent: shadowFakExecutionIntent);
-                            if (!shadowFakEstimate.Filled)
+                            if (!shadowFakEstimate.Filled && !IsFollowMarketFakEntry(variant))
                             {
                                 await RecordEntryRunSkippedAsync(
                                     run,
@@ -6365,8 +6543,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             shadowDecisionTargetNotionalUsd = shadowFakSizing.TargetNotionalUsd;
                             shadowDecisionRequestedSizeShares = shadowFakSizing.TargetSizeShares;
                             shadowDecisionMaxReservedNotionalUsd = shadowFakSizing.TargetNotionalUsd;
-                            stakeUsd = shadowFakEstimate.NotionalUsd;
-                            limitSizeShares = shadowFakEstimate.SizeShares;
+                            stakeUsd = shadowFakEstimate.Filled ? shadowFakEstimate.NotionalUsd : shadowFakSizing.TargetNotionalUsd;
+                            limitSizeShares = shadowFakEstimate.Filled ? shadowFakEstimate.SizeShares : shadowFakSizing.TargetSizeShares;
                             shadowFakFillEvidence = string.Concat(
                                 "BtcUpDown5mPaper:",
                                 variant.Code,
@@ -6389,11 +6567,12 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                         Signal? limitSignal = null;
                         PaperOrder? limitOrder = null;
-                        var entryPrice = shadowFakEstimate?.AverageFillPrice ?? orderPrice;
+                        var entryPrice = shadowFakEstimate is { Filled: true } ? shadowFakEstimate.AverageFillPrice : orderPrice;
                         var entryStakeUsd = stakeUsd;
                         var entrySizeShares = limitSizeShares;
                         var orderPersistedDeferred = false;
                         var openingChildEntryResult = ChildMirrorEntryResult.Empty;
+                        StrategyMarketPaperRun? openingPendingParentRun = null;
                         await WaitForEntryPlacementLockAsync(latencyMetrics, cancellationToken);
                         try
                         {
@@ -6480,7 +6659,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             }
                             else
                             {
-                                var enteredRun = CreateEnteredRun(
+                                openingPendingParentRun = CreateEnteredRun(
                                     run,
                                     market,
                                     limitSelectedOutcome,
@@ -6490,24 +6669,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     limitSignal.Id,
                                     limitOrder.Id,
                                     nowUtc);
-                                deferredPersistence.AddPendingPaperEntry(limitSignal, limitOrder, enteredRun);
                                 orderPersistedDeferred = true;
-                                openingChildEntryResult = AddChildPendingPaperEntries(
-                                    childAssignmentsByParent,
-                                    variant,
-                                    market,
-                                    limitSelectedOutcome,
-                                    enteredRun,
-                                    limitSignal.Id,
-                                    limitOrder.Id,
-                                    orderPrice,
-                                    entryPrice,
-                                    entryStakeUsd,
-                                    entrySizeShares,
-                                    cancelDeadlineUtc,
-                                    nowUtc,
-                                    BtcChildMirrorPaperExecutionSource,
-                                    deferredPersistence);
                             }
 
                             if (isPaperLiveShadowTest)
@@ -6539,6 +6701,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
                         if (orderPersistedDeferred)
                         {
+                            openingChildEntryResult = await AddChildPendingEntriesAsync(
+                                childAssignmentsByParent, strategySettings, variant, market, limitSelectedOutcome,
+                                openingPendingParentRun ?? throw new InvalidOperationException("Pending parent run missing."),
+                                limitSignal, limitOrder, limitSizing, expiration, limitPricing.OrderBookLookup, nowUtc,
+                                deferredPersistence, cancellationToken);
                             entriesPlaced += 1 + openingChildEntryResult.EntriesPlaced;
                             runsSkipped += openingChildEntryResult.RunsSkipped;
 
@@ -6556,6 +6723,17 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         if (isPaperLiveShadowTest && correlationId is { } paperLiveShadowCorrelationId)
                         {
                             var lossDiffLiveChildResult = ChildMirrorEntryResult.Empty;
+                            var enteredRun = CreateEnteredRun(
+                                run,
+                                market,
+                                limitSelectedOutcome,
+                                entryPrice,
+                                entryStakeUsd,
+                                entrySizeShares,
+                                limitSignal.Id,
+                                limitOrder.Id,
+                                nowUtc);
+                            await repository.UpdateStrategyMarketPaperRunAsync(enteredRun, cancellationToken);
                             var placementResult = await TryPlacePaperLiveShadowOrderAsync(
                                 limitSignal,
                                 limitSelectedOutcome,
@@ -6567,16 +6745,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                 market.EndDateUtc,
                                 nowUtc,
                                 cancellationToken);
-                            var enteredRun = CreateEnteredRun(
-                                run,
-                                market,
-                                limitSelectedOutcome,
-                                entryPrice,
-                                entryStakeUsd,
-                                entrySizeShares,
-                                limitSignal.Id,
-                                limitOrder.Id,
-                                nowUtc);
                             if (placementResult.Placed && placementResult.LiveOrder is { } liveOrder)
                             {
                                 var parentEntryApplied = await ApplyActualLiveFillToPaperShadowAsync(
@@ -6587,7 +6755,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     cancellationToken);
                                 if (parentEntryApplied)
                                 {
-                                    lossDiffLiveChildResult = await AddLossDiffChildrenAfterParentEntryAsync(
+                                    lossDiffLiveChildResult = await AddChildEntriesAfterParentEntryAsync(
                                         childAssignmentsByParent,
                                         strategySettings,
                                         variant,
@@ -6627,7 +6795,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                                     : [];
                                 if (progressOnly.Length > 0)
                                 {
-                                    lossDiffLiveChildResult = await AddLossDiffChildrenAfterParentEntryAsync(
+                                    lossDiffLiveChildResult = await AddChildEntriesAfterParentEntryAsync(
                                         new Dictionary<Guid, IReadOnlyList<ActiveChildMirrorAssignment>> { [normalizedParentId] = progressOnly },
                                         strategySettings, variant, market, limitSelectedOutcome, enteredRun,
                                         limitSignal.Id, limitOrder.Id, shadowFakExecutionIntent!, shadowFakLookup!, shadowFakSizing!,
@@ -6841,6 +7009,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                         paperLostCounterAdjustment);
                     Signal? signal = null;
                     PaperOrder? order = null;
+                    StrategyMarketPaperRun? gtdPendingParentRun = null;
                     var gtdChildEntryResult = ChildMirrorEntryResult.Empty;
                     await WaitForEntryPlacementLockAsync(latencyMetrics, cancellationToken);
                     try
@@ -6858,7 +7027,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             rawDecisionJson,
                             executionSource: BtcGtdLimitExecutionSource);
 
-                        var enteredRun = CreateEnteredRun(
+                        gtdPendingParentRun = CreateEnteredRun(
                             run,
                             market,
                             selectedOutcome,
@@ -6868,23 +7037,6 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                             signal.Id,
                             order.Id,
                             nowUtc);
-                        deferredPersistence.AddPendingPaperEntry(signal, order, enteredRun);
-                        gtdChildEntryResult = AddChildPendingPaperEntries(
-                            childAssignmentsByParent,
-                            variant,
-                            market,
-                            selectedOutcome,
-                            enteredRun,
-                            signal.Id,
-                            order.Id,
-                            gtdLimitPrice,
-                            gtdLimitPrice,
-                            reservedNotionalUsd,
-                            sizeShares,
-                            gtdCancelDeadlineUtc,
-                            nowUtc,
-                            BtcChildMirrorPaperExecutionSource,
-                            deferredPersistence);
                     }
                     finally
                     {
@@ -6895,6 +7047,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     {
                         continue;
                     }
+
+                    gtdChildEntryResult = await AddChildPendingEntriesAsync(
+                        childAssignmentsByParent, strategySettings, variant, market, selectedOutcome,
+                        gtdPendingParentRun ?? throw new InvalidOperationException("Pending parent run missing."),
+                        signal, order, gtdSizing, gtdExpiration, entryPricing.OrderBookLookup, nowUtc, deferredPersistence, cancellationToken);
 
                     entriesPlaced += 1 + gtdChildEntryResult.EntriesPlaced;
                     runsSkipped += gtdChildEntryResult.RunsSkipped;
@@ -6930,6 +7087,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         StrategyMarketPaperRun run,
         PolymarketGammaMarket market,
         BtcUpDown5mStrategyVariant variant,
+        StrategyRuntimeSettings settings,
         BtcUpDown5mOutcomeQuote selectedOutcome,
         string signalDecisionJson,
         decimal stakeMultiplier,
@@ -6937,6 +7095,16 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         EntryBatchLatencyMetrics latencyMetrics,
         CancellationToken cancellationToken)
     {
+        var liveStakes = HasEffectiveLiveStakes(variant, settings);
+        if (liveStakes)
+        {
+            paperLostCounterAdjustment = ApplyLiveLostCounterStakeAdjustment(
+                variant,
+                settings,
+                settings.LiveStakeAmount);
+            stakeMultiplier = paperLostCounterAdjustment.EffectiveStakeUsd;
+        }
+
         var root = ParseJsonObject(signalDecisionJson);
         var attempts = new JsonArray();
         var maxQuoteAge = GetPaperTakerMaxQuoteAge();
@@ -6946,9 +7114,9 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         var makerGtd = new JsonObject
         {
             ["contract_version"] = MakerGtdPaperExecutionContract.CurrentContractVersion,
-            ["execution_source"] = MakerGtdPaperExecutionContract.ExecutionSource,
+            ["execution_source"] = liveStakes ? PaperLiveShadowTestSource : MakerGtdPaperExecutionContract.ExecutionSource,
             ["strategy_run_id"] = run.Id.ToString("D"),
-            ["paper_only"] = true,
+            ["paper_only"] = !liveStakes,
             ["post_only"] = true,
             ["order_type"] = MakerGtdBuyExecutionIntent.TimeInForce,
             ["maximum_placement_attempts"] = MakerGtdPaperMaximumPlacementAttempts,
@@ -6960,13 +7128,13 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             ["attempts"] = attempts
         };
         root["maker_gtd"] = makerGtd;
-        root["paper_only"] = true;
+        root["paper_only"] = !liveStakes;
         root["post_only"] = true;
         root["order_type"] = MakerGtdBuyExecutionIntent.TimeInForce;
         root["order_execution_mode"] = MakerGtdBuyExecutionIntent.TimeInForce;
-        root["execution_source"] = MakerGtdPaperExecutionContract.ExecutionSource;
+        root["execution_source"] = liveStakes ? PaperLiveShadowTestSource : MakerGtdPaperExecutionContract.ExecutionSource;
 
-        if (!variant.PaperOnly)
+        if (!liveStakes && !variant.PaperOnly)
         {
             return CompleteMakerGtdPlacementFailure(
                 root,
@@ -6974,7 +7142,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 "maker_gtd_variant_not_paper_only");
         }
 
-        if (!MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant))
+        if (!liveStakes && !MakerGtdPaperExecutionContract.IsApprovedCurrentStrategyVariant(variant))
         {
             return CompleteMakerGtdPlacementFailure(
                 root,
@@ -6982,8 +7150,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 "maker_gtd_variant_outside_closed_exception");
         }
 
-        makerGtd["paper_model_label"] = StrategyIds.OptimisticTouchNoDepthPaperLabel;
-        root["paper_model_label"] = StrategyIds.OptimisticTouchNoDepthPaperLabel;
+        if (!liveStakes)
+        {
+            makerGtd["paper_model_label"] = StrategyIds.OptimisticTouchNoDepthPaperLabel;
+            root["paper_model_label"] = StrategyIds.OptimisticTouchNoDepthPaperLabel;
+        }
 
         if (marketStartUtc is null)
         {
@@ -7026,6 +7197,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         string? entryWindowTerminalReason = null;
+        StrategyMarketPaperRun? liveAttemptRun = null;
         for (var attemptNumber = 1;
              attemptNumber <= MakerGtdPaperMaximumPlacementAttempts;
              attemptNumber++)
@@ -7150,6 +7322,49 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                     "intent_rejected",
                     "maker_gtd_execution_intent_invalid");
                 continue;
+            }
+
+            if (liveStakes)
+            {
+                var liveAttempt = await PlaceReferenceAverageMakerGtdLiveAttemptAsync(
+                    run,
+                    market,
+                    variant,
+                    selectedOutcome,
+                    intent,
+                    s0,
+                    root,
+                    makerGtd,
+                    attempt,
+                    latencyMetrics,
+                    cancellationToken);
+                liveAttemptRun = liveAttempt.Run;
+                var disposition = liveAttempt.Placement.MakerDisposition;
+                if (disposition == MakerGtdLivePlacementDisposition.RetryNewIntent)
+                {
+                    continue;
+                }
+
+                if (liveAttempt.Placement.Placed || disposition is
+                    MakerGtdLivePlacementDisposition.ReconcileInvariantViolation or
+                    MakerGtdLivePlacementDisposition.ReconcilePending or
+                    MakerGtdLivePlacementDisposition.ReconcileAmbiguous)
+                {
+                    return MakerGtdPaperPlacementResult.Accepted(root.ToJsonString()) with
+                    {
+                        PersistedRun = liveAttemptRun
+                    };
+                }
+
+                return CompleteMakerGtdPlacementFailure(
+                    root,
+                    makerGtd,
+                    liveAttempt.Placement.LiveOrder?.Status == LiveOrderStatus.PreflightRejected
+                        ? "maker_gtd_live_preflight_rejected"
+                        : MakerGtdLivePlacementClassifier.TerminalFailureReason) with
+                {
+                    PersistedRun = liveAttemptRun
+                };
             }
 
             var admission = await makerGtdHandoff.EnterPlacementAdmissionAsync(
@@ -7355,7 +7570,155 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
 
         var finalReason = entryWindowTerminalReason ?? "maker_gtd_post_only_attempts_exhausted";
-        return CompleteMakerGtdPlacementFailure(root, makerGtd, finalReason);
+        return CompleteMakerGtdPlacementFailure(root, makerGtd, finalReason) with
+        {
+            PersistedRun = liveAttemptRun
+        };
+    }
+
+    private async Task<(PaperLiveShadowPlacementResult Placement, StrategyMarketPaperRun Run)>
+        PlaceReferenceAverageMakerGtdLiveAttemptAsync(
+            StrategyMarketPaperRun run,
+            PolymarketGammaMarket market,
+            BtcUpDown5mStrategyVariant variant,
+            BtcUpDown5mOutcomeQuote selectedOutcome,
+            MakerGtdBuyExecutionIntent intent,
+            OrderBookSnapshot decisionBook,
+            JsonObject root,
+            JsonObject makerGtd,
+            JsonObject attempt,
+            EntryBatchLatencyMetrics latencyMetrics,
+            CancellationToken cancellationToken)
+    {
+        var executionIntent = LimitBuyExecutionIntent.FromMakerGtd(intent);
+        var correlationId = intent.DecisionId;
+        AttachLimitExecutionIntentJson(root, executionIntent);
+        root["paper_live_shadow_test"] = true;
+        root["live_post_only"] = intent.PostOnly;
+        root["execution_intent_strategy_id"] = intent.StrategyId.ToString("D");
+        root["execution_intent_decision_id"] = intent.DecisionId.ToString("D");
+        root["execution_intent_condition_id"] = intent.ConditionId;
+        root["execution_intent_asset_id"] = intent.AssetId;
+        root["execution_intent_side"] = intent.Side.ToString();
+        root["execution_intent_maximum_order_price"] = intent.MaximumOrderPrice;
+        root["execution_intent_tick_size"] = intent.TickSize;
+        root["execution_intent_min_order_size"] = intent.MinOrderSize;
+        root["execution_intent_negative_risk"] = intent.NegativeRisk;
+        makerGtd["frozen_intent"] = BuildMakerGtdFrozenIntentJson(intent);
+        makerGtd["terminal_outcome"] = "live_submission_pending";
+        makerGtd["attempts_completed"] = (makerGtd["attempts"] as JsonArray)?.Count ?? 0;
+        attempt["outcome"] = "live_submission_pending";
+
+        var signal = CreateSignal(
+            market,
+            selectedOutcome,
+            variant,
+            intent.LimitPrice,
+            intent.TargetSizeShares,
+            intent.TargetNotionalUsd,
+            intent.FrozenAtUtc);
+        var order = CreatePendingOpeningLimitPaperOrder(
+            signal,
+            selectedOutcome,
+            variant,
+            intent.LimitPrice,
+            intent.TargetSizeShares,
+            intent.TargetNotionalUsd,
+            intent.FrozenAtUtc,
+            intent.EffectiveExpiresAtUtc,
+            root.ToJsonString(),
+            correlationId,
+            PaperLiveShadowTestSource);
+        var restingRun = CreateRestingRun(
+            run,
+            market,
+            selectedOutcome,
+            intent.LimitPrice,
+            intent.TargetNotionalUsd,
+            intent.TargetSizeShares,
+            signal.Id,
+            order.Id,
+            intent.FrozenAtUtc);
+        var quoteAge = intent.FrozenAtUtc - decisionBook.SnapshotAtUtc;
+        var decision = new PaperLiveShadowDecision(
+            correlationId,
+            variant.Id,
+            market.MarketId,
+            market.ConditionId,
+            selectedOutcome.AssetId,
+            selectedOutcome.Outcome,
+            intent.Side,
+            intent.LimitPrice,
+            intent.TargetNotionalUsd,
+            intent.TargetSizeShares,
+            intent.TargetNotionalUsd,
+            MakerGtdBuyExecutionIntent.TimeInForce,
+            intent.PostOnly,
+            SerializePaperLiveShadowOrderBookSnapshot(decisionBook, ClobBookSource, quoteAge),
+            (int)Math.Round(quoteAge.TotalMilliseconds),
+            PaperLiveShadowTestSource,
+            decisionBook.SnapshotAtUtc,
+            intent.FrozenAtUtc,
+            restingRun.MarketStartUtc,
+            market.EndDateUtc,
+            intent.FrozenAtUtc.AddSeconds(Math.Min(10, Math.Max(1, options.EntryGraceSeconds))),
+            intent.EffectiveExpiresAtUtc,
+            Status: "decision_created",
+            UpdatedAtUtc: intent.FrozenAtUtc);
+        await WaitForEntryPlacementLockAsync(latencyMetrics, cancellationToken);
+        try
+        {
+            await repository.AddPaperLiveShadowDecisionAsync(decision, cancellationToken);
+            await repository.AddPaperEntryPersistenceBatchAsync(
+                new PaperEntryPersistenceBatch([signal], [order], [], [], [], [restingRun]),
+                cancellationToken);
+            await repository.UpdatePaperLiveShadowDecisionLinksAsync(
+                correlationId,
+                signal.Id,
+                order.Id,
+                null,
+                "paper_shadow_created",
+                intent.FrozenAtUtc,
+                cancellationToken);
+            MarkLocallyFinalizedEntryRuns([restingRun]);
+            exposureCache.ApplyPaperOrder(order);
+        }
+        finally
+        {
+            entryPlacementLock.Release();
+        }
+
+        var placement = await TryPlacePaperLiveShadowOrderAsync(
+            signal,
+            selectedOutcome,
+            variant,
+            order,
+            executionIntent,
+            correlationId,
+            restingRun.MarketStartUtc,
+            market.EndDateUtc,
+            GetUtcNow(),
+            cancellationToken);
+        var outcome = placement.MakerDisposition?.ToString() ??
+            (placement.Placed ? "live_submitted" : "live_rejected");
+        attempt["outcome"] = outcome;
+        attempt["completed_at_utc"] = FormatMakerGtdTimestamp(GetUtcNow());
+        makerGtd["terminal_outcome"] = outcome;
+        if (placement.LiveOrder is { } liveOrder)
+        {
+            attempt["live_order_id"] = liveOrder.Id.ToString("D");
+            attempt["clob_order_id"] = liveOrder.OrderId;
+        }
+
+        var persistedOrder = await repository.GetPaperOrderAsync(order.Id, cancellationToken);
+        if (persistedOrder is not null)
+        {
+            await repository.UpdatePaperOrderAsync(
+                persistedOrder with { RawDecisionJson = root.ToJsonString() },
+                cancellationToken);
+        }
+
+        return (placement, restingRun);
     }
 
     private async Task<MakerGtdDirectOrderBookRead> ReadMakerGtdDirectOrderBookAsync(
@@ -9154,7 +9517,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         BtcUpDown5mStrategyVariant variant,
         StrategyRuntimeSettings settings)
     {
-        return settings.EffectiveLiveStakes && !IsPaperOnlyVariant(variant);
+        return settings.EffectiveLiveStakes;
     }
 
     private static bool ShouldRunPaperLiveShadowTest(
@@ -18867,6 +19230,38 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             result.PaperLostCounter);
     }
 
+    private static string AttachLimitExecutionIntentJson(string rawDecisionJson, LimitBuyExecutionIntent intent)
+    {
+        var root = ParseJsonObject(rawDecisionJson);
+        AttachLimitExecutionIntentJson(root, intent);
+        return root.ToJsonString();
+    }
+
+    private static void AttachLimitExecutionIntentJson(JsonObject root, LimitBuyExecutionIntent intent)
+    {
+        root["execution_intent_strategy_id"] = intent.StrategyId.ToString("D");
+        root["execution_intent_decision_id"] = intent.DecisionId.ToString("D");
+        root["execution_intent_condition_id"] = intent.ConditionId;
+        root["execution_intent_asset_id"] = intent.AssetId;
+        root["execution_intent_side"] = intent.Side.ToString();
+        root["execution_intent_tick_size"] = intent.TickSize;
+        root["execution_intent_min_order_size"] = intent.MinOrderSize;
+        root["execution_intent_negative_risk"] = intent.NegativeRisk;
+        root["execution_intent_limit_price"] = intent.LimitPrice;
+        root["execution_intent_requested_notional_usd"] = intent.RequestedNotionalUsd;
+        root["execution_intent_requested_size_shares"] = intent.RequestedSizeShares;
+        root["execution_intent_target_notional_usd"] = intent.TargetNotionalUsd;
+        root["execution_intent_target_size_shares"] = intent.TargetSizeShares;
+        root["execution_intent_order_type"] = LimitBuyExecutionIntent.TimeInForce;
+        root["execution_intent_post_only"] = intent.PostOnly;
+        root["execution_intent_expires_at_utc"] = intent.EffectiveExpiresAtUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["execution_intent_clob_gtd_expiration_utc"] = intent.ClobGtdExpirationUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["execution_intent_created_at_utc"] = intent.CreatedAtUtc.ToString("O", CultureInfo.InvariantCulture);
+        root["live_order_type"] = LimitBuyExecutionIntent.TimeInForce;
+        root["order_type"] = LimitBuyExecutionIntent.TimeInForce;
+        root["post_only"] = intent.PostOnly;
+    }
+
     private static string AttachOpeningLimitStakeSizingJson(
         string rawDecisionJson,
         decimal stakeMultiplier,
@@ -22525,7 +22920,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         return marketStartUtc?.Add(BtcUpDown5mMarketAnalyzer.GetIntervalDuration(variant.MarketInterval));
     }
 
-    private sealed record PaperLiveShadowPlacementResult(bool Placed, LiveOrder? LiveOrder, bool KeepPaperEntry)
+    private sealed record PaperLiveShadowPlacementResult(
+        bool Placed,
+        LiveOrder? LiveOrder,
+        bool KeepPaperEntry,
+        MakerGtdLivePlacementDisposition? MakerDisposition = null)
     {
         public static PaperLiveShadowPlacementResult NotPlaced(LiveOrder? liveOrder = null)
         {
@@ -22601,7 +23000,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
     }
 
-    private async Task<PaperLiveShadowPlacementResult> TryPlacePaperLiveShadowOrderAsync(
+    private Task<PaperLiveShadowPlacementResult> TryPlacePaperLiveShadowOrderAsync(
         Signal signal,
         BtcUpDown5mOutcomeQuote outcome,
         BtcUpDown5mStrategyVariant variant,
@@ -22611,28 +23010,86 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         DateTimeOffset? marketStartUtc,
         DateTimeOffset? marketEndUtc,
         DateTimeOffset nowUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        BtcUpDown5mStrategyVariant? executionWindowVariant = null)
     {
-        if (IsPaperOnlyVariant(variant))
+        return TryPlacePaperLiveShadowOrderCoreAsync(
+            signal, outcome, variant, paperOrder, executionIntent, null, correlationId,
+            marketStartUtc, marketEndUtc, nowUtc, cancellationToken, executionWindowVariant);
+    }
+
+    private Task<PaperLiveShadowPlacementResult> TryPlacePaperLiveShadowOrderAsync(
+        Signal signal,
+        BtcUpDown5mOutcomeQuote outcome,
+        BtcUpDown5mStrategyVariant variant,
+        PaperOrder paperOrder,
+        LimitBuyExecutionIntent executionIntent,
+        Guid correlationId,
+        DateTimeOffset? marketStartUtc,
+        DateTimeOffset? marketEndUtc,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken,
+        BtcUpDown5mStrategyVariant? executionWindowVariant = null)
+    {
+        return TryPlacePaperLiveShadowOrderCoreAsync(
+            signal, outcome, variant, paperOrder, null, executionIntent, correlationId,
+            marketStartUtc, marketEndUtc, nowUtc, cancellationToken, executionWindowVariant);
+    }
+
+    private async Task<PaperLiveShadowPlacementResult> TryPlacePaperLiveShadowOrderCoreAsync(
+        Signal signal,
+        BtcUpDown5mOutcomeQuote outcome,
+        BtcUpDown5mStrategyVariant variant,
+        PaperOrder paperOrder,
+        FakBuyExecutionIntent? executionIntent,
+        LimitBuyExecutionIntent? limitIntent,
+        Guid correlationId,
+        DateTimeOffset? marketStartUtc,
+        DateTimeOffset? marketEndUtc,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken,
+        BtcUpDown5mStrategyVariant? executionWindowVariant)
+    {
+        var isFakOrder = executionIntent is not null;
+        var liveOrderType = isFakOrder ? FakOrderType : LimitBuyExecutionIntent.TimeInForce;
+        var price = executionIntent?.MaximumOrderPrice ?? limitIntent!.LimitPrice;
+        var sizeShares = executionIntent?.TargetSizeShares ?? limitIntent!.TargetSizeShares;
+        var liveNotional = executionIntent?.TargetNotionalUsd ?? limitIntent!.TargetNotionalUsd;
+        var postOnly = limitIntent?.PostOnly ?? false;
+        var validation = new List<string>();
+        if (executionIntent is not null)
         {
-            return PaperLiveShadowPlacementResult.LiveSkippedKeepPaper();
+            AddFakExecutionIntentValidation(
+                validation, executionIntent, signal, outcome, variant, paperOrder, correlationId);
+        }
+        else
+        {
+            foreach (var error in LimitBuyExecutionParity.Validate(limitIntent!).Errors)
+            {
+                validation.Add("GTD execution intent is not Live-valid: " + error);
+            }
+
+            if (limitIntent!.StrategyId != variant.Id || paperOrder.StrategyId != variant.Id ||
+                limitIntent.DecisionId != correlationId || paperOrder.CorrelationId != correlationId ||
+                paperOrder.SignalId != signal.Id || limitIntent.Side != TradeSide.Buy ||
+                paperOrder.Side != limitIntent.Side ||
+                limitIntent.ConditionId != signal.LeaderTrade.ConditionId ||
+                paperOrder.ConditionId != limitIntent.ConditionId ||
+                limitIntent.AssetId != outcome.AssetId || paperOrder.AssetId != limitIntent.AssetId ||
+                paperOrder.Price != limitIntent.LimitPrice ||
+                paperOrder.NotionalUsd != limitIntent.TargetNotionalUsd ||
+                paperOrder.SizeShares != limitIntent.TargetSizeShares ||
+                paperOrder.ExpiresAtUtc != limitIntent.EffectiveExpiresAtUtc)
+            {
+                validation.Add("Paper and Live GTD fields do not match the shared execution intent.");
+            }
         }
 
-        var isFakOrder = true;
-        var liveOrderType = FakOrderType;
-        var price = executionIntent.MaximumOrderPrice;
-        var sizeShares = executionIntent.TargetSizeShares;
-        var liveNotional = executionIntent.TargetNotionalUsd;
-        var postOnly = executionIntent.PostOnly;
-        var validation = new List<string>();
-        AddFakExecutionIntentValidation(
-            validation,
-            executionIntent,
-            signal,
-            outcome,
-            variant,
-            paperOrder,
-            correlationId);
+        var currentSettings = await strategyStateProvider.GetStrategySettingsAsync(variant.Id, cancellationToken);
+        if (!currentSettings.Enabled || !currentSettings.EffectiveLiveStakes || currentSettings.IsPausedAt(nowUtc))
+        {
+            validation.Add("Strategy Live is disabled or the strategy is paused.");
+        }
         if (botOptions.Mode != BotMode.Live)
         {
             validation.Add("Bot mode is not Live.");
@@ -22653,7 +23110,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             validation.Add("Live trading is paused.");
         }
 
-        AddLiveMarketWindowValidation(validation, variant, marketStartUtc, marketEndUtc, nowUtc);
+        AddLiveMarketWindowValidation(validation, executionWindowVariant ?? variant, marketStartUtc, marketEndUtc, nowUtc);
 
         if (price <= 0m || price >= 1m)
         {
@@ -22834,7 +23291,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             return PaperLiveShadowPlacementResult.NotPlaced();
         }
 
-        var request = CreateFakMarketBuyRequest(executionIntent);
+        var request = executionIntent is not null
+            ? CreateFakMarketBuyRequest(executionIntent)
+            : LimitBuyExecutionParity.CreateLiveRequest(
+                limitIntent!, authOptions.FunderAddress, authOptions.SigningAddress,
+                ParseSignatureType(authOptions.SignatureType));
         LiveOrderPlacementResult result;
         try
         {
@@ -22842,31 +23303,46 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            var failureClassification = isFakOrder ? null : MakerGtdLivePlacementClassifier.ClassifyThrownFailure(ex);
+            var unresolved = failureClassification?.RequiresReconciliation == true;
             var errorOrder = liveOrderIntent with
             {
-                Status = LiveOrderStatus.Error,
-                ResponseStatus = "error",
+                Status = unresolved ? LiveOrderStatus.Submitted : LiveOrderStatus.Error,
+                ResponseStatus = unresolved ? "unresolved_submission" : "error",
                 ValidationSummary = "Live order placement failed: " + ex.Message,
                 RawResponseJson = "{}",
                 UpdatedAtUtc = DateTimeOffset.UtcNow
             };
             await repository.UpdateLiveOrderAsync(errorOrder, cancellationToken);
             exposureCache.ApplyLiveOrder(errorOrder);
-            await CancelPaperShadowOrderAsync(paperOrder, nowUtc, cancellationToken);
+            if (!unresolved)
+            {
+                await CancelPaperShadowOrderAsync(paperOrder, nowUtc, cancellationToken);
+            }
             await repository.UpdatePaperLiveShadowDecisionLinksAsync(
                 correlationId,
                 signal.Id,
                 paperOrder.Id,
                 liveOrderIntent.Id,
-                "live_submit_error",
+                unresolved ? "live_submit_unresolved" : "live_submit_error",
                 DateTimeOffset.UtcNow,
                 cancellationToken);
             await repository.AddLiveTradingEventAsync(
                 new LiveTradingEvent(Guid.NewGuid(), "BtcUpDown5mPaperLiveShadowPlaceOrder", "Error", ex.Message, DateTimeOffset.UtcNow),
                 cancellationToken);
-            return PaperLiveShadowPlacementResult.NotPlaced(errorOrder);
+            return new PaperLiveShadowPlacementResult(
+                false, errorOrder, false,
+                failureClassification?.Disposition);
         }
 
+        var makerClassification = !isFakOrder && (postOnly || !result.Success || string.IsNullOrWhiteSpace(result.OrderId))
+            ? MakerGtdLivePlacementClassifier.Classify(result)
+            : null;
+        if (!postOnly && makerClassification?.CanSubmitNewIntent == true)
+        {
+            makerClassification = new MakerGtdLivePlacementClassification(
+                MakerGtdLivePlacementDisposition.TerminalFailure, MakerGtdLivePlacementClassifier.TerminalFailureReason, result.OrderId);
+        }
         var placementStatus = MapPlacementStatus(result);
         var fillSummary = LiveOrderPlacementAccounting.FromPlacementResult(
             TradeSide.Buy,
@@ -22877,6 +23353,11 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             allowFilledSizeAboveRequested: isFakOrder);
         var status = placementStatus;
         var validationSummary = result.ErrorMessage ?? string.Empty;
+        if (makerClassification?.RequiresReconciliation == true)
+        {
+            status = LiveOrderStatus.Submitted;
+            validationSummary = $"GTD requires reconciliation ({makerClassification.ReasonCode}); no replacement may be submitted. " + validationSummary;
+        }
         if (isFakOrder)
         {
             if (fillSummary.FilledSize > 0m)
@@ -22949,7 +23430,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
             signal.Id,
             paperOrder.Id,
             updatedLiveOrder.Id,
-            result.Success && status != LiveOrderStatus.Rejected ? "live_submitted" : "live_rejected",
+            makerClassification?.RequiresReconciliation == true ? "live_submit_unresolved" :
+                result.Success && status != LiveOrderStatus.Rejected ? "live_submitted" : "live_rejected",
             DateTimeOffset.UtcNow,
             cancellationToken);
         await repository.AddLiveTradingEventAsync(
@@ -22961,16 +23443,22 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
                 DateTimeOffset.UtcNow),
             cancellationToken);
 
+        if (makerClassification?.RequiresReconciliation == true)
+        {
+            return new PaperLiveShadowPlacementResult(false, updatedLiveOrder, false, makerClassification.Disposition);
+        }
+
         if (!result.Success || status is LiveOrderStatus.Rejected or LiveOrderStatus.Error)
         {
             await CancelPaperShadowOrderAsync(paperOrder, DateTimeOffset.UtcNow, cancellationToken);
-            return PaperLiveShadowPlacementResult.NotPlaced(updatedLiveOrder);
+            return new PaperLiveShadowPlacementResult(false, updatedLiveOrder, false, makerClassification?.Disposition);
         }
 
         return new PaperLiveShadowPlacementResult(
             status is LiveOrderStatus.Live or LiveOrderStatus.Delayed or LiveOrderStatus.Matched or LiveOrderStatus.Unmatched or LiveOrderStatus.Submitted,
             updatedLiveOrder,
-            false);
+            false,
+            makerClassification?.Disposition);
     }
 
     private static void AddLiveMarketWindowValidation(
@@ -25738,7 +26226,8 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     private sealed record MakerGtdPaperPlacementResult(
         bool Placed,
         string? SkipReason,
-        string RawDecisionJson)
+        string RawDecisionJson,
+        StrategyMarketPaperRun? PersistedRun = null)
     {
         public static MakerGtdPaperPlacementResult Accepted(string rawDecisionJson)
         {

@@ -109,16 +109,20 @@ the closed user-approved exception defined below:
   regimes. Its ordinary
   Paper orders, PnL, win rate, and performance are intentional, but every result
   must say
-  `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills`. Live
-  submission is
-  disabled, and no alias, clone, descendant, future strategy, or changed execution
+  `optimistic TouchNoDepth Paper; not Live-equivalent; may overstate fills` for
+  that Paper model. `RC-20260918-universal-live-strategy-checkbox` supersedes only
+  the former Live-transport prohibition: the Live checkbox permits submission of
+  the same frozen post-only GTD intent through common Live gates, with actual
+  venue fills recorded in its shadow. Live-off Paper and historical accounting
+  remain unchanged, and no alias, clone, descendant, future strategy, or changed execution
   semantic inherits the exception;
 - add or update parity tests and verify that intent, market evidence, fills, and
   outcomes are persisted or otherwise auditable.
 
 Except for that exact closed exception, missing Live-equivalence evidence or a
 failing parity test is a completion blocker, not a documentation caveat. A predicate
-mismatch, missing mandatory label, enabled Live path, or failing exception contract
+mismatch, missing mandatory label on optimistic Paper, optimistic fills used as
+Live outcomes, or failing exception contract
 test is likewise a completion blocker for the exception.
 
 Closed historical accounting exception approved by
