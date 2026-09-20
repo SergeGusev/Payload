@@ -665,3 +665,46 @@ Result:
 Completed approved local fix, approval-only parent8a8d60fd. New concurrent migration0015 all-source paper_orders(copied_trader_wallet,asset_id), exact index/valid/ready check; coverage-only adaptive250..1 and30s timeout pause, legacy loop continues. Financial refresh SQL, old migrations and transaction semantics unchanged. 53focused tests plus1actual PostgreSQL consumer load pass,0skipped; initial tests build127existing warnings,final Service/Dashboard incremental builds0warnings/0errors each. Independent reviewer agent:/root/paper_coverage_projection_reviewer PASS/noopenfindings after comparing original request,approved contract,full diff/newfiles,README/report,TRX/buildlogs.
 Load:100korders/10kassets/1000settlements/1000fills for one wallet, normal triggers,setup201542ms; initial drain68855ms/204046refreshes/0errors;600neworders/1800events in60s,final drain1ms,cumulative205846refreshes/0errors. Fixture final1600closed/800confirmed/Net320/denominator480 equals independent raw aggregation. Post-test local read-only13:58:07.482925UTC global raw100616orders/50310confirmed equals projected; queue0,cursors4complete,initializedtrue. Latency p95 includes empty polls and is explicitly not busy-portion or production throughput. Full commands,raw comparisonSQL,fixture ID and TRX SHA256 in Codex/Reports/2026-09-20-paper-coverage-projection-fix.md.
 Completed isolated WorkingTree gate PASS governedFiles10/contracts1; unchanged semantic digest confirmed. Exact root Staged gate PASS; root unrelated Sept17contract/other edits preserved and excluded. Copied exact11product/report/contract paths from isolated checkout with SHA256 equality. No production calls/mutations/deploy/restart or outcome-verifier changes. PostgreSQL stopped,protected cleanup removed marked paper-coverage-fix-20260920-01 (3635files/836390771bytes),absence verified; temporary worktree registration cleanup checked. Final context prefix only staged over HEAD to preserve unrelated working content. Commit/push follows standard finalization.
+
+## 2026-09-20T14:11:48.6251517+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Read-only deployment check: expected fa995cd7; both14:09:29.561425 and14:10:26.060158UTC snapshots of192.168.0.101:5432/polycopytrader report old cb226596/MVID64fa58b07166 launch13:05:00.288598UTC with fresh progressing heartbeat. Migration0015/new exactindex absent,coverageinitializedfalse/refreshedNULL/allcursorszero/totalsNULL,queue106827→114114,firstsequence1. LegacyprojectionRunning/version4/freshevents,last_errorNULL,waitinglocks0 atbothsnapshots. Independent logtail14:09:31.690..14:09:58.398UTC:4old-format coveragewarnings/4SQLSTATE57014,0newNextLimit fields,0ERR/FTL in boundedtail,ongoing resultpolling. Version mismatch reported immediately; did not claim new fix failed. Asked user which artifact/environment deployed; actual rollout cause unknown. No code,productiondata/config/schema/service changes or builds/tests.
+
+Source:service_heartbeats service_name='PolyCopyTrader.Service'; schema_migration_history exact0015; pg_index/public exactindex; full small projection state/cursors/totals and queue counts, no age/strategy filters. UTC, forced default_transaction_read_only + BEGIN READ ONLY,statement15s/lock1s/parallelism0/jitoff. Logsource \\192.168.0.101\CodexLogs\polycopytrader-service-20260920_005.log last1500lines; timestamp inlines used instead of cached SMB LastWriteTime.
+
+Exact SQL:
+BEGIN READ ONLY;
+SELECT json_build_object('at',clock_timestamp(),'server',inet_server_addr(),'database',current_database(),
+ 'heartbeat',(SELECT row_to_json(h) FROM service_heartbeats h WHERE service_name='PolyCopyTrader.Service'),
+ 'migration',(SELECT row_to_json(m) FROM schema_migration_history m WHERE migration_id='0015-paper-confirmation-coverage-index'),
+ 'index',(SELECT json_build_object('valid',x.indisvalid,'ready',x.indisready,'definition',pg_get_indexdef(x.indexrelid),'size',pg_relation_size(x.indexrelid))
+ FROM pg_index x JOIN pg_class i ON i.oid=x.indexrelid WHERE i.relnamespace='public'::regnamespace AND i.relname='ix_paper_orders_confirmation_wallet_asset'),
+ 'projection',(SELECT row_to_json(s) FROM paper_confirmation_projection_state s),
+ 'cursors',(SELECT json_agg(c ORDER BY kind) FROM paper_confirmation_projection_cursor c),
+ 'queue',(SELECT json_build_object('count',count(*),'first',min(sequence_id),'last',max(sequence_id)) FROM paper_confirmation_projection_queue),
+ 'totals',(SELECT json_agg(t) FROM (SELECT kind,hours,sum(records) records,sum(closed) closed,sum(confirmed) confirmed FROM paper_confirmation_projection_totals GROUP BY kind,hours ORDER BY kind,hours)t),
+ 'legacy',(SELECT json_build_object('status',status,'initialized',initialized,'version',calculation_version,'last_event',last_event_applied_at_utc,'last_error',last_error) FROM dashboard_projection_control),
+ 'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'));
+ROLLBACK;
+
+First result:
+BEGIN
+{"at" : "2026-09-20T14:09:29.561425+00:00", "server" : "192.168.0.101", "database" : "polycopytrader", "heartbeat" : {"service_name":"PolyCopyTrader.Service","status":"Running","started_at_utc":"2026-09-20T13:05:00.288598+00:00","last_heartbeat_utc":"2026-09-20T14:09:01.733444+00:00","version":"info=1.0.0+cb226596ab9239da67b524971b6ddcd7bf9901ca; assembly=1.0.0.0; mvid=64fa58b07166","mode":"Live","current_loop":"BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut; DBScanTelemetry CopiedPerformance@2026-09-20T14:07:56.309Z:Seed(last=0/0,total=0/0,lastPositive=none),Aggregate(last=0/0,total=0/0,lastPositive=none); DashboardReconciliation@2026-09-20T14:08:30.277Z[latest=eth_up_down_5m_down_diff_5_fak_premarket]:Build(last=0/0,total=0/0,lastPositive=none),lastPositiveStrategy=none","last_error":null}, "migration" : null, "index" : null, "projection" : {"singleton":true,"refreshed_at":null,"initialized":false,"arrivals":0,"unique_confirmations":0}, "cursors" : [{"kind":"F","cursor_id":"00000000-0000-0000-0000-000000000000","completed":false},
+ {"kind":"O","cursor_id":"00000000-0000-0000-0000-000000000000","completed":false},
+ {"kind":"R","cursor_id":"00000000-0000-0000-0000-000000000000","completed":false},
+ {"kind":"S","cursor_id":"00000000-0000-0000-0000-000000000000","completed":false}], "queue" : {"count" : 106827, "first" : 1, "last" : 412839}, "totals" : null, "legacy" : {"status" : "Running", "initialized" : true, "version" : 4, "last_event" : "2026-09-20T14:09:29.469064+00:00", "last_error" : null}, "waiting_locks" : 0}
+ROLLBACK
+
+Second result:
+BEGIN
+{"at" : "2026-09-20T14:10:26.060158+00:00", "server" : "192.168.0.101", "database" : "polycopytrader", "heartbeat" : {"service_name":"PolyCopyTrader.Service","status":"Running","started_at_utc":"2026-09-20T13:05:00.288598+00:00","last_heartbeat_utc":"2026-09-20T14:10:01.766151+00:00","version":"info=1.0.0+cb226596ab9239da67b524971b6ddcd7bf9901ca; assembly=1.0.0.0; mvid=64fa58b07166","mode":"Live","current_loop":"BTC5mOnly WatchlistScanner=CommentedOut; FollowLeaderSignals=CommentedOut; DBScanTelemetry CopiedPerformance@2026-09-20T14:09:52.566Z:Seed(last=0/0,total=0/0,lastPositive=none),Aggregate(last=0/0,total=0/0,lastPositive=none); DashboardReconciliation@2026-09-20T14:09:05.801Z[latest=eth_up_down_5m_down_diff_5_fak_premarket]:Build(last=0/0,total=0/0,lastPositive=none),lastPositiveStrategy=none","last_error":null}, "migration" : null, "index" : null, "projection" : {"singleton":true,"refreshed_at":null,"initialized":false,"arrivals":0,"unique_confirmations":0}, "cursors" : [{"kind":"F","cursor_id":"00000000-0000-0000-0000-000000000000","completed":false},
+ {"kind":"O","cursor_id":"00000000-0000-0000-0000-000000000000","completed":false},
+ {"kind":"R","cursor_id":"00000000-0000-0000-0000-000000000000","completed":false},
+ {"kind":"S","cursor_id":"00000000-0000-0000-0000-000000000000","completed":false}], "queue" : {"count" : 114114, "first" : 1, "last" : 421626}, "totals" : null, "legacy" : {"status" : "Running", "initialized" : true, "version" : 4, "last_event" : "2026-09-20T14:10:22.015765+00:00", "last_error" : null}, "waiting_locks" : 0}
+ROLLBACK
+
+SHA256:preview.jsonl2ca6b0267405b2596f619fd45dec000757e749730b278cc30660698f923e6aac;repeat.jsonl3ab8c52568ff52c21ef32eef34dc756638d681b0a4611fc12ae54cf1205ff4ee;tail.log57ef634c242aff953e198cc39e7b274e326ec031ae2a526719e1f9eebee3333b.
+Protected cleanup completed and run directory absence verified. Exact context/history Staged requirement gate PASS; full WorkingTree gate still blocked solely by unrelated pre-existing Sept17contract semantic mutation, preserved without edits. No product files changed. Diff whitespace corrected in this new history entry only.

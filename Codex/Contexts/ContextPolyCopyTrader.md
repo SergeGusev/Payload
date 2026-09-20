@@ -1,3 +1,14 @@
+## Active Update 2026-09-20 Coverage Fix Deployment Check: Previous Version Still Running
+Goal: Verify the user's reported deployment of coverage fix fa995cd7, read-only.
+Status: Verification completed; intended deployed version not observed on the known production endpoint.
+Done:
+- Two snapshots of192.168.0.101:5432/polycopytrader at14:09:29.561425 and14:10:26.060158UTC still identify service cb226596ab9239da67b524971b6ddcd7bf9901ca/MVID64fa58b07166, started13:05:00.288598UTC. Fresh heartbeat advanced14:09:01.733444→14:10:01.766151; statusRunning/Live,last_errorNULL,waitinglocks0.
+- Migration0015 and exact new index ix_paper_orders_confirmation_wallet_asset absent in both snapshots. Coverage remains initializedfalse/refreshedNULL/all4cursorszero/totalsNULL; queue106827→114114,firstsequence1. Legacy projection remainsRunning/version4,last_event14:10:22.015765UTC.
+- Independent fresh service-log tail14:09:31.690..14:09:58.398UTC contains4coveragewarnings and4SQLSTATE57014 exceptions, old message format with no new NextLimit fields; market result polling continues. This verifies current old-path activity independently of heartbeat. No ERR/FTL in that bounded tail; not an all-launch error audit.
+Next: Resolve what artifact/environment was deployed; user asked asynchronously whether Service fa995cd7 on192.168.0.101,Dashboard-only,or another build/server. Do not claim fix fa995cd7 failed on production: it is not observed running here.
+Notes: No code/config/schema/data/service mutation,tests,builds or deployment. Exact read-only SQL/results/log bounds/hashes in Sept20history;15sstatement/1slock/UTC/parallelism0. Expected fa995cd7 versus observedcb226596 is unresolved; reason unknown.
+Blockers: Actual intended deployment not established. Current production service still exposes prior version and prior projection failure.
+
 ## Active Update 2026-09-20 Paper Coverage Projection Fix Completed
 Goal: Restore bounded progress of the Paper confirmation coverage projection.
 Status: Completed local implementation and independent review; no production operation.
