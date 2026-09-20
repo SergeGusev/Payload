@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Paper Diagnostics Post-Deploy Verification
+Goal: Verify user deployment and diagnose actual Paper confirmation behavior read-only.
+Status: Completed bounded verification; diagnostics deployed, confirmation still makes no observed completion progress.
+Done:
+- Production192.168.0.101:5432/polycopytrader reports e8c3ea61813b706af9faf2dd6a6d709b4cb01a61, MVID6eab3010139c, started09:06:33.933582UTC; latest checked heartbeat09:09:34.322703UTC, Running/Live, last_errorNULL, waitinglocks0. New production structured logs independently confirm instrumentation; no separate binary hash audit.
+- Full current log coverage09:06:33.933582..09:09:48.988UTC:33finished attempts, allCanceled/Foreground by MarketDataSideEffectQueue.EnqueueUpdate (30PriceChange,2BestBidAsk,1Book);21IdleCheck,12GammaToken, noneCommitStarted/errors. Independent regex recount33/33. Exact32non-null PaperOrderIds rechecked09:09:50:allfalse/lookup_started; one attempt canceled before an order ID was assigned.
+-09:08:47 full Paper count3938682,confirmed0,corrected0,attempted68,attempted since start21; exact5known ETH22 pairs still unconfirmed/mismatched. Three summaries cover first150seconds:149IdleChecks,24attempt starts,124ActiveTrading skips and1QueuesBusy; RefreshPositionMarksAsync present120busy checks (sources may overlap).
+- Verified source mechanism: every EnqueueUpdate enters foreground and cancels existing background lease, including normal market quotes; observed33attempt cancellations match that path. Thus these attempts are prevented by foreground preemption; they never reached corrective DB commit. This does not prove universal DB performance or predict historical throughput.
+- Found diagnostic cadence discrepancy: summary intervals30.0344s,60.0035s,59.9967s, rather than strictly30s. Current code combines PeriodicTimer30s with elapsed>=30s guard; exact scheduler skip not separately instrumented. No fix applied in read-only task.
+Next: None within deployment verification.
+Notes: UTC query/log window; displayed local times Europe/Sofia UTC+03. Explicit READ ONLY, statement15s/lock1s/idle20s, no parallel workers. Evidence/SQL/hashes in2026-09-20 history. No service/database/product mutation or build/test required.
+Blockers: Production Paper confirmation completion remains blocked by observed foreground cancellation; diagnostic cadence also fails stated30second expectation.
+
 ## Active Update 2026-09-20 Paper Confirmation Diagnostics
 Goal: Explain skipped or unfinished Paper outcome confirmation through approved diagnostic-only changes.
 Status: Completed local implementation and verification; not deployed.
