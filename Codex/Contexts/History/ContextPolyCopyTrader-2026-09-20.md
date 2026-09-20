@@ -914,3 +914,10 @@ SELECT status,confirmed,count(*) FROM paper_orders WHERE created_at_utc>='2026-0
 SELECT count(*) FROM paper_algorithm_outcomes;
 SELECT * FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service';
 SELECT pid,wait_event_type,wait_event,pg_blocking_pids(pid),clock_timestamp()-xact_start,left(query,1800) FROM pg_stat_activity WHERE datname=current_database() AND (wait_event_type='Lock' OR pid IN(SELECT unnest(pg_blocking_pids(pid)) FROM pg_stat_activity WHERE wait_event_type='Lock'));
+
+## 2026-09-20T17:38:35.3955009+00:00
+Request:
+Исправляй
+
+Result:
+Prepared local fix contractRC-20260920-final-settlement-query-lock-fix from the user's repair instruction and unchanged final-only/provisional-sizing requirements. Read exact final confirmation, run/generic position settlement, wallet and Live/historical confirmation lock paths. Scope:key-bounded existing-index readiness queries and coherent existing-lock acquisition, preserving atomic final-only accounting and immediate eligible Confirmed. Verification:actual-path PostgreSQL plans with100000unrelated rows per relevant table, deterministic overlapping writer tests, existing focused regression suite, servicebuild, independent review. No code/production/schema/index mutations or test/build artifacts. ContractdraftvalidationPASS, semanticSHA2562d32e365bb5e5907388cc6c5bfb51fe58cd2e68c7927f73d02cf83998c4f7368; exact later approval required underCodex/Rules/RequirementGate.md checkpointB. Unrelated root work excluded from bookkeeping commit.

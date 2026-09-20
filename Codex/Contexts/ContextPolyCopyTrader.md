@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Final Settlement Query And Lock Fix Contract Ready
+Goal: Fix the immediate-confirmation query-plan and settlement-lock regression reported for1762db97.
+Status: Draft prepared; awaiting exact user digest approval.
+Done:
+- User request verbatim: Исправляй. Inspected current final settlement and historical confirmation SQL, generic position settlement, wallet/position locks, linked Live settlement and focused integration tests.
+- Direct code evidence: PersistFinalPaperRunAsync currently locks strategy/run before wallet/position; generic final position settlement locks wallet/position before related orders. Immediate confirmation embeds correlated readiness checks in UPDATE. Persisted production stacks and actual blocking activity identify the affected path; the exact second deadlock participant remains unproven.
+- DraftRC-20260920-final-settlement-query-lock-fix covers key-bounded readiness reads using existing indexes, consistent acquisition of existing locks only in directly interacting paths, unchanged atomic final-only financial/provisional/proof/Confirmed semantics, and actual-path scale/concurrency tests. No production operation or schema/index change.
+- Local scale verification will include at least100000unrelated rows in each relevant run/position/settlement table, real overlapping writer tests and existing regressions/service build/independent review. Estimated implementation45–90minutes after approval; no individual action longer than15minutes is authorized implicitly.
+- Contract mode draft validation PASS; semanticSHA2562d32e365bb5e5907388cc6c5bfb51fe58cd2e68c7927f73d02cf83998c4f7368. No product edits, builds, tests, production calls or disposable artifacts this turn.
+Next: Obtain exact APPROVE for this digest, commit approval separately, then implement and verify the bounded fix.
+Notes: Concurrent unrelated root changes preserved. Root WorkingTree gate has previously verified unrelatedSept17semantic-change blocker; the new draft remains untracked because draft contracts cannot be committed; only own exempt context/history are staged.
+Blockers: RequirementGate.md checkpointB requires later exact approval before material edits.
+
 ## Active Update 2026-09-20 Final Settlement Deployment Verification Failed
 Goal: Verify the user's deployment of1762db97 read-only on production192.168.0.101:5432/polycopytrader.
 Status: Verification completed; deployment behavior failed.
