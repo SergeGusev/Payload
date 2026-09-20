@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260920-paper-confirmation-diagnostics",
+  "title": "Diagnose idle skips, cancellation and stages of Paper outcome confirmation",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Что нужно сделать, чтобы мы это поняли?"
+    },
+    {
+      "source": "user",
+      "text": "Ок, добавь необходимые проверки"
+    }
+  ],
+  "scope": {
+    "goal": "Добавить согласованную диагностику, позволяющую установить, почему фоновая проверка Paper не начинает или не завершает попытки.",
+    "inScope": [
+      "Диагностика ServiceActivityState, PaperOutcomeConfirmationWorker/Processor и этапов существующей транзакции подтверждения.",
+      "Имена существующих торговых обработчиков и рыночных эффектов, вызывающих занятость/отмену; снимки существующих pending/in-flight метрик.",
+      "Структурированные логи попыток и сводка частых пропусков раз в 30 секунд, длительности этапов, PaperOrderId/AttemptId и конкретные причины исходов.",
+      "Целевые тесты, сборка сервиса, README и обязательная независимая семантическая проверка."
+    ],
+    "outOfScope": [
+      "Изменение Idle, торговых циклов/приоритетов, условий подтверждения, финансовых формул, таймаутов, интервала выбора 1 секунда и повторной попытки 1 минута.",
+      "Новые индексы/миграции/таблицы, дополнительная запись диагностики в рабочую БД, изменение Confirmed или данных ставок ради диагностики.",
+      "Выкладка, запуск миграций, остановка/перезапуск рабочего сервиса, Live-ордера, изменение настроек и наблюдение за production после будущей выкладки.",
+      "Общий мониторинг, отдельный сервис/sidecar, аудит остальных механизмов приложения."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Все будущие попытки и пропуски только фонового PaperOutcomeConfirmation; сводки по 30-секундным интервалам, UTC timestamps и монотонные длительности. Исторические данные не переписываются.",
+    "firstVerification": "До правок прочитаны ServiceActivityState, все EnterTradingCycle callsites, worker/processor, точные методы repository и текущие tests. Проверить последующее соответствие логов этим dispatch paths; production подключение для локальной реализации не нужно."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Показывать фактические причины пропуска Idle и источники отмены.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, добавь необходимые проверки",
+      "acceptanceCriteria": [
+        "Диагностика различает активные торговые обработчики, занятую фоновую попытку, pending/in-flight очереди и остановку сервиса; показывает именованный источник и доступные счётчики.",
+        "Все существующие production EnterTradingCycle callsites дают проверяемое имя компонента/метода; рыночные эффекты включают тип события. Источник первой отмены сохраняется и не заменяется более поздними событиями.",
+        "Причина и снимок отмечаются как наблюдение на соответствующем этапе, а не выдуманная причина задним числом. Unknown используется, если источник объективно не установлен.",
+        "Сохраняются существующие условия Idle, точки отмены и неблокирующее возобновление торговли; логирование и дорогое форматирование не выполняются под блокировкой активности/из горячего пути каждого рыночного события."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Control/ServiceActivityState.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperSettlementProcessor.cs",
+        "src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperEntryPersistenceQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/ServiceActivityStateTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "expected": "Детерминированные тесты причин отказа/источника отмены, вложенной активности и nonblocking callbacks; прежние Idle tests проходят.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Позволить проследить попытку от выбора ставки до результата с длительностями и причинами.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, добавь необходимые проверки",
+      "acceptanceCriteria": [
+        "Каждая начатая попытка имеет AttemptId, после выбора — PaperOrderId. Записываются реально достигнутый этап и монотонные длительности: выбор, Gamma по token/condition, проверка ответа, применение БД/commit, сохранение повторной попытки.",
+        "В существующей транзакции БД диагностируются достигнутые этапы получения соединения/транзакции, блокировок, проверок идентичности/готовности, коррекции, зависимого пересчёта и commit. Никаких дополнительных SQL-запросов или изменения границ транзакций ради диагностики.",
+        "Итог различает отсутствие кандидата, успешное совпадение, успешную коррекцию, отложенную проверку с причиной, отмену торговлей/очередью/остановкой, timeout Gamma, ошибку HTTP/БД. SQLSTATE и тип исключения фиксируются, когда доступны; неизвестный результат commit не объявляется доказанным rollback.",
+        "Диагностика пишется в finally/эквивалентном гарантированном пути и охватывает отмену/ошибку при выборе, до HTTP, в HTTP, перед/во время БД и при defer; первоначальная ошибка не теряется при последующей отмене.",
+        "Секреты, полные HTTP-ответы, заголовки, connection strings и торговые подписи в новые логи не попадают. Не меняются критерии Resolve, returned results, retry/evidence semantics или финансовые операции."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationDiagnostics.cs",
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationDiagnostics.cs",
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationModels.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/NoOpAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationDiagnosticsTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "expected": "Проверка реальных структурированных log fields на успехе/skip/timeout/error/preemption; корреляция и этапы, отсутствие ложного success/rollback; PG tests на отдельной disposable базе, без silent skip.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Объединять частые пропуски в диагностическую сводку раз в 30 секунд.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, добавь необходимые проверки",
+      "acceptanceCriteria": [
+        "Сводка содержит UTC границы интервала, количество проверок Idle/пропусков по причинам, попыток/успехов/коррекций/отложенных/отмен/ошибок, а также активную попытку с этапом и его возрастом, когда она есть.",
+        "При длительной попытке периодическая сводка продолжает показывать её текущий этап. Частые no-candidate/Idle skips не создают отдельный лог каждую секунду или на каждую котировку.",
+        "Счётчики конкурентно безопасны и ограничены набором компонентов/причин; не накапливают всю историю PaperOrderId в памяти. Метрики не добавляют опрос БД/Gamma и не запускают дополнительную проверку ставок."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationDiagnostics.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationDiagnosticsTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "expected": "Контролируемое время и конкурентные тесты доказывают 30-секундные сводки, отсутствие flood, видимость незавершённого этапа и неизменную последовательную обработку.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Проверить диагностические изменения и описать чтение новых логов.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Ок, добавь необходимые проверки",
+      "acceptanceCriteria": [
+        "Сервис собирается; целевые tests проходят, включая прежние Paper confirmation/ServiceActivityState и фактически выполняемые PostgreSQL tests на отдельной локальной базе.",
+        "README описывает поля, этапы, сводки и ограничения интерпретации; по Unknown или незавершённому commit нельзя делать неподтверждённый причинный вывод.",
+        "Независимый reviewer сравнивает пользовательские слова, утверждённый digest, фактический diff и результаты. Временные артефакты хранятся в отмеченном D:/CodexTemp run и удаляются после сохранения evidence."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationDiagnosticsTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/ServiceActivityStateTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "expected": "Целевые тесты, документация и независимый semantic PASS без открытых замечаний.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
+          "expected": "Build exit0, ошибки отсутствуют; предупреждения явно отражены.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Независимое semantic review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree и -Mode Staged на точных изменениях задачи",
+          "expected": "Review PASS/no open findings; механические проверки PASS; утверждённая семантика неизменна.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260920-paper-confirmation-diagnostics sha256:59f4fe5854570360a27cb8b522edb799d7eee372f8ee534d9fdc57d02aff5637",
+    "semanticDigest": "sha256:59f4fe5854570360a27cb8b522edb799d7eee372f8ee534d9fdc57d02aff5637"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/paper_diagnostics_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
