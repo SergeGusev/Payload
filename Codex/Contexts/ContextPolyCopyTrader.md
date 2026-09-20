@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Paper Confirmation Progress And Net Realized Priority Clarification
+Goal: Check current Paper confirmation progress and prepare the user's requested descending all-history Net realized strategy priority.
+Status: Read-only progress check completed; sorting preparation awaits the user's queue-precedence choice and a new requirement contract approval.
+Done:
+- Production192.168.0.101:5432/polycopytrader, all paper_orders, UTC:14:40:18.909883 total3949515/confirmed3051/remaining3946464/corrected0;14:42:16.625298 total3949515/confirmed3052/remaining3946463/corrected0. Status-group sums and3052distinct confirmed IDs independently agree;0.0772753% confirmed.
+- Second snapshot last10minutes242confirmed/384arrivals; independent deduplicated service log window14:32:16.625298..14:42:16.625298UTC contains242confirmed lines. First window had302confirmations/384arrivals;4CorrectRuns SQL55P03timeouts. Later14:40:18.909883..14:41:58.909UTC had1confirmation and3RefreshWallet timeouts; all3exact order IDs remained unconfirmed at14:44:29.422923UTC. No correction committed in these counts.
+- Dashboard initial projection is a separate process: at14:42:12.545454UTC Fcursor94b7ddd5-8849-4e2d-8333-e5d9baeb5cd5,2293042of3944467fillIDs at/below cursor (58.133% of F seeding stage only),1651425after. O/R/S unfinished. Latest14:44:30.743023UTC Fcursorac9e939c-acbf-4ce8-b329-440d13ef2578,queue165834,initializedfalse; partial projectioncounts must not replace actual whole-history orders.
+- Latest service heartbeat14:44:16.667435UTC Running/Live,version4661987621dfba3b687b5c30b51dba51098fbfbc,last_errorNULL,waitinglocks0; legacy projection Running/version4 and advancing. No production mutation or deployment.
+- User requested sorting and explicitly selected outcome verification by overall all-history Net realized. Source path verified: Dashboard MainWindow binding -> DashboardDataService -> PostgresDashboardSnapshotRepository -> dashboard_strategy_performance_snapshots.net_realized_pnl_usd. Current worker Recent/Recent/Archive with borrowing; repository claims by retry time/creation/id then reorders by condition/id.
+- Read-only ranking preview14:50:13.506054UTC:2645strategies,1673numeric Net realized,972NULL,0missing snapshots. Current paper_orders strategy_time and unconfirmed indexes valid/ready. No new contract or product edits yet.
+Next: Obtain pending choice: global Net realized priority across history, or retain Recent/Archive2:1 and rank within each lane; then make exact reviewable sorting contract, including null/tie/rank-refresh behavior, and request digest approval before product edits.
+Notes: Queries and compact evidence appended to Sept20history. Protected temp cleanup completed; owned run absence verified. Preserve concurrent BTC-chart context/history and unrelated Sept17deletion work.
+Blockers: Queue-precedence answer pending; RequirementGate requires a later exact approval of the new contract before implementation.
 ## Active Update 2026-09-20 Coverage Fix Deployment Confirmed And Progressing
 Goal: Verify the user's repeated deployment, read-only, on the production service and coverage projection.
 Status: Completed verification; fixed projection advances, initial historical fill remains incomplete.
