@@ -1,3 +1,14 @@
+## Active Update 2026-09-20 Paper Coverage Projection Fix Preparation
+Goal: Fix the deployed Paper confirmation coverage projection timeout without changing financial semantics.
+Status: In Progress; concrete draft ready, exact digest approval pending.
+Done:
+- User request «Фиксируй» follows deployed verification. Current source18690b30 and actual worker/repository/migration/test paths inspected read-only; stored evidence of98timeouts/zero cursors/queue15645 and wallet-only settlement lookup cross-checked against current implementation.
+- Draft RC-20260920-paper-coverage-projection-fix validates PASS, sha256:eec65a37d17a39c2b698bb6ddf5a101ca158c9452dc5e2cd083cad44fe2d2b2d. Proposed separate0015concurrent all-source wallet/asset index; preserve existing migrations and formulas. Coverage-only adaptive250..1, halve on57014/55P03,30second pause while legacy projection continues, bounded recovery after8fast successful portions.
+- Proposed real PostgreSQL consumer verification:100000orders/10000assets/1000settlements, plus60seconds concurrent arrivals; raw aggregate comparison and actual timeout rollback/retry. Each drain capped10minutes. No production speed guarantee.
+Next: Obtain later APPROVE RC-20260920-paper-coverage-projection-fix sha256:eec65a37d17a39c2b698bb6ddf5a101ca158c9452dc5e2cd083cad44fe2d2b2d; approval-only commit, isolated local implementation, tests and independent review.
+Notes: No product edits/builds/tests/production calls or temporary artifacts in preparation. Existing unrelated root changes preserved. Initial preparation/local-check estimate30–45minutes; implementation estimate to be updated from measured test runtime.
+Blockers: RequirementGate.md checkpointB requires later exact digest approval before material changes; new draft remains untracked until approval.
+
 ## Active Update 2026-09-20 Throughput Deployment Verification
 Goal: Verify the user's deployment read-only, current service launch and Paper confirmation reporting.
 Status: Completed verification; deployed verifier runs, new Dashboard coverage projection is blocked.

@@ -649,3 +649,10 @@ log-summary.json 93FE2279B35B119BF9A665973BCCB3AA89B3621539376C601EE180174B60DDC
 final-health.jsonl F7933346AB285BFE37F4079114769DEB5F7F7558BBE4A3849534190C83DE1103
 Final bookkeeping validation: full WorkingTree gate still reports pre-existing unrelated Sept17contract SEMANTIC_CHANGE_AFTER_APPROVAL; preserved without editing. Exact exempt context-prefix + Sept20history Staged gate PASS/governedFiles0/contracts0 and diffcheckPASS. No product modifications or tests/builds were needed for this read-only runtime check. Protected temp cleanup follows; unrelated work remains excluded.
 Protected cleanup verified: exact marked paper-throughput-verify-20260920-01 removed21files/14337232bytes; directory absent. All98coveragewarning continuations independently grouped to SQLSTATE57014 statement timeout. Launchmatched logs before13:08:18.146468UTC independently count102, matching rawDBslice. Context/history only committed/pushed as normal finalization.
+
+## 2026-09-20T13:21:25.7277840+00:00
+Request:
+Фиксируй
+
+Result:
+Prepared RC-20260920-paper-coverage-projection-fix draft; Contract mode validation PASS; semantic sha256:eec65a37d17a39c2b698bb6ddf5a101ca158c9452dc5e2cd083cad44fe2d2b2d. Current implementation and persisted deployment evidence inspected. Exact proposal: new concurrent all-source paper_orders(wallet,asset) index, coverage-only adaptive portions250..1 with30s overload pause, real PostgreSQL consumer100korders/10kassets/1000settlements and60s arrivals. Existing2sstatement/100mslock and atomic queue/cursor/deltas/formulas preserved. No code changes, production calls, builds, tests or temporary artifacts. User must approve exact digest per RequirementGate checkpointB before material edits; draft remains untracked. Only own context prefix and this history entry staged, unrelated work preserved.
