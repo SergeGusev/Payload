@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Paper Throughput Approval And Migration Path Amendment
+Goal: Implement approved Paper throughput/trust contract without changing agreed behavior.
+Status: Approval recorded; product edits blocked by missing migration catalog/test paths. Narrow v2 draft ready.
+Done:
+- User approved v1 sha256:7ff9a5a0e38913ed480b8e855fe4c61c382be5241097e16b60cf32c8487a17d6; verified exact digest and recorded verbatim in approval-only commit2c39896d. No product edit followed.
+- Actual migration path: PostgresSchemaInitializer public ctor calls PostgresSchemaMigrationCatalog.CreateDefault; PostgresSchemaMigrationTests.DefaultCatalog_IsBoundToApprovedLegacyChecksum asserts10items and immutable baseline checksum. Catalog and its test were omitted from v1implementationPaths. PostgresSchema.SchemaSql includes DashboardProjectionSchema.SchemaSql; both are immutable baseline and must remain unchanged.
+- Independent agent:/root/paper_throughput_trust_reviewer supports adding catalog+catalog test. Constructor-only Append is technically viable runner wiring but would split default initializer from default catalog representation; not used as path-gate workaround.
+- New draft RC-20260920-paper-confirmation-throughput-and-trust-v2 validated PASS, semantic sha256:af5d392a16c476be3da48c8fd2a61e9871851105ba8531f18a7322e7b3e4dac2. Deep comparison proves only identity/lifecycle plus2implementationPaths inREQ-002 andVER-008focused catalog test differ; all accepted behavior/settings/benchmarks/scope unchanged. V1approved record preserved unchanged.
+- Clean detached worktree atapproval commit inspected read-only. No code/config/schema/database changes, builds or tests. Protected cleanup removed marked paper-throughput-20260920-01, absence verified; dry-run showed only its stale worktree registration, then pruned.
+Next: Obtain APPROVE RC-20260920-paper-confirmation-throughput-and-trust-v2 sha256:af5d392a16c476be3da48c8fd2a61e9871851105ba8531f18a7322e7b3e4dac2; approval-only commit, fresh marked isolated worktree, implement existing accepted design. Original2–4hour estimate unchanged; no implementation has been performed.
+Notes: Planning omission belongs to assistant, not missing user direction. WorkingTree gate pre-existing unrelated Sept17contract mutation remains preserved; exact staged bookkeeping/approval gate passes. V2draft remains untracked until its approval-only commit. No production access.
+Blockers: RequirementGate path mapping and changed digest require later approval before adding the two omitted files.
+
 ## Active Update 2026-09-20 Paper Throughput And Trust Contract Preparation
 Goal: Prepare concrete implementation contract after user accepted recommended history-recovery approach.
 Status: Draft ready; later exact digest approval required before product edits.
