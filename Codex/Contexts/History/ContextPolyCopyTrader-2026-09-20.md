@@ -302,3 +302,21 @@ SELECT json_build_object('at',clock_timestamp(),'orders',(SELECT json_agg(x) FRO
 ```
 
 Finalization 2026-09-20T09:11:56.1782181Z: marked temporary run removed, absence verified. Broad WorkingTree gate detects pre-existing unrelated Sept17contract semantic change; no attempt to alter it. Read-only task stages only exempt context/history paths; exact Staged gate and diff check before commit. No build/test needed for unchanged code.
+
+## 2026-09-20T09:19:41.0094800Z
+Request:
+Это решаемо?
+
+Result:
+## Active Update 2026-09-20 Paper Confirmation Scheduling Feasibility
+Goal: Answer whether the observed foreground cancellation problem is solvable.
+Status: Completed source-only feasibility explanation; no implementation authorized by this question.
+Done:
+- Rechecked current Processor, Worker, ServiceActivityState and exact claim/correction repository paths. Gamma lookup occurs outside correction transaction; current linked background token is canceled by every foreground entry and is shared across lookup/application.
+- Proposed staged scheduling: admit one attempt during Idle, allow in-flight bounded Gamma lookup to finish and retain its result, wait for Idle before applying, and give an admitted atomic database operation a bounded completion opportunity. This would change cancellation policy and requires separate agreed implementation scope.
+- Strict immediate cancellation on every quote cannot guarantee progress if all free gaps are shorter than an operation. Successful DB correction latency/trading impact remains unmeasured because observed production attempts never reached it; no zero-impact/throughput guarantee.
+Next: None within this feasibility question.
+Notes: Current HEAD77bc48cd, inspected source unchanged. Existing deployed runtime cancellation evidence remains in previous entry. No production connection, product edits, artifacts, builds or tests.
+Blockers: None for feasibility answer; production fix is not implemented.
+
+Only exempt context/history changed. Existing unrelated Sept17semantic gate failure remains outside scope; exact Staged gate and diff check used. No new operational action or contract proposed as already approved.
