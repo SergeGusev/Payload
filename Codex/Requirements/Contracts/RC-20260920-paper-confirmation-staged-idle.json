@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260920-paper-confirmation-staged-idle",
+  "title": "Allow bounded Paper confirmation stages to complete between trading cycles",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Да, свободные промежутки между торговыми циклами"
+    },
+    {
+      "source": "user",
+      "text": "Пересчитывай всё. Исходи из главного принципа - мы должны иметь наиболее актуальную информацию, реально отражающую живые ставки."
+    },
+    {
+      "source": "user",
+      "text": "Это решаемо?"
+    },
+    {
+      "source": "user",
+      "text": "Действуй"
+    }
+  ],
+  "scope": {
+    "goal": "Устранить подтверждённое прерывание всех Paper confirmation попыток котировками: поэтапное выполнение с допуском в Idle и ограниченным завершением уже начатого этапа.",
+    "inScope": [
+      "Только планирование PaperOutcomeConfirmationWorker/Processor, необходимый допуск через ServiceActivityState и типизированное состояние одной текущей ставки.",
+      "Отдельные этапы выбора, Gamma, применения коррекции или сохранения отложенной попытки; сохранение текущей ставки и готового результата между Idle промежутками.",
+      "Таймауты и диагностика этих этапов, сохранение существующих финансовых/идентификационных проверок и полного зависимого пересчёта.",
+      "Целевые unit и изолированные PostgreSQL tests, сборка сервиса, README и независимая семантическая проверка."
+    ],
+    "outOfScope": [
+      "Production подключение/выкладка/рестарт/миграции/ручное изменение ставок, стратегий, Live ордеров и настроек.",
+      "Новые таблицы, колонки, индексы, общая очередь задач, пакетная обработка или отдельный сервис.",
+      "Изменение критериев final outcome, расчётов PnL/fees/counters, набора стратегий и Paper/Live execution semantics.",
+      "Изменение торговых циклов, состава учитываемой активности и очередей, произвольное исключение RefreshPositionMarksAsync или market events из Idle.",
+      "Самостоятельное исправление отдельного дефекта 30/60-секундного периода диагностических сводок."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Все будущие попытки существующего Paper confirmation worker по историческим и новым Paper orders, включая отключённые стратегии и Live shadows. Один кандидат в памяти; production история не обрабатывается этой задачей.",
+    "firstVerification": "Read-only изучены актуальные Worker/Processor/ServiceActivityState, SQL claim/defer/Confirm, cache invalidation, интерфейсы, DI и tests на HEAD be450168. Наблюдавшийся production сбой за09:06:34..09:09:49UTC20сентября сохранён в history:33/33отменForeground. Новый production запрос для локальной доработки не нужен."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Заменить отмену всей попытки на последовательные этапы с допуском в свободных промежутках.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "Выбор кандидата, начало Gamma lookup и применение БД/defer допускаются только когда прежний predicate Idle разрешает работу: нет активной торговли и pending/in-flight очередей. Повторная проверка готовности не чаще существующего тика1секунда.",
+        "Уже допущенный этап не отменяется последующими Foreground/queue событиями; новые этапы ждут следующего Idle. Остановка сервиса и собственный таймаут продолжают отменять выполняемый этап.",
+        "Foreground EnterTradingCycle не ждёт завершения фонового этапа или разрешения фонового worker; никаких новых блокировок торговых циклов на всё время HTTP/коррекции.",
+        "Одновременно обрабатывается не более одной ставки и одного её этапа; между этапами не удерживается DB транзакция/соединение/блокировка или cache-update scope. Существующее поведение activity lease для иных потребителей не меняется."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Control/ServiceActivityState.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "tests/PolyCopyTrader.Tests/ServiceActivityStateTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "expected": "Тесты доказывают прежний Idle admission, продолжение допущенного этапа после котировки, отсутствие ожидания foreground, последовательность стадий и запрет следующего этапа при занятости.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Сохранять выбранную ставку и результат Gamma до применения, не теряя прогресс из-за возобновившейся торговли.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "Типизированное состояние worker удерживает только одну текущую ставку и, после lookup, её проверенный результат либо причину defer. При ожидании Idle новые кандидаты не выбираются и завершённый Gamma lookup не повторяется.",
+        "Gamma token/condition fallback и Resolve сохраняют существующие проверки и общий лимит5секунд; HTTP не выполняется внутри DB транзакции.",
+        "При остановке состояние в памяти освобождается; уже существующие Confirmed/retry данные БД обеспечивают безопасную повторную проверку после рестарта. Новый durable cache/schema не вводится.",
+        "Если исход недоступен, запись не готова, возник timeout/ошибка, сохраняется существующий путь defer с1минутой до повтора, после чего worker переходит к следующему кандидату; при недоступности самой записи defer существующая claim retry запись остаётся точкой восстановления. Готовый результат удерживается только на ожидании Idle, а не бесконечно после terminal failure.",
+        "Переход к следующей ставке после успешного совпадения/коррекции; идемпотентность и повторная проверка текущей идентичности/готовности записи в транзакции сохраняются."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationModels.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "expected": "Проверить сохранение результата между занятыми интервалами, отсутствие повторных lookup/claim, restart/retry/stop, unavailable outcome и идемпотентность.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Ограничить завершение допущенных DB этапов и сохранить атомарность полного пересчёта.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "Для каждого DB этапа claim, apply или defer вводится общий бюджет2секунды от начала этапа до его завершения, с отменой токена по истечении бюджета и по остановке сервиса; котировки этот токен не отменяют. Это cooperative cancellation, а не обещание завершения rollback/dispose/сетевого cancellation строго за2секунды.",
+        "Существующие100ms lock_timeout и2s statement_timeout коррекции остаются. Границы единой атомарной коррекции, все финансовые формулы, зависимые counters/events/hourly/wallet updates и Confirmed остаются прежними.",
+        "При конкурентном писателе/lock timeout/cancellation не допускается частичное применение коррекции. Неопределённый результат commit не выдаётся за доказанный rollback; повторная обработка использует текущие durable данные.",
+        "Cache invalidation scope открыт только вокруг фактической apply транзакции; его прежняя защита от устаревшего результата после commit сохраняется.",
+        "Проверка конкуренции показывает, что foreground activity admission не блокируется фоновым этапом; отдельный PostgreSQL сценарий измеряет конфликт за строки и освобождение блокировок после отмены. Нулевое влияние на production latency и достаточность2секунд для любой исторической ставки без runtime evidence не утверждаются."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/ServiceActivityStateTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "expected": "Детерминированные timeout/stop/concurrency tests и реальные локальные PostgreSQL проверки атомарности, повторной записи, конкуренции и освобождения locks; старые financial cases проходят.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Адаптировать диагностику к ожиданию между этапами и проверить завершённую доработку.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Действуй",
+      "acceptanceCriteria": [
+        "Один AttemptId/PaperOrderId сохраняется через все стадии, сводки показывают ожидание Idle и текущий этап. Ожидание и разрешённое продолжение после котировки не записываются как Canceled или успешное подтверждение.",
+        "Сохраняются структурированные длительности/первоначальная ошибка/SQLSTATE/commit acknowledgment и отсутствие секретов; ограниченная память даже при длительном ожидании: не накапливать stage entry на каждом1секундном пропуске.",
+        "Timeout DB этапа, timeout Gamma и ServiceStopping различимы; фактический успех логируется только по результату repository. Диагностика не добавляет SQL.",
+        "README описывает новые этапы,2секундный DB budget,5секундный Gamma timeout, сохранение состояния и пределы гарантий. Исправление отдельного30/60s cadence defect не входит в эту доработку.",
+        "Целевые tests реально выполняются на disposable PostgreSQL, сервис собирается, независимый reviewer сравнивает verbatim requests/approved digest/diff/evidence, временный marked run удалён до завершения."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationDiagnostics.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationDiagnostics.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationDiagnosticsTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "expected": "Тесты подтверждают единый attempt, waiting stage без роста памяти/flood, правильные причины и неизменные accounting результаты; документация и независимый PASS.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
+          "expected": "Сборка exit0, warnings отражены.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-006",
+          "kind": "inspection",
+          "command": "Independent semantic review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree and -Mode Staged on exact task changes",
+          "expected": "PASS/no open findings; approved semantics unchanged, unrelated dirty root files preserved.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260920-paper-confirmation-staged-idle sha256:b3030b229501398a954c8669f30ef1fcd9dc4feed9c6332257b67c46385e6017",
+    "semanticDigest": "sha256:b3030b229501398a954c8669f30ef1fcd9dc4feed9c6332257b67c46385e6017"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/paper_staged_idle_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
