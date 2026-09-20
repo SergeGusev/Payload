@@ -1,3 +1,15 @@
+## Active Update 2026-09-20 Final-Only Settlement And Preliminary Sizing Contract Ready
+Goal: Separate preliminary algorithm outcomes from real financial results and confirm eligible final Paper settlements immediately.
+Status: Draft prepared; awaiting exact user digest approval. No product or production edits.
+Done:
+- Historical reason verified from35f72c0c/RC-20260815-maker-precision-resolved-ledger-settlementREQ-002 and current matching success test: fallback was added to process the documented230run backlog whenGamma lacked a winner; it explicitly admitted provisionalBinanceTimedClose after identity/time/token checks. Those checks did not prove finality; the financial-source policy was wrong.
+- User clarified verbatim: Для выбора размера можно учитывать предварительный исход отдельно от финансовой истории. Earlier counter question is resolved. Paper sizing may use separate preliminary contributions; financial outcome accounting waits for the real final result.
+- Draft RC-20260920-final-only-settlement-and-provisional-sizing has3requirements: final-only Paper/Live outcome financial accounting, durable distinct preliminaryPaper sizing contributions with final replacement/restart/idempotence, and immediateConfirmed only with exact final evidence and completed lifecycle. It retains signal availability, actual fill/sale accounting, existing sizing formulas and risk gates; Live sizing changes and queue sorting are excluded.
+- Draft includes minimal local per-run state migration/catalog wiring, final Gamma and official market_resolved identity validation, focused PostgreSQL/regression tests, service build and independent semantic review. No production deployment/migration/restart/historyDML or broad rewrite authorized by this draft. Existing historical verification continues.
+- Contract validation PASS;semanticSHA256cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf. Newcontract/context/history only. No implementation or tests/builds executed.
+Next: Obtain APPROVE RC-20260920-final-only-settlement-and-provisional-sizing sha256:cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf, record approval-only commit, then local implementation and required verification/review.
+Notes: No temporary files or production access in this turn. Exact exempt/newdraft Staged gate and diff checks required before bookkeeping commit. Root WorkingTree gate has unrelated preexistingSept17semantic-change blocker; preserve/exclude it and concurrent research context/history.
+Blockers: RequirementGate exact digest approval pending. Profit-sorting global-vs-lane choice remains outside this contract.
 ## Active Update 2026-09-20 Immediate Confirmation Conditions And Revalidated ETH22 Divergence
 Goal: Explain when new Paper stakes can be confirmed immediately and establish the original Paper/Live discrepancy from code and current evidence.
 Status: Completed read-only explanation; no sorting or confirmation implementation changes.

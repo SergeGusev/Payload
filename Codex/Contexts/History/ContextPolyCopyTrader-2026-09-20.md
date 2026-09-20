@@ -844,3 +844,42 @@ WHERE l.strategy_id='b7c50005-0000-4000-8195-000000000022' AND l.settled_at_utc>
 SELECT json_build_object('aggregate',true,'pairs',count(*),'paper_net',sum(r.net_realized_pnl_usd),'live_net',sum(l.net_realized_pnl_usd),'paper_wins',count(*) FILTER(WHERE r.settlement_price=1),'live_wins',count(*) FILTER(WHERE l.won),'mismatches',count(*) FILTER(WHERE (r.settlement_price=1) IS DISTINCT FROM l.won),'mismatch_delta',sum(r.net_realized_pnl_usd-l.net_realized_pnl_usd) FILTER(WHERE (r.settlement_price=1) IS DISTINCT FROM l.won))
 FROM live_orders l JOIN paper_orders p ON p.id=l.paper_order_id JOIN strategy_market_paper_runs r ON r.paper_order_id=p.id WHERE l.strategy_id='b7c50005-0000-4000-8195-000000000022' AND l.settled_at_utc>='2026-09-19T06:10:26.233155Z' AND l.settled_at_utc<'2026-09-20T06:10:26.233155Z';
 ROLLBACK;
+
+
+## 2026-09-20T16:20:08.3473264+00:00 — Final-only financial outcome accounting clarification
+Request:
+Re: Этот предварительный результат сохранялся как завершённый расчёт ставки. &#x20;
+
+А почему так делалось? Это же неправильно. Мы можем использовать этот результат как основание алгоритма для того, чтобы сделать вывод, делать следующую ставку или нет. Но персчёты любых ставок мы должны делать только тогда, когда приходит реальный сигнал о результате
+
+Result:
+## Active Update 2026-09-20 Final Outcome Accounting Boundary
+Goal: Explain why preliminary results were used for settlement and prepare the user's rule that financial outcome accounting waits for real final results.
+Status: Historical design cause verified; no product edits. Awaiting counter semantics clarification before drafting an approval-ready implementation contract.
+Done:
+- Git35f72c0c1045851213a5062eda78393ee98ed888 dated2026-08-15 introduced IsApprovedSettlementResolvedLedgerSource allowing GammaClosedMarket,MarketWebSocket,BinanceTimedClose. The historical RC-20260815-maker-precision-resolved-ledger-settlement REQ-002 explicitly allowed the fallback when Gamma lacked a winner to unblock the documented230Entered-run backlog. Originalusertexts were only 'Проверь сервер и ставки' and 'Доработай'; the detailed designed acceptance criteria included the erroneous provisional-source authority. Do not shift responsibility to the user's general request.
+- Current source retains this allowlist; focused test ProcessAsync_SettlementResolvedLedger_SettlesExactCanonicalRows includes BinanceTimedClose success, so it encodes that policy. Historical contract/commit and current implementation independently establish how the policy entered code; no new production incidence measurement in this turn.
+- User explicitly distinguishes preliminary algorithm signals from accounting: preliminary results may guide whether to place the next stake, but stake outcome recalculations require a real result signal. Final financial results must not be fabricated to advance an algorithm. No sort/global-vs-lane decision or immediate Confirmed code approved by this turn.
+- Current settlement also calls UpdatePaperLostCounterAfterSettlementAsync at8336; ApplyPaperLostCounterStakeAdjustment consumes settings.PaperLostCounter at19150 to change next size. Therefore delaying settlement affects stake sizing, a real behavior choice. Async question pending: should this counter also wait for final Polymarket outcome, or may a separate preliminary algorithm value affect sizing while financial history remains final-only?
+Next: Resolve pending counter choice, then draft exact final-result accounting contract and obtain semantic digest approval. Preserve preliminary market signal availability; no assumption that it can mutate financial history.
+Notes: Read-only local source/history,gitstatus/divergence checked; no production queries/mutations/build/tests or temporary artifacts. Existing unrelated dirty context/history andSept17contract preserved.
+Blockers: Counter semantics answer pending; no implementation approval contract yet.
+
+
+## 2026-09-20T16:24:53.6642416+00:00 — Counter clarification received and final-only settlement contract drafted
+Request:
+Для выбора размера можно учитывать предварительный исход отдельно от финансовой истории
+
+Result:
+## Active Update 2026-09-20 Final-Only Settlement And Preliminary Sizing Contract Ready
+Goal: Separate preliminary algorithm outcomes from real financial results and confirm eligible final Paper settlements immediately.
+Status: Draft prepared; awaiting exact user digest approval. No product or production edits.
+Done:
+- Historical reason verified from35f72c0c/RC-20260815-maker-precision-resolved-ledger-settlementREQ-002 and current matching success test: fallback was added to process the documented230run backlog whenGamma lacked a winner; it explicitly admitted provisionalBinanceTimedClose after identity/time/token checks. Those checks did not prove finality; the financial-source policy was wrong.
+- User clarified verbatim: Для выбора размера можно учитывать предварительный исход отдельно от финансовой истории. Earlier counter question is resolved. Paper sizing may use separate preliminary contributions; financial outcome accounting waits for the real final result.
+- Draft RC-20260920-final-only-settlement-and-provisional-sizing has3requirements: final-only Paper/Live outcome financial accounting, durable distinct preliminaryPaper sizing contributions with final replacement/restart/idempotence, and immediateConfirmed only with exact final evidence and completed lifecycle. It retains signal availability, actual fill/sale accounting, existing sizing formulas and risk gates; Live sizing changes and queue sorting are excluded.
+- Draft includes minimal local per-run state migration/catalog wiring, final Gamma and official market_resolved identity validation, focused PostgreSQL/regression tests, service build and independent semantic review. No production deployment/migration/restart/historyDML or broad rewrite authorized by this draft. Existing historical verification continues.
+- Contract validation PASS;semanticSHA256cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf. Newcontract/context/history only. No implementation or tests/builds executed.
+Next: Obtain APPROVE RC-20260920-final-only-settlement-and-provisional-sizing sha256:cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf, record approval-only commit, then local implementation and required verification/review.
+Notes: No temporary files or production access in this turn. Exact exempt/newdraft Staged gate and diff checks required before bookkeeping commit. Root WorkingTree gate has unrelated preexistingSept17semantic-change blocker; preserve/exclude it and concurrent research context/history.
+Blockers: RequirementGate exact digest approval pending. Profit-sorting global-vs-lane choice remains outside this contract.
