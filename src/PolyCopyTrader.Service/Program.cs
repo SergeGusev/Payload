@@ -477,6 +477,9 @@ builder.Services.AddSingleton<IOnChainPaperSignalProcessor, OnChainPaperSignalPr
 builder.Services.AddSingleton<IOnChainMarketEnrichmentProcessor, OnChainMarketEnrichmentProcessor>();
 builder.Services.AddSingleton<IOnChainSignalCandidateProcessor, OnChainSignalCandidateProcessor>();
 builder.Services.AddSingleton<ServiceControlState>();
+builder.Services.AddSingleton<ServiceActivityState>();
+builder.Services.AddSingleton<IPaperOutcomeConfirmationProcessor, PaperOutcomeConfirmationProcessor>();
+builder.Services.AddHostedService<PaperOutcomeConfirmationWorker>();
 builder.Services.AddSingleton<DatabaseScanTelemetryState>();
 builder.Services.Configure<HostOptions>(options =>
 {

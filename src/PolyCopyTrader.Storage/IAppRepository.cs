@@ -460,6 +460,15 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
 
     Task<IReadOnlyList<SignalRejection>> GetRecentSignalRejectionsAsync(int limit = 100, CancellationToken cancellationToken = default);
 
+    Task<PaperOrder?> TryClaimPaperOutcomeConfirmationAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken = default)
+        => Task.FromResult<PaperOrder?>(null);
+
+    Task DeferPaperOutcomeConfirmationAsync(Guid orderId, DateTimeOffset nextAttemptUtc, string reason, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    Task<PaperOutcomeConfirmationResult> ConfirmPaperOutcomeAsync(PaperOutcomeConfirmation confirmation, CancellationToken cancellationToken = default)
+        => Task.FromResult(new PaperOutcomeConfirmationResult(false, false, "repository_not_supported"));
+
     Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);
 
     async Task AddSignalAndPaperOrderAsync(

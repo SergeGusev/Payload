@@ -1,3 +1,4 @@
+using PolyCopyTrader.Service.Control;
 using System.Diagnostics;
 using Npgsql;
 using PolyCopyTrader.Domain;
@@ -10,13 +11,15 @@ public sealed class PaperSettlementProcessor(
     ILogger<PaperSettlementProcessor> logger,
     IPolymarketGammaClient gammaClient,
     IExposureSnapshotCache exposureCache,
-    IAppRepository repository) : IPaperSettlementProcessor
+    IAppRepository repository,
+    ServiceActivityState? activityState = null) : IPaperSettlementProcessor
 {
     private const int SettlementDeadlockMaximumAttempts = 3;
     private const int SettlementDeadlockInitialRetryDelayMilliseconds = 50;
 
     public async Task<PaperSettlementProcessingResult> ProcessOpenPositionsAsync(CancellationToken cancellationToken = default)
     {
+        using var tradingActivity = activityState?.EnterTradingCycle();
         var positions = (await repository.GetOpenPaperPositionsAsync(cancellationToken)).ToArray();
         if (positions.Length == 0)
         {
@@ -91,6 +94,7 @@ public sealed class PaperSettlementProcessor(
         DateTimeOffset settledAtUtc,
         CancellationToken cancellationToken = default)
     {
+        using var tradingActivity = activityState?.EnterTradingCycle();
         if (string.IsNullOrWhiteSpace(winningAssetId) && string.IsNullOrWhiteSpace(winningOutcome))
         {
             return new PaperSettlementProcessingResult(0, 0, 0, 0);

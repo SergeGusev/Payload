@@ -12,6 +12,27 @@ public sealed class StrategyStateProvider(
     private IReadOnlyDictionary<Guid, StrategyRuntimeSettings>? strategySettings;
     private IReadOnlySet<Guid>? enabledStrategyIds;
     private DateTimeOffset refreshedAtUtc;
+    private long outcomeRevision;
+    private long loadedOutcomeRevision;
+    private int pendingOutcomeUpdates;
+
+    public void InvalidatePaperOutcomeSettings() => Interlocked.Increment(ref outcomeRevision);
+
+    public IDisposable BeginPaperOutcomeUpdate()
+    {
+        Interlocked.Increment(ref pendingOutcomeUpdates);
+        InvalidatePaperOutcomeSettings();
+        return new OutcomeUpdate(this);
+    }
+
+    private sealed class OutcomeUpdate(StrategyStateProvider owner) : IDisposable
+    {
+        public void Dispose()
+        {
+            owner.InvalidatePaperOutcomeSettings();
+            Interlocked.Decrement(ref owner.pendingOutcomeUpdates);
+        }
+    }
 
     public async Task<IReadOnlyDictionary<Guid, StrategyRuntimeSettings>> GetStrategySettingsAsync(CancellationToken cancellationToken = default)
     {
@@ -84,7 +105,7 @@ public sealed class StrategyStateProvider(
     private async Task EnsureRefreshedAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
-        if (strategySettings is not null && enabledStrategyIds is not null && now - refreshedAtUtc < RefreshInterval)
+        if (Volatile.Read(ref pendingOutcomeUpdates) == 0 && Volatile.Read(ref loadedOutcomeRevision) == Volatile.Read(ref outcomeRevision) && strategySettings is not null && enabledStrategyIds is not null && now - refreshedAtUtc < RefreshInterval)
         {
             return;
         }
@@ -93,13 +114,14 @@ public sealed class StrategyStateProvider(
         try
         {
             now = DateTimeOffset.UtcNow;
-            if (strategySettings is not null && enabledStrategyIds is not null && now - refreshedAtUtc < RefreshInterval)
+            if (Volatile.Read(ref pendingOutcomeUpdates) == 0 && Volatile.Read(ref loadedOutcomeRevision) == Volatile.Read(ref outcomeRevision) && strategySettings is not null && enabledStrategyIds is not null && now - refreshedAtUtc < RefreshInterval)
             {
                 return;
             }
 
             try
             {
+                var revision = Volatile.Read(ref outcomeRevision);
                 var settings = await repository.GetStrategyRuntimeSettingsAsync(cancellationToken);
                 strategySettings = settings.ToDictionary(
                     item => StrategyIds.Normalize(item.Key),
@@ -109,6 +131,7 @@ public sealed class StrategyStateProvider(
                     .Select(item => StrategyIds.Normalize(item.Key))
                     .ToHashSet();
                 refreshedAtUtc = now;
+                Volatile.Write(ref loadedOutcomeRevision, revision);
             }
             catch (OperationCanceledException)
             {
@@ -120,6 +143,7 @@ public sealed class StrategyStateProvider(
                 strategySettings ??= StrategyIds.AllStrategyIds.ToDictionary(StrategyIds.Normalize, StrategyRuntimeSettings.Default);
                 enabledStrategyIds ??= new HashSet<Guid>();
                 refreshedAtUtc = now;
+
             }
         }
         finally

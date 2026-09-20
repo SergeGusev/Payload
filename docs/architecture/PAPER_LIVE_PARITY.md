@@ -753,6 +753,24 @@ Before completing a new or changed Paper execution feature:
 
 ## Persistence and audit evidence
 
+Paper outcome confirmation (`RC-20260920-paper-outcome-confirmation`) is
+post-execution accounting. It preserves the original execution intent, fill prices,
+sizes, sales, fees, historical decision evidence and ResearchOnly/closed-exception
+provenance. A Live shadow keeps the actual venue execution; the verifier never
+submits/cancels Live orders or changes Live balance from Paper calculations.
+`Confirmed=true` validates the final market outcome, not equivalence of a simulated
+fill to an actual Live fill. Final resolution is checked against the exact Gamma
+condition/token mapping, oracle resolution status and unambiguous payout; the
+existing provisional initial close is unchanged. Related accounting is corrected
+atomically with the confirmation and durable Dashboard events. Original provisional
+evidence remains historical; separate confirmation evidence records the final
+source and old/new results.
+
+Gamma's [market schema](https://docs.polymarket.com/api-reference/markets/list-markets)
+exposes `umaResolutionStatus` separately from `closed`; the official
+[Polymarket SDK resolution states](https://github.com/Polymarket/py-sdk/blob/main/src/polymarket/models/gamma/market.py)
+distinguish proposed/disputed/requested states from resolved/settled states.
+
 Each Paper execution candidate must be reproducible from durable evidence. Persist
 or durably reference:
 

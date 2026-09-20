@@ -35,9 +35,9 @@ public sealed partial class PostgresAppRepository(PostgresConnectionFactory conn
 
 	private const string PolymarketGammaMarketSelectColumns = "market_id, condition_id, question_id, slug, question, event_id, event_slug, event_title,\n       series_slug, category, active, closed, archived, restricted, accepting_orders, enable_order_book,\n       negative_risk, liquidity, liquidity_clob, volume, volume_24hr, best_bid, best_ask, spread,\n       created_at_utc, updated_at_utc, start_date_utc, end_date_utc, event_start_time_utc,\n       outcomes_json, clob_token_ids_json, raw_json, fetched_at_utc, last_trade_price, order_min_size,\n       order_price_min_tick_size";
 
-	private const string PaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json::text, correlation_id, execution_source";
+	private const string PaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, raw_decision_json::text, correlation_id, execution_source, confirmed";
 
-	private const string RecentPaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, NULL::text, correlation_id, execution_source";
+	private const string RecentPaperOrderSelectColumns = "id, signal_id, strategy_id, copied_trader_wallet, status, side, asset_id, condition_id, outcome, price, size_shares, notional_usd,\n       created_at_utc, expires_at_utc, filled_at_utc, cancelled_at_utc, NULL::text, correlation_id, execution_source, confirmed";
 
 	private const string LiveOrderSelectColumns = "id, signal_id, strategy_id, status, order_id, side, asset_id, condition_id, outcome, price, size_shares,\n       notional_usd, order_type, created_at_utc, expires_at_utc, submitted_at_utc, response_status,\n       filled_size, remaining_size, average_fill_price, filled_notional_usd, cost_basis_usd, fee_usd,\n       cancel_status, raw_response_json::text, validation_summary, updated_at_utc,\n       balance_effect_applied, settlement_value_usd, realized_pnl_usd, settled_at_utc, winning_asset_id, winning_outcome,\n       won, settlement_source, correlation_id, execution_source, post_only, paper_order_id,\n       fee_accounting_status, fee_liquidity_role, fee_calculation_source, fee_rate, fee_exponent,\n       fee_taker_only, fee_calculated_at_utc, net_realized_pnl_usd,\n       historical_gross_net_parity_ownership, row_version";
 
@@ -3700,215 +3700,7 @@ WHERE performance.copied_trader_wallet = selected.copied_trader_wallet;
 					await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
 				}
 
-				await using NpgsqlCommand command = CreateCommand(connection, """
-WITH selected_orders AS MATERIALIZED (
-    SELECT
-        po.id,
-        po.copied_trader_wallet,
-        po.condition_id,
-        po.status,
-        po.side,
-        po.created_at_utc
-    FROM paper_orders po
-    JOIN temp_paper_copied_trader_performance_wallets selected
-      ON selected.copied_trader_wallet = po.copied_trader_wallet
-    WHERE po.copied_trader_wallet <> ''
-),
-selected_open_positions AS MATERIALIZED (
-    SELECT
-        pp.copied_trader_wallet,
-        pp.condition_id,
-        pp.unrealized_pnl_usd
-    FROM paper_positions pp
-    JOIN temp_paper_copied_trader_performance_wallets selected
-      ON selected.copied_trader_wallet = pp.copied_trader_wallet
-    WHERE pp.copied_trader_wallet <> ''
-      AND pp.size_shares > 0
-),
-selected_settlements AS MATERIALIZED (
-    SELECT
-        ps.copied_trader_wallet,
-        ps.condition_id,
-        ps.category,
-        ps.won,
-        ps.settlement_value_usd,
-        ps.realized_pnl_usd
-    FROM paper_position_settlements ps
-    JOIN temp_paper_copied_trader_performance_wallets selected
-      ON selected.copied_trader_wallet = ps.copied_trader_wallet
-    WHERE ps.copied_trader_wallet <> ''
-),
-required_condition_ids AS MATERIALIZED (
-    SELECT condition_id FROM selected_orders
-    UNION
-    SELECT condition_id FROM selected_open_positions
-    UNION
-    SELECT condition_id
-    FROM selected_settlements
-    WHERE NULLIF(category, '') IS NULL
-),
-condition_categories AS MATERIALIZED (
-    SELECT required.condition_id, latest.category
-    FROM required_condition_ids required
-    LEFT JOIN LATERAL (
-        SELECT market.category
-        FROM polymarket_gamma_markets market
-        WHERE market.condition_id = required.condition_id
-        ORDER BY market.fetched_at_utc DESC, market.market_id
-        LIMIT 1
-    ) latest ON true
-),
-source_metrics AS (
-    SELECT
-        orders.copied_trader_wallet,
-        COALESCE(NULLIF(category.category, ''), 'unknown') AS category,
-        COUNT(*)::integer AS orders_count,
-        COUNT(*) FILTER (
-            WHERE orders.status IN ('Filled', 'PartiallyFilled', 'PartiallyFilledExpired')
-        )::integer AS filled_orders_count,
-        COALESCE(SUM(CASE WHEN orders.side = 'Buy' THEN fills.fill_count ELSE 0 END), 0)::integer AS buy_fills_count,
-        COALESCE(SUM(CASE WHEN orders.side = 'Sell' THEN fills.fill_count ELSE 0 END), 0)::integer AS sell_fills_count,
-        0::integer AS open_positions_count,
-        0::integer AS settled_positions_count,
-        0::integer AS won_positions_count,
-        0::integer AS lost_positions_count,
-        COALESCE(SUM(CASE WHEN orders.side = 'Buy' THEN fills.notional_usd ELSE 0 END), 0) AS buy_cost_usd,
-        COALESCE(SUM(CASE WHEN orders.side = 'Sell' THEN fills.notional_usd ELSE 0 END), 0) AS sell_proceeds_usd,
-        0::numeric AS settlement_value_usd,
-        COALESCE(SUM(fills.realized_pnl_usd), 0) AS realized_pnl_usd,
-        0::numeric AS unrealized_pnl_usd,
-        MIN(orders.created_at_utc) AS first_order_utc,
-        MAX(orders.created_at_utc) AS last_order_utc
-    FROM selected_orders orders
-    LEFT JOIN condition_categories category
-      ON category.condition_id = orders.condition_id
-    LEFT JOIN LATERAL (
-        SELECT
-            COUNT(*) AS fill_count,
-            COALESCE(SUM(fill.price * fill.size_shares), 0) AS notional_usd,
-            COALESCE(SUM(fill.realized_pnl_usd), 0) AS realized_pnl_usd
-        FROM paper_fills fill
-        WHERE fill.paper_order_id = orders.id
-        OFFSET 0
-    ) fills ON true
-    GROUP BY orders.copied_trader_wallet, COALESCE(NULLIF(category.category, ''), 'unknown')
-
-    UNION ALL
-
-    SELECT
-        positions.copied_trader_wallet,
-        COALESCE(NULLIF(category.category, ''), 'unknown') AS category,
-        0, 0, 0, 0,
-        COUNT(*)::integer,
-        0, 0, 0,
-        0, 0, 0, 0,
-        COALESCE(SUM(positions.unrealized_pnl_usd), 0),
-        NULL::timestamptz,
-        NULL::timestamptz
-    FROM selected_open_positions positions
-    LEFT JOIN condition_categories category
-      ON category.condition_id = positions.condition_id
-    GROUP BY positions.copied_trader_wallet, COALESCE(NULLIF(category.category, ''), 'unknown')
-
-    UNION ALL
-
-    SELECT
-        settlements.copied_trader_wallet,
-        COALESCE(NULLIF(settlements.category, ''), NULLIF(category.category, ''), 'unknown') AS category,
-        0, 0, 0, 0,
-        0,
-        COUNT(*)::integer,
-        COUNT(*) FILTER (WHERE settlements.won)::integer,
-        COUNT(*) FILTER (WHERE NOT settlements.won)::integer,
-        0, 0,
-        COALESCE(SUM(settlements.settlement_value_usd), 0),
-        COALESCE(SUM(settlements.realized_pnl_usd), 0),
-        0,
-        NULL::timestamptz,
-        NULL::timestamptz
-    FROM selected_settlements settlements
-    LEFT JOIN condition_categories category
-      ON category.condition_id = settlements.condition_id
-    GROUP BY
-        settlements.copied_trader_wallet,
-        COALESCE(NULLIF(settlements.category, ''), NULLIF(category.category, ''), 'unknown')
-),
-grouped AS (
-    SELECT
-           copied_trader_wallet,
-           CASE WHEN GROUPING(category) = 1 THEN 'OVERALL' ELSE category END AS category,
-           SUM(orders_count)::integer AS orders_count,
-           SUM(filled_orders_count)::integer AS filled_orders_count,
-           SUM(buy_fills_count)::integer AS buy_fills_count,
-           SUM(sell_fills_count)::integer AS sell_fills_count,
-           SUM(open_positions_count)::integer AS open_positions_count,
-           SUM(settled_positions_count)::integer AS settled_positions_count,
-           SUM(won_positions_count)::integer AS won_positions_count,
-           SUM(lost_positions_count)::integer AS lost_positions_count,
-           SUM(buy_cost_usd) AS buy_cost_usd,
-           SUM(sell_proceeds_usd) AS sell_proceeds_usd,
-           SUM(settlement_value_usd) AS settlement_value_usd,
-           SUM(realized_pnl_usd) AS realized_pnl_usd,
-           SUM(unrealized_pnl_usd) AS unrealized_pnl_usd,
-           MIN(first_order_utc) AS first_order_utc,
-           MAX(last_order_utc) AS last_order_utc
-    FROM source_metrics
-    GROUP BY GROUPING SETS (
-        (copied_trader_wallet, category),
-        (copied_trader_wallet)
-    )
-),
-scored AS (
-    SELECT *,
-           realized_pnl_usd + unrealized_pnl_usd AS total_pnl_usd,
-           CASE WHEN buy_cost_usd = 0 THEN 0 ELSE (realized_pnl_usd + unrealized_pnl_usd) / buy_cost_usd * 100 END AS roi_pct,
-           CASE WHEN settled_positions_count = 0 THEN 0 ELSE won_positions_count::numeric / settled_positions_count * 100 END AS win_rate_pct
-    FROM grouped
-),
-inserted AS (
-    INSERT INTO paper_copied_trader_performance (
-        copied_trader_wallet, category, orders_count, filled_orders_count, buy_fills_count,
-        sell_fills_count, open_positions_count, settled_positions_count, won_positions_count,
-        lost_positions_count, buy_cost_usd, sell_proceeds_usd, settlement_value_usd,
-        realized_pnl_usd, unrealized_pnl_usd, total_pnl_usd, roi_pct, win_rate_pct,
-        score, first_order_utc, last_order_utc, refreshed_at_utc
-    )
-    SELECT
-        copied_trader_wallet,
-        category,
-        orders_count,
-        filled_orders_count,
-        buy_fills_count,
-        sell_fills_count,
-        open_positions_count,
-        settled_positions_count,
-        won_positions_count,
-        lost_positions_count,
-        buy_cost_usd,
-        sell_proceeds_usd,
-        settlement_value_usd,
-        realized_pnl_usd,
-        unrealized_pnl_usd,
-        total_pnl_usd,
-        roi_pct,
-        win_rate_pct,
-        greatest(0, least(100,
-            50
-            + greatest(-50, least(50, roi_pct)) * 0.35
-            + (win_rate_pct - 50) * 0.25
-            + greatest(-20, least(20, total_pnl_usd)) * 1.25
-            + least(settled_positions_count, 20) * 0.5
-            - lost_positions_count * 1.25
-            - open_positions_count * 0.1
-        )) AS score,
-        first_order_utc,
-        last_order_utc,
-        now()
-    FROM scored
-    RETURNING 1
-)
-SELECT count(*)::integer FROM inserted;
-""");
+				await using NpgsqlCommand command = CreateCommand(connection, PaperConfirmationCopiedPerformanceSql);
 				command.Transaction = transaction;
 				command.CommandTimeout = PaperCopiedTraderPerformanceCommandTimeoutSeconds;
 				performanceRowsWritten = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken) ?? 0);
@@ -4636,6 +4428,14 @@ GROUP BY strategy_id;
 		}
 
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // Acquire before the aggregate statement so a refresh waiting for outcome
+        // correction starts with a fresh READ COMMITTED snapshot after that commit.
+        await using (var gate = CreateCommand(connection, "SELECT pg_advisory_xact_lock(hashtextextended('paper-outcome-hourly',0));"))
+        {
+            gate.Transaction = transaction;
+            await gate.ExecuteNonQueryAsync(cancellationToken);
+        }
 		await using NpgsqlCommand command = CreateCommand(connection, """
 WITH selected_strategy_ids AS (
     SELECT unnest(@StrategyIds::uuid[]) AS strategy_id
@@ -4730,10 +4530,12 @@ deleted AS (
 SELECT (SELECT count(*) FROM upserted)::integer AS upserted_rows,
        (SELECT count(*) FROM deleted)::integer AS deleted_rows;
 """);
-		command.CommandTimeout = StrategyPerformanceCommandTimeoutSeconds;
+		command.Transaction = transaction;
+        command.CommandTimeout = StrategyPerformanceCommandTimeoutSeconds;
 		command.Parameters.Add("StrategyIds", NpgsqlDbType.Array | NpgsqlDbType.Uuid).Value = normalizedStrategyIds;
 		command.Parameters.AddWithValue("RefreshedAtUtc", UtcDateTime(refreshedAtUtc));
 		object? value = await command.ExecuteScalarAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 		return value is null or DBNull ? 0 : Convert.ToInt32(value);
 	}
 
@@ -5400,7 +5202,16 @@ ORDER BY parent_strategy_id ASC, child_strategy_id ASC;
 		var normalizedParentStrategyId = StrategyIds.Normalize(parentStrategyId);
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
-		var states = new List<StrategyLossDiffState>();
+		var result = await ReconcileStrategyLossDiffStatesAsync(connection, transaction, normalizedParentStrategyId, settledBeforeUtc, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    private static async Task<IReadOnlyDictionary<Guid, StrategyLossDiffState>> ReconcileStrategyLossDiffStatesAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, Guid normalizedParentStrategyId,
+        DateTimeOffset settledBeforeUtc, CancellationToken cancellationToken)
+    {
+        var states = new List<StrategyLossDiffState>();
 		await using (NpgsqlCommand lockCommand = CreateCommand(connection, """
 SELECT child_strategy_id, parent_strategy_id, mode, threshold, current_value,
        started_at_utc, last_parent_entered_at_utc, last_parent_run_id,
@@ -5422,7 +5233,7 @@ FOR UPDATE;
 
 		if (states.Count == 0)
 		{
-			await transaction.CommitAsync(cancellationToken);
+
 			return new Dictionary<Guid, StrategyLossDiffState>();
 		}
 
@@ -5555,7 +5366,7 @@ RETURNING child_strategy_id, parent_strategy_id, mode, threshold, current_value,
 			reconciledStates.Add(reconciledState.ChildStrategyId, reconciledState);
 		}
 
-		await transaction.CommitAsync(cancellationToken);
+
 		return reconciledStates;
 	}
 
@@ -10787,7 +10598,7 @@ FROM claimed;
 			reader.GetGuid(2),
 			reader.IsDBNull(16) ? null : reader.GetString(16),
 			reader.IsDBNull(17) ? null : reader.GetGuid(17),
-			reader.IsDBNull(18) ? string.Empty : reader.GetString(18));
+			reader.IsDBNull(18) ? string.Empty : reader.GetString(18), reader.GetBoolean(19));
 	}
 
 	private static PaperFill ReadPaperFill(NpgsqlDataReader reader)

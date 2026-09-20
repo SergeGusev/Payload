@@ -1,3 +1,13 @@
+## Active Update 2026-09-20 Paper Outcome Confirmation
+Goal: Implement approved Confirmed verification for all Paper history/new bets during idle trading gaps with complete dependent recalculation.
+Status: Completed local implementation and verification; production rollout is outside approved scope.
+Done:
+- Approval-only commit9235732a; RC-20260920-paper-outcome-confirmation digest abebf44184dad2109004c103b4daa73a417fd37198e852c20bd88b2fd7209dc2 unchanged. Confirmed migration0010, indexed retry queue, foreground-priority worker, final Gamma validation, atomic correction/audit and dependent counters/projections/cache implemented.
+- Final focused42tests passed0failed0skipped including22real isolated PostgreSQL cases; service build exit0. Expanded regression158passed2pre-existing catalog-arrange failures reproduced on clean9235732a before settlement invocation; not claimed passed. Exact evidence/hashes and commands in2026-09-20 history.
+- Independent semantic review agent:/root/paper_confirmation_reviewer PASS/no open findings. WorkingTree gate on isolated changes and root Staged gate PASS27governed paths; source/destination hashes equal. Unrelated root changes preserved.
+Next: None within this local implementation task.
+Notes: No production database/service/deployment/order changes. Missing final outcome or busy trading leaves Confirmed=false for retry. Actual fills/fees/provenance remain intact. Temporary PostgreSQL stopped; marked run cleanup and commit/push finalization recorded in daily history.
+Blockers: None for approved implementation. Production history is not yet reprocessed.
 ## Active Update 2026-09-20 Paper Settlement Recheck Scope
 Goal: Answer whether the ETH22 settlement divergence affects all Paper strategies for all history and whether closed outcomes are rechecked.
 Status: Completed bounded source inspection; full historical incidence remains unknown.

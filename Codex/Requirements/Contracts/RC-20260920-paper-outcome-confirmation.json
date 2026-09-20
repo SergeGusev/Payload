@@ -3,7 +3,7 @@
   "contractId": "RC-20260920-paper-outcome-confirmation",
   "title": "Confirm and reconcile each Paper outcome during idle trading gaps",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -61,8 +61,8 @@
           "kind": "test",
           "id": "VER-001",
           "expected": "Миграция новой и существующей локальной тестовой базы, default=false, чтение/запись Confirmed, повторный запуск, отсутствие сброса true, индексированный план выбора; реальное выполнение, не пропуск по отсутствующему подключению.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 exact focused filter FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState:42passed0failed0skipped, including22 PostgreSQL integration cases,15 outcome resolution tests,2 worker cases,3 activity cases. Isolated PostgreSQL17 at127.0.0.1:56492/pct_codex_paper_confirmation_test; full migration + legacy schema migration, actual transaction/projection/LossDiff/cache/concurrency/rollback execution. confirmation-final.trx SHA256925A8B18FBA4823A72A7A990C4CBBC2DE55837A5765B44943AD95879BFFEC15C; independent recount equals TRX counters. See2026-09-20 history for commands and coverage."
         }
       ],
       "text": "Реализовать доработку сервиса и сохраняемое bool-свойство Confirmed каждой Paper-ставки.",
@@ -101,8 +101,8 @@
           "kind": "test",
           "id": "VER-002",
           "expected": "Детерминированные конкурентные тесты занятости и возобновления торговли, pending/in-flight, отмены и отсутствия ожидания основной работы на фоновой сети.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 exact focused filter FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState:42passed0failed0skipped, including22 PostgreSQL integration cases,15 outcome resolution tests,2 worker cases,3 activity cases. Isolated PostgreSQL17 at127.0.0.1:56492/pct_codex_paper_confirmation_test; full migration + legacy schema migration, actual transaction/projection/LossDiff/cache/concurrency/rollback execution. confirmation-final.trx SHA256925A8B18FBA4823A72A7A990C4CBBC2DE55837A5765B44943AD95879BFFEC15C; independent recount equals TRX counters. See2026-09-20 history for commands and coverage."
         }
       ],
       "text": "Запускать фоновые проверки только в свободные промежутки между торговыми циклами, не заставляя торговлю ждать проверку.",
@@ -137,8 +137,8 @@
           "kind": "test",
           "id": "VER-003",
           "expected": "Один кандидат, ложный/provisional исход отклонён, несовпадающие идентификаторы отклонены, ошибки/незавершённый рынок повторяются без starvation, false переживает прерывание, true не проверяется повторно.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 exact focused filter FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState:42passed0failed0skipped, including22 PostgreSQL integration cases,15 outcome resolution tests,2 worker cases,3 activity cases. Isolated PostgreSQL17 at127.0.0.1:56492/pct_codex_paper_confirmation_test; full migration + legacy schema migration, actual transaction/projection/LossDiff/cache/concurrency/rollback execution. confirmation-final.trx SHA256925A8B18FBA4823A72A7A990C4CBBC2DE55837A5765B44943AD95879BFFEC15C; independent recount equals TRX counters. See2026-09-20 history for commands and coverage."
         }
       ],
       "text": "Последовательно выбирать одну неподтверждённую ставку и проверять именно окончательный фактический исход её рынка.",
@@ -171,8 +171,8 @@
           "kind": "test",
           "id": "VER-004",
           "expected": "Win->loss и loss->win, совпадение без финансовой перезаписи, реальные частичные fills/выходы, несколько ордеров одного asset/wallet, rollback/перезапуск/конкурентное обновление без double accounting, пять обезличенных примеров ETH22 воспроизводят разницу.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 exact focused filter FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState:42passed0failed0skipped, including22 PostgreSQL integration cases,15 outcome resolution tests,2 worker cases,3 activity cases. Isolated PostgreSQL17 at127.0.0.1:56492/pct_codex_paper_confirmation_test; full migration + legacy schema migration, actual transaction/projection/LossDiff/cache/concurrency/rollback execution. confirmation-final.trx SHA256925A8B18FBA4823A72A7A990C4CBBC2DE55837A5765B44943AD95879BFFEC15C; independent recount equals TRX counters. See2026-09-20 history for commands and coverage."
         }
       ],
       "text": "При несовпадении исправить данные ставки; при совпадении не менять её финансовые данные; Confirmed=true выставлять после успешной обработки.",
@@ -214,8 +214,8 @@
           "kind": "test",
           "id": "VER-005",
           "expected": "Независимый пересчёт сумм и счётчиков из исправленных raw rows совпадает с stored counters и projections; смена старого parent outcome обновляет события и оба LossDiff-режима/Progress с их cutoffs; повторный запуск не меняет результат.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 exact focused filter FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState:42passed0failed0skipped, including22 PostgreSQL integration cases,15 outcome resolution tests,2 worker cases,3 activity cases. Isolated PostgreSQL17 at127.0.0.1:56492/pct_codex_paper_confirmation_test; full migration + legacy schema migration, actual transaction/projection/LossDiff/cache/concurrency/rollback execution. confirmation-final.trx SHA256925A8B18FBA4823A72A7A990C4CBBC2DE55837A5765B44943AD95879BFFEC15C; independent recount equals TRX counters. See2026-09-20 history for commands and coverage."
         }
       ],
       "text": "Пересчитать все данные, зависящие от исправленного Paper-исхода, включая текущие счётчики, используемые для будущих решений.",
@@ -246,8 +246,8 @@
           "kind": "test",
           "id": "VER-006",
           "expected": "Связанный Live shadow сохраняет actual fills/fees, совпадает по final outcome; никакого live submit/cancel/replay; самостоятельный Paper остаётся Paper, исключения/provenance сохраняются.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 exact focused filter FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState:42passed0failed0skipped, including22 PostgreSQL integration cases,15 outcome resolution tests,2 worker cases,3 activity cases. Isolated PostgreSQL17 at127.0.0.1:56492/pct_codex_paper_confirmation_test; full migration + legacy schema migration, actual transaction/projection/LossDiff/cache/concurrency/rollback execution. confirmation-final.trx SHA256925A8B18FBA4823A72A7A990C4CBBC2DE55837A5765B44943AD95879BFFEC15C; independent recount equals TRX counters. See2026-09-20 history for commands and coverage."
         }
       ],
       "text": "Подтверждённый Paper-учёт должен опираться на наиболее актуальный фактический исход и не подменять факты Live моделированием.",
@@ -286,16 +286,16 @@
           "kind": "build",
           "id": "VER-007",
           "expected": "Сервис собирается без ошибок; результаты build и целевых regression tests сохранены.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 isolated checkout9235732a + implementation: dedicated dotnet build PolyCopyTrader.Service --artifacts-path run/artifacts exit0; service-final-build.log SHA25618D583710B565F84786243AE38BC29CDCEA8E22C6F8EC673B5501A9B039F850D. Focused regression158passed2baseline failures0skipped; identical two catalog-lookup arrange failures on clean9235732a, before settlement dispatch. Exact names and TRX hashes in2026-09-20 history; not claimed passed. Independent reviewer accepts unavailable legacy coverage as pre-existing, no new product blocker."
         },
         {
           "command": "Независимый reviewer сравнивает originalRequests, утверждённый semantic digest, git diff и фактически выполненные тесты; Validate-RequirementContract.ps1 -Mode WorkingTree и -Mode Staged на изменениях задачи.",
           "kind": "inspection",
           "id": "VER-008",
           "expected": "Независимый PASS без открытых замечаний, механическая валидация точных изменений задачи PASS.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent agent:/root/paper_confirmation_reviewer final PASS, no open findings: compared verbatim requests, unchanged digest, actual diff vs9235732a and executed test/build artifacts; independently checked two baseline failures. WorkingTree and Staged mechanical checks recorded in task history before commit."
         }
       ],
       "text": "Проверить и документировать локальную доработку PolyCopyTrader.Service.",
@@ -318,7 +318,7 @@
   "independentReview": {
     "findings": [],
     "reviewer": "agent:/root/paper_confirmation_reviewer",
-    "verdict": "pending",
-    "comparedOriginalRequests": false
+    "verdict": "pass",
+    "comparedOriginalRequests": true
   }
 }

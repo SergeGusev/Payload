@@ -4374,7 +4374,8 @@ public sealed record PaperOrder(
     Guid StrategyId = default,
     string? RawDecisionJson = null,
     Guid? CorrelationId = null,
-    string ExecutionSource = "");
+    string ExecutionSource = "",
+    bool Confirmed = false);
 
 public sealed record PaperPosition(
     string AssetId,

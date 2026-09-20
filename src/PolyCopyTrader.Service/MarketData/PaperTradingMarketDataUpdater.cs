@@ -1,3 +1,4 @@
+using PolyCopyTrader.Service.Control;
 using System.Diagnostics;
 using System.Text.Json;
 using PolyCopyTrader.Domain;
@@ -17,7 +18,8 @@ public sealed class PaperTradingMarketDataUpdater(
     IAppRepository repository,
     IPolymarketFeeAccountingService? feeAccountingService = null,
     MarketDataWebSocketOptions? marketDataWebSocketOptions = null,
-    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null) : IPaperTradingMarketDataUpdater
+    IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
+    ServiceActivityState? activityState = null) : IPaperTradingMarketDataUpdater
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const int MakerPositionCasMaximumAttempts = 3;
@@ -37,6 +39,7 @@ public sealed class PaperTradingMarketDataUpdater(
         CancellationToken cancellationToken = default,
         MarketDataSideEffectExecutionTrace? executionTrace = null)
     {
+        using var tradingActivity = activityState?.EnterTradingCycle();
         if (string.IsNullOrWhiteSpace(update.AssetId) ||
             eligibleMakerGtdPaperOrderIds.Count == 0 ||
             update.EventType is not (
@@ -215,6 +218,7 @@ public sealed class PaperTradingMarketDataUpdater(
         MarketDataSideEffectExecutionTrace? executionTrace = null,
         bool persistPositionMarks = true)
     {
+        using var tradingActivity = activityState?.EnterTradingCycle();
         if (string.IsNullOrWhiteSpace(update.AssetId))
         {
             return;

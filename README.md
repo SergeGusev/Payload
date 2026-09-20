@@ -16,6 +16,50 @@ This repository is currently at Task 18 plus local debugging, trader discovery, 
 - Default mode is read-only/paper-first by project policy.
 - Every Paper execution change is governed by the mandatory [Paper/Live execution parity contract](docs/architecture/PAPER_LIVE_PARITY.md). The default remains: no proven Live equivalent means no Paper trade or Paper PnL claim. The only exception is the exact closed ETH Reference Average Maker-GTD family enumerated in that contract; its TouchNoDepth fills are not Live-equivalent and cannot be generalized.
 
+### Paper outcome confirmation
+
+`PaperOrder.Confirmed` / `paper_orders.confirmed` starts as `false` for existing
+and new Paper orders, including disabled strategies and Live shadows. The service
+registers `PaperOutcomeConfirmationWorker` automatically; the ordered schema
+migration adds the flag, an indexed retry queue and per-order confirmation evidence.
+
+Once per second the worker attempts one candidate during a gap with no active
+trading cycle or pending/in-flight processing. Trading resumption cancels the
+check without waiting for its HTTP request. A claimed candidate has a durable
+one-minute retry time, so interrupted or unavailable markets do not hold up the
+rest of the history. No database transaction is held during the Gamma request.
+
+Confirmation requires exact condition/token/outcome identity, final Gamma oracle
+status (`resolved` or `settled`) and an unambiguous 1/0 payout. `closed`, a near-1
+price, or provisional `BinanceTimedClose` alone cannot confirm an order. Missing,
+contradictory or unavailable final data stays unconfirmed with retry evidence.
+Active financial cycles wait; unfilled orders receive no invented fill or payout.
+
+An outcome correction preserves executions, actual sales, fees and historical
+settlement times. One transaction updates the shared remaining-position settlement,
+related strategy runs, PaperLostCounter, dependent LossDiff events/state and affected
+hourly/copied-trader statistics, and marks the candidate confirmed. Existing durable
+Dashboard events update lifetime/recent PnL, ROI and WinRate without adding a second
+trade. The strategy settings cache is invalidated across the transaction. The hourly
+refresh and confirmation share a transaction lock to prevent an older aggregate
+overwriting a correction. Confirmation uses a 100 ms lock timeout and 2 s statement
+timeout; interrupted or contended work retries. Matching outcomes preserve financial
+values. `confirmation_evidence` records the final source and before/after results.
+
+Build the service normally. Run the focused verification with a marked temporary
+run directory in `CODEX_TASK_RUN` (and `TEMP`, `TMP`, `TMPDIR` pointing to its `temp`):
+
+```powershell
+dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path "$env:CODEX_TASK_RUN/artifacts"
+dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path "$env:CODEX_TASK_RUN/artifacts" --results-directory "$env:CODEX_TASK_RUN/results" --filter "FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState" --logger trx
+```
+
+The integration tests require `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` targeting an
+isolated local database named `pct_codex_paper_confirmation_test`; they fail rather
+than silently skipping when that fixture is absent. Production rollout and the
+historical pass require their own operational preview. No fixed completion time is
+promised while trading remains busy or final venue evidence is unavailable.
+
 ### Follow Market FAK strategies
 
 The catalog contains 270 `Follow Market M N` strategies for BTC, ETH,

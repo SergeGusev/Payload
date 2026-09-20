@@ -1,3 +1,4 @@
+using PolyCopyTrader.Service.Control;
 using System.Diagnostics;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
@@ -130,7 +131,8 @@ public sealed class MarketDataSideEffectQueue(
     IMarketDataSideEffectHandler handler,
     IAppRepository repository,
     IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
-    IPaperTradingMarketDataUpdater? paperTradingMarketDataUpdater = null) : IHostedService, IMarketDataSideEffectQueue
+    IPaperTradingMarketDataUpdater? paperTradingMarketDataUpdater = null,
+    ServiceActivityState? activityState = null) : IHostedService, IMarketDataSideEffectQueue
 {
     private const string ComponentName = "MarketDataSideEffectQueue";
     private static readonly IReadOnlySet<Guid> EmptyPaperOrderIds = new HashSet<Guid>();
@@ -275,6 +277,7 @@ public sealed class MarketDataSideEffectQueue(
         DateTimeOffset receivedAtUtc,
         IReadOnlySet<Guid>? eligiblePaperOrderIds)
     {
+        using var enqueueActivity = activityState?.EnterTradingCycle();
         return EnqueueUpdate(
             component,
             update,
@@ -292,6 +295,7 @@ public sealed class MarketDataSideEffectQueue(
         IReadOnlySet<Guid>? eligiblePaperOrderIds,
         IReadOnlySet<Guid>? eligibleMakerGtdPaperOrderIds)
     {
+        using var enqueueActivity = activityState?.EnterTradingCycle();
         if (!accepting)
         {
             Interlocked.Increment(ref rejectedUpdates);
@@ -412,11 +416,13 @@ public sealed class MarketDataSideEffectQueue(
         MarketWebSocketFrameDiagnostic diagnostic,
         bool important)
     {
+        using var enqueueActivity = activityState?.EnterTradingCycle();
         return EnqueueDiagnostic(new DiagnosticWorkItem(diagnostic, null, important));
     }
 
     public MarketDataSideEffectEnqueueOutcome EnqueueApiError(ApiError apiError)
     {
+        using var enqueueActivity = activityState?.EnterTradingCycle();
         return EnqueueDiagnostic(new DiagnosticWorkItem(null, apiError, Important: true));
     }
 
@@ -1028,6 +1034,7 @@ public sealed class MarketDataSideEffectQueue(
 
     private async Task ProcessDiagnosticAsync(DiagnosticWorkItem workItem)
     {
+        using var diagnosticActivity = activityState?.EnterTradingCycle();
         try
         {
             if (workItem.FrameDiagnostic is not null)

@@ -1,3 +1,4 @@
+using PolyCopyTrader.Service.Control;
 using System.Threading.Channels;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Storage;
@@ -18,7 +19,8 @@ public sealed class PaperEntryPersistenceQueue(
     ILogger<PaperEntryPersistenceQueue> logger,
     IAppRepository repository,
     IPaperTradingEngine paperTradingEngine,
-    IExposureSnapshotCache exposureCache) : IHostedService, IPaperEntryPersistenceQueue
+    IExposureSnapshotCache exposureCache,
+    ServiceActivityState? activityState = null) : IHostedService, IPaperEntryPersistenceQueue
 {
     private const int MaxBatchesPerFlush = 64;
     private static readonly TimeSpan FailureRetryDelay = TimeSpan.FromSeconds(1);
@@ -81,6 +83,7 @@ public sealed class PaperEntryPersistenceQueue(
         PaperEntryPersistenceBatch batch,
         CancellationToken cancellationToken = default)
     {
+        using var enqueueActivity = activityState?.EnterTradingCycle();
         if (batch.IsEmpty)
         {
             return ValueTask.CompletedTask;

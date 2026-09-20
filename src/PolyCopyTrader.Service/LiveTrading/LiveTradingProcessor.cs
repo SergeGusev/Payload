@@ -24,7 +24,8 @@ public sealed class LiveTradingProcessor(
     IPolymarketDataApiClient? dataApiClient = null,
     PolymarketAuthOptions? authOptions = null,
     IPaperLiveShadowFillReconciler? paperLiveShadowFillReconciler = null,
-    IPolymarketFeeAccountingService? feeAccountingService = null) : ILiveTradingProcessor
+    IPolymarketFeeAccountingService? feeAccountingService = null,
+    ServiceActivityState? activityState = null) : ILiveTradingProcessor
 {
     private const string PaperLiveShadowTestSource = "paper_live_shadow_test";
     private const string PaperLiveShadowActualFillSource = "paper_live_shadow_actual_fill";
@@ -45,6 +46,7 @@ public sealed class LiveTradingProcessor(
 
     public async Task<LiveTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
+        using var tradingActivity = activityState?.EnterTradingCycle();
         var dataApiPositionObservations = await ObserveRecentLiveOrderDataApiPositionsAsync(cancellationToken);
         var balanceSettlementsApplied = await SettleMatchedOrdersAsync(cancellationToken);
         var openOrders = await repository.GetOpenLiveOrdersAsync(cancellationToken);
@@ -447,6 +449,7 @@ public sealed class LiveTradingProcessor(
 
     public async Task CancelAllOpenOrdersAsync(string source, CancellationToken cancellationToken = default)
     {
+        using var tradingActivity = activityState?.EnterTradingCycle();
         var openOrders = await repository.GetOpenLiveOrdersAsync(cancellationToken);
         var result = await tradingClient.CancelAllOrdersAsync(cancellationToken);
         foreach (var order in openOrders)

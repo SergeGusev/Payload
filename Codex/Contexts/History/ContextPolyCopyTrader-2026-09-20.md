@@ -73,3 +73,58 @@ Next: None within this explanatory question.
 Blockers: None for the mechanism answer; universal historical incidence is unverified.
 
 Scope distinction: common eligibility for the flawed5mBTC/ETH/SOLfallback is verified in current source; all-strategy/all-history prevalence is unknown. No full-history database scan performed in this follow-up; no measured universal-incidence claim is made. Closed outcomes remain outside the normal settlement selector; refreshing or reconciling Dashboard does not validate their winners. FollowLeader/general Paper positions use separate Gamma/WebSocket paths, so universal exposure is not inferred. Prior five-case runtime evidence plus current dispatch/storage code substantiate the mechanism; no tests rerun for unchanged code. Only exempt context/history bookkeeping staged; existing unrelated changes preserved.
+
+## 2026-09-20T06:40:16.9863870+00:00
+Request:
+Давай сделаем так:
+
+
+
+1. Внеси доработку в сервис PolyCopyTrader.Service
+2. Пусть он добавит свойство Confirmed в каждую Paper ставку.
+3. Добавь фоновую задачу, которая работает в режиме, когда основной сервис в Idle режиме, чтобы не мешать основному циклу.
+4. Эта задача должна выбирать одну Paper ставку, у которой Confirmed = false, проверять фактический исход и либо корректировать данные по этой ставке, либо оставлять её нетронутой, в зависимости от того, совпал реальный исход или нет. После чего ставит для этой ставки Confirmed = true и идёт дальше
+
+Result:
+Read-only preparation. No material edits. No global serviceIdle flag exists; independent strategy/background workers and pending/in-flight queues require a clarified coordination boundary. Per-bet outcome correction affects related run/settlement/projection records, and historical corrections may interact with current loss counters. Two async behavior questions are pending (idle gaps vs manual pause; per-bet accounting/statistics vs also currentLostCounter/LossDiff). No approval-ready contract or semantic approval requested yet; implementation is blocked until choices and then required digest approval. Existing unrelated worktree changes preserved; only exempt task bookkeeping appended.
+
+## 2026-09-20T06:41:23.7377593+00:00
+Request:
+Да, свободные промежутки между торговыми циклами
+
+Result:
+Idle clarification accepted for pending PaperConfirmed task: idle gaps between independent trading cycles, with empty processing queues and priority for resumed trading. This is a behavior clarification, not requirement-digest approval. Second question (currentLostCounter/LossDiff recomputation) remains unanswered and implementation-blocking; no material edits. Confirmed source observation: ServiceRunState has Starting,Running,Paused,Stopping,Stopped,Error and noIdle; existing queue metrics and separate worker loops require explicit coordination.
+
+## 2026-09-20 Paper confirmation contract ready
+Request:
+Пересчитывай всё. Исходи из главного принципа - мы должны иметь наиболее актуальную информацию, реально отражающую живые ставки.
+
+Result:
+Current-counter scope is explicitly resolved: recalculate all dependent accounting, statistics, current PaperLostCounter and LossDiff events/states/caches. Idle clarification remains gaps between trading cycles with queue/in-flight checks and foreground priority. Inspected source call paths and repository reconciliation: LossDiff parent-event ON CONFLICT DO NOTHING requires explicit correction to avoid stale won values. Prepared draft RC-20260920-paper-outcome-confirmation with all three verbatim user requests. Contract validation PASS, semantic SHA256 abebf44184dad2109004c103b4daa73a417fd37198e852c20bd88b2fd7209dc2. User must approve this exact digest before product edits; approval record must be committed separately. No source implementation, tests, database access/mutation, deployment, service/order changes or temporary artifacts in this preparation. Scope is local implementation across all Paper history/new bets and dependencies; actual production rollout/reprocessing is not performed. No material completion claim.
+
+## 2026-09-20T07:33:03.2257011+00:00
+Request:
+Продолжай
+
+Result:
+Resumed interrupted approved Paper-confirmation implementation without scope change. Approval commit9235732a, isolated worktree and PostgreSQL test server persist under marked paper-confirmation-20260920-01. Latest focused tests29passed0failed0skipped; broader required verification still pending. No production changes.
+
+## 2026-09-20T07:56:00.0000000Z
+Request:
+APPROVE RC-20260920-paper-outcome-confirmation sha256:abebf44184dad2109004c103b4daa73a417fd37198e852c20bd88b2fd7209dc2
+Продолжай
+
+Result:
+Implemented approved local-edit contract; approval-only parent9235732a. Added Confirmed/default-false migration0010, indexed durable retry selection, one-candidate idle worker with foreground cancellation, authoritative final Gamma identity/status/payout validation. Atomic accounting correction preserves fills/fees/timestamps, updates related run/shared settlement, current PaperLostCounter/LossDiff events/state/caches and hourly/copied-trader statistics; durable Dashboard events publish corrected lifetime/recent totals. Hourly aggregate fence prevents stale overwrite. Production database/service/deployment/order state untouched.
+
+Verification executed on isolated PostgreSQL17 at127.0.0.1:56492/pct_codex_paper_confirmation_test; no production connection. UTC fixtures use relative entered/settlement times; exact assertions and row filters preserved in committed tests. Test result counters independently recounted from individual TRX results.
+- Final required filter FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState:42passed0failed0skipped (22PGintegration,15processor,2worker,3activity). Covers old/new migration/default/index, final/provisional/identity rejection, idle preemption/fair retries, both outcome directions, matching values unchanged, partial fills/sales/shared positions, real linked Live shadow and unchanged Live balance/rows, Dashboard lifetime/recent, counters/LossDiff modes/Progress ordering/cutoffs, cache commit window, hourly concurrency, rollback/restart/idempotence. Five anonymous payout deltas total61.64621602 removed without changing fills.
+- Extended filter adds PaperSettlementProcessorTests, PaperSettlementPostgresIntegrationTests, PaperEntryPersistenceQueueTests, MarketDataSideEffectQueueTests, PostgresSchemaMigrationTests.DefaultCatalog, LiveTradingGatingTests.ProcessOpenOrders and BtcUpDown5mPaperStrategyProcessorTests.ProcessAsync_Settl:158passed2failed0skipped. Failures: ProcessAsync_SettlesOpeningLimitRunUsingOnlyFilledShares and ProcessAsync_SettlementUsesGlobalConcurrentQueueSoSlowEarlyVariantsDoNotStarvePreOpen. Both independently reproduced on clean9235732a with identical System.InvalidOperationException: Sequence contains no matching element; absent catalog variants fail arrange before settlement invocation. They are unavailable legacy coverage, NOT passed; no unrelated test edits. Reviewer verified exception locations. All new/directly executable checks passed; no full-suite claim.
+- Commands: dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter <filters above> --logger trx. Dedicated dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts exit0. Incremental finalbuild0warnings0errors; actual preceding compilation retained existing nullable warnings.
+- TRX SHA256: confirmation-final925A8B18FBA4823A72A7A990C4CBBC2DE55837A5765B44943AD95879BFFEC15C; confirmation-regression-fixed-envB4A28827DD6239A101B94C235546B0C283FD14515277C0D76EF7A4473D7657F7; baseline-two-settlementD5416CAED52C1B3F7AF6FC21E916B07B7CF0F67012188C4D532A2BDA032620C5; service-final-build18D583710B565F84786243AE38BC29CDCEA8E22C6F8EC673B5501A9B039F850D.
+- Earlier environment issues disclosed during execution: testhost CLR0x80131506 crashed discovery before tests; bounded no-build retry succeeded. Existing PG regression guard required pct_codex_ name; isolated DB renamed after zero-connections check, guards unchanged.
+- Independent reviewer agent:/root/paper_confirmation_reviewer final semantic PASS/no open findings compared verbatim requests, unchanged approved digest, actual diff and test/build artifacts. Fixed review findings were parser closed!=final, cache commit race and hourly snapshot overwrite.
+- WorkingTree gate in isolated checkout PASS governedFiles27/contracts1; root exact Staged gate PASS governedFiles27/contracts1; digest unchanged. Root broad gate remains affected by unrelated pre-existing Sept17 contract; unrelated changes preserved.28copied paths (27product+contract) source/destination SHA256 equal, root targets verified clean before copy. git diff --check and cached check PASS.
+- Known limits: no production rollout/history pass measured; unresolved/ambiguous Gamma or busy trading leaves false for retry; modeled Paper execution does not become actual Live. Existing user Paper/provenance exceptions retained.
+
+Finalization 2026-09-20T07:58:11.4709608Z: isolated PostgreSQL stopped successfully; protected cleanup removed4947files/399273468bytes, marked run absence independently verified; only2matching stale worktree metadata entries pruned after dry-run. Full product/test evidence preserved above; root staged content is exact copied/reviewed implementation plus this task bookkeeping.

@@ -168,6 +168,7 @@ public static class PostgresSchemaMigrationCatalog
                 historicalParityPaperRunOrderIndex,
                 historicalParityAuditTrigger,
                 positiveProgress,
+                new PostgresSchemaMigration(9, PostgresPaperOutcomeConfirmationSchemaMigration.Id, PostgresPaperOutcomeConfirmationSchemaMigration.Sql, true, "confirm Paper outcomes and persist retry/audit state"),
                 strategyRetentionWalletIndex
             ]);
     }

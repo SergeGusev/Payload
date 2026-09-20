@@ -1,3 +1,4 @@
+using PolyCopyTrader.Service.Control;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -24,7 +25,8 @@ public sealed class PaperTradingProcessor(
     IPolymarketFeeAccountingService? feeAccountingService = null,
     IMarketDataSideEffectQueue? marketDataSideEffectQueue = null,
     IMakerGtdPaperPlacementHandoff? makerGtdPaperPlacementHandoff = null,
-    TimeProvider? timeProvider = null) :
+    TimeProvider? timeProvider = null,
+    ServiceActivityState? activityState = null) :
     IPaperTradingProcessor,
     IPaperPositionMarkProcessor
 {
@@ -43,6 +45,7 @@ public sealed class PaperTradingProcessor(
 
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
+        using var tradingActivity = activityState?.EnterTradingCycle();
         var now = DateTimeOffset.UtcNow;
         var openOrders = PrioritizeOpenOrders(await repository.GetOpenPaperOrdersAsync(cancellationToken), now);
         if (openOrders.Count == 0)
@@ -272,6 +275,7 @@ public sealed class PaperTradingProcessor(
 
     public async Task<int> RefreshPositionMarksAsync(CancellationToken cancellationToken = default)
     {
+        using var tradingActivity = activityState?.EnterTradingCycle();
         var positions = (await exposureCache.GetSnapshotAsync(cancellationToken)).PaperPositions.ToArray();
         return await UpdatePositionMarksAsync(positions, cancellationToken);
     }
