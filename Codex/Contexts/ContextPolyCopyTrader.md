@@ -1,3 +1,17 @@
+## Active Update 2026-09-20 Paper Confirmation Progress And ETA
+Goal: Measure current confirmation progress and estimate full Paper database reconciliation.
+Status: Completed read-only measurement and conditional extrapolation.
+Done:
+- Production192.168.0.101:5432/polycopytrader still759e64bc98455e1b511adf55d077accd03bcc58e/MVID46ac71544fb1; started10:33:19.432052UTC; heartbeat11:02:19.995918UTC Running/Live/last_errorNULL, waitinglocks0.
+- Full snapshot11:03:29.322079UTC:3942861orders,59Confirmed,3942802unconfirmed,0corrected (0.0014964%completed);605nonnull evidence,3942256neverclaimed; allunconfirmed due. EntirePaper historyJune5..September20UTC, no strategy/date exclusions.
+- Logs10:33:19.674..11:03:41.722UTC:60finished/60uniqueIDs,allMatched,0errors/timeouts/deferred/repeatedIDs,0ERR/FTL. At exact DB cutoff logs59successes/22last10minutes independently matchDB. Exact60IDs rechecked11:04:19.631317UTC:60Confirmed,0corrected,60before=after; at least60now, not a later global total.
+- Average59/30.164834minutes=1.955920/min (2816.525/day); recent22/10minutes=2.2/min (3168/day). Fixed current remainder divided by these rates gives1244.571..1399.882days,3.407..3.833years. Independent seconds-per-order arithmetic agrees. Conditional linear extrapolation of short observed windows, not confidence bounds or a completion guarantee.
+-897neworders since start (29.7366/min); last10min339new versus22confirmed. At unchanged arrival/completion rates continuously growing database has no finite catch-up ETA. Prior total3942099/count10 to current3942861/count59 independently shows backlog growth (+762orders,+49confirmed).
+-38summaries cover10:33:19.427444..11:03:19.451836UTC:1800IdleChecks,1611ActiveTrading skips (89.5%). Waiting-stage sum1198628.2242ms of1262504.9001ms across60finished attempts (~94.9%). Source confirms each next phase requires fresh Idle admission. Most observed attempt time is waiting; no observed failures.
+Next: None within requested measurement and estimate.
+Notes: Read-only SQL15sstatement/1slock limits; no product edits/build/tests needed. Exact SQL/log evidence/calculations in daily history; protected temporary cleanup before completion.
+Blockers: None for estimate; whole-history completion or correction not established.
+
 ## Active Update 2026-09-20 Staged Confirmation Deployment Verification
 Goal: Verify user deployment read-only against actual service runtime and Paper rows.
 Status: Completed bounded verification; confirmations now finish, production correction of a mismatched outcome not yet observed.

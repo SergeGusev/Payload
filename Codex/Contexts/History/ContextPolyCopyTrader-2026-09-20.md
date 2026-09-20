@@ -400,3 +400,74 @@ results/counts.jsonl SHA256 CAE4FEF41F8CB9C7A5560CE0C5E10E60041C7DD1CEED0EBB53B2
 results/exact.json SHA256 9E95A5D391B7DA93309CCA7360A9B3C2CBEF0BC2B3B3B48F5CCFEF053523ABE6
 
 Finalization 2026-09-20T10:40:36.2963726Z: protected cleanup removed marked paper-staged-verify-20260920-01 (14files/5401282bytes); absence verified. WorkingTree gate reports pre-existing unrelated RC-20260917-single-disabled-strategy-timed-delete SEMANTIC_CHANGE_AFTER_APPROVAL; preserved unchanged. Only own exempt context prefix and appended Sept20 history staged. Exact Staged gate and diff check required before commit; no production/product change.
+
+## 2026-09-20T11:06:48.5268367Z
+Request:
+Проверь, сколько сделано сейчас и дай оценку по проверке полной базы
+
+Result:
+## Active Update 2026-09-20 Paper Confirmation Progress And ETA
+Goal: Measure current confirmation progress and estimate full Paper database reconciliation.
+Status: Completed read-only measurement and conditional extrapolation.
+Done:
+- Production192.168.0.101:5432/polycopytrader still759e64bc98455e1b511adf55d077accd03bcc58e/MVID46ac71544fb1; started10:33:19.432052UTC; heartbeat11:02:19.995918UTC Running/Live/last_errorNULL, waitinglocks0.
+- Full snapshot11:03:29.322079UTC:3942861orders,59Confirmed,3942802unconfirmed,0corrected (0.0014964%completed);605nonnull evidence,3942256neverclaimed; allunconfirmed due. EntirePaper historyJune5..September20UTC, no strategy/date exclusions.
+- Logs10:33:19.674..11:03:41.722UTC:60finished/60uniqueIDs,allMatched,0errors/timeouts/deferred/repeatedIDs,0ERR/FTL. At exact DB cutoff logs59successes/22last10minutes independently matchDB. Exact60IDs rechecked11:04:19.631317UTC:60Confirmed,0corrected,60before=after; at least60now, not a later global total.
+- Average59/30.164834minutes=1.955920/min (2816.525/day); recent22/10minutes=2.2/min (3168/day). Fixed current remainder divided by these rates gives1244.571..1399.882days,3.407..3.833years. Independent seconds-per-order arithmetic agrees. Conditional linear extrapolation of short observed windows, not confidence bounds or a completion guarantee.
+-897neworders since start (29.7366/min); last10min339new versus22confirmed. At unchanged arrival/completion rates continuously growing database has no finite catch-up ETA. Prior total3942099/count10 to current3942861/count59 independently shows backlog growth (+762orders,+49confirmed).
+-38summaries cover10:33:19.427444..11:03:19.451836UTC:1800IdleChecks,1611ActiveTrading skips (89.5%). Waiting-stage sum1198628.2242ms of1262504.9001ms across60finished attempts (~94.9%). Source confirms each next phase requires fresh Idle admission. Most observed attempt time is waiting; no observed failures.
+Next: None within requested measurement and estimate.
+Notes: Read-only SQL15sstatement/1slock limits; no product edits/build/tests needed. Exact SQL/log evidence/calculations in daily history; protected temporary cleanup before completion.
+Blockers: None for estimate; whole-history completion or correction not established.
+
+Reproducibility: pinned production192.168.0.101:5432/polycopytrader; BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY/ROLLBACK, default_transaction_read_onlyon, statement_timeout15s, lock_timeout1s, idle-in-transaction20s, timezoneUTC, max_parallel_workers_per_gather0, jitoff. Entire paper_orders with no exclusions. created_since_previous_count used an approximate timestamp and was discarded from calculations because it is not the verified previous transaction timestamp. Exact SQL:
+```sql
+SELECT json_build_object('snapshot_at',transaction_timestamp(),'server',inet_server_addr(),'database',current_database(),'readonly',current_setting('transaction_read_only'),'heartbeat',(SELECT row_to_json(h) FROM service_heartbeats h WHERE service_name='PolyCopyTrader.Service'),'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock'),'paper_estimate',(SELECT reltuples::bigint FROM pg_class WHERE oid='paper_orders'::regclass));
+
+SELECT json_build_object('snapshot_at',transaction_timestamp(),'orders',count(*),'confirmed',count(*) FILTER(WHERE confirmed),'unconfirmed',count(*) FILTER(WHERE NOT confirmed),'corrected',count(*) FILTER(WHERE confirmed AND confirmation_evidence->>'corrected'='true'),'with_evidence',count(*) FILTER(WHERE confirmation_evidence IS NOT NULL),'never_claimed',count(*) FILTER(WHERE NOT confirmed AND confirmation_next_attempt_at_utc='-infinity'::timestamptz),'due',count(*) FILTER(WHERE NOT confirmed AND confirmation_next_attempt_at_utc<=transaction_timestamp()),'created_since_service_start',count(*) FILTER(WHERE created_at_utc>='2026-09-20T10:33:19.432052Z'),'created_since_previous_count',count(*) FILTER(WHERE created_at_utc>='2026-09-20T10:37:16Z'),'created_10min',count(*) FILTER(WHERE created_at_utc>=transaction_timestamp()-interval '10 minutes'),'checked_10min',count(*) FILTER(WHERE confirmed AND (confirmation_evidence->>'checked_at_utc')::timestamptz>=transaction_timestamp()-interval '10 minutes'),'earliest_created',min(created_at_utc),'latest_created',max(created_at_utc),'earliest_confirmed_order',min(created_at_utc) FILTER(WHERE confirmed),'latest_confirmed_order',max(created_at_utc) FILTER(WHERE confirmed)) FROM paper_orders;
+
+SELECT json_build_object('at',transaction_timestamp(),'rows',count(*),'confirmed',count(*) FILTER(WHERE confirmed),'corrected',count(*) FILTER(WHERE confirmation_evidence->>'corrected'='true'),'before_after_equal',count(*) FILTER(WHERE confirmation_evidence->'before'=confirmation_evidence->'after')) FROM paper_orders WHERE id IN ('00e6e73d-6644-f564-df9c-16175738e97f','0187afb2-3986-bb62-7bd0-2dac6ba4fd72','149b0977-6fdd-9d23-29d8-e091668c0a0f','18cd8209-a1ec-a61a-82fc-77b98ebb028b','19e5ee3c-390e-6b3a-60d3-9cb539e76551','1cd5a96a-75b3-9166-18b3-585b2eccbe4b','2334e12d-5f3d-5796-6958-3a9972cec51c','306d95d7-57be-3811-0a0b-027dc9e6adfc','31194c06-3352-dbf8-c9a1-f971f93741e4','329a7c76-60ae-6eb1-86d4-dbce2d2edb96','36be0a7e-747f-e895-1999-d58604ba8c7f','3e6cd864-594c-9b88-c46c-8ed4b7213389','42483052-3495-d3ae-0e0f-3536a8f52529','4f2ad2b4-45e5-3fbb-4963-26293ec79df5','4f307ec1-a506-5108-a747-d6af40497f4f','55fadcea-8ead-420f-6c64-41b745f28686','5affd444-9483-0c4e-c01c-29bd75e3cb8c','610f03d3-606a-7d77-a2f0-6b8ce882b0c7','616d2a33-4fc9-b553-587b-3fb7df12b6c8','706c8a1d-7916-4137-bbc4-dd8ba02c0a53','717e8434-7df1-1721-b785-f92755a6737a','746c45f9-cd31-fb5c-1885-c5722c8bfb5d','785af460-c937-07f6-a988-7deb8f90f138','792707ed-7724-8531-a47e-78087f5153c4','7c496b80-310e-1925-7da3-c602acffa3e4','7e0d76af-1149-334b-1a22-7d8749f9db4b','7f8be6ba-44b8-cb68-edbe-78d460269e9a','80d69c6a-1a9c-19e5-0577-34384d96ef36','83063318-f423-f80b-20d0-943c2050aafc','84a0a95f-9e1a-9bf9-f4b9-078bc841190c','8b60bcec-fffd-996a-43ae-fe22ef9ec8db','8f7b36d9-5043-b48c-96bd-ce46d04f43de','9117af7f-e600-e98c-9610-faada8a3f0ff','96c55390-f057-6b9c-3b89-23c8cc960b67','97606dfd-f537-4700-b3f1-a49b96cad757','9c4b803b-332a-89cb-d7e5-ba317b9af432','9d216815-7db9-0fb8-0b49-7d764722f885','a40dfc8e-51a8-f5ae-0a20-3ab5bfd26bd3','a43c3ccd-40fc-aafa-5829-392210f1ef52','a71ed82e-bcff-13a1-37f7-ba11bb21ce81','a8952059-1dc9-43dd-ce4f-a96cc98b14ae','a93b2654-b590-1e80-7ddf-7a2bd7d23991','b582fcaf-00ad-87b7-8fb3-e615c1012043','b60af7f0-7e63-2fcd-3e70-5da7264d2309','b7950e6d-ac58-cc8d-5fe2-f8a5abe3acf6','ba3510c2-2bfe-0ff3-b8b8-b4ef5f488ffa','be0d2a72-133e-2eac-1228-ba7cbf3e1280','c34c0f55-219e-b9bb-a2f4-f394132e4870','c5eb5dbb-8b2d-9c1c-679d-d0499b48d56d','c96aa0a4-412b-40d4-767d-b25984f47295','d1e646e2-1180-3d00-4150-40df4553b7bf','d4b85266-9b70-643e-3cf9-d653bcd91267','dd42a11e-4a86-04bb-889f-d4ac33720044','e27be551-13f2-0bbb-b25a-2de2a35081dc','e32a1e79-9db9-ee2d-12e9-fbbf81724251','e6426040-da12-fd0a-14c4-5a7f1c9f573f','e83177e8-9a8d-2429-7f84-44ba5503108c','e99a58c1-adeb-ef47-ac19-0a8f00b60181','f0382225-c6cb-5bcb-1dd6-b4e2031eac3e','f50d3ea3-8b2a-c9b3-5c78-8da314b39f4c');
+
+```
+Results and calculations:
+{"snapshot_at" : "2026-09-20T11:03:29.322079+00:00", "orders" : 3942861, "confirmed" : 59, "unconfirmed" : 3942802, "corrected" : 0, "with_evidence" : 605, "never_claimed" : 3942256, "due" : 3942802, "created_since_service_start" : 897, "created_since_previous_count" : 762, "created_10min" : 339, "checked_10min" : 22, "earliest_created" : "2026-06-05T09:15:11.838899+00:00", "latest_created" : "2026-09-20T11:00:01.849818+00:00", "earliest_confirmed_order" : "2026-06-12T14:55:01.09235+00:00", "latest_confirmed_order" : "2026-06-14T21:45:02.838814+00:00"}
+
+{"at" : "2026-09-20T11:04:19.631317+00:00", "rows" : 60, "confirmed" : 60, "corrected" : 0, "before_after_equal" : 60}
+
+{
+  "snapshot": "2026-09-20T11:03:29.322079+00:00",
+  "confirmed": 59,
+  "total": 3942861,
+  "remaining": 3942802,
+  "percent": 0.001496375347748754,
+  "minutes_since_start": 30.164833783333332,
+  "average_per_minute": 1.955919943858556,
+  "recent_per_minute": 2.2,
+  "average_per_day": 2816.5247191563208,
+  "recent_per_day": 3168.0000000000005,
+  "static_remaining_days_average": 1399.8819087875968,
+  "static_remaining_days_recent": 1244.571338383838,
+  "static_years_average": 3.8326677858661102,
+  "static_years_recent": 3.407450618436244,
+  "new_per_minute_since_start": 29.736613383747873,
+  "new_per_minute_10min": 33.9,
+  "net_backlog_growth_10min": 317,
+  "independent_static_days_from_seconds": 1399.8819087875968
+}
+
+{
+  "Summaries": 38,
+  "First": "2026-09-20T13:33:19.4274444+03:00",
+  "Last": "2026-09-20T14:03:19.4518364+03:00",
+  "IdleChecks": 1800.0,
+  "ActiveTradingSkips": 1611.0
+}
+
+Log source: \\192.168.0.101\CodexLogs\polycopytrader-service-20260920_004.log copied read-only via FileStream; entire launch covered, timestamp>=10:33:19.432052UTC; selected confirmation/success/summary/heartbeat/ERR/FTL. Successful commit timestamps<=DB cutoff independently recount59; trailing10minutes22. Exact60IDs all found/confirmed. Estimate formula remaining/(confirmed/elapsedMinutes*1440); independent remaining*(elapsedSeconds/confirmed)/86400 agrees; recent remaining/(22/10*1440). Annual divisor365.25days. No extrapolation presented as guarantee; new rows counted via persisted created_at. Previous aggregate independently confirms growth.0financial corrections observed; these60before/after snapshots equal.
+Hashes:
+logs/selected.log SHA256 66515CC11373305DBDF391FE8DF5EDCE5B4700782BC568115D7C9A939CFD6C8F
+results/counts.json SHA256 51B606B7A7775B0ECB4AA71ED5B09EA68D1D3CA522D71F7735A0F0FB4F1E1055
+results/exact.json SHA256 8E37BF665F820F6313DC41FAEBB555764BE66AC885F41A05105A5DEE2F76EC88
+results/estimate.json SHA256 6430062AE422359B500B0CDD78382C2CDA47D84DCF995F5897F9A929DE459252
+
+Finalization 2026-09-20T11:07:07.8916612Z: marked paper-progress-20260920-01 protected cleanup succeeded, absence verified; no remaining process/artifact. WorkingTree gate detects existing unrelated RC-20260917-single-disabled-strategy-timed-delete SEMANTIC_CHANGE_AFTER_APPROVAL; those files preserved. Exact own exempt context/history staged for gate/diff check and commit/push. No production mutation.
