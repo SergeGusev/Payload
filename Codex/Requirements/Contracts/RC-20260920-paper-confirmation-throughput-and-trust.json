@@ -1,0 +1,300 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260920-paper-confirmation-throughput-and-trust",
+  "title": "Bounded market-group Paper reconciliation and visible confirmation coverage",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Давай сделаем так:\n\n1. Внеси доработку в сервис PolyCopyTrader.Service\n2. Пусть он добавит свойство Confirmed в каждую Paper ставку.\n3. Добавь фоновую задачу, которая работает в режиме, когда основной сервис в Idle режиме, чтобы не мешать основному циклу.\n4. Эта задача должна выбирать одну Paper ставку, у которой Confirmed = false, проверять фактический исход и либо корректировать данные по этой ставке, либо оставлять её нетронутой, в зависимости от того, совпал реальный исход или нет. После чего ставит для этой ставки Confirmed = true и идёт дальше"
+    },
+    {
+      "source": "user",
+      "text": "Пересчитывай всё. Исходи из главного принципа - мы должны иметь наиболее актуальную информацию, реально отражающую живые ставки."
+    },
+    {
+      "source": "user",
+      "text": "Какие есть варианты решения этой проблемы?\n\n1. Я теперь не могу доверять результатам Paper истории.\n2. Я в таком режиме никогда не дождусь проверки полной базы"
+    },
+    {
+      "source": "user",
+      "text": "Ок, давай по твоим рекомендациям действовать."
+    }
+  ],
+  "scope": {
+    "goal": "Реализовать принятую рекомендацию: видимая достоверность Paper показателей, повторное использование окончательного исхода рынка, отдельное обслуживание актуальных ставок и всего архива, ограниченная фоновая работа независимо от глобального Idle.",
+    "inScope": [
+      "PolyCopyTrader.Service Paper confirmation; необходимые типизированные модели, конфигурация, локальные PostgreSQL миграции/индексы и Storage операции.",
+      "Все существующие и новые Paper orders, включая отключённые стратегии и связанные с Live Paper shadows; только подтверждение исхода и согласованный пересчёт существующего учёта.",
+      "WPF Dashboard: основная таблица стратегий, все существующие recent strategy windows, Paper orders: подтверждённые показатели, покрытие, оставшиеся записи, понятная предварительность всей статистики.",
+      "Одна специализированная устойчивая очередь/курсор и кэш окончательных исходов, ограниченные порции, паузы при перегрузке, диагностика темпа/отставания.",
+      "Целевые тесты с изолированным PostgreSQL и ограниченный локальный нагрузочный сценарий; сборка Service и Dashboard; README, независимый semantic review."
+    ],
+    "outOfScope": [
+      "Production deploy/restart/stop, применение миграций к production, ручная массовая коррекция, backup, отдельный maintenance run или новый сервис.",
+      "Новые Live ордера, изменение сигналов, размеров ставок, fill-моделей, комиссионных формул, исторических разрешённых Paper исключений или пересоздание прошлых решений стратегии.",
+      "Удаление/отбрасывание непроверенного архива, проставление Confirmed без проверки, скрытие старых результатов или автоматический выбор стратегий по неполной подтверждённой выборке.",
+      "Общий планировщик/очередь для других задач, общий мониторинг всех сервисов, не относящийся к подтверждению refactoring.",
+      "Обещание production throughput/ETA по локальному тесту. Полный прогон production истории не является частью локальной реализации."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Подтверждение — вся сохранённая Paper история и новые записи без исключений по возрасту/стратегии. Предлагаемый приоритет Recent: created_at_utc за последние24часаUTC, Archive: более старые; это scheduling window, не период расчёта статистики. Dashboard использует прежние all-time и существующие recent windows с исходными временными якорями.",
+    "firstVerification": "Read-only на29aca4c2: Worker/Processor/claim/atomic correction/Gamma; actual DashboardDataService -> IDashboardSnapshotRepository -> persisted snapshots, incremental projection worker/calculator/schema/events; current config/interfaces/tests. Последний production замер11:03:29UTC20сентября:3942861orders,59confirmed,~1.96..2.2/min против~30..34new/min; это ранее проверенная исходная точка, не новый замер и не performance promise."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Заменить только для Paper confirmation строгий Idle ограниченной фоновой обработкой; выделять актуальным ставкам и архиву гарантированные возможности обработки.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Ок, давай по твоим рекомендациям действовать.",
+      "acceptanceCriteria": [
+        "Одобренная рекомендация явно заменяет прежнее условие только Idle для этого worker. Торговля/котировки не отменяют начатую работу; другие пользователи ServiceActivityState сохраняют прежнюю семантику. Торговые циклы не ждут admission verifier.",
+        "Предлагаемые начальные настройки: Recent24часаUTC по created_at_utc; цикл2порцииRecent:1порцияArchive, заимствование свободного слота другой очередью; не более32выбранных Paper orders на порцию, адаптивное уменьшение после timeout. Ни одна непустая готовая очередь не исключается бесконечно из-за другой.",
+        "Один writer и не более одного HTTP lookup одновременно; пауза250ms между порциями. Предлагаемый общий бюджет apply-транзакции5секунд вместо прежних2; claim/cache/defer2секунды, Gamma5секунд, SQL statement_timeout2s и lock_timeout100ms сохраняются. Бюджеты cooperative; время rollback не выдаётся за строгую гарантию.",
+        "Перегрузка: рост суммарных pending торговых очередей3последовательных измерения с интервалом1секунда либо рост счётчиков failed/rejected/overflow рыночной очереди приостанавливает начало новых порций на30секунд с повторной оценкой. Наличие одной активной торговли/котировки само по себе не означает перегрузку. Lock/DB timeout уменьшает размер следующей порции вдвое до1 и включает такую же паузу. Успешные порции постепенно возвращают размер до настроенного максимума.",
+        "Настройки валидируются; Enabled позволяет выключить verifier, не останавливая торговлю. Existing runtime mode/kill switch/order gating не меняются. Остановка сервиса отменяет HTTP/DB, освобождает ресурсы; между порциями/паузами нет открытых транзакций.",
+        "Планирование и durable retry должны после рестарта продолжать пропущенные/ошибочные записи; окна движутся по UTC, запись при старении не теряется. Невозможность подтвердить конкретную запись не блокирует весь архив."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperConfirmation*.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/Program.cs",
+        "src/PolyCopyTrader.Service/appsettings.json",
+        "src/PolyCopyTrader.Domain/Configuration/AppConfiguration.cs",
+        "src/PolyCopyTrader.Domain/Configuration/AppOptionsValidator.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmation*.cs",
+        "tests/PolyCopyTrader.Tests/ConfigurationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
+          "expected": "Busy trading без overload не вызывает starvation;2:1/borrow/aging/restart; все caps/timeouts/backoff/stop/invalid config; foreground admission не ждёт verifier.",
+          "result": "pending",
+          "evidence": "Pending approved implementation and execution."
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Получать окончательный исход рынка один раз, сохранять доказательство и использовать для всех соответствующих Paper ставок.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Ок, давай по твоим рекомендациям действовать.",
+      "acceptanceCriteria": [
+        "Типизированный durable cache окончательного исхода по точной conditionId и полному mapping токенов/исходов; хранить источник, время и исходный ответ. Многократные ставки и рестарт используют это доказательство без повторного HTTP для уже окончательного неизменившегося mapping.",
+        "Сохранять все текущие Resolve проверки финальности, exact token/condition identity, outcome mapping и0/1; closed/цена/BinanceTimedClose сами по себе не подтверждение. Неокончательный, отсутствующий или противоречивый ответ не попадает в final cache, не ставит Confirmed; retry с причинами.",
+        "Подготовка кандидатов и shared lookup ограничены выбранной порцией; все связанные ставки остаются отдельно учтёнными. Кэш результата рынка не означает, что все его ставки уже финансово проверены.",
+        "Локальная миграция добавляет только необходимые специализированные cache/progress/schema и индексы для Recent/Archive/group lookup, без общей инфраструктуры задач. Existing Confirmed/evidence сохраняются. Initial population выполняется возобновляемыми ограниченными чтениями/порциями, а не UPDATE всей многомиллионной таблицы в startup-транзакции.",
+        "Точность identities проверяется повторно перед записью; новые fills/live settlement/изменение связей не обходятся cached outcome. На конфликте запись остаётся неподтверждённой, без финансовой частичной записи."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationModels.cs",
+        "src/PolyCopyTrader.Domain/PaperConfirmation*.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/NoOpAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperConfirmation*.cs",
+        "src/PolyCopyTrader.Storage/PostgresPaperConfirmation*.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaInitializer.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchema.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmation*.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
+          "expected": "Один HTTP outcome для многих ставок/рестарта; unresolved/conflicting identities не подтверждаются; миграция идемпотентна, действующие данные сохранены, cursor restart не теряет записи.",
+          "result": "pending",
+          "evidence": "Pending approved implementation and execution."
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Ускорить применение проверенного исхода ограниченными порциями с полным согласованным пересчётом.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Ок, давай по твоим рекомендациям действовать.",
+      "acceptanceCriteria": [
+        "Сократить повторные identity/readiness/financial reads для выбранных ставок одного рынка с индексированными запросами; подтверждение совпадений не пересчитывает неизменившиеся денежные итоги. Нельзя автоматически пометить всю группу по одному успешному ордеру.",
+        "Для несовпадения сохраняются существующие формулы remaining inventory/реальных продаж/fees/null coverage; корректируются settlements, strategy runs, counters/LossDiff events/state, hourly/wallet totals. Сохраняются recorded fills, order intent и Live orders. Нет ретроспективного воспроизведения того, какие ставки стратегия могла бы принять.",
+        "Confirmed и evidence(before/after/source) фиксируются атомарно вместе со всеми затронутыми существующими финансовыми зависимостями одной accounting correction. Общие зависимости в порции не должны многократно считаться при возможности одного согласованного расчёта. Не допускается отложенный незавершённый пересчёт counters при уже Confirmed=true.",
+        "Максимум32 выбираемых записей — верхний предел, не обещание32 финансовых обновлений в одной транзакции. Зависимые строки могут быть многочисленнее; их нельзя обрезать ради лимита. Разбиение только по независимым единицам коррекции; единица, не укладывающаяся в5s, откатывается, остаётся видимой как deferred и не выдаётся за завершённую.",
+        "Транзакции сохраняют защиту от конкурентных писателей, общий hourly/cache coordination, идемпотентность и сохранение source evidence. Existing strategy cache обновляется/инвалидируется после фактического commit, исключая stale overwrite.",
+        "Проверенные SQL планы на локальных масштабных fixtures должны исключать повторное сканирование полной истории для каждого совпавшего ордера; оптимизации и необходимые индексы ограничены этим dispatch path."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperConfirmation*.cs",
+        "src/PolyCopyTrader.Storage/PostgresPaperConfirmation*.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/StrategyStateProvider.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmation*.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
+          "expected": "Real PostgreSQL: matched unchanged; wrong win/loss, sells/fees, counters/LossDiff/hourly/wallet correct; group boundaries, rollback/timeout/competing writes/unknown commit/replay; независимый пересчёт сумм и EXPLAIN.",
+          "result": "pending",
+          "evidence": "Pending approved implementation and execution."
+        }
+      ]
+    },
+    {
+      "id": "REQ-004",
+      "text": "Показать в Dashboard предварительный результат, подтверждённый результат и полноту проверки.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Ок, давай по твоим рекомендациям действовать.",
+      "acceptanceCriteria": [
+        "В основной стратегии и каждом существующем recent strategy window сохранить текущий общий Net realized/Net closed ROI и явно обозначить предварительность при неполном покрытии; рядом показывать confirmed net realized/confirmed net closed ROI, число подтверждённых закрытых записей/общее число закрытых записей, процент и остаток.",
+        "Для покрытия и подтверждённых сумм использовать тот же cohort и исходный временной anchor существующей метрики; recent RunSettled уже использует settled_at_utc. Не заменить отчётный период scheduling окном24часа. Не смешивать count всех paper_orders с количеством settlement/run строк в знаменателе стратегии.",
+        "Net ROI подтверждённой части рассчитывать по stake этой же подтверждённой части с прежними правилами fees/null coverage; при отсутствии подтверждённых закрытых записей результат unknown/пусто, не0%доходности. Missing snapshot/ошибка/initialization дают Unknown, а не100%verified.",
+        "Closed run считается подтверждённым только при надёжной связи с подтверждённой Paper записью и завершённом соответствующем финансовом пересчёте; unmatched/неоднозначные связи входят в непроверенное покрытие. Подтверждение исхода явно не называется доказательством реалистичности Paper fill.",
+        "Поля проходят actual incremental projection/events/snapshots -> DashboardDataService -> typed rows -> XAML, включая correction и Confirmed-only updates, рестарт и истечение recent windows. Dashboard не сканирует полную Paper историю при каждом refresh.",
+        "Paper orders показывает Confirmed/ожидание. Глобальный прогресс проверяющего worker показывает completed/remaining/corrected/deferred и время снимка отдельно от coverage выбранного периода. Неполная confirmed выборка не становится новым фильтром/рейтингом отбора стратегий.",
+        "Новые проекции заполняются ограниченно с durable progress и показывают Unknown до готовности; изменение полей не запускает неограниченный полный rebuild в большой startup-транзакции. Existing all-time/recent/Live показатели и их временные границы сохраняются."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Domain/PaperConfirmation*.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionModels.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionCalculator.cs",
+        "src/PolyCopyTrader.Storage/DashboardProjectionSchema.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository*.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardSnapshotRepository.cs",
+        "src/PolyCopyTrader.Storage/IDashboardSnapshotRepository.cs",
+        "src/PolyCopyTrader.Storage/NoOpDashboardSnapshotRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperConfirmation*.cs",
+        "src/PolyCopyTrader.Storage/PostgresPaperConfirmation*.cs",
+        "src/PolyCopyTrader.Dashboard/Services/DashboardDataService.cs",
+        "src/PolyCopyTrader.Dashboard/Models/DashboardRows.cs",
+        "src/PolyCopyTrader.Dashboard/ViewModels/MainViewModel.cs",
+        "src/PolyCopyTrader.Dashboard/MainWindow.xaml",
+        "src/PolyCopyTrader.Service/Analytics/DashboardStrategyPerformanceSnapshotWorker.cs",
+        "tests/PolyCopyTrader.Tests/Dashboard*.cs",
+        "tests/PolyCopyTrader.Tests/StrategyPerformanceTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmation*.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
+          "expected": "Actual stored projection + snapshot path: mixed/unmatched/zero/fees-null/100% coverage, confirmed-only update, corrected PnL, recent expiry, initialization/restart; original Live/all-time/recent tests preserve behavior.",
+          "result": "pending",
+          "evidence": "Pending approved implementation and execution."
+        }
+      ]
+    },
+    {
+      "id": "REQ-005",
+      "text": "Измерять фактическое продвижение и проверить достаточность выбранного подхода до обещания production сроков.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Ок, давай по твоим рекомендациям действовать.",
+      "acceptanceCriteria": [
+        "Диагностика различает Recent/Archive, число выбранных/confirmed/corrected/deferred, cache hit/HTTP calls, стадии/SQLSTATE, overload pauses и время; прогресс основан на durable данных и уникальных подтверждениях, а не количестве попыток.",
+        "Показывать completed/remaining с timestamp и охватом; темп подтверждения и поступления новых ставок считать в сопоставимых окнах. ETA для фиксированного backlog отдельно от ETA догоняния; если поступление>=подтверждение, не показывать конечную дату догоняния.",
+        "Локальный PostgreSQL benchmark ограничен10минутами на прогон и10000Paper записей/100рынков/20стратегий, со смешанными совпадениями, несовпадениями и параллельными симулируемыми foreground writes. Данные синтетические и явно так помечены. Сравнить исходный путь и новый в одинаковом фиксированном окне наблюдения на одинаковых fixtures; не требовать завершить все10000записей за это окно. Отдельно измерить запись/блокировки и p95 latency foreground.",
+        "Локальный критерий: новый verifier обрабатывает не менее100записей смешанной проверяемой выборки, включая реальные financial corrections в тестовой БД, без потери финансовой целостности и archive starvation; устойчивый темп выше34подтверждений/минуту (ориентир прошлого поступления production, не гарантия); прирост foreground p95 не превышает большее из50ms и10%baseline. Если критерий не достигнут, нельзя заявить throughput problem solved; сообщить измеренный предел, не менять семантику без нового согласования.",
+        "Перед последующим production запуском требуется отдельный read-only preview точных counts/unique markets/index plans/health и подбор operational batch size из этих данных. Это условие следующего rollout; данная локальная реализация не запускает production benchmark, full scan backlog job или миграцию."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationDiagnostics.cs",
+        "src/PolyCopyTrader.Domain/PaperConfirmation*.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationDiagnostics.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperConfirmation*.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperConfirmation*.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationDiagnosticsTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmation*.cs",
+        "Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-005",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
+          "expected": "Deterministic diagnostics/fairness/ETA tests plus explicitly enabled isolated benchmark; durable report includes fixtures, queries, counts, timing, baseline/new and limits.",
+          "result": "pending",
+          "evidence": "Pending approved implementation and execution."
+        }
+      ]
+    },
+    {
+      "id": "REQ-006",
+      "text": "Проверить и документировать локальную реализацию перед отдельным rollout.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Ок, давай по твоим рекомендациям действовать.",
+      "acceptanceCriteria": [
+        "Service и WPF Dashboard собираются; указанные unit/integration tests действительно выполняются, PostgreSQL tests не silently skipped. Отдельно проверяется корректный financial mismatch path, не только matched fast path.",
+        "README описывает настройки/дефолты, замену Idle,24h scheduling/2:1/max32/паузы/5s apply, новые UI значения и покрытие, setup и локальные тесты; не объявляет Confirmed доказательством Live-equivalent исполнения.",
+        "Независимый reviewer сравнивает verbatim requests, approved contract, actual diff и весь validation evidence; PASS без открытых замечаний. Работа в изолированном checkout сохраняет посторонние изменения основной рабочей директории.",
+        "Локальные schema changes проверяются только на disposable PostgreSQL; все процессы/артефакты в marked D:/CodexTemp run, protected cleanup до завершения. Никакого production deploy/stop/restart/backup в данной задаче."
+      ],
+      "implementationPaths": [
+        "README.md",
+        "src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj",
+        "src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj",
+        "tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj",
+        "Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-006",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --nologo -v:q; dotnet build src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --nologo -v:q",
+          "expected": "Обе сборки успешны, предупреждения явно зафиксированы.",
+          "result": "pending",
+          "evidence": "Pending approved implementation and execution."
+        },
+        {
+          "id": "VER-007",
+          "kind": "inspection",
+          "command": "Independent reviewer compares approved contract against git diff and test/benchmark evidence; Validate-RequirementContract.ps1 -Mode WorkingTree / -Mode Staged",
+          "expected": "Semantic PASS/noopenfindings, gates/diff check, cleanup and authorized local completion.",
+          "result": "pending",
+          "evidence": "Pending approved implementation and execution."
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260920-paper-confirmation-throughput-and-trust sha256:7ff9a5a0e38913ed480b8e855fe4c61c382be5241097e16b60cf32c8487a17d6",
+    "semanticDigest": "sha256:7ff9a5a0e38913ed480b8e855fe4c61c382be5241097e16b60cf32c8487a17d6"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/paper_throughput_trust_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
