@@ -10,26 +10,24 @@ namespace PolyCopyTrader.Tests;
 public sealed class PaperOutcomeConfirmationWorkerTests
 {
     [Fact]
-    public async Task IdleAdmissionAndQueuesAreCheckedBeforeEveryStage()
+    public async Task BoundedPortionRunsBetweenAndDuringTradingWithoutIdleAdmission()
     {
         var activity = new ServiceActivityState();
-        var entries = new EntryQueue(); var market = new MarketQueue(); var processor = new Processor();
+        var entries = new EntryQueue { PendingBatches = 1 }; var processor = new Processor();
         using var worker = new PaperOutcomeConfirmationWorker(NullLogger<PaperOutcomeConfirmationWorker>.Instance,
-            activity, entries, market, processor);
+            activity, entries, new MarketQueue(), processor);
         using (activity.EnterTradingCycle()) await worker.ProcessIdleGapAsync(default);
-        entries.PendingBatches = 1; await worker.ProcessIdleGapAsync(default);
-        entries.PendingBatches = 0; market.InFlight = 1; await worker.ProcessIdleGapAsync(default);
-        Assert.Empty(processor.Calls);
-        market.InFlight = 0; await worker.ProcessIdleGapAsync(default);
-        Assert.Equal(["Claim"], processor.Calls);
-        using (activity.EnterTradingCycle()) await worker.ProcessIdleGapAsync(default);
-        Assert.Equal(["Claim"], processor.Calls);
-        await worker.ProcessIdleGapAsync(default);
-        market.InFlight = 1;
-        for (var i = 0; i < 100; i++) await worker.ProcessIdleGapAsync(default);
-        Assert.Equal(["Claim", "Lookup"], processor.Calls);
-        market.InFlight = 0; await worker.ProcessIdleGapAsync(default);
         Assert.Equal(["Claim", "Lookup", "Apply"], processor.Calls);
+    }
+    [Fact]
+    public async Task NonemptyLanesReceiveTwoRecentPortionsThenOneArchive()
+    {
+        var processor=new Processor();
+        using var worker=new PaperOutcomeConfirmationWorker(NullLogger<PaperOutcomeConfirmationWorker>.Instance,
+            new ServiceActivityState(),new EntryQueue(),new MarketQueue(),processor);
+        for(var i=0;i<6;i++)await worker.ProcessIdleGapAsync(default);
+        Assert.Equal([PaperConfirmationLane.Recent,PaperConfirmationLane.Recent,PaperConfirmationLane.Archive,
+            PaperConfirmationLane.Recent,PaperConfirmationLane.Recent,PaperConfirmationLane.Archive],processor.Lanes);
     }
 
     [Theory]
@@ -49,8 +47,6 @@ public sealed class PaperOutcomeConfirmationWorkerTests
             started.SetResult(); await release.Task;
             Assert.False(token.IsCancellationRequested);
         };
-        if (stage != "Claim") await worker.ProcessIdleGapAsync(default);
-        if (stage == "Apply") await worker.ProcessIdleGapAsync(default);
         var running = worker.ProcessIdleGapAsync(default);
         await started.Task.WaitAsync(TimeSpan.FromSeconds(1));
         try
@@ -61,8 +57,7 @@ public sealed class PaperOutcomeConfirmationWorkerTests
             await worker.ProcessIdleGapAsync(default); // Concurrent caller cannot duplicate current stage.
             Assert.Equal(before, processor.Calls.Count);
             release.SetResult(); await running.WaitAsync(TimeSpan.FromSeconds(1));
-            await worker.ProcessIdleGapAsync(default); // Retained state waits for a later idle gap.
-            Assert.Equal(before, processor.Calls.Count);
+            Assert.Equal(3, processor.Calls.Count);
         }
         finally { release.TrySetResult(); }
         while (processor.Calls.Count < 3) await worker.ProcessIdleGapAsync(default);
@@ -71,7 +66,12 @@ public sealed class PaperOutcomeConfirmationWorkerTests
 
     private sealed class Processor : IPaperOutcomeConfirmationProcessor
     {
+        public List<PaperConfirmationLane> Lanes { get; } = [];
         public List<string> Calls { get; } = [];
+        public async Task<IReadOnlyList<PaperOrder>> ClaimBatchAsync(PaperConfirmationLane lane, int limit, CancellationToken token)
+        { Lanes.Add(lane); return [(await ClaimAsync(token))!]; }
+        public Task<PaperOutcomeConfirmationResult> ApplyGroupAsync(IReadOnlyList<PaperOutcomeConfirmation> confirmations,
+            PaperOutcomeConfirmationTrace trace, CancellationToken token) => ApplyAsync(confirmations[0], trace, token);
         public Func<string, CancellationToken, Task> OnStep = (_, _) => Task.CompletedTask;
         public async Task<PaperOrder?> ClaimAsync(CancellationToken token)
         { Calls.Add("Claim"); await OnStep("Claim", token); return PaperOutcomeConfirmationProcessorTests.Order(); }

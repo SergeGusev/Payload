@@ -1,4 +1,5 @@
 using PolyCopyTrader.Domain;
+using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.MarketData;
 
@@ -10,157 +11,206 @@ public sealed class PaperOutcomeConfirmationWorker(
     IPaperEntryPersistenceQueue entries,
     IMarketDataSideEffectQueue marketData,
     IPaperOutcomeConfirmationProcessor processor,
-    TimeProvider? timeProvider = null) : BackgroundService
+    TimeProvider? timeProvider = null,
+    PaperConfirmationOptions? options = null) : BackgroundService
 {
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+    private readonly PaperConfirmationOptions settings = options ?? new();
+    private readonly PaperConfirmationLoadControl load = new(options ?? new());
     private readonly PaperOutcomeConfirmationDiagnostics diagnostics = new(logger, timeProvider);
-    private PendingAttempt? pending;
-    private int processing;
+    private int processing, slot;
+    private PaperConfirmationProgress? previousProgress;
+    private DateTimeOffset nextProgress;
 
-    private enum Step { Claim, Lookup, Apply, Defer }
-    private sealed class PendingAttempt(PaperOutcomeConfirmationTrace trace)
+    public void ObserveLoad()
     {
-        public PaperOutcomeConfirmationTrace Trace { get; } = trace;
-        public Step Next { get; set; }
-        public PaperOrder? Order { get; set; }
-        public PaperOutcomeConfirmation? Confirmation { get; set; }
-        public string DeferReason { get; set; } = "Unknown";
-        public string Outcome { get; set; } = "Deferred";
-        public string Reason { get; set; } = "Unknown";
+        var m = marketData.GetMetrics();
+        load.Observe(clock.GetUtcNow(), entries.PendingBatches + m.PendingUpdates +
+            m.PendingDiagnostics + m.PendingMakerUpdates,
+            m.FailedUpdates + m.FailedMakerUpdates + m.FailedDiagnostics +
+            m.RejectedUpdates + m.RejectedMakerUpdates + m.RejectedDiagnostics +
+            m.UpdateSoftLimitOverflows + m.DiagnosticSoftLimitOverflows);
     }
 
-    private PaperConfirmationQueueSnapshot ReadQueues()
-    {
-        var metrics = marketData.GetMetrics();
-        return new(clock.GetUtcNow(), entries.PendingBatches, metrics.PendingUpdates, metrics.PendingDiagnostics,
-            metrics.PendingGeneralUpdates, metrics.InFlightGeneralUpdates, metrics.PendingMakerUpdates,
-            metrics.InFlightMakerUpdates);
-    }
-    public bool QueuesEmpty()
-    {
-        var queues = ReadQueues();
-        return queues.PendingBatches == 0 && queues.PendingUpdates == 0 &&
-            queues.PendingDiagnostics == 0 && queues.PendingMaker == 0 &&
-            queues.PendingGeneral == 0 && queues.InFlightGeneral == 0 && queues.InFlightMaker == 0;
-    }
-
+    // Existing explicit callers keep this entry point; admission no longer requires Idle.
     public async Task ProcessIdleGapAsync(CancellationToken token)
     {
-        // Also serialize explicit callers: no second candidate or stage can overlap.
-        if (Interlocked.Exchange(ref processing, 1) != 0) return;
+        _ = activity; // Other activity leases and their cancellation semantics are unchanged.
+        if (!settings.Enabled || load.IsPaused(clock.GetUtcNow()) ||
+            Interlocked.Exchange(ref processing, 1) != 0) return;
         try
         {
-            using var idle = activity.TryEnterIdle(QueuesEmpty, token, out var observation,
-                cancelOnForeground: false);
-            diagnostics.ObserveIdle(observation, ReadQueues()); // Separate, timestamped queue observation.
-            if (idle is null) return;
-            var attempt = pending ??= new(diagnostics.Begin());
-            var trace = attempt.Trace;
-            var step = attempt.Next;
-            using var deadline = new CancellationTokenSource(
-                TimeSpan.FromSeconds(step == Step.Lookup ? 5 : 2), clock);
-            using var stageStop = CancellationTokenSource.CreateLinkedTokenSource(idle.Token, deadline.Token);
-            try
+            var lane = slot == 2 ? PaperConfirmationLane.Archive : PaperConfirmationLane.Recent;
+            slot = (slot + 1) % 3;
+            var orders = await ClaimAsync(lane, token);
+            if (orders.Count == 0)
             {
-                stageStop.Token.ThrowIfCancellationRequested();
-                switch (step)
+                lane = lane == PaperConfirmationLane.Recent ? PaperConfirmationLane.Archive : PaperConfirmationLane.Recent;
+                orders = await ClaimAsync(lane, token);
+            }
+            var confirmed = 0; var corrected = 0; var deferred = 0; var cacheHits = 0; var httpCalls = 0;
+            foreach (var group in orders.GroupBy(x => (x.ConditionId, x.AssetId, x.Outcome, x.StrategyId, x.CopiedTraderWallet)))
+            {
+                token.ThrowIfCancellationRequested();
+                if (load.IsPaused(clock.GetUtcNow())) break;
+                var order = group.First();
+                var trace = diagnostics.Begin();
+                trace.SetOrder(order.Id);
+                var outcome = "Deferred"; var reason = "final_outcome_missing_or_identity_conflict";
+                try
                 {
-                    case Step.Claim:
-                        trace.Enter(PaperConfirmationStage.Claim);
-                        attempt.Order = await processor.ClaimAsync(stageStop.Token);
-                        if (attempt.Order is null) { Finish("NoCandidate", "QueueEmpty"); break; }
-                        trace.SetOrder(attempt.Order.Id);
-                        WaitFor(Step.Lookup, PaperConfirmationStage.WaitingForLookupIdle);
-                        break;
-                    case Step.Lookup:
-                        trace.Enter(PaperConfirmationStage.GammaToken);
-                        attempt.Confirmation = await processor.LookupAsync(attempt.Order!, trace, stageStop.Token);
-                        if (attempt.Confirmation is null)
-                            Defer("Deferred", "final_outcome_missing_or_identity_conflict",
-                                "final_outcome_missing_or_identity_conflict");
-                        else WaitFor(Step.Apply, PaperConfirmationStage.WaitingForApplyIdle);
-                        break;
-                    case Step.Apply:
+                    PaperOutcomeConfirmation? confirmation;
+                    using (var lookup = Budget(settings.GammaTimeoutSeconds, token))
+                        confirmation = await processor.LookupAsync(order, trace, lookup.Token);
+                    if (confirmation is not null)
+                    {
                         trace.Enter(PaperConfirmationStage.ApplyDatabase);
-                        var result = await processor.ApplyAsync(attempt.Confirmation!, trace, stageStop.Token);
-                        if (result.Confirmed) Finish(result.Corrected ? "Corrected" : "Matched", result.Reason);
-                        else Defer("Deferred", result.Reason, result.Reason);
-                        break;
-                    case Step.Defer:
-                        trace.Enter(PaperConfirmationStage.Defer);
-                        await processor.DeferAsync(attempt.Order!.Id, attempt.DeferReason, stageStop.Token);
-                        Finish(attempt.Outcome, attempt.Reason);
-                        break;
+                        using var apply = Budget(settings.ApplyTimeoutSeconds, token);
+                        var confirmations = group.Select(x => confirmation with { PaperOrderId = x.Id }).ToArray();
+                        var result = await processor.ApplyGroupAsync(confirmations, trace, apply.Token);
+                        reason = result.Reason;
+                        if (result.Confirmed)
+                        {
+                            confirmed += group.Count();
+                            if (result.Corrected) corrected += group.Count();
+                            outcome = result.Corrected ? "Corrected" : "Matched";
+                        }
+                    }
                 }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    trace.Complete("Canceled", "ServiceStopping");
+                    diagnostics.End(trace, new("ServiceStopping", null));
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    trace.Error(ex.GetType().Name, (ex as Npgsql.PostgresException)?.SqlState);
+                    var timeout = ex is OperationCanceledException or TimeoutException ||
+                        ex is Npgsql.PostgresException { SqlState: "55P03" or "57014" };
+                    outcome = timeout ? "Timeout" : "Error";
+                    reason = timeout ? "StageTimeout" : ex is HttpRequestException ? "HttpError" : "DatabaseError";
+                    if (timeout) load.Timeout(clock.GetUtcNow());
+                }
+                if (outcome is not ("Matched" or "Corrected"))
+                {
+                    deferred += group.Count();
+                    try
+                    {
+                        trace.Enter(PaperConfirmationStage.Defer);
+                        using var retry = Budget(settings.DatabaseTimeoutSeconds, token);
+                        foreach (var candidate in group)
+                            await processor.DeferAsync(candidate.Id, reason, retry.Token);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                        trace.Complete("Canceled", "ServiceStopping"); diagnostics.End(trace, new("ServiceStopping", null)); throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        trace.Error(ex.GetType().Name, (ex as Npgsql.PostgresException)?.SqlState);
+                        if (outcome == "Deferred")
+                        {
+                            outcome = ex is OperationCanceledException or TimeoutException ? "Timeout" : "Error";
+                            reason = "DeferFailed";
+                        }
+                        load.Timeout(clock.GetUtcNow());
+                    }
+                }
+                trace.Complete(outcome, reason);
+                var lookupCounts = trace.Snapshot();
+                cacheHits += lookupCounts.CacheHits; httpCalls += lookupCounts.HttpCalls;
+                diagnostics.End(trace, new("Unknown", null));
             }
-            catch (OperationCanceledException) when (token.IsCancellationRequested)
-            {
-                Finish("Canceled", "ServiceStopping");
-            }
-            catch (Exception ex)
-            {
-                trace.Error(ex.GetType().Name, (ex as Npgsql.PostgresException)?.SqlState);
-                var timedOut = deadline.IsCancellationRequested;
-                var reason = timedOut ? (step == Step.Lookup ? "GammaTimeout" : "DatabaseTimeout") :
-                    ex is HttpRequestException ? "HttpError" : ex is Npgsql.NpgsqlException ? "DatabaseError" : "UnknownError";
-                var outcome = timedOut ? "Timeout" : "Error";
-                // Preserve the original persisted retry payload; logs retain only safe type/state fields.
-                if (step == Step.Defer || attempt.Order is null) Finish(outcome, reason);
-                else Defer(outcome, reason, ex.GetType().Name + ": " + ex.Message);
-            }
-
-            void WaitFor(Step next, PaperConfirmationStage waitingStage)
-            {
-                attempt.Next = next;
-                trace.Complete("Waiting", "WaitingForIdle");
-                trace.Enter(waitingStage); // Once per transition, never once per busy tick.
-            }
-            void Defer(string outcome, string reason, string persistedReason)
-            {
-                attempt.Confirmation = null;
-                attempt.Outcome = outcome;
-                attempt.Reason = reason;
-                attempt.DeferReason = persistedReason;
-                WaitFor(Step.Defer, PaperConfirmationStage.WaitingForDeferIdle);
-            }
+            if (orders.Count > 0 && deferred == 0 && confirmed == orders.Count) load.Succeeded();
+            if (orders.Count > 0) logger.LogInformation(
+                "Paper confirmation portion. Lane={Lane} Selected={Selected} Confirmed={Confirmed} Corrected={Corrected} Deferred={Deferred} BatchLimit={BatchLimit} Paused={Paused} CacheHits={CacheHits} HttpCalls={HttpCalls}",
+                lane, orders.Count, confirmed, corrected, deferred, load.BatchSize, load.IsPaused(clock.GetUtcNow()),cacheHits,httpCalls);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            load.Timeout(clock.GetUtcNow());
+            logger.LogWarning("Paper confirmation selection failed. ErrorType={ErrorType} SqlState={SqlState}",
+                ex.GetType().Name, (ex as Npgsql.PostgresException)?.SqlState);
         }
         finally { Volatile.Write(ref processing, 0); }
     }
 
-    private void Finish(string outcome, string reason)
+    private async Task<IReadOnlyList<PaperOrder>> ClaimAsync(PaperConfirmationLane lane, CancellationToken token)
     {
-        var attempt = pending;
-        if (attempt is null) return;
-        pending = null;
-        attempt.Trace.Complete(outcome, reason);
-        diagnostics.End(attempt.Trace, new(outcome == "Canceled" ? reason : "Unknown", null));
+        var trace = diagnostics.Begin(); trace.Enter(PaperConfirmationStage.Claim);
+        using var budget = Budget(settings.DatabaseTimeoutSeconds, token);
+        try
+        {
+            var result = await processor.ClaimBatchAsync(lane, load.BatchSize, budget.Token);
+            trace.Complete("NoCandidate", "SelectionCompleted");
+            diagnostics.End(trace, new("Unknown", null));
+            return result;
+        }
+        catch (Exception ex)
+        {
+            trace.Error(ex.GetType().Name,(ex as Npgsql.PostgresException)?.SqlState);
+            trace.Complete(token.IsCancellationRequested ? "Canceled" : ex is OperationCanceledException ? "Timeout" : "Error",
+                token.IsCancellationRequested ? "ServiceStopping" : "SelectionFailed");
+            diagnostics.End(trace, new(token.IsCancellationRequested ? "ServiceStopping" : "Unknown", null));
+            throw;
+        }
+    }
+
+    private StageBudget Budget(int seconds, CancellationToken token) => new(seconds,clock,token);
+    private sealed class StageBudget : IDisposable
+    {
+        private readonly CancellationTokenSource deadline, linked;
+        public StageBudget(int seconds,TimeProvider clock,CancellationToken token)
+        {
+            deadline = new(TimeSpan.FromSeconds(seconds),clock);
+            linked = CancellationTokenSource.CreateLinkedTokenSource(token,deadline.Token);
+        }
+        public CancellationToken Token => linked.Token;
+        public void Dispose() { linked.Dispose(); deadline.Dispose(); }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Independent telemetry timer: a slow in-flight attempt cannot hide its stage.
+        if (!settings.Enabled) return;
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-        try { await Task.WhenAll(RunAsync(ProcessLoopAsync), RunAsync(SummaryLoopAsync)); }
-        finally
+        await Task.WhenAll(Run(ProcessAsync), Run(MonitorAsync));
+        async Task Run(Func<CancellationToken, Task> run)
         {
-            // A retained result has no open resources; durable claim/retry state survives restart.
-            Finish("Canceled", stoppingToken.IsCancellationRequested ? "ServiceStopping" : "WorkerStopping");
-        }
-
-        async Task RunAsync(Func<CancellationToken, Task> loop)
-        {
-            try { await loop(lifetime.Token); }
+            try { await run(lifetime.Token); }
             finally { await lifetime.CancelAsync(); }
         }
     }
-    private async Task ProcessLoopAsync(CancellationToken token)
+    private async Task ProcessAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            await ProcessIdleGapAsync(token);
+            if (clock.GetUtcNow() >= nextProgress)
+            {
+                nextProgress = clock.GetUtcNow().AddSeconds(30);
+                try
+                {
+                    using var budget = Budget(settings.DatabaseTimeoutSeconds, token);
+                    var progress = await processor.GetProgressAsync(budget.Token);
+                    var rates = progress is null ? null : PaperConfirmationRates.Between(previousProgress, progress);
+                    logger.LogInformation("Paper confirmation durable all-history progress. Progress={@Progress} Rates={@Rates}", progress, rates);
+                    if (progress is { Initialized: true }) previousProgress = progress;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                catch (Exception ex) { logger.LogWarning("Paper confirmation progress unavailable. ErrorType={ErrorType}", ex.GetType().Name); }
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(settings.BatchDelayMilliseconds), clock, token);
+        }
+    }
+    private async Task MonitorAsync(CancellationToken token)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), clock);
-        while (await timer.WaitForNextTickAsync(token)) await ProcessIdleGapAsync(token);
-    }
-    private async Task SummaryLoopAsync(CancellationToken token)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30), clock);
-        while (await timer.WaitForNextTickAsync(token)) diagnostics.LogSummaryIfDue();
+        while (await timer.WaitForNextTickAsync(token))
+        {
+            ObserveLoad();
+            diagnostics.LogSummaryIfDue();
+        }
     }
 }

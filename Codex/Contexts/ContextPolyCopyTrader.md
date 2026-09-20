@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Paper Confirmation Throughput And Trust V2
+Goal: Complete the approved local bounded verifier and transparent Paper confirmation reporting.
+Status: Completed local implementation and independent review; commit/push and protected cleanup recorded in daily history.
+Done:
+- Exact approval af5d392a16c476be3da48c8fd2a61e9871851105ba8531f18a7322e7b3e4dac2 persisted in parent aa6f2cd3 before product edits. Later user status question and «Ок, продолжай» did not change scope or approved behavior.
+- One continuous bounded verifier, Recent/Archive 2:1 with borrowing, adaptive max32,250ms cadence,30s overload pause,2s DB/5s lookup/apply; durable final-market cache and grouped atomic financial corrections. Existing fills, Live data and execution decisions preserved.
+- Separate resumable confirmation projection/outbox and migrations0011..0014, baseline and legacy projection version unchanged. Dashboard shows provisional/confirmed results, fee-aware closed ROI and coverage, order confirmation status and all-history progress. Unknown on unavailable/incomplete coverage. Durable unique transitions survive deletion before consumption; recent boundaries match existing inclusive windows.
+- Consolidated220distinctchecks passed:205focused +14real Dashboard PostgreSQL +1explicit benchmark. Both final application incremental builds0errors0warnings; test compilation warnings documented. Independent agent:/root/paper_throughput_trust_reviewer semantic PASS/noopenfindings across requests,contract,actualdiff,tests and report.
+- Final synthetic10korders/100markets/20strategies,60s per path:baseline12confirmed versus3527new,1618corrected-evidence,1174archive/2353recent;3526.543/min. Foregroundp95 1.782→4.3856ms;0errors/financial mismatches. Independent706run aggregate gross36/net-105.2 matches expected. No production-speed or whole-history completion claim.
+Next: Separate authorized rollout preview of production counts, market distribution, index plans/validity and health; this task does not deploy.
+Notes: Evidence/reproduction/limits in Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md and README. Isolated WorkingTree requirement gate and unchanged semantic digest PASS; exact staged gate and cleanup in finalization history. Unrelated root edits preserved/excluded.
+Blockers: None for local implementation. Production throughput/ETA and actual historical fill realism remain unestablished.
+
 ## Active Update 2026-09-20 Paper Throughput Approval And Migration Path Amendment
 Goal: Implement approved Paper throughput/trust contract without changing agreed behavior.
 Status: Approval recorded; product edits blocked by missing migration catalog/test paths. Narrow v2 draft ready.

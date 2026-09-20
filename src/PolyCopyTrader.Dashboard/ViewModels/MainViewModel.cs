@@ -12,6 +12,8 @@ namespace PolyCopyTrader.Dashboard.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
+    [ObservableProperty]
+    private string paperConfirmationProgress = "Paper outcome verification: Unknown";
     [Flags]
     private enum OrderRefreshScope
     {
@@ -1357,6 +1359,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void Apply(DashboardSnapshot snapshot)
     {
         Replace(Overview, snapshot.Overview);
+        var confirmation = snapshot.ConfirmationProgress;
+        PaperConfirmationProgress = confirmation is { Initialized: true }
+            ? $"Paper outcomes, all history: {confirmation.Confirmed:N0} completed / {confirmation.Orders:N0}; " +
+              $"{confirmation.Remaining:N0} remaining; {confirmation.Corrected:N0} corrected; {confirmation.Deferred:N0} deferred. " +
+              $"Snapshot {confirmation.CapturedAtUtc:yyyy-MM-dd HH:mm:ss} UTC. Outcome verification does not verify fill realism."
+            : "Paper outcome verification: Unknown (projection initializing or pending updates).";
         Replace(Watchlist, snapshot.Watchlist);
         Replace(TraderDiscovery, snapshot.TraderDiscovery);
         Replace(OnChainLeaders, snapshot.OnChainLeaders);

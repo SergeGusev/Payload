@@ -39,6 +39,17 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
                     continue;
                 }
 
+                var confirmationEvents = 0;
+                if (projection is PostgresDashboardProjectionRepository postgres)
+                {
+                    try { confirmationEvents = await postgres.ApplyPaperConfirmationProjectionAsync(cancellationToken: stoppingToken); }
+                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Paper confirmation coverage projection deferred; existing Dashboard projection continues.");
+                        await postgres.MarkPaperConfirmationProjectionUnknownAsync(stoppingToken);
+                    }
+                }
                 var eventBatch = await projection.ApplyPendingEventsAsync(
                     options.ProjectionEventBatchSize,
                     stoppingToken);
@@ -73,7 +84,7 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
                     nextExpiryAtUtc = DateTimeOffset.UtcNow + ExpiryCadence;
                 }
 
-                if (eventBatch.EventsRead == 0)
+                if (eventBatch.EventsRead == 0 && confirmationEvents == 0)
                 {
                     await Task.Delay(IdleDelay, stoppingToken);
                 }

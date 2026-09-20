@@ -2,6 +2,7 @@ namespace PolyCopyTrader.Domain.Configuration;
 
 public sealed class AppConfiguration
 {
+    public PaperConfirmationOptions PaperConfirmation { get; init; } = new();
     public BotOptions Bot { get; init; } = new();
 
     public RiskOptions Risk { get; init; } = new();
@@ -75,6 +76,18 @@ public sealed class AppConfiguration
     public IpcOptions Ipc { get; init; } = new();
 
     public StorageOptions Storage { get; init; } = new();
+}
+
+public sealed class PaperConfirmationOptions
+{
+    public bool Enabled { get; init; } = true;
+    public int RecentHours { get; init; } = 24;
+    public int MaxBatchSize { get; init; } = 32;
+    public int BatchDelayMilliseconds { get; init; } = 250;
+    public int OverloadPauseSeconds { get; init; } = 30;
+    public int ApplyTimeoutSeconds { get; init; } = 5;
+    public int DatabaseTimeoutSeconds { get; init; } = 2;
+    public int GammaTimeoutSeconds { get; init; } = 5;
 }
 
 public sealed class BotOptions

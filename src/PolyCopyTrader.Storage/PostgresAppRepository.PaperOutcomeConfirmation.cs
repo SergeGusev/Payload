@@ -41,9 +41,22 @@ public sealed partial class PostgresAppRepository
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<PaperOutcomeConfirmationResult> ConfirmPaperOutcomeAsync(PaperOutcomeConfirmation confirmation,
+    public Task<PaperOutcomeConfirmationResult> ConfirmPaperOutcomeAsync(PaperOutcomeConfirmation confirmation,
+        CancellationToken cancellationToken = default, PaperOutcomeConfirmationTrace? diagnostics = null)
+        => ConfirmPaperOutcomeGroupAsync([confirmation], cancellationToken, diagnostics);
+
+    public async Task<PaperOutcomeConfirmationResult> ConfirmPaperOutcomeGroupAsync(
+        IReadOnlyList<PaperOutcomeConfirmation> confirmations,
         CancellationToken cancellationToken = default, PaperOutcomeConfirmationTrace? diagnostics = null)
     {
+        if (confirmations.Count is < 1 or > 32) throw new ArgumentOutOfRangeException(nameof(confirmations));
+        var confirmation = confirmations[0];
+        var ids = confirmations.Select(x => x.PaperOrderId).Distinct().Order().ToArray();
+        if (ids.Length != confirmations.Count || confirmations.Any(x =>
+            x.ConditionId != confirmation.ConditionId || x.AssetId != confirmation.AssetId ||
+            x.Outcome != confirmation.Outcome || x.WinningAssetId != confirmation.WinningAssetId ||
+            x.WinningOutcome != confirmation.WinningOutcome))
+            return new(false, false, "group_identity_conflict");
         diagnostics?.Enter(PaperConfirmationStage.DatabaseConnection);
         await using var connection = await OpenConnectionAsync(cancellationToken);
         diagnostics?.Enter(PaperConfirmationStage.DatabaseTransaction);
@@ -58,18 +71,21 @@ public sealed partial class PostgresAppRepository
             if (!(bool)(await gate.ExecuteScalarAsync(cancellationToken))!) return new(false, false, "hourly_refresh_active");
         }
         diagnostics?.Enter(PaperConfirmationStage.OrderLock);
-        PaperOrder? order;
-        await using (var command = Command($"SELECT {PaperOrderSelectColumns} FROM paper_orders WHERE id=@Id FOR UPDATE;"))
+        var orders = new List<PaperOrder>();
+        await using (var command = Command($"SELECT {PaperOrderSelectColumns} FROM paper_orders WHERE id=ANY(@Ids) ORDER BY id FOR UPDATE;"))
         {
-            command.Parameters.AddWithValue("Id", confirmation.PaperOrderId);
+            command.Parameters.AddWithValue("Ids", ids);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            order = await reader.ReadAsync(cancellationToken) ? ReadPaperOrder(reader) : null;
+            while (await reader.ReadAsync(cancellationToken)) orders.Add(ReadPaperOrder(reader));
         }
-        if (order is null) return new(false, false, "order_missing");
-        if (order.Confirmed) return new(true, false, "already_confirmed");
-        if (order.ConditionId != confirmation.ConditionId || order.AssetId != confirmation.AssetId ||
-            order.Outcome != confirmation.Outcome) return new(false, false, "order_identity_changed");
-        if (order.Status is PaperOrderStatus.Pending or PaperOrderStatus.PartiallyFilled)
+        if (orders.Count != ids.Length) return new(false, false, "order_missing");
+        var order = orders[0];
+        if (orders.All(x => x.Confirmed)) return new(true, false, "already_confirmed");
+        if (orders.Any(x => x.ConditionId != confirmation.ConditionId || x.AssetId != confirmation.AssetId ||
+            x.Outcome != confirmation.Outcome || x.StrategyId != order.StrategyId ||
+            x.CopiedTraderWallet != order.CopiedTraderWallet))
+            return new(false, false, "order_identity_changed");
+        if (orders.Any(x => x.Status is PaperOrderStatus.Pending or PaperOrderStatus.PartiallyFilled))
             return new(false, false, "order_still_active");
 
         diagnostics?.Enter(PaperConfirmationStage.IdentityCheck);
@@ -79,7 +95,7 @@ public sealed partial class PostgresAppRepository
                 (condition_id<>@Condition OR selected_asset_id IS DISTINCT FROM @Asset OR selected_outcome IS DISTINCT FROM @Outcome))
                 OR EXISTS(SELECT 1 FROM paper_position_settlements WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset
                     AND (condition_id<>@Condition OR outcome<>@Outcome))
-                OR EXISTS(SELECT 1 FROM live_orders WHERE paper_order_id=@Id
+                OR EXISTS(SELECT 1 FROM live_orders WHERE paper_order_id=ANY(@Ids)
                     AND (condition_id<>@Condition OR asset_id<>@Asset OR outcome<>@Outcome));
             """))
         {
@@ -91,7 +107,7 @@ public sealed partial class PostgresAppRepository
         await using (var readiness = ForOrder("""
             SELECT EXISTS(SELECT 1 FROM strategy_market_paper_runs WHERE paper_order_id IN (SELECT id FROM paper_orders WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset AND condition_id=@Condition AND strategy_id=@Strategy) AND status IN ('Entered','Resting'))
                 OR EXISTS(SELECT 1 FROM paper_positions WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset AND size_shares>0)
-                OR EXISTS(SELECT 1 FROM live_orders WHERE paper_order_id=@Id AND
+                OR EXISTS(SELECT 1 FROM live_orders WHERE paper_order_id=ANY(@Ids) AND
                     (status IN ('Submitted','Live','Delayed','Unmatched','CancelRequested','CancelFailed','Error')
                      OR (filled_size>0 AND settled_at_utc IS NULL)));
             """))
@@ -118,7 +134,7 @@ public sealed partial class PostgresAppRepository
             WHERE s.copied_trader_wallet=@Wallet AND s.asset_id=@Asset AND s.condition_id=@Condition
               AND (s.won IS DISTINCT FROM @Won OR s.winning_asset_id IS DISTINCT FROM @Winner
                    OR s.winning_outcome IS DISTINCT FROM @WinningOutcome)
-              AND (EXISTS(SELECT 1 FROM paper_fills WHERE paper_order_id=@Id)
+              AND (EXISTS(SELECT 1 FROM paper_fills WHERE paper_order_id=ANY(@Ids))
                    OR EXISTS(SELECT 1 FROM strategy_market_paper_runs WHERE paper_order_id IN (SELECT id FROM paper_orders WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset AND condition_id=@Condition AND strategy_id=@Strategy) AND status='Settled'));
             """))
         {
@@ -189,7 +205,7 @@ public sealed partial class PostgresAppRepository
         await using (var finish = ForOrder("""
             UPDATE paper_orders SET confirmed=true, confirmation_evidence=jsonb_build_object(
                 'final_outcome',@Evidence::jsonb,'before',@Before::jsonb,'after',@After::jsonb,
-                'corrected',@Corrected,'checked_at_utc',@Checked::timestamptz) WHERE id=@Id AND NOT confirmed;
+                'corrected',@Corrected,'checked_at_utc',@Checked::timestamptz) WHERE id=ANY(@Ids) AND NOT confirmed;
             """))
         {
             finish.Parameters.AddWithValue("Evidence", confirmation.EvidenceJson);
@@ -215,6 +231,7 @@ public sealed partial class PostgresAppRepository
         {
             var command = Command(sql);
             command.Parameters.AddWithValue("Id", order.Id);
+            command.Parameters.AddWithValue("Ids", ids);
             command.Parameters.AddWithValue("Wallet", order.CopiedTraderWallet);
             command.Parameters.AddWithValue("Asset", order.AssetId);
             command.Parameters.AddWithValue("Condition", order.ConditionId);

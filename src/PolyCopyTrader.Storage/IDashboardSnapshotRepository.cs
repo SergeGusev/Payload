@@ -4,6 +4,8 @@ namespace PolyCopyTrader.Storage;
 
 public interface IDashboardSnapshotRepository
 {
+    Task<PaperConfirmationProgress?> GetPaperConfirmationProgressAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult<PaperConfirmationProgress?>(null);
     Task<IReadOnlyList<StrategyPerformance>> GetStrategyPerformanceSnapshotAsync(
         int limit = 25_000,
         CancellationToken cancellationToken = default);

@@ -3,7 +3,7 @@
   "contractId": "RC-20260920-paper-confirmation-throughput-and-trust-v2",
   "title": "Bounded market-group Paper reconciliation and visible confirmation coverage",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -77,8 +77,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
           "expected": "Busy trading без overload не вызывает starvation;2:1/borrow/aging/restart; все caps/timeouts/backoff/stop/invalid config; foreground admission не ждёт verifier.",
-          "result": "pending",
-          "evidence": "Pending approved implementation and execution."
+          "result": "passed",
+          "evidence": "2026-09-20 consolidated local verification: focused-final 205 passed; exact 14 guarded Dashboard tests separately passed in dashboard-postgres-final; explicitly enabled benchmark-final 1 passed. All 220 distinct selected checks executed. New benchmark 3527 confirmed,1618 corrected-evidence,1174 archive,2353 recent;3526.543/min; foreground p95 delta2.6036ms;0 financial mismatches. Source/filters/queries/limits/TRX hashes in Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md."
         }
       ]
     },
@@ -120,16 +120,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
           "expected": "Один HTTP outcome для многих ставок/рестарта; unresolved/conflicting identities не подтверждаются; миграция идемпотентна, действующие данные сохранены, cursor restart не теряет записи.",
-          "result": "pending",
-          "evidence": "Pending approved implementation and execution."
+          "result": "passed",
+          "evidence": "2026-09-20 consolidated local verification: focused-final 205 passed; exact 14 guarded Dashboard tests separately passed in dashboard-postgres-final; explicitly enabled benchmark-final 1 passed. All 220 distinct selected checks executed. New benchmark 3527 confirmed,1618 corrected-evidence,1174 archive,2353 recent;3526.543/min; foreground p95 delta2.6036ms;0 financial mismatches. Source/filters/queries/limits/TRX hashes in Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md."
         },
         {
           "id": "VER-008",
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PostgresSchemaMigrationTests.DefaultCatalog_IsBoundToApprovedLegacyChecksum\" --logger trx",
           "expected": "Штатный каталог содержит новые ordered migration records; legacy baseline checksum остаётся прежним. Existing/default initializer и catalog используют одинаковый набор миграций.",
-          "result": "pending",
-          "evidence": "Pending approved implementation and execution."
+          "result": "passed",
+          "evidence": "DefaultCatalog_IsBoundToApprovedLegacyChecksum passed in focused-final.trx. Catalog has 14 ordered migrations; immutable baseline checksum unchanged; disposable PostgreSQL initialized repeatedly. See benchmark report."
         }
       ]
     },
@@ -164,8 +164,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
           "expected": "Real PostgreSQL: matched unchanged; wrong win/loss, sells/fees, counters/LossDiff/hourly/wallet correct; group boundaries, rollback/timeout/competing writes/unknown commit/replay; независимый пересчёт сумм и EXPLAIN.",
-          "result": "pending",
-          "evidence": "Pending approved implementation and execution."
+          "result": "passed",
+          "evidence": "2026-09-20 consolidated local verification: focused-final 205 passed; exact 14 guarded Dashboard tests separately passed in dashboard-postgres-final; explicitly enabled benchmark-final 1 passed. All 220 distinct selected checks executed. New benchmark 3527 confirmed,1618 corrected-evidence,1174 archive,2353 recent;3526.543/min; foreground p95 delta2.6036ms;0 financial mismatches. Source/filters/queries/limits/TRX hashes in Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md."
         }
       ]
     },
@@ -212,8 +212,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
           "expected": "Actual stored projection + snapshot path: mixed/unmatched/zero/fees-null/100% coverage, confirmed-only update, corrected PnL, recent expiry, initialization/restart; original Live/all-time/recent tests preserve behavior.",
-          "result": "pending",
-          "evidence": "Pending approved implementation and execution."
+          "result": "passed",
+          "evidence": "2026-09-20 consolidated local verification: focused-final 205 passed; exact 14 guarded Dashboard tests separately passed in dashboard-postgres-final; explicitly enabled benchmark-final 1 passed. All 220 distinct selected checks executed. New benchmark 3527 confirmed,1618 corrected-evidence,1174 archive,2353 recent;3526.543/min; foreground p95 delta2.6036ms;0 financial mismatches. Source/filters/queries/limits/TRX hashes in Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md."
         }
       ]
     },
@@ -248,8 +248,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration\" --logger trx",
           "expected": "Deterministic diagnostics/fairness/ETA tests plus explicitly enabled isolated benchmark; durable report includes fixtures, queries, counts, timing, baseline/new and limits.",
-          "result": "pending",
-          "evidence": "Pending approved implementation and execution."
+          "result": "passed",
+          "evidence": "2026-09-20 consolidated local verification: focused-final 205 passed; exact 14 guarded Dashboard tests separately passed in dashboard-postgres-final; explicitly enabled benchmark-final 1 passed. All 220 distinct selected checks executed. New benchmark 3527 confirmed,1618 corrected-evidence,1174 archive,2353 recent;3526.543/min; foreground p95 delta2.6036ms;0 financial mismatches. Source/filters/queries/limits/TRX hashes in Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md."
         }
       ]
     },
@@ -279,16 +279,16 @@
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --nologo -v:q; dotnet build src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --nologo -v:q",
           "expected": "Обе сборки успешны, предупреждения явно зафиксированы.",
-          "result": "pending",
-          "evidence": "Pending approved implementation and execution."
+          "result": "passed",
+          "evidence": "2026-09-20 final Service and Dashboard incremental builds: 0 errors/0 warnings each. Test compilation had compiler/analyzer warnings, explicitly reported. See Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md."
         },
         {
           "id": "VER-007",
           "kind": "inspection",
           "command": "Independent reviewer compares approved contract against git diff and test/benchmark evidence; Validate-RequirementContract.ps1 -Mode WorkingTree / -Mode Staged",
           "expected": "Semantic PASS/noopenfindings, gates/diff check, cleanup and authorized local completion.",
-          "result": "pending",
-          "evidence": "Pending approved implementation and execution."
+          "result": "passed",
+          "evidence": "Independent agent:/root/paper_throughput_trust_reviewer compared original requests, approved contract, full tracked/untracked diff, README, report and TRX evidence: PASS/no open findings. Semantic digest unchanged; WorkingTree path gate and diff check passed. Staged gate, commit/push and protected cleanup are recorded in task history during finalization."
         }
       ]
     }
@@ -303,8 +303,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/paper_throughput_trust_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

@@ -74,7 +74,7 @@ public sealed class DashboardSnapshotTests
         Assert.Contains("catch (Exception ex) when (!cancellationToken.IsCancellationRequested)", method, StringComparison.Ordinal);
         Assert.Contains("Recent strategy performance snapshot failed", method, StringComparison.Ordinal);
         Assert.Contains("AddStrategyRecentPerformanceWarning(diagnostics)", method, StringComparison.Ordinal);
-        Assert.Contains("cachedStrategyRecentPerformance ?? []", method, StringComparison.Ordinal);
+        Assert.Contains("cachedStrategyRecentPerformance?.Select(row => row with { Confirmation = null }).ToArray() ?? []", method, StringComparison.Ordinal);
     }
 
     [Fact]

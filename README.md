@@ -18,88 +18,91 @@ This repository is currently at Task 18 plus local debugging, trader discovery, 
 
 ### Paper outcome confirmation
 
-`PaperOrder.Confirmed` / `paper_orders.confirmed` starts as `false` for existing
-and new Paper orders, including disabled strategies and Live shadows. The service
-registers `PaperOutcomeConfirmationWorker` automatically; the ordered schema
-migration adds the flag, an indexed retry queue and per-order confirmation evidence.
+`PaperOrder.Confirmed` / `paper_orders.confirmed` starts false for existing and new
+Paper orders, including disabled strategies and Live shadows. The service registers
+`PaperOutcomeConfirmationWorker` automatically. Only this verifier no longer waits
+for global Idle; other background admission rules are unchanged.
 
-Once per second the worker admits the next stage during a gap with no active
-trading cycle or pending/in-flight processing: claim one candidate, query Gamma,
-then apply the result or persist a deferred retry. Each stage requires its own
-Idle admission. Resumed trading or incoming quotes do not cancel an already
-admitted stage and do not wait for a background admission gate. The worker retains
-one order and its lookup result between gaps, without repeating completed lookup
-work or selecting another candidate. No connection, transaction, database lock or
-cache-update scope is held while waiting for Idle or during the Gamma request.
+`PaperConfirmation` settings default to `Enabled=true`, `RecentHours=24`,
+`MaxBatchSize=32`, `BatchDelayMilliseconds=250`, `OverloadPauseSeconds=30`,
+`DatabaseTimeoutSeconds=2`, `GammaTimeoutSeconds=5`, `ApplyTimeoutSeconds=5`.
+There is one HTTP request and one database writer at a time. Two Recent portions
+alternate with one Archive portion; an empty lane lends its slot to the other.
+Recent means order `created_at_utc >= now UTC - 24 hours`, solely for scheduling.
+Within a lane, due retry time precedes creation time, so unresolved old records do
+not repeatedly displace never-attempted archive work.
 
-Gamma token/condition lookup shares a five-second deadline. Each admitted database
-stage (claim, apply, defer) has a two-second cancellation budget. Service shutdown
-also cancels the current stage and clears retained memory; the existing durable
-one-minute claim/retry state allows recovery after restart. Missing outcomes and
-failed application are deferred in a later Idle gap; once retry persistence finishes
-or fails, the worker releases the candidate. If defer itself fails, the durable
-claim remains the retry point. Ready results are retained while awaiting Idle,
-not indefinitely after a terminal failure.
+Pending queues growing over three successive one-second samples, or an increase
+in failed/rejected/overflow counters, pauses verification for 30 seconds. Timeouts
+also halve the portion limit down to one; successful portions increase it back to
+the configured maximum. There is at least 250 ms between portions. Database stages
+for claim/cache/defer have a two-second cancellation budget, Gamma has five seconds,
+and one atomic accounting apply has five seconds. SQL retains two-second statement
+and 100 ms lock limits. Shutdown cancels active work; durable one-minute claim/retry
+state survives restart. Missing or conflicting final evidence remains deferred.
 
-Confirmation requires exact condition/token/outcome identity, final Gamma oracle
-status (`resolved` or `settled`) and an unambiguous 1/0 payout. `closed`, a near-1
-price, or provisional `BinanceTimedClose` alone cannot confirm an order. Missing,
-contradictory or unavailable final data stays unconfirmed with retry evidence.
-Active financial cycles wait; unfilled orders receive no invented fill or payout.
+Final Gamma market evidence is persisted once per exact condition/token mapping and
+reused across orders and restarts. A closed flag alone is insufficient: existing
+oracle-final, winner, exact payout and token identity checks still apply. Selected
+orders with the same wallet, strategy, condition and outcome share readiness and
+financial reads. A maximum of 32 selected records is not a cap on dependent financial
+rows. Each accounting unit commits Confirmed and its before/after/source evidence
+with settlements, runs, counters, LossDiff, hourly and wallet recalculation. Timeout
+rolls back the entire unit; there is no later unfinished counter repair. Matching
+outcomes preserve money, fills, intent, Live orders and balances. Corrections retain
+actual sales, remaining inventory, recorded fees and unknown-fee semantics. No
+historical strategy decision is replayed.
 
-An outcome correction preserves executions, actual sales, fees and historical
-settlement times. One transaction updates the shared remaining-position settlement,
-related strategy runs, PaperLostCounter, dependent LossDiff events/state and affected
-hourly/copied-trader statistics, and marks the candidate confirmed. Existing durable
-Dashboard events update lifetime/recent PnL, ROI and WinRate without adding a second
-trade. The strategy settings cache is invalidated across the transaction. The hourly
-refresh and confirmation share a transaction lock to prevent an older aggregate
-overwriting a correction. Confirmation uses a 100 ms lock timeout and 2 s statement
-timeout; interrupted or contended work retries. The two-second stage budget requests
-cooperative cancellation, not a hard bound on rollback/disposal or network cleanup.
-Concurrent foreground writes can still contend for the same database rows; local
-tests verify rollback and lock release, not zero production latency impact or a
-completion guarantee for every historical correction. Matching outcomes preserve financial
-values. `confirmation_evidence` records the final source and before/after results.
+Dashboard keeps general Net realized/Net closed ROI and shows Paper result status,
+confirmed Net realized/Net closed ROI, confirmed/closed count, percent and remaining.
+Coverage uses the same closed cohort: settled runs where the strategy uses runs;
+otherwise settlements plus SELL fills. Existing recent windows use `settled_at_utc`.
+Confirmed ROI uses only the corresponding confirmed stake and fees. Zero confirmed
+records or missing fees do not produce a fabricated zero return. Missing, incomplete
+or failed coverage projections show Unknown. Confirmation proves the outcome only;
+it does not establish fill realism or Live-equivalent execution. Paper orders show
+Confirmed/Pending. The all-history verifier progress, corrected/deferred counts and
+UTC snapshot time appear separately above the strategy table.
 
-Build the service normally. Run the focused verification with a marked temporary
-run directory in `CODEX_TASK_RUN` (and `TEMP`, `TMP`, `TMPDIR` pointing to its `temp`):
+A separate durable projection seeds source rows in bounded pages and applies queued
+changes and window expiry. It resumes after restart without changing the existing
+Dashboard projection version or triggering a full historical startup rebuild. Indexes
+are separate concurrent migrations. Apply these only through the normal service
+migration path after the separately required production rollout preview.
+
+`Paper confirmation portion` logs Recent/Archive, selected, confirmed/corrected/deferred,
+cache hits, HTTP calls and pause state. Attempt diagnostics retain stage timings,
+SQLSTATE and first error type without HTTP payloads or exception text. Independent
+30-second summaries show slow active stages. Durable all-history progress logs unique
+completed/remaining counts, corrected/deferred, timestamp and comparable arrival and
+confirmation rates. Fixed-backlog ETA differs from catch-up ETA; no finite catch-up
+ETA is emitted when arrivals are at least as fast as confirmations. An unacknowledged
+commit remains uncertain until persisted state is read; retry is idempotent.
+Unique arrivals and confirmations are retained independently of source-row retention;
+queued event facts also cover an order confirmed and deleted before projection catch-up.
+
+Build Service and Dashboard normally. Focused tests require an isolated local
+PostgreSQL database named `pct_codex_paper_confirmation_test` through
+`POLYCOPYTRADER_TEST_POSTGRES_CONNECTION`; confirmation integration tests fail if it
+is missing. Use the task's marked temporary root for artifacts:
 
 ```powershell
-dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path "$env:CODEX_TASK_RUN/artifacts"
-dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path "$env:CODEX_TASK_RUN/artifacts" --results-directory "$env:CODEX_TASK_RUN/results" --filter "FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState" --logger trx
+$env:POLYCOPYTRADER_REPOSITORY_ROOT = (Get-Location).Path
+dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path "$env:CODEX_TASK_RUN/artifacts" --results-directory "$env:CODEX_TASK_RUN/results" --filter "(FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~PaperConfirmation|FullyQualifiedName~Dashboard|FullyQualifiedName~StrategyPerformance|FullyQualifiedName~Configuration|FullyQualifiedName~PostgresSchemaMigrationTests.DefaultCatalog_IsBoundToApprovedLegacyChecksum)&FullyQualifiedName!~Benchmark&FullyQualifiedName!~DashboardIncrementalProjectionIntegrationTests" --logger trx
 ```
 
-The integration tests require `POLYCOPYTRADER_TEST_POSTGRES_CONNECTION` targeting an
-isolated local database named `pct_codex_paper_confirmation_test`; they fail rather
-than silently skipping when that fixture is absent. Production rollout and the
-historical pass require their own operational preview. No fixed completion time is
-promised while trading remains busy or final venue evidence is unavailable.
+Run `DashboardIncrementalProjectionIntegrationTests` separately with the same connection
+variable targeting its existing allowlisted disposable database naming pattern
+`pct_codex_skip_v2_YYYYMMDDHHMMSS_abcdefgh` (last eight characters hexadecimal).
+Do not count its guarded skips as passing verification.
 
-Confirmation diagnostics are emitted automatically by the service logger. Every
-30 seconds, `Paper confirmation 30-second summary` reports UTC interval bounds,
-Idle checks, skips (`ActiveTrading`, `BackgroundBusy`, `QueuesBusy`), attempt
-outcomes, named busy/canceling handlers and their market event types, and the last
-pending/in-flight queue observation. Queue metrics are a separate timestamped
-sample, not an atomic explanation of an earlier Idle decision. A slow attempt
-remains visible as `ActiveAttempt` with its current stage and monotonic age.
-Empty candidate selections and frequent Idle skips appear only in these summaries.
-
-`Paper confirmation attempt finished` correlates `AttemptId` and `PaperOrderId`
-with `Matched`, `Corrected`, `Deferred`, `Canceled`, `Timeout`, or `Error`. Reached
-stages and durations cover claim, Gamma token/condition lookup, validation,
-database connection/transaction/locks, correction and dependent recalculation,
-commit, and defer. The same attempt/order correlation remains visible across
-`WaitingForLookupIdle`, `WaitingForApplyIdle`, and `WaitingForDeferIdle`; repeated
-busy ticks do not append trace entries. `Waiting` is not a canceled or completed
-attempt. `GammaTimeout`, `DatabaseTimeout`, and `ServiceStopping` distinguish stage
-deadlines from shutdown. `ErrorType`, `SqlState`, and `ErrorStage`
-retain the first failure even if cancellation or retry persistence later fails;
-the final `Reason` describes the final outcome. New logs omit exception messages,
-HTTP payloads/headers and connection strings. `Unknown` is explicitly unresolved.
-`CommitStarted=true` without `CommitAcknowledged=true` means the commit result is
-unknown; it does not prove rollback. These diagnostics add no SQL and do not
-change confirmation/accounting rules, Idle eligibility, timeouts or retry timing.
+Set `POLYCOPYTRADER_CONFIRMATION_BENCHMARK=1` explicitly and select
+`FullyQualifiedName~PaperConfirmationBenchmarkTests` on the confirmation test database for the synthetic
+10,000-order / 100-market / 20-strategy comparison with concurrent foreground writes.
+Each old/new observation window is 60 seconds; this is not a production throughput
+or completion-time guarantee. See the [benchmark report](Codex/Reports/2026-09-20-paper-confirmation-throughput-benchmark.md).
+The next rollout step is a separate read-only production preview of exact counts,
+unique markets, index plans and health before choosing its operational batch size.
 
 ### Follow Market FAK strategies
 

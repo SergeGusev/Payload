@@ -4248,7 +4248,8 @@ public sealed record StrategyPerformance(
     decimal? LiveNetRoiPct = null,
     decimal LiveAccountedFeeUsd = 0m,
     int LiveFeeAccountedSettledCount = 0,
-    int LiveFeeRequiredSettledCount = 0);
+    int LiveFeeRequiredSettledCount = 0,
+    PaperConfirmationCoverage? Confirmation = null);
 
 public sealed record StrategyRecentPerformance(
     Guid StrategyId,
@@ -4301,7 +4302,8 @@ public sealed record StrategyRecentPerformance(
     decimal? LiveNetRoiPct = null,
     decimal LiveAccountedFeeUsd = 0m,
     int LiveFeeAccountedSettledCount = 0,
-    int LiveFeeRequiredSettledCount = 0);
+    int LiveFeeRequiredSettledCount = 0,
+    PaperConfirmationCoverage? Confirmation = null);
 
 public static class StrategyChildParentAssignmentModes
 {

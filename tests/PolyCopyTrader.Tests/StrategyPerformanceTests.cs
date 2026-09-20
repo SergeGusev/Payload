@@ -29,7 +29,7 @@ public sealed class StrategyPerformanceTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == StrategyIds.BtcUpDown5mUpSimpleCode);
+            item.Code == "btc_up_down_5m_up_bps_1_instant");
         repository.StrategyMarketPaperRuns.Add(new StrategyMarketPaperRun(
             Guid.NewGuid(),
             variant.Id,
@@ -73,7 +73,7 @@ public sealed class StrategyPerformanceTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == StrategyIds.BtcUpDown5mUpSimpleCode);
+            item.Code == "btc_up_down_5m_up_bps_1_instant");
         repository.PaperOrders.Add(new PaperOrder(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -178,7 +178,7 @@ public sealed class StrategyPerformanceTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == StrategyIds.BtcUpDown5mUpSimpleCode);
+            item.Code == "btc_up_down_5m_up_bps_1_instant");
         repository.StrategyMarketPaperRuns.Add(CreateSkippedRun(
             variant.Id,
             now.AddMinutes(-10),
@@ -205,7 +205,7 @@ public sealed class StrategyPerformanceTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == StrategyIds.BtcUpDown5mUpSimpleCode);
+            item.Code == "btc_up_down_5m_up_bps_1_instant");
         repository.StrategyMarketPaperRuns.Add(CreateSkippedRun(
             variant.Id,
             now.AddMinutes(-20),
@@ -428,7 +428,7 @@ public sealed class StrategyPerformanceTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == StrategyIds.BtcUpDown5mUpSimpleCode);
+            item.Code == "btc_up_down_5m_up_bps_1_instant");
         repository.StrategySettings[variant.Id] = StrategyRuntimeSettings.Default(variant.Id) with
         {
             LiveStakes = true,
@@ -696,7 +696,7 @@ public sealed class StrategyPerformanceTests
         var repository = new TestAppRepository();
         var now = DateTimeOffset.UtcNow;
         var variant = StrategyIds.BtcUpDown5mVariants.Single(item =>
-            item.Code == StrategyIds.BtcUpDown5mUpSimpleCode);
+            item.Code == "btc_up_down_5m_up_bps_1_instant");
         repository.StrategyMarketPaperRuns.Add(CreateSkippedRun(
             variant.Id,
             now.AddMinutes(-40),

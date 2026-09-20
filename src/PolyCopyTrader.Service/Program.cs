@@ -322,6 +322,7 @@ if (!StorageConnectionResolver.IsConfigured(appConfiguration.Storage))
 
 builder.Services.AddSerilog(Log.Logger, dispose: true);
 builder.Services.AddSingleton(appConfiguration);
+builder.Services.AddSingleton(appConfiguration.PaperConfirmation);
 builder.Services.AddSingleton(appConfiguration.Bot);
 builder.Services.AddSingleton(appConfiguration.Risk);
 builder.Services.AddSingleton(appConfiguration.Execution);

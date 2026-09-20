@@ -7,14 +7,15 @@ public enum PaperConfirmationStage
     IdentityCheck, ReadinessCheck, ReadBefore, CorrectSettlement, CorrectRuns,
     LossDiffLock, CorrectEventsAndCounter, ReconcileLossDiff, RefreshHourly,
     RefreshWallet, ReadAfter, MarkConfirmed, Commit, Defer,
-    WaitingForLookupIdle, WaitingForApplyIdle, WaitingForDeferIdle
+    WaitingForLookupIdle, WaitingForApplyIdle, WaitingForDeferIdle, MarketCacheRead, MarketCacheWrite
 }
 
 public sealed record PaperConfirmationStageTiming(PaperConfirmationStage Stage, double DurationMs);
 public sealed record PaperConfirmationTraceSnapshot(Guid AttemptId, Guid? PaperOrderId,
     DateTimeOffset StartedAtUtc, PaperConfirmationStage Stage, double StageAgeMs, double DurationMs,
     string Outcome, string Reason, string? ErrorType, string? SqlState, PaperConfirmationStage? ErrorStage,
-    bool CommitStarted, bool CommitAcknowledged, IReadOnlyList<PaperConfirmationStageTiming> Stages);
+    bool CommitStarted, bool CommitAcknowledged, IReadOnlyList<PaperConfirmationStageTiming> Stages,
+    int CacheHits = 0, int HttpCalls = 0);
 
 /// <summary>One bounded attempt, without payloads or exception messages. No I/O in stage tracking.</summary>
 public sealed class PaperOutcomeConfirmationTrace(TimeProvider? timeProvider = null)
@@ -32,6 +33,9 @@ public sealed class PaperOutcomeConfirmationTrace(TimeProvider? timeProvider = n
     private string? errorType, sqlState;
     private PaperConfirmationStage? errorStage;
     private bool commitStarted, commitAcknowledged;
+    private int cacheHits, httpCalls;
+    public void CacheHit() { lock (sync) cacheHits++; }
+    public void HttpCall() { lock (sync) httpCalls++; }
 
     public void SetOrder(Guid id) { lock (sync) orderId = id; }
     public void Enter(PaperConfirmationStage next)
@@ -63,7 +67,7 @@ public sealed class PaperOutcomeConfirmationTrace(TimeProvider? timeProvider = n
             return new(attemptId, orderId, startedUtc, stage,
                 clock.GetElapsedTime(stageStarted, now).TotalMilliseconds,
                 clock.GetElapsedTime(started, now).TotalMilliseconds, outcome, reason,
-                errorType, sqlState, errorStage, commitStarted, commitAcknowledged, stages.ToArray());
+                errorType, sqlState, errorStage, commitStarted, commitAcknowledged, stages.ToArray(), cacheHits, httpCalls);
         }
     }
 }

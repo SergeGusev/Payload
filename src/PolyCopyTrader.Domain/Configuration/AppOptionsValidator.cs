@@ -18,6 +18,13 @@ public static class AppOptionsValidator
         ArgumentNullException.ThrowIfNull(configuration);
 
         var errors = new List<string>();
+        var confirmation = configuration.PaperConfirmation;
+        if (confirmation.RecentHours <= 0 || confirmation.MaxBatchSize is < 1 or > 32 ||
+            confirmation.BatchDelayMilliseconds < 250 || confirmation.OverloadPauseSeconds < 30 ||
+            confirmation.ApplyTimeoutSeconds is < 1 or > 5 ||
+            confirmation.DatabaseTimeoutSeconds is < 1 or > 2 ||
+            confirmation.GammaTimeoutSeconds is < 1 or > 5)
+            errors.Add("PaperConfirmation requires positive windows, batch 1..32, delay >=250ms, pause >=30s and bounded DB/Gamma timeouts.");
         ValidateBot(configuration.Bot, errors);
         ValidatePolymarket(configuration.Polymarket, configuration.MarketDataWebSocket, errors);
         ValidatePolymarketAuth(configuration.PolymarketAuth, errors);

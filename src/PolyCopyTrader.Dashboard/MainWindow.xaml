@@ -135,7 +135,11 @@
                     <DataGridTextColumn Header="Lost" Binding="{Binding LostRunsCount}" Width="60" />
                     <DataGridTextColumn Header="Net realized" Binding="{Binding NetRealizedPnlUsd}" Width="100" />
                     <DataGridTextColumn Header="Net closed ROI" Binding="{Binding NetRoiPct}" Width="110" />
-                    <DataGridTextColumn Header="Closed fee coverage" Binding="{Binding ClosedFeeCoverage}" Width="130" />
+                    <DataGridTextColumn Header="Paper result status" Binding="{Binding Confirmation.Status, TargetNullValue=Unknown}" Width="120" />
+                        <DataGridTextColumn Header="Confirmed net realized" Binding="{Binding Confirmation.NetRealizedPnlUsd}" Width="140" />
+                        <DataGridTextColumn Header="Confirmed net closed ROI" Binding="{Binding Confirmation.NetClosedRoiPct}" Width="160" />
+                        <DataGridTextColumn Header="Outcome coverage" Binding="{Binding Confirmation.Display, TargetNullValue=Unknown}" Width="235" />
+                        <DataGridTextColumn Header="Closed fee coverage" Binding="{Binding ClosedFeeCoverage}" Width="130" />
                     <DataGridTextColumn Header="Gross realized (audit)" Binding="{Binding RealizedPnlUsd}" Width="130" />
                     <DataGridTextColumn Header="Gross closed ROI (audit)" Binding="{Binding RoiPct}" Width="145" />
                     <DataGridTextColumn Header="Live settles" Binding="{Binding LiveSettledOrdersCount}" Width="90" />
@@ -336,6 +340,7 @@
                 <TabControl>
                     <TabItem Header="All">
                         <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="{Binding PaperConfirmationProgress}" TextWrapping="Wrap" Margin="0,6" />
                             <WrapPanel DockPanel.Dock="Top"
                                        Orientation="Horizontal"
                                        ItemHeight="34"
@@ -450,6 +455,10 @@
                         <DataGridTextColumn Header="Lost" Binding="{Binding LostPositionsCount}" Width="60" />
                         <DataGridTextColumn Header="Net realized" Binding="{Binding NetRealizedPnlUsd}" Width="105" />
                         <DataGridTextColumn Header="Net closed ROI" Binding="{Binding NetClosedRoiPct}" Width="115" />
+                        <DataGridTextColumn Header="Paper result status" Binding="{Binding Confirmation.Status, TargetNullValue=Unknown}" Width="120" />
+                        <DataGridTextColumn Header="Confirmed net realized" Binding="{Binding Confirmation.NetRealizedPnlUsd}" Width="140" />
+                        <DataGridTextColumn Header="Confirmed net closed ROI" Binding="{Binding Confirmation.NetClosedRoiPct}" Width="160" />
+                        <DataGridTextColumn Header="Outcome coverage" Binding="{Binding Confirmation.Display, TargetNullValue=Unknown}" Width="235" />
                         <DataGridTextColumn Header="Closed fee coverage" Binding="{Binding ClosedFeeCoverage}" Width="130" />
                         <DataGridTextColumn Header="Gross realized (audit)" Binding="{Binding RealizedPnlUsd}" Width="135" />
                         <DataGridTextColumn Header="Gross closed ROI (audit)" Binding="{Binding ClosedRoiPct}" Width="150" />
@@ -983,6 +992,7 @@
                     <DataGrid ItemsSource="{Binding PaperOrders}"
                               behaviors:DataGridSelectionPersistence.KeyProperties="StrategyId,SignalId,Side,Outcome">
                         <DataGrid.Columns>
+                            <DataGridTextColumn Header="Outcome verification" Binding="{Binding ConfirmationStatus}" Width="145" />
                             <DataGridTemplateColumn Header="Strategy" SortMemberPath="StrategyName" Width="260">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>

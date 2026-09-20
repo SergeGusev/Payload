@@ -15,10 +15,10 @@ namespace PolyCopyTrader.Tests;
 [Collection(PaperCopiedTraderPerformancePostgresIntegrationCollection.Name)]
 public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutputHelper output)
 {
-    private static string ConnectionString => Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION")
+    internal static string ConnectionString => Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION")
         ?? throw new InvalidOperationException("An isolated test PostgreSQL connection is required; this test must not silently skip.");
 
-    private static async Task<PostgresAppRepository> RepositoryAsync()
+    internal static async Task<PostgresAppRepository> RepositoryAsync()
     {
         var builder = new NpgsqlConnectionStringBuilder(ConnectionString);
         Assert.Equal("127.0.0.1", builder.Host);
@@ -338,7 +338,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
     {
         var repository=await RepositoryAsync();
         var seed=await SeedAsync(repository,true,0);
-        await SqlAsync("UPDATE paper_orders SET created_at_utc='1900-01-01',confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id",seed.Order.Id);
+        await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE id<>@Id; UPDATE paper_orders SET created_at_utc=now(),confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id",seed.Order.Id);
         var gamma=new ConfirmationGamma(seed.Order,apiFailure);
         var strategies=new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance,repository);
         var processor=new PaperOutcomeConfirmationProcessor(NullLogger<PaperOutcomeConfirmationProcessor>.Instance,repository,gamma,strategies);
@@ -346,12 +346,12 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
         using var worker = new PaperOutcomeConfirmationWorker(NullLogger<PaperOutcomeConfirmationWorker>.Instance,
             activity, new PaperOutcomeConfirmationWorkerTests.EntryQueue(),
             new PaperOutcomeConfirmationWorkerTests.MarketQueue(), processor);
-        for (var step = 0; step < 3; step++) await worker.ProcessIdleGapAsync(default);
+        await worker.ProcessIdleGapAsync(default);
         Assert.Equal(1,gamma.Lookups);
         Assert.Equal(!apiFailure,(await repository.GetPaperOrderAsync(seed.Order.Id))!.Confirmed);
         if(apiFailure)
         {
-            Assert.Contains("HttpRequestException",await ScalarAsync<string>("SELECT confirmation_evidence::text FROM paper_orders WHERE id=@Id",seed.Order.Id));
+            Assert.Contains("HttpError",await ScalarAsync<string>("SELECT confirmation_evidence::text FROM paper_orders WHERE id=@Id",seed.Order.Id));
             Assert.Equal(6m,await ScalarAsync<decimal>("SELECT realized_pnl_usd FROM strategy_market_paper_runs WHERE paper_order_id=@Id",seed.Order.Id));
         }
         Assert.NotEqual(seed.Order.Id,(await repository.TryClaimPaperOutcomeConfirmationAsync(DateTimeOffset.UtcNow))?.Id);
@@ -362,14 +362,12 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
     {
         var repository = await RepositoryAsync();
         var seed = await SeedAsync(repository, true, 0);
-        await SqlAsync("UPDATE paper_orders SET created_at_utc='1900-01-01',confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", seed.Order.Id);
+        await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE id<>@Id; UPDATE paper_orders SET created_at_utc=now(),confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", seed.Order.Id);
         var activity = new ServiceActivityState();
         var processor = new PaperOutcomeConfirmationProcessor(NullLogger<PaperOutcomeConfirmationProcessor>.Instance,
             repository, new ConfirmationGamma(seed.Order, false), new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository));
         using var worker = new PaperOutcomeConfirmationWorker(NullLogger<PaperOutcomeConfirmationWorker>.Instance,
             activity, new PaperOutcomeConfirmationWorkerTests.EntryQueue(), new PaperOutcomeConfirmationWorkerTests.MarketQueue(), processor);
-        await worker.ProcessIdleGapAsync(default);
-        await worker.ProcessIdleGapAsync(default);
         var before = await SnapshotAsync(seed.Order.Id);
         // Disposable test DB only: pause immediately before Confirmed is written, after financial updates.
         var function = "pct_confirmation_wait_" + Guid.NewGuid().ToString("N");
@@ -409,7 +407,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
             Assert.Equal("55P03", blocked.SqlState);
             var cancel = Stopwatch.StartNew();
             stop.Cancel();
-            await applying.WaitAsync(TimeSpan.FromSeconds(5));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => applying.WaitAsync(TimeSpan.FromSeconds(5)));
             Assert.Equal(seed.Order.Id, await ScalarAsync<Guid>("SELECT id FROM paper_orders WHERE id=@Id FOR UPDATE NOWAIT", seed.Order.Id));
             output.WriteLine($"Cancellation, rollback and successful writer lock probe: {cancel.Elapsed.TotalMilliseconds:F3}ms");
             Assert.Equal(before, await SnapshotAsync(seed.Order.Id));
@@ -418,7 +416,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
         finally
         {
             stop.Cancel();
-            if (applying is not null) await applying.WaitAsync(TimeSpan.FromSeconds(5));
+            if (applying is { IsCompleted: false }) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => applying.WaitAsync(TimeSpan.FromSeconds(5)));
             await SqlAsync($"DROP TRIGGER {function} ON paper_orders; DROP FUNCTION {function}();", seed.Order.Id);
         }
         var corrected = await repository.ConfirmPaperOutcomeAsync(Confirmation(seed.Order, false));
@@ -526,12 +524,12 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
         public Task<string?> GetEventCategoryAsync(string eventId,CancellationToken cancellationToken=default)=>Task.FromResult<string?>(null);
     }
 
-    private static PaperOutcomeConfirmation Confirmation(PaperOrder order, bool won) => new(order.Id,order.ConditionId,
+    internal static PaperOutcomeConfirmation Confirmation(PaperOrder order, bool won) => new(order.Id,order.ConditionId,
         order.AssetId,order.Outcome,won ? order.AssetId : order.AssetId+"-other",won ? "Up" : "Down",DateTimeOffset.UtcNow,
         """{"source":"GammaClosedMarket","umaResolutionStatus":"resolved"}""");
 
-    private sealed record Seed(PaperOrder Order, Guid RunId, DateTimeOffset Settled);
-    private static async Task<Seed> SeedAsync(PostgresAppRepository repository, bool oldWin, int sold)
+    internal sealed record Seed(PaperOrder Order, Guid RunId, DateTimeOffset Settled);
+    internal static async Task<Seed> SeedAsync(PostgresAppRepository repository, bool oldWin, int sold)
     {
         var strategy = Guid.NewGuid();
         var code = "confirmation-"+strategy.ToString("N");
@@ -585,17 +583,17 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
         return new(order,runId,settled);
     }
 
-    private static Task<string> SnapshotAsync(Guid id)=>ScalarAsync<string>("""
+    internal static Task<string> SnapshotAsync(Guid id)=>ScalarAsync<string>("""
         SELECT jsonb_build_object('run',(SELECT to_jsonb(r) FROM strategy_market_paper_runs r WHERE paper_order_id=@Id),
             'settlement',(SELECT to_jsonb(s) FROM paper_position_settlements s WHERE asset_id=(SELECT asset_id FROM paper_orders WHERE id=@Id)))::text
         """,id);
-    private static async Task<T> ScalarAsync<T>(string sql,Guid id)
+    internal static async Task<T> ScalarAsync<T>(string sql,Guid id)
     {
         await using var connection=new NpgsqlConnection(ConnectionString);await connection.OpenAsync();
         await using var command=new NpgsqlCommand(sql,connection);command.Parameters.AddWithValue("Id",id);
         return (T)(await command.ExecuteScalarAsync() ?? throw new InvalidOperationException("Missing scalar result"));
     }
-    private static async Task SqlAsync(string sql,Guid id)
+    internal static async Task SqlAsync(string sql,Guid id)
     {
         await using var connection=new NpgsqlConnection(ConnectionString);await connection.OpenAsync();
         await using var command=new NpgsqlCommand(sql,connection);command.Parameters.AddWithValue("Id",id);await command.ExecuteNonQueryAsync();

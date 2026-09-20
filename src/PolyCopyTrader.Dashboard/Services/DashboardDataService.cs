@@ -149,6 +149,7 @@ public sealed class DashboardDataService(
             controlStatus,
             controlStatusError);
 
+        var confirmationProgress = await LoadConfirmationProgressAsync(strategyPerformance, strategyRecentPerformance, dashboardDiagnostics, cancellationToken);
         return new DashboardSnapshot(
             serviceAvailability,
             overview,
@@ -189,7 +190,7 @@ public sealed class DashboardDataService(
                 optionalReportDiagnostics),
             BuildRunbookLinks(),
             BuildLogs(apiErrors, riskEvents, commandAudits, marketDataEvents, liveTradingEvents),
-            hasNextLiveOrdersPage);
+            hasNextLiveOrdersPage) { ConfirmationProgress = confirmationProgress };
     }
 
     private async Task<DashboardSnapshot> LoadStrategiesOnlyAsync(
@@ -235,6 +236,7 @@ public sealed class DashboardDataService(
             controlStatus,
             controlStatusError);
 
+        var confirmationProgress = await LoadConfirmationProgressAsync(strategyPerformance, strategyRecentPerformance, dashboardDiagnostics, cancellationToken);
         return new DashboardSnapshot(
             serviceAvailability,
             overview,
@@ -267,7 +269,7 @@ public sealed class DashboardDataService(
             diagnostics,
             [],
             [],
-            hasNextLiveOrdersPage);
+            hasNextLiveOrdersPage) { ConfirmationProgress = confirmationProgress };
     }
 
     public async Task<DashboardOrderSnapshot> LoadOrderRowsAsync(
@@ -418,7 +420,22 @@ public sealed class DashboardDataService(
                 ? $"Recent strategy performance snapshot failed; using cached rows from {FormatDate(cachedStrategyRecentPerformanceAtUtc)}. {FormatOptionalReportException(ex)}"
                 : $"Recent strategy performance snapshot failed; recent strategy tabs are temporarily empty. {FormatOptionalReportException(ex)}";
             AddStrategyRecentPerformanceWarning(diagnostics);
-            return cachedStrategyRecentPerformance ?? [];
+            return cachedStrategyRecentPerformance?.Select(row => row with { Confirmation = null }).ToArray() ?? [];
+        }
+    }
+
+    private async Task<PaperConfirmationProgress?> LoadConfirmationProgressAsync(
+        IReadOnlyList<StrategyPerformance> performance, IReadOnlyList<StrategyRecentPerformance> recent,
+        List<DiagnosticRow> diagnostics, CancellationToken cancellationToken)
+    {
+        foreach (var error in performance.Select(x => x.Confirmation?.Error)
+                     .Concat(recent.Select(x => x.Confirmation?.Error)).Where(x => x is not null).Distinct())
+            diagnostics.Add(new DiagnosticRow("Paper confirmation", error!, "Warning"));
+        try { return await dashboardSnapshots.GetPaperConfirmationProgressAsync(cancellationToken); }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            diagnostics.Add(new DiagnosticRow("Paper confirmation", $"Progress unavailable ({ex.GetType().Name})", "Warning"));
+            return null;
         }
     }
 
@@ -1140,7 +1157,7 @@ public sealed class DashboardDataService(
             InferPaperWinningOutcome(order.Outcome, paperRun),
             InferPaperWon(paperRun),
             TtlRemaining(order),
-            order.SignalId.ToString());
+            order.SignalId.ToString()) { Confirmed = order.Confirmed };
     }
 
     private static bool? InferPaperWon(StrategyMarketPaperRun? paperRun)
@@ -1351,7 +1368,7 @@ public sealed class DashboardDataService(
             performance.LiveNetRoiPct,
             performance.LiveAccountedFeeUsd,
             performance.LiveFeeAccountedSettledCount,
-            performance.LiveFeeRequiredSettledCount);
+            performance.LiveFeeRequiredSettledCount) { Confirmation = performance.Confirmation };
     }
 
     private static StrategyRecentPerformanceRow ToStrategyRecentPerformanceRow(StrategyRecentPerformance performance)
@@ -1404,7 +1421,7 @@ public sealed class DashboardDataService(
             performance.LiveNetRoiPct,
             performance.LiveAccountedFeeUsd,
             performance.LiveFeeAccountedSettledCount,
-            performance.LiveFeeRequiredSettledCount);
+            performance.LiveFeeRequiredSettledCount) { Confirmation = performance.Confirmation };
     }
 
     private static LiveOrderRow ToLiveOrderRow(

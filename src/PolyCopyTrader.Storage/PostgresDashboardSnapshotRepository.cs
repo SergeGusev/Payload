@@ -608,7 +608,10 @@ ON CONFLICT (strategy_id, window_label) DO UPDATE SET
             results.Add(ReadStrategyPerformance(reader));
         }
 
-        return results;
+        await reader.DisposeAsync();
+        var coverage = await ReadConfirmationCoverageAsync(connection, cancellationToken);
+        return results.Select(row => row with { Confirmation = Coverage(row.StrategyId, 0,
+            row.FeeRequiredSettledCount, coverage) }).ToArray();
     }
 
     public async Task<IReadOnlyList<StrategyRecentPerformance>> GetStrategyRecentPerformanceSnapshotAsync(
@@ -627,7 +630,10 @@ ON CONFLICT (strategy_id, window_label) DO UPDATE SET
             results.Add(ReadStrategyRecentPerformance(reader));
         }
 
-        return results;
+        await reader.DisposeAsync();
+        var coverage = await ReadConfirmationCoverageAsync(connection, cancellationToken);
+        return results.Select(row => row with { Confirmation = Coverage(row.StrategyId, row.WindowHours,
+            row.SettledRunsCount, coverage) }).ToArray();
     }
 
     public async Task<int> UpsertStrategyPerformanceSnapshotAsync(
@@ -1014,6 +1020,64 @@ WHERE refreshed_at_utc < @RefreshedAtUtc;
     private static DateTime UtcDateTime(DateTimeOffset timestamp)
     {
         return timestamp.UtcDateTime;
+    }
+
+    private sealed record ConfirmationTotals(bool Initialized, DateTimeOffset? At,
+        long Closed, long Confirmed, decimal Net, decimal Basis, long Missing);
+
+    private static PaperConfirmationCoverage Coverage(Guid strategyId, int hours, long expectedClosed,
+        (Dictionary<(Guid, int), ConfirmationTotals> Totals, string? Error) coverage)
+    {
+        if (!coverage.Totals.TryGetValue((strategyId, hours), out var t))
+            return new(false, expectedClosed, 0, null, null, null, coverage.Error);
+        var initialized = t.Initialized && t.Closed == expectedClosed && t.Confirmed <= t.Closed;
+        var financial = initialized && t.Confirmed > 0 && t.Missing == 0;
+        return new(initialized, expectedClosed, t.Confirmed,
+            financial ? t.Net : null, financial ? t.Basis == 0 ? 0 : t.Net * 100 / t.Basis : null, t.At);
+    }
+
+    private static async Task<(Dictionary<(Guid, int), ConfirmationTotals> Totals, string? Error)> ReadConfirmationCoverageAsync(
+        NpgsqlConnection connection, CancellationToken token)
+    {
+        try
+        {
+        await using var command = new NpgsqlCommand("""
+            SELECT t.strategy_id,t.hours,s.initialized,
+                s.refreshed_at,sum(t.closed)::bigint,sum(t.confirmed)::bigint,sum(t.net),sum(t.denominator),sum(t.missing_fee)::bigint
+            FROM paper_confirmation_projection_totals t CROSS JOIN paper_confirmation_projection_state s
+            WHERE t.kind<>'O' AND (t.kind='R' OR NOT EXISTS(SELECT 1 FROM paper_confirmation_projection_totals r
+                WHERE r.strategy_id=t.strategy_id AND r.kind='R' AND r.hours=0 AND r.records>0))
+            GROUP BY t.strategy_id,t.hours,s.initialized,s.refreshed_at;
+            """, connection);
+        var result = new Dictionary<(Guid, int), ConfirmationTotals>();
+        await using var reader = await command.ExecuteReaderAsync(token);
+        while (await reader.ReadAsync(token))
+            result.Add((reader.GetGuid(0), reader.GetInt32(1)), new(reader.GetBoolean(2),
+                reader.IsDBNull(3) ? null : DateTimeOffsetFromUtc(reader.GetDateTime(3)),reader.GetInt64(4),
+                reader.GetInt64(5),reader.GetDecimal(6),reader.GetDecimal(7),reader.GetInt64(8)));
+        return (result, null);
+        }
+        catch (NpgsqlException ex) when (!token.IsCancellationRequested)
+        {
+            return (new(), $"Paper confirmation coverage unavailable ({ex.SqlState ?? ex.GetType().Name})");
+        }
+    }
+
+    public async Task<PaperConfirmationProgress?> GetPaperConfirmationProgressAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = connectionFactory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("""
+            SELECT s.refreshed_at,s.initialized,
+                COALESCE(t.records,0),COALESCE(t.confirmed,0),COALESCE(t.corrected,0),COALESCE(t.deferred,0),
+                s.arrivals,s.unique_confirmations
+            FROM paper_confirmation_projection_state s LEFT JOIN paper_confirmation_projection_totals t
+                ON t.kind='O' AND t.hours=0 AND t.strategy_id='00000000-0000-0000-0000-000000000000'::uuid;
+            """, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken) || reader.IsDBNull(0)) return null;
+        return new(DateTimeOffsetFromUtc(reader.GetDateTime(0)),reader.GetBoolean(1),reader.GetInt64(2),
+            reader.GetInt64(3),reader.GetInt64(4),reader.GetInt64(5),reader.GetInt64(6),reader.GetInt64(7));
     }
 
     private static object NullableDateTime(DateTimeOffset? timestamp)

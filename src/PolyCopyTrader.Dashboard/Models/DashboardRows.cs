@@ -1,3 +1,4 @@
+using PolyCopyTrader.Domain;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace PolyCopyTrader.Dashboard.Models;
@@ -193,7 +194,8 @@ public sealed record PaperOrderRow(
     string WinningOutcome,
     bool? Won,
     string TtlRemaining,
-    string SignalId);
+    string SignalId)
+{ public bool Confirmed { get; init; } public string ConfirmationStatus => Confirmed ? "Confirmed" : "Pending"; }
 
 public sealed record PaperPositionRow(
     string Market,
@@ -509,6 +511,7 @@ public sealed partial class StrategyPerformanceRow : ObservableObject
 
     public int FeeRequiredOpenPositionCount { get; }
 
+    public PaperConfirmationCoverage? Confirmation { get; init; }
     public string ClosedFeeCoverage => FormatFeeCoverage(
         FeeAccountedSettledCount,
         FeeRequiredSettledCount);
@@ -651,6 +654,7 @@ public sealed record StrategyRecentPerformanceRow(
     int LiveFeeAccountedSettledCount,
     int LiveFeeRequiredSettledCount)
 {
+    public PaperConfirmationCoverage? Confirmation { get; init; }
     public string ClosedFeeCoverage => FormatFeeCoverage(
         FeeAccountedSettledCount,
         FeeRequiredSettledCount);
@@ -865,7 +869,8 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<DiagnosticRow> Diagnostics,
     IReadOnlyList<RunbookLinkRow> RunbookLinks,
     IReadOnlyList<LogRow> Logs,
-    bool HasNextLiveOrdersPage = false);
+    bool HasNextLiveOrdersPage = false)
+{ public PaperConfirmationProgress? ConfirmationProgress { get; init; } }
 
 public sealed record DashboardOrderSnapshot(
     IReadOnlyList<PaperOrderRow> PaperOrders,

@@ -44,6 +44,8 @@ public static class PaperPositionMarkPersistenceStages
 
 public interface IAppRepository : IHistoricalGrossNetParityStore
 {
+    Task<PaperConfirmationProgress?> GetPaperConfirmationProgressAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult<PaperConfirmationProgress?>(null);
     Task<DateTimeOffset> GetDatabaseNowUtcAsync(CancellationToken cancellationToken = default)
     {
         return Task.FromResult(DateTimeOffset.UtcNow);
@@ -462,6 +464,21 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
 
     Task<PaperOrder?> TryClaimPaperOutcomeConfirmationAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken = default)
         => Task.FromResult<PaperOrder?>(null);
+
+    Task<IReadOnlyList<PaperOrder>> ClaimPaperConfirmationBatchAsync(PaperConfirmationLane lane,
+        DateTimeOffset nowUtc, int recentHours, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<PaperOrder>>([]);
+
+    Task<PaperConfirmationMarketEvidence?> GetPaperConfirmationMarketAsync(string conditionId,
+        CancellationToken cancellationToken = default) => Task.FromResult<PaperConfirmationMarketEvidence?>(null);
+
+    Task<PaperConfirmationMarketEvidence> SavePaperConfirmationMarketAsync(PaperConfirmationMarketEvidence evidence,
+        CancellationToken cancellationToken = default) => Task.FromResult(evidence);
+
+    Task<PaperOutcomeConfirmationResult> ConfirmPaperOutcomeGroupAsync(
+        IReadOnlyList<PaperOutcomeConfirmation> confirmations, CancellationToken cancellationToken = default,
+        PaperOutcomeConfirmationTrace? diagnostics = null)
+        => Task.FromResult(new PaperOutcomeConfirmationResult(false, false, "repository_not_supported"));
 
     Task DeferPaperOutcomeConfirmationAsync(Guid orderId, DateTimeOffset nextAttemptUtc, string reason, CancellationToken cancellationToken = default)
         => Task.CompletedTask;

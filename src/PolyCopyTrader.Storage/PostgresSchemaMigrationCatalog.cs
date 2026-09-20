@@ -170,6 +170,16 @@ public static class PostgresSchemaMigrationCatalog
                 positiveProgress,
                 new PostgresSchemaMigration(9, PostgresPaperOutcomeConfirmationSchemaMigration.Id, PostgresPaperOutcomeConfirmationSchemaMigration.Sql, true, "confirm Paper outcomes and persist retry/audit state"),
                 strategyRetentionWalletIndex
+                ,new PostgresSchemaMigration(10, PostgresPaperConfirmationBatchSchemaMigration.Id,
+                    PostgresPaperConfirmationBatchSchemaMigration.Sql, true, "durable final Paper market evidence")
+                ,new PostgresSchemaMigration(11, PostgresPaperConfirmationBatchSchemaMigration.IndexId,
+                    PostgresPaperConfirmationBatchSchemaMigration.IndexSql, false, "bounded Paper confirmation lookup indexes",
+                    completionCheckSql: PostgresPaperConfirmationBatchSchemaMigration.IndexCheckSql)
+                ,new PostgresSchemaMigration(12, PostgresPaperConfirmationBatchSchemaMigration.InventoryIndexId,
+                    PostgresPaperConfirmationBatchSchemaMigration.InventoryIndexSql, false, "Paper confirmation inventory lookup",
+                    completionCheckSql: PostgresPaperConfirmationBatchSchemaMigration.InventoryIndexCheckSql)
+                ,new PostgresSchemaMigration(13, PostgresPaperConfirmationProjectionSchemaMigration.Id,
+                    PostgresPaperConfirmationProjectionSchemaMigration.Sql, true, "bounded confirmation coverage projection and durable counters")
             ]);
     }
 
