@@ -41,9 +41,9 @@ public sealed class PaperSettlementProcessorTests
             "0xleader"));
         var processor = new PaperSettlementProcessor(
             NullLogger<PaperSettlementProcessor>.Instance,
-            new FakeGammaClient([]),
+            new FakeGammaClient([TokenMetadata("asset-yes", "condition-1", "Yes", "Yes", "Politics"), TokenMetadata("asset-no", "condition-1", "No", "Yes", "Politics")]),
             new ExposureSnapshotCache(repository),
-            repository);
+            FinalSettlementTestRepository.Wrap(repository));
 
         var result = await processor.SettleMarketResolutionAsync(
             "condition-1",
@@ -428,7 +428,7 @@ public sealed class PaperSettlementProcessorTests
             NullLogger<PaperSettlementProcessor>.Instance,
             new FakeGammaClient(metadata),
             new ExposureSnapshotCache(repository),
-            repository);
+            FinalSettlementTestRepository.Wrap(repository));
 
         var result = await processor.ProcessOpenPositionsAsync();
 
@@ -465,7 +465,7 @@ public sealed class PaperSettlementProcessorTests
             ["Yes", "No"],
             LookupSucceeded: true,
             LookupError: null,
-            RawJson: "{}",
+            RawJson: """{"umaResolutionStatus":"resolved","outcomePrices":"[\"1\",\"0\"]"}""",
             LastRefreshedUtc: DateTimeOffset.UtcNow);
     }
 
@@ -489,9 +489,9 @@ public sealed class PaperSettlementProcessorTests
             NetUnrealizedPnlUsd: -0.10m));
         var processor = new PaperSettlementProcessor(
             logger ?? NullLogger<PaperSettlementProcessor>.Instance,
-            new FakeGammaClient([]),
+            new FakeGammaClient([TokenMetadata("asset-yes", "condition-1", "Yes", "Yes", "Politics"), TokenMetadata("asset-no", "condition-1", "No", "Yes", "Politics"), TokenMetadata("asset-other", "condition-other", "Yes", "Yes", "Politics") with { ClobTokenIds = ["asset-other", "asset-other-no"] }]),
             new ExposureSnapshotCache(repository),
-            repository);
+            FinalSettlementTestRepository.Wrap(repository));
         return (repository, processor);
     }
 
@@ -615,7 +615,7 @@ public sealed class PaperSettlementProcessorTests
         {
             return Task.FromResult<IReadOnlyList<PolymarketOnChainTokenMetadata>>(
                 metadata.Any(item => string.Equals(item.ConditionId, conditionId, StringComparison.OrdinalIgnoreCase))
-                    ? metadata
+                    ? metadata.Where(x => x.ConditionId == conditionId).ToArray()
                     : []);
         }
 

@@ -2490,7 +2490,7 @@ public sealed class LiveTradingGatingTests
             ["Yes", "No"],
             LookupSucceeded: true,
             LookupError: null,
-            RawJson: "{}",
+            RawJson: System.Text.Json.JsonSerializer.Serialize(new { umaResolutionStatus = "resolved", outcomePrices = winningOutcome == "Yes" ? "[\"1\",\"0\"]" : "[\"0\",\"1\"]" }),
             LastRefreshedUtc: DateTimeOffset.UtcNow);
     }
 

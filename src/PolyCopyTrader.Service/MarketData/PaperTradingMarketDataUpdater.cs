@@ -273,15 +273,7 @@ public sealed class PaperTradingMarketDataUpdater(
                     MarketDataSideEffectPhases.SettleMarketResolution,
                     "SettleMarketResolution",
                     "PaperSettlementProcessor.SettleMarketResolution");
-                await paperSettlementProcessor.SettleMarketResolutionAsync(
-                    update.ConditionId,
-                    update.AssetId,
-                    update.WinningAssetId,
-                    update.WinningOutcome,
-                    null,
-                    "MarketWebSocket",
-                    update.TimestampUtc,
-                    cancellationToken);
+                await paperSettlementProcessor.SettleMarketResolutionAsync(update, cancellationToken);
                 return;
             }
 

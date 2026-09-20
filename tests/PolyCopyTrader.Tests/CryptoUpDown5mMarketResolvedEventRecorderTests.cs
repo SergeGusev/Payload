@@ -21,7 +21,7 @@ public sealed class CryptoUpDown5mMarketResolvedEventRecorderTests
 
         await recorder.RecordAsync(
             CriticalCryptoUpDown5mAssetSelector.ComponentName,
-            CreateResolvedUpdate("asset-up", "asset-down", winningOutcome: null, receivedAtUtc),
+            CreateResolvedUpdate("asset-up", "asset-down", winningOutcome: "Down", receivedAtUtc),
             snapshot,
             receivedAtUtc);
         await recorder.RecordAsync(
@@ -150,7 +150,7 @@ public sealed class CryptoUpDown5mMarketResolvedEventRecorderTests
             TradeSide.Unknown,
             true,
             receivedAtUtc,
-            RawJson: """{"event_type":"market_resolved"}""",
+            RawJson: System.Text.Json.JsonSerializer.Serialize(new { event_type = "market_resolved", market = "condition-1", winning_asset_id = winningAssetId, winning_outcome = winningOutcome }),
             WinningAssetId: winningAssetId,
             WinningOutcome: winningOutcome);
     }

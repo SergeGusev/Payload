@@ -306,19 +306,10 @@ public sealed class LiveTradingProcessor(
                     ? grossRealizedPnl - settlementOrder.FeeUsd
                     : (decimal?)null;
                 var now = DateTimeOffset.UtcNow;
+                var final = FinalMarketOutcomeEvidence.FromGamma(metadata, now)!;
                 var result = await repository.ApplyLiveOrderSettlementToStrategyBalanceWithConcurrencyAsync(
-                    settlementOrder.Id,
-                    settlementOrder.StrategyId,
-                    settlementValue,
-                    grossRealizedPnl,
-                    netRealizedPnl,
-                    winningAssetId,
-                    winningOutcome,
-                    now,
-                    now,
-                    settlementOrder.RowVersion,
-                    cancellationToken);
-                if (!result.Applied)
+                    settlementOrder.Id, settlementOrder.StrategyId, settlementValue, grossRealizedPnl, netRealizedPnl,
+                    final.WinningAssetId, final.WinningOutcome, now, now, settlementOrder.RowVersion, final, cancellationToken);                if (!result.Applied)
                 {
                     continue;
                 }
@@ -434,9 +425,8 @@ public sealed class LiveTradingProcessor(
             ? byToken
             : await gammaClient.GetTokenMetadataByConditionIdAsync(order.ConditionId, order.AssetId, closed: true, cancellationToken);
 
-        return metadata
-            .Where(item => item.Resolved && !string.IsNullOrWhiteSpace(item.WinningOutcome))
-            .ToArray();
+        var final = FinalMarketOutcomeEvidence.FromGamma(metadata, DateTimeOffset.UtcNow);
+        return final is not null && final.Matches(order.ConditionId, order.AssetId, order.Outcome) ? metadata : [];
     }
 
     private static bool IsWinningOrder(LiveOrder order, string? winningAssetId, string? winningOutcome)

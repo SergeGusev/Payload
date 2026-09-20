@@ -44,6 +44,19 @@ public static class PaperPositionMarkPersistenceStages
 
 public interface IAppRepository : IHistoricalGrossNetParityStore
 {
+    Task RecordPaperAlgorithmOutcomeAsync(PaperAlgorithmOutcome outcome, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Durable Paper algorithm outcomes are required.");
+    Task ConfirmFinalPaperOrderAsync(Guid orderId, FinalMarketOutcomeEvidence evidence, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Atomic final Paper confirmation is required.");
+    Task<int> GetEffectivePaperLostCounterAsync(Guid strategyId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("An atomic effective Paper counter read is required.");
+    Task<StrategyLostCounterUpdateResult> PersistFinalPaperRunAsync(FinalPaperRunSettlement settlement, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Atomic final Paper settlement is required.");
+    Task<int> PersistFinalPaperPositionsAsync(IReadOnlyList<PaperPositionSettlementWrite> writes, FinalMarketOutcomeEvidence evidence,
+        Action<PaperSettlementPersistenceStageEvent>? observer, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Atomic final Paper settlement is required.");
+    Task<PolymarketGammaMarket?> GetGammaMarketForOutcomeAsync(string conditionId, CancellationToken cancellationToken = default)
+        => Task.FromResult<PolymarketGammaMarket?>(null);
     Task<PaperConfirmationProgress?> GetPaperConfirmationProgressAsync(CancellationToken cancellationToken = default)
         => Task.FromResult<PaperConfirmationProgress?>(null);
     Task<DateTimeOffset> GetDatabaseNowUtcAsync(CancellationToken cancellationToken = default)
@@ -1098,6 +1111,12 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
         return Task.FromResult(new StrategyLiveBalanceAdjustmentResult(false, 0m, false));
     }
 
+    Task<StrategyLiveBalanceAdjustmentResult> ApplyLiveOrderSettlementToStrategyBalanceWithConcurrencyAsync(
+        Guid liveOrderId, Guid strategyId, decimal value, decimal gross, decimal? net, string? winner,
+        string outcome, DateTimeOffset settled, DateTimeOffset updated, long version, FinalMarketOutcomeEvidence evidence,
+        CancellationToken cancellationToken = default)
+        => ApplyLiveOrderSettlementToStrategyBalanceWithConcurrencyAsync(liveOrderId,strategyId,value,gross,net,
+            winner,outcome,settled,updated,version,cancellationToken);
     Task<StrategyLiveBalanceAdjustmentResult> ApplyLiveOrderSettlementToStrategyBalanceWithConcurrencyAsync(
         Guid liveOrderId,
         Guid strategyId,

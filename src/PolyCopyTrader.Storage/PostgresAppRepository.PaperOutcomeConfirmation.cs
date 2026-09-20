@@ -199,6 +199,11 @@ public sealed partial class PostgresAppRepository
             diagnostics?.Enter(PaperConfirmationStage.RefreshWallet);
             await RefreshConfirmedWalletAsync();
         }
+        await using (var retire = ForOrder("""
+            UPDATE paper_algorithm_outcomes a SET retired=true
+            FROM strategy_market_paper_runs r WHERE a.run_id=r.id AND r.status='Settled'
+                AND r.strategy_id=@Strategy AND r.condition_id=@Condition AND r.selected_asset_id=@Asset;
+            """)) await retire.ExecuteNonQueryAsync(cancellationToken);
         diagnostics?.Enter(PaperConfirmationStage.ReadAfter);
         var after = await ReadFinancialSnapshotAsync();
         diagnostics?.Enter(PaperConfirmationStage.MarkConfirmed);

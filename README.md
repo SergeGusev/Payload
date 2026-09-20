@@ -16,6 +16,39 @@ This repository is currently at Task 18 plus local debugging, trader discovery, 
 - Default mode is read-only/paper-first by project policy.
 - Every Paper execution change is governed by the mandatory [Paper/Live execution parity contract](docs/architecture/PAPER_LIVE_PARITY.md). The default remains: no proven Live equivalent means no Paper trade or Paper PnL claim. The only exception is the exact closed ETH Reference Average Maker-GTD family enumerated in that contract; its TouchNoDepth fills are not Live-equivalent and cannot be generalized.
 
+### Final settlement and preliminary Paper sizing
+
+Outcome-based Paper and Live accounting accepts only validated Polymarket final
+proof: an official `market_resolved` message with matching condition/token/outcome,
+or Gamma with resolved/settled oracle status and exact unique 0/1 payouts.
+`BinanceTimedClose` remains an algorithm signal. It does not settle runs, release
+positions, credit payouts, change realized PnL or confirm orders. Actual fills,
+sales, fees and unrealized marks retain their existing accounting.
+
+Migration `0016-paper-algorithm-outcomes` adds indexed per-run preliminary sizing
+state. Only actually filled, still-entered Paper runs contribute. The existing
+sizing formula reads the financial counter plus these contributions in one SQL
+snapshot. Repeated observations replace rather than add contributions; final
+settlement retires the contribution and updates the financial counter in the same
+transaction. Explicit counter/settings reset excludes existing preliminary
+contributions. Live sizing has no new preliminary state.
+
+Final proof is persisted even when confirmation must wait. Eligible Paper orders
+become `Confirmed` in the final accounting transaction; active orders, open
+inventory, unfinished related runs or linked Live orders keep it false. Final
+Live settlement also rechecks its linked Paper order. Confirmed means verified
+outcome accounting, not historical execution equivalence. Existing unconfirmed
+history still requires the background verifier.
+
+Run the service through its existing startup path; its ordered schema initializer
+applies the new empty-state migration. This change does not rebuild old history.
+Local verification uses `FinalMarketOutcomeEvidence`, `PaperAlgorithmOutcome`,
+`FinalOutcomeSettlement`, Paper confirmation/settlement, Live gating and counter
+tests. PostgreSQL confirmation tests require a disposable database named
+`pct_codex_paper_confirmation_test`; unrelated retention/positive-progress tests
+require their own allowlisted database and must run separately. Set
+`POLYCOPYTRADER_REPOSITORY_ROOT` to the checkout when build artifacts are external.
+
 ### Paper outcome confirmation
 
 `PaperOrder.Confirmed` / `paper_orders.confirmed` starts false for existing and new

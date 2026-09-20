@@ -1,3 +1,17 @@
+## Active Update 2026-09-20 Final-Only Settlement And Preliminary Sizing Implemented
+Goal: Implement approved RC-20260920-final-only-settlement-and-provisional-sizing without production changes.
+Status: Completed locally; deployment not performed.
+Done:
+- Outcome-based Paper/Live settlement now requires validated final Polymarket evidence: official market_resolved with exact identity or Gamma resolved/settled oracle evidence with unique exact0/1 payouts. Preliminary signals remain available without provisional financial settlement or exposure release.
+- Added minimal durable per-run Paper algorithm contributions for actual fills and fresh effective sizing reads. Final settlement atomically retires preliminary state and applies financial accounting; duplicate/restart/reset/disabled-coefficient behavior is covered. Existing sizing formulas, execution intents, fees and Live submission are unchanged.
+- Eligible Paper orders become Confirmed in the final accounting transaction; final proof persists while pending/partial orders, open runs/inventory or linked Live lifecycle block confirmation. Existing historical verification remains required.
+- Approval-only commit b73a264e preceded implementation. Independent reviewer agent:/root/final_settlement_reviewer compared verbatim requests, approved digest, all changed/new files, documentation and actual verification: PASS, no open findings.
+- Final selected tests:307/307 focused,2/2 projection,1/1 positive-progress integration; total310 passed,zero skips. Three isolated local PostgreSQL databases satisfy pre-existing incompatible test guards; no production connection. Final service build passed with0errors/0warnings; earlier full builds retained inherited nullable warnings.
+- Completed contract records exact filters, database names and TRX/build hashes. WorkingTree gate passed in isolated implementation worktree; exact Staged gate passed in root. Semantic digest remains cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf. Diff checks passed.
+Next: None within the approved local implementation scope.
+Notes: No production deployment, migration execution, service restart, historical DML or Live orders. Local PostgreSQL stopped and verified copied implementation worktree removed. Unrelated concurrent root changes preserved and excluded from this task's commit.
+Blockers: None for local implementation.
+
 ## Active Update 2026-09-20 Final-Only Settlement And Preliminary Sizing Contract Ready
 Goal: Separate preliminary algorithm outcomes from real financial results and confirm eligible final Paper settlements immediately.
 Status: Draft prepared; awaiting exact user digest approval. No product or production edits.

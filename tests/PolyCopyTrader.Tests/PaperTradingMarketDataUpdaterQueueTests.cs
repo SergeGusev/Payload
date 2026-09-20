@@ -1078,6 +1078,9 @@ public sealed class PaperTradingMarketDataUpdaterQueueTests
             return Task.FromResult(new PaperSettlementProcessingResult(0, 0, 0, 0));
         }
 
+        public Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(MarketDataUpdate update, CancellationToken cancellationToken = default)
+            => Task.FromResult(new PaperSettlementProcessingResult(0, 0, 0, 0));
+
         public Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(
             string? conditionId,
             string? assetId,

@@ -16,6 +16,9 @@ public sealed class StrategyStateProvider(
     private long loadedOutcomeRevision;
     private int pendingOutcomeUpdates;
 
+    public Task<int> GetEffectivePaperLostCounterAsync(Guid strategyId, CancellationToken cancellationToken = default)
+        => repository.GetEffectivePaperLostCounterAsync(strategyId, cancellationToken);
+
     public void InvalidatePaperOutcomeSettings() => Interlocked.Increment(ref outcomeRevision);
 
     public IDisposable BeginPaperOutcomeUpdate()

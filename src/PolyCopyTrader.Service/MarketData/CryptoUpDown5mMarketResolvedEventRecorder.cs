@@ -218,28 +218,12 @@ public sealed class CryptoUpDown5mMarketResolvedEventRecorder(
         ActiveMarketAssetSnapshot snapshot,
         out string winningOutcome)
     {
-        if (TryNormalizeOutcome(update.WinningOutcome, out winningOutcome))
-        {
-            return true;
-        }
-
-        if (string.IsNullOrWhiteSpace(update.WinningAssetId))
-        {
-            return false;
-        }
-
-        for (var index = 0; index < snapshot.ClobTokenIds.Count && index < snapshot.Outcomes.Count; index++)
-        {
-            if (string.Equals(snapshot.ClobTokenIds[index], update.WinningAssetId, StringComparison.OrdinalIgnoreCase) &&
-                TryNormalizeOutcome(snapshot.Outcomes[index], out winningOutcome))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        var final = FinalMarketOutcomeEvidence.FromWebSocket(snapshot.MarketId, snapshot.ConditionId,
+            snapshot.ClobTokenIds, snapshot.Outcomes, update.RawJson, update.TimestampUtc);
+        winningOutcome = final?.WinningOutcome ?? string.Empty;
+        return final is not null && update.ConditionId == final.ConditionId &&
+            update.WinningAssetId == final.WinningAssetId && (update.WinningOutcome is null || update.WinningOutcome == final.WinningOutcome);
     }
-
     private static bool TryNormalizeOutcome(string? value, out string winningOutcome)
     {
         if (string.Equals(value, "Up", StringComparison.OrdinalIgnoreCase))

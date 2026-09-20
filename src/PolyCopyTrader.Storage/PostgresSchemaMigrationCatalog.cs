@@ -183,6 +183,8 @@ public static class PostgresSchemaMigrationCatalog
                 ,new PostgresSchemaMigration(14, PostgresPaperConfirmationCoverageIndexMigration.Id,
                     PostgresPaperConfirmationCoverageIndexMigration.Sql, false, "all-source Paper coverage wallet and asset lookup",
                     completionCheckSql: PostgresPaperConfirmationCoverageIndexMigration.CompletionCheckSql)
+                ,new PostgresSchemaMigration(15, PostgresPaperAlgorithmOutcomeSchemaMigration.Id,
+                    PostgresPaperAlgorithmOutcomeSchemaMigration.Sql, true, "separate preliminary Paper sizing state")
             ]);
     }
 

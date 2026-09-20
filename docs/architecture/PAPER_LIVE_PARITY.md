@@ -16,6 +16,27 @@ The default has one closed exception, defined under **Closed user-approved
 ordinary-Paper exception** below. It is a classification decision, not evidence
 of Live-equivalent fills, and cannot be inferred for any other strategy.
 
+## Final outcome accounting
+
+`RC-20260920-final-only-settlement-and-provisional-sizing` separates algorithm
+observations from outcome settlement. Only exact official `market_resolved` proof
+or strict Gamma oracle resolution (resolved/settled, unique exact 0/1 payouts and
+consistent token mapping) authorizes Paper/Live outcome accounting. Source labels,
+Binance closes and expiry alone are insufficient. Canonical ledger updates retain
+the matching winner token and raw proof; final evidence cannot be replaced by a
+late provisional result.
+
+Paper's existing loss-counter sizing may include a separate, durable preliminary
+contribution for each actually filled unfinalized run. It does not modify the
+financial counter, realized PnL, position exposure or previously frozen intents.
+Financial settlement and retirement of that contribution are atomic. The final
+proof and eligible immediate confirmation share the financial transaction;
+unfinished linked Live or Paper lifecycle keeps confirmation pending.
+
+Order types, limits, fill simulation, actual sale/fee accounting and the closed
+Paper exceptions below are unchanged. This accounting correction introduces no
+new Live order semantics or Live preliminary sizing.
+
 ## Current strategy Live eligibility
 
 Approved contract `RC-20260918-universal-live-strategy-checkbox` makes the

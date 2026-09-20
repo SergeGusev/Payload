@@ -4,6 +4,9 @@ namespace PolyCopyTrader.Service.Strategies;
 
 public interface IStrategyStateProvider
 {
+    async Task<int> GetEffectivePaperLostCounterAsync(Guid strategyId, CancellationToken cancellationToken = default)
+        => (await GetStrategySettingsAsync(strategyId, cancellationToken)).PaperLostCounter;
+
     Task<IReadOnlyDictionary<Guid, StrategyRuntimeSettings>> GetStrategySettingsAsync(CancellationToken cancellationToken = default);
 
     Task<IReadOnlySet<Guid>> GetEnabledStrategyIdsAsync(CancellationToken cancellationToken = default);

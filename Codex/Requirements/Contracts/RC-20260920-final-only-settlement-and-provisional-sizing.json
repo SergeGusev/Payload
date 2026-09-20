@@ -3,7 +3,7 @@
   "contractId": "RC-20260920-final-only-settlement-and-provisional-sizing",
   "title": "Final-only outcome accounting with separate preliminary Paper stake-sizing state",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -81,8 +81,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~FinalMarketOutcomeEvidence|FullyQualifiedName~Settlement|FullyQualifiedName~CryptoUpDown5mResultPolling|FullyQualifiedName~CryptoUpDown5mMarketResolvedEventRecorder|FullyQualifiedName~LiveTradingGating|FullyQualifiedName~PaperTradingMarketDataUpdaterQueue\" --logger trx",
           "expected": "All focused cases pass on an isolated local PostgreSQL database where applicable; no production connection.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 local isolated PostgreSQL17 at127.0.0.1:56492; no production connection. Approved filters executed as their combined union in three partitions because existing integration guards require incompatible database names and the projection suite requires a clean queue. Main filter=(FullyQualifiedName~FinalMarketOutcomeEvidence|FullyQualifiedName~Settlement|FullyQualifiedName~CryptoUpDown5mResultPolling|FullyQualifiedName~CryptoUpDown5mMarketResolvedEventRecorder|FullyQualifiedName~LiveTradingGating|FullyQualifiedName~PaperTradingMarketDataUpdaterQueue|FullyQualifiedName~PaperAlgorithmOutcome|FullyQualifiedName~LostCounter|FullyQualifiedName~PostgresSchemaMigrationTests|FullyQualifiedName~PaperOutcomeConfirmation)&FullyQualifiedName!~LossDiffPositiveProgressPostgresTests&FullyQualifiedName!~PaperCopiedTraderPerformancePostgresIntegrationTests; DB=pct_codex_paper_confirmation_test. Separate filters: FullyQualifiedName~PaperCopiedTraderPerformancePostgresIntegrationTests&FullyQualifiedName~Settlement, DB=pct_codex_projection_final_test; FullyQualifiedName~LossDiffPositiveProgressPostgresTests&FullyQualifiedName~Settlement, DB=pct_codex_skip_v2_20260920170000_fa120099. All use approved project/artifacts/results arguments, separate runs use --no-build. Final union310passed/no skips. Earlier combined runs failed fixture/environment guards; final partitions replace those failed runs. focused.trx: total=307, executed=307, passed=307, failed=0, notExecuted=0; SHA256=416123C8EA65292E5C20D6D450C91DB94CD881978D9180091B4DB9F0ADF7C270; projection.trx: total=2, executed=2, passed=2, failed=0, notExecuted=0; SHA256=C04B37AEF7760F34622AD98A12C9EDF4077B07F0E8B6FAE2E5601B099025E301; positive.trx: total=1, executed=1, passed=1, failed=0, notExecuted=0; SHA256=951D177A85766E6A1C09B646BA7BAB7CDF9E4BED0D59AA4A169E83EB7B3DB89A"
         }
       ]
     },
@@ -126,8 +126,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperAlgorithmOutcome|FullyQualifiedName~LostCounter|FullyQualifiedName~PostgresSchemaMigrationTests|FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegration\" --logger trx",
           "expected": "All focused cases pass on an isolated local PostgreSQL database where applicable; no production connection.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 local isolated PostgreSQL17 at127.0.0.1:56492; no production connection. Approved filters executed as their combined union in three partitions because existing integration guards require incompatible database names and the projection suite requires a clean queue. Main filter=(FullyQualifiedName~FinalMarketOutcomeEvidence|FullyQualifiedName~Settlement|FullyQualifiedName~CryptoUpDown5mResultPolling|FullyQualifiedName~CryptoUpDown5mMarketResolvedEventRecorder|FullyQualifiedName~LiveTradingGating|FullyQualifiedName~PaperTradingMarketDataUpdaterQueue|FullyQualifiedName~PaperAlgorithmOutcome|FullyQualifiedName~LostCounter|FullyQualifiedName~PostgresSchemaMigrationTests|FullyQualifiedName~PaperOutcomeConfirmation)&FullyQualifiedName!~LossDiffPositiveProgressPostgresTests&FullyQualifiedName!~PaperCopiedTraderPerformancePostgresIntegrationTests; DB=pct_codex_paper_confirmation_test. Separate filters: FullyQualifiedName~PaperCopiedTraderPerformancePostgresIntegrationTests&FullyQualifiedName~Settlement, DB=pct_codex_projection_final_test; FullyQualifiedName~LossDiffPositiveProgressPostgresTests&FullyQualifiedName~Settlement, DB=pct_codex_skip_v2_20260920170000_fa120099. All use approved project/artifacts/results arguments, separate runs use --no-build. Final union310passed/no skips. Earlier combined runs failed fixture/environment guards; final partitions replace those failed runs. focused.trx: total=307, executed=307, passed=307, failed=0, notExecuted=0; SHA256=416123C8EA65292E5C20D6D450C91DB94CD881978D9180091B4DB9F0ADF7C270; projection.trx: total=2, executed=2, passed=2, failed=0, notExecuted=0; SHA256=C04B37AEF7760F34622AD98A12C9EDF4077B07F0E8B6FAE2E5601B099025E301; positive.trx: total=1, executed=1, passed=1, failed=0, notExecuted=0; SHA256=951D177A85766E6A1C09B646BA7BAB7CDF9E4BED0D59AA4A169E83EB7B3DB89A"
         }
       ]
     },
@@ -166,16 +166,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~FinalOutcomeSettlement|FullyQualifiedName~PaperSettlementPostgresIntegration\" --logger trx",
           "expected": "All focused cases pass on an isolated local PostgreSQL database where applicable; no production connection.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20 local isolated PostgreSQL17 at127.0.0.1:56492; no production connection. Approved filters executed as their combined union in three partitions because existing integration guards require incompatible database names and the projection suite requires a clean queue. Main filter=(FullyQualifiedName~FinalMarketOutcomeEvidence|FullyQualifiedName~Settlement|FullyQualifiedName~CryptoUpDown5mResultPolling|FullyQualifiedName~CryptoUpDown5mMarketResolvedEventRecorder|FullyQualifiedName~LiveTradingGating|FullyQualifiedName~PaperTradingMarketDataUpdaterQueue|FullyQualifiedName~PaperAlgorithmOutcome|FullyQualifiedName~LostCounter|FullyQualifiedName~PostgresSchemaMigrationTests|FullyQualifiedName~PaperOutcomeConfirmation)&FullyQualifiedName!~LossDiffPositiveProgressPostgresTests&FullyQualifiedName!~PaperCopiedTraderPerformancePostgresIntegrationTests; DB=pct_codex_paper_confirmation_test. Separate filters: FullyQualifiedName~PaperCopiedTraderPerformancePostgresIntegrationTests&FullyQualifiedName~Settlement, DB=pct_codex_projection_final_test; FullyQualifiedName~LossDiffPositiveProgressPostgresTests&FullyQualifiedName~Settlement, DB=pct_codex_skip_v2_20260920170000_fa120099. All use approved project/artifacts/results arguments, separate runs use --no-build. Final union310passed/no skips. Earlier combined runs failed fixture/environment guards; final partitions replace those failed runs. focused.trx: total=307, executed=307, passed=307, failed=0, notExecuted=0; SHA256=416123C8EA65292E5C20D6D450C91DB94CD881978D9180091B4DB9F0ADF7C270; projection.trx: total=2, executed=2, passed=2, failed=0, notExecuted=0; SHA256=C04B37AEF7760F34622AD98A12C9EDF4077B07F0E8B6FAE2E5601B099025E301; positive.trx: total=1, executed=1, passed=1, failed=0, notExecuted=0; SHA256=951D177A85766E6A1C09B646BA7BAB7CDF9E4BED0D59AA4A169E83EB7B3DB89A"
         },
         {
           "id": "VER-004",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
           "expected": "Service build succeeds with zero errors; inherited warnings reported accurately.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final local service build with approved artifacts path and --nologo -v:q passed:0errors,0warnings,1.07seconds. Earlier full builds had inherited nullable warnings. build-final.log SHA256=D33ACADE11F7593C3220656F19B56907ED58F4F7E4354D665865800C3FEFE04A."
         }
       ]
     }
@@ -190,8 +190,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/final_settlement_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

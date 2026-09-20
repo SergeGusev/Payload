@@ -59,6 +59,14 @@ public sealed class PaperOutcomeConfirmationProcessorTests
             [Metadata(), Metadata() with { WinningOutcome = "Up" }], DateTimeOffset.UtcNow));
     }
 
+    [Fact]
+    public void FinalProofForAnotherTokenCannotHideMissingOwnProof()
+    {
+        var other = Metadata() with { TokenId = "token-down", Outcome = "Down", OutcomeIndex = 1 };
+        Assert.Null(PaperOutcomeConfirmationProcessor.Resolve(Order(),
+            [other, Metadata() with { RawJson = "{}" }], DateTimeOffset.UtcNow));
+    }
+
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"umaResolutionStatus\":\"proposed\",\"outcomePrices\":\"[\\\"0\\\",\\\"1\\\"]\"}")]

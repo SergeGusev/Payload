@@ -49,25 +49,10 @@ public sealed class PaperSettlementProcessor(
                     continue;
                 }
 
-                var winningOutcome = metadata.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.WinningOutcome))?.WinningOutcome;
-                if (string.IsNullOrWhiteSpace(winningOutcome))
-                {
-                    continue;
-                }
-
-                var winningAssetId = metadata.FirstOrDefault(item =>
-                    string.Equals(item.Outcome, winningOutcome, StringComparison.OrdinalIgnoreCase))?.TokenId;
+                var final = FinalMarketOutcomeEvidence.FromGamma(metadata, DateTimeOffset.UtcNow);
+                if (final is null || !final.Matches(position.ConditionId, position.AssetId, position.Outcome)) continue;
                 var category = metadata.FirstOrDefault(item => !string.IsNullOrWhiteSpace(item.Category))?.Category;
-                var result = await SettleMarketResolutionAsync(
-                    position.ConditionId,
-                    null,
-                    winningAssetId,
-                    winningOutcome,
-                    category,
-                    "GammaClosedMarket",
-                    DateTimeOffset.UtcNow,
-                    cancellationToken);
-                settledPositions += result.PositionsSettled;
+                var result = await SettleFinalMarketAsync(final, category, cancellationToken);                settledPositions += result.PositionsSettled;
                 insertedSettlements += result.SettlementsInserted;
             }
             catch (OperationCanceledException)
@@ -84,17 +69,42 @@ public sealed class PaperSettlementProcessor(
         return new PaperSettlementProcessingResult(checkedPositions, settledPositions, insertedSettlements, 0);
     }
 
-    public async Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(
-        string? conditionId,
-        string? assetId,
-        string? winningAssetId,
-        string? winningOutcome,
-        string? category,
-        string settlementSource,
-        DateTimeOffset settledAtUtc,
+    public async Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(MarketDataUpdate update,
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle("PaperSettlementProcessor.SettleMarketResolutionAsync");
+        if (!update.MarketResolved || string.IsNullOrWhiteSpace(update.ConditionId)) return new(0, 0, 0, 0);
+        var market = await repository.GetGammaMarketForOutcomeAsync(update.ConditionId, cancellationToken);
+        if (market is null) return new(0, 0, 0, 0);
+        var final = FinalMarketOutcomeEvidence.FromWebSocket(market.MarketId, market.ConditionId,
+            market.ClobTokenIds, market.Outcomes, update.RawJson, update.TimestampUtc);
+        if (final is null || update.WinningAssetId != final.WinningAssetId || (update.WinningOutcome is not null && update.WinningOutcome != final.WinningOutcome) ||
+            (update.AssetId is not null && !final.Tokens.Contains(update.AssetId))) return new(0, 0, 0, 0);
+        return await SettleFinalMarketAsync(final, market.Category, cancellationToken);
+    }
+
+    // Legacy callers supply no proof: revalidate with the venue before accounting.
+    public async Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(string? conditionId, string? assetId,
+        string? winningAssetId, string? winningOutcome, string? category, string settlementSource,
+        DateTimeOffset settledAtUtc, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(conditionId)) return new(0, 0, 0, 0);
+        var metadata = await gammaClient.GetTokenMetadataByConditionIdAsync(conditionId, assetId ?? string.Empty, closed: true, cancellationToken);
+        var final = FinalMarketOutcomeEvidence.FromGamma(metadata, settledAtUtc);
+        if (final is null || final.ConditionId != conditionId ||
+            (winningAssetId is not null && final.WinningAssetId != winningAssetId) ||
+            (winningOutcome is not null && final.WinningOutcome != winningOutcome)) return new(0, 0, 0, 0);
+        return await SettleFinalMarketAsync(final, category, cancellationToken);
+    }
+
+    private async Task<PaperSettlementProcessingResult> SettleFinalMarketAsync(FinalMarketOutcomeEvidence evidence,
+        string? category, CancellationToken cancellationToken)
+    {
+        var conditionId = evidence.ConditionId;
+        string? assetId = null;
+        var winningAssetId = evidence.WinningAssetId;
+        var winningOutcome = evidence.WinningOutcome;
+        var settlementSource = evidence.Source;
+        var settledAtUtc = evidence.ObservedAtUtc;        using var tradingActivity = activityState?.EnterTradingCycle("PaperSettlementProcessor.SettleMarketResolutionAsync");
         if (string.IsNullOrWhiteSpace(winningAssetId) && string.IsNullOrWhiteSpace(winningOutcome))
         {
             return new PaperSettlementProcessingResult(0, 0, 0, 0);
@@ -128,7 +138,9 @@ public sealed class PaperSettlementProcessor(
                 var writes = new List<PaperPositionSettlementWrite>(positions.Length);
                 foreach (var position in positions)
                 {
-                    var won = IsWinningPosition(position, winningAssetId, winningOutcome);
+                    if (!evidence.Matches(position.ConditionId, position.AssetId, position.Outcome))
+                        throw new InvalidOperationException("Final position identity conflicts with venue evidence.");
+                    var won = position.AssetId == evidence.WinningAssetId;
                     var costBasis = position.AveragePrice * position.SizeShares;
                     var settlementValue = won ? position.SizeShares : 0m;
                     var grossRealizedPnl = settlementValue - costBasis;
@@ -186,8 +198,8 @@ public sealed class PaperSettlementProcessor(
 
                 phase = "PersistSettlementBatch";
                 phaseStarted = Stopwatch.GetTimestamp();
-                var inserted = await repository.PersistPaperPositionSettlementBatchAsync(
-                    writes,
+                var inserted = await repository.PersistFinalPaperPositionsAsync(
+                    writes, evidence,
                     persistenceDiagnostics.Observe,
                     cancellationToken);
                 persistenceDuration = Stopwatch.GetElapsedTime(phaseStarted);

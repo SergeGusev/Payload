@@ -6,6 +6,9 @@ public interface IPaperSettlementProcessor
 {
     Task<PaperSettlementProcessingResult> ProcessOpenPositionsAsync(CancellationToken cancellationToken = default);
 
+    Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(MarketDataUpdate update, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException("Final venue evidence is required.");
+
     Task<PaperSettlementProcessingResult> SettleMarketResolutionAsync(
         string? conditionId,
         string? assetId,

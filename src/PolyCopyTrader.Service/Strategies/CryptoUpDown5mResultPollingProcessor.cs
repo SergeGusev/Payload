@@ -771,7 +771,8 @@ public sealed class CryptoUpDown5mResultPollingProcessor(
                     confirmed_at_utc = confirmedAtUtc,
                     market_closed = market.Closed,
                     market_slug = market.Slug,
-                    raw_winning_outcome = winningOutcome
+                    raw_winning_outcome = winningOutcome,
+                    response = market.RawJson
                 }));
             await repository.UpsertCryptoUpDown5mWebSocketResolvedMarketAsync(
                 BuildResolvedMarketLedgerRow(candidate, result, confirmedAtUtc, SourceGammaClosedMarket),

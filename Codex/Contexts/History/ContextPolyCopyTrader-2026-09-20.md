@@ -883,3 +883,10 @@ Done:
 Next: Obtain APPROVE RC-20260920-final-only-settlement-and-provisional-sizing sha256:cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf, record approval-only commit, then local implementation and required verification/review.
 Notes: No temporary files or production access in this turn. Exact exempt/newdraft Staged gate and diff checks required before bookkeeping commit. Root WorkingTree gate has unrelated preexistingSept17semantic-change blocker; preserve/exclude it and concurrent research context/history.
 Blockers: RequirementGate exact digest approval pending. Profit-sorting global-vs-lane choice remains outside this contract.
+
+## 2026-09-20T17:14:12.2783053+00:00
+Request:
+APPROVE RC-20260920-final-only-settlement-and-provisional-sizing sha256:cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf
+
+Result:
+Implemented approved final-only Paper/Live outcome accounting, durable separate preliminary Paper sizing contributions, atomic final replacement and immediate eligible Paper confirmation with persisted final evidence. Approval-only commit b73a264e precedes product edits. Tests310/310 passed without skips across three isolated local PostgreSQL partitions required by existing fixture guards; final service build0errors/0warnings. Independent full semantic review PASS/no findings; unchanged approved digest, isolated WorkingTree gate and exact root Staged gate PASS. Completed contract retains reproducible filters and result hashes. No production deployment/migration/restart/data writes or Live orders. Historical confirmation remains required. Unrelated concurrent work preserved/excluded; local test PostgreSQL stopped and copied worktree removed.

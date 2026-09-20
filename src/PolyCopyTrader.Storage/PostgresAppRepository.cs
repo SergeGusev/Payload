@@ -1109,10 +1109,17 @@ RETURNING id;
 			.ToArray();
 	}
 
-	public async Task UpdateStrategyMarketPaperRunAsync(StrategyMarketPaperRun run, CancellationToken cancellationToken = default(CancellationToken))
+	public async Task UpdateStrategyMarketPaperRunAsync(StrategyMarketPaperRun run, CancellationToken cancellationToken = default)
 	{
-		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
-		await using NpgsqlCommand command = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc,\n    fee_usd = @FeeUsd,\n    fee_accounting_status = @FeeAccountingStatus,\n    fee_liquidity_role = @FeeLiquidityRole,\n    fee_calculation_source = @FeeCalculationSource,\n    fee_rate = @FeeRate,\n    fee_exponent = @FeeExponent,\n    fee_taker_only = @FeeTakerOnly,\n    fee_calculated_at_utc = @FeeCalculatedAtUtc,\n    net_realized_pnl_usd = @NetRealizedPnlUsd\nWHERE id = @Id;");
+		await using var connection = await OpenConnectionAsync(cancellationToken);
+		await UpdateStrategyMarketPaperRunAsync(connection, null, run, cancellationToken);
+	}
+
+    private async Task UpdateStrategyMarketPaperRunAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction,
+        StrategyMarketPaperRun run, CancellationToken cancellationToken)
+    {
+        await using NpgsqlCommand command = CreateCommand(connection, "UPDATE strategy_market_paper_runs\nSET strategy_id = @StrategyId,\n    market_id = @MarketId,\n    condition_id = @ConditionId,\n    market_slug = @MarketSlug,\n    market_title = @MarketTitle,\n    category = @Category,\n    market_start_utc = @MarketStartUtc,\n    market_end_utc = @MarketEndUtc,\n    detected_at_utc = @DetectedAtUtc,\n    entry_due_at_utc = @EntryDueAtUtc,\n    status = @Status,\n    selected_asset_id = @SelectedAssetId,\n    selected_outcome = @SelectedOutcome,\n    entry_price = @EntryPrice,\n    stake_usd = @StakeUsd,\n    size_shares = @SizeShares,\n    signal_id = @SignalId,\n    paper_order_id = @PaperOrderId,\n    entered_at_utc = @EnteredAtUtc,\n    settlement_price = @SettlementPrice,\n    settlement_value_usd = @SettlementValueUsd,\n    realized_pnl_usd = @RealizedPnlUsd,\n    settled_at_utc = @SettledAtUtc,\n    skip_reason = @SkipReason,\n    skip_diagnostics_json = CAST(@SkipDiagnosticsJson AS jsonb),\n    created_at_utc = @CreatedAtUtc,\n    updated_at_utc = @UpdatedAtUtc,\n    fee_usd = @FeeUsd,\n    fee_accounting_status = @FeeAccountingStatus,\n    fee_liquidity_role = @FeeLiquidityRole,\n    fee_calculation_source = @FeeCalculationSource,\n    fee_rate = @FeeRate,\n    fee_exponent = @FeeExponent,\n    fee_taker_only = @FeeTakerOnly,\n    fee_calculated_at_utc = @FeeCalculatedAtUtc,\n    net_realized_pnl_usd = @NetRealizedPnlUsd\nWHERE id = @Id;");
+		command.Transaction = transaction;
 		AddStrategyMarketPaperRunParameters(command, run);
 		await command.ExecuteNonQueryAsync(cancellationToken);
 	}
@@ -3117,7 +3124,7 @@ RETURNING 1;
 	private async Task<int> PersistPaperPositionSettlementBatchCoreAsync(
 		IReadOnlyList<PaperPositionSettlementWrite> writes,
 		Action<PaperSettlementPersistenceStageEvent>? stageObserver,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken, FinalMarketOutcomeEvidence? finalEvidence = null)
 	{
 		if (writes.Count == 0)
 		{
@@ -3165,6 +3172,9 @@ RETURNING 1;
 					stage?.Complete();
 				}
 				await LockPaperPositionKeysAsync(connection, transaction, settledPositions, [], cancellationToken, stageObserver);
+                if (finalEvidence is not null)
+                    foreach (var write in writes)
+                        await AssertExistingSettlementAsync(connection, transaction, write.Settlement, cancellationToken);
 				await UpsertPaperPositionsBatchAsync(
 					connection,
 					transaction,
@@ -3183,7 +3193,21 @@ RETURNING 1;
 					settlements,
 					cancellationToken,
 					stageObserver);
-				using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.Commit))
+                if (finalEvidence is not null)
+                {
+                    foreach (var write in writes)
+                    {
+                        await using var orders = new NpgsqlCommand("SELECT id FROM paper_orders WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset AND condition_id=@Condition ORDER BY id FOR UPDATE", connection, transaction);
+                        orders.Parameters.AddWithValue("Wallet", write.Settlement.CopiedTraderWallet);
+                        orders.Parameters.AddWithValue("Asset", write.Settlement.AssetId);
+                        orders.Parameters.AddWithValue("Condition", finalEvidence.ConditionId);
+                        var ids = new List<Guid>();
+                        await using (var reader = await orders.ExecuteReaderAsync(cancellationToken))
+                            while (await reader.ReadAsync(cancellationToken)) ids.Add(reader.GetGuid(0));
+                        await ConfirmFinalOrdersAsync(connection, transaction, finalEvidence, ids.ToArray(), cancellationToken);
+                    }
+                }
+                using (var stage = ObserveSettlementStage(stageObserver, PaperSettlementPersistenceStages.Commit))
 				{
 					await transaction.CommitAsync(cancellationToken);
 					stage?.Complete();
@@ -5660,6 +5684,7 @@ WHERE id = @StrategyId;
 		CancellationToken cancellationToken = default(CancellationToken))
 	{
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 UPDATE strategies
 SET paper_stake_amount = @PaperStakeAmount,
@@ -5675,6 +5700,7 @@ WHERE id = @StrategyId
   AND @PaperLostCoeff >= 1
   AND @LiveLostCoeff >= 1;
 """);
+		command.Transaction = transaction;
 		command.Parameters.AddWithValue("StrategyId", StrategyIds.Normalize(strategyId));
 		command.Parameters.AddWithValue("PaperStakeAmount", paperStakeAmount);
 		command.Parameters.AddWithValue("LiveStakeAmount", liveStakeAmount);
@@ -5684,7 +5710,14 @@ WHERE id = @StrategyId
 		command.Parameters.AddWithValue("LiveLostCounter", liveLostCounter);
 		command.Parameters.AddWithValue("UpdatedAtUtc", updatedAtUtc.UtcDateTime);
 		var rows = await command.ExecuteNonQueryAsync(cancellationToken);
-		return rows > 0;
+		        if (rows > 0)
+        {
+            await using var reset = new NpgsqlCommand("UPDATE paper_algorithm_outcomes SET reset_excluded=true WHERE strategy_id=@Strategy AND NOT retired", connection, transaction);
+            reset.Parameters.AddWithValue("Strategy", StrategyIds.Normalize(strategyId));
+            await reset.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return rows > 0;
 	}
 
 	public async Task<bool> SetStrategyLiveAvailableBalanceAsync(
@@ -6247,12 +6280,17 @@ RETURNING row_version;
 		DateTimeOffset settledAtUtc,
 		DateTimeOffset updatedAtUtc,
 		long? expectedRowVersion,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken, FinalMarketOutcomeEvidence? finalEvidence = null)
 	{
 		var normalizedStrategyId = StrategyIds.Normalize(strategyId);
 		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
-		if (expectedRowVersion is null)
+        if (finalEvidence is not null)
+        {
+            var current = await ReadLiveOrderForReconciliationAsync(connection, transaction, liveOrderId, cancellationToken);
+            if (current is null || !finalEvidence.Matches(current.ConditionId, current.AssetId, current.Outcome))
+                throw new InvalidOperationException("Final Live order identity changed.");
+        }		if (expectedRowVersion is null)
 		{
 			await using NpgsqlCommand versionCommand = CreateCommand(connection, """
 SELECT row_version
@@ -6317,7 +6355,8 @@ RETURNING balance_effect_applied;
 
 			if (!(bool)balanceEffectApplied)
 			{
-				await transaction.CommitAsync(cancellationToken);
+				await ConfirmLinkedPaperAsync(connection, transaction, liveOrderId, finalEvidence, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
 				return new StrategyLiveBalanceAdjustmentResult(false, 0m, false);
 			}
 		}
@@ -6349,7 +6388,8 @@ RETURNING live_available_balance, live_stakes, live_stake_amount;
 			var liveStakes = reader.GetBoolean(1);
 			var liveStakeAmount = reader.GetDecimal(2);
 			await reader.CloseAsync();
-			await transaction.CommitAsync(cancellationToken);
+			await ConfirmLinkedPaperAsync(connection, transaction, liveOrderId, finalEvidence, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
 			return new StrategyLiveBalanceAdjustmentResult(
 				true,
 				availableBalance,
@@ -7545,7 +7585,12 @@ ORDER BY asset_symbol, market_start_utc;
 
 	public async Task UpsertCryptoUpDown5mWebSocketResolvedMarketAsync(CryptoUpDown5mWebSocketResolvedMarket resolvedMarket, CancellationToken cancellationToken = default(CancellationToken))
 	{
-		await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
+		        var catalog = await GetPolymarketGammaMarketAsync(resolvedMarket.MarketId, cancellationToken);
+        var final = catalog is null ? null : FinalMarketOutcomeEvidence.FromLedger(catalog, resolvedMarket);
+        var raw = System.Text.Json.Nodes.JsonNode.Parse(resolvedMarket.RawJson)?.AsObject();
+        if (raw is not null) raw["final_outcome_validated"] = final is not null;
+        resolvedMarket = resolvedMarket with { RawJson = raw?.ToJsonString() ?? "{}" };
+        await using NpgsqlConnection connection = await OpenConnectionAsync(cancellationToken);
 		await using NpgsqlCommand command = CreateCommand(connection, """
 INSERT INTO crypto_up_down_5m_websocket_resolved_markets (
     id, asset_symbol, market_id, condition_id, market_slug, market_start_utc, market_end_utc,
@@ -7564,8 +7609,8 @@ ON CONFLICT (asset_symbol, market_start_utc) DO UPDATE SET
     market_slug = excluded.market_slug,
     market_end_utc = excluded.market_end_utc,
     winning_outcome = excluded.winning_outcome,
-    winning_asset_id = COALESCE(crypto_up_down_5m_websocket_resolved_markets.winning_asset_id, excluded.winning_asset_id),
-    event_timestamp_utc = LEAST(crypto_up_down_5m_websocket_resolved_markets.event_timestamp_utc, excluded.event_timestamp_utc),
+    winning_asset_id = excluded.winning_asset_id,
+    event_timestamp_utc = excluded.event_timestamp_utc,
     first_received_at_utc = LEAST(crypto_up_down_5m_websocket_resolved_markets.first_received_at_utc, excluded.first_received_at_utc),
     last_received_at_utc = GREATEST(crypto_up_down_5m_websocket_resolved_markets.last_received_at_utc, excluded.last_received_at_utc),
     event_count = crypto_up_down_5m_websocket_resolved_markets.event_count + GREATEST(1, excluded.event_count),
@@ -7573,7 +7618,13 @@ ON CONFLICT (asset_symbol, market_start_utc) DO UPDATE SET
     source = excluded.source,
     raw_event_type = excluded.raw_event_type,
     raw_json = excluded.raw_json,
-    updated_at_utc = excluded.updated_at_utc;
+    updated_at_utc = excluded.updated_at_utc
+WHERE COALESCE(crypto_up_down_5m_websocket_resolved_markets.raw_json->>'final_outcome_validated','false') <> 'true'
+   OR (excluded.raw_json->>'final_outcome_validated'='true'
+       AND crypto_up_down_5m_websocket_resolved_markets.condition_id=excluded.condition_id
+       AND crypto_up_down_5m_websocket_resolved_markets.market_id=excluded.market_id
+       AND crypto_up_down_5m_websocket_resolved_markets.winning_asset_id=excluded.winning_asset_id
+       AND crypto_up_down_5m_websocket_resolved_markets.winning_outcome=excluded.winning_outcome);
 """);
 		AddCryptoUpDown5mWebSocketResolvedMarketParameters(command, resolvedMarket);
 		await command.ExecuteNonQueryAsync(cancellationToken);
@@ -12648,7 +12699,7 @@ FROM claimed;
 		command.Parameters.AddWithValue("ResultDelaySeconds", resolvedMarket.ResultDelaySeconds);
 		command.Parameters.AddWithValue("Source", resolvedMarket.Source);
 		command.Parameters.AddWithValue("RawEventType", resolvedMarket.RawEventType);
-		command.Parameters.AddWithValue("RawJson", "{}");
+		command.Parameters.AddWithValue("RawJson", resolvedMarket.RawJson);
 		command.Parameters.Add("CreatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.CreatedAtUtc);
 		command.Parameters.Add("UpdatedAtUtc", NpgsqlDbType.TimestampTz).Value = UtcDateTime(resolvedMarket.UpdatedAtUtc);
 	}
