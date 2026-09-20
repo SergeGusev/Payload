@@ -1,3 +1,14 @@
+## Active Update 2026-09-20 ETH22 Paper Live Realized Divergence
+Goal: Explain the user's approximately 612->640 Net realized and -10->-36 Net live realized for ETH Up or Down 5m 22 Child ROI.
+Status: Completed read-only diagnosis.
+Done:
+- Exact sole strategy b7c50005-0000-4000-8195-000000000022 on 192.168.0.101:5432/polycopytrader. Fixed settlement window [2026-09-19T06:10:26.233155Z,2026-09-20T06:10:26.233155Z), Europe/Sofia 09:10:26 to 09:10:26. 22 Paper/Live pairs, no missing/duplicate links or asset/condition/side/fill-price/fill-size/fee mismatches. Paper +18.42226796, Live -43.223948, difference61.64621596; independent SQL totals and decimal row recount agree.
+- Five Paper wins contradict Live losses: market slugs suffix1789810500,1789835100,1789857900,1789868100,1789876500. Their immutable run diagnostics and position settlements use BtcUpDown5mResolvedLedger:BinanceTimedClose; each is independently confirmed by production settlement logs. Current canonical ledger rows use MarketWebSocket with the opposite winner, agreeing with Live's gamma_resolved_metadata. Five wrong payouts contribute61.64621602; remaining17pairs total rounding difference-0.00000006.
+- Mechanism verified in source matching service-reported0e4cef20: BinanceTimedClose produces provisional=true inference; Paper settlement allowlist admits it, persists Settled, and normal settlement selector considers only Entered. Live sync copies fills, not the already-settled run result. The five runs remain unchanged after authoritative ledger updates. No unsupported claim of full absence of every possible repair path.
+- Dashboard lifetime640.31200145 Paper(2472settled runs), -36.688425 Live(57settled orders) match independent raw sums. These totals cover different lifetime populations; fixed24h comparison is22against22. User's earlier approximate values have no exact snapshot timestamp, so their precise delta was not asserted reproduced.
+Notes: READ ONLY/repeatable-read, UTC, statement15s/lock1s/idle20s, no parallel workers. Heartbeat06:10:10->06:16:10UTC; last_errorNULL, waitinglocks0. Initial diagnostic wrapper misread DbConnectionStringBuilder properties and passed empty username (psql used Windows serge); corrected to explicit accessors, no server changes. No product/config/database/service/order edits or deployment, no build/tests necessary. Reproducible SQL and five-case evidence are in2026-09-20 daily history. Temporary session cleanup and exempt-bookkeeping validation follow before final response.
+Next: None within the requested diagnosis.
+Blockers: None; correction was not requested or performed.
 ## Active Update 2026-09-18 ETH22 Child Live Confirmed After Deployment
 Goal: «Проверь сейчас» — recheck the exact ETH22ChildROI after the preceding post-deploy snapshot.
 Status: Completed read-only verification; one actual Live fill confirmed.
