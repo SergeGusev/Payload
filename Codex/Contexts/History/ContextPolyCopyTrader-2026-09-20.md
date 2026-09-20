@@ -55,3 +55,21 @@ SHA256 independent.json: A909D43A7332BC0B780E468E92843529479BD4E77C122BB6EBD0FE1
 SHA256 settlement-logs.txt: FE7DBEFD8DD7AF6E03D7700030C5F87C434AA68FFA714163A24502B158D942BE
 
 Finalization: staged requirement validation and staged diff check PASS (only2exempt context/history paths). WorkingTree gate is blocked by pre-existing unrelated RC-20260917-single-disabled-strategy-timed-delete.json SEMANTIC_CHANGE_AFTER_APPROVAL; unrelated changes are excluded and preserved. No product tests run because no product files changed.
+
+## 2026-09-20T06:25:36.1639046+00:00
+Request:
+Эта проблема проявляется по всем нашим Paper стратегиям за всю историю? Приняв по ним решение, мы потом его не проверяем?
+
+Result:
+## Active Update 2026-09-20 Paper Settlement Recheck Scope
+Goal: Answer whether the ETH22 settlement divergence affects all Paper strategies for all history and whether closed outcomes are rechecked.
+Status: Completed bounded source inspection; full historical incidence remains unknown.
+Done:
+- Current common SettleDueRunsAsync dispatch covers StrategyIds.UpDown5mStrategyVariants, including disabled/nonconfigured variants and Child. Fallback TryResolveSettlementFromCanonicalLedgerAsync requires exact catalog identity, FiveMinutes and BTC/ETH/SOL; it admits BinanceTimedClose. This is a shared eligible path, not evidence every strategy/trade is wrong.
+- Normal storage settlement query selects Entered only; settlement persists Settled. PaperSettlementProcessor reads only open positions, including upon market-resolution events. Live shadow synchronization handles fills. Dashboard reconciliation rebuilds aggregates from existing source rows. Inspection of service hosted workers, outcome/settlement write callsites, reconciliation and correction searches found no routine that revisits these already-settled provisional results against final venue outcomes. Prior five-case runtime evidence independently demonstrates their persistence after authoritative updates.
+- Local git introduction of this fallback is35f72c0c dated2026-08-15; this does not establish production rollout time or all historical implementation versions. Full-history strategy/error counts and financial impact are not measured. No production query or code/config/runtime mutation in this follow-up.
+Notes: Read-only source/history examination. Relevant paths: BtcUpDown5mPaperStrategyProcessor.cs:203,270,8393,8559; PostgresAppRepository.cs:1005,7735; PaperSettlementProcessor.cs:18,84; LiveTradingProcessor.cs:544; DashboardStrategyProjectionReconciliationWorker.cs:32 and PostgresDashboardProjectionRepository.Reconciliation.cs:69. Existing fallback test cases inspected, not executed; no product changes or build needed.
+Next: None within this explanatory question.
+Blockers: None for the mechanism answer; universal historical incidence is unverified.
+
+Scope distinction: common eligibility for the flawed5mBTC/ETH/SOLfallback is verified in current source; all-strategy/all-history prevalence is unknown. No full-history database scan performed in this follow-up; no measured universal-incidence claim is made. Closed outcomes remain outside the normal settlement selector; refreshing or reconciling Dashboard does not validate their winners. FollowLeader/general Paper positions use separate Gamma/WebSocket paths, so universal exposure is not inferred. Prior five-case runtime evidence plus current dispatch/storage code substantiate the mechanism; no tests rerun for unchanged code. Only exempt context/history bookkeeping staged; existing unrelated changes preserved.

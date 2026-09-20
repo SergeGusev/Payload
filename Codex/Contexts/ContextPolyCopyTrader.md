@@ -1,3 +1,13 @@
+## Active Update 2026-09-20 Paper Settlement Recheck Scope
+Goal: Answer whether the ETH22 settlement divergence affects all Paper strategies for all history and whether closed outcomes are rechecked.
+Status: Completed bounded source inspection; full historical incidence remains unknown.
+Done:
+- Current common SettleDueRunsAsync dispatch covers StrategyIds.UpDown5mStrategyVariants, including disabled/nonconfigured variants and Child. Fallback TryResolveSettlementFromCanonicalLedgerAsync requires exact catalog identity, FiveMinutes and BTC/ETH/SOL; it admits BinanceTimedClose. This is a shared eligible path, not evidence every strategy/trade is wrong.
+- Normal storage settlement query selects Entered only; settlement persists Settled. PaperSettlementProcessor reads only open positions, including upon market-resolution events. Live shadow synchronization handles fills. Dashboard reconciliation rebuilds aggregates from existing source rows. Inspection of service hosted workers, outcome/settlement write callsites, reconciliation and correction searches found no routine that revisits these already-settled provisional results against final venue outcomes. Prior five-case runtime evidence independently demonstrates their persistence after authoritative updates.
+- Local git introduction of this fallback is35f72c0c dated2026-08-15; this does not establish production rollout time or all historical implementation versions. Full-history strategy/error counts and financial impact are not measured. No production query or code/config/runtime mutation in this follow-up.
+Notes: Read-only source/history examination. Relevant paths: BtcUpDown5mPaperStrategyProcessor.cs:203,270,8393,8559; PostgresAppRepository.cs:1005,7735; PaperSettlementProcessor.cs:18,84; LiveTradingProcessor.cs:544; DashboardStrategyProjectionReconciliationWorker.cs:32 and PostgresDashboardProjectionRepository.Reconciliation.cs:69. Existing fallback test cases inspected, not executed; no product changes or build needed.
+Next: None within this explanatory question.
+Blockers: None for the mechanism answer; universal historical incidence is unverified.
 ## Active Update 2026-09-20 ETH22 Paper Live Realized Divergence
 Goal: Explain the user's approximately 612->640 Net realized and -10->-36 Net live realized for ETH Up or Down 5m 22 Child ROI.
 Status: Completed read-only diagnosis.
