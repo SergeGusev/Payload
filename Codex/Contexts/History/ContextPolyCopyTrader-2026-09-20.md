@@ -990,3 +990,17 @@ Gamma snapshot:
 ]
 Exact final read-only query:
 SELECT json_build_object('at',clock_timestamp(),'heartbeat',(SELECT json_build_object('version',version,'started',started_at_utc,'heartbeat',last_heartbeat_utc,'last_error',last_error) FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service'),'waiters',(SELECT count(*)FROM pg_stat_activity WHERE wait_event_type='Lock'),'settled',(SELECT json_build_object('n',count(*),'new_orders',count(*)FILTER(WHERE o.created_at_utc>='2026-09-20T18:09:18.657601Z'),'confirmed',count(*)FILTER(WHERE o.confirmed),'proof',count(*)FILTER(WHERE r.skip_diagnostics_json ? 'final_outcome')) FROM strategy_market_paper_runs r LEFT JOIN paper_orders o ON o.id=r.paper_order_id WHERE r.status='Settled' AND r.settled_at_utc>='2026-09-20T18:09:18.657601Z'),'first_new_orders',(SELECT json_agg(x)FROM(SELECT o.id,o.status,o.confirmed,r.status AS run_status,r.market_end_utc,r.settled_at_utc,r.settlement_price,o.confirmation_evidence->>'source' AS source,o.confirmation_evidence->>'winning_outcome' AS winner,r.selected_outcome,o.confirmation_evidence->>'condition_id'=o.condition_id AS proof_identity,o.confirmation_evidence=r.skip_diagnostics_json->'final_outcome' AS proof_equal FROM paper_orders o JOIN strategy_market_paper_runs r ON r.paper_order_id=o.id WHERE o.id IN('1e5b1da2-5cb4-408d-8852-c8bd66c248df','0936f95c-15de-481e-bd31-841816945e6b','897c6f4b-afd7-4bbd-96fd-c9d38ffc4ada','96c71ab0-5280-4a90-b80a-d3499f25dc5f','d47b0950-397b-40f0-84ee-e9a8a6e264cd','41ec8c53-8141-4428-aedb-5b5d052e9fa6'))x));
+
+## 2026-09-20T19:05:33.3143894+00:00
+Request:
+Новые ставки идут нормально?
+
+Result:
+Done:
+- Production192.168.0.101:5432/polycopytrader at19:02:56.392705UTC still reports10f15916/MVIDaf427badfe3e,start18:09:18.657601UTC,heartbeat19:02:19.422062UTC,last_errorNULL,0waitinglocks.
+- Exact creation scope18:09:18.657601..19:02:56.392705UTC:1686distinct new orders,1501Settled/Confirmed(1495Filled+6PartiallyFilledExpired),185Filled/Entered/unconfirmed with market_end19:05UTC. No unmatched runs or duplicate order joins. Independent per-row audit:0identity/proof-equality/payout mismatches; no open order incorrectly confirmed.
+- First6postdeployment orders from previous check allSettled/Confirmed from18:16:59.927248..18:17:02.873387UTC usingMarketWebSocket final proof. Previous waiting state therefore progressed normally.
+- Complete shared service log window18:16:12.634..19:04:39.094UTC:30760events,1501paper run settled events independently match database;0historical confirmation records. Only1ERR:18:29:38.315UTC AutoRedeem GetUserCurrentPositions HTTP429. No Paper entry/settlement error or deadlock error in this window. Earlier startup deadlock remains an unfixed code issue; absence of recurrence is not a fix claim.
+Next: None for this read-only status question.
+Notes: Two bounded read-only SQL snapshots with15sstatement/1slock limits,no parallel DB scan workers; lower bound pinned to deployment start,raw-row crosscheck upper bound pinned19:02:56.392705UTC. Shared log read FileShare.ReadWrite with1MiB buffer,full timestamp filter on20260920_007 and any later rotations. No code,production,data,service or order mutation; no disposable files created. Concurrent root edits preserved; only own exempt context/history staged.
+Blockers: None to answering current new-stake status; previously recorded startup retention deadlock not repaired.

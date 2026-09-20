@@ -1,3 +1,15 @@
+## Active Update 2026-09-20 New Paper Stakes Runtime Check
+Goal: Answer whether new Paper stakes operate normally after deployed10f15916, read-only.
+Status: Completed for observed window.
+Done:
+- Production192.168.0.101:5432/polycopytrader at19:02:56.392705UTC still reports10f15916/MVIDaf427badfe3e,start18:09:18.657601UTC,heartbeat19:02:19.422062UTC,last_errorNULL,0waitinglocks.
+- Exact creation scope18:09:18.657601..19:02:56.392705UTC:1686distinct new orders,1501Settled/Confirmed(1495Filled+6PartiallyFilledExpired),185Filled/Entered/unconfirmed with market_end19:05UTC. No unmatched runs or duplicate order joins. Independent per-row audit:0identity/proof-equality/payout mismatches; no open order incorrectly confirmed.
+- First6postdeployment orders from previous check allSettled/Confirmed from18:16:59.927248..18:17:02.873387UTC usingMarketWebSocket final proof. Previous waiting state therefore progressed normally.
+- Complete shared service log window18:16:12.634..19:04:39.094UTC:30760events,1501paper run settled events independently match database;0historical confirmation records. Only1ERR:18:29:38.315UTC AutoRedeem GetUserCurrentPositions HTTP429. No Paper entry/settlement error or deadlock error in this window. Earlier startup deadlock remains an unfixed code issue; absence of recurrence is not a fix claim.
+Next: None for this read-only status question.
+Notes: Two bounded read-only SQL snapshots with15sstatement/1slock limits,no parallel DB scan workers; lower bound pinned to deployment start,raw-row crosscheck upper bound pinned19:02:56.392705UTC. Shared log read FileShare.ReadWrite with1MiB buffer,full timestamp filter on20260920_007 and any later rotations. No code,production,data,service or order mutation; no disposable files created. Concurrent root edits preserved; only own exempt context/history staged.
+Blockers: None to answering current new-stake status; previously recorded startup retention deadlock not repaired.
+
 ## Active Update 2026-09-20 Final Confirmation Deployment Verified With Residual Deadlock
 Goal: Check user-deployed10f15916 read-only on192.168.0.101:5432/polycopytrader.
 Status: Verification completed; residual production lock conflict remains.
