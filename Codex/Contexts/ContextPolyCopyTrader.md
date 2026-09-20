@@ -1,3 +1,15 @@
+## Active Update 2026-09-20 Pause Paper History And Retain Normal Confirmation
+Goal: Temporarily stop background historical confirmation and answer whether new-stake Confirmed is currently correct, preserving the requested normal-path repair.
+Status: New contract drafted; product changes await exact approval.
+Done:
+- Inspected Program.cs:483 and complete source references: PaperOutcomeConfirmationWorker is independently hosted and owns both Recent/Archive queue processing; no other production ProcessIdleGapAsync caller found under src. Normal final settlement calls ConfirmFinalOrdersAsync separately.
+- New PaperOrder defaultsConfirmed=false(Models.cs:4380). Normal run settlement requires final own-market evidence; final confirmation checks pending/partial status, exact mappings, open positions/runs and linked Live readiness. Existing tests cover provisional/final replacement and linked Live completion. These source/test observations do not prove production operation succeeds: the preceding deployed1762db97 check found normal-path timeouts inConfirmFinalOrdersAsync.
+- Disabling historical worker alone does not remove the normal-path defective SQL. New draftRC-20260920-paper-history-pause-and-final-fix combines the requested historical pause with the still-required normal query/lock repair. Proposal removes hosted registration for the whole history worker, leaves current flags/evidence/property/reporting intact, retains ordinary settlement of still-open stakes, and preserves final-only atomic semantics.
+- New draft supersedes unapproved RC-20260920-final-settlement-query-lock-fix for implementation planning. No historical-worker optimization; prior implementation approval is not reused for changed scope. New semanticSHA256fff6f3335a50bfdef6578c9f3cdfe5d1f927eb709fe36c62eacc2db58f7b6abd; Contract mode draft validationPASS.
+Next: Obtain exact approval of the new digest before local edits. Prior estimate45–90minutes after approval remains; no production operation authorized.
+Notes: No product changes, production reads/writes, builds/tests or temporary artifacts this turn. New drafts remain untracked per gate; only own exempt context/history staged. Concurrent changes and unrelatedSept17WorkingTree gate blocker preserved.
+Blockers: RequirementGate.md checkpointB requires later exact contract approval.
+
 ## Active Update 2026-09-20 Final Settlement Query And Lock Fix Contract Ready
 Goal: Fix the immediate-confirmation query-plan and settlement-lock regression reported for1762db97.
 Status: Draft prepared; awaiting exact user digest approval.

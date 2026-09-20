@@ -921,3 +921,11 @@ Request:
 
 Result:
 Prepared local fix contractRC-20260920-final-settlement-query-lock-fix from the user's repair instruction and unchanged final-only/provisional-sizing requirements. Read exact final confirmation, run/generic position settlement, wallet and Live/historical confirmation lock paths. Scope:key-bounded existing-index readiness queries and coherent existing-lock acquisition, preserving atomic final-only accounting and immediate eligible Confirmed. Verification:actual-path PostgreSQL plans with100000unrelated rows per relevant table, deterministic overlapping writer tests, existing focused regression suite, servicebuild, independent review. No code/production/schema/index mutations or test/build artifacts. ContractdraftvalidationPASS, semanticSHA2562d32e365bb5e5907388cc6c5bfb51fe58cd2e68c7927f73d02cf83998c4f7368; exact later approval required underCodex/Rules/RequirementGate.md checkpointB. Unrelated root work excluded from bookkeeping commit.
+
+## 2026-09-20T17:42:54.1710818+00:00
+Request:
+1. Убери пока простановку Confirmed из истории, мы к нему ещё вернёмся.
+2. В новых ставках Confirmed используется корректно?
+
+Result:
+Read current normal and background dispatch: newordersstartConfirmed=false; final own-market evidence and completed lifecycle authorize immediate true. The previous production failure belongs to that normal path too, so stopping historical worker alone does not repair it. Prepared superseding draftRC-20260920-paper-history-pause-and-final-fix for disabling the independently hosted PaperOutcomeConfirmationWorker (both lanes, no date cutoff, no reset of saved flags) plus the previously requested normal query/lock fix. Preserve direct final settlement, reporting and property; defer background historical corrections/confirmations until later work. SemanticSHA256fff6f3335a50bfdef6578c9f3cdfe5d1f927eb709fe36c62eacc2db58f7b6abd, draftvalidationPASS. No product/runtime/data changes or builds/tests; exact later approval required by RequirementGate checkpointB. Previous unapproved query-lock draft remains unused; new draft remains untracked. Concurrent work excluded from this bookkeeping commit.
