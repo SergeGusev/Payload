@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Coverage Fix Deployment Confirmed And Progressing
+Goal: Verify the user's repeated deployment, read-only, on the production service and coverage projection.
+Status: Completed verification; fixed projection advances, initial historical fill remains incomplete.
+Done:
+- Production192.168.0.101:5432/polycopytrader now runs4661987621dfba3b687b5c30b51dba51098fbfbc/MVIDf4f3c02d170b, launch14:17:15.993661UTC. Local ancestry verifies fa995cd7 included and src diff fa995cd7..46619876 empty. Previous old-version blocker resolved by this new deployment.
+- Migration0015 applied14:17:15.945484UTC;checksum80a030a13a5543595ca032b15652cd5dd4822c5ff19835f10a203b7c623cf1f5 matches independent hash of current migration SQL. Index valid/ready/exact definition,642957312bytes. Production EXPLAIN of original settlement0490f766-e769-4adb-80bd-3c658a09d8b4 uses the new wallet+asset Index Cond in both subplans; no ANALYZE or mutation.
+- Four snapshots14:17:42.930612..14:22:48.895357UTC show F cursor029c3548→0ad821a0→1d1a3ad2→34ce8d2e,refreshed_at advancing; O projected records1459→5156,R all-time1743→9561,S1337→4986. Oldest queue sequence150505→1148513. Queue count123204→132359 while bounded historical seed continues; count alone is not processed-work count. All cursors still incomplete,initializedfalse; do not treat partial counters as whole-history coverage.
+- Combined actual launch logs from005/006 cover14:17:16.241..14:21:49.633UTC:0coveragewarning/timeouts,0ERR/FTL,217uniqueoutcome confirmations/0corrected. Exact217-ID read14:22:18.4151UTC independently found217confirmed,217before=after,0corrected. Verifier had2SQLSTATE55P03timeouts atCorrectRuns; successful financial correction path remains unproven in this window.
+- Final heartbeat14:22:16.475963,statusRunning/Live,last_errorNULL,waitinglocks0; legacyprojectionRunning/version4,last_event14:22:48.030443. Market-data metrics14:21:46UTC enqueued=processed362945,pending0,failed/rejected/overflow0,Maker195processed.
+Next: None within this deployment check. Initial coverage fill and full outcome confirmation are separate unfinished production processes; no completion date or whole-history trust claim.
+Notes: No product/config/schema/data/service mutation,tests or builds. Read-only bounds15sstatement/1slock/UTC/parallelism0. Snapshot reader source returns incomplete coverage while initializedfalse; deployed Dashboard UI itself not inspected. Evidence/SQL/IDs/hashes in Sept20history; protected temporary cleanup before finalization.
+Blockers: None for confirming rollout and restored projection progress. Initial coverage not yet ready;2verifier lock timeouts remain observed.
+
 ## Active Update 2026-09-20 Coverage Fix Deployment Check: Previous Version Still Running
 Goal: Verify the user's reported deployment of coverage fix fa995cd7, read-only.
 Status: Verification completed; intended deployed version not observed on the known production endpoint.
