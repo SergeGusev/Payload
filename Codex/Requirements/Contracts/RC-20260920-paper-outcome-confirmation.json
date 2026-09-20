@@ -1,0 +1,324 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260920-paper-outcome-confirmation",
+  "title": "Confirm and reconcile each Paper outcome during idle trading gaps",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Давай сделаем так:\n\n\n\n1. Внеси доработку в сервис PolyCopyTrader.Service\n2. Пусть он добавит свойство Confirmed в каждую Paper ставку.\n3. Добавь фоновую задачу, которая работает в режиме, когда основной сервис в Idle режиме, чтобы не мешать основному циклу.\n4. Эта задача должна выбирать одну Paper ставку, у которой Confirmed = false, проверять фактический исход и либо корректировать данные по этой ставке, либо оставлять её нетронутой, в зависимости от того, совпал реальный исход или нет. После чего ставит для этой ставки Confirmed = true и идёт дальше"
+    },
+    {
+      "source": "user",
+      "text": "Да, свободные промежутки между торговыми циклами"
+    },
+    {
+      "source": "user",
+      "text": "Пересчитывай всё. Исходи из главного принципа - мы должны иметь наиболее актуальную информацию, реально отражающую живые ставки."
+    }
+  ],
+  "scope": {
+    "inScope": [
+      "Все существующие и новые PaperOrder/paper_orders всех стратегий за всю сохранённую историю, включая выключенные стратегии и Paper shadow реальных Live-сделок. Confirmed означает подтверждение фактического исхода рынка.",
+      "PolyCopyTrader.Service и необходимые Domain/Storage изменения, новая упорядоченная PostgreSQL-миграция свойства и индексированной очереди, один кандидат на цикл.",
+      "Связанные Paper runs, settlements и учёт исполненных выходов, PnL/net PnL/ROI/WinRate, накопительные и временные проекции, текущий PaperLostCounter и зависимые LossDiff-события/состояния и кэши.",
+      "Координация занятости торговых циклов и очередей с приоритетом основной работы; тесты на отдельной локальной тестовой базе, документация и обязательная независимая проверка."
+    ],
+    "goal": "Добавить Confirmed каждой Paper-ставке и фоновую последовательную проверку фактического исхода в свободные промежутки между торговыми циклами, исправляя весь зависимый учёт и текущие счётчики.",
+    "outOfScope": [
+      "Запуск разработанной миграции или перепроверки на рабочей базе, публикация, остановка или перезапуск рабочего сервиса в этой задаче.",
+      "Создание, отмена или повторная отправка реальных Live-ордеров; переписывание фактического исполнения, прошлых ставок и прошлых решений выбора родителя.",
+      "Изменение правил входа/размера/исполнения Paper или Live, существующих классификаций ResearchOnly/исключений Paper, комиссионных формул или настроек пользователя.",
+      "Новая колонка или управление Confirmed в UI Dashboard, общий аудит других финансовых дефектов, отдельная массовая историческая операция."
+    ],
+    "firstVerification": "Проверить текущие PaperOrder/run/settlement модели и dispatch, окончательный Gamma outcome, все зависимости PaperLostCounter/LossDiff/проекций, независимые торговые циклы и in-flight очереди; уже проверено чтением кода. До изменений утвердить этот контракт.",
+    "mode": "local-edit",
+    "periodOrFilter": "Вся сохранённая история Paper и новые Paper-ставки, без ограничения ETH22/24h; каждый цикл выбирает ровно одного кандидата Confirmed=false. UTC для хранения времени. Фактический масштаб рабочей базы в подготовке не измеряется: подключения/мутации production не требуются для локальной реализации."
+  },
+  "requirements": [
+    {
+      "sourceQuote": "Пусть он добавит свойство Confirmed в каждую Paper ставку.",
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/Models.cs",
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationModels.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/NoOpAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "src/PolyCopyTrader.Storage/PostgresPaperOutcomeConfirmationSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs"
+      ],
+      "id": "REQ-001",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "verification": [
+        {
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests\" --logger trx",
+          "kind": "test",
+          "id": "VER-001",
+          "expected": "Миграция новой и существующей локальной тестовой базы, default=false, чтение/запись Confirmed, повторный запуск, отсутствие сброса true, индексированный план выбора; реальное выполнение, не пропуск по отсутствующему подключению.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ],
+      "text": "Реализовать доработку сервиса и сохраняемое bool-свойство Confirmed каждой Paper-ставки.",
+      "acceptanceCriteria": [
+        "PaperOrder имеет Confirmed, сохраняемый в paper_orders.confirmed; новые и ранее существовавшие ставки получают false до успешной проверки. Поле относится ко всем Paper-ставкам, независимо от стратегии, валюты и включённости.",
+        "Новая миграция сохраняет неизменяемый legacy baseline; повторный запуск миграции безопасен. Индекс обеспечивает выбор следующего неподтверждённого кандидата без полного сканирования всей истории на каждом цикле.",
+        "Обычные сохранения ордера и синхронизация Live shadow не сбрасывают уже установленный Confirmed устаревшим объектом. Нет массовой перезаписи финансовой истории при миграции."
+      ]
+    },
+    {
+      "sourceQuote": "Да, свободные промежутки между торговыми циклами",
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Program.cs",
+        "src/PolyCopyTrader.Service/Control/ServiceActivityState.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperSettlementProcessor.cs",
+        "src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperEntryPersistenceQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/MarketDataSideEffectQueue.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "tests/PolyCopyTrader.Tests/ServiceActivityStateTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs"
+      ],
+      "id": "REQ-002",
+      "sourceRequestIndexes": [
+        0,
+        1
+      ],
+      "verification": [
+        {
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "kind": "test",
+          "id": "VER-002",
+          "expected": "Детерминированные конкурентные тесты занятости и возобновления торговли, pending/in-flight, отмены и отсутствия ожидания основной работы на фоновой сети.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ],
+      "text": "Запускать фоновые проверки только в свободные промежутки между торговыми циклами, не заставляя торговлю ждать проверку.",
+      "acceptanceCriteria": [
+        "Отдельный BackgroundService зарегистрирован в DI. Idle определяется отсутствием активной обработки торговых циклов и pending/in-flight работ очередей исполнения/сохранения Paper и рыночных эффектов, а не RunState=Paused или спящим heartbeat BotWorker.",
+        "Учтены торговые entry/observe/settlement/Child-refresh циклы, Paper open-order и position processing, Live maintenance, market-data settlement и persistence queue. Периодический heartbeat и постоянное чтение рыночного потока сами по себе не блокируют свободный промежуток.",
+        "Возобновившаяся торговая работа имеет приоритет: фоновая проверка перестаёт начинать следующие этапы/кандидаты и отменяет допускающие отмену ожидания. Торговые циклы не ожидают сетевой запрос или общий блокирующий semaphore фонового проверяющего.",
+        "Проверка Idle повторяется до выбора, перед получением результата и перед применением. Ни транзакция БД, ни блокировка строки не удерживается во время HTTP. Коррекция одного кандидата выполняется коротко с ограниченными ожиданиями блокировок; прерывание не оставляет частичной коррекции или ложного Confirmed=true.",
+        "Работает во время обычной работы сервиса с Paper, в том числе с Paper shadow в Live-режиме; ручная постановка торговли на паузу не требуется."
+      ]
+    },
+    {
+      "sourceQuote": "Эта задача должна выбирать одну Paper ставку, у которой Confirmed = false, проверять фактический исход",
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationModels.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/NoOpAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs"
+      ],
+      "id": "REQ-003",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "verification": [
+        {
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "kind": "test",
+          "id": "VER-003",
+          "expected": "Один кандидат, ложный/provisional исход отклонён, несовпадающие идентификаторы отклонены, ошибки/незавершённый рынок повторяются без starvation, false переживает прерывание, true не проверяется повторно.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ],
+      "text": "Последовательно выбирать одну неподтверждённую ставку и проверять именно окончательный фактический исход её рынка.",
+      "acceptanceCriteria": [
+        "Одновременно проверяется один PaperOrder; Confirmed=true больше не выбирается. Сбой или перезапуск возобновляет обработку неподтверждённых, не применяя прежнюю коррекцию повторно.",
+        "Окончательный исход получается через текущий Polymarket Gamma API и проверяется по точным идентификаторам рынка/condition/token/outcome. BinanceTimedClose, provisional inference и противоречивые идентификаторы не служат подтверждением.",
+        "Если рынок не завершён, окончательного исхода нет, API недоступен или данные противоречат друг другу, Confirmed остаётся false и финансовый результат не подменяется; фиксируется конкретная причина и последующая попытка. Такой кандидат не блокирует навсегда остальные.",
+        "Поле есть и у неисполненных/отменённых заявок; проверка исхода не создаёт им фиктивное исполнение, выплату или PnL. Активный незавершённый финансовый цикл не объявляется окончательно проверенным преждевременно.",
+        "Проход по истории не ограничен семейством ETH22 и не требует наличия Live-пары. Для Live shadow сохраняется связь с действительным Live-исполнением."
+      ]
+    },
+    {
+      "sourceQuote": "либо корректировать данные по этой ставке, либо оставлять её нетронутой, в зависимости от того, совпал реальный исход или нет. После чего ставит для этой ставки Confirmed = true и идёт дальше",
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Domain/PaperOutcomeConfirmationModels.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresPaperOutcomeConfirmationSchemaMigration.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs"
+      ],
+      "id": "REQ-004",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "verification": [
+        {
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests\" --logger trx",
+          "kind": "test",
+          "id": "VER-004",
+          "expected": "Win->loss и loss->win, совпадение без финансовой перезаписи, реальные частичные fills/выходы, несколько ордеров одного asset/wallet, rollback/перезапуск/конкурентное обновление без double accounting, пять обезличенных примеров ETH22 воспроизводят разницу.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ],
+      "text": "При несовпадении исправить данные ставки; при совпадении не менять её финансовые данные; Confirmed=true выставлять после успешной обработки.",
+      "acceptanceCriteria": [
+        "Корректируются выбранная ставка и её связанные уже существующие записи результата: выигравший outcome/token, won, settlement price/value, gross/net realized PnL и согласованные accounting записи. Частичные исполнения и реальные продажи до settlement учитываются по исходным исполненным количествам, стоимости и комиссиям.",
+        "При совпадении исхода финансовые значения, исходные цены/количества/комиссии и время исторического settlement не переписываются; фиксируется успешное подтверждение. При расхождении правильная выплата вычисляется по окончательному исходу и сохранённому исполнению.",
+        "Изменение финансовых исходных записей и Confirmed образует атомарную идемпотентную операцию одного кандидата с проверкой конкурентных изменений. Нет повторного зачисления, удаления истории или пересоздания ордеров.",
+        "Подтверждение и коррекция аудируемы по PaperOrderId, источнику конечного исхода и старым/новым значениям; прежнее provisional evidence не выдаётся за официальный результат.",
+        "Статистика не содержит одновременно старую и новую выплату; публикация производных обновлений надёжно связана с исходной коррекцией, а не теряется при падении между записью и обновлением Dashboard."
+      ]
+    },
+    {
+      "sourceQuote": "Пересчитывай всё.",
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/NoOpAppRepository.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/StrategyStateProvider.cs",
+        "src/PolyCopyTrader.Service/Strategies/IStrategyStateProvider.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Reconciliation.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Events.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.Build.cs",
+        "src/PolyCopyTrader.Storage/IDashboardProjectionRepository.cs",
+        "src/PolyCopyTrader.Service/Analytics/DateDependentStrategyHourlyPaperPnlWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperCopiedTraderPerformanceWorker.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs"
+      ],
+      "id": "REQ-005",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "verification": [
+        {
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests\" --logger trx",
+          "kind": "test",
+          "id": "VER-005",
+          "expected": "Независимый пересчёт сумм и счётчиков из исправленных raw rows совпадает с stored counters и projections; смена старого parent outcome обновляет события и оба LossDiff-режима/Progress с их cutoffs; повторный запуск не меняет результат.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ],
+      "text": "Пересчитать все данные, зависящие от исправленного Paper-исхода, включая текущие счётчики, используемые для будущих решений.",
+      "acceptanceCriteria": [
+        "После коррекции согласованы связанный run/position settlement, PnL/net PnL/ROI/WinRate, lifetime и временные Dashboard-проекции, copied-trader/per-category Paper-статистика и затронутые почасовые Paper PnL записи. Счётчики количества сделок не увеличиваются из-за повторной проверки.",
+        "Текущий PaperLostCounter пересчитывается по исправленной истории по существующей формуле (+1 проигрыш, -1 выигрыш; при выключенном коэффициенте счётчик 0), без придумывания иной трактовки серии. Изменившийся счётчик публикуется в StrategyStateProvider.",
+        "Исправляются относящиеся к изменённому parent-run события strategy_loss_diff_parent_events; LossDiffReset и LossDiffPositive/Progress пересчитываются в установленном для каждого режима порядке и с сохранением started_at_utc/действующих границ истории. Существующее ON CONFLICT DO NOTHING не оставляет старый won после коррекции.",
+        "Текущие зависимые состояния и кэши, из которых рассчитываются дальнейшие ставки и выбор Child-parent, получают исправленные данные через их действующие пути обновления. Уже совершённые входы, размеры, назначения родителей и trade decision evidence не переписываются как гипотетический backtest.",
+        "Нельзя поставить корректировку в состояние окончательно завершённой, потеряв зависимый пересчёт: он либо завершён, либо надёжно зафиксирован для возобновления. Тесты доказывают конечную согласованность всех перечисленных зависимостей и отсутствие возврата старого исхода обычными workers."
+      ]
+    },
+    {
+      "sourceQuote": "Исходи из главного принципа - мы должны иметь наиболее актуальную информацию, реально отражающую живые ставки.",
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "id": "REQ-006",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "verification": [
+        {
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
+          "kind": "test",
+          "id": "VER-006",
+          "expected": "Связанный Live shadow сохраняет actual fills/fees, совпадает по final outcome; никакого live submit/cancel/replay; самостоятельный Paper остаётся Paper, исключения/provenance сохраняются.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ],
+      "text": "Подтверждённый Paper-учёт должен опираться на наиболее актуальный фактический исход и не подменять факты Live моделированием.",
+      "acceptanceCriteria": [
+        "Для Paper shadow реального Live-ордера сохраняются фактически исполненные Live цена, количество, стоимость и учтённые комиссии; подтверждение не меняет execution intent и не отвергает уже совершённую сделку постфактум. При одинаковом исполнении и конечном исходе связанные Paper/Live результаты совпадают с учётом действующего округления.",
+        "Для самостоятельной Paper-ставки окончательный исход проверяется по тому же рынку Polymarket, но Confirmed не объявляет моделированное исполнение фактическим Live-fill. Существующие ResearchOnly/Paper provenance и закрытые исключения не стираются.",
+        "Реальные Live-ордера, их исполнение и доступный Live баланс не переписываются из модели Paper; это фоновая сверка Paper-учёта. Прошлые торговые действия не проигрываются заново.",
+        "Первичное предварительное закрытие и существующие стратегии не изменяются этой задачей: новый механизм исправляет и подтверждает результат позднее, как запросил пользователь."
+      ]
+    },
+    {
+      "sourceQuote": "Внеси доработку в сервис PolyCopyTrader.Service",
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Program.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/ServiceActivityStateTests.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/LiveTradingProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperEntryPersistenceQueueTests.cs",
+        "tests/PolyCopyTrader.Tests/MarketDataSideEffectQueueTests.cs"
+      ],
+      "id": "REQ-007",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "verification": [
+        {
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
+          "kind": "build",
+          "id": "VER-007",
+          "expected": "Сервис собирается без ошибок; результаты build и целевых regression tests сохранены.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "command": "Независимый reviewer сравнивает originalRequests, утверждённый semantic digest, git diff и фактически выполненные тесты; Validate-RequirementContract.ps1 -Mode WorkingTree и -Mode Staged на изменениях задачи.",
+          "kind": "inspection",
+          "id": "VER-008",
+          "expected": "Независимый PASS без открытых замечаний, механическая валидация точных изменений задачи PASS.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ],
+      "text": "Проверить и документировать локальную доработку PolyCopyTrader.Service.",
+      "acceptanceCriteria": [
+        "Сборка сервиса и непосредственно затронутые unit/PostgreSQL integration tests проходят. Интеграционные тесты выполняются на отдельной локальной disposable базе, не на production; отсутствие подключения не выдаётся за успешный тест.",
+        "Проверены обычные Paper/Live shadow settlement пути и регрессия чтения/записи ордеров после добавления поля. Если новая проблема тестирования или поведения блокирует критерии, она сообщается, а не молча исключается.",
+        "README объясняет Confirmed, ожидание final outcome, idle scheduling, зависимый пересчёт, запуск и проверку; parity documentation описывает только эту проверку результатов. Финальное независимое semantic review сравнивает запросы, утверждённый контракт, фактический diff и доказательства.",
+        "Временные build/test артефакты размещаются в отмеченном D:/CodexTemp run и удаляются после сохранения необходимого evidence; production rollout в задачу не входит."
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "semanticDigest": "sha256:abebf44184dad2109004c103b4daa73a417fd37198e852c20bd88b2fd7209dc2",
+    "evidenceText": "APPROVE RC-20260920-paper-outcome-confirmation sha256:abebf44184dad2109004c103b4daa73a417fd37198e852c20bd88b2fd7209dc2",
+    "approvedBy": "user",
+    "status": "approved"
+  },
+  "independentReview": {
+    "findings": [],
+    "reviewer": "agent:/root/paper_confirmation_reviewer",
+    "verdict": "pending",
+    "comparedOriginalRequests": false
+  }
+}
