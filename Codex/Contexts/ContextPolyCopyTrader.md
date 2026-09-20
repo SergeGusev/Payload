@@ -1,3 +1,14 @@
+## Active Update 2026-09-20 Paper Confirmation Post-Deploy Verification
+Goal: Verify user deployment of Paper outcome confirmation, read-only.
+Status: Completed bounded check; deployment/schema present, successful historical confirmation not yet demonstrated.
+Done:
+- Production192.168.0.101:5432/polycopytrader, explicit READ ONLY/UTC/repeatable-read; statement15s/lock1s/idle20s, no parallel query workers. Service reports ef138c389b5ad9e5968129cfec0b5b0e5582fa62, Running/Live, started08:02:04.381682UTC; final heartbeat08:08:04.796750UTC, last_errorNULL, waitinglocks0. Independent production logs corroborate startup/heartbeat/activity (no independent deployed-binary hash audit).
+- Migration0010 applied08:02:04.246392UTC; confirmed/defaultfalse, retry/evidence columns and partial index verified in catalog; EXPLAIN candidate uses ix_paper_orders_unconfirmed.
+-08:04:53UTC:3936304orders,0confirmed,0attempted.08:08:11UTC:3936411orders,0confirmed,3distinct attempted,0corrected.08:08:25 exact3rows all remain lookup_started; no successful Paper outcome log through08:08:04. Initial observation of zero attempts is superseded by later three attempts, not a permanently inactive worker claim.
+- Five previously identified ETH22 mismatches remain false/unconfirmed, original BinanceTimedClose wins vs Live losses. Independent position-settlement join and raw run/Live sum agree delta61.64621602; no correction yet. Whole-history duration/throughput cannot be projected from this short observation.
+Next: None within this read-only deployment check.
+Notes: High-frequency market-data enqueue enters activity/cancels verification in implementation; production log shows391253 processed updates by08:08:04 with sampled queues often empty. Specific per-attempt cancellation/busy reason is not logged, so exact cause of noncompletion remains unknown; no causal claim made. No production mutation, service restart or product edits; no build/test needed for unchanged code. Queries/IDs/evidence hashes in2026-09-20 history.
+Blockers: Successful production confirmation/accounting correction not observed; original runtime outcome is not validated merely by passing unit tests.
 ## Active Update 2026-09-20 Paper Outcome Confirmation
 Goal: Implement approved Confirmed verification for all Paper history/new bets during idle trading gaps with complete dependent recalculation.
 Status: Completed local implementation and verification; production rollout is outside approved scope.

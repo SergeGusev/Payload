@@ -128,3 +128,37 @@ Verification executed on isolated PostgreSQL17 at127.0.0.1:56492/pct_codex_paper
 - Known limits: no production rollout/history pass measured; unresolved/ambiguous Gamma or busy trading leaves false for retry; modeled Paper execution does not become actual Live. Existing user Paper/provenance exceptions retained.
 
 Finalization 2026-09-20T07:58:11.4709608Z: isolated PostgreSQL stopped successfully; protected cleanup removed4947files/399273468bytes, marked run absence independently verified; only2matching stale worktree metadata entries pruned after dry-run. Full product/test evidence preserved above; root staged content is exact copied/reviewed implementation plus this task bookkeeping.
+
+## 2026-09-20T08:09:39.1140378Z
+Request:
+Выложил, проверяй
+
+Result:
+## Active Update 2026-09-20 Paper Confirmation Post-Deploy Verification
+Goal: Verify user deployment of Paper outcome confirmation, read-only.
+Status: Completed bounded check; deployment/schema present, successful historical confirmation not yet demonstrated.
+Done:
+- Production192.168.0.101:5432/polycopytrader, explicit READ ONLY/UTC/repeatable-read; statement15s/lock1s/idle20s, no parallel query workers. Service reports ef138c389b5ad9e5968129cfec0b5b0e5582fa62, Running/Live, started08:02:04.381682UTC; final heartbeat08:08:04.796750UTC, last_errorNULL, waitinglocks0. Independent production logs corroborate startup/heartbeat/activity (no independent deployed-binary hash audit).
+- Migration0010 applied08:02:04.246392UTC; confirmed/defaultfalse, retry/evidence columns and partial index verified in catalog; EXPLAIN candidate uses ix_paper_orders_unconfirmed.
+-08:04:53UTC:3936304orders,0confirmed,0attempted.08:08:11UTC:3936411orders,0confirmed,3distinct attempted,0corrected.08:08:25 exact3rows all remain lookup_started; no successful Paper outcome log through08:08:04. Initial observation of zero attempts is superseded by later three attempts, not a permanently inactive worker claim.
+- Five previously identified ETH22 mismatches remain false/unconfirmed, original BinanceTimedClose wins vs Live losses. Independent position-settlement join and raw run/Live sum agree delta61.64621602; no correction yet. Whole-history duration/throughput cannot be projected from this short observation.
+Next: None within this read-only deployment check.
+Notes: High-frequency market-data enqueue enters activity/cancels verification in implementation; production log shows391253 processed updates by08:08:04 with sampled queues often empty. Specific per-attempt cancellation/busy reason is not logged, so exact cause of noncompletion remains unknown; no causal claim made. No production mutation, service restart or product edits; no build/test needed for unchanged code. Queries/IDs/evidence hashes in2026-09-20 history.
+Blockers: Successful production confirmation/accounting correction not observed; original runtime outcome is not validated merely by passing unit tests.
+
+Reproducible closing SQL (transport uses psql -X -q -w -A -t pinned host192.168.0.101/dbpolycopytrader; credentials passed via child environment only; BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY, ROLLBACK):
+```sql
+SELECT json_build_object('captured',clock_timestamp(),'health',(SELECT json_build_object('status',status,'start',started_at_utc,'heartbeat',last_heartbeat_utc,'version',version,'last_error',last_error) FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service'),
+'counts',(SELECT json_build_object('orders',count(*),'confirmed',count(*)FILTER(WHERE confirmed),'attempted',count(*)FILTER(WHERE confirmation_evidence IS NOT NULL),'corrected',count(*)FILTER(WHERE confirmation_evidence->>'corrected'='true')) FROM paper_orders),
+'five_pairs',(SELECT json_build_object('pairs',count(*),'mismatches',count(*)FILTER(WHERE (r.settlement_price=1)IS DISTINCT FROM l.won),'difference',sum(r.net_realized_pnl_usd-l.net_realized_pnl_usd))FROM strategy_market_paper_runs r JOIN live_orders l ON l.paper_order_id=r.paper_order_id WHERE r.id IN('f70816d2-7fe5-4a66-ba3c-01ecae3ba6a6','dee68412-e2f4-4d4b-9bbe-7147859a83cf','12aea786-f272-4f79-9560-5ce50d32f0cc','30d1d88e-8bb0-4451-9ebe-2f6b443c217a','1ee026d3-65e8-48e8-9a20-648887717edb')),
+'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock'));
+```
+
+Exact attempted Paper IDs:797055aa-5782-42c7-71ba-d0fa7f6a0280 at08:06:25.397034UTC (Rejected);38987ba3-d87c-248f-6a53-2f8877b46ba0 at08:07:56.403992UTC (Filled);d3cf1bbc-a7f3-7d65-53bd-528a015f1505 at08:07:57.401383UTC (Filled). All3checked08:08:25 show last_attempt=lookup_started and Confirmed=false, no last_error reason. Their historicalcreated dates2026-06-05. Five exact runIDs are in closing SQL and preceding diagnosis; zero missing pairs; all5position settlements still BinanceTimedClose and won=true, Livewon=false. Independent decimal row recount equalsSQL61.64621602.
+SHA256 preview.json 3B36A3E7C1EFDA245C7375E9604CB72DB90FE228B2981B8C5185F8D03A121E33
+SHA256 closing.json E36864CFA5C279FC1BF3C998982DAC98930C3FF110B2D0E625D0D3A039CBAFBF
+SHA256 attempts-final.json CF7F1F6BA623025A74D3A4B18B082622DA22A8CA71EEAC7D10B898C211477647
+SHA256 logs/runtime-final.log C447C536EC6F99E79F8549F9D99209F71DFB1C1ECB6E81509ECCE3B294ABD381
+Operational obstacle: environment connection points127.0.0.1; initial diagnostic guard stopped before connecting. Explicit production endpoint override follows existing read-only diagnostic scripts; inside-server addr/db verified. No secret printed/stored. Temp lifecycle startup ignored unrelated invalid/missing markers; no unrelated cleanup. No broader financial audit or service instrumentation added.
+
+Finalization 2026-09-20T08:10:10.6555467Z: protected cleanup removed19files/6637692bytes; run absence verified. Full WorkingTree gate reports pre-existing unrelated Sept17contract SEMANTIC_CHANGE_AFTER_APPROVAL; preserved and excluded. This task stages only2exempt context/history paths. No product modifications or tests/builds. Staged gate/diff check run before bookkeeping commit.
