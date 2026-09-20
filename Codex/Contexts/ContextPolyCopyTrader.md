@@ -1,3 +1,17 @@
+## Active Update 2026-09-20 Paper Throughput And Trust Contract Preparation
+Goal: Prepare concrete implementation contract after user accepted recommended history-recovery approach.
+Status: Draft ready; later exact digest approval required before product edits.
+Done:
+- User «Ок, давай по твоим рекомендациям действовать.» accepts grouped outcomes, separate current/archive service, bounded continuous verification and visible trust coverage. No code/production operation performed in this preparation turn.
+- New RC-20260920-paper-confirmation-throughput-and-trust draft validated PASS, semantic sha256:7ff9a5a0e38913ed480b8e855fe4c61c382be5241097e16b60cf32c8487a17d6. Six requirements cover scheduling/cache/atomic correction/UI+projections/measurement/verification.
+- Proposed explicit defaults for digest approval: Recent24hUTC bycreated_at scheduling only;2Recent:1Archive with borrowing; max32selected orders per portion/adaptive decrease;1writer/1HTTP,250ms between portions. Gamma5s;claim/cache/defer2s;apply5s instead of2; existingSQL2s/lock100ms. Sustained pending growth3one-second samples or failed/rejected/overflow increase pauses30s; timeout halves batch. Only verifier loses strictIdle admission.
+- Source dispatch inspection includes actual DashboardDataService -> stored snapshots -> incremental projection/events/calculator, not only legacy repository performance queries. Proposed confirmed metrics use same cohort/window anchor (RunSettled settled_at) and fee semantics; Unknown before initialized; bounded durable fill, no whole-history startup rewrite/rebuild.
+- Scope includes local specialized cache/progress/schema/index migration implementation and tests, but excludes production deploy/restart/schema application/full-backlog mutation/backup. Atomic financial dependencies/Live/fills/formulas retained. No assumptions silently adopted: listed proposed behavior becomes authorized only through digest approval.
+- Benchmark proposal: isolated10korders/100markets/20strategies, <=10minutes each fixed-window baseline/new run, >=100mixed processed records including actual fixture corrections, >34confirmed/min and p95 foreground increase<=max(50ms,10%baseline). No claim this proves production throughput/ETA. Failure blocks success claim.
+Next: Obtain APPROVE RC-20260920-paper-confirmation-throughput-and-trust sha256:7ff9a5a0e38913ed480b8e855fe4c61c382be5241097e16b60cf32c8487a17d6; approval-only commit then isolated implementation/tests/independent review. Estimate2–4hours, update as evidence warrants.
+Notes: Current source29aca4c2, upstream0/0 atstart. Newdraft remains untracked until approval-only commit per gate. No temporary artifacts/build/tests/production calls. Required bookkeeping only committed; unrelated dirty files preserved. Contract structure/paths checked (new benchmark report intentionally absent).
+Blockers: RequirementGate.md checkpointB mandates later exact semantic-digest approval before material edits; user's direction approval already recorded.
+
 ## Active Update 2026-09-20 Paper History Recovery Options
 Goal: Explain options for trustworthy Paper reporting and feasible whole-history confirmation.
 Status: Completed source-based options analysis; no implementation or production operation authorized.
