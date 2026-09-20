@@ -162,3 +162,70 @@ SHA256 logs/runtime-final.log C447C536EC6F99E79F8549F9D99209F71DFB1C1ECB6E81509E
 Operational obstacle: environment connection points127.0.0.1; initial diagnostic guard stopped before connecting. Explicit production endpoint override follows existing read-only diagnostic scripts; inside-server addr/db verified. No secret printed/stored. Temp lifecycle startup ignored unrelated invalid/missing markers; no unrelated cleanup. No broader financial audit or service instrumentation added.
 
 Finalization 2026-09-20T08:10:10.6555467Z: protected cleanup removed19files/6637692bytes; run absence verified. Full WorkingTree gate reports pre-existing unrelated Sept17contract SEMANTIC_CHANGE_AFTER_APPROVAL; preserved and excluded. This task stages only2exempt context/history paths. No product modifications or tests/builds. Staged gate/diff check run before bookkeeping commit.
+
+## 2026-09-20T08:16:13.8316437Z
+Request:
+Есть ли нужные индексы?
+
+Result:
+## Active Update 2026-09-20 Paper Confirmation Index Verification
+Goal: Answer whether required indexes exist for the deployed Paper confirmation path.
+Status: Completed read-only index/catalog/plan check.
+Done:
+- Verified production192.168.0.101:5432/polycopytrader08:14:20..08:15:30UTC, service-reported ef138c38, fresh heartbeat/no reported error, waitinglocks0. Catalog inspected all73indexes on12tables used by confirmation; all valid/ready. Estimates were used only to bound diagnostics, not reported as exact history counts.
+- ix_paper_orders_unconfirmed(confirmation_next_attempt_at_utc,created_at_utc,id) WHERE NOT confirmed exists. Exact claim EXPLAIN(no ANALYZE) selects via this index then order-ID index; no mutation executed. Pure read selector EXPLAIN ANALYZE twice returns1candidate with Index Only Scan, executions8.938/12.944ms, planning33.896/39.745ms. These are SELECT-only timings, not end-to-end worker or claim latency.
+- Exact ETH22 Paper15e5e2d6-4157-49f1-95ff-f32eadf5f374 paths use strategy+condition order index, run paper_order_id index, settlement wallet+asset unique index, fill order+time and Live paper_order indexes. SELECT executions relatedrun0.914ms/1row, settlement0.706ms/1row, fill0.196ms/1row, Live0.119ms/1row. No full history scan in tested point-lookup plans.
+- Counter/hourly/source-wallet/real-sale and LossDiff state/event lookup plans use existing indexes. LossDiff parent_run_id lookup uses existing(child_strategy_id,parent_run_id)PK:40index searches,2.175ms,0rows for thisrun; no separate leading-parent_run index exists in inspected catalog, but tested lookup already indexed. Aggregate timings for all strategies and end-to-end correction not measured; no universal performance guarantee or causal explanation of earlier noncompletion.
+Next: None within index question.
+Notes: Explicit READ ONLY/repeatable-read/UTC; statement15s,lock1s,idle20s; parallel workers disabled. No index/schema/data/service/product changes. Source query inspection plus actual catalog/plans provide independent confirmations. Relevant full SQL/plans/hash evidence retained in2026-09-20 history; no builds/tests needed.
+Blockers: None for bounded index answer.
+
+```sql
+SELECT json_build_object('at',clock_timestamp(),'server',inet_server_addr(),'database',current_database(),'read_only',current_setting('transaction_read_only'),'heartbeat',(SELECT row_to_json(h)FROM service_heartbeats h WHERE service_name='PolyCopyTrader.Service'),'waiting_locks',(SELECT count(*)FROM pg_stat_activity WHERE wait_event_type='Lock'));
+SELECT json_agg(json_build_object('table',t.relname,'rows_estimate',t.reltuples,'index',i.relname,'valid',x.indisvalid,'ready',x.indisready,'definition',pg_get_indexdef(i.oid))ORDER BY t.relname,i.relname) FROM pg_index x JOIN pg_class i ON i.oid=x.indexrelid JOIN pg_class t ON t.oid=x.indrelid WHERE t.relnamespace='public'::regnamespace AND t.relname IN('paper_orders','paper_fills','paper_positions','paper_position_settlements','strategy_market_paper_runs','live_orders','strategies','strategy_loss_diff_parent_events','strategy_loss_diff_states','date_dependent_strategy_hourly_paper_pnl','paper_copied_trader_performance','polymarket_gamma_markets');
+SELECT row_to_json(p) FROM (SELECT id,strategy_id,copied_trader_wallet,asset_id,condition_id,outcome FROM paper_orders WHERE id='15e5e2d6-4157-49f1-95ff-f32eadf5f374')p;
+```
+
+```sql
+SELECT 'candidate_read';
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF) SELECT id FROM paper_orders WHERE NOT confirmed AND confirmation_next_attempt_at_utc<=now() ORDER BY confirmation_next_attempt_at_utc,created_at_utc,id LIMIT 1;
+SELECT 'claim_plan_only';
+EXPLAIN (COSTS OFF) UPDATE paper_orders SET confirmation_next_attempt_at_utc=now()+interval '1 minute',confirmation_evidence=jsonb_build_object('last_attempt','lookup_started','attempted_at_utc',now()) WHERE id=(SELECT id FROM paper_orders WHERE NOT confirmed AND confirmation_next_attempt_at_utc<=now() ORDER BY confirmation_next_attempt_at_utc,created_at_utc,id LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING id;
+SELECT 'related_runs';
+EXPLAIN (ANALYZE,BUFFERS,TIMING OFF) SELECT r.id FROM strategy_market_paper_runs r WHERE paper_order_id IN (SELECT id FROM paper_orders WHERE copied_trader_wallet='strategy:eth_up_down_5m_22_child_roi' AND asset_id='99618101114913483585652649226274597541964425464876672363080288077329117418999' AND condition_id='0xad08d097e224507968dd7e2114aa74187df1199a6acceda37ca807783a01a1f3' AND strategy_id='b7c50005-0000-4000-8195-000000000022');
+SELECT 'settlement';
+EXPLAIN (ANALYZE,BUFFERS,TIMING OFF) SELECT id FROM paper_position_settlements WHERE copied_trader_wallet='strategy:eth_up_down_5m_22_child_roi' AND asset_id='99618101114913483585652649226274597541964425464876672363080288077329117418999' AND condition_id='0xad08d097e224507968dd7e2114aa74187df1199a6acceda37ca807783a01a1f3';
+SELECT 'fills';
+EXPLAIN (ANALYZE,BUFFERS,TIMING OFF) SELECT price,size_shares FROM paper_fills WHERE paper_order_id='15e5e2d6-4157-49f1-95ff-f32eadf5f374';
+SELECT 'live_shadow';
+EXPLAIN (ANALYZE,BUFFERS,TIMING OFF) SELECT id FROM live_orders WHERE paper_order_id='15e5e2d6-4157-49f1-95ff-f32eadf5f374';
+SELECT 'lossdiff_events';
+EXPLAIN (COSTS OFF) SELECT e.child_strategy_id FROM strategy_loss_diff_parent_events e JOIN strategy_market_paper_runs r ON e.parent_run_id=r.id WHERE r.paper_order_id IN (SELECT id FROM paper_orders WHERE copied_trader_wallet='strategy:eth_up_down_5m_22_child_roi' AND asset_id='99618101114913483585652649226274597541964425464876672363080288077329117418999' AND condition_id='0xad08d097e224507968dd7e2114aa74187df1199a6acceda37ca807783a01a1f3' AND strategy_id='b7c50005-0000-4000-8195-000000000022') AND r.realized_pnl_usd<>0 AND e.won IS DISTINCT FROM(r.realized_pnl_usd>0);
+SELECT 'counter';
+EXPLAIN (COSTS OFF) SELECT COALESCE(sum(CASE WHEN settlement_price=1 THEN -1 ELSE 1 END),0)::integer FROM strategy_market_paper_runs WHERE strategy_id='b7c50005-0000-4000-8195-000000000022' AND status='Settled';
+SELECT 'hourly';
+EXPLAIN (COSTS OFF) SELECT extract(hour FROM entered_at_utc AT TIME ZONE 'UTC')::integer,count(*),sum(realized_pnl_usd) FROM strategy_market_paper_runs WHERE strategy_id='b7c50005-0000-4000-8195-000000000022' AND status='Settled' AND entered_at_utc IS NOT NULL AND realized_pnl_usd IS NOT NULL GROUP BY 1;
+SELECT 'copied_wallet_sources';
+EXPLAIN (COSTS OFF) SELECT id FROM paper_orders WHERE copied_trader_wallet='strategy:eth_up_down_5m_22_child_roi';
+EXPLAIN (COSTS OFF) SELECT id FROM paper_position_settlements WHERE copied_trader_wallet='strategy:eth_up_down_5m_22_child_roi';
+EXPLAIN (COSTS OFF) SELECT id FROM paper_positions WHERE copied_trader_wallet='strategy:eth_up_down_5m_22_child_roi' AND size_shares>0;
+SELECT 'lossdiff_state';
+EXPLAIN (COSTS OFF) SELECT child_strategy_id FROM strategy_loss_diff_states WHERE parent_strategy_id='b7c50005-0000-4000-8195-000000000022' ORDER BY child_strategy_id;
+```
+
+```sql
+SELECT 'queue_read_repeat';
+EXPLAIN (ANALYZE,BUFFERS,TIMING OFF) SELECT id FROM paper_orders WHERE NOT confirmed AND confirmation_next_attempt_at_utc<=now() ORDER BY confirmation_next_attempt_at_utc,created_at_utc,id LIMIT 1;
+SELECT 'lossdiff_event_lookup';
+EXPLAIN (ANALYZE,BUFFERS,TIMING OFF) SELECT child_strategy_id FROM strategy_loss_diff_parent_events WHERE parent_run_id='f70816d2-7fe5-4a66-ba3c-01ecae3ba6a6';
+SELECT 'sales';
+EXPLAIN (COSTS OFF) SELECT f.size_shares,f.price FROM paper_orders o JOIN paper_fills f ON f.paper_order_id=o.id WHERE o.strategy_id='b7c50005-0000-4000-8195-000000000022' AND o.copied_trader_wallet='strategy:eth_up_down_5m_22_child_roi' AND o.asset_id='99618101114913483585652649226274597541964425464876672363080288077329117418999' AND o.condition_id='0xad08d097e224507968dd7e2114aa74187df1199a6acceda37ca807783a01a1f3' AND o.side='Sell' AND o.created_at_utc>='2026-09-19T09:30:00Z';
+SELECT json_build_object('at',clock_timestamp(),'heartbeat',(SELECT last_heartbeat_utc FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service'),'last_error',(SELECT last_error FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service'),'waiting_locks',(SELECT count(*)FROM pg_stat_activity WHERE wait_event_type='Lock'));
+```
+SHA256 catalog.jsonl ED47A51940CAF47FCD1653EB779A1DDBE5B1384D605CEE159D1BB2D34619718D
+SHA256 plans.txt DC85962857C3AAC80A3EE42A2ACCBB11402B7F66286A73BE75BD7C60D16DD681
+SHA256 verify.txt F3805C891DE5CD4C7728E1119C94E074746FCC4417EF143435AA4D09375F3B30
+
+Catalog indexes used: ix_paper_orders_unconfirmed; ix_paper_orders_strategy_condition; ix_strategy_market_paper_runs_order; ux_paper_position_settlements_wallet_asset; ix_paper_fills_order_time; ix_live_orders_paper_order; ix_strategy_market_paper_runs_settlement_due; ix_strategy_market_paper_runs_strategy_entered; ix_paper_orders_copied_wallet_time; ix_paper_position_settlements_wallet_time; ix_paper_positions_open_asset_lookup; ix_strategy_loss_diff_states_parent; strategy_loss_diff_parent_events_pkey. No table-row scan timings extrapolated to all history. No independent production worker correction success claimed.
+
+Finalization 2026-09-20T08:16:33.1589019Z: marked temp run removed and absence verified. Broad WorkingTree gate blocked solely by pre-existing unrelated Sept17contract semantic modification, preserved/excluded. This read-only task stages only2exempt context/history paths; Staged gate and diff check executed before commit.

@@ -1,3 +1,14 @@
+## Active Update 2026-09-20 Paper Confirmation Index Verification
+Goal: Answer whether required indexes exist for the deployed Paper confirmation path.
+Status: Completed read-only index/catalog/plan check.
+Done:
+- Verified production192.168.0.101:5432/polycopytrader08:14:20..08:15:30UTC, service-reported ef138c38, fresh heartbeat/no reported error, waitinglocks0. Catalog inspected all73indexes on12tables used by confirmation; all valid/ready. Estimates were used only to bound diagnostics, not reported as exact history counts.
+- ix_paper_orders_unconfirmed(confirmation_next_attempt_at_utc,created_at_utc,id) WHERE NOT confirmed exists. Exact claim EXPLAIN(no ANALYZE) selects via this index then order-ID index; no mutation executed. Pure read selector EXPLAIN ANALYZE twice returns1candidate with Index Only Scan, executions8.938/12.944ms, planning33.896/39.745ms. These are SELECT-only timings, not end-to-end worker or claim latency.
+- Exact ETH22 Paper15e5e2d6-4157-49f1-95ff-f32eadf5f374 paths use strategy+condition order index, run paper_order_id index, settlement wallet+asset unique index, fill order+time and Live paper_order indexes. SELECT executions relatedrun0.914ms/1row, settlement0.706ms/1row, fill0.196ms/1row, Live0.119ms/1row. No full history scan in tested point-lookup plans.
+- Counter/hourly/source-wallet/real-sale and LossDiff state/event lookup plans use existing indexes. LossDiff parent_run_id lookup uses existing(child_strategy_id,parent_run_id)PK:40index searches,2.175ms,0rows for thisrun; no separate leading-parent_run index exists in inspected catalog, but tested lookup already indexed. Aggregate timings for all strategies and end-to-end correction not measured; no universal performance guarantee or causal explanation of earlier noncompletion.
+Next: None within index question.
+Notes: Explicit READ ONLY/repeatable-read/UTC; statement15s,lock1s,idle20s; parallel workers disabled. No index/schema/data/service/product changes. Source query inspection plus actual catalog/plans provide independent confirmations. Relevant full SQL/plans/hash evidence retained in2026-09-20 history; no builds/tests needed.
+Blockers: None for bounded index answer.
 ## Active Update 2026-09-20 Paper Confirmation Post-Deploy Verification
 Goal: Verify user deployment of Paper outcome confirmation, read-only.
 Status: Completed bounded check; deployment/schema present, successful historical confirmation not yet demonstrated.
