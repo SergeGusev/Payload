@@ -8,30 +8,64 @@ public sealed class PaperOutcomeConfirmationWorker(
     ServiceActivityState activity,
     IPaperEntryPersistenceQueue entries,
     IMarketDataSideEffectQueue marketData,
-    IPaperOutcomeConfirmationProcessor processor) : BackgroundService
+    IPaperOutcomeConfirmationProcessor processor,
+    TimeProvider? timeProvider = null) : BackgroundService
 {
-    public bool QueuesEmpty()
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
+    private readonly PaperOutcomeConfirmationDiagnostics diagnostics = new(logger, timeProvider);
+
+    private PaperConfirmationQueueSnapshot ReadQueues()
     {
         var metrics = marketData.GetMetrics();
-        return entries.PendingBatches == 0 && metrics.PendingUpdates == 0 &&
-            metrics.PendingDiagnostics == 0 && metrics.PendingMakerUpdates == 0 &&
-            metrics.PendingGeneralUpdates == 0 && metrics.InFlightGeneralUpdates == 0 &&
-            metrics.InFlightMakerUpdates == 0;
+        return new(clock.GetUtcNow(), entries.PendingBatches, metrics.PendingUpdates, metrics.PendingDiagnostics,
+            metrics.PendingGeneralUpdates, metrics.InFlightGeneralUpdates, metrics.PendingMakerUpdates,
+            metrics.InFlightMakerUpdates);
+    }
+    public bool QueuesEmpty()
+    {
+        var queues = ReadQueues();
+        return queues.PendingBatches == 0 && queues.PendingUpdates == 0 &&
+            queues.PendingDiagnostics == 0 && queues.PendingMaker == 0 &&
+            queues.PendingGeneral == 0 && queues.InFlightGeneral == 0 && queues.InFlightMaker == 0;
     }
 
     public async Task ProcessIdleGapAsync(CancellationToken token)
     {
-        using var idle = activity.TryEnterIdle(QueuesEmpty, token);
+        using var idle = activity.TryEnterIdle(QueuesEmpty, token, out var observation);
+        diagnostics.ObserveIdle(observation, ReadQueues()); // Separate, timestamped queue observation.
         if (idle is null) return;
+        var trace = idle.Trace = diagnostics.Begin();
         try { await processor.ProcessOneAsync(idle, idle.Token); }
-        catch (OperationCanceledException) when (idle.Token.IsCancellationRequested) { }
-        catch (Exception ex) { logger.LogError(ex, "Paper outcome confirmation failed; unconfirmed work will retry."); }
+        catch (OperationCanceledException) when (idle.Token.IsCancellationRequested)
+        { trace.Complete("Canceled", idle.Cancellation.Reason); }
+        catch (Exception ex)
+        {
+            trace.Error(ex.GetType().Name, (ex as Npgsql.PostgresException)?.SqlState);
+            trace.Complete("Error", ex is Npgsql.NpgsqlException ? "DatabaseError" : "UnknownError");
+        }
+        finally { diagnostics.End(trace, idle.Cancellation); }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-            await ProcessIdleGapAsync(stoppingToken);
+        // Independent telemetry timer: a slow in-flight attempt cannot hide its stage.
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        await Task.WhenAll(RunAsync(ProcessLoopAsync), RunAsync(SummaryLoopAsync));
+
+        async Task RunAsync(Func<CancellationToken, Task> loop)
+        {
+            try { await loop(lifetime.Token); }
+            finally { await lifetime.CancelAsync(); }
+        }
+    }
+    private async Task ProcessLoopAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), clock);
+        while (await timer.WaitForNextTickAsync(token)) await ProcessIdleGapAsync(token);
+    }
+    private async Task SummaryLoopAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30), clock);
+        while (await timer.WaitForNextTickAsync(token)) diagnostics.LogSummaryIfDue();
     }
 }

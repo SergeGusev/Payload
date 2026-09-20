@@ -83,7 +83,7 @@ public sealed class PaperEntryPersistenceQueue(
         PaperEntryPersistenceBatch batch,
         CancellationToken cancellationToken = default)
     {
-        using var enqueueActivity = activityState?.EnterTradingCycle();
+        using var enqueueActivity = activityState?.EnterTradingCycle("PaperEntryPersistenceQueue.EnqueueAsync");
         if (batch.IsEmpty)
         {
             return ValueTask.CompletedTask;

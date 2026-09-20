@@ -1,3 +1,13 @@
+## Active Update 2026-09-20 Paper Confirmation Diagnostics
+Goal: Explain skipped or unfinished Paper outcome confirmation through approved diagnostic-only changes.
+Status: Completed local implementation and verification; not deployed.
+Done:
+- Approval-only commit10ea4eed; RC-20260920-paper-confirmation-diagnostics semantic digest59f4fe5854570360a27cb8b522edb799d7eee372f8ee534d9fdc57d02aff5637 unchanged. All23production activity callsites named, first preemption source retained; existing Idle conditions/priorities and nonblocking callbacks preserved.
+- Per-attempt correlation, reached Gamma/DB/defer stages with monotonic durations, first error type/SQLSTATE/stage, commit started/acknowledged distinction; independent30second summaries of skips/queues/outcomes/active stage. No extra SQL or business/accounting/timing changes; no perquote or empty-candidate log flood. README describes interpretation.
+- Final tests57passed0failed0skipped:15diagnostics,22real isolated PostgreSQL,15processor,2worker,3activity. Dedicated service build0errors121warnings. Independent agent:/root/paper_diagnostics_reviewer final semantic PASS/no open findings. Isolated WorkingTree and exact-root Staged gates PASS17governed files; copied18paths with equal SHA256.
+Next: None within local diagnostic implementation.
+Notes: Exact commands, hashes, fixture and cleanup evidence in2026-09-20 history. No production connection, deployment, schema/data/service mutation. Unrelated root changes retained; full-root WorkingTree is not used to approve unrelated Sept17contract changes.
+Blockers: None for local implementation. Production cause still requires runtime evidence after deployment.
 ## Active Update 2026-09-20 Paper Confirmation Index Verification
 Goal: Answer whether required indexes exist for the deployed Paper confirmation path.
 Status: Completed read-only index/catalog/plan check.

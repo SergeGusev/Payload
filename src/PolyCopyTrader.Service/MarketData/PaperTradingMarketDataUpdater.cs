@@ -39,7 +39,7 @@ public sealed class PaperTradingMarketDataUpdater(
         CancellationToken cancellationToken = default,
         MarketDataSideEffectExecutionTrace? executionTrace = null)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("PaperTradingMarketDataUpdater.ApplyMakerGtdUpdateAsync", update.EventType);
         if (string.IsNullOrWhiteSpace(update.AssetId) ||
             eligibleMakerGtdPaperOrderIds.Count == 0 ||
             update.EventType is not (
@@ -218,7 +218,7 @@ public sealed class PaperTradingMarketDataUpdater(
         MarketDataSideEffectExecutionTrace? executionTrace = null,
         bool persistPositionMarks = true)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("PaperTradingMarketDataUpdater.ApplyUpdateAsync", update.EventType);
         if (string.IsNullOrWhiteSpace(update.AssetId))
         {
             return;

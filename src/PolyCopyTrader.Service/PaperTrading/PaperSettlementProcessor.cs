@@ -19,7 +19,7 @@ public sealed class PaperSettlementProcessor(
 
     public async Task<PaperSettlementProcessingResult> ProcessOpenPositionsAsync(CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("PaperSettlementProcessor.ProcessOpenPositionsAsync");
         var positions = (await repository.GetOpenPaperPositionsAsync(cancellationToken)).ToArray();
         if (positions.Length == 0)
         {
@@ -94,7 +94,7 @@ public sealed class PaperSettlementProcessor(
         DateTimeOffset settledAtUtc,
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("PaperSettlementProcessor.SettleMarketResolutionAsync");
         if (string.IsNullOrWhiteSpace(winningAssetId) && string.IsNullOrWhiteSpace(winningOutcome))
         {
             return new PaperSettlementProcessingResult(0, 0, 0, 0);

@@ -46,7 +46,7 @@ public sealed class LiveTradingProcessor(
 
     public async Task<LiveTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("LiveTradingProcessor.ProcessOpenOrdersAsync");
         var dataApiPositionObservations = await ObserveRecentLiveOrderDataApiPositionsAsync(cancellationToken);
         var balanceSettlementsApplied = await SettleMatchedOrdersAsync(cancellationToken);
         var openOrders = await repository.GetOpenLiveOrdersAsync(cancellationToken);
@@ -449,7 +449,7 @@ public sealed class LiveTradingProcessor(
 
     public async Task CancelAllOpenOrdersAsync(string source, CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("LiveTradingProcessor.CancelAllOpenOrdersAsync");
         var openOrders = await repository.GetOpenLiveOrdersAsync(cancellationToken);
         var result = await tradingClient.CancelAllOrdersAsync(cancellationToken);
         foreach (var order in openOrders)

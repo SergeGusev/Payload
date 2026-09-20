@@ -45,7 +45,7 @@ public sealed class PaperTradingProcessor(
 
     public async Task<PaperTradingProcessingResult> ProcessOpenOrdersAsync(CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("PaperTradingProcessor.ProcessOpenOrdersAsync");
         var now = DateTimeOffset.UtcNow;
         var openOrders = PrioritizeOpenOrders(await repository.GetOpenPaperOrdersAsync(cancellationToken), now);
         if (openOrders.Count == 0)
@@ -275,7 +275,7 @@ public sealed class PaperTradingProcessor(
 
     public async Task<int> RefreshPositionMarksAsync(CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("PaperTradingProcessor.RefreshPositionMarksAsync");
         var positions = (await exposureCache.GetSnapshotAsync(cancellationToken)).PaperPositions.ToArray();
         return await UpdatePositionMarksAsync(positions, cancellationToken);
     }

@@ -277,7 +277,7 @@ public sealed class MarketDataSideEffectQueue(
         DateTimeOffset receivedAtUtc,
         IReadOnlySet<Guid>? eligiblePaperOrderIds)
     {
-        using var enqueueActivity = activityState?.EnterTradingCycle();
+        using var enqueueActivity = activityState?.EnterTradingCycle("MarketDataSideEffectQueue.EnqueueUpdate", update.EventType);
         return EnqueueUpdate(
             component,
             update,
@@ -295,7 +295,7 @@ public sealed class MarketDataSideEffectQueue(
         IReadOnlySet<Guid>? eligiblePaperOrderIds,
         IReadOnlySet<Guid>? eligibleMakerGtdPaperOrderIds)
     {
-        using var enqueueActivity = activityState?.EnterTradingCycle();
+        using var enqueueActivity = activityState?.EnterTradingCycle("MarketDataSideEffectQueue.EnqueueUpdate", update.EventType);
         if (!accepting)
         {
             Interlocked.Increment(ref rejectedUpdates);
@@ -416,13 +416,13 @@ public sealed class MarketDataSideEffectQueue(
         MarketWebSocketFrameDiagnostic diagnostic,
         bool important)
     {
-        using var enqueueActivity = activityState?.EnterTradingCycle();
+        using var enqueueActivity = activityState?.EnterTradingCycle("MarketDataSideEffectQueue.EnqueueFrameDiagnostic");
         return EnqueueDiagnostic(new DiagnosticWorkItem(diagnostic, null, important));
     }
 
     public MarketDataSideEffectEnqueueOutcome EnqueueApiError(ApiError apiError)
     {
-        using var enqueueActivity = activityState?.EnterTradingCycle();
+        using var enqueueActivity = activityState?.EnterTradingCycle("MarketDataSideEffectQueue.EnqueueApiError");
         return EnqueueDiagnostic(new DiagnosticWorkItem(null, apiError, Important: true));
     }
 
@@ -1034,7 +1034,7 @@ public sealed class MarketDataSideEffectQueue(
 
     private async Task ProcessDiagnosticAsync(DiagnosticWorkItem workItem)
     {
-        using var diagnosticActivity = activityState?.EnterTradingCycle();
+        using var diagnosticActivity = activityState?.EnterTradingCycle("MarketDataSideEffectQueue.ProcessDiagnosticAsync");
         try
         {
             if (workItem.FrameDiagnostic is not null)

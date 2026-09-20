@@ -181,7 +181,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessAsync(CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessAsync");
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
         {
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
@@ -300,7 +300,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessDueEntriesAsync(
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessDueEntriesAsync");
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
         {
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
@@ -641,7 +641,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessDiffCounterDueEntriesAsync(
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessDiffCounterDueEntriesAsync");
         var observeResult = await ProcessDiffCounterObserveAsync(cancellationToken);
         var dueResult = await ProcessDiffCounterFastDueEntriesAsync(cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
@@ -654,7 +654,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessDiffCounterObserveAsync(
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessDiffCounterObserveAsync");
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
         {
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
@@ -701,7 +701,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessDiffCounterFastDueEntriesAsync(
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessDiffCounterFastDueEntriesAsync");
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
         {
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
@@ -769,7 +769,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessPreviousResultDueEntriesAsync(
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessPreviousResultDueEntriesAsync");
         var observeResult = await ProcessPreviousResultObserveAsync(cancellationToken);
         var dueResult = await ProcessPreviousResultFastDueEntriesAsync(cancellationToken);
         return new BtcUpDown5mPaperStrategyResult(
@@ -782,7 +782,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessPreviousResultFastDueEntriesAsync(
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessPreviousResultFastDueEntriesAsync");
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
         {
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
@@ -827,7 +827,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
     public async Task<BtcUpDown5mPaperStrategyResult> ProcessPreviousResultObserveAsync(
         CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessPreviousResultObserveAsync");
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
         {
             return new BtcUpDown5mPaperStrategyResult(0, 0, 0, 0);
@@ -4447,7 +4447,7 @@ public sealed class BtcUpDown5mPaperStrategyProcessor(
 
     public async Task ProcessChildParentRefreshAsync(CancellationToken cancellationToken = default)
     {
-        using var tradingActivity = activityState?.EnterTradingCycle();
+        using var tradingActivity = activityState?.EnterTradingCycle("BtcUpDown5mPaperStrategyProcessor.ProcessChildParentRefreshAsync");
         if (!RuntimeModePolicy.IsPaperTradingEnabled(botOptions, paperTradingOptions))
         {
             return;

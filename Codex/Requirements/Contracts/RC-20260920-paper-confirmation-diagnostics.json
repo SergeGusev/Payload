@@ -3,7 +3,7 @@
   "contractId": "RC-20260920-paper-confirmation-diagnostics",
   "title": "Diagnose idle skips, cancellation and stages of Paper outcome confirmation",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -65,8 +65,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
           "expected": "Детерминированные тесты причин отказа/источника отмены, вложенной активности и nonblocking callbacks; прежние Idle tests проходят.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final focused tests57/57 passed,0failed0skipped:15new diagnostics,22real isolated PostgreSQL,15processor,2worker,3activity. Includes first-error retention, foreground/queue/stop cancellation, real Gamma timeout, commit uncertainty, 30s/hung attempt/no-flood/concurrent counters, sibling fault propagation. diagnostics-final.trx SHA2566F69AD98C61BDD8AE9F954D1AD432418B6613FE3135D3BFB9414AF353F7990F5. README documents fields and limits. Commands and fixture in2026-09-20 history."
         }
       ]
     },
@@ -103,8 +103,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
           "expected": "Проверка реальных структурированных log fields на успехе/skip/timeout/error/preemption; корреляция и этапы, отсутствие ложного success/rollback; PG tests на отдельной disposable базе, без silent skip.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final focused tests57/57 passed,0failed0skipped:15new diagnostics,22real isolated PostgreSQL,15processor,2worker,3activity. Includes first-error retention, foreground/queue/stop cancellation, real Gamma timeout, commit uncertainty, 30s/hung attempt/no-flood/concurrent counters, sibling fault propagation. diagnostics-final.trx SHA2566F69AD98C61BDD8AE9F954D1AD432418B6613FE3135D3BFB9414AF353F7990F5. README documents fields and limits. Commands and fixture in2026-09-20 history."
         }
       ]
     },
@@ -134,8 +134,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
           "expected": "Контролируемое время и конкурентные тесты доказывают 30-секундные сводки, отсутствие flood, видимость незавершённого этапа и неизменную последовательную обработку.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final focused tests57/57 passed,0failed0skipped:15new diagnostics,22real isolated PostgreSQL,15processor,2worker,3activity. Includes first-error retention, foreground/queue/stop cancellation, real Gamma timeout, commit uncertainty, 30s/hung attempt/no-flood/concurrent counters, sibling fault propagation. diagnostics-final.trx SHA2566F69AD98C61BDD8AE9F954D1AD432418B6613FE3135D3BFB9414AF353F7990F5. README documents fields and limits. Commands and fixture in2026-09-20 history."
         }
       ]
     },
@@ -166,24 +166,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
           "expected": "Целевые тесты, документация и независимый semantic PASS без открытых замечаний.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final focused tests57/57 passed,0failed0skipped:15new diagnostics,22real isolated PostgreSQL,15processor,2worker,3activity. Includes first-error retention, foreground/queue/stop cancellation, real Gamma timeout, commit uncertainty, 30s/hung attempt/no-flood/concurrent counters, sibling fault propagation. diagnostics-final.trx SHA2566F69AD98C61BDD8AE9F954D1AD432418B6613FE3135D3BFB9414AF353F7990F5. README documents fields and limits. Commands and fixture in2026-09-20 history."
         },
         {
           "id": "VER-005",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
           "expected": "Build exit0, ошибки отсутствуют; предупреждения явно отражены.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Dedicated service build on final source: exit0, 121 warnings, 0 errors. build-final.log SHA2564542CDB2D15FA2E13AFF8E7C814C51FE9CB59A514333A9E5343AC02D3EFE4CC7."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "Независимое semantic review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree и -Mode Staged на точных изменениях задачи",
           "expected": "Review PASS/no open findings; механические проверки PASS; утверждённая семантика неизменна.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent agent:/root/paper_diagnostics_reviewer final semantic PASS/no open findings: compared user verbatim, approved digest, exact diff, final TRX and dedicated build. SQL/transaction/Idle/business paths unchanged. Mechanical gate results and cleanup recorded in daily history before commit."
         }
       ]
     }
@@ -198,8 +198,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/paper_diagnostics_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

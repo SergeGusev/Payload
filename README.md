@@ -60,6 +60,28 @@ than silently skipping when that fixture is absent. Production rollout and the
 historical pass require their own operational preview. No fixed completion time is
 promised while trading remains busy or final venue evidence is unavailable.
 
+Confirmation diagnostics are emitted automatically by the service logger. Every
+30 seconds, `Paper confirmation 30-second summary` reports UTC interval bounds,
+Idle checks, skips (`ActiveTrading`, `BackgroundBusy`, `QueuesBusy`), attempt
+outcomes, named busy/canceling handlers and their market event types, and the last
+pending/in-flight queue observation. Queue metrics are a separate timestamped
+sample, not an atomic explanation of an earlier Idle decision. A slow attempt
+remains visible as `ActiveAttempt` with its current stage and monotonic age.
+Empty candidate selections and frequent Idle skips appear only in these summaries.
+
+`Paper confirmation attempt finished` correlates `AttemptId` and `PaperOrderId`
+with `Matched`, `Corrected`, `Deferred`, `Canceled`, `Timeout`, or `Error`. Reached
+stages and durations cover claim, Gamma token/condition lookup, validation,
+database connection/transaction/locks, correction and dependent recalculation,
+commit, and defer. Cancellation retains its first known foreground handler/event,
+queue-busy observation, or service stop. `ErrorType`, `SqlState`, and `ErrorStage`
+retain the first failure even if cancellation or retry persistence later fails;
+the final `Reason` describes the final outcome. New logs omit exception messages,
+HTTP payloads/headers and connection strings. `Unknown` is explicitly unresolved.
+`CommitStarted=true` without `CommitAcknowledged=true` means the commit result is
+unknown; it does not prove rollback. These diagnostics add no SQL and do not
+change confirmation/accounting rules, Idle eligibility, timeouts or retry timing.
+
 ### Follow Market FAK strategies
 
 The catalog contains 270 `Follow Market M N` strategies for BTC, ETH,

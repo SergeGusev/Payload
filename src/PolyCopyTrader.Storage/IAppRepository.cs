@@ -466,7 +466,7 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
     Task DeferPaperOutcomeConfirmationAsync(Guid orderId, DateTimeOffset nextAttemptUtc, string reason, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 
-    Task<PaperOutcomeConfirmationResult> ConfirmPaperOutcomeAsync(PaperOutcomeConfirmation confirmation, CancellationToken cancellationToken = default)
+    Task<PaperOutcomeConfirmationResult> ConfirmPaperOutcomeAsync(PaperOutcomeConfirmation confirmation, CancellationToken cancellationToken = default, PaperOutcomeConfirmationTrace? diagnostics = null)
         => Task.FromResult(new PaperOutcomeConfirmationResult(false, false, "repository_not_supported"));
 
     Task AddPaperOrderAsync(PaperOrder order, CancellationToken cancellationToken = default);

@@ -42,17 +42,22 @@ public sealed partial class PostgresAppRepository
     }
 
     public async Task<PaperOutcomeConfirmationResult> ConfirmPaperOutcomeAsync(PaperOutcomeConfirmation confirmation,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, PaperOutcomeConfirmationTrace? diagnostics = null)
     {
+        diagnostics?.Enter(PaperConfirmationStage.DatabaseConnection);
         await using var connection = await OpenConnectionAsync(cancellationToken);
+        diagnostics?.Enter(PaperConfirmationStage.DatabaseTransaction);
         await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         // No external request occurs under these locks. Preemption or a concurrent
         // financial writer rolls back the complete candidate, including derived state.
+        diagnostics?.Enter(PaperConfirmationStage.DatabaseTimeouts);
         await ExecuteAsync("SET LOCAL lock_timeout = '100ms'; SET LOCAL statement_timeout = '2s';");
+        diagnostics?.Enter(PaperConfirmationStage.HourlyLock);
         await using (var gate = Command("SELECT pg_try_advisory_xact_lock(hashtextextended('paper-outcome-hourly',0));"))
         {
             if (!(bool)(await gate.ExecuteScalarAsync(cancellationToken))!) return new(false, false, "hourly_refresh_active");
         }
+        diagnostics?.Enter(PaperConfirmationStage.OrderLock);
         PaperOrder? order;
         await using (var command = Command($"SELECT {PaperOrderSelectColumns} FROM paper_orders WHERE id=@Id FOR UPDATE;"))
         {
@@ -67,6 +72,7 @@ public sealed partial class PostgresAppRepository
         if (order.Status is PaperOrderStatus.Pending or PaperOrderStatus.PartiallyFilled)
             return new(false, false, "order_still_active");
 
+        diagnostics?.Enter(PaperConfirmationStage.IdentityCheck);
         await using (var identity = ForOrder("""
             SELECT EXISTS(SELECT 1 FROM strategy_market_paper_runs WHERE paper_order_id IN
                 (SELECT id FROM paper_orders WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset AND condition_id=@Condition AND strategy_id=@Strategy) AND
@@ -81,6 +87,7 @@ public sealed partial class PostgresAppRepository
             if ((bool)(await identity.ExecuteScalarAsync(cancellationToken))!) return new(false, false, "related_identity_conflict");
         }
 
+        diagnostics?.Enter(PaperConfirmationStage.ReadinessCheck);
         await using (var readiness = ForOrder("""
             SELECT EXISTS(SELECT 1 FROM strategy_market_paper_runs WHERE paper_order_id IN (SELECT id FROM paper_orders WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset AND condition_id=@Condition AND strategy_id=@Strategy) AND status IN ('Entered','Resting'))
                 OR EXISTS(SELECT 1 FROM paper_positions WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset AND size_shares>0)
@@ -93,10 +100,12 @@ public sealed partial class PostgresAppRepository
         }
 
         var won = order.AssetId == confirmation.WinningAssetId;
+        diagnostics?.Enter(PaperConfirmationStage.ReadBefore);
         var before = await ReadFinancialSnapshotAsync();
         var corrected = false;
         // Settlement represents remaining inventory for this wallet/token, not one
         // additional payout per order. Existing sell fills and their proceeds stay intact.
+        diagnostics?.Enter(PaperConfirmationStage.CorrectSettlement);
         await using (var settlements = ForOrder("""
             UPDATE paper_position_settlements s
             SET winning_asset_id=@Winner, winning_outcome=@WinningOutcome, won=@Won,
@@ -116,6 +125,7 @@ public sealed partial class PostgresAppRepository
             AddOutcome(settlements);
             corrected = await settlements.ExecuteNonQueryAsync(cancellationToken) > 0;
         }
+        diagnostics?.Enter(PaperConfirmationStage.CorrectRuns);
         await using (var runs = ForOrder("""
             WITH corrected AS (
                 SELECT r.id, COALESCE(sold.proceeds,0) +
@@ -151,8 +161,10 @@ public sealed partial class PostgresAppRepository
         {
             // Lock the same parent state rows as normal reconciliation before replacing
             // immutable-by-default event payloads for the corrected run.
+            diagnostics?.Enter(PaperConfirmationStage.LossDiffLock);
             await using (var stateLock = ForOrder("SELECT child_strategy_id FROM strategy_loss_diff_states WHERE parent_strategy_id=@Strategy ORDER BY child_strategy_id FOR UPDATE;"))
                 await stateLock.ExecuteNonQueryAsync(cancellationToken);
+            diagnostics?.Enter(PaperConfirmationStage.CorrectEventsAndCounter);
             await using (var events = ForOrder("""
                 UPDATE strategy_loss_diff_parent_events e SET won=r.realized_pnl_usd>0
                 FROM strategy_market_paper_runs r WHERE r.paper_order_id IN (SELECT id FROM paper_orders WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset AND condition_id=@Condition AND strategy_id=@Strategy) AND e.parent_run_id=r.id
@@ -164,11 +176,16 @@ public sealed partial class PostgresAppRepository
                      FROM strategy_market_paper_runs r WHERE r.strategy_id=s.id AND r.status='Settled') END,
                     updated_at_utc=@Checked WHERE s.id=@Strategy;
                 """)) await events.ExecuteNonQueryAsync(cancellationToken);
+            diagnostics?.Enter(PaperConfirmationStage.ReconcileLossDiff);
             await ReconcileStrategyLossDiffStatesAsync(connection, transaction, order.StrategyId, confirmation.CheckedAtUtc, cancellationToken);
+            diagnostics?.Enter(PaperConfirmationStage.RefreshHourly);
             await RefreshConfirmedHourlyAsync();
+            diagnostics?.Enter(PaperConfirmationStage.RefreshWallet);
             await RefreshConfirmedWalletAsync();
         }
+        diagnostics?.Enter(PaperConfirmationStage.ReadAfter);
         var after = await ReadFinancialSnapshotAsync();
+        diagnostics?.Enter(PaperConfirmationStage.MarkConfirmed);
         await using (var finish = ForOrder("""
             UPDATE paper_orders SET confirmed=true, confirmation_evidence=jsonb_build_object(
                 'final_outcome',@Evidence::jsonb,'before',@Before::jsonb,'after',@After::jsonb,
@@ -182,7 +199,9 @@ public sealed partial class PostgresAppRepository
             await finish.ExecuteNonQueryAsync(cancellationToken);
         }
         cancellationToken.ThrowIfCancellationRequested();
+        diagnostics?.Enter(PaperConfirmationStage.Commit);
         await transaction.CommitAsync(cancellationToken);
+        diagnostics?.AcknowledgeCommit();
         return new(true, corrected, "confirmed");
 
         NpgsqlCommand Command(string sql)

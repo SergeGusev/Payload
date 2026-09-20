@@ -229,3 +229,36 @@ SHA256 verify.txt F3805C891DE5CD4C7728E1119C94E074746FCC4417EF143435AA4D09375F3B
 Catalog indexes used: ix_paper_orders_unconfirmed; ix_paper_orders_strategy_condition; ix_strategy_market_paper_runs_order; ux_paper_position_settlements_wallet_asset; ix_paper_fills_order_time; ix_live_orders_paper_order; ix_strategy_market_paper_runs_settlement_due; ix_strategy_market_paper_runs_strategy_entered; ix_paper_orders_copied_wallet_time; ix_paper_position_settlements_wallet_time; ix_paper_positions_open_asset_lookup; ix_strategy_loss_diff_states_parent; strategy_loss_diff_parent_events_pkey. No table-row scan timings extrapolated to all history. No independent production worker correction success claimed.
 
 Finalization 2026-09-20T08:16:33.1589019Z: marked temp run removed and absence verified. Broad WorkingTree gate blocked solely by pre-existing unrelated Sept17contract semantic modification, preserved/excluded. This read-only task stages only2exempt context/history paths; Staged gate and diff check executed before commit.
+
+## 2026-09-20T08:25:27.4464103Z
+Request:
+Ок, добавь необходимые проверки
+
+Result:
+## Active Update 2026-09-20 Paper Confirmation Diagnostics Preparation
+Goal: Add user-requested checks explaining Idle skips, cancellation and unfinished Paper confirmation attempts.
+Status: Draft contract ready; material implementation awaits exact digest approval.
+Done:
+- User verbatim: «Что нужно сделать, чтобы мы это поняли?» then «Ок, добавь необходимые проверки». Inspected actual ServiceActivityState/worker/processor/repository and all EnterTradingCycle callsites; current worker drops cancellation and TryEnterIdle returns null without reason.
+- Prepared RC-20260920-paper-confirmation-diagnostics, draft validation PASS, digest sha256:59f4fe5854570360a27cb8b522edb799d7eee372f8ee534d9fdc57d02aff5637. Diagnostic-only scope: named busy/preemption sources, attempt/stage/time/outcome fields, existing DB phase tracing, 30second bounded summaries, tests/README/review. Preserve Idle/trading/accounting/retry/timeouts and no new DB writes/schema/production rollout.
+Next: Obtain later exact APPROVE RC-20260920-paper-confirmation-diagnostics sha256:59f4fe5854570360a27cb8b522edb799d7eee372f8ee534d9fdc57d02aff5637; record and commit approval before product edits, then implement and verify.
+Notes: Source base afe7bacb, upstream divergence0/0. No production access or product changes, builds/tests or temporary artifacts in preparation. Existing unrelated dirty context/history/Sept17contract/operations changes preserved. Expected implementation/testing20–30minutes after approval.
+Blockers: RequirementGate.md checkpointB exact contract approval, not another behavior clarification.
+Only new draft contract and exempt context/history changed. No substantive implementation before later digest approval; no commit/push at draft checkpoint.
+
+## 2026-09-20T08:47:00.4661208Z
+Request:
+APPROVE RC-20260920-paper-confirmation-diagnostics sha256:59f4fe5854570360a27cb8b522edb799d7eee372f8ee534d9fdc57d02aff5637
+
+Result:
+Approved contract committed separately as10ea4eed before edits. Diagnostic-only implementation completed in isolated checkout of that exact commit, then18taskpaths copied/staged to root with matching hashes. All23production EnterTradingCycle calls have component/method labels; typed market update paths include event type. First cancellation retained without hot-path logging. Worker independently emits30second summaries and one record per non-empty attempt with correlation/stages/durations/outcome/error/commit fields. First error survives later preemption/defer error; uncertain commit is not claimed rollback. SQL, transaction boundaries, eligibility, retry1min, poll1sec, Gamma5sec and financial operations unchanged. README describes actual fields and limitations. No production connection or mutation, no rollout.
+Verification:
+- dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path D:/CodexTemp/runs/paper-diagnostics-20260920-01/artifacts --nologo -v:q:0errors121warnings; build-final.log SHA2564542CDB2D15FA2E13AFF8E7C814C51FE9CB59A514333A9E5343AC02D3EFE4CC7.
+- dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path <run>/artifacts --results-directory <run>/results --filter 'FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState' --logger 'trx;LogFileName=diagnostics-final.trx' --nologo -v:q:57executed57passed0failed0skipped;15diagnostics22Postgres15processor2worker3activity. Actual local PostgreSQL17 fixture127.0.0.1:56493/pct_codex_paper_confirmation_test; TEMP/TMP/TMPDIR markedrun/temp. diagnostics-final.trx SHA2566F69AD98C61BDD8AE9F954D1AD432418B6613FE3135D3BFB9414AF353F7990F5; tests-final.log SHA256A866A958D272D4EBC23DF60C2A424D06C15BD3AB6C62C191491F2AB12484E911.
+- First test run53pass1failure in log snapshot serialization of structured dictionary keys; changed LastActivity sources to array, second and final runs57/57passed. Review found initial dual-loop lifetime fault masking; linked sibling cancellation added and both processing/summary fault tests pass. No unresolved failures.
+- Independent agent:/root/paper_diagnostics_reviewer compared verbatim user requests, approved digest, actual diff and final build/TRX: final semantic PASS/no open findings. Final delta scopes GammaTimeout diagnostic classification to actual Gamma stage.
+- Validate-RequirementContract.ps1 WorkingTree in isolated checkout and Staged in root PASS17governed files/1contract. Contract mode verifies unchanged approved semantic digest. git diff --check PASS. Initial PrintSemanticDigest/WorkingTree argument combination was rejected before validation; corrected modes passed.
+- Existing unrelated root Sept17contract/context/history/operations changes preserved. Exact active context staging uses HEAD plus this task prefix, avoiding unrelated context edits.
+- Disposable PostgreSQL stopped successfully using pg_ctl -m fast -w stop; port56493 has no listener. Protected marked-run cleanup and final commit/push follow below.
+
+Finalization 2026-09-20T08:48:08.0698122Z: first protected cleanup encountered analyzer DLL held by VBCSCompiler PID53420. Inspected loaded modules and creation time, confirmed exact marked-run paths; stopped that compiler process after build/test completion. Repeated protected cleanup succeeded, run absence verified, only this task stale worktree registration pruned after dry-run preview. Production unaffected. Final staged gate/diff check and commit/push below complete workflow.

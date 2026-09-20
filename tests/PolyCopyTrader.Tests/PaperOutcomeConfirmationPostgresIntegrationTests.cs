@@ -41,7 +41,16 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests
         var cache = new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository);
         await cache.GetStrategySettingsAsync();
         PaperOutcomeConfirmationResult result;
-        using (cache.BeginPaperOutcomeUpdate()) result = await repository.ConfirmPaperOutcomeAsync(Confirmation(seed.Order, finalWin));
+        var trace = new PaperOutcomeConfirmationTrace();
+        using (cache.BeginPaperOutcomeUpdate()) result = await repository.ConfirmPaperOutcomeAsync(Confirmation(seed.Order, finalWin), diagnostics: trace);
+        var diagnostic = trace.Snapshot();
+        Assert.True(diagnostic.CommitStarted);
+        Assert.True(diagnostic.CommitAcknowledged);
+        Assert.Equal(PaperConfirmationStage.Commit, diagnostic.Stage);
+        Assert.Contains(diagnostic.Stages, x => x.Stage == PaperConfirmationStage.DatabaseConnection);
+        Assert.Contains(diagnostic.Stages, x => x.Stage == PaperConfirmationStage.OrderLock);
+        Assert.Contains(diagnostic.Stages, x => x.Stage == PaperConfirmationStage.MarkConfirmed);
+        if (oldWin != finalWin) Assert.Contains(diagnostic.Stages, x => x.Stage == PaperConfirmationStage.ReconcileLossDiff);
         Assert.True(result.Confirmed);
         Assert.Equal(oldWin != finalWin, result.Corrected);
         Assert.True((await repository.GetPaperOrderAsync(seed.Order.Id))!.Confirmed);
