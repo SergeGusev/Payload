@@ -1,0 +1,197 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260920-final-only-settlement-and-provisional-sizing",
+  "title": "Final-only outcome accounting with separate preliminary Paper stake-sizing state",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Re: Этот предварительный результат сохранялся как завершённый расчёт ставки. &#x20;\n\nА почему так делалось? Это же неправильно. Мы можем использовать этот результат как основание алгоритма для того, чтобы сделать вывод, делать следующую ставку или нет. Но персчёты любых ставок мы должны делать только тогда, когда приходит реальный сигнал о результате"
+    },
+    {
+      "source": "user",
+      "text": "Для выбора размера можно учитывать предварительный исход отдельно от финансовой истории"
+    },
+    {
+      "source": "user",
+      "text": "Давай подумаем, как будем работать с новыми ставками. В идеале, это работает так:\n\n1. Если у нас есть ставка, которая делается гарантированно после получения результата, то там можно ставить Confirmed = true сразу.\n\nРасскажи, в каких случаях мы не можем этого делать? И вообще, давай-ка подробнее, откуда у нас взялось это расхождение?"
+    }
+  ],
+  "scope": {
+    "goal": "Separate provisional algorithm decisions from final financial settlement: Paper and Live outcome accounting requires final venue evidence; Paper sizing may use separately persisted preliminary outcomes; eligible final Paper settlement confirms without awaiting the historical queue.",
+    "inScope": [
+      "All ordinary Paper outcome-settlement paths: BTC/ETH/SOL run processor, generic Paper positions, official market_resolved events and exact canonical ledger fallback; tighten Gamma finality at financial consumers, including Live settlement, without changing order submission.",
+      "Separate algorithm-only preliminary outcome contributions for the existing PaperLostCounter sizing path; retain current counter and stake-sizing formulas, source signal availability, and durable auditable per-run identity.",
+      "Immediate Confirmed for Paper orders only after strict exact-market final evidence and completed financial lifecycle; reuse these conditions in historical confirmation.",
+      "Minimal new durable per-run algorithm-state storage and local migration/catalog wiring if needed; local implementation, focused PostgreSQL tests, service build, current documentation and independent review."
+    ],
+    "outOfScope": [
+      "Production deployment, restart, service/configuration changes, running migrations or direct historical DML on production; no backups or Live order placement.",
+      "Profit-based queue sorting and Recent/Archive scheduling; throughput fixes, projection initialization changes, full-history repair outside the existing confirmation worker.",
+      "Changing Live stake-sizing formulas or introducing preliminary LiveLostCounter behavior; changing signal thresholds, entry/fill semantics, fees, prices, execution intents, risk gates, or replaying previously submitted orders.",
+      "Replacing realized profit from an actual sale with market-outcome settlement or delaying normal fill/fee recording; market-price unrealized valuation remains its separate existing operation.",
+      "Rebuilding the whole Paper history at rollout or declaring old unconfirmed data trustworthy; existing historical outcome checking remains required."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Future processing and still-active records of existing Paper strategies, all supported markets/intervals in their current dispatch paths; financial outcome finality also applies to the existing Live settlement reader. No selected historical time window, no direct production writes. Historical Confirmed=false records remain on the existing queue.",
+    "firstVerification": "Trace normal Paper/Live settlement, official WebSocket dispatch, Gamma parsing, algorithm counter sizing and confirmation transactions; verify the source of the August15 provisional-settlement policy and inspect exact focused tests before edits."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Only an exact final Polymarket outcome authorizes outcome-based financial settlement or correction of Paper or Live stakes.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Но персчёты любых ставок мы должны делать только тогда, когда приходит реальный сигнал о результате",
+      "acceptanceCriteria": [
+        "BinanceTimedClose and other inferred/provisional results cannot mark a run Settled, empty a position, credit a payout, change realized Gross/Net, record financial win/loss, alter financial outcome counters or set Confirmed. Expiry alone and a source label alone do not authorize settlement.",
+        "Accept official market_resolved evidence with consistent condition/asset/outcome identity, or Gamma evidence meeting the existing strict confirmation finality rules (resolved/settled oracle status, unique winner and exact0/1payouts, consistent token mapping). Cached/ledger evidence must preserve and validate the corresponding final evidence; old GammaClosedMarket labels without final evidence require verification.",
+        "Generic Paper positions, strategy runs and the Live Gamma settlement path apply the same finality meaning. Preserve actual fill/sale accounting, fees, valuation, entry/risk rules and current execution contracts.",
+        "Provisional Up followed by final Down causes no provisional financial win, then exactly one final loss; reverse-direction and matching-outcome cases behave symmetrically. Duplicate final events are idempotent and conflicting identities fail without partial accounting.",
+        "Preliminary market signal generation and algorithm reads remain available independently of the settlement eligibility gate. Existing already-settled history is not broadly rewritten by the migration; the approved confirmation worker continues its repairs."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/FinalMarketOutcomeEvidence.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/CryptoUpDown5mResultPollingProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperSettlementProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperSettlementProcessor.cs",
+        "src/PolyCopyTrader.Service/MarketData/PaperTradingMarketDataUpdater.cs",
+        "src/PolyCopyTrader.Service/MarketData/CryptoUpDown5mMarketResolvedEventRecorder.cs",
+        "src/PolyCopyTrader.Service/LiveTrading/LiveTradingProcessor.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.FinalOutcomeSettlement.cs",
+        "tests/PolyCopyTrader.Tests/FinalMarketOutcomeEvidenceTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/CryptoUpDown5mResultPollingProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/LiveTradingGatingTests.cs",
+        "tests/PolyCopyTrader.Tests/CryptoUpDown5mMarketResolvedEventRecorderTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingMarketDataUpdaterQueueTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~FinalMarketOutcomeEvidence|FullyQualifiedName~Settlement|FullyQualifiedName~CryptoUpDown5mResultPolling|FullyQualifiedName~CryptoUpDown5mMarketResolvedEventRecorder|FullyQualifiedName~LiveTradingGating|FullyQualifiedName~PaperTradingMarketDataUpdaterQueue\" --logger trx",
+          "expected": "All focused cases pass on an isolated local PostgreSQL database where applicable; no production connection.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Preliminary Paper outcomes may influence the next stake size through separate algorithm state, without financial settlement.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Для выбора размера можно учитывать предварительный исход отдельно от финансовой истории",
+      "acceptanceCriteria": [
+        "Keep preliminary sizing evidence/contributions distinct from financial run/position settlement, realizedPnL, confirmed statistics and Confirmed. Persist the exact run, market/token identity, source, observed outcome and time so retry/restart does not lose or double-count a contribution.",
+        "The existing PaperLostCounter sizing formula remains unchanged: the sizing input combines the financial counter with separate contributions from eligible unfinalized actual Paper runs. This is not a new Live sizing rule; coefficient-disabled/reset semantics remain consistent with existing sizing behavior.",
+        "A repeated preliminary result contributes once. A changed preliminary result replaces its previous algorithm contribution. A final result supersedes preliminary state and is incorporated once, without counting both provisional and final contributions or changing already-created execution intents/orders.",
+        "Final settlement/counter transitions and reading effective sizing state must not expose a double-applied or half-applied contribution; cancellation/failure/restart leaves a retryable state. Existing historical financial baseline is not declared confirmed by copying it into algorithm state; historical verifier corrections must be reflected in future sizing reads.",
+        "Do not release risk exposure or fabricate settlement to enable a next trade: current real execution/risk constraints continue to apply. Existing market-level preliminary signal readers continue to operate; no new strategy-selection formulas.",
+        "Add only the minimal durable per-run algorithm state needed by this split, with bounded indexed strategy/run access. Migration preserves immutable baseline SQL and old completed migrations; no full historical financial rebuild or production migration execution in this local task."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/PaperAlgorithmOutcome.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperAlgorithmOutcomes.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.FinalOutcomeSettlement.cs",
+        "src/PolyCopyTrader.Storage/PostgresPaperAlgorithmOutcomeSchemaMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/IStrategyStateProvider.cs",
+        "src/PolyCopyTrader.Service/Strategies/StrategyStateProvider.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "tests/PolyCopyTrader.Tests/PaperAlgorithmOutcomeTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperAlgorithmOutcomePostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/BtcUpDown5mPaperStrategyProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperAlgorithmOutcome|FullyQualifiedName~LostCounter|FullyQualifiedName~PostgresSchemaMigrationTests|FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegration\" --logger trx",
+          "expected": "All focused cases pass on an isolated local PostgreSQL database where applicable; no production connection.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "A Paper stake with strict final own-market evidence and completed financial lifecycle can become Confirmed immediately on final settlement.",
+      "sourceRequestIndexes": [
+        2
+      ],
+      "sourceQuote": "то там можно ставить Confirmed = true сразу",
+      "acceptanceCriteria": [
+        "Reuse the same exact-identity/finality meaning as historical verification. Final settlement records, evidence and Confirmed commit consistently; a preliminary source never confirms an order.",
+        "Pending/partially-filled orders, open inventory, Entered/Resting related runs, active or unsettled linked Live orders, missing identity/evidence, cancellation and failed persistence cannot be immediately confirmed. These remain on the existing false retry path.",
+        "A final result from a previous market used to decide a new order does not confirm that new order. When no financial lifecycle prerequisite is missing, do not require waiting for the archive queue or a redundant venue lookup if equivalent final evidence is already available.",
+        "Confirmation continues to mean final-outcome/accounting verification and does not claim that modeled fills/fees reproduce historical venue execution. Existing queue admission, batch limits, timeouts and sorting are outside this change.",
+        "Focused tests cover official WebSocket and Gamma final paths, matching/opposite provisional outcomes, zero/partial fills, linkedLive readiness, duplicate events, rollback and restart. Service builds; an independent reviewer compares verbatim user requests, approved contract, final diff and actual evidence."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Domain/FinalMarketOutcomeEvidence.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperSettlementProcessor.cs",
+        "src/PolyCopyTrader.Service/Strategies/BtcUpDown5mPaperStrategyProcessor.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.FinalOutcomeSettlement.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperOutcomeConfirmation.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationProcessorTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/FinalOutcomeSettlementPostgresIntegrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~FinalOutcomeSettlement|FullyQualifiedName~PaperSettlementPostgresIntegration\" --logger trx",
+          "expected": "All focused cases pass on an isolated local PostgreSQL database where applicable; no production connection.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
+          "expected": "Service build succeeds with zero errors; inherited warnings reported accurately.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260920-final-only-settlement-and-provisional-sizing sha256:cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf",
+    "semanticDigest": "sha256:cdc89713592ca8984b766a0ffc80c1238f7012b403686e5197a1035d2b7d48cf"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/final_settlement_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
