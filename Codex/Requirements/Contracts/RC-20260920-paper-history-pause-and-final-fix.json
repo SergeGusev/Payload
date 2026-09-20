@@ -3,7 +3,7 @@
   "contractId": "RC-20260920-paper-history-pause-and-final-fix",
   "title": "Pause historical Paper confirmation and repair normal final settlement confirmation",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -72,8 +72,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~FinalSettlementQueryLockPostgresIntegrationTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests\" --logger trx",
           "expected": "All exact-path plan, scale, correctness and concurrency cases pass against isolated local PostgreSQL; no skipped database tests.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final combined union ran VER-002 filter plus FullyQualifiedName~PaperTradingWorkerIsolationTests, covering VER-001/004 subsets: 146/146 passed, 0 failed, 0 skipped, 44s. PostgreSQL17 loopback127.0.0.1:56493/pct_codex_paper_confirmation_test only. TRX SHA256 B11BC2EB8863402D5CFDFAF1341968B3A754694FFEC1DA1A1C23F71974237568. Existing test compilation warnings remain outside changed paths. Actual repository SQL EXPLAIN with normal planner settings; full unrelated per-table row hashes equal before/after. Initial JSON-clone fixture setup timed out before product execution; direct INSERT fixture of the same required300000rows replaced that setup without changing production timeouts. Final evidence: Unrelated fixture before: [[100000, \"98563d5f5c3a471f83f6f8452bf2b225\"], [100000, \"e2133801c472f381e357314a0a138b9a\"], [100000, \"a7e8e979d4934f05f38554345c26b914\"]]\r\nResult  (cost=33.65..33.66 rows=1 width=1)\n  InitPlan 1\n    ->  Index Scan using ux_paper_positions_wallet_asset on paper_positions  (cost=0.55..8.57 rows=1 width=0)\n          Index Cond: ((copied_trader_wallet = 'strategy:confirmation-8940716d8f2d4300b60bd31d43d84e51'::text) AND (asset_id = 'token-confirmation-8940716d8f2d4300b60bd31d43d84e51'::text))\n          Filter: ((size_shares > '0'::numeric) OR (condition_id <> 'condition-confirmation-8940716d8f2d4300b60bd31d43d84e51'::text) OR (outcome <> 'Up'::text))\n  InitPlan 2\n    ->  Index Scan using ix_strategy_market_paper_runs_order on strategy_market_paper_runs  (cost=0.29..8.33 rows=1 width=0)\n          Index Cond: (paper_order_id = ANY ('{8ed82a3c-c8d1-49e9-8637-f100ddfa9ee9}'::uuid[]))\n          Filter: ((status = ANY ('{Entered,Resting}'::text[])) OR (condition_id <> 'condition-confirmation-8940716d8f2d4300b60bd31d43d84e51'::text) OR (selected_asset_id IS DISTINCT FROM 'token-confirmation-8940716d8f2d4300b60bd31d43d84e51'::text) OR (selected_outcome IS DISTINCT FROM 'Up'::text) OR ((status = 'Settled'::text) AND (settlement_price IS DISTINCT FROM '0'::numeric)))\n  InitPlan 3\n    ->  Index Scan using ux_paper_position_settlements_wallet_asset on paper_position_settlements  (cost=0.55..8.57 rows=1 width=0)\n          Index Cond: ((copied_trader_wallet = 'strategy:confirmation-8940716d8f2d4300b60bd31d43d84e51'::text) AND (asset_id = 'token-confirmation-8940716d8f2d4300b60bd31d43d84e51'::text))\n          Filter: ((condition_id <> 'condition-confirmation-8940716d8f2d4300b60bd31d43d84e51'::text) OR (outcome <> 'Up'::text) OR (winning_asset_id IS DISTINCT FROM 'token-confirmation-8940716d8f2d4300b60bd31d43d84e51-other'::text) OR (winning_outcome <> 'Down'::text))\n  InitPlan 4\n    ->  Index Scan using ix_live_orders_paper_order on live_orders  (cost=0.14..8.18 rows=1 width=0)\n          Index Cond: (paper_order_id = '8ed82a3c-c8d1-49e9-8637-f100ddfa9ee9'::uuid)\n          Filter: ((condition_id <> 'condition-confirmation-8940716d8f2d4300b60bd31d43d84e51'::text) OR (asset_id <> 'token-confirmation-8940716d8f2d4300b60bd31d43d84e51'::text) OR (outcome <> 'Up'::text) OR (status = ANY ('{Submitted,Live,Delayed,Unmatched,CancelRequested,CancelFailed,Error}'::text[])) OR ((filled_size > '0'::numeric) AND (settled_at_utc IS NULL)))\r\nActual final transaction: 130.37ms; command timeout5s."
         }
       ]
     },
@@ -109,16 +109,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~FinalMarketOutcomeEvidenceTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests|FullyQualifiedName~FinalSettlementQueryLockPostgresIntegrationTests|FullyQualifiedName~PaperAlgorithmOutcomePostgresIntegrationTests|FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests|FullyQualifiedName~PaperOutcomeConfirmationProcessorTests|FullyQualifiedName~PaperSettlementProcessorTests|FullyQualifiedName~LiveTradingGatingTests\" --logger trx",
           "expected": "All selected regressions pass with no skipped database cases; partition local databases only when existing fixture guards require it and retain the full selected union.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final combined union ran VER-002 filter plus FullyQualifiedName~PaperTradingWorkerIsolationTests, covering VER-001/004 subsets: 146/146 passed, 0 failed, 0 skipped, 44s. PostgreSQL17 loopback127.0.0.1:56493/pct_codex_paper_confirmation_test only. TRX SHA256 B11BC2EB8863402D5CFDFAF1341968B3A754694FFEC1DA1A1C23F71974237568. Existing test compilation warnings remain outside changed paths. Deterministic overlap verifies generic settlement, linked Live, wallet-gated single mark, SKIP LOCKED batch marks and cancellation/retry. Existing finality, provisional replacement, idempotence, rollback and confirmation prerequisite tests passed."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
           "expected": "Service builds with zero errors; inherited warnings reported accurately.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Service dotnet build passed, 0 errors and 0 warnings, 1.93s. Log SHA256 D6C2558EB81317F68076134F598EE9BAE6172A1CC0877E945C6EC572CFC7547A. No production deployment."
         }
       ]
     },
@@ -149,8 +149,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests\" --logger trx",
           "expected": "Service dispatch does not register the historical worker; direct final confirmation tests pass with no historical worker instantiated. PostgreSQL cases execute without skips.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final combined union ran VER-002 filter plus FullyQualifiedName~PaperTradingWorkerIsolationTests, covering VER-001/004 subsets: 146/146 passed, 0 failed, 0 skipped, 44s. PostgreSQL17 loopback127.0.0.1:56493/pct_codex_paper_confirmation_test only. TRX SHA256 B11BC2EB8863402D5CFDFAF1341968B3A754694FFEC1DA1A1C23F71974237568. Existing test compilation warnings remain outside changed paths. Program registration assertion verifies absence of hosted PaperOutcomeConfirmationWorker; normal direct/generic/linked Live final settlement tests instantiate no history worker and still confirm eligible orders."
         }
       ]
     }
@@ -165,8 +165,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/paper_history_pause_final_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

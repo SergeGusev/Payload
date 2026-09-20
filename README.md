@@ -38,7 +38,7 @@ become `Confirmed` in the final accounting transaction; active orders, open
 inventory, unfinished related runs or linked Live orders keep it false. Final
 Live settlement also rechecks its linked Paper order. Confirmed means verified
 outcome accounting, not historical execution equivalence. Existing unconfirmed
-history still requires the background verifier.
+history still requires verification, which is currently paused.
 
 Run the service through its existing startup path; its ordered schema initializer
 applies the new empty-state migration. This change does not rebuild old history.
@@ -51,9 +51,30 @@ require their own allowlisted database and must run separately. Set
 
 ### Paper outcome confirmation
 
+Historical background verification is temporarily paused under
+`RC-20260920-paper-history-pause-and-final-fix`: the service does not register
+`PaperOutcomeConfirmationWorker`. Neither its Recent nor Archive lane runs.
+Existing flags/evidence and coverage reporting remain; this pause does not make
+unconfirmed history trustworthy. The worker code and the operational description
+below are retained for a later explicitly approved reactivation.
+
+Normal final settlement remains active for new and still-open stakes. It checks
+readiness by exact wallet/asset and related order IDs using existing indexes,
+and takes wallet/position locks before dependent financial rows. Final financial
+writes, preliminary-contribution retirement, proof and eligible `Confirmed` still
+commit together. No new schema/configuration setting is required: publish/run the
+service normally to apply this dispatch change.
+
+Verify the repair on an isolated local PostgreSQL database with
+`FullyQualifiedName~FinalSettlementQueryLockPostgresIntegrationTests` and
+`FullyQualifiedName~PaperTradingWorkerIsolationTests`, followed by the final
+settlement/provisional sizing regressions. The scale test creates 100,000
+unrelated rows in each of three tables and checks actual readiness plans and
+concurrent repository calls. It never targets production.
+
 `PaperOrder.Confirmed` / `paper_orders.confirmed` starts false for existing and new
-Paper orders, including disabled strategies and Live shadows. The service registers
-`PaperOutcomeConfirmationWorker` automatically. Only this verifier no longer waits
+Paper orders, including disabled strategies and Live shadows. Before the pause, the service registered
+`PaperOutcomeConfirmationWorker` automatically. In the retained implementation, this verifier no longer waits
 for global Idle; other background admission rules are unchanged.
 
 `PaperConfirmation` settings default to `Enabled=true`, `RecentHours=24`,

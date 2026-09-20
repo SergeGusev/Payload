@@ -37,6 +37,13 @@ Order types, limits, fill simulation, actual sale/fee accounting and the closed
 Paper exceptions below are unchanged. This accounting correction introduces no
 new Live order semantics or Live preliminary sizing.
 
+`RC-20260920-paper-history-pause-and-final-fix` pauses the historical confirmation
+worker (both lanes) without resetting saved flags or changing reporting. Direct
+final settlement remains enabled for new and still-open stakes. Its readiness
+checks use exact wallet/asset and related order keys, with wallet/position locks
+acquired before dependent financial rows. Atomicity, finality and execution
+semantics above remain unchanged; unresolved history is not declared reliable.
+
 ## Current strategy Live eligibility
 
 Approved contract `RC-20260918-universal-live-strategy-checkbox` makes the

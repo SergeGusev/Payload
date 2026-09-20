@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Paper History Paused And Final Settlement Repaired
+Goal: Implement approved historical confirmation pause and normal final settlement query/lock repair.
+Status: Completed locally; production deployment not performed.
+Done:
+- Removed PaperOutcomeConfirmationWorker hosted registration, pausing both Recent/Archive lanes. Existing flags, evidence, reporting and worker code retained. Normal final settlement remains active for new and still-open stakes.
+- Immediate confirmation uses scalar wallet/asset and related-order keys with existing indexes. Final run and linked Live paths acquire wallet/position/Paper order locks before dependent rows and revalidate identity. Financial/provisional/proof/Confirmed atomicity, finality and Live version checks preserved.
+- Final combined approved test union plus worker isolation:146/146 passed,0 skipped. Actual SQL scale fixture:100000 unrelated rows each in positions,settlements,runs; four index scans; actual transaction130.37ms with5s command deadline; full row hashes unchanged. Deterministic overlap covers generic/run settlement, linked Live, single/batch marks, cancellation/retry.
+- Service build passed with0errors/0warnings; test compilation retained unrelated existing warnings. Independent semantic reviewer agent:/root/paper_history_pause_final_reviewer inspected original requests, approved contract, complete diff and actual TRX/build evidence:PASS,no open findings.
+- Completed RC-20260920-paper-history-pause-and-final-fix retains approved digest fff6f3335a50bfdef6578c9f3cdfe5d1f927eb709fe36c62eacc2db58f7b6abd and exact evidence/hashes. Approval-only commit e641c6a2 preceded implementation. WorkingTree gate passed in isolated worktree; exact Staged gate and diff checks passed.
+Next: None within approved local implementation scope.
+Notes: No production changes, deployment, restart, migration, historical DML or Live actions. Initial JSON fixture setup timed out before product execution; same300000rows inserted directly and final tests passed. Concurrent root work preserved and excluded from this commit. Local PostgreSQL stopped; copied worktree removed after hash comparison; protected cleanup removed the marked session and absence was verified.
+Blockers: None for local implementation; deployed behavior remains unverified.
+
 ## Active Update 2026-09-20 Pause Paper History And Retain Normal Confirmation
 Goal: Temporarily stop background historical confirmation and answer whether new-stake Confirmed is currently correct, preserving the requested normal-path repair.
 Status: New contract drafted; product changes await exact approval.

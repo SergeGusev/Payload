@@ -480,7 +480,7 @@ builder.Services.AddSingleton<IOnChainSignalCandidateProcessor, OnChainSignalCan
 builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddSingleton<ServiceActivityState>();
 builder.Services.AddSingleton<IPaperOutcomeConfirmationProcessor, PaperOutcomeConfirmationProcessor>();
-builder.Services.AddHostedService<PaperOutcomeConfirmationWorker>();
+// Historical Paper confirmation is paused; normal final settlement confirms directly.
 builder.Services.AddSingleton<DatabaseScanTelemetryState>();
 builder.Services.Configure<HostOptions>(options =>
 {

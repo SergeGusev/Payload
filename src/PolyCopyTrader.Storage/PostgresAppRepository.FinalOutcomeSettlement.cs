@@ -10,6 +10,7 @@ public sealed partial class PostgresAppRepository
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await LockFinalPaperIdentityAsync(connection, transaction, orderId, cancellationToken);
         await ConfirmFinalOrdersAsync(connection, transaction, evidence, [orderId], cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
@@ -56,6 +57,12 @@ public sealed partial class PostgresAppRepository
             throw new InvalidOperationException("Final run identity or payout conflict.");
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        // Match fill reconciliation and generic settlement: wallet, position, order,
+        // then financial strategy/run rows. Never wait for a wallet while holding a run.
+        if (run.PaperOrderId is { } paperId)
+            await LockFinalPaperIdentityAsync(connection, transaction, paperId, cancellationToken, write.Position);
+        else if (write.Position is { } unlockedPosition)
+            await LockPaperPositionKeysAsync(connection, transaction, [unlockedPosition], [], cancellationToken);
         await using (var gate = new NpgsqlCommand("SELECT id FROM strategies WHERE id=@Strategy FOR UPDATE", connection, transaction))
         {
             gate.Parameters.AddWithValue("Strategy", run.StrategyId);
@@ -158,47 +165,89 @@ public sealed partial class PostgresAppRepository
         if ((bool)(await command.ExecuteScalarAsync(cancellationToken))!) throw new InvalidOperationException("Conflicting stored final settlement.");
     }
 
+    private static async Task<PaperOrder?> LockFinalPaperIdentityAsync(NpgsqlConnection connection,
+        NpgsqlTransaction transaction, Guid orderId, CancellationToken cancellationToken,
+        PaperPosition? expectedPosition = null)
+    {
+        var initial = await ReadPaperOrderForReconciliationAsync(connection, transaction, orderId, false, cancellationToken);
+        if (initial is null) return null;
+        if (expectedPosition is not null && (initial.CopiedTraderWallet != expectedPosition.CopiedTraderWallet ||
+            initial.AssetId != expectedPosition.AssetId || initial.ConditionId != expectedPosition.ConditionId ||
+            initial.Outcome != expectedPosition.Outcome))
+            throw new InvalidOperationException("Final position/order identity conflict.");
+        await LockPaperWalletsAsync(connection, transaction, [initial.CopiedTraderWallet], cancellationToken);
+        await ReadPaperPositionForReconciliationAsync(connection, transaction, initial.CopiedTraderWallet,
+            initial.AssetId, cancellationToken);
+        var current = await ReadPaperOrderForReconciliationAsync(connection, transaction, orderId, true, cancellationToken);
+        if (current is null || current.CopiedTraderWallet != initial.CopiedTraderWallet ||
+            current.AssetId != initial.AssetId || current.ConditionId != initial.ConditionId ||
+            current.Outcome != initial.Outcome || current.StrategyId != initial.StrategyId)
+            throw new InvalidOperationException("Final Paper identity changed while acquiring locks.");
+        return current;
+    }
+
+    // All predicates use scalar identities or a bounded set of related order IDs.
+    // Keeping them outside the outer UPDATE prevents correlated whole-history scans.
+    private const string FinalPaperReadinessSql = """
+        SELECT EXISTS(SELECT 1 FROM paper_positions WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset
+            AND (size_shares>0 OR condition_id<>@Condition OR outcome<>@Outcome))
+        OR EXISTS(SELECT 1 FROM strategy_market_paper_runs WHERE paper_order_id=ANY(@RelatedIds)
+            AND (status IN ('Entered','Resting') OR condition_id<>@Condition
+                OR selected_asset_id IS DISTINCT FROM @Asset OR selected_outcome IS DISTINCT FROM @Outcome
+                OR (status='Settled' AND settlement_price IS DISTINCT FROM @Price)))
+        OR EXISTS(SELECT 1 FROM paper_position_settlements WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset
+            AND (condition_id<>@Condition OR outcome<>@Outcome
+                OR winning_asset_id IS DISTINCT FROM @Winner OR winning_outcome<>@WinningOutcome))
+        OR EXISTS(SELECT 1 FROM live_orders WHERE paper_order_id=@Id AND
+            (condition_id<>@Condition OR asset_id<>@Asset OR outcome<>@Outcome
+                OR status IN ('Submitted','Live','Delayed','Unmatched','CancelRequested','CancelFailed','Error')
+                OR (filled_size>0 AND settled_at_utc IS NULL)));
+        """;
+
     private static async Task ConfirmFinalOrdersAsync(NpgsqlConnection connection, NpgsqlTransaction transaction,
         FinalMarketOutcomeEvidence evidence, Guid[] ids, CancellationToken cancellationToken)
     {
-        // Confirm only completed identities whose final records already match this evidence.
-        // Financial writes and this flag share the caller's transaction.
-        await using var command = new NpgsqlCommand("""
-            UPDATE paper_orders o SET confirmation_evidence=CAST(@Evidence AS jsonb)
-            WHERE o.id=ANY(@Ids) AND NOT o.confirmed AND o.condition_id=@Condition
-                AND EXISTS(SELECT 1 FROM unnest(@Tokens::text[],@Outcomes::text[]) m(asset,outcome)
-                    WHERE m.asset=o.asset_id AND lower(m.outcome)=lower(o.outcome));
-            UPDATE paper_orders o SET confirmed=true,
-                confirmation_evidence=CAST(@Evidence AS jsonb)
-            WHERE o.id=ANY(@Ids) AND NOT o.confirmed AND o.condition_id=@Condition
-                AND o.status NOT IN ('Pending','PartiallyFilled')
-                AND EXISTS(SELECT 1 FROM unnest(@Tokens::text[],@Outcomes::text[]) m(asset,outcome)
-                    WHERE m.asset=o.asset_id AND lower(m.outcome)=lower(o.outcome))
-                AND NOT EXISTS(SELECT 1 FROM paper_positions p WHERE p.copied_trader_wallet=o.copied_trader_wallet
-                    AND p.asset_id=o.asset_id AND (p.size_shares>0 OR p.condition_id<>o.condition_id OR p.outcome<>o.outcome))
-                AND NOT EXISTS(SELECT 1 FROM strategy_market_paper_runs r WHERE r.paper_order_id IN
-                    (SELECT id FROM paper_orders p WHERE p.copied_trader_wallet=o.copied_trader_wallet AND p.asset_id=o.asset_id
-                        AND p.condition_id=o.condition_id AND p.strategy_id=o.strategy_id)
-                    AND (r.status IN ('Entered','Resting') OR r.condition_id<>o.condition_id
-                        OR r.selected_asset_id IS DISTINCT FROM o.asset_id OR r.selected_outcome IS DISTINCT FROM o.outcome
-                        OR (r.status='Settled' AND r.settlement_price IS DISTINCT FROM CASE WHEN o.asset_id=@Winner THEN 1::numeric ELSE 0::numeric END)))
-                AND NOT EXISTS(SELECT 1 FROM paper_position_settlements s WHERE s.copied_trader_wallet=o.copied_trader_wallet
-                    AND s.asset_id=o.asset_id AND (s.condition_id<>o.condition_id OR s.outcome<>o.outcome
-                        OR s.winning_asset_id IS DISTINCT FROM @Winner OR s.winning_outcome<>@WinningOutcome))
-                AND NOT EXISTS(SELECT 1 FROM live_orders l WHERE l.paper_order_id=o.id AND
-                    (l.condition_id<>o.condition_id OR l.asset_id<>o.asset_id OR l.outcome<>o.outcome
-                     OR l.status IN ('Submitted','Live','Delayed','Unmatched','CancelRequested','CancelFailed','Error')
-                     OR (l.filled_size>0 AND l.settled_at_utc IS NULL)));
-            """, connection, transaction);
-        command.Parameters.AddWithValue("Ids", ids);
-        command.Parameters.AddWithValue("Now", evidence.ObservedAtUtc.UtcDateTime);
-        command.Parameters.AddWithValue("Evidence", evidence.ToAuditJson());
-        command.Parameters.AddWithValue("Market", evidence.MarketId);
-        command.Parameters.AddWithValue("Condition", evidence.ConditionId);
-        command.Parameters.AddWithValue("Tokens", evidence.Tokens.ToArray());
-        command.Parameters.AddWithValue("Outcomes", evidence.Outcomes.ToArray());
-        command.Parameters.AddWithValue("Winner", evidence.WinningAssetId);
-        command.Parameters.AddWithValue("WinningOutcome", evidence.WinningOutcome);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        foreach (var id in ids.Distinct().Order())
+        {
+            // Callers already own the wallet/position locks before reaching order writes.
+            var order = await ReadPaperOrderForReconciliationAsync(connection, transaction, id, true, cancellationToken);
+            if (order is null || order.Confirmed || !evidence.Matches(order.ConditionId, order.AssetId, order.Outcome)) continue;
+            var blocked = order.Status is PaperOrderStatus.Pending or PaperOrderStatus.PartiallyFilled;
+            if (!blocked)
+            {
+                var relatedIds = new List<Guid>();
+                await using (var related = new NpgsqlCommand("""
+                    SELECT id FROM paper_orders WHERE copied_trader_wallet=@Wallet AND asset_id=@Asset
+                        AND condition_id=@Condition AND strategy_id=@Strategy
+                    """, connection, transaction))
+                {
+                    related.Parameters.AddWithValue("Wallet", order.CopiedTraderWallet);
+                    related.Parameters.AddWithValue("Asset", order.AssetId);
+                    related.Parameters.AddWithValue("Condition", order.ConditionId);
+                    related.Parameters.AddWithValue("Strategy", order.StrategyId);
+                    await using var reader = await related.ExecuteReaderAsync(cancellationToken);
+                    while (await reader.ReadAsync(cancellationToken)) relatedIds.Add(reader.GetGuid(0));
+                }
+                await using var readiness = new NpgsqlCommand(FinalPaperReadinessSql, connection, transaction);
+                readiness.Parameters.AddWithValue("Id", id);
+                readiness.Parameters.AddWithValue("Wallet", order.CopiedTraderWallet);
+                readiness.Parameters.AddWithValue("Asset", order.AssetId);
+                readiness.Parameters.AddWithValue("Condition", order.ConditionId);
+                readiness.Parameters.AddWithValue("Outcome", order.Outcome);
+                readiness.Parameters.AddWithValue("RelatedIds", relatedIds.ToArray());
+                readiness.Parameters.AddWithValue("Price", order.AssetId == evidence.WinningAssetId ? 1m : 0m);
+                readiness.Parameters.AddWithValue("Winner", evidence.WinningAssetId);
+                readiness.Parameters.AddWithValue("WinningOutcome", evidence.WinningOutcome);
+                blocked = (bool)(await readiness.ExecuteScalarAsync(cancellationToken))!;
+            }
+            await using var update = new NpgsqlCommand("""
+                UPDATE paper_orders SET confirmed=@Confirmed,confirmation_evidence=CAST(@Evidence AS jsonb)
+                WHERE id=@Id AND NOT confirmed;
+                """, connection, transaction);
+            update.Parameters.AddWithValue("Id", id);
+            update.Parameters.AddWithValue("Confirmed", !blocked);
+            update.Parameters.AddWithValue("Evidence", evidence.ToAuditJson());
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 }

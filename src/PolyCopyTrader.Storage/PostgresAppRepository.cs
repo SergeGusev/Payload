@@ -6287,8 +6287,16 @@ RETURNING row_version;
 		await using NpgsqlTransaction transaction = await connection.BeginTransactionAsync(cancellationToken);
         if (finalEvidence is not null)
         {
+            Guid? paperId;
+            await using (var linked = new NpgsqlCommand("SELECT paper_order_id FROM live_orders WHERE id=@Id", connection, transaction))
+            {
+                linked.Parameters.AddWithValue("Id", liveOrderId);
+                paperId = await linked.ExecuteScalarAsync(cancellationToken) is Guid id ? id : null;
+            }
+            if (paperId is { } linkedPaperId)
+                await LockFinalPaperIdentityAsync(connection, transaction, linkedPaperId, cancellationToken);
             var current = await ReadLiveOrderForReconciliationAsync(connection, transaction, liveOrderId, cancellationToken);
-            if (current is null || !finalEvidence.Matches(current.ConditionId, current.AssetId, current.Outcome))
+            if (current is null || current.PaperOrderId != paperId || !finalEvidence.Matches(current.ConditionId, current.AssetId, current.Outcome))
                 throw new InvalidOperationException("Final Live order identity changed.");
         }		if (expectedRowVersion is null)
 		{

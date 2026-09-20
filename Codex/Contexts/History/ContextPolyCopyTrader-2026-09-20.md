@@ -929,3 +929,10 @@ Request:
 
 Result:
 Read current normal and background dispatch: newordersstartConfirmed=false; final own-market evidence and completed lifecycle authorize immediate true. The previous production failure belongs to that normal path too, so stopping historical worker alone does not repair it. Prepared superseding draftRC-20260920-paper-history-pause-and-final-fix for disabling the independently hosted PaperOutcomeConfirmationWorker (both lanes, no date cutoff, no reset of saved flags) plus the previously requested normal query/lock fix. Preserve direct final settlement, reporting and property; defer background historical corrections/confirmations until later work. SemanticSHA256fff6f3335a50bfdef6578c9f3cdfe5d1f927eb709fe36c62eacc2db58f7b6abd, draftvalidationPASS. No product/runtime/data changes or builds/tests; exact later approval required by RequirementGate checkpointB. Previous unapproved query-lock draft remains unused; new draft remains untracked. Concurrent work excluded from this bookkeeping commit.
+
+## 2026-09-20T18:05:29.9013337+00:00
+Request:
+APPROVE RC-20260920-paper-history-pause-and-final-fix sha256:fff6f3335a50bfdef6578c9f3cdfe5d1f927eb709fe36c62eacc2db58f7b6abd
+
+Result:
+Implemented local history worker pause and keyed atomic final confirmation repair. Final selected tests146/146 passed,0skips; service build0errors/0warnings; independent reviewPASS.100000unrelated rows per table unchanged, four index plans, final transaction130.37ms. Completed contract preserves exact approval digest and evidence. Production not changed or verified; concurrent edits preserved. WorkingTree/Staged gates and diff checks passed. Local PostgreSQL stopped, verified copied worktree removed, protected session cleanup completed and absence verified. Commit/push follow.
