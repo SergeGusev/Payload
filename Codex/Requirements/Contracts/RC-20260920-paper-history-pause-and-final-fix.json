@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260920-paper-history-pause-and-final-fix",
+  "title": "Pause historical Paper confirmation and repair normal final settlement confirmation",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Исправляй"
+    },
+    {
+      "source": "user",
+      "text": "Re: Этот предварительный результат сохранялся как завершённый расчёт ставки. &#x20;\n\nА почему так делалось? Это же неправильно. Мы можем использовать этот результат как основание алгоритма для того, чтобы сделать вывод, делать следующую ставку или нет. Но персчёты любых ставок мы должны делать только тогда, когда приходит реальный сигнал о результате"
+    },
+    {
+      "source": "user",
+      "text": "Для выбора размера можно учитывать предварительный исход отдельно от финансовой истории"
+    },
+    {
+      "source": "user",
+      "text": "1. Убери пока простановку Confirmed из истории, мы к нему ещё вернёмся.\n2. В новых ставках Confirmed используется корректно?"
+    }
+  ],
+  "scope": {
+    "goal": "Temporarily stop background rechecking/confirmation of saved Paper history and fix the already requested normal final settlement confirmation regression; retain exact final own-market evidence and atomic accounting.",
+    "inScope": [
+      "Normal final-outcome repository paths: PersistFinalPaperRunAsync, ConfirmFinalPaperOrderAsync, PersistFinalPaperPositionsAsync and linked Live settlement confirmation. Historical worker is paused, not optimized in this task.",
+      "Replace correlated all-history readiness scans with parameterized exact-order and wallet/asset related-row reads using existing indexes; preserve every identity, lifecycle and payout prerequisite.",
+      "Consistent acquisition of existing wallet/row locks across the affected final settlement and confirmation paths; preserve atomic financial/counter/provisional/evidence/Confirmed state and optimistic Live version checks.",
+      "Focused PostgreSQL query-plan/scale/concurrency regression tests and existing final-settlement/accounting tests; service build, minimal documentation and independent semantic review.",
+      "Remove the PaperOutcomeConfirmationWorker hosted-service registration so neither Recent nor Archive queue processing runs. Retain its implementation for later return and retain existing persisted Confirmed flags/evidence; the historical correction process pauses together with its worker."
+    ],
+    "outOfScope": [
+      "No production deployment, service restart/stop, configuration changes, SQL mutation, schema/index migration or backup. No production EXPLAIN ANALYZE or large diagnostic scans.",
+      "No changes to finality rules, eligibility for Confirmed, financial formulas, preliminary sizing rules, actual fills/fees, exposure, strategy signals, execution intents, Live submission or Live sizing.",
+      "No disabling immediate confirmation, splitting an atomic financial commit into independently committed stages, silently accepting partial financial writes, raising timeouts to hide scans, or bypassing correctness predicates.",
+      "No backlog sorting, queue cadence/batch redesign, historical full-base recalculation, general locking framework, unrelated Dashboard or schema refactor.",
+      "Do not reset existing Confirmed values, erase stored evidence or remove the schema/property. Do not select a new historical cutoff date. No optimization or scheduling redesign of the paused historical confirmation worker; keep ordinary settlement of already-open stakes available."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "History is paused by processing path: all candidates of the background PaperOutcomeConfirmationWorker (both current lanes), without a creation-date cutoff. Normal final settlement remains active for new and still-open stakes. No production mutations.",
+    "firstVerification": "Inspect the exact deployed-revision final confirmation SQL, wallet/position/order/run/strategy/Live lock acquisition paths and focused PostgreSQL tests; correlate the persisted deployment stack traces and diagnostic plan without claiming an unobserved second deadlock participant."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Remove the immediate final confirmation full-history query-plan regression while preserving all existing confirmation prerequisites.",
+      "sourceRequestIndexes": [
+        0
+      ],
+      "sourceQuote": "Исправляй",
+      "acceptanceCriteria": [
+        "The repository checks only the supplied orders and their exact wallet/asset/condition/strategy/linked identities; final evidence, inactive order, closed inventory/runs and linked Live readiness predicates retain their current meaning. Missing/conflicting identities remain unconfirmed.",
+        "Actual repository readiness SQL obtains related rows through existing indexed keys rather than correlated sequential scans of unrelated run, position and settlement histories. Do not disable sequential scans or other planner methods to make verification pass.",
+        "A local PostgreSQL scale fixture with at least100000unrelated rows in each of runs,positions,settlements exercises the actual final settlement/confirmation path, validates its plan and completion under a bounded command deadline, and verifies unrelated rows stay unchanged. Record exact fixture counts, plan and elapsed execution; no production-scale writes.",
+        "Eligible completion still persists final proof and Confirmed in the same financial transaction. An ineligible lifecycle retains final proof and Confirmed=false as before; no financial formula or finality changes."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.FinalOutcomeSettlement.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/FinalOutcomeSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/FinalSettlementQueryLockPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperAlgorithmOutcomePostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~FinalSettlementQueryLockPostgresIntegrationTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests\" --logger trx",
+          "expected": "All exact-path plan, scale, correctness and concurrency cases pass against isolated local PostgreSQL; no skipped database tests.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Remove conflicting lock acquisition in affected final settlement and confirmation paths and retain one atomic final transition.",
+      "sourceRequestIndexes": [
+        0,
+        1,
+        2
+      ],
+      "sourceQuote": "Исправляй",
+      "acceptanceCriteria": [
+        "Trace participating writer paths before changing locks, and apply a consistent order of existing wallet/position/order/run/strategy/linked Live locks where these operations overlap. Acquire keyed locks before dependent writes and revalidate identity under lock. No general locking framework or new persistent lock object.",
+        "Deterministic PostgreSQL concurrency tests exercise run settlement versus generic position settlement, linked Live final settlement and position mark updates where they share records. Both operations finish or return their existing documented retry/ineligible result without deadlock or partial accounting; establish real overlapping transactions rather than relying only on sleep. Historical worker must be absent from the normal service dispatch.",
+        "Final payout, position closure, settled run, financial counter, retirement of provisional contribution, proof and eligible Confirmed remain atomic. Duplicate events/restart and rollback/cancellation preserve existing idempotence and allow retry, and effective sizing reads cannot see double or half-applied contributions.",
+        "Keep Live row-version checks and all existing final-only evidence rules. No increases to timeouts or disabling of checks as a workaround.",
+        "Run existing focused final evidence, final settlement, provisional sizing and historical confirmation tests on isolated PostgreSQL; build service; independent reviewer compares original requests, approved contract, full diff and actual evidence."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.FinalOutcomeSettlement.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.cs",
+        "tests/PolyCopyTrader.Tests/FinalOutcomeSettlementPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/FinalSettlementQueryLockPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperAlgorithmOutcomePostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~FinalMarketOutcomeEvidenceTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests|FullyQualifiedName~FinalSettlementQueryLockPostgresIntegrationTests|FullyQualifiedName~PaperAlgorithmOutcomePostgresIntegrationTests|FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests|FullyQualifiedName~PaperOutcomeConfirmationProcessorTests|FullyQualifiedName~PaperSettlementProcessorTests|FullyQualifiedName~LiveTradingGatingTests\" --logger trx",
+          "expected": "All selected regressions pass with no skipped database cases; partition local databases only when existing fixture guards require it and retain the full selected union.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
+          "expected": "Service builds with zero errors; inherited warnings reported accurately.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Temporarily stop the historical background confirmation process while preserving normal final confirmation of stakes.",
+      "sourceRequestIndexes": [
+        3
+      ],
+      "sourceQuote": "Убери пока простановку Confirmed из истории, мы к нему ещё вернёмся.",
+      "acceptanceCriteria": [
+        "PolyCopyTrader.Service no longer registers/starts PaperOutcomeConfirmationWorker; neither its Recent nor Archive selection, venue lookup, historical financial correction nor Confirmed writes run in the normal service. Keep the worker implementation available for a later explicitly approved return.",
+        "Keep existing stored flags, financial history and proof unchanged by this pause; no migration or data reset. Keep the reporting projection and property available.",
+        "Normal final settlement continues to use the separate immediate-confirmation path after exact own-market final evidence and completed lifecycle. A new order starts unconfirmed; a previous market result or provisional signal cannot confirm it.",
+        "With historical worker absent, eligible direct Paper, generic position and linked Live final settlement paths still set Confirmed atomically; unresolved or unfinished lifecycle remains false. Do not claim that pausing history alone fixes the defective normal confirmation query.",
+        "Document that historical verification is paused and that confirmation of remaining historical false rows is deferred; this does not declare historical data reliable."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Program.cs",
+        "tests/PolyCopyTrader.Tests/PaperTradingWorkerIsolationTests.cs",
+        "tests/PolyCopyTrader.Tests/FinalOutcomeSettlementPostgresIntegrationTests.cs",
+        "README.md",
+        "docs/architecture/PAPER_LIVE_PARITY.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-004",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests\" --logger trx",
+          "expected": "Service dispatch does not register the historical worker; direct final confirmation tests pass with no historical worker instantiated. PostgreSQL cases execute without skips.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260920-paper-history-pause-and-final-fix sha256:fff6f3335a50bfdef6578c9f3cdfe5d1f927eb709fe36c62eacc2db58f7b6abd",
+    "semanticDigest": "sha256:fff6f3335a50bfdef6578c9f3cdfe5d1f927eb709fe36c62eacc2db58f7b6abd"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/paper_history_pause_final_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
