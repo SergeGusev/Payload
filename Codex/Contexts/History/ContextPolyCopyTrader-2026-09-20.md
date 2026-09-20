@@ -356,3 +356,47 @@ Verification:
 - Native disposable PostgreSQL PID51692 stopped with pg_ctl -m fast -w stop. Test/build processes finished. Protected cleanup and final commit/push follow below. Existing unrelated root context/history/Sept17contract/operations edits preserved; active context index formed from exact HEAD bytes plus this task prefix to avoid encoding changes.
 
 Finalization 2026-09-20T10:06:09.6237498Z: protected cleanup removed marked run paper-staged-idle-20260920-01 successfully, absence verified; only its stale worktree registration pruned after dry-run preview. No compiler/PG cleanup issue. Exact Staged gate and diff check run before commit/push; no remaining task artifact/process.
+
+## 2026-09-20T10:40:06.5401289Z
+Request:
+Выложил, проверяй
+
+Result:
+## Active Update 2026-09-20 Staged Confirmation Deployment Verification
+Goal: Verify user deployment read-only against actual service runtime and Paper rows.
+Status: Completed bounded verification; confirmations now finish, production correction of a mismatched outcome not yet observed.
+Done:
+- Production 192.168.0.101:5432/polycopytrader heartbeat identifies deployed 759e64bc98455e1b511adf55d077accd03bcc58e, MVID46ac71544fb1, started10:33:19.432052UTC; latest checked heartbeat10:38:19.790644UTC Running/Live, last_errorNULL. Read-only transactions, 15s statement/1s lock limits; no production mutation/restart/deployment.
+- Complete current-launch log window10:33:19.674..10:38:35.876UTC contains16finished attempts, all Matched/confirmed, all CommitAcknowledged=true; independent legacy log recount16. Exact16 IDs rechecked10:39:11.882223UTC:16Confirmed,0Corrected,16before/after financial snapshots equal. No finished cancellation/timeout/error and no ERR/FTL log entries in checked window.
+- ApplyDatabase through Commit durations from recorded stage sums0.742..0.870s (mean0.792s), below2s budget for these16 matching cases. Idle waiting1.866..30.876s. Runtime shows retained work completing after waiting; no inference about slower mismatched corrections.
+- Full Paper aggregate10:37:22.030436UTC:3942099orders,10confirmed,557with nonnull evidence,0corrected. Later exact-ID read proves at least16confirmed, not a later full total. Five known ETH22 pairs still0confirmed/5mismatched at10:38:30UTC. Historical reconciliation remains incomplete.
+- Waiting-lock snapshots0 at10:34:31,10:37:22,10:38:30UTC. Queue metrics at10:38:19UTC:351608enqueued/processed updates,0failed and0pending; this and heartbeat show continuing activity, not a measured zero trading-latency impact.
+Next: None within this bounded deployment check.
+Notes: Reproducible SQL, exact IDs, log filtering and hashes recorded in today's history. No product edits/build/tests needed for read-only verification; context/history only. Temporary run protected cleanup and exact staged gate recorded below.
+Blockers: None for deployment check; full backlog progress and mismatched financial correction are not established by this small runtime window.
+
+
+Exact log IDs and independent database recount:
+{"at" : "2026-09-20T10:39:11.882223+00:00", "rows" : 16, "confirmed" : 16, "corrected" : 0, "before_after_equal" : 16, "ids" : ["306d95d7-57be-3811-0a0b-027dc9e6adfc", "42483052-3495-d3ae-0e0f-3536a8f52529", "4f2ad2b4-45e5-3fbb-4963-26293ec79df5", "616d2a33-4fc9-b553-587b-3fb7df12b6c8", "84a0a95f-9e1a-9bf9-f4b9-078bc841190c", "8f7b36d9-5043-b48c-96bd-ce46d04f43de", "9d216815-7db9-0fb8-0b49-7d764722f885", "a8952059-1dc9-43dd-ce4f-a96cc98b14ae", "ba3510c2-2bfe-0ff3-b8b8-b4ef5f488ffa", "be0d2a72-133e-2eac-1228-ba7cbf3e1280", "c34c0f55-219e-b9bb-a2f4-f394132e4870", "d4b85266-9b70-643e-3cf9-d653bcd91267", "dd42a11e-4a86-04bb-889f-d4ac33720044", "e27be551-13f2-0bbb-b25a-2de2a35081dc", "e99a58c1-adeb-ef47-ac19-0a8f00b60181", "f50d3ea3-8b2a-c9b3-5c78-8da314b39f4c"]}
+
+Reproducibility: production psql pinned192.168.0.101:5432/polycopytrader, application_name Codex-paper-staged-verify-readonly, BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY / ROLLBACK; default_transaction_read_only on, statement_timeout15s, lock_timeout1s, idle-in-transaction20s, timezoneUTC, max_parallel_workers_per_gather0, jitoff. Full aggregates have no strategy/date exclusions; exact-ID checks use only logged success IDs or original five ETH22 run IDs. No unmatched successful log IDs (16/16).
+SQL:
+```sql
+SELECT json_build_object('at',clock_timestamp(),'server',inet_server_addr(),'database',current_database(),'read_only',current_setting('transaction_read_only'),'heartbeat',(SELECT row_to_json(h) FROM service_heartbeats h WHERE service_name='PolyCopyTrader.Service'),'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock'),'paper_estimate',(SELECT reltuples::bigint FROM pg_class WHERE oid='paper_orders'::regclass));
+
+SELECT json_build_object('at',clock_timestamp(),'counts',(SELECT json_build_object('orders',count(*),'confirmed',count(*) FILTER (WHERE confirmed),'attempted',count(*) FILTER (WHERE confirmation_evidence IS NOT NULL),'corrected',count(*) FILTER (WHERE confirmation_evidence->>'corrected'='true')) FROM paper_orders),'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock'));
+SELECT json_build_object('id',id,'confirmed',confirmed,'evidence',confirmation_evidence) FROM paper_orders WHERE id IN ('e99a58c1-adeb-ef47-ac19-0a8f00b60181','ba3510c2-2bfe-0ff3-b8b8-b4ef5f488ffa','4f2ad2b4-45e5-3fbb-4963-26293ec79df5');
+
+SELECT json_build_object('at',clock_timestamp(),'heartbeat',(SELECT json_build_object('started',started_at_utc,'last',last_heartbeat_utc,'status',status,'last_error',last_error,'version',version) FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service'),'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock'));
+SELECT json_build_object('five_pairs',(SELECT json_build_object('pairs',count(*),'confirmed',count(*) FILTER(WHERE o.confirmed),'mismatches',count(*) FILTER(WHERE (r.settlement_price=1)IS DISTINCT FROM l.won)) FROM strategy_market_paper_runs r JOIN paper_orders o ON o.id=r.paper_order_id JOIN live_orders l ON l.paper_order_id=r.paper_order_id WHERE r.id IN('f70816d2-7fe5-4a66-ba3c-01ecae3ba6a6','dee68412-e2f4-4d4b-9bbe-7147859a83cf','12aea786-f272-4f79-9560-5ce50d32f0cc','30d1d88e-8bb0-4451-9ebe-2f6b443c217a','1ee026d3-65e8-48e8-9a20-648887717edb')));
+
+SELECT json_build_object('at',clock_timestamp(),'rows',count(*),'confirmed',count(*) FILTER(WHERE confirmed),'corrected',count(*) FILTER(WHERE confirmation_evidence->>'corrected'='true'),'before_after_equal',count(*) FILTER(WHERE confirmation_evidence->'before'=confirmation_evidence->'after'),'ids',json_agg(id ORDER BY id)) FROM paper_orders WHERE id IN ('306d95d7-57be-3811-0a0b-027dc9e6adfc','42483052-3495-d3ae-0e0f-3536a8f52529','4f2ad2b4-45e5-3fbb-4963-26293ec79df5','616d2a33-4fc9-b553-587b-3fb7df12b6c8','84a0a95f-9e1a-9bf9-f4b9-078bc841190c','8f7b36d9-5043-b48c-96bd-ce46d04f43de','9d216815-7db9-0fb8-0b49-7d764722f885','a8952059-1dc9-43dd-ce4f-a96cc98b14ae','ba3510c2-2bfe-0ff3-b8b8-b4ef5f488ffa','be0d2a72-133e-2eac-1228-ba7cbf3e1280','c34c0f55-219e-b9bb-a2f4-f394132e4870','d4b85266-9b70-643e-3cf9-d653bcd91267','dd42a11e-4a86-04bb-889f-d4ac33720044','e27be551-13f2-0bbb-b25a-2de2a35081dc','e99a58c1-adeb-ef47-ac19-0a8f00b60181','f50d3ea3-8b2a-c9b3-5c78-8da314b39f4c');
+
+```
+Log source: \\192.168.0.101\CodexLogs\polycopytrader-service-20260920_004.log, last25000lines first13:02:29.806+03 therefore covers entire new launch; filter timestamp>=heartbeat.started_at_utc, selected confirmation/success/summary/heartbeat/queue/error lines. Lastcovered13:38:35.876+03. Group finished Outcome/Reason, independent legacy success count, then exact-ID DB confirmation and before=after jsonb equality. Database duration=sum Stages from ApplyDatabase onward + final Commit StageAgeMs; waiting=sum Waiting* stage durations. This measures16matched cases only. No external web lookup or financial recommendation.
+Evidence hashes:
+logs/final.log SHA256 950F279C3D52820116AB224121773EE98DBCC1718970F14D28D691D827569A33
+results/counts.jsonl SHA256 CAE4FEF41F8CB9C7A5560CE0C5E10E60041C7DD1CEED0EBB53B28C606B0A9B99
+results/exact.json SHA256 9E95A5D391B7DA93309CCA7360A9B3C2CBEF0BC2B3B3B48F5CCFEF053523ABE6
+
+Finalization 2026-09-20T10:40:36.2963726Z: protected cleanup removed marked paper-staged-verify-20260920-01 (14files/5401282bytes); absence verified. WorkingTree gate reports pre-existing unrelated RC-20260917-single-disabled-strategy-timed-delete SEMANTIC_CHANGE_AFTER_APPROVAL; preserved unchanged. Only own exempt context prefix and appended Sept20 history staged. Exact Staged gate and diff check required before commit; no production/product change.

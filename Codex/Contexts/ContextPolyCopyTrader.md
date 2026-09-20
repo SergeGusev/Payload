@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Staged Confirmation Deployment Verification
+Goal: Verify user deployment read-only against actual service runtime and Paper rows.
+Status: Completed bounded verification; confirmations now finish, production correction of a mismatched outcome not yet observed.
+Done:
+- Production 192.168.0.101:5432/polycopytrader heartbeat identifies deployed 759e64bc98455e1b511adf55d077accd03bcc58e, MVID46ac71544fb1, started10:33:19.432052UTC; latest checked heartbeat10:38:19.790644UTC Running/Live, last_errorNULL. Read-only transactions, 15s statement/1s lock limits; no production mutation/restart/deployment.
+- Complete current-launch log window10:33:19.674..10:38:35.876UTC contains16finished attempts, all Matched/confirmed, all CommitAcknowledged=true; independent legacy log recount16. Exact16 IDs rechecked10:39:11.882223UTC:16Confirmed,0Corrected,16before/after financial snapshots equal. No finished cancellation/timeout/error and no ERR/FTL log entries in checked window.
+- ApplyDatabase through Commit durations from recorded stage sums0.742..0.870s (mean0.792s), below2s budget for these16 matching cases. Idle waiting1.866..30.876s. Runtime shows retained work completing after waiting; no inference about slower mismatched corrections.
+- Full Paper aggregate10:37:22.030436UTC:3942099orders,10confirmed,557with nonnull evidence,0corrected. Later exact-ID read proves at least16confirmed, not a later full total. Five known ETH22 pairs still0confirmed/5mismatched at10:38:30UTC. Historical reconciliation remains incomplete.
+- Waiting-lock snapshots0 at10:34:31,10:37:22,10:38:30UTC. Queue metrics at10:38:19UTC:351608enqueued/processed updates,0failed and0pending; this and heartbeat show continuing activity, not a measured zero trading-latency impact.
+Next: None within this bounded deployment check.
+Notes: Reproducible SQL, exact IDs, log filtering and hashes recorded in today's history. No product edits/build/tests needed for read-only verification; context/history only. Temporary run protected cleanup and exact staged gate recorded below.
+Blockers: None for deployment check; full backlog progress and mismatched financial correction are not established by this small runtime window.
+
 ## Active Update 2026-09-20 Paper Confirmation Staged Idle
 Goal: Implement approved bounded staged confirmation so market quotes no longer discard progress.
 Status: Completed local implementation and verification; not deployed.
