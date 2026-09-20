@@ -547,3 +547,105 @@ Benchmark2026-09-20T12:51:30.3305788Z..12:53:43.4002836Z on localPG17.5,10korder
 Finalization continues below with exact staged gate, preservation and protected cleanup results.
 Finalization: isolated WorkingTree and root Staged requirement gates PASS (36 governed paths/1 completed approved contract); staged diffcheck PASS. All own product files copied with SHA256 equality; nine unrelated root files byte-identical, original context tail byte-identical and excluded from staged context. Local PostgreSQL stopped with pg_ctl fast/wait; no remaining task test/database process found. Protected cleanup follows.
 Protected cleanup completed: Complete-CodexTempRun removed the exact marked paper-throughput-v2-20260920-01 run (4770 files,888583509 bytes); root absence verified. Dry-run identified only its stale worktree registration, then pruned. All durable code/report/evidence already transferred and committed; unrelated root changes remain. Implementation commit is the commit containing this entry; push to origin/master follows normal finalization.
+
+## 2026-09-20T13:13:00.2175733+00:00
+Request:
+Выложил, проверяй
+
+Result:
+## Active Update 2026-09-20 Throughput Deployment Verification
+Goal: Verify the user's deployment read-only, current service launch and Paper confirmation reporting.
+Status: Completed verification; deployed verifier runs, new Dashboard coverage projection is blocked.
+Done:
+- Production192.168.0.101:5432/polycopytrader heartbeat identifies cb226596ab9239da67b524971b6ddcd7bf9901ca/MVID64fa58b07166, launch13:05:00.288598UTC. Final snapshot13:11:49.802766UTC:Running/Live,heartbeat13:11:00.692474,last_errorNULL,waitinglocks0. Independent fresh market-data activity and confirmation logs continue.
+- Migrations0011..0014 applied13:04:45..13:05:00UTC; all three new indexes and existing unconfirmed index valid/ready. Actual Recent selection plan uses ix_paper_orders_unconfirmed.
+- Complete launch log window13:05:00.288598..13:09:57.283UTC:176uniqueconfirmed,117Recent/59Archive,0corrected;35.556/min across296.994402sec. Independent legacy success log176 and exact176-ID database read13:10:47UTC found176confirmed,176before=after,0unmatched,0corrected. Cache hits120/HTTP67 in19completed portions. Fourlocktimeouts55P03(3CorrectRuns,1MarkConfirmed),sixhourly-refreshdefer andoneactive-financialcycledefer observed; no ERR/FTL in that window.
+- Full read-only snapshot13:08:18.146468UTC:3946375orders,409confirmed,0corrected,102confirmedcurrentlaunch,5createdcurrentlaunch. All-historyJune5..Sept20UTC, no strategy/status exclusions. All five original ETH22 divergent pairs remain unconfirmed and mismatched; no production correction success demonstrated.
+- New coverage projection has98timeoutwarnings in the5minute window. Runtime SQLSTATE57014 identifies settlement refresh within ApplyPaperConfirmationProjectionAsync line64; statementbudget2s and wholeportiontransaction roll back. Read-only snapshots13:07:31,13:09:36,13:11:49show initializedfalse/refreshedNULL/allcursorszero; finalmembers0,queue15645,oldestsequence1. Thus no initialization progress, not merely delayed display.
+- Source plus production EXPLAIN show settlement coverage looks up paper_orders by wallet then filters asset; existing general index is(wallet,created), partial(wallet,asset)index onlycovers twoFAKsources. Actual plan repeats wallet bitmap scans estimated2573rows; no all-source exact(wallet,asset)index in inspected paper_orders catalog. No ANALYZE or mutation run; plan alone does not quantify its share of timeout cost. LegacyDashboard projection remainsRunning,last_event13:11:48,last_errorNULL.
+Next: A separately authorized fix is needed for the new coverage projection and production-scale verification. Do not treat local3527/min benchmark as production throughput or claim full-history trust restored.
+Notes: Production verification only, forcedread-onlytransactions/15sstatement/1slock/UTC/singlequeryparallelism0. No code/config/schema/service/data change. Local Dashboard process absent duringinspection; deployed UIbinary/visual state not established. Exact SQL,log scope,IDs,counts and hashes in dailyhistory. Temporary evidence protected cleanup and bookkeeping commit/push follow.
+Blockers: New coverage projection cannot initialize under current2sSQLportionbudget; sampled correction path has not yet succeeded inproduction.
+
+
+Reproducibility: psql pinned192.168.0.101:5432/polycopytrader, appnameCodex-paper-throughput-verify-readonly, default_transaction_read_onlyon, statement_timeout15000ms,lock_timeout1000ms,idle_in_transaction_session_timeout20000ms,timezoneUTC,max_parallel_workers_per_gather0,jitoff. No credentials persisted. Current launch start from fresh heartbeat, logsource \\192.168.0.101\CodexLogs\polycopytrader-service-20260920_005.log last12000lines covers launch (earliest retained before13:05UTC); regex parses timestamp/offset and excludes older launches. Count unique successful IDs and independently sum portionConfirmed and legacy Paper outcome confirmed lines. Exact-ID query below confirmed every logged success. Fullrawcount102at13:08 agrees with102logsuccesses beforethatcut; aggregateglobal409ispoint-in-timeonly. Final rate176/(296.994402/60)=35.5562257365/min, equivalently296.994402/176=1.687468s/order; no production ETA claimed.
+
+Read-only SQL preview:
+BEGIN READ ONLY;
+SELECT json_build_object('at',clock_timestamp(),'server',inet_server_addr(),'database',current_database(),
+ 'read_only',current_setting('transaction_read_only'),
+ 'heartbeat',(SELECT row_to_json(h) FROM service_heartbeats h WHERE service_name='PolyCopyTrader.Service'),
+ 'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'),
+ 'estimates',(SELECT json_agg(x) FROM (SELECT relname,reltuples::bigint AS estimated_rows FROM pg_class WHERE relnamespace='public'::regnamespace AND relname IN ('paper_orders','paper_confirmation_markets','paper_confirmation_projection_queue','paper_confirmation_projection_members')) x));
+SELECT json_build_object('migrations',(SELECT json_agg(x) FROM (SELECT * FROM schema_migration_history WHERE migration_id>='0011' ORDER BY migration_id) x),
+ 'indexes',(SELECT json_agg(x) FROM (SELECT i.relname,x.indisvalid,x.indisready,pg_get_indexdef(i.oid) AS definition FROM pg_index x JOIN pg_class i ON i.oid=x.indexrelid WHERE i.relnamespace='public'::regnamespace AND i.relname IN ('ix_paper_confirmation_created','ix_paper_confirmation_open_inventory','ix_paper_orders_unconfirmed','ix_paper_confirmation_projection_expiry')) x));
+SELECT json_build_object('at',clock_timestamp(),'state',(SELECT row_to_json(s) FROM paper_confirmation_projection_state s),
+ 'cursor',(SELECT json_agg(c ORDER BY kind) FROM paper_confirmation_projection_cursor c),
+ 'global',(SELECT row_to_json(t) FROM paper_confirmation_projection_totals t WHERE kind='O' AND hours=0 AND strategy_id='00000000-0000-0000-0000-000000000000'),
+ 'legacy_projection',(SELECT row_to_json(c) FROM dashboard_projection_control c));
+ROLLBACK;
+
+
+Read-only SQL details:
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SELECT json_build_object('at',transaction_timestamp(),'queue',(SELECT json_build_object('events',count(*),'first',min(sequence_id),'last',max(sequence_id)) FROM paper_confirmation_projection_queue),
+ 'cache_markets',(SELECT count(*) FROM paper_confirmation_markets),
+ 'first_events',(SELECT json_agg(q) FROM (SELECT * FROM paper_confirmation_projection_queue ORDER BY sequence_id LIMIT 12) q),
+ 'orders_indexes',(SELECT json_agg(x) FROM (SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='public' AND tablename IN ('paper_orders','paper_fills','paper_position_settlements') ORDER BY tablename,indexname) x));
+SELECT json_build_object('at',transaction_timestamp(),'orders',count(*),'confirmed',count(*) FILTER(WHERE confirmed),
+ 'corrected',count(*) FILTER(WHERE confirmed AND confirmation_evidence->>'corrected'='true'),
+ 'confirmed_current_launch',count(*) FILTER(WHERE confirmed AND (confirmation_evidence->>'checked_at_utc')::timestamptz>='2026-09-20T13:05:00.288598Z'),
+ 'created_current_launch',count(*) FILTER(WHERE created_at_utc>='2026-09-20T13:05:00.288598Z'),
+ 'oldest_order',min(created_at_utc),'newest_order',max(created_at_utc)) FROM paper_orders;
+SELECT json_build_object('pairs',(SELECT json_agg(x) FROM (SELECT r.id,r.strategy_id,o.id AS order_id,o.confirmed,r.settlement_price,l.won AS live_won,r.net_realized_pnl_usd,l.net_realized_pnl_usd AS live_net FROM strategy_market_paper_runs r JOIN paper_orders o ON o.id=r.paper_order_id JOIN live_orders l ON l.paper_order_id=r.paper_order_id WHERE r.id IN('f70816d2-7fe5-4a66-ba3c-01ecae3ba6a6','dee68412-e2f4-4d4b-9bbe-7147859a83cf','12aea786-f272-4f79-9560-5ce50d32f0cc','30d1d88e-8bb0-4451-9ebe-2f6b443c217a','1ee026d3-65e8-48e8-9a20-648887717edb'))x));
+ROLLBACK;
+
+
+Read-only SQL plans:
+BEGIN READ ONLY;
+EXPLAIN (FORMAT JSON)
+SELECT CASE WHEN lower(s.copied_trader_wallet) LIKE 'strategy:%' THEN st.id ELSE follow.id END,
+ EXISTS(SELECT 1 FROM paper_orders o WHERE o.copied_trader_wallet=s.copied_trader_wallet
+ AND o.asset_id=s.asset_id AND EXISTS(SELECT 1 FROM paper_fills f WHERE f.paper_order_id=o.id)),
+ NOT EXISTS(SELECT 1 FROM paper_orders o WHERE o.copied_trader_wallet=s.copied_trader_wallet
+ AND o.asset_id=s.asset_id AND (NOT o.confirmed OR o.condition_id<>s.condition_id OR o.outcome<>s.outcome))
+FROM paper_position_settlements s
+LEFT JOIN strategies st ON lower(s.copied_trader_wallet)=lower('strategy:'||st.code)
+LEFT JOIN strategies follow ON follow.id='f0110a0d-1ead-4c00-8b01-000000000001'::uuid
+WHERE s.id='0490f766-e769-4adb-80bd-3c658a09d8b4';
+EXPLAIN (FORMAT JSON)
+SELECT id FROM paper_orders WHERE NOT confirmed AND confirmation_next_attempt_at_utc<=now()
+ AND created_at_utc>=now()-interval '24 hours'
+ORDER BY confirmation_next_attempt_at_utc,created_at_utc,id LIMIT 32;
+SELECT json_build_object('at',clock_timestamp(),'state',(SELECT row_to_json(s) FROM paper_confirmation_projection_state s),
+ 'cursor',(SELECT json_agg(c ORDER BY kind) FROM paper_confirmation_projection_cursor c),
+ 'queue',(SELECT json_build_object('count',count(*),'first',min(sequence_id)) FROM paper_confirmation_projection_queue),
+ 'oldest_settlement',(SELECT json_build_object('id',id,'wallet',copied_trader_wallet,'asset',asset_id,'condition',condition_id) FROM paper_position_settlements WHERE id='0490f766-e769-4adb-80bd-3c658a09d8b4'),
+ 'health',(SELECT json_build_object('version',version,'last',last_heartbeat_utc,'status',status,'error',last_error) FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service'),
+ 'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'));
+ROLLBACK;
+
+
+Read-only SQL exact:
+BEGIN READ ONLY; SELECT json_build_object('at',clock_timestamp(),'requested',176,'found',count(*),'confirmed',count(*) FILTER(WHERE confirmed),'corrected',count(*) FILTER(WHERE confirmation_evidence->>'corrected'='true'),'equal_before_after',count(*) FILTER(WHERE confirmation_evidence->'before'=confirmation_evidence->'after')) FROM paper_orders WHERE id IN ('0141cbfb-3ac0-4d64-8125-07d47e6b21eb','03c0e259-55f0-4cf8-9a96-1870bb587827','04c3acbf-2db6-4b07-b841-6265e8b62e12','052e5221-4152-4f80-bfdf-864fb17ec99c','052f019b-ea20-4f54-86d4-79dcd7fa6f38','05c06d21-4cc9-46b8-a8dd-7db3db867ab9','0661eabe-40f0-4c9e-ab40-0a8f0d47aef4','075df448-b65c-46a3-aa53-d0b23221f41c','088cbc19-71f1-4e8a-9782-6934c76b5e1c','09207f44-850c-d563-1410-957ac5ef603e','0d975317-d8a4-4763-988d-e58ee775df87','0f2dd8d8-5a09-4fb1-91e2-7ddd88a64040','112e19e6-5ba6-89ac-5593-57ee543cbaf3','121ab3ad-5ac3-90be-e1e5-99341a47bf09','123d85ce-791d-4084-b700-506b5ff46799','13f8a4d5-0567-43c8-a144-e7bebb36e40a','142dacb5-edc0-4f42-9c4c-deea1ae8d4cd','147cd81e-8282-43d2-9964-4b6fb440ced5','1490dabc-d0d0-4ee5-a883-4ac9baebeaec','15014780-c6dd-4079-a848-8302152e4340','16ba760f-5c41-d13b-f055-07e6984e64c9','1a3bb155-a98f-2a41-7cfa-c1afe100672c','1b193826-007c-47b5-af8a-096f626360be','1d87b546-0186-4ecb-badc-e0e0d60fe35e','1eaeb7e2-beda-40cf-9772-1adb501ab88b','1fab131f-71db-66a7-30f5-1dda3341e254','21133233-75ea-43f9-b1fe-7da03e30a9fe','233cf369-7aaf-4271-8c54-71ac617c825c','2441673d-4cf8-4927-8994-1924499b9e10','264ac407-e177-61ea-9693-8d7b3ad05dd5','2662899d-c7e7-40e7-abef-fe66514b1d64','2bcfc978-3f76-4984-aba1-8ddfa9b8c187','2cf970d0-7daa-cf35-34e5-58858c622baf','2efe763e-8649-4570-8894-6ffcd4b0da04','2f9723ea-a8e7-0865-5036-0719dcddc186','32d68595-efeb-4031-8232-d0df07c69e3f','32f68049-6dd1-4139-af1d-9def27463199','32fe37c4-5e93-4d4d-a429-b3a3cbaa79cb','34c37f53-c229-42fc-a4e8-7a6e572afeb7','36797aa5-cdb7-4fd1-9b78-fef7fbe549a8','377a8435-e8b1-43f0-b767-eb9b922bc5ad','3936a9d6-42ac-4c9a-999a-1aeea47e11fe','393df7a4-9e4d-45ae-b228-f891cef84b1e','3a136269-da6c-0924-fdb6-9ad98d91bfab','3d3d613c-89c0-9bbd-25f7-7ee253d32bee','3dba4a50-3b59-4a74-9d32-85dfc43797ec','3fbc8135-9862-8583-7d48-d85ed5d57a2a','3fdc4abc-a6a9-4e68-bfa2-87f306b745d5','43e28638-c1cf-1a80-8fcf-58e5a9d24589','43fb6f03-c573-3e11-b049-4b81880e43af','4500dad7-9d07-463c-8ba9-b5402ed65526','4540dda7-ff39-9a90-1bb0-0c87d407cd38','45e75103-5e95-4774-9c14-9320bdfff1e1','484abd75-c465-4b6b-96d7-e9924663be3c','489d5bc5-da30-4cbb-b56e-57ff7ed93707','4939342d-8d11-4dbb-b596-50b147e92e0f','4967aa7d-0348-e817-ec05-5dab181c67a7','4987764b-e84b-4977-ba04-182aceb9c8ec','4a7e0f79-5be2-4af9-8fb6-2e9bfbb3d3dd','4b20fd49-4cb6-e85f-ee6f-d37cae5e11e0','4b5e9d19-f9ff-3ff2-4ca2-2be83cb9b866','4c33edec-8f1a-4738-bfa3-d066d0d8a0e9','4fb1b035-4a40-4488-9d9b-1c80cc844544','4fd87d05-d8ba-40d6-bbe6-7920ec137019','53f4fc92-ba65-46eb-885f-02e7af9937bb','546e5edf-1230-c8e9-773e-bac156b52235','577c0f5a-029c-cb4b-df2a-cf196d54a295','586d376a-8f8e-4469-87c2-6a2b446c952d','58ba5673-60b5-f2da-0e4b-1293465948c3','59aea82c-0387-4f77-a6da-24a67471fda5','59c0585b-c4a6-4d58-b1ef-0f689c8e0fe4','5ab736d1-a125-44d5-9dcd-ff87b1f60534','5c12244c-fb20-8558-4099-f167234acb5c','5c2392e7-f51c-4dcd-b957-d39747ed57ce','5d15f2af-204b-403f-b506-a684ba457558','5e0e4287-81b3-f077-362e-b808efc74c40','5f65c089-28ef-4faa-8674-a4ac49ca69f4','60bbbf8d-5958-aee5-2a90-6d897b2aec08','622732aa-24d2-4377-b840-3903693cf4a6','63a8c5f1-1d9e-f932-eca6-f1f60961c75b','64fe7127-c150-44da-99be-ea58cfea5714','68e6e666-305c-ad13-782a-19a67f993f44','6b53eaa8-2641-47e7-849d-14d5a295b497','6f34b39b-6a97-9582-1927-e71cdc442c02','7682969d-76c7-4530-9fc6-c45a0518a4cb','79810cb5-dbe0-b55b-18cb-b7389b82f8f0','7a517ae6-a980-49cd-995f-793c21703608','7a658161-d8d0-4367-8635-21a4d4dcdf74','7b87b4f5-e3eb-4221-a9d0-371eae7607cf','7eb5d3c2-a5d0-40ea-b195-2f79c88a8441','7f7ce444-d03a-5df1-2e37-24f20e887c37','82f21685-555a-4e78-b946-1218fdb40245','83e936e9-d39a-47b6-af2f-df20e0c83e17','8646ec3a-cc24-4977-88be-dac797e7ec2a','87ce3894-cf50-b60f-1c9a-7e28e795b20a','8a0c3453-ce4d-fc4b-e450-5dc0e1a5d5fe','8ac1f7ce-6193-4e98-ba89-2471af9154de','8d1aa508-53b5-8c00-0df7-e4862b052428','8de9dc6e-94b1-4a9e-a425-47eb5a035128','8fd7a77a-f857-fceb-e5c6-9424b7553b08','90c1c3b8-e6a5-4589-917f-5ed183f7bac2','92cd20c0-de77-486e-84f1-454f7e2b1d6f','93308642-8b2f-4edf-8f63-5f7cec887a86','940dc729-d2d6-489f-ab55-ce017835fc18','95a9b2f3-44f6-4253-8227-2854ad87a7b4','9751b74e-8861-90f6-55ba-4bf1361a7e1b','97fa8d4d-275c-42b9-b846-67157cf77d43','98f2f89b-67e7-12eb-6698-c2d6389f1b24','9a6226c2-2a44-4248-9367-5db52d6bf17c','9a87ea6f-4d34-208b-dd2f-b108750d2fa0','9c5798da-118a-b593-d332-aff8dff39f58','9c8f4429-6e86-4ebb-ab21-761887095b39','9caa9aa8-b399-4ccf-b13a-e3cacd67d70c','9ceb1ab5-4a19-4709-a04c-c4731986462f','9ec23662-887f-47aa-a188-d69b4e6a713b','9fa3b982-783e-bae3-d2f4-2d84a6eab919','a0eac639-67a3-4d9e-8f18-b0c787750066','a102d337-ae59-e564-2a8e-af54e3e4a84a','a4810f6b-6408-9a16-3ffe-b249f84b9095','a6c09580-acee-40c3-a311-558dda965b3d','acad142a-911e-45df-9979-dd599218a452','af3bf78c-fd24-44a1-abec-9b43e0117442','af886a60-5035-4289-8019-dbaa6e70e489','b04525e6-9ee5-9a90-d398-e50d60e88dc8','b1d97066-ddc4-865b-bcc5-aa9c91fd6127','b1eb89e7-8639-42b4-9ac0-9914f607a966','b37531fc-cabe-405b-a075-2d0815a49d0a','b4080df2-16c0-4af7-a5fb-c6933424dd78','b70ec47b-2ab3-4f00-aa72-17b47eb623e1','b76c8d0f-6d4e-4ed5-b9a7-75ace115fc3c','b80c3128-6db6-6dae-0b6c-473d8347e5ed','ba4223d6-8605-34a5-b38e-9519304ec819','bc1490ee-fa85-8997-0cac-61faa4c47e68','bdf22634-a019-4abd-802e-66a9b493782b','be816f20-e617-2fa1-72ff-967e720d89fe','c1bfeb78-4cab-436f-0109-114fb9bd1192','c48e0ceb-36e8-e124-ffb6-de5729d92fa3','c49f0eb0-9b41-44c1-9990-04cff2dd33ec','c5a8d4f4-69f9-41c5-aa3d-d8e4f2964940','c72982b0-6910-cf73-1971-b5c3f10ccaa8','c89caae6-d74d-cd8f-4666-0408d716c468','c98b3418-b77a-d463-4e17-87d17d4a0872','cb956262-e6d0-48d9-9867-cee80db1c9ec','ced02ee0-36f9-4393-825c-590ad83c5624','d0222433-6650-4581-b6bc-a16e55fe91d8','d33c2ba5-6d65-48bb-bcae-5a74308d8def','d55de4fa-8262-4c21-b5cf-15496805e8a9','d6a087f7-945f-46c8-bf66-e2b2bcaf79eb','d79a625d-19b9-4d14-aed2-fe3eb4018547','d7db0994-0614-4dd3-9069-be67f7236cba','d8cce776-bf6b-c082-a715-4735c35d93f2','db9d9778-1d0e-4af4-a082-dc6bb3059ca0','dcd59362-388a-1e9b-b675-6f756e0ebcf8','dd5abf77-79b2-1156-54b1-e54413afee7d','dd7b8e71-6542-a6da-ae1c-afbdf3042fd5','ddce3885-8b0c-53df-cd57-cc38b4ba5cca','deedb1d7-4ffa-4f46-8c93-423c24c9cbd4','dfc91932-4827-4087-9c06-ce60a52ddb45','e00d823d-5e95-432c-ad2b-0e322dca5cf1','e15b964d-1c85-4a8e-8af1-3b175fdb2c77','e2bcebd1-35b8-4877-8d7d-d564dd540d7a','e6c85c9d-b075-41cd-a44a-9aa8205ac586','e9573058-9a41-4870-b89b-bb3b96dcbf01','eaa441f0-37e9-408a-b0a5-ae4656fc5e41','ec01ac25-593f-4339-bc1b-f5ca07881789','ef7ee394-6106-4a10-ab78-4f65b29110c4','f2592cd2-fd99-48b5-8266-7178a81946c0','f27aadbc-2017-4624-8bb4-8b0673d36cc2','f71fbea8-fdcf-40be-afa3-e65537615d60','f7414aaf-13e1-46ea-a5ca-1c8d83159c66','f9d849df-6193-4a42-a57e-9765e5088dd5','fbb32fff-2018-5cc5-7b1b-7b5fc87c3dd5','fd786dae-262c-499e-992f-c574b37a7b79','fd8343c1-a499-4b24-ab03-ead49e91fad7','fd95dbd2-18f5-4dca-9ada-e88e60bae35c','feff1df7-8ec6-4df0-bad8-ad76b5ec97a2'); ROLLBACK;
+
+Read-only SQL final-health:
+BEGIN READ ONLY;
+SELECT json_build_object('at',clock_timestamp(),
+ 'heartbeat',(SELECT json_build_object('last',last_heartbeat_utc,'status',status,'error',last_error,'version',version) FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service'),
+ 'projection',(SELECT row_to_json(s) FROM paper_confirmation_projection_state s),
+ 'members',(SELECT count(*) FROM paper_confirmation_projection_members),
+ 'queue',(SELECT json_build_object('events',count(*),'first',min(sequence_id)) FROM paper_confirmation_projection_queue),
+ 'legacy',(SELECT json_build_object('status',status,'last_event',last_event_applied_at_utc,'last_error',last_error) FROM dashboard_projection_control),
+ 'waiting_locks',(SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'));
+ROLLBACK;
+
+Evidence SHA256:
+preview.jsonl 05C16B4583CF85FD5FD2DB13D0978ACBFD13CFD67E622754077AA7D8A1A9608B
+details.jsonl 22E5CBE71017BAC9FA15AC5B502516CD48A1E0923928BE11E118112A415236A4
+plans.jsonl 69839D336A209DA79711C366A477AF7798721F4E5D31AF8DCB3DB0CBBD1CDF1F
+exact.jsonl 3CBC1DBBF5405419ECADF4B2BFDA6C4359C8998EBE8B27CD2327FCCEEB00353F
+log-summary.json 93FE2279B35B119BF9A665973BCCB3AA89B3621539376C601EE180174B60DDC7
+final-health.jsonl F7933346AB285BFE37F4079114769DEB5F7F7558BBE4A3849534190C83DE1103
+Final bookkeeping validation: full WorkingTree gate still reports pre-existing unrelated Sept17contract SEMANTIC_CHANGE_AFTER_APPROVAL; preserved without editing. Exact exempt context-prefix + Sept20history Staged gate PASS/governedFiles0/contracts0 and diffcheckPASS. No product modifications or tests/builds were needed for this read-only runtime check. Protected temp cleanup follows; unrelated work remains excluded.
+Protected cleanup verified: exact marked paper-throughput-verify-20260920-01 removed21files/14337232bytes; directory absent. All98coveragewarning continuations independently grouped to SQLSTATE57014 statement timeout. Launchmatched logs before13:08:18.146468UTC independently count102, matching rawDBslice. Context/history only committed/pushed as normal finalization.

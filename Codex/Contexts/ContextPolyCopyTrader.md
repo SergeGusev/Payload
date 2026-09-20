@@ -1,3 +1,17 @@
+## Active Update 2026-09-20 Throughput Deployment Verification
+Goal: Verify the user's deployment read-only, current service launch and Paper confirmation reporting.
+Status: Completed verification; deployed verifier runs, new Dashboard coverage projection is blocked.
+Done:
+- Production192.168.0.101:5432/polycopytrader heartbeat identifies cb226596ab9239da67b524971b6ddcd7bf9901ca/MVID64fa58b07166, launch13:05:00.288598UTC. Final snapshot13:11:49.802766UTC:Running/Live,heartbeat13:11:00.692474,last_errorNULL,waitinglocks0. Independent fresh market-data activity and confirmation logs continue.
+- Migrations0011..0014 applied13:04:45..13:05:00UTC; all three new indexes and existing unconfirmed index valid/ready. Actual Recent selection plan uses ix_paper_orders_unconfirmed.
+- Complete launch log window13:05:00.288598..13:09:57.283UTC:176uniqueconfirmed,117Recent/59Archive,0corrected;35.556/min across296.994402sec. Independent legacy success log176 and exact176-ID database read13:10:47UTC found176confirmed,176before=after,0unmatched,0corrected. Cache hits120/HTTP67 in19completed portions. Fourlocktimeouts55P03(3CorrectRuns,1MarkConfirmed),sixhourly-refreshdefer andoneactive-financialcycledefer observed; no ERR/FTL in that window.
+- Full read-only snapshot13:08:18.146468UTC:3946375orders,409confirmed,0corrected,102confirmedcurrentlaunch,5createdcurrentlaunch. All-historyJune5..Sept20UTC, no strategy/status exclusions. All five original ETH22 divergent pairs remain unconfirmed and mismatched; no production correction success demonstrated.
+- New coverage projection has98timeoutwarnings in the5minute window. Runtime SQLSTATE57014 identifies settlement refresh within ApplyPaperConfirmationProjectionAsync line64; statementbudget2s and wholeportiontransaction roll back. Read-only snapshots13:07:31,13:09:36,13:11:49show initializedfalse/refreshedNULL/allcursorszero; finalmembers0,queue15645,oldestsequence1. Thus no initialization progress, not merely delayed display.
+- Source plus production EXPLAIN show settlement coverage looks up paper_orders by wallet then filters asset; existing general index is(wallet,created), partial(wallet,asset)index onlycovers twoFAKsources. Actual plan repeats wallet bitmap scans estimated2573rows; no all-source exact(wallet,asset)index in inspected paper_orders catalog. No ANALYZE or mutation run; plan alone does not quantify its share of timeout cost. LegacyDashboard projection remainsRunning,last_event13:11:48,last_errorNULL.
+Next: A separately authorized fix is needed for the new coverage projection and production-scale verification. Do not treat local3527/min benchmark as production throughput or claim full-history trust restored.
+Notes: Production verification only, forcedread-onlytransactions/15sstatement/1slock/UTC/singlequeryparallelism0. No code/config/schema/service/data change. Local Dashboard process absent duringinspection; deployed UIbinary/visual state not established. Exact SQL,log scope,IDs,counts and hashes in dailyhistory. Temporary evidence protected cleanup and bookkeeping commit/push follow.
+Blockers: New coverage projection cannot initialize under current2sSQLportionbudget; sampled correction path has not yet succeeded inproduction.
+
 ## Active Update 2026-09-20 Paper Confirmation Throughput And Trust V2
 Goal: Complete the approved local bounded verifier and transparent Paper confirmation reporting.
 Status: Completed local implementation and independent review; commit/push and protected cleanup recorded in daily history.
