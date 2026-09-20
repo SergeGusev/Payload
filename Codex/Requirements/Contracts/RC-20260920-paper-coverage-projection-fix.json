@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260920-paper-coverage-projection-fix",
+  "title": "Restore progress of the Paper confirmation coverage projection",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Выложил, проверяй"
+    },
+    {
+      "source": "user",
+      "text": "Фиксируй"
+    }
+  ],
+  "scope": {
+    "goal": "Исправить выявленную после выкладки остановку новой проекции покрытия подтверждения Paper: тайм-ауты расчёта settlements откатывают всю порцию и не дают продвигаться курсорам и очереди.",
+    "inScope": [
+      "Локальная реализация исправления только Paper confirmation coverage projection в Storage и её вызова из DashboardStrategyPerformanceSnapshotWorker.",
+      "Новая отдельная PostgreSQL миграция индекса paper_orders по точным copied_trader_wallet и asset_id для всех execution_source; регистрация и проверка миграции.",
+      "Адаптивная порция проекции после SQL timeout/lock timeout, ограниченная пауза только этой проекции и диагностика повторов.",
+      "Целевые тесты, локальная изолированная PostgreSQL проверка плотной истории, сборки Service/Dashboard, README и отчёт, обязательное независимое ревью."
+    ],
+    "outOfScope": [
+      "Выкладка, остановка или перезапуск production, применение индекса к production, изменение production данных, backup и ручной прогон всей базы.",
+      "Изменение финансовых формул, Confirmed semantics, исходов, fill-моделей, Live данных, стратегии проверки исходов и скорости самого verifier.",
+      "Редактирование уже применённых миграций, изменение legacy Dashboard projection version, полный rebuild или очистка существующей очереди/курсоров.",
+      "Обещание production скорости или срока проверки всей истории по локальному тесту."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Проекция всей существующей и новой Paper истории, прежние all-time и recent окна 1/6/24h с исходными якорями UTC и границами. Индекс без фильтра execution_source. Локальный нагрузочный набор: 100000 orders одного wallet, 10000 assets, 1000 settlements и связанные fills; не копия production.",
+    "firstVerification": "Read-only сверка текущего кода 18690b30/cb226596 и сохранённого deployment evidence 2026-09-20 13:05:00.288598..13:11:49.802766 UTC: 98 SQLSTATE57014, нулевые курсоры/0members, очередь15645; фактический EXPLAIN settlement0490f766-e769-4adb-80bd-3c658a09d8b4 использует wallet-only lookup. Проверить миграционный каталог, фактический вызов worker, атомарность seed/queue/delta и существующие тесты до изменений."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Обеспечить индексный поиск Paper orders по wallet и asset для расчёта покрытия settlements без изменения результатов запроса.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Фиксируй",
+      "acceptanceCriteria": [
+        "Новая миграция0015 создаёт один общий индекс btree(copied_trader_wallet,asset_id) на paper_orders: все строки и все execution_source, без INCLUDE. CREATE INDEX CONCURRENTLY вне транзакции через существующий runner, с проверкой valid/ready и точного определения индекса; повторный запуск корректен, несовпадающий/invalid существующий индекс не считается успехом.",
+        "Предыдущие0011..0014, legacy baseline checksum и Dashboard projection version не изменяются. Каталог и его тест включают новую миграцию.",
+        "На плотном локальном наборе фактический EXPLAIN для обоих settlement subqueries содержит индексное условие по wallet И asset; результат покрытия совпадает с независимо рассчитанным по исходным строкам. Production создание индекса в этой задаче не выполняется."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresPaperConfirmationCoverageIndexMigration.cs",
+        "src/PolyCopyTrader.Storage/PostgresSchemaMigrationCatalog.cs",
+        "tests/PolyCopyTrader.Tests/PostgresSchemaMigrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmationProjectionTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmationProjectionLoadTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~PostgresSchemaMigrationTests --artifacts-path $RunRoot/artifacts --results-directory $RunRoot/results",
+          "expected": "Миграционный каталог и неизменность legacy baseline проходят; PostgreSQL load test отдельно подтверждает применение, план и повторную инициализацию.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "После перегрузки повторять сохранённую работу проекции меньшими атомарными порциями, сохраняя доступность прежнего Dashboard цикла.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Фиксируй",
+      "acceptanceCriteria": [
+        "Предлагаемые параметры: старт/максимум250, минимум1; SQLSTATE57014 или55P03 уменьшает следующий limit вдвое с округлением вниз и минимумом1. Пауза30сек касается только coverage consumer, legacy ApplyPendingEvents/expiry/reconciliation продолжаются. После8последовательных успешных непустых порций каждая быстрее500ms limit удваивается до250; ошибка или более медленная порция сбрасывает последовательность. Отмена сервиса не считается перегрузкой.",
+        "SQL statement_timeout2s и lock_timeout100ms сохраняются. Одна неуспешная транзакция не подтверждает события, не продвигает seed cursor и не меняет итоговые суммы. Повтор идемпотентен; на limit1 при повторном timeout записи не отбрасываются, состояние остаётся Unknown и причина логируется.",
+        "Инициализация и обработка продолжатся с существующих durable cursors/queue после рестарта; адаптивный limit может начинаться заново с250. Никакого full rebuild, truncate или признания неполной проекции достоверной.",
+        "Диагностика показывает текущий/следующий limit, SQLSTATE, длительность и время следующей попытки после перегрузки без дополнительного полного COUNT очереди. Существующие формулы, durable unique counters, inclusive recent boundaries и mapping orders/runs/settlements/fills сохраняются."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/Analytics/DashboardStrategyPerformanceSnapshotWorker.cs",
+        "src/PolyCopyTrader.Service/Analytics/PaperConfirmationProjectionBatchPolicy.cs",
+        "src/PolyCopyTrader.Storage/PostgresDashboardProjectionRepository.PaperConfirmation.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmationProjectionBatchPolicyTests.cs",
+        "tests/PolyCopyTrader.Tests/DashboardSnapshotTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmationProjectionTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmationProjectionLoadTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~PaperConfirmationProjectionBatchPolicyTests|FullyQualifiedName~DashboardSnapshotTests|FullyQualifiedName~PaperConfirmationProjectionTests' --artifacts-path $RunRoot/artifacts --results-directory $RunRoot/results",
+          "expected": "Проверены адаптация/пауза и фактический dispatch; реальный PostgreSQL timeout откатывает queue/cursor/totals, последующий повтор завершает их ровно один раз; существующие финансовые и оконные regression tests проходят без пропусков PostgreSQL.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    },
+    {
+      "id": "REQ-003",
+      "text": "Проверить исправление реальным consumer на плотной локальной истории и зафиксировать фактический результат и пределы проверки.",
+      "sourceRequestIndexes": [
+        1
+      ],
+      "sourceQuote": "Фиксируй",
+      "acceptanceCriteria": [
+        "Изолированный C#/.NET/PostgreSQL тест под D:/CodexTemp:100000orders одного wallet/10000assets,1000settlements со связаннымиfills, смесь confirmed/unconfirmed и execution_source. После загрузки исходных данных consumer с реальными2s/100ms limits доводит всю initial queue/cursors до initialized=true в пределах10минут. Независимый raw-row aggregate совпадает с persisted coverage; неподтверждённые записи не включаются в confirmed result.",
+        "Отдельная60секфаза producer10orders/сек плюс реальные связанные события и одновременно coverage consumer; затем прекращение producer и полное осушение очереди в пределах10минут. Записать длительности порций, ошибки, фактически созданные/обработанные события и совпадение итогов. Невыполнение критерия блокирует заявление об исправлении; не заменять эту проверку benchmark только verifier.",
+        "Сборки Service и Dashboard и релевантные tests проходят. Отчёт сохраняет команды, размеры набора, ограничения и результаты. Независимый reviewer сравнивает исходный запрос, утверждённый контракт, actual diff и evidence; PASS без открытых замечаний.",
+        "README описывает новую миграцию/адаптацию и команды тестирования. Не делать вывод о production сроках до отдельной проверки после пользовательской выкладки."
+      ],
+      "implementationPaths": [
+        "tests/PolyCopyTrader.Tests/PaperConfirmationProjectionLoadTests.cs",
+        "README.md",
+        "Codex/Reports/2026-09-20-paper-coverage-projection-fix.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-003",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~PaperConfirmationProjectionLoadTests --artifacts-path $RunRoot/artifacts --results-directory $RunRoot/results",
+          "expected": "Настоящий локальный PostgreSQL, consumer работает; плотная история, concurrent producer и независимые итоги проходят все критерии; точное allowlist подключение изолированной тестовой БД, без production данных.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-004",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $RunRoot/artifacts; dotnet build src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj --artifacts-path $RunRoot/artifacts",
+          "expected": "Обе сборки проходят; предупреждения и ограничения явно записаны.",
+          "result": "pending",
+          "evidence": ""
+        },
+        {
+          "id": "VER-005",
+          "kind": "inspection",
+          "command": "Independent reviewer compares verbatim request, approved contract, actual diff and test evidence; Validate-RequirementContract.ps1 -Mode WorkingTree and -Mode Staged",
+          "expected": "Independent PASS без findings; точный staged gate PASS, unrelated root dirt сохранён и исключён. Для WorkingTree использовать изолированную копию утверждённой задачи.",
+          "result": "pending",
+          "evidence": ""
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260920-paper-coverage-projection-fix sha256:eec65a37d17a39c2b698bb6ddf5a101ca158c9452dc5e2cd083cad44fe2d2b2d",
+    "semanticDigest": "sha256:eec65a37d17a39c2b698bb6ddf5a101ca158c9452dc5e2cd083cad44fe2d2b2d"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/paper_coverage_projection_reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
