@@ -471,3 +471,25 @@ results/exact.json SHA256 8E37BF665F820F6313DC41FAEBB555764BE66AC885F41A05105A5D
 results/estimate.json SHA256 6430062AE422359B500B0CDD78382C2CDA47D84DCF995F5897F9A929DE459252
 
 Finalization 2026-09-20T11:07:07.8916612Z: marked paper-progress-20260920-01 protected cleanup succeeded, absence verified; no remaining process/artifact. WorkingTree gate detects existing unrelated RC-20260917-single-disabled-strategy-timed-delete SEMANTIC_CHANGE_AFTER_APPROVAL; those files preserved. Exact own exempt context/history staged for gate/diff check and commit/push. No production mutation.
+
+## 2026-09-20T11:10:43.9285756Z
+Request:
+Какие есть варианты решения этой проблемы?
+
+1. Я теперь не могу доверять результатам Paper истории.
+2. Я в таком режиме никогда не дождусь проверки полной базы
+
+Result:
+## Active Update 2026-09-20 Paper History Recovery Options
+Goal: Explain options for trustworthy Paper reporting and feasible whole-history confirmation.
+Status: Completed source-based options analysis; no implementation or production operation authorized.
+Done:
+- Rechecked current Worker, Processor, Gamma token/condition HTTP paths and atomic repository correction. Each candidate has separate Idle admissions; Gamma lookup is called per order; corrections also touch related runs/settlements/counters/LossDiff/hourly/wallet state under a common hourly advisory lock. More workers alone are not a proven throughput solution.
+- Recommended proposal: expose provisional versus outcome-confirmed reporting with coverage; prioritize new closed markets and recent/known mismatch records while reserving work for archive; retrieve final market outcome once per exact condition/token mapping and apply to related orders in bounded atomic groups; preserve evidence and recompute affected derived totals before treating batch as confirmed.
+- Scheduling options: retain strict Idle and optimize/group (no guaranteed completion bandwidth); bounded continuously scheduled reconciliation with load/lock/latency controls (requires explicit relaxation of user Idle rule); separate historical maintenance run (separate approval for schedule and service-state effects). Recommended combined grouped reconciliation + bounded capacity + separate new/archive queues; no speed guarantee before representative benchmark.
+- Clarified Confirmed verifies outcome/accounting scope, not historical fill realism or counterfactual strategy decisions. Unconfirmed does not prove wrong; partial confirmed subset cannot establish full strategy performance. Fixed backlog estimate3.4..3.8years remains prior conditional extrapolation, not new runtime measurement.
+Next: None within options question; any implementation needs separately agreed scope and requirement contract.
+Notes: No production access, code/config/schema changes, builds or temporary artifacts. Official sources consulted: docs.polymarket.com/faq (market final outcome payouts); postgresql.org/docs/17/explicit-locking.html (row/advisory locking). Exact distinct-market count, optimized correction cost and capacity remain unknown; propose measuring them before promising duration.
+Blockers: None for options; no proposed change approved by this question.
+
+Verification: source inspection at3ece774c; no fresh runtime claims. Current per-order external lookup and common correction lock verified directly. Bounded batching must preserve dependent accounting and must not mark unresolved/conflicting records confirmed. Grouping remains proposed design, deduplication factor and achievable throughput unmeasured. Source docs official; no financial advice. Exempt context/history only. Existing unrelated dirty files preserved. No temporary session needed.

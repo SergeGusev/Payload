@@ -1,3 +1,15 @@
+## Active Update 2026-09-20 Paper History Recovery Options
+Goal: Explain options for trustworthy Paper reporting and feasible whole-history confirmation.
+Status: Completed source-based options analysis; no implementation or production operation authorized.
+Done:
+- Rechecked current Worker, Processor, Gamma token/condition HTTP paths and atomic repository correction. Each candidate has separate Idle admissions; Gamma lookup is called per order; corrections also touch related runs/settlements/counters/LossDiff/hourly/wallet state under a common hourly advisory lock. More workers alone are not a proven throughput solution.
+- Recommended proposal: expose provisional versus outcome-confirmed reporting with coverage; prioritize new closed markets and recent/known mismatch records while reserving work for archive; retrieve final market outcome once per exact condition/token mapping and apply to related orders in bounded atomic groups; preserve evidence and recompute affected derived totals before treating batch as confirmed.
+- Scheduling options: retain strict Idle and optimize/group (no guaranteed completion bandwidth); bounded continuously scheduled reconciliation with load/lock/latency controls (requires explicit relaxation of user Idle rule); separate historical maintenance run (separate approval for schedule and service-state effects). Recommended combined grouped reconciliation + bounded capacity + separate new/archive queues; no speed guarantee before representative benchmark.
+- Clarified Confirmed verifies outcome/accounting scope, not historical fill realism or counterfactual strategy decisions. Unconfirmed does not prove wrong; partial confirmed subset cannot establish full strategy performance. Fixed backlog estimate3.4..3.8years remains prior conditional extrapolation, not new runtime measurement.
+Next: None within options question; any implementation needs separately agreed scope and requirement contract.
+Notes: No production access, code/config/schema changes, builds or temporary artifacts. Official sources consulted: docs.polymarket.com/faq (market final outcome payouts); postgresql.org/docs/17/explicit-locking.html (row/advisory locking). Exact distinct-market count, optimized correction cost and capacity remain unknown; propose measuring them before promising duration.
+Blockers: None for options; no proposed change approved by this question.
+
 ## Active Update 2026-09-20 Paper Confirmation Progress And ETA
 Goal: Measure current confirmation progress and estimate full Paper database reconciliation.
 Status: Completed read-only measurement and conditional extrapolation.
