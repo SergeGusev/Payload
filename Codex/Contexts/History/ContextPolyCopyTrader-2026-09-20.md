@@ -936,3 +936,57 @@ APPROVE RC-20260920-paper-history-pause-and-final-fix sha256:fff6f3335a50bfdef65
 
 Result:
 Implemented local history worker pause and keyed atomic final confirmation repair. Final selected tests146/146 passed,0skips; service build0errors/0warnings; independent reviewPASS.100000unrelated rows per table unchanged, four index plans, final transaction130.37ms. Completed contract preserves exact approval digest and evidence. Production not changed or verified; concurrent edits preserved. WorkingTree/Staged gates and diff checks passed. Local PostgreSQL stopped, verified copied worktree removed, protected session cleanup completed and absence verified. Commit/push follow.
+
+## 2026-09-20T18:17:50.8300636+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Done:
+- Heartbeat pins10f15916e02e99e30a7e787d5eade562198e8032,MVIDaf427badfe3e,started18:09:18.657601UTC. Latest DB snapshot18:16:13.258344UTC:Running/Live,heartbeat18:15:18.984786UTC,last_errorNULL,0waitinglocks. Existing readiness indexes valid/ready.
+- Since launch586runs settled,all586Confirmed and final proof. Independent586raw-row audit found0proof-identity/proof-equality/payout mismatches;586success log events agree. SourcesGammaClosedMarket/MarketWebSocket. All were previously open stakes; this does not mean paused historical rechecking ran.
+- Complete captured launch log18:09:18.899..18:16:11.804UTC:14541events,6ERR(all40P01deadlocks:3queued entry attempts and3settlements),0timeout errors,0ConfirmFinalOrdersAsync error stacks,0history-worker confirmation records. Deployed Program has no PaperOutcomeConfirmationWorker registration. LogSHA256ECE92F4FB0DCCC044B11645AB6C83C4883455B4E576EDE3041522BE061B578B2.
+- Residual conflict evidence: final settlement holds strategies FOR UPDATE before settlement trigger requests shared retention gate(1346589778,1); direct skipped-run compaction holds exclusive gate then waits for strategies FK KEY SHARE. Runtime deadlock details and production function definitions confirm shared/exclusive gate identity. Failed settlement strategies btc_up_down_5m_up_diff_2_fak_lower_enter_premarket/market4728458,eth_up_down_5m_down_diff_1_fak_premarket/4728537,eth_up_down_5m_up_bps_34_instant/4728392 subsequently allSettled/Confirmed at18:10:43UTC. Six errors observed18:10:12.391..18:10:22.621UTC; none later in captured window.
+- First6new orders created18:10:56UTC remainEntered/Confirmedfalse/no payout at18:16:13UTC;markets end18:15UTC. Direct Gamma reads18:16:51..52UTC for exactETH4729168/SOL4729170 showclosedfalse,oracle statusnull,nonfinal prices; their final transition has not yet been observed. No claim of successful postlaunch-created stake final settlement.
+Next: None within this read-only deployment check. Remaining lock repair requires a separately approved change.
+Notes: Read-only PostgreSQL transactions,15sstatement/1slock limits,UTC,no parallel DB scan workers; bounded postlaunch/indexed and exact-ID reads. No code/production/service/order mutation. Shared log read initially failed on file sharing, then succeeded with FileShare.ReadWrite. Initial multiline JSON display counted only first row; corrected full-array parsing before conclusions. Concurrent root edits preserved; own context/history only.
+Blockers: Residual retention-gate/strategy-row deadlock prevents declaring deployment fully healthy.
+
+Reproducibility:
+PostgreSQL endpoint192.168.0.101:5432/polycopytrader; psql-X-q-w-A-t; credentials passed only in child environment. PGOPTIONS default_transaction_read_only=on,timezoneUTC,max_parallel_workers_per_gather0,jitoff,statement_timeout15000,lock_timeout1000,idle_in_transaction_session_timeout20000. BEGIN READ ONLY/ROLLBACK. Sources: shared log \\192.168.0.101\CodexLogs\polycopytrader-service-20260920_007.log; exact Gamma /markets?slug=eth-updown-5m-1789927800 and sol-updown-5m-1789927800. Final snapshot and targeted retry evidence:
+{"at" : "2026-09-20T18:16:13.258344+00:00", "heartbeat" : {"version" : "info=1.0.0+10f15916e02e99e30a7e787d5eade562198e8032; assembly=1.0.0.0; mvid=af427badfe3e", "started" : "2026-09-20T18:09:18.657601+00:00", "heartbeat" : "2026-09-20T18:15:18.984786+00:00", "last_error" : null}, "waiters" : 0, "settled" : {"n" : 586, "new_orders" : 0, "confirmed" : 586, "proof" : 586}, "first_new_orders" : [{"id":"0936f95c-15de-481e-bd31-841816945e6b","status":"Filled","confirmed":false,"run_status":"Entered","market_end_utc":"2026-09-20T18:15:00+00:00","settled_at_utc":null,"settlement_price":null,"source":null,"winner":null,"selected_outcome":"Down","proof_identity":null,"proof_equal":null},
+ {"id":"1e5b1da2-5cb4-408d-8852-c8bd66c248df","status":"Filled","confirmed":false,"run_status":"Entered","market_end_utc":"2026-09-20T18:15:00+00:00","settled_at_utc":null,"settlement_price":null,"source":null,"winner":null,"selected_outcome":"Down","proof_identity":null,"proof_equal":null},
+ {"id":"41ec8c53-8141-4428-aedb-5b5d052e9fa6","status":"Filled","confirmed":false,"run_status":"Entered","market_end_utc":"2026-09-20T18:15:00+00:00","settled_at_utc":null,"settlement_price":null,"source":null,"winner":null,"selected_outcome":"Down","proof_identity":null,"proof_equal":null},
+ {"id":"897c6f4b-afd7-4bbd-96fd-c9d38ffc4ada","status":"Filled","confirmed":false,"run_status":"Entered","market_end_utc":"2026-09-20T18:15:00+00:00","settled_at_utc":null,"settlement_price":null,"source":null,"winner":null,"selected_outcome":"Down","proof_identity":null,"proof_equal":null},
+ {"id":"96c71ab0-5280-4a90-b80a-d3499f25dc5f","status":"Filled","confirmed":false,"run_status":"Entered","market_end_utc":"2026-09-20T18:15:00+00:00","settled_at_utc":null,"settlement_price":null,"source":null,"winner":null,"selected_outcome":"Down","proof_identity":null,"proof_equal":null},
+ {"id":"d47b0950-397b-40f0-84ee-e9a8a6e264cd","status":"Filled","confirmed":false,"run_status":"Entered","market_end_utc":"2026-09-20T18:15:00+00:00","settled_at_utc":null,"settlement_price":null,"source":null,"winner":null,"selected_outcome":"Down","proof_identity":null,"proof_equal":null}]}
+{"at" : "2026-09-20T18:14:33.602711+00:00", "functions" : [{"proname":"lock_strategy_run_retention_dependency","definition":"CREATE OR REPLACE FUNCTION public.lock_strategy_run_retention_dependency()\n RETURNS void\n LANGUAGE sql\nAS $function$\nSELECT pg_advisory_xact_lock_shared(1346589778, 1);\n$function$\n"},
+ {"proname":"lock_strategy_run_retention_transfer","definition":"CREATE OR REPLACE FUNCTION public.lock_strategy_run_retention_transfer()\n RETURNS void\n LANGUAGE sql\nAS $function$\nSELECT pg_advisory_lock(1346589778, 1);\n$function$\n"}], "retry_results" : [{"code":"btc_up_down_5m_up_diff_2_fak_lower_enter_premarket","id":"175f89a4-f6bb-45f4-ada6-0b50207ed81c","market_id":"4728458","status":"Settled","settled_at_utc":"2026-09-20T18:10:43.191064+00:00","confirmed":true},
+ {"code":"eth_up_down_5m_down_diff_1_fak_premarket","id":"295f3079-93c3-41fc-b411-a88e4bdbcc10","market_id":"4728537","status":"Settled","settled_at_utc":"2026-09-20T18:10:43.191186+00:00","confirmed":true},
+ {"code":"eth_up_down_5m_up_bps_34_instant","id":"96ed2c24-10ee-4a46-a525-dbfc33a0d67d","market_id":"4728392","status":"Settled","settled_at_utc":"2026-09-20T18:10:43.439677+00:00","confirmed":true}]}
+
+Gamma snapshot:
+[
+  {
+    "at": "2026-09-20T18:16:51.9233533+00:00",
+    "id": "4729168",
+    "slug": "eth-updown-5m-1789927800",
+    "condition": "0x3607548d285f7c6db1e884aa0493fe7121c9caa9c4247b81c219e34d53eec85e",
+    "closed": false,
+    "oracle": null,
+    "outcomes": "[\"Up\", \"Down\"]",
+    "prices": "[\"0.0005\", \"0.9995\"]"
+  },
+  {
+    "at": "2026-09-20T18:16:52.0211237+00:00",
+    "id": "4729170",
+    "slug": "sol-updown-5m-1789927800",
+    "condition": "0x611bf1221c7c7e5112f93b6afe91c7b1b5e7b9241e6772cf7e531e4a20bdacfa",
+    "closed": false,
+    "oracle": null,
+    "outcomes": "[\"Up\", \"Down\"]",
+    "prices": "[\"0.52\", \"0.48\"]"
+  }
+]
+Exact final read-only query:
+SELECT json_build_object('at',clock_timestamp(),'heartbeat',(SELECT json_build_object('version',version,'started',started_at_utc,'heartbeat',last_heartbeat_utc,'last_error',last_error) FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service'),'waiters',(SELECT count(*)FROM pg_stat_activity WHERE wait_event_type='Lock'),'settled',(SELECT json_build_object('n',count(*),'new_orders',count(*)FILTER(WHERE o.created_at_utc>='2026-09-20T18:09:18.657601Z'),'confirmed',count(*)FILTER(WHERE o.confirmed),'proof',count(*)FILTER(WHERE r.skip_diagnostics_json ? 'final_outcome')) FROM strategy_market_paper_runs r LEFT JOIN paper_orders o ON o.id=r.paper_order_id WHERE r.status='Settled' AND r.settled_at_utc>='2026-09-20T18:09:18.657601Z'),'first_new_orders',(SELECT json_agg(x)FROM(SELECT o.id,o.status,o.confirmed,r.status AS run_status,r.market_end_utc,r.settled_at_utc,r.settlement_price,o.confirmation_evidence->>'source' AS source,o.confirmation_evidence->>'winning_outcome' AS winner,r.selected_outcome,o.confirmation_evidence->>'condition_id'=o.condition_id AS proof_identity,o.confirmation_evidence=r.skip_diagnostics_json->'final_outcome' AS proof_equal FROM paper_orders o JOIN strategy_market_paper_runs r ON r.paper_order_id=o.id WHERE o.id IN('1e5b1da2-5cb4-408d-8852-c8bd66c248df','0936f95c-15de-481e-bd31-841816945e6b','897c6f4b-afd7-4bbd-96fd-c9d38ffc4ada','96c71ab0-5280-4a90-b80a-d3499f25dc5f','d47b0950-397b-40f0-84ee-e9a8a6e264cd','41ec8c53-8141-4428-aedb-5b5d052e9fa6'))x));

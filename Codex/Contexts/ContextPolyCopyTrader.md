@@ -1,3 +1,16 @@
+## Active Update 2026-09-20 Final Confirmation Deployment Verified With Residual Deadlock
+Goal: Check user-deployed10f15916 read-only on192.168.0.101:5432/polycopytrader.
+Status: Verification completed; residual production lock conflict remains.
+Done:
+- Heartbeat pins10f15916e02e99e30a7e787d5eade562198e8032,MVIDaf427badfe3e,started18:09:18.657601UTC. Latest DB snapshot18:16:13.258344UTC:Running/Live,heartbeat18:15:18.984786UTC,last_errorNULL,0waitinglocks. Existing readiness indexes valid/ready.
+- Since launch586runs settled,all586Confirmed and final proof. Independent586raw-row audit found0proof-identity/proof-equality/payout mismatches;586success log events agree. SourcesGammaClosedMarket/MarketWebSocket. All were previously open stakes; this does not mean paused historical rechecking ran.
+- Complete captured launch log18:09:18.899..18:16:11.804UTC:14541events,6ERR(all40P01deadlocks:3queued entry attempts and3settlements),0timeout errors,0ConfirmFinalOrdersAsync error stacks,0history-worker confirmation records. Deployed Program has no PaperOutcomeConfirmationWorker registration. LogSHA256ECE92F4FB0DCCC044B11645AB6C83C4883455B4E576EDE3041522BE061B578B2.
+- Residual conflict evidence: final settlement holds strategies FOR UPDATE before settlement trigger requests shared retention gate(1346589778,1); direct skipped-run compaction holds exclusive gate then waits for strategies FK KEY SHARE. Runtime deadlock details and production function definitions confirm shared/exclusive gate identity. Failed settlement strategies btc_up_down_5m_up_diff_2_fak_lower_enter_premarket/market4728458,eth_up_down_5m_down_diff_1_fak_premarket/4728537,eth_up_down_5m_up_bps_34_instant/4728392 subsequently allSettled/Confirmed at18:10:43UTC. Six errors observed18:10:12.391..18:10:22.621UTC; none later in captured window.
+- First6new orders created18:10:56UTC remainEntered/Confirmedfalse/no payout at18:16:13UTC;markets end18:15UTC. Direct Gamma reads18:16:51..52UTC for exactETH4729168/SOL4729170 showclosedfalse,oracle statusnull,nonfinal prices; their final transition has not yet been observed. No claim of successful postlaunch-created stake final settlement.
+Next: None within this read-only deployment check. Remaining lock repair requires a separately approved change.
+Notes: Read-only PostgreSQL transactions,15sstatement/1slock limits,UTC,no parallel DB scan workers; bounded postlaunch/indexed and exact-ID reads. No code/production/service/order mutation. Shared log read initially failed on file sharing, then succeeded with FileShare.ReadWrite. Initial multiline JSON display counted only first row; corrected full-array parsing before conclusions. Concurrent root edits preserved; own context/history only.
+Blockers: Residual retention-gate/strategy-row deadlock prevents declaring deployment fully healthy.
+
 ## Active Update 2026-09-20 Paper History Paused And Final Settlement Repaired
 Goal: Implement approved historical confirmation pause and normal final settlement query/lock repair.
 Status: Completed locally; production deployment not performed.
