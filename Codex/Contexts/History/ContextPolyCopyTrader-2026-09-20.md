@@ -890,3 +890,27 @@ APPROVE RC-20260920-final-only-settlement-and-provisional-sizing sha256:cdc89713
 
 Result:
 Implemented approved final-only Paper/Live outcome accounting, durable separate preliminary Paper sizing contributions, atomic final replacement and immediate eligible Paper confirmation with persisted final evidence. Approval-only commit b73a264e precedes product edits. Tests310/310 passed without skips across three isolated local PostgreSQL partitions required by existing fixture guards; final service build0errors/0warnings. Independent full semantic review PASS/no findings; unchanged approved digest, isolated WorkingTree gate and exact root Staged gate PASS. Completed contract retains reproducible filters and result hashes. No production deployment/migration/restart/data writes or Live orders. Historical confirmation remains required. Unrelated concurrent work preserved/excluded; local test PostgreSQL stopped and copied worktree removed.
+
+## 2026-09-20T17:33:43.6106493+00:00
+Request:
+Выложил, проверяй
+
+Result:
+Read-only verification of1762db97 FAILED functional check. Runtime/version/migration/indexes verified, but immediate final confirmation times out and one deadlock was observed. See newest active context for exact counts and IDs. Production not mutated; no product edits/build/tests needed for this runtime check. Root WorkingTree validation hit preserved unrelated RC-20260917-single-disabled-strategy-timed-delete semantic-change blocker; only exempt context/history entries are staged.
+
+Evidence and reproducibility:
+- Source192.168.0.101:5432/polycopytrader; psql-X-q-w-A-t, child-environment credentials only, PGOPTIONS default_transaction_read_only=on,statement_timeout15000,lock_timeout1000,idle_in_transaction_session_timeout20000,timezoneUTC,max_parallel_workers_per_gather0,jitoff; BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY / ROLLBACK. No parallel/broad full-history aggregate.
+- Preview17:27:46.633213UTC: service launch17:25:34.188130,version1762db97bc2382447cc5e82af254091f9d9dea12/MVIDe0eb984eecb0; migration0016at17:25:34.094704,checksum9fb4365dd82d3b7372d87895be187737f97b5995c15c43254906577f5df39eee; bothalgorithmindexesvalidready. Estimates:17,762,542runs/3,948,635orders. Initial13waitinglocks; subsequent snapshots0,16,1,5,3. No claim of sustained zero waiting.
+- Logsource\\192.168.0.101\CodexLogs\polycopytrader-service-20260920_007.log; full retained launch17:25:34.409..17:30:09.083UTC, originaltimezone+03. SHA256D23D64BD5E203EBF4ED4919035A14123A01D3A7F887D337420F44235D9C856E6.70ERR:69NpgsqlException reading timeouts/1deadlock;60Paper strategysettlementerrors,59ConfirmFinalOrdersAsync stack traces. Block parsing and independent anchored regex counts agree. Other errors include Dashboardprojection and positionmarkupdates.
+- Deadlock17:30:06.482UTC,sol_up_down_5m_24_child_progress market4728389:process5660 waitedExclusiveLock onadvisory[16388,3187290655,2085138348,1] heldby3264;3264 waitedShareLock transaction991028498 heldby5660. StackPersistFinalPaperRunAsync:90/LockPaperWalletsAsync. Exact second transaction's full operation remains unknown; no unsupported complete deadlock-cycle causal attribution.
+- Runtime pg_stat_activity17:29:04.247138UTC independently showed new UPDATE paper_orders SET confirmed=true... inbackend420,xactage29.319069s,blockingwalletadvisorywaiter2032(queryage25.439704s). SourceConfirmFinalOrdersAsync in deployed1762db97 keeps readiness checks within financialtransaction; timeout stackatline202 agrees.
+- Read-only SELECT EXPLAIN (not ANALYZE) reproduced readiness predicates from FinalOutcomeSettlement.cs fororder14e00c7b-0126-4ae4-8c16-65eeeae8a2f7,condition0x47ab4c6e70a69fb9de473d05398cffac992bb3a1ae5ff588353e2c129fdd762c. Diagnostic bindsselectedtoken84414345980782255776562925517417321361911337490921626227771451288779315162676/outcomeDown/settlementprice0; these substitutions are only for planning, not proof of venuewinner. PlanSeqScanruns17,789,926/positions4,075,817/settlements4,121,509 estimatedrows; overallcost84,440,366.28. Indexed correlatedorderlookup does not prevent outer full scans. Existing run.paper_order_id and wallet/asset indexes are present.
+- Final17:32:07.658533UTC:0settledruns since launch,349dueEntered,51newFilled/unconfirmedorders,0algorithmrows. Samplebf51e968-9430-4474-a455-7ea414a5313a,strategysol_up_down_5m_2_diff_reference_average_premarket,market4728389 remainsEntered/no settled_at/no finalproof,order14e00c7b-0126-4ae4-8c16-65eeeae8a2f7 unconfirmed. At17:30:23 groupedcounts28+83+99+89+24+26=339 independently match due scope before laterarrivals. No claims about actual Live order losses or completeness of all financial state.
+
+Reproduction SQL (same snapshot envelope above):
+SELECT count(*) FROM strategy_market_paper_runs WHERE settled_at_utc>='2026-09-20T17:25:34.188130Z';
+SELECT count(*) FROM strategy_market_paper_runs WHERE status='Entered' AND market_end_utc<=transaction_timestamp();
+SELECT status,confirmed,count(*) FROM paper_orders WHERE created_at_utc>='2026-09-20T17:25:34.188130Z' GROUP BY status,confirmed;
+SELECT count(*) FROM paper_algorithm_outcomes;
+SELECT * FROM service_heartbeats WHERE service_name='PolyCopyTrader.Service';
+SELECT pid,wait_event_type,wait_event,pg_blocking_pids(pid),clock_timestamp()-xact_start,left(query,1800) FROM pg_stat_activity WHERE datname=current_database() AND (wait_event_type='Lock' OR pid IN(SELECT unnest(pg_blocking_pids(pid)) FROM pg_stat_activity WHERE wait_event_type='Lock'));

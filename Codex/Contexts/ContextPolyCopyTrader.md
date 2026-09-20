@@ -1,3 +1,15 @@
+## Active Update 2026-09-20 Final Settlement Deployment Verification Failed
+Goal: Verify the user's deployment of1762db97 read-only on production192.168.0.101:5432/polycopytrader.
+Status: Verification completed; deployment behavior failed.
+Done:
+- Runtime heartbeat reports1762db97bc2382447cc5e82af254091f9d9dea12/MVIDe0eb984eecb0, launched17:25:34.188130UTC. Migration0016 applied17:25:34.094704UTC; checksum9fb4365dd82d3b7372d87895be187737f97b5995c15c43254906577f5df39eee independently matches normalized local SQL. Both new algorithm indexes valid/ready.
+- Complete launch log window17:25:34.409..17:30:09.083UTC contains70ERR events:69Npgsql stream-read timeouts and1Postgres40P01deadlock.60events are Paper strategy settlement failures;59stack traces enter ConfirmFinalOrdersAsync(line202), the deadlock enters PersistFinalPaperRunAsync wallet locking(line90). Independent regex counts agree with parsed event blocks.
+- Runtime17:29:04.247UTC: backend420 executing new confirmed UPDATE held its transaction29.319s and blocked backend2032 waiting25.440s on a wallet advisory lock. Diagnostic SELECT EXPLAIN of same readiness predicates for exact order14e00c7b-0126-4ae4-8c16-65eeeae8a2f7 selects sequential scans of strategy_market_paper_runs17,789,926 estimated rows, paper_positions4,075,817 and settlements4,121,509. These are planner estimates, not measured rows or executed EXPLAIN ANALYZE.
+- Final17:32:07.658533UTC: Running/Live heartbeat17:31:34.629607UTC,last_errorNULL,3waitinglocks,0strategy runs settled since launch,349Entered runs with elapsed market end,51new Filled/unconfirmed orders,0algorithm contribution rows. Earlier17:30:23snapshot had0settled and339due; sampled SOL runbf51e968-9430-4474-a455-7ea414a5313a remainsEntered/no finalproof/no settled_at,its orderunconfirmed. Fresh heartbeat alone did not establish functional health.
+Next: None within the read-only deployment check. Product correction requires a new approved requirement contract; no fix/deployment/restart was performed.
+Notes: Read-only transactions,15sstatement/1slock limits, no parallel DB scan workers. Initial diagnostic connection failed because PowerShell assigned the builder property incorrectly; corrected to the repository's explicit setter/getter transport, no server settings changed. Root WorkingTree gate remains blocked by unrelatedSept17contractsemanticchange; exact exempt bookkeeping staging preserves concurrent work.
+Blockers: Runtime timeouts in immediate confirmation and observed deadlock; new final settlement/provisional sizing behavior is not production-validated.
+
 ## Active Update 2026-09-20 Final-Only Settlement And Preliminary Sizing Implemented
 Goal: Implement approved RC-20260920-final-only-settlement-and-provisional-sizing without production changes.
 Status: Completed locally; deployment not performed.
