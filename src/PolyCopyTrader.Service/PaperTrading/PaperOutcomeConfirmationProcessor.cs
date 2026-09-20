@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 using System.Globalization;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Polymarket;
-using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.Strategies;
 using PolyCopyTrader.Storage;
 
@@ -15,78 +14,39 @@ public sealed class PaperOutcomeConfirmationProcessor(
     IPolymarketGammaClient gamma,
     IStrategyStateProvider strategies) : IPaperOutcomeConfirmationProcessor
 {
-    public async Task ProcessOneAsync(ServiceActivityState.BackgroundLease idle, CancellationToken cancellationToken = default)
+    public Task<PaperOrder?> ClaimAsync(CancellationToken cancellationToken) =>
+        repository.TryClaimPaperOutcomeConfirmationAsync(DateTimeOffset.UtcNow, cancellationToken);
+
+    // The worker owns admission and the shared token/condition lookup deadline.
+    public async Task<PaperOutcomeConfirmation?> LookupAsync(PaperOrder order,
+        PaperOutcomeConfirmationTrace trace, CancellationToken cancellationToken)
     {
-        var trace = idle.Trace;
-        trace?.Enter(PaperConfirmationStage.IdleCheck);
-        idle.CheckIdle();
-        trace?.Enter(PaperConfirmationStage.Claim);
-        var order = await repository.TryClaimPaperOutcomeConfirmationAsync(DateTimeOffset.UtcNow, cancellationToken);
-        if (order is null) { trace?.Complete("NoCandidate", "QueueEmpty"); return; }
-        trace?.SetOrder(order.Id);
-        CancellationTokenSource? lookup = null;
-        var lookupInProgress = false;
-        try
+        trace.Enter(PaperConfirmationStage.GammaToken);
+        var metadata = await gamma.GetTokenMetadataAsync(order.AssetId, closed: true, cancellationToken);
+        if (metadata.Count == 0)
         {
-            trace?.Enter(PaperConfirmationStage.IdleCheck);
-            idle.CheckIdle();
-            lookup = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            lookup.CancelAfter(TimeSpan.FromSeconds(5));
-            lookupInProgress = true;
-            trace?.Enter(PaperConfirmationStage.GammaToken);
-            var metadata = await gamma.GetTokenMetadataAsync(order.AssetId, closed: true, lookup.Token);
-            if (metadata.Count == 0)
-            {
-                trace?.Enter(PaperConfirmationStage.GammaCondition);
-                metadata = await gamma.GetTokenMetadataByConditionIdAsync(order.ConditionId, order.AssetId, closed: true, lookup.Token);
-            }
-            lookupInProgress = false;
-            trace?.Enter(PaperConfirmationStage.IdleCheck);
-            idle.CheckIdle();
-            trace?.Enter(PaperConfirmationStage.ValidateOutcome);
-            var confirmation = Resolve(order, metadata, DateTimeOffset.UtcNow);
-            if (confirmation is null)
-            {
-                trace?.Complete("Deferred", "final_outcome_missing_or_identity_conflict");
-                trace?.Enter(PaperConfirmationStage.Defer);
-                await DeferAsync(order.Id, "final_outcome_missing_or_identity_conflict", cancellationToken);
-                return;
-            }
-            using var cacheUpdate = (strategies as StrategyStateProvider)?.BeginPaperOutcomeUpdate();
-            trace?.Enter(PaperConfirmationStage.ApplyDatabase);
-            var result = await repository.ConfirmPaperOutcomeAsync(confirmation, cancellationToken, trace);
-            if (!result.Confirmed)
-            {
-                trace?.Complete("Deferred", result.Reason);
-                trace?.Enter(PaperConfirmationStage.IdleCheck);
-                idle.CheckIdle();
-                trace?.Enter(PaperConfirmationStage.Defer);
-                await DeferAsync(order.Id, result.Reason, cancellationToken);
-                return;
-            }
-            trace?.Complete(result.Corrected ? "Corrected" : "Matched", result.Reason);
-            logger.LogInformation("Paper outcome confirmed: {PaperOrderId}, corrected={Corrected}, winner={WinningOutcome}",
-                order.Id, result.Corrected, confirmation.WinningOutcome);
+            trace.Enter(PaperConfirmationStage.GammaCondition);
+            metadata = await gamma.GetTokenMetadataByConditionIdAsync(order.ConditionId, order.AssetId,
+                closed: true, cancellationToken);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception ex)
-        {
-            var timedOut = lookupInProgress && ex is OperationCanceledException && lookup?.IsCancellationRequested == true;
-            var reason = timedOut ? "GammaTimeout" : ex is HttpRequestException ? "HttpError" :
-                ex is Npgsql.NpgsqlException ? "DatabaseError" : "UnknownError";
-            trace?.Error(ex.GetType().Name, (ex as Npgsql.PostgresException)?.SqlState);
-            trace?.Complete(timedOut ? "Timeout" : "Error", reason);
-            idle.CheckIdle();
-            // Preserve the existing persisted retry payload; new telemetry excludes messages/payloads.
-            logger.LogWarning("Paper outcome lookup/application failed for {PaperOrderId}. ErrorType={ErrorType} Reason={Reason} SqlState={SqlState}",
-                order.Id, ex.GetType().Name, reason, (ex as Npgsql.PostgresException)?.SqlState);
-            trace?.Enter(PaperConfirmationStage.Defer);
-            await DeferAsync(order.Id, ex.GetType().Name + ": " + ex.Message, cancellationToken);
-        }
-        finally { lookup?.Dispose(); }
+        trace.Enter(PaperConfirmationStage.ValidateOutcome);
+        return Resolve(order, metadata, DateTimeOffset.UtcNow);
     }
-    private Task DeferAsync(Guid id, string reason, CancellationToken token) =>
-        repository.DeferPaperOutcomeConfirmationAsync(id, DateTimeOffset.UtcNow.AddMinutes(1), reason, token);
+
+    public async Task<PaperOutcomeConfirmationResult> ApplyAsync(PaperOutcomeConfirmation confirmation,
+        PaperOutcomeConfirmationTrace trace, CancellationToken cancellationToken)
+    {
+        // Never hold this scope while awaiting a later idle admission.
+        using var cacheUpdate = (strategies as StrategyStateProvider)?.BeginPaperOutcomeUpdate();
+        var result = await repository.ConfirmPaperOutcomeAsync(confirmation, cancellationToken, trace);
+        if (result.Confirmed)
+            logger.LogInformation("Paper outcome confirmed: {PaperOrderId}, corrected={Corrected}, winner={WinningOutcome}",
+                confirmation.PaperOrderId, result.Corrected, confirmation.WinningOutcome);
+        return result;
+    }
+
+    public Task DeferAsync(Guid id, string reason, CancellationToken cancellationToken) =>
+        repository.DeferPaperOutcomeConfirmationAsync(id, DateTimeOffset.UtcNow.AddMinutes(1), reason, cancellationToken);
 
     public static PaperOutcomeConfirmation? Resolve(PaperOrder order,
         IReadOnlyList<PolymarketOnChainTokenMetadata> metadata, DateTimeOffset checkedAtUtc)

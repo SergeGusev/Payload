@@ -23,11 +23,23 @@ and new Paper orders, including disabled strategies and Live shadows. The servic
 registers `PaperOutcomeConfirmationWorker` automatically; the ordered schema
 migration adds the flag, an indexed retry queue and per-order confirmation evidence.
 
-Once per second the worker attempts one candidate during a gap with no active
-trading cycle or pending/in-flight processing. Trading resumption cancels the
-check without waiting for its HTTP request. A claimed candidate has a durable
-one-minute retry time, so interrupted or unavailable markets do not hold up the
-rest of the history. No database transaction is held during the Gamma request.
+Once per second the worker admits the next stage during a gap with no active
+trading cycle or pending/in-flight processing: claim one candidate, query Gamma,
+then apply the result or persist a deferred retry. Each stage requires its own
+Idle admission. Resumed trading or incoming quotes do not cancel an already
+admitted stage and do not wait for a background admission gate. The worker retains
+one order and its lookup result between gaps, without repeating completed lookup
+work or selecting another candidate. No connection, transaction, database lock or
+cache-update scope is held while waiting for Idle or during the Gamma request.
+
+Gamma token/condition lookup shares a five-second deadline. Each admitted database
+stage (claim, apply, defer) has a two-second cancellation budget. Service shutdown
+also cancels the current stage and clears retained memory; the existing durable
+one-minute claim/retry state allows recovery after restart. Missing outcomes and
+failed application are deferred in a later Idle gap; once retry persistence finishes
+or fails, the worker releases the candidate. If defer itself fails, the durable
+claim remains the retry point. Ready results are retained while awaiting Idle,
+not indefinitely after a terminal failure.
 
 Confirmation requires exact condition/token/outcome identity, final Gamma oracle
 status (`resolved` or `settled`) and an unambiguous 1/0 payout. `closed`, a near-1
@@ -43,7 +55,11 @@ Dashboard events update lifetime/recent PnL, ROI and WinRate without adding a se
 trade. The strategy settings cache is invalidated across the transaction. The hourly
 refresh and confirmation share a transaction lock to prevent an older aggregate
 overwriting a correction. Confirmation uses a 100 ms lock timeout and 2 s statement
-timeout; interrupted or contended work retries. Matching outcomes preserve financial
+timeout; interrupted or contended work retries. The two-second stage budget requests
+cooperative cancellation, not a hard bound on rollback/disposal or network cleanup.
+Concurrent foreground writes can still contend for the same database rows; local
+tests verify rollback and lock release, not zero production latency impact or a
+completion guarantee for every historical correction. Matching outcomes preserve financial
 values. `confirmation_evidence` records the final source and before/after results.
 
 Build the service normally. Run the focused verification with a marked temporary
@@ -73,8 +89,11 @@ Empty candidate selections and frequent Idle skips appear only in these summarie
 with `Matched`, `Corrected`, `Deferred`, `Canceled`, `Timeout`, or `Error`. Reached
 stages and durations cover claim, Gamma token/condition lookup, validation,
 database connection/transaction/locks, correction and dependent recalculation,
-commit, and defer. Cancellation retains its first known foreground handler/event,
-queue-busy observation, or service stop. `ErrorType`, `SqlState`, and `ErrorStage`
+commit, and defer. The same attempt/order correlation remains visible across
+`WaitingForLookupIdle`, `WaitingForApplyIdle`, and `WaitingForDeferIdle`; repeated
+busy ticks do not append trace entries. `Waiting` is not a canceled or completed
+attempt. `GammaTimeout`, `DatabaseTimeout`, and `ServiceStopping` distinguish stage
+deadlines from shutdown. `ErrorType`, `SqlState`, and `ErrorStage`
 retain the first failure even if cancellation or retry persistence later fails;
 the final `Reason` describes the final outcome. New logs omit exception messages,
 HTTP payloads/headers and connection strings. `Unknown` is explicitly unresolved.

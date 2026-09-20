@@ -6,7 +6,8 @@ public enum PaperConfirmationStage
     DatabaseConnection, DatabaseTransaction, DatabaseTimeouts, HourlyLock, OrderLock,
     IdentityCheck, ReadinessCheck, ReadBefore, CorrectSettlement, CorrectRuns,
     LossDiffLock, CorrectEventsAndCounter, ReconcileLossDiff, RefreshHourly,
-    RefreshWallet, ReadAfter, MarkConfirmed, Commit, Defer
+    RefreshWallet, ReadAfter, MarkConfirmed, Commit, Defer,
+    WaitingForLookupIdle, WaitingForApplyIdle, WaitingForDeferIdle
 }
 
 public sealed record PaperConfirmationStageTiming(PaperConfirmationStage Stage, double DurationMs);

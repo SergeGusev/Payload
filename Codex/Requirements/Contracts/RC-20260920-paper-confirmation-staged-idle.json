@@ -3,7 +3,7 @@
   "contractId": "RC-20260920-paper-confirmation-staged-idle",
   "title": "Allow bounded Paper confirmation stages to complete between trading cycles",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -69,8 +69,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
           "expected": "Тесты доказывают прежний Idle admission, продолжение допущенного этапа после котировки, отсутствие ожидания foreground, последовательность стадий и запрет следующего этапа при занятости.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused66executed66passed0failed0skipped:20diagnostics23real PostgreSQL15processor4worker4activity. staged-first.trx SHA25627063291BD044006AC6D21F4D7211891A5C5494AC4AECE09FACA1B35934A9219. Tests prove per-stage admission/deadlines, retained correlation/result without repeated lookup or unbounded trace, stop cleanup, legacy lease behavior; real PG at final Confirmed write verifies active foreground admission, conflicting writer55P03, cancellation rollback with unchanged financial snapshot, released lock and later idempotent correction. Exact commands/local-only fixture and measured timings retained in daily history."
         }
       ]
     },
@@ -103,8 +103,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
           "expected": "Проверить сохранение результата между занятыми интервалами, отсутствие повторных lookup/claim, restart/retry/stop, unavailable outcome и идемпотентность.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused66executed66passed0failed0skipped:20diagnostics23real PostgreSQL15processor4worker4activity. staged-first.trx SHA25627063291BD044006AC6D21F4D7211891A5C5494AC4AECE09FACA1B35934A9219. Tests prove per-stage admission/deadlines, retained correlation/result without repeated lookup or unbounded trace, stop cleanup, legacy lease behavior; real PG at final Confirmed write verifies active foreground admission, conflicting writer55P03, cancellation rollback with unchanged financial snapshot, released lock and later idempotent correction. Exact commands/local-only fixture and measured timings retained in daily history."
         }
       ]
     },
@@ -136,8 +136,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
           "expected": "Детерминированные timeout/stop/concurrency tests и реальные локальные PostgreSQL проверки атомарности, повторной записи, конкуренции и освобождения locks; старые financial cases проходят.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused66executed66passed0failed0skipped:20diagnostics23real PostgreSQL15processor4worker4activity. staged-first.trx SHA25627063291BD044006AC6D21F4D7211891A5C5494AC4AECE09FACA1B35934A9219. Tests prove per-stage admission/deadlines, retained correlation/result without repeated lookup or unbounded trace, stop cleanup, legacy lease behavior; real PG at final Confirmed write verifies active foreground admission, conflicting writer55P03, cancellation rollback with unchanged financial snapshot, released lock and later idempotent correction. Exact commands/local-only fixture and measured timings retained in daily history."
         }
       ]
     },
@@ -170,24 +170,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts --results-directory $env:CODEX_TASK_RUN/results --filter \"FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState\" --logger trx",
           "expected": "Тесты подтверждают единый attempt, waiting stage без роста памяти/flood, правильные причины и неизменные accounting результаты; документация и независимый PASS.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused66executed66passed0failed0skipped:20diagnostics23real PostgreSQL15processor4worker4activity. staged-first.trx SHA25627063291BD044006AC6D21F4D7211891A5C5494AC4AECE09FACA1B35934A9219. Tests prove per-stage admission/deadlines, retained correlation/result without repeated lookup or unbounded trace, stop cleanup, legacy lease behavior; real PG at final Confirmed write verifies active foreground admission, conflicting writer55P03, cancellation rollback with unchanged financial snapshot, released lock and later idempotent correction. Exact commands/local-only fixture and measured timings retained in daily history."
         },
         {
           "id": "VER-005",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $env:CODEX_TASK_RUN/artifacts",
           "expected": "Сборка exit0, warnings отражены.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Dedicated service build exit0,121warnings0errors on final product source. build-first.log SHA256650BA949B3016FBD06835E6090EEA27592F5A2F86E4ED90C4D6038C782EC241C. UseSharedCompilation=false; isolated artifacts under markedrun."
         },
         {
           "id": "VER-006",
           "kind": "inspection",
           "command": "Independent semantic review; scripts/requirements/Validate-RequirementContract.ps1 -Mode WorkingTree and -Mode Staged on exact task changes",
           "expected": "PASS/no open findings; approved semantics unchanged, unrelated dirty root files preserved.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent agent:/root/paper_staged_idle_reviewer final PASS/noopenfindings. Compared verbatim requests, approved digest, all10changed product/test/documentation paths and actual test/build artifacts. Mechanical gates and protected cleanup recorded in2026-09-20 history before completion."
         }
       ]
     }
@@ -202,8 +202,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/paper_staged_idle_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

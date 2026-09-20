@@ -32,7 +32,7 @@ public sealed class ServiceActivityState
         TryEnterIdle(queuesEmpty, stoppingToken, out _);
 
     public BackgroundLease? TryEnterIdle(Func<bool> queuesEmpty, CancellationToken stoppingToken,
-        out ServiceActivitySnapshot observation)
+        out ServiceActivitySnapshot observation, bool cancelOnForeground = true)
     {
         lock (sync)
         {
@@ -41,7 +41,7 @@ public sealed class ServiceActivityState
                 !queuesEmpty() ? "QueuesBusy" : "Idle";
             observation = new(reason, active, new Dictionary<ServiceActivitySource, int>(sources));
             if (reason != "Idle") return null;
-            return background = new BackgroundLease(this, queuesEmpty, stoppingToken);
+            return background = new BackgroundLease(this, queuesEmpty, stoppingToken, cancelOnForeground);
         }
     }
 
@@ -65,16 +65,19 @@ public sealed class ServiceActivityState
         private readonly Func<bool> queuesEmpty;
         private readonly CancellationTokenSource cancellation;
         private readonly CancellationToken stoppingToken;
+        private readonly bool cancelOnForeground;
         private Task cancellationCompletion = Task.CompletedTask;
         private ServiceActivityCancellation? firstCancellation;
         private bool disposed;
         public PaperOutcomeConfirmationTrace? Trace { get; set; }
 
-        internal BackgroundLease(ServiceActivityState owner, Func<bool> queuesEmpty, CancellationToken token)
+        internal BackgroundLease(ServiceActivityState owner, Func<bool> queuesEmpty, CancellationToken token,
+            bool cancelOnForeground)
         {
             this.owner = owner;
             this.queuesEmpty = queuesEmpty;
             stoppingToken = token;
+            this.cancelOnForeground = cancelOnForeground;
             cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
         }
 
@@ -86,6 +89,7 @@ public sealed class ServiceActivityState
         }
         internal void Cancel(string reason, ServiceActivitySource? source = null)
         {
+            if (!cancelOnForeground) return;
             if (cancellation.IsCancellationRequested) return;
             firstCancellation = new(reason, source);
             // No logging, formatting, or synchronous cancellation callbacks on this path.

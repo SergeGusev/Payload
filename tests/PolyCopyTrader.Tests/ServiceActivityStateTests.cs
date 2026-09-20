@@ -5,6 +5,24 @@ namespace PolyCopyTrader.Tests;
 public sealed class ServiceActivityStateTests
 {
     [Fact]
+    public void AdmittedNonPreemptibleStageIgnoresForegroundAndQueueChangesButHonorsStop()
+    {
+        var activity = new ServiceActivityState(); var empty = true;
+        using var stop = new CancellationTokenSource();
+        using var idle = activity.TryEnterIdle(() => empty, stop.Token, out _, cancelOnForeground: false)!;
+        using (activity.EnterTradingCycle("Quote"))
+        {
+            empty = false;
+            idle.CheckIdle();
+            Assert.False(idle.Token.IsCancellationRequested);
+            Assert.Null(activity.TryEnterIdle(() => true, default));
+        }
+        stop.Cancel();
+        Assert.Throws<OperationCanceledException>(idle.CheckIdle);
+        Assert.Equal("ServiceStopping", idle.Cancellation.Reason);
+    }
+
+    [Fact]
     public void ActiveCyclesAndQueuesExcludeBackground_AndNestedCyclesAreCounted()
     {
         var activity = new ServiceActivityState();

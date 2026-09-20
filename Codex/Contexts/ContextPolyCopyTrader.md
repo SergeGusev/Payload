@@ -1,3 +1,15 @@
+## Active Update 2026-09-20 Paper Confirmation Staged Idle
+Goal: Implement approved bounded staged confirmation so market quotes no longer discard progress.
+Status: Completed local implementation and verification; not deployed.
+Done:
+- Approval-only commita952beac; RC-20260920-paper-confirmation-staged-idle digestb3030b229501398a954c8669f30ef1fcd9dc4feed9c6332257b67c46385e6017 unchanged. Existing Idle predicate admits each claim/lookup/apply/defer separately. Foreground does not cancel an admitted bounded stage or wait for its admission lease; default legacy leases retain preemption.
+- Worker retains one candidate/result with one correlation trace between gaps; Gamma5s, each DB stage cooperative2s, stop cancellation and durable1minute retry retained. Waiting releases connections/transactions/cache scope; no repeated lookup or trace growth on busy ticks. SQL, financial formulas, atomic correction and cache safeguards unchanged.
+- Focused66/66passed0failed0skipped:20diagnostics23real PostgreSQL15processor4worker4activity. Real PG paused at final Confirmed write, observed conflicting writer55P03, continued foreground admission, stop rollback/lock release and unchanged financial snapshot, then successful idempotent correction. Local timings0.233ms foreground admission/41.479ms cancel+rollback+lock probe are not production guarantees.
+- Dedicated service build0errors121warnings. Independent agent:/root/paper_staged_idle_reviewer final semantic PASS/noopenfindings. Isolated WorkingTree and root exact Staged gates PASS10governed files/1contract;11paths copied with matching SHA256. README updated.
+Next: None within approved local implementation.
+Notes: Run instructions/limitations in README. Tests/artifacts/isolated PG stayed under marked paper-staged-idle-20260920-01; PG stopped, cleanup and commit/push finalization in daily history. No production connection/mutation/deployment, no new schema, summary30/60s cadence defect explicitly outside approved scope. Unrelated root changes preserved.
+Blockers: None for implementation; production throughput and trading latency remain unmeasured until deployment.
+
 ## Active Update 2026-09-20 Paper Confirmation Scheduling Feasibility
 Goal: Answer whether the observed foreground cancellation problem is solvable.
 Status: Completed source-only feasibility explanation; no implementation authorized by this question.

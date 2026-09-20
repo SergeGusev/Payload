@@ -7,11 +7,13 @@ using PolyCopyTrader.Storage;
 using PolyCopyTrader.Polymarket;
 using PolyCopyTrader.Service.Control;
 using PolyCopyTrader.Service.PaperTrading;
+using System.Diagnostics;
+using Xunit.Abstractions;
 
 namespace PolyCopyTrader.Tests;
 
 [Collection(PaperCopiedTraderPerformancePostgresIntegrationCollection.Name)]
-public sealed class PaperOutcomeConfirmationPostgresIntegrationTests
+public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutputHelper output)
 {
     private static string ConnectionString => Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION")
         ?? throw new InvalidOperationException("An isolated test PostgreSQL connection is required; this test must not silently skip.");
@@ -341,7 +343,10 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests
         var strategies=new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance,repository);
         var processor=new PaperOutcomeConfirmationProcessor(NullLogger<PaperOutcomeConfirmationProcessor>.Instance,repository,gamma,strategies);
         var activity=new ServiceActivityState();
-        using(var idle=activity.TryEnterIdle(()=>true,default)!) await processor.ProcessOneAsync(idle,idle.Token);
+        using var worker = new PaperOutcomeConfirmationWorker(NullLogger<PaperOutcomeConfirmationWorker>.Instance,
+            activity, new PaperOutcomeConfirmationWorkerTests.EntryQueue(),
+            new PaperOutcomeConfirmationWorkerTests.MarketQueue(), processor);
+        for (var step = 0; step < 3; step++) await worker.ProcessIdleGapAsync(default);
         Assert.Equal(1,gamma.Lookups);
         Assert.Equal(!apiFailure,(await repository.GetPaperOrderAsync(seed.Order.Id))!.Confirmed);
         if(apiFailure)
@@ -350,6 +355,76 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests
             Assert.Equal(6m,await ScalarAsync<decimal>("SELECT realized_pnl_usd FROM strategy_market_paper_runs WHERE paper_order_id=@Id",seed.Order.Id));
         }
         Assert.NotEqual(seed.Order.Id,(await repository.TryClaimPaperOutcomeConfirmationAsync(DateTimeOffset.UtcNow))?.Id);
+    }
+
+    [Fact]
+    public async Task AdmittedCorrectionSurvivesQuote_StopRollsBackAndReleasesWriterLocks()
+    {
+        var repository = await RepositoryAsync();
+        var seed = await SeedAsync(repository, true, 0);
+        await SqlAsync("UPDATE paper_orders SET created_at_utc='1900-01-01',confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", seed.Order.Id);
+        var activity = new ServiceActivityState();
+        var processor = new PaperOutcomeConfirmationProcessor(NullLogger<PaperOutcomeConfirmationProcessor>.Instance,
+            repository, new ConfirmationGamma(seed.Order, false), new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance, repository));
+        using var worker = new PaperOutcomeConfirmationWorker(NullLogger<PaperOutcomeConfirmationWorker>.Instance,
+            activity, new PaperOutcomeConfirmationWorkerTests.EntryQueue(), new PaperOutcomeConfirmationWorkerTests.MarketQueue(), processor);
+        await worker.ProcessIdleGapAsync(default);
+        await worker.ProcessIdleGapAsync(default);
+        var before = await SnapshotAsync(seed.Order.Id);
+        // Disposable test DB only: pause immediately before Confirmed is written, after financial updates.
+        var function = "pct_confirmation_wait_" + Guid.NewGuid().ToString("N");
+        await SqlAsync($"""
+            CREATE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.id='{seed.Order.Id}'::uuid AND NEW.confirmed THEN PERFORM pg_sleep(10); END IF;
+                RETURN NEW;
+            END $$;
+            CREATE TRIGGER {function} BEFORE UPDATE ON paper_orders FOR EACH ROW EXECUTE FUNCTION {function}();
+            """, seed.Order.Id);
+        using var stop = new CancellationTokenSource();
+        Task? applying = null;
+        try
+        {
+            applying = worker.ProcessIdleGapAsync(stop.Token);
+            var observed = false;
+            var started = Stopwatch.StartNew();
+            while (started.Elapsed < TimeSpan.FromSeconds(1.5) && !applying.IsCompleted)
+            {
+                observed = await ScalarAsync<bool>("""
+                    SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+                        AND wait_event='PgSleep' AND query LIKE '%UPDATE paper_orders SET confirmed=true%')
+                    """, seed.Order.Id);
+                if (observed) break;
+                await Task.Delay(5);
+            }
+            Assert.True(observed);
+            var admission = Stopwatch.StartNew();
+            using var foreground = await Task.Run(() => activity.EnterTradingCycle("Quote", MarketDataEventType.PriceChange))
+                .WaitAsync(TimeSpan.FromSeconds(1));
+            output.WriteLine($"Foreground admission during real DB correction: {admission.Elapsed.TotalMilliseconds:F3}ms");
+            Assert.False(applying.IsCompleted);
+            // A conflicting writer really sees the row lock; the background lease does not gate foreground admission.
+            var blocked = await Assert.ThrowsAsync<PostgresException>(() =>
+                ScalarAsync<Guid>("SELECT id FROM paper_orders WHERE id=@Id FOR UPDATE NOWAIT", seed.Order.Id));
+            Assert.Equal("55P03", blocked.SqlState);
+            var cancel = Stopwatch.StartNew();
+            stop.Cancel();
+            await applying.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(seed.Order.Id, await ScalarAsync<Guid>("SELECT id FROM paper_orders WHERE id=@Id FOR UPDATE NOWAIT", seed.Order.Id));
+            output.WriteLine($"Cancellation, rollback and successful writer lock probe: {cancel.Elapsed.TotalMilliseconds:F3}ms");
+            Assert.Equal(before, await SnapshotAsync(seed.Order.Id));
+            Assert.False((await repository.GetPaperOrderAsync(seed.Order.Id))!.Confirmed);
+        }
+        finally
+        {
+            stop.Cancel();
+            if (applying is not null) await applying.WaitAsync(TimeSpan.FromSeconds(5));
+            await SqlAsync($"DROP TRIGGER {function} ON paper_orders; DROP FUNCTION {function}();", seed.Order.Id);
+        }
+        var corrected = await repository.ConfirmPaperOutcomeAsync(Confirmation(seed.Order, false));
+        Assert.True(corrected.Confirmed);
+        Assert.True(corrected.Corrected);
+        Assert.False((await repository.ConfirmPaperOutcomeAsync(Confirmation(seed.Order, false))).Corrected);
     }
 
     [Fact]

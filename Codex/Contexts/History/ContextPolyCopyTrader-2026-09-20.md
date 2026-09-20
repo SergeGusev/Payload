@@ -320,3 +320,39 @@ Notes: Current HEAD77bc48cd, inspected source unchanged. Existing deployed runti
 Blockers: None for feasibility answer; production fix is not implemented.
 
 Only exempt context/history changed. Existing unrelated Sept17semantic gate failure remains outside scope; exact Staged gate and diff check used. No new operational action or contract proposed as already approved.
+
+## 2026-09-20T09:47:31.6967704Z
+Request:
+Действуй
+
+Result:
+## Active Update 2026-09-20 Paper Confirmation Staged Idle Preparation
+Goal: Implement user-authorized staged scheduling after «Это решаемо?» / «Действуй».
+Status: Draft ready; exact contract digest approval required before product edits.
+Done:
+- Read actual Worker/Processor/activity leases, claim/defer/Confirm SQL, strategy cache, DI, models, README and tests atbe450168. Root upstream0/0; unrelated dirty paths retained. No production connection or product changes.
+- Draft RC-20260920-paper-confirmation-staged-idle validated PASS, semantic SHA256b3030b229501398a954c8669f30ef1fcd9dc4feed9c6332257b67c46385e6017. Separate claim/Gamma/apply-or-defer stages admitted only on existing Idle predicate; foreground no longer cancels an admitted bounded stage. Retain one candidate/result between gaps, no new durable cache/schema.
+- Concrete proposed budgets require digest approval: Gamma existing5s; each claim/apply/defer DB stage cooperative2s cancellation budget, retaining existing correction SQL2s/lock100ms. Stop cancels all stages, no foreground waiting gate; DB lock interaction verified with isolated tests. Full accounting/identity/cache invariants preserved; own timeout is not a hard guarantee for rollback/dispose latency.
+- Diagnostics retain one attempt across waiting/stages; no per-tick growing trace. Separate30/60second summary cadence defect, production rollout and financial-rule changes explicitly outside this task. Targeted tests/build/README/independent review planned; estimate25–40minutes after approval.
+Next: Obtain later APPROVE RC-20260920-paper-confirmation-staged-idle sha256:b3030b229501398a954c8669f30ef1fcd9dc4feed9c6332257b67c46385e6017, commit approval separately, then implement and verify.
+Notes: Draft-only contract/context/history files written. No artifacts/builds/tests/production access. Initial draft validator rejected empty approval.evidenceText; nonempty pending placeholder corrected, contract validation passed.
+Blockers: RequirementGate.md checkpointB requires later exact semantic-digest approval.
+
+No material implementation, commit or push before later exact approval checkpoint. User action authorizes preparation of the concrete staged fix; contract now fixes observable semantics for approval.
+
+## 2026-09-20T10:05:52.4172730Z
+Request:
+APPROVE RC-20260920-paper-confirmation-staged-idle sha256:b3030b229501398a954c8669f30ef1fcd9dc4feed9c6332257b67c46385e6017
+
+Result:
+Approval committed separately as a952beac before product edits. Implemented only10approved code/test/README paths in isolated worktree of that exact commit. Worker performs sequential claim/lookup/apply/defer admissions on existing Idle predicate. Nonpreemptible admitted stage ignores foreground/queue changes, still honors stop and independent deadline; default leases unchanged. One typed pending order/confirmation/retry reason survives idle gaps; no open resources while waiting. Each DB stage budget2seconds, shared token/condition Gamma5seconds; cancellation cooperative. Original repository/SQL/financial/cache behavior unchanged; failure goes to defer in next gap and terminal retry failure releases state to durable claim recovery. Diagnostics show Waiting stages under same AttemptId and do not accumulate per busy tick.
+Verification:
+- dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <run>/artifacts -p:UseSharedCompilation=false --nologo -v:q:exit0,121warnings0errors. build-first.log SHA256650BA949B3016FBD06835E6090EEA27592F5A2F86E4ED90C4D6038C782EC241C. Product code was unchanged after this build.
+- dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --artifacts-path <run>/artifacts --results-directory <run>/results --filter 'FullyQualifiedName~PaperOutcomeConfirmation|FullyQualifiedName~ServiceActivityState' --logger 'trx;LogFileName=staged-first.trx' -p:UseSharedCompilation=false --nologo -v:q:66executed66passed0failed0skipped. Independent TRX recount20diagnostics23PG15processor4worker4activity. staged-first.trx SHA25627063291BD044006AC6D21F4D7211891A5C5494AC4AECE09FACA1B35934A9219; tests-first.log SHA256F24ECA9212A74E20CE29287E80C06251778B567447B0B202E8FC19A846FB40FF.
+- Actual PostgreSQL17 fixture127.0.0.1:56494/pct_codex_paper_confirmation_test under D:/CodexTemp/runs/paper-staged-idle-20260920-01/db; TEMP/TMP/TMPDIR run/temp. Test fixture explicitly fails without exact isolated local database. No production connection.
+- New real PG scenario AdmittedCorrectionSurvivesQuote_StopRollsBackAndReleasesWriterLocks pauses final order UPDATE in a disposable trigger after financial changes. Detects pg_stat_activity PgSleep, admits foreground while operation remains active, confirms conflicting NOWAIT writer55P03; stop cancellation releases row lock, snapshots unchanged, subsequent confirmation corrects once. Trigger/function removed in finally. Measured local foreground admission0.233ms, cancellation+rollback+successful writer probe41.479ms; no production latency inference.
+- Deterministic tests cover each2s/5s deadline, stop during claim/lookup/commit and retained waiting, foreground admission and concurrency serialization, no repeated claim/lookup across busy gaps, first error retention after later stop/defer failure, bounded waiting trace and independent diagnostics loop. Default lease tests retain original behavior. Old financial tests remain passing.
+- Independent agent:/root/paper_staged_idle_reviewer final PASS/noopenfindings compared verbatim original requests, approved digest, actual10pathdiff and build/TRX. Requirement Contract digest unchanged; isolated WorkingTree and root Staged PASS10governed files1contract; diff checks passed.11paths including completed contract copied root after clean-target preview, byte hashes equal. No financial source diff.
+- Native disposable PostgreSQL PID51692 stopped with pg_ctl -m fast -w stop. Test/build processes finished. Protected cleanup and final commit/push follow below. Existing unrelated root context/history/Sept17contract/operations edits preserved; active context index formed from exact HEAD bytes plus this task prefix to avoid encoding changes.
+
+Finalization 2026-09-20T10:06:09.6237498Z: protected cleanup removed marked run paper-staged-idle-20260920-01 successfully, absence verified; only its stale worktree registration pruned after dry-run preview. No compiler/PG cleanup issue. Exact Staged gate and diff check run before commit/push; no remaining task artifact/process.

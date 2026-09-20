@@ -68,7 +68,7 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
             trace!.Enter(PaperConfirmationStage.Commit); clock.Advance(TimeSpan.FromMilliseconds(17));
             trace.AcknowledgeCommit(); return Task.FromResult(new PaperOutcomeConfirmationResult(true, corrected, "confirmed"));
         };
-        await setup.Worker.ProcessIdleGapAsync(default);
+        await RunSteps(setup, 3);
         var log = Assert.Single(logger.Attempts);
         Assert.Equal(setup.Order.Id, log["PaperOrderId"]);
         Assert.IsType<Guid>(log["AttemptId"]);
@@ -84,25 +84,27 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
     [InlineData("claim", PaperConfirmationStage.Claim)]
     [InlineData("http", PaperConfirmationStage.GammaToken)]
     [InlineData("commit", PaperConfirmationStage.Commit)]
-    public async Task ForegroundCancellationReportsActualStageAndFirstSource(string where, PaperConfirmationStage stage)
+    public async Task StopCancellationReportsActualStage(string where, PaperConfirmationStage stage)
     {
         var logger = new CaptureLogger(); var setup = Create(logger);
-        void Cancel() { using (setup.Activity.EnterTradingCycle("Market", MarketDataEventType.Book)) { } }
+        using var stop = new CancellationTokenSource();
+        void Cancel() { stop.Cancel(); }
         if (where == "claim") setup.Repository.Claim = token => { Cancel(); return Task.FromCanceled<PaperOrder?>(token); };
         if (where == "http") setup.Gamma.Lookup = (_, token) => { Cancel(); return Task.FromCanceled<IReadOnlyList<PolymarketOnChainTokenMetadata>>(token); };
         if (where == "commit") setup.Repository.Confirm = (_, token, trace) =>
         { trace!.Enter(PaperConfirmationStage.Commit); Cancel(); return Task.FromCanceled<PaperOutcomeConfirmationResult>(token); };
-        await setup.Worker.ProcessIdleGapAsync(default);
+        var steps = where == "claim" ? 1 : where == "http" ? 2 : 3;
+        for (var i = 0; i < steps; i++) await setup.Worker.ProcessIdleGapAsync(stop.Token);
         var log = Assert.Single(logger.Attempts);
         Assert.Equal("Canceled", log["Outcome"]); Assert.Equal(stage, log["Stage"]);
-        Assert.Equal("Market", log["CancellationSource"]);
-        Assert.Equal(MarketDataEventType.Book, log["CancellationEventType"]);
+        Assert.Equal("ServiceStopping", log["CancellationReason"]);
+        Assert.Null(log["CancellationSource"]);
         Assert.Equal(false, log["CommitAcknowledged"]);
         Assert.Equal(where == "commit", log["CommitStarted"]);
     }
 
     [Fact]
-    public async Task FirstHttpErrorSurvivesCancellationBeforeRetryAndSecretsAreNotLogged()
+    public async Task FirstHttpErrorSurvivesForegroundAndStopBeforeRetryAndSecretsAreNotLogged()
     {
         var logger = new CaptureLogger(); var setup = Create(logger);
         setup.Gamma.Lookup = (_, _) =>
@@ -110,7 +112,9 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
             using (setup.Activity.EnterTradingCycle("Entry")) { }
             throw new HttpRequestException("secret-response-header");
         };
-        await setup.Worker.ProcessIdleGapAsync(default);
+        await RunSteps(setup, 2);
+        using var stop = new CancellationTokenSource(); stop.Cancel();
+        await setup.Worker.ProcessIdleGapAsync(stop.Token);
         var log = Assert.Single(logger.Attempts);
         Assert.Equal("Canceled", log["Outcome"]);
         Assert.Equal(nameof(HttpRequestException), log["ErrorType"]);
@@ -126,7 +130,7 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
         setup.Repository.Confirm = (_, _, trace) =>
         { trace!.Enter(PaperConfirmationStage.OrderLock); throw new PostgresException("secret-db-details", "ERROR", "ERROR", "55P03"); };
         setup.Repository.Defer = _ => throw new InvalidOperationException("secret-retry-details");
-        await setup.Worker.ProcessIdleGapAsync(default);
+        await RunSteps(setup, 4);
         var log = Assert.Single(logger.Attempts);
         Assert.Equal("55P03", log["SqlState"]);
         Assert.Equal(nameof(PostgresException), log["ErrorType"]);
@@ -140,7 +144,7 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
     {
         var logger = new CaptureLogger(); var setup = Create(logger);
         setup.Gamma.Lookup = (_, _) => Task.FromResult<IReadOnlyList<PolymarketOnChainTokenMetadata>>([]);
-        await setup.Worker.ProcessIdleGapAsync(default);
+        await RunSteps(setup, 3);
         var log = Assert.Single(logger.Attempts);
         Assert.Equal("Deferred", log["Outcome"]); Assert.Equal(1, setup.Repository.Defers);
         var stages = Assert.IsAssignableFrom<IReadOnlyList<PaperConfirmationStageTiming>>(log["@Stages"]);
@@ -153,7 +157,7 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
     {
         var logger = new CaptureLogger(); var setup = Create(logger);
         setup.Gamma.Lookup = async (_, token) => { await Task.Delay(Timeout.InfiniteTimeSpan, token); return []; };
-        await setup.Worker.ProcessIdleGapAsync(default).WaitAsync(TimeSpan.FromSeconds(10));
+        await RunSteps(setup, 3).WaitAsync(TimeSpan.FromSeconds(10));
         var log = Assert.Single(logger.Attempts);
         Assert.Equal("Timeout", log["Outcome"]); Assert.Equal("GammaTimeout", log["Reason"]);
         Assert.Equal(1, setup.Repository.Defers);
@@ -164,7 +168,9 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
     {
         var logger = new CaptureLogger(); var clock = new ManualClock(); var setup = Create(logger, clock);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        setup.Repository.Claim = async token => { started.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, token); return null; };
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        // A provider can take time to acknowledge cancellation; summaries must remain independent.
+        setup.Repository.Claim = async token => { started.TrySetResult(); await release.Task; token.ThrowIfCancellationRequested(); return null; };
         await setup.Worker.StartAsync(default);
         await UntilAsync(() => clock.TimerCount == 2);
         clock.Advance(TimeSpan.FromSeconds(1)); await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
@@ -173,7 +179,9 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
         Assert.Equal((int)PaperConfirmationStage.Claim, summary.GetProperty("ActiveAttempt").GetProperty("Stage").GetInt32());
         Assert.Equal(30000d, summary.GetProperty("ActiveAttempt").GetProperty("StageAgeMs").GetDouble());
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-        await setup.Worker.StopAsync(deadline.Token);
+        var stopping = setup.Worker.StopAsync(deadline.Token);
+        release.SetResult();
+        await stopping;
         var log = Assert.Single(logger.Attempts);
         Assert.Equal("ServiceStopping", log["CancellationReason"]);
     }
@@ -209,6 +217,87 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
         Assert.Equal("QueuesBusy", idle.Cancellation.Reason);
     }
 
+    [Theory]
+    [InlineData("claim", 2)]
+    [InlineData("lookup", 5)]
+    [InlineData("apply", 2)]
+    [InlineData("defer", 2)]
+    public async Task EachAdmittedStageHasItsOwnDeadlineAndReleasesCandidate(string stage, int seconds)
+    {
+        var logger = new CaptureLogger(); var clock = new ManualClock(); var setup = Create(logger, clock);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        async Task Hang(CancellationToken token)
+        { started.SetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, token); }
+        if (stage == "claim") setup.Repository.Claim = async token => { await Hang(token); return null; };
+        else
+        {
+            await RunSteps(setup, 1);
+            if (stage == "lookup") setup.Gamma.Lookup = async (_, token) => { await Hang(token); return []; };
+            else
+            {
+                if (stage == "defer") setup.Gamma.Lookup = (_, _) => Task.FromResult<IReadOnlyList<PolymarketOnChainTokenMetadata>>([]);
+                await RunSteps(setup, 1);
+                if (stage == "apply") setup.Repository.Confirm = async (_, token, _) => { await Hang(token); return new(true, false, "unexpected"); };
+                else setup.Repository.Defer = Hang;
+            }
+        }
+        var running = setup.Worker.ProcessIdleGapAsync(default);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        clock.Advance(TimeSpan.FromSeconds(seconds) - TimeSpan.FromMilliseconds(1));
+        Assert.False(running.IsCompleted);
+        clock.Advance(TimeSpan.FromMilliseconds(1));
+        await running.WaitAsync(TimeSpan.FromSeconds(1));
+        if (stage is "lookup" or "apply") await RunSteps(setup, 1); // Persist retry in its own gap.
+        var log = Assert.Single(logger.Attempts);
+        Assert.Equal("Timeout", log["Outcome"]);
+        Assert.Equal(stage == "lookup" ? "GammaTimeout" : "DatabaseTimeout", log["Reason"]);
+        Assert.Equal(false, log["CommitAcknowledged"]);
+        // A terminal timeout does not retain the order or keep the stage alive.
+        setup.Repository.Claim = _ => Task.FromResult<PaperOrder?>(null);
+        await RunSteps(setup, 1);
+        Assert.Single(logger.Attempts);
+        Assert.Equal(0, clock.ActiveTimers);
+    }
+
+    [Fact]
+    public async Task WaitingResultKeepsCorrelationAndBoundedTrace_AndStopReleasesIt()
+    {
+        var logger = new CaptureLogger(); var clock = new ManualClock(); var setup = Create(logger, clock);
+        var lookups = 0;
+        setup.Gamma.Lookup = (_, _) => { lookups++; return Task.FromResult<IReadOnlyList<PolymarketOnChainTokenMetadata>>([PaperOutcomeConfirmationProcessorTests.Metadata()]); };
+        await RunSteps(setup, 2);
+        using var foreground = setup.Activity.EnterTradingCycle("Trading");
+        await setup.Worker.StartAsync(default);
+        await UntilAsync(() => clock.ActiveTimers == 2);
+        clock.Advance(TimeSpan.FromSeconds(30));
+        await UntilAsync(() => logger.Entries.Any(x => x.ContainsKey("@Summary")));
+        var first = JsonSerializer.SerializeToElement(logger.Entries.Last(x => x.ContainsKey("@Summary"))["@Summary"])
+            .GetProperty("ActiveAttempt");
+        for (var i = 0; i < 1000; i++) await setup.Worker.ProcessIdleGapAsync(default);
+        clock.Advance(TimeSpan.FromSeconds(30));
+        await UntilAsync(() => logger.Entries.Count(x => x.ContainsKey("@Summary")) == 2);
+        var second = JsonSerializer.SerializeToElement(logger.Entries.Last(x => x.ContainsKey("@Summary"))["@Summary"])
+            .GetProperty("ActiveAttempt");
+        Assert.Equal((int)PaperConfirmationStage.WaitingForApplyIdle, second.GetProperty("Stage").GetInt32());
+        Assert.Equal(first.GetProperty("AttemptId").GetGuid(), second.GetProperty("AttemptId").GetGuid());
+        Assert.Equal(first.GetProperty("Stages").GetArrayLength(), second.GetProperty("Stages").GetArrayLength());
+        Assert.Equal("Waiting", second.GetProperty("Outcome").GetString());
+        Assert.Equal(1, lookups);
+        Assert.Empty(logger.Attempts);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await setup.Worker.StopAsync(deadline.Token);
+        var log = Assert.Single(logger.Attempts);
+        Assert.Equal("ServiceStopping", log["Reason"]);
+        Assert.Equal(setup.Order.Id, log["PaperOrderId"]);
+        Assert.Equal(first.GetProperty("AttemptId").GetGuid(), log["AttemptId"]);
+        foreground.Dispose();
+        setup.Repository.Claim = _ => Task.FromResult<PaperOrder?>(null);
+        await RunSteps(setup, 1); // Explicit call verifies no retained Apply after Stop.
+        Assert.Single(logger.Attempts);
+    }
+
+    private static async Task RunSteps(Setup setup, int count)
+    { for (var i = 0; i < count; i++) await setup.Worker.ProcessIdleGapAsync(default); }
     private static PaperConfirmationQueueSnapshot Queues(ManualClock clock) => new(clock.GetUtcNow(),0,0,0,0,0,0,0);
     private static async Task UntilAsync(Func<bool> done)
     {
@@ -296,7 +385,7 @@ public sealed class PaperOutcomeConfirmationDiagnosticsTests
         {
             private long next=clock.GetTimestamp()+due.Ticks; private bool disposed;
             public bool Disposed => disposed;
-            public void Fire(){if(!disposed&&clock.GetTimestamp()>=next){next=clock.GetTimestamp()+period.Ticks;callback(state);}}
+            public void Fire(){if(!disposed&&clock.GetTimestamp()>=next){next=period==Timeout.InfiniteTimeSpan?long.MaxValue:clock.GetTimestamp()+period.Ticks;callback(state);}}
             public bool Change(TimeSpan dueTime,TimeSpan newPeriod){next=clock.GetTimestamp()+dueTime.Ticks;period=newPeriod;return true;}
             public void Dispose()=>disposed=true;
             public ValueTask DisposeAsync(){Dispose();return ValueTask.CompletedTask;}
