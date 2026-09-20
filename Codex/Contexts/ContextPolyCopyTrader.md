@@ -1,3 +1,17 @@
+## Active Update 2026-09-20 Paper Coverage Projection Fix Completed
+Goal: Restore bounded progress of the Paper confirmation coverage projection.
+Status: Completed local implementation and independent review; no production operation.
+Done:
+- Exact user approval eec65a37d17a39c2b698bb6ddf5a101ca158c9452dc5e2cd083cad44fe2d2b2d recorded in approval-only parent 8a8d60fd before edits. Semantic digest unchanged at completion.
+- New migration0015 adds one concurrent all-source paper_orders(wallet,asset) index with exact definition/valid/ready check. Previous migration SQL, financial refresh SQL and atomic cursor/queue/totals transaction unchanged.
+- Coverage worker adapts250..1 after57014/55P03, pauses coverage30s while legacy processing continues, recovers after8fast nonempty successful portions. Failed records never dropped; Unknown retained on failure.
+- 54 distinct tests passed,0skipped:53focused plus1real PostgreSQL load. Real timeout rollback and actual worker legacy progress during pause verified. Final Service/Dashboard builds each0warnings/0errors; initial test build127existing warnings documented.
+- Synthetic100korders/10kassets/1000settlements loaded with normal triggers in201.542s; actual projection initial drain68.855s,204046refreshes,0errors. Concurrent600orders/1800events over60s processed,final drain1ms,0errors. Final fixture1600settlements/800confirmed/Net320/denominator480 equals raw aggregate. Post-test global raw100616orders/50310confirmed equals projection;queue0,all4cursorscomplete,initializedtrue.
+- Independent agent:/root/paper_coverage_projection_reviewer semantic PASS/noopenfindings; exact diff/request/contract/report/TRX/build evidence compared. Isolated completed WorkingTree gate and root exact Staged gate PASS; unrelated root edits excluded.
+Next: User deployment followed by read-only production verification; local load result is coverage projection evidence, not outcome-verifier throughput or full-history ETA.
+Notes: Reproduction/results/hashes in Codex/Reports/2026-09-20-paper-coverage-projection-fix.md. Temporary PostgreSQL stopped; protected cleanup removed exact marked run3635files/836390771bytes and absence verified. Product/report files copied with hash equality before cleanup.
+Blockers: None for local fix. Production behavior after deployment not yet verified.
+
 ## Active Update 2026-09-20 Paper Coverage Projection Fix Preparation
 Goal: Fix the deployed Paper confirmation coverage projection timeout without changing financial semantics.
 Status: In Progress; concrete draft ready, exact digest approval pending.

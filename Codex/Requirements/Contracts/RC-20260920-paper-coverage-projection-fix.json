@@ -3,7 +3,7 @@
   "contractId": "RC-20260920-paper-coverage-projection-fix",
   "title": "Restore progress of the Paper confirmation coverage projection",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -58,8 +58,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~PostgresSchemaMigrationTests --artifacts-path $RunRoot/artifacts --results-directory $RunRoot/results",
           "expected": "Миграционный каталог и неизменность legacy baseline проходят; PostgreSQL load test отдельно подтверждает применение, план и повторную инициализацию.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "2026-09-20: focused53 tests PASS/0skipped, including catalog and real-PG wrong-index rejection/recovery. Load test verifies exact valid/ready index, both wallet+asset Index Cond and repeated initialization. Existing baseline/migrations unchanged. See Codex/Reports/2026-09-20-paper-coverage-projection-fix.md."
         }
       ]
     },
@@ -91,8 +91,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~PaperConfirmationProjectionBatchPolicyTests|FullyQualifiedName~DashboardSnapshotTests|FullyQualifiedName~PaperConfirmationProjectionTests' --artifacts-path $RunRoot/artifacts --results-directory $RunRoot/results",
           "expected": "Проверены адаптация/пауза и фактический dispatch; реальный PostgreSQL timeout откатывает queue/cursor/totals, последующий повтор завершает их ровно один раз; существующие финансовые и оконные regression tests проходят без пропусков PostgreSQL.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Focused53 PASS incl policy boundaries, actual2sSQL timeout rollback of queue/cursor/totals/state, actual BackgroundService legacy event drain during coverage pause, Unknown and idempotent replay. Existing projection monetary/window tests pass."
         }
       ]
     },
@@ -120,24 +120,24 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~PaperConfirmationProjectionLoadTests --artifacts-path $RunRoot/artifacts --results-directory $RunRoot/results",
           "expected": "Настоящий локальный PostgreSQL, consumer работает; плотная история, concurrent producer и независимые итоги проходят все критерии; точное allowlist подключение изолированной тестовой БД, без production данных.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Real PostgreSQL load1 PASS:100korders/10kassets/1000settlements,setup201542ms,history drain68855ms,204046refreshes;60s600orders/1800events,final drain1ms,total205846refreshes,0errors; independent aggregates match. Raw100616orders/50310confirmed equal projected,queue0,cursors4complete,initializedtrue. Sampling limits/report hashes documented."
         },
         {
           "id": "VER-004",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path $RunRoot/artifacts; dotnet build src/PolyCopyTrader.Dashboard/PolyCopyTrader.Dashboard.csproj --artifacts-path $RunRoot/artifacts",
           "expected": "Обе сборки проходят; предупреждения и ограничения явно записаны.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Final Service and Dashboard incremental builds each0warnings/0errors. Initial tests build127existing warnings,0errors. Exact output evidence in report."
         },
         {
           "id": "VER-005",
           "kind": "inspection",
           "command": "Independent reviewer compares verbatim request, approved contract, actual diff and test evidence; Validate-RequirementContract.ps1 -Mode WorkingTree and -Mode Staged",
           "expected": "Independent PASS без findings; точный staged gate PASS, unrelated root dirt сохранён и исключён. Для WorkingTree использовать изолированную копию утверждённой задачи.",
-          "result": "pending",
-          "evidence": ""
+          "result": "passed",
+          "evidence": "Independent agent:/root/paper_coverage_projection_reviewer compared verbatim requests, exact approved contract, full diff/new files, README/report and TRX/build logs:PASS/noopenfindings. Pending-evidence isolated WorkingTree gate PASS governedFiles10; final completed WorkingTree/Staged gates and protectedcleanup are recorded in task history during finalization."
         }
       ]
     }
@@ -152,8 +152,8 @@
   },
   "independentReview": {
     "reviewer": "agent:/root/paper_coverage_projection_reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

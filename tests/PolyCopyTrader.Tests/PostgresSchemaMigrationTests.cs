@@ -105,7 +105,11 @@ public sealed class PostgresSchemaMigrationTests
     public void DefaultCatalog_IsBoundToApprovedLegacyChecksum()
     {
         var catalog = PostgresSchemaMigrationCatalog.CreateDefault();
-        Assert.Equal(14, catalog.Count);
+        Assert.Equal(15, catalog.Count);
+        Assert.Equal(PostgresPaperConfirmationCoverageIndexMigration.Id, catalog[14].Id);
+        Assert.Equal(14, catalog[14].Order);
+        Assert.False(catalog[14].Transactional);
+        Assert.Equal(PostgresPaperConfirmationCoverageIndexMigration.CompletionCheckSql, catalog[14].CompletionCheckSql);
         var baseline = catalog[0];
         var lossDiff = catalog[1];
         var ethUp8LossDiff = catalog[2];

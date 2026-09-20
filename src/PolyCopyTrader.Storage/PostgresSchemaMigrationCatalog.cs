@@ -180,6 +180,9 @@ public static class PostgresSchemaMigrationCatalog
                     completionCheckSql: PostgresPaperConfirmationBatchSchemaMigration.InventoryIndexCheckSql)
                 ,new PostgresSchemaMigration(13, PostgresPaperConfirmationProjectionSchemaMigration.Id,
                     PostgresPaperConfirmationProjectionSchemaMigration.Sql, true, "bounded confirmation coverage projection and durable counters")
+                ,new PostgresSchemaMigration(14, PostgresPaperConfirmationCoverageIndexMigration.Id,
+                    PostgresPaperConfirmationCoverageIndexMigration.Sql, false, "all-source Paper coverage wallet and asset lookup",
+                    completionCheckSql: PostgresPaperConfirmationCoverageIndexMigration.CompletionCheckSql)
             ]);
     }
 

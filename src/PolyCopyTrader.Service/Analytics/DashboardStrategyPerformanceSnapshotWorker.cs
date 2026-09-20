@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using Npgsql;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
 
@@ -18,6 +20,7 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var nextExpiryAtUtc = DateTimeOffset.MinValue;
+        var confirmationBatch = new PaperConfirmationProjectionBatchPolicy();
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -40,13 +43,25 @@ public sealed class DashboardStrategyPerformanceSnapshotWorker(
                 }
 
                 var confirmationEvents = 0;
-                if (projection is PostgresDashboardProjectionRepository postgres)
+                if (projection is PostgresDashboardProjectionRepository postgres && confirmationBatch.CanRun(DateTimeOffset.UtcNow))
                 {
-                    try { confirmationEvents = await postgres.ApplyPaperConfirmationProjectionAsync(cancellationToken: stoppingToken); }
+                    var limit = confirmationBatch.Limit;
+                    var elapsed = Stopwatch.StartNew();
+                    try
+                    {
+                        confirmationEvents = await postgres.ApplyPaperConfirmationProjectionAsync(limit, cancellationToken: stoppingToken);
+                        confirmationBatch.Succeeded(confirmationEvents, elapsed.Elapsed);
+                        if (confirmationEvents > 0)
+                            logger.LogDebug("Paper confirmation coverage portion. Processed={Processed} Limit={Limit} NextLimit={NextLimit} DurationMs={DurationMs}",
+                                confirmationEvents, limit, confirmationBatch.Limit, elapsed.Elapsed.TotalMilliseconds);
+                    }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
                     catch (Exception ex)
                     {
-                        logger.LogWarning(ex, "Paper confirmation coverage projection deferred; existing Dashboard projection continues.");
+                        var sqlState = (ex as PostgresException)?.SqlState;
+                        confirmationBatch.Failed(DateTimeOffset.UtcNow, sqlState);
+                        logger.LogWarning(ex, "Paper confirmation coverage projection deferred; existing Dashboard projection continues. Limit={Limit} NextLimit={NextLimit} SqlState={SqlState} DurationMs={DurationMs} RetryAtUtc={RetryAtUtc}",
+                            limit, confirmationBatch.Limit, sqlState, elapsed.Elapsed.TotalMilliseconds, confirmationBatch.RetryAtUtc);
                         await postgres.MarkPaperConfirmationProjectionUnknownAsync(stoppingToken);
                     }
                 }

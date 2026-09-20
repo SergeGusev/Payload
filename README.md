@@ -70,6 +70,40 @@ Dashboard projection version or triggering a full historical startup rebuild. In
 are separate concurrent migrations. Apply these only through the normal service
 migration path after the separately required production rollout preview.
 
+Migration `0015-paper-confirmation-coverage-index` adds the all-source
+`paper_orders(copied_trader_wallet, asset_id)` index used by settlement coverage.
+It builds concurrently and checks the exact definition and valid/ready state before
+recording success. An existing invalid or differently defined index causes migration
+failure; it is not silently accepted or dropped. Existing migrations stay unchanged.
+The coverage consumer starts at 250 events per portion. SQLSTATE `57014`/`55P03`
+halves its limit down to one and pauses only coverage for 30 seconds; the legacy
+Dashboard event/expiry loop continues. Eight consecutive nonempty successful portions
+under 500 ms double the limit up to 250. SQL still uses two-second statement and
+100 ms lock limits. Failed portions roll back cursor, queue acknowledgement and
+totals together. Even at limit one, a failing event stays queued and coverage stays
+Unknown. Restart resumes durable progress with an initial limit of 250.
+Coverage warnings include current/next limit, SQLSTATE, duration and retry time;
+successful portion diagnostics are at Debug level.
+
+The coverage regression includes a real SQL timeout and verifies that the existing
+Dashboard loop continues during the coverage pause. Run `PaperConfirmationProjectionLoadTests`
+separately, last, in a dedicated disposable `pct_codex_paper_confirmation_test` database:
+it inserts 100,000 orders for one wallet and resets that test database's coverage
+cursors to exercise initialization, then runs 60 seconds of concurrent arrivals.
+Recreate the disposable database before using it for another test suite. The test
+uses the real consumer, checks both indexed predicates and compares persisted totals
+against source-row aggregates. Each drain has a ten-minute bound. Example, with
+`TEMP`, `TMP`, `TMPDIR` and the connection variable already pointing at the marked
+local test environment:
+
+```powershell
+dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~PaperConfirmationProjectionLoadTests --artifacts-path "$RunRoot/artifacts" --results-directory "$RunRoot/results"
+```
+
+Measured results and limits are in
+[`2026-09-20-paper-coverage-projection-fix.md`](Codex/Reports/2026-09-20-paper-coverage-projection-fix.md).
+This local test does not establish production throughput or whole-history ETA.
+
 `Paper confirmation portion` logs Recent/Archive, selected, confirmed/corrected/deferred,
 cache hits, HTTP calls and pause state. Attempt diagnostics retain stage timings,
 SQLSTATE and first error type without HTTP payloads or exception text. Independent

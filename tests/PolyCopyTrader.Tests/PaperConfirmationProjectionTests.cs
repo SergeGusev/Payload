@@ -1,4 +1,7 @@
 using Npgsql;
+using Microsoft.Extensions.Logging;
+using PolyCopyTrader.Service.Analytics;
+using System.Collections.Concurrent;
 using PolyCopyTrader.Domain;
 using PolyCopyTrader.Domain.Configuration;
 using PolyCopyTrader.Storage;
@@ -9,6 +12,102 @@ namespace PolyCopyTrader.Tests;
 [Collection(PaperCopiedTraderPerformancePostgresIntegrationCollection.Name)]
 public sealed class PaperConfirmationProjectionTests
 {
+    [Fact]
+    public async Task StatementTimeoutRollsBackProgress_AndWorkerKeepsLegacyProjectionRunningDuringPause()
+    {
+        var repository = await RepositoryAsync();
+        var projection = new PostgresDashboardProjectionRepository(Factory());
+        await DrainAsync(projection);
+        await projection.BootstrapAsync();
+        var seed = await SeedAsync(repository, true, 0);
+        await SqlAsync("UPDATE paper_confirmation_projection_cursor SET completed=false,cursor_id='00000000-0000-0000-0000-000000000000' WHERE kind='F'", Guid.Empty);
+        await SqlAsync($"""
+            CREATE FUNCTION coverage_test_delay() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW.kind='O' AND NEW.id='{seed.Order.Id}'::uuid THEN PERFORM pg_sleep(3); END IF; RETURN NEW; END $$;
+            CREATE TRIGGER coverage_test_delay BEFORE INSERT ON paper_confirmation_projection_members
+                FOR EACH ROW EXECUTE FUNCTION coverage_test_delay();
+            """, Guid.Empty);
+        const string snapshot = """
+            SELECT jsonb_build_object(
+              'queue',(SELECT jsonb_agg(to_jsonb(q) ORDER BY sequence_id) FROM paper_confirmation_projection_queue q),
+              'cursor',(SELECT jsonb_agg(to_jsonb(c) ORDER BY kind) FROM paper_confirmation_projection_cursor c),
+              'totals',(SELECT jsonb_agg(to_jsonb(t) ORDER BY strategy_id,kind,hours) FROM paper_confirmation_projection_totals t),
+              'state',(SELECT to_jsonb(s) FROM paper_confirmation_projection_state s))::text
+            """;
+        var logger = new CoverageWorkerLogger();
+        using var worker = new DashboardStrategyPerformanceSnapshotWorker(logger, new DashboardOptions(), projection, repository);
+        try
+        {
+            var before = await ScalarAsync<string>(snapshot, Guid.Empty);
+            var failure = await Assert.ThrowsAsync<PostgresException>(() => projection.ApplyPaperConfirmationProjectionAsync());
+            Assert.Equal("57014", failure.SqlState);
+            Assert.Equal(before, await ScalarAsync<string>(snapshot, Guid.Empty));
+            await worker.StartAsync(CancellationToken.None);
+            await logger.Deferred.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Contains(logger.Messages, m => m.Contains("NextLimit=125") && m.Contains("SqlState=57014"));
+            var incoming = seed.Order with { Id=Guid.NewGuid(), SignalId=Guid.NewGuid(), Status=PaperOrderStatus.Cancelled };
+            await repository.AddPaperOrderAsync(incoming);
+            var wait = System.Diagnostics.Stopwatch.StartNew();
+            while (wait.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                if (await ScalarAsync<long>("SELECT count(*) FROM dashboard_projection_events WHERE source_id=@Id", incoming.Id)==0
+                    && logger.Messages.Any(m=>m.StartsWith("Dashboard projection events applied."))) break;
+                await Task.Delay(50);
+            }
+            Assert.Equal(0L,await ScalarAsync<long>("SELECT count(*) FROM dashboard_projection_events WHERE source_id=@Id",incoming.Id));
+            Assert.Contains(logger.Messages,m=>m.StartsWith("Dashboard projection events applied."));
+            Assert.Equal(1, logger.Messages.Count(m=>m.StartsWith("Paper confirmation coverage projection deferred;")));
+            Assert.False(await ScalarAsync<bool>("SELECT initialized FROM paper_confirmation_projection_state",Guid.Empty));
+        }
+        finally
+        {
+            await worker.StopAsync(CancellationToken.None);
+            await SqlAsync("DROP TRIGGER coverage_test_delay ON paper_confirmation_projection_members; DROP FUNCTION coverage_test_delay();",Guid.Empty);
+        }
+        await DrainAsync(projection);
+        var result = await ScalarAsync<string>("SELECT row_to_json(t)::text FROM paper_confirmation_projection_totals t WHERE strategy_id=(SELECT strategy_id FROM paper_orders WHERE id=@Id) AND kind='S' AND hours=0", seed.Order.Id);
+        await SqlAsync("INSERT INTO paper_confirmation_projection_queue(kind,id) SELECT 'S',id FROM paper_position_settlements WHERE asset_id=(SELECT asset_id FROM paper_orders WHERE id=@Id)",seed.Order.Id);
+        await DrainAsync(projection);
+        Assert.Equal(result,await ScalarAsync<string>("SELECT row_to_json(t)::text FROM paper_confirmation_projection_totals t WHERE strategy_id=(SELECT strategy_id FROM paper_orders WHERE id=@Id) AND kind='S' AND hours=0",seed.Order.Id));
+    }
+
+    [Fact]
+    public async Task CoverageIndexMigrationRejectsWrongExistingDefinition_AndResumesAfterCorrection()
+    {
+        await RepositoryAsync();
+        await SqlAsync("""
+            ALTER INDEX ix_paper_orders_confirmation_wallet_asset RENAME TO coverage_test_correct_index;
+            CREATE INDEX ix_paper_orders_confirmation_wallet_asset ON paper_orders(copied_trader_wallet);
+            DELETE FROM schema_migration_history WHERE migration_id='0015-paper-confirmation-coverage-index';
+            """,Guid.Empty);
+        try
+        {
+            Assert.False(await ScalarAsync<bool>(PostgresPaperConfirmationCoverageIndexMigration.CompletionCheckSql,Guid.Empty));
+            var exception=await Assert.ThrowsAsync<InvalidOperationException>(()=>new PostgresSchemaInitializer(Factory()).InitializeAsync());
+            Assert.Contains("did not satisfy its completion check",exception.Message);
+            Assert.Equal(0L,await ScalarAsync<long>("SELECT count(*) FROM schema_migration_history WHERE migration_id='0015-paper-confirmation-coverage-index'",Guid.Empty));
+        }
+        finally
+        {
+            await SqlAsync("DROP INDEX ix_paper_orders_confirmation_wallet_asset; ALTER INDEX coverage_test_correct_index RENAME TO ix_paper_orders_confirmation_wallet_asset;",Guid.Empty);
+            await new PostgresSchemaInitializer(Factory()).InitializeAsync();
+        }
+        Assert.True(await ScalarAsync<bool>(PostgresPaperConfirmationCoverageIndexMigration.CompletionCheckSql,Guid.Empty));
+    }
+
+    private sealed class CoverageWorkerLogger : ILogger<DashboardStrategyPerformanceSnapshotWorker>
+    {
+        public ConcurrentQueue<string> Messages { get; } = new();
+        public TaskCompletionSource Deferred { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public IDisposable? BeginScope<TState>(TState state) where TState:notnull => null;
+        public bool IsEnabled(LogLevel level) => true;
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? error, Func<TState,Exception?,string> format)
+        {
+            var message=format(state,error); Messages.Enqueue(message);
+            if(message.StartsWith("Paper confirmation coverage projection deferred;")) Deferred.TrySetResult();
+        }
+    }
+
     private static PostgresConnectionFactory Factory() => new(new StorageOptions { ConnectionString = ConnectionString });
     internal static async Task DrainAsync(PostgresDashboardProjectionRepository projection, DateTimeOffset? at = null)
     {
