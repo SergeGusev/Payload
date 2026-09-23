@@ -51,12 +51,12 @@ require their own allowlisted database and must run separately. Set
 
 ### Paper outcome confirmation
 
-Historical background verification is temporarily paused under
-`RC-20260920-paper-history-pause-and-final-fix`: the service does not register
-`PaperOutcomeConfirmationWorker`. Neither its Recent nor Archive lane runs.
-Existing flags/evidence and coverage reporting remain; this pause does not make
-unconfirmed history trustworthy. The worker code and the operational description
-below are retained for a later explicitly approved reactivation.
+Historical background verification is enabled only for
+`ETH Up or Down 5m 22 Child ROI` (`b7c50005-0000-4000-8195-000000000022`)
+under `RC-20260923-eth-child-roi-only-history-selection`. Both existing Recent
+and Archive lanes filter by that strategy ID. Other strategies' unconfirmed
+history remains unverified by this worker. Existing flags/evidence and coverage
+reporting remain.
 
 Normal final settlement remains active for new and still-open stakes. It checks
 readiness by exact wallet/asset and related order IDs using existing indexes,
@@ -73,8 +73,8 @@ unrelated rows in each of three tables and checks actual readiness plans and
 concurrent repository calls. It never targets production.
 
 `PaperOrder.Confirmed` / `paper_orders.confirmed` starts false for existing and new
-Paper orders, including disabled strategies and Live shadows. Before the pause, the service registered
-`PaperOutcomeConfirmationWorker` automatically. In the retained implementation, this verifier no longer waits
+Paper orders, including disabled strategies and Live shadows. The service registers
+`PaperOutcomeConfirmationWorker` for the restricted historical selection. This verifier does not wait
 for global Idle; other background admission rules are unchanged.
 
 `PaperConfirmation` settings default to `Enabled=true`, `RecentHours=24`,

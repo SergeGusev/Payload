@@ -480,7 +480,6 @@ builder.Services.AddSingleton<IOnChainSignalCandidateProcessor, OnChainSignalCan
 builder.Services.AddSingleton<ServiceControlState>();
 builder.Services.AddSingleton<ServiceActivityState>();
 builder.Services.AddSingleton<IPaperOutcomeConfirmationProcessor, PaperOutcomeConfirmationProcessor>();
-// Historical Paper confirmation is paused; normal final settlement confirms directly.
 builder.Services.AddSingleton<DatabaseScanTelemetryState>();
 builder.Services.Configure<HostOptions>(options =>
 {
@@ -549,6 +548,7 @@ builder.Services.AddHostedService<CryptoUpDown5mResultPollingWorker>();
 // builder.Services.AddHostedService<OnChainTradeCaptureWorker>();
 // builder.Services.AddHostedService<OnChainPaperSignalWorker>();
 builder.Services.AddHostedService<MarketDataWebSocketService>();
+builder.Services.AddHostedService<PaperOutcomeConfirmationWorker>();
 // BTC 5m focused mode: copied-trader accounting, leader exits, and daily analytics reports are paused.
 // builder.Services.AddHostedService<PaperAccountingWorker>();
 // builder.Services.AddHostedService<LeaderActivityExitWorker>();

@@ -10,10 +10,10 @@ namespace PolyCopyTrader.Tests;
 public sealed class PaperTradingWorkerIsolationTests
 {
     [Fact]
-    public void Program_DoesNotStartHistoricalConfirmationWorker()
+    public void Program_StartsHistoricalConfirmationWorker()
     {
         var source = File.ReadAllText(Path.Combine(GetRepositoryRoot(), "src", "PolyCopyTrader.Service", "Program.cs"));
-        Assert.DoesNotContain("AddHostedService<PaperOutcomeConfirmationWorker>()", source, StringComparison.Ordinal);
+        Assert.Contains("AddHostedService<PaperOutcomeConfirmationWorker>()", source, StringComparison.Ordinal);
     }
 
     [Fact]

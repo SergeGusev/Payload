@@ -317,15 +317,26 @@ public sealed class PaperConfirmationProjectionTests
     {
         var repository=await RepositoryAsync();var seed=await SeedAsync(repository,true,0);
         var now=DateTimeOffset.UtcNow;
-        await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE id<>@Id; UPDATE paper_orders SET created_at_utc=now()-interval '2 days' WHERE id=@Id",seed.Order.Id);
-        var later=seed.Order with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),CreatedAtUtc=now.AddHours(-25)};
-        await repository.AddPaperOrderAsync(later);
+        var targetStrategyId=Guid.Parse("b7c50005-0000-4000-8195-000000000022");
+        await SqlAsync("""
+            UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity';
+            INSERT INTO strategies(id,code,name,enabled,paper_lost_coeff,paper_lost_counter,created_at_utc,updated_at_utc)
+            SELECT 'b7c50005-0000-4000-8195-000000000022','confirmation-target-only','confirmation-target-only',false,2,0,now(),now()
+            FROM paper_orders WHERE id=@Id ON CONFLICT (id) DO NOTHING;
+            """,seed.Order.Id);
+        var other=seed.Order with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),CreatedAtUtc=now.AddDays(-3)};
+        await repository.AddPaperOrderAsync(other);
+        var target=seed.Order with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),StrategyId=targetStrategyId,
+            CreatedAtUtc=now.AddDays(-2)};
+        await repository.AddPaperOrderAsync(target);
         var first=Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive,now,24,1));
-        Assert.Equal(seed.Order.Id,first.Id);
+        Assert.Equal(target.Id,first.Id);
         await repository.DeferPaperOutcomeConfirmationAsync(first.Id,now.AddMinutes(1),"unresolved");
         // Even after the oldest retry is due again, never-attempted work is first.
+        var later=target with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),CreatedAtUtc=now.AddHours(-25)};
+        await repository.AddPaperOrderAsync(later);
         Assert.Equal(later.Id,Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive,now.AddMinutes(2),24,1)).Id);
-        var recent=seed.Order with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),CreatedAtUtc=now.AddHours(-23)};
+        var recent=target with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),CreatedAtUtc=now.AddHours(-23)};
         await repository.AddPaperOrderAsync(recent);
         Assert.Equal(recent.Id,Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent,now,24,1)).Id);
     }

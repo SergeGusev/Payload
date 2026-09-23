@@ -18,7 +18,7 @@ public sealed partial class PostgresAppRepository
         await using var command = CreateCommand(connection, $"""
             WITH candidates AS (
                 SELECT id FROM paper_orders
-                WHERE NOT confirmed AND confirmation_next_attempt_at_utc<=@Now
+                WHERE NOT confirmed AND strategy_id=@StrategyId AND confirmation_next_attempt_at_utc<=@Now
                   AND created_at_utc {comparison} @Cutoff
                 ORDER BY confirmation_next_attempt_at_utc,created_at_utc,id LIMIT @Limit FOR UPDATE SKIP LOCKED
             )
@@ -28,6 +28,7 @@ public sealed partial class PostgresAppRepository
             RETURNING {PaperOrderSelectColumns};
             """);
         command.Parameters.AddWithValue("Now", nowUtc.UtcDateTime);
+        command.Parameters.AddWithValue("StrategyId", Guid.Parse("b7c50005-0000-4000-8195-000000000022"));
         command.Parameters.AddWithValue("Cutoff", nowUtc.AddHours(-recentHours).UtcDateTime);
         command.Parameters.AddWithValue("Limit", limit);
         var orders = new List<PaperOrder>();

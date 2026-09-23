@@ -3,7 +3,7 @@
   "contractId": "RC-20260923-eth-child-roi-only-history-selection",
   "title": "Run historical Paper confirmation only for ETH Up or Down 5m 22 Child ROI",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -57,8 +57,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter \"FullyQualifiedName~PaperConfirmationProjectionTests.DueOrderPreventsOldUnresolvedStarvation_AndLanesUseCreatedUtcBoundary|FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests\"",
           "expected": "Target-only selection and existing final-outcome correction tests, with worker fixtures using the target strategy ID, pass; no selected PostgreSQL tests are skipped. The unrelated coverage-index migration repair test is excluded because it leaves the shared test database with a missing migration-history row.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Focused exact selection plus PaperOutcomeConfirmationPostgresIntegrationTests: 24/24 passed, 0 failed, 0 skipped, on isolated local PostgreSQL 17.5 at 127.0.0.1:56493/pct_codex_paper_confirmation_test. TRX SHA256 5B735DCBFC7AD37622D4348184FB01700322443DB7CE977B679E1D600BD7C0F7. The disposable database used check_function_bodies=off and jit=off to avoid local PG17.5 bootstrap defects; no production database was changed."
         }
       ]
     },
@@ -83,16 +83,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter \"FullyQualifiedName~PaperTradingWorkerIsolationTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests\"",
           "expected": "Registration and separate direct final settlement regressions pass; no selected PostgreSQL tests are skipped.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PaperTradingWorkerIsolationTests plus FinalOutcomeSettlementPostgresIntegrationTests: 13/13 passed, 0 failed, 0 skipped, on the same isolated local PostgreSQL 17.5. TRX SHA256 399D53218678A8E67C709342E3AD7DB84890F8F783C12AF56F2003652BD56141."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj",
           "expected": "Service builds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.Service build succeeded with 0 errors and 0 warnings. Build log SHA256 DACA06325246D061387AEA8B77467D42E9F2B997F72EE3DD5C0BB3359DF1AD34."
         }
       ]
     }
@@ -106,9 +106,9 @@
     "semanticDigest": "sha256:9f46621f265c9b226b7b56cba9332421e58dba449cd46bf1bb5714f14ab7e8ed"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/eth_child_roi_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

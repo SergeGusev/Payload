@@ -15,6 +15,8 @@ namespace PolyCopyTrader.Tests;
 [Collection(PaperCopiedTraderPerformancePostgresIntegrationCollection.Name)]
 public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutputHelper output)
 {
+    private static readonly Guid HistoricalWorkerStrategyId = Guid.Parse("b7c50005-0000-4000-8195-000000000022");
+
     internal static string ConnectionString => Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION")
         ?? throw new InvalidOperationException("An isolated test PostgreSQL connection is required; this test must not silently skip.");
 
@@ -337,7 +339,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
     public async Task ProcessorDispatchConfirmsOne_OrPersistsApiFailureWithoutBlockingOtherCandidates(bool apiFailure)
     {
         var repository=await RepositoryAsync();
-        var seed=await SeedAsync(repository,true,0);
+        var seed=await SeedAsync(repository,true,0,HistoricalWorkerStrategyId);
         await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE id<>@Id; UPDATE paper_orders SET created_at_utc=now(),confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id",seed.Order.Id);
         var gamma=new ConfirmationGamma(seed.Order,apiFailure);
         var strategies=new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance,repository);
@@ -361,7 +363,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
     public async Task AdmittedCorrectionSurvivesQuote_StopRollsBackAndReleasesWriterLocks()
     {
         var repository = await RepositoryAsync();
-        var seed = await SeedAsync(repository, true, 0);
+        var seed = await SeedAsync(repository, true, 0, HistoricalWorkerStrategyId);
         await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE id<>@Id; UPDATE paper_orders SET created_at_utc=now(),confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", seed.Order.Id);
         var activity = new ServiceActivityState();
         var processor = new PaperOutcomeConfirmationProcessor(NullLogger<PaperOutcomeConfirmationProcessor>.Instance,
@@ -529,13 +531,14 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
         """{"source":"GammaClosedMarket","umaResolutionStatus":"resolved"}""");
 
     internal sealed record Seed(PaperOrder Order, Guid RunId, DateTimeOffset Settled);
-    internal static async Task<Seed> SeedAsync(PostgresAppRepository repository, bool oldWin, int sold)
+    internal static async Task<Seed> SeedAsync(PostgresAppRepository repository, bool oldWin, int sold,
+        Guid? strategyId = null)
     {
-        var strategy = Guid.NewGuid();
-        var code = "confirmation-"+strategy.ToString("N");
+        var strategy = strategyId ?? Guid.NewGuid();
+        var code = "confirmation-"+(strategyId is null ? strategy : Guid.NewGuid()).ToString("N");
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
-        await using (var strategyCommand = new NpgsqlCommand("INSERT INTO strategies(id,code,name,enabled,paper_lost_coeff,paper_lost_counter,created_at_utc,updated_at_utc) VALUES(@Id,@Code,@Code,false,2,@Counter,now(),now())",connection))
+        await using (var strategyCommand = new NpgsqlCommand("INSERT INTO strategies(id,code,name,enabled,paper_lost_coeff,paper_lost_counter,created_at_utc,updated_at_utc) VALUES(@Id,@Code,@Code,false,2,@Counter,now(),now()) ON CONFLICT (id) DO NOTHING",connection))
         {
             strategyCommand.Parameters.AddWithValue("Id",strategy);
             strategyCommand.Parameters.AddWithValue("Code",code);
@@ -569,7 +572,8 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
             INSERT INTO date_dependent_strategy_hourly_paper_pnl(strategy_id,code,name,hour_utc,settled_runs_count,won_runs_count,
                 lost_runs_count,stake_usd,realized_pnl_usd,avg_pnl_usd,refreshed_at_utc)
             SELECT s.id,s.code,s.name,extract(hour FROM o.created_at_utc AT TIME ZONE 'UTC')::integer,1,1,0,6,@Payout-6,@Payout-6,now()
-                FROM paper_orders o JOIN strategies s ON s.id=o.strategy_id WHERE o.id=@Id;
+                FROM paper_orders o JOIN strategies s ON s.id=o.strategy_id WHERE o.id=@Id
+                ON CONFLICT (strategy_id,hour_utc) DO NOTHING;
             """,connection))
         {
             run.Parameters.AddWithValue("Id",order.Id);run.Parameters.AddWithValue("RunId",runId);
