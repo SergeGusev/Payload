@@ -48,14 +48,15 @@
       "implementationPaths": [
         "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperConfirmationBatch.cs",
         "tests/PolyCopyTrader.Tests/PaperConfirmationProjectionTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
         "README.md"
       ],
       "verification": [
         {
           "id": "VER-001",
           "kind": "test",
-          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter \"FullyQualifiedName~PaperConfirmationProjectionTests|FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests\"",
-          "expected": "Target-only selection and existing final-outcome correction tests pass; no selected PostgreSQL tests are skipped.",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter \"FullyQualifiedName~PaperConfirmationProjectionTests.DueOrderPreventsOldUnresolvedStarvation_AndLanesUseCreatedUtcBoundary|FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests\"",
+          "expected": "Target-only selection and existing final-outcome correction tests, with worker fixtures using the target strategy ID, pass; no selected PostgreSQL tests are skipped. The unrelated coverage-index migration repair test is excluded because it leaves the shared test database with a missing migration-history row.",
           "result": "pending",
           "evidence": "pending"
         }
@@ -101,8 +102,8 @@
   "approval": {
     "status": "approved",
     "approvedBy": "user",
-    "evidenceText": "APPROVE RC-20260923-eth-child-roi-only-history-selection sha256:722d377ef5ab9260ccea9878c600d240d3c897fa1da8fe6d6330c78f45f62120",
-    "semanticDigest": "sha256:722d377ef5ab9260ccea9878c600d240d3c897fa1da8fe6d6330c78f45f62120"
+    "evidenceText": "APPROVE RC-20260923-eth-child-roi-only-history-selection sha256:9f46621f265c9b226b7b56cba9332421e58dba449cd46bf1bb5714f14ab7e8ed",
+    "semanticDigest": "sha256:9f46621f265c9b226b7b56cba9332421e58dba449cd46bf1bb5714f14ab7e8ed"
   },
   "independentReview": {
     "reviewer": "agent:/root/reviewer",
