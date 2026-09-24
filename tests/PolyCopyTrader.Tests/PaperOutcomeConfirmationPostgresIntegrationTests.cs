@@ -333,6 +333,140 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
         Assert.Equal(0L,await ScalarAsync<long>("SELECT count(*) FROM paper_position_settlements WHERE asset_id=(SELECT asset_id FROM paper_orders WHERE id=@Id)",cancelled.Id));
     }
 
+    [Fact]
+    public async Task HistoricalClaimKeepsStrategyDueAndLaneBoundaries_AndPlannerSettingIsLocal()
+    {
+        var repository = await RepositoryAsync();
+        var first = await SeedAsync(repository, true, 0, HistoricalWorkerStrategyId);
+        var boundary = await SeedAsync(repository, true, 0, HistoricalWorkerStrategyId);
+        var later = await SeedAsync(repository, true, 0, HistoricalWorkerStrategyId);
+        var archive = await SeedAsync(repository, true, 0, HistoricalWorkerStrategyId);
+        var future = await SeedAsync(repository, true, 0, HistoricalWorkerStrategyId);
+        var otherStrategy = await SeedAsync(repository, true, 0);
+        var observedNow = DateTimeOffset.UtcNow;
+        var now = new DateTimeOffset(observedNow.Ticks - observedNow.Ticks % 10, TimeSpan.Zero);
+        var cutoff = now.AddHours(-24);
+        var poolSettings = new NpgsqlConnectionStringBuilder(ConnectionString)
+        {
+            ApplicationName = "claim-setting-" + Guid.NewGuid().ToString("N"),
+            MaxPoolSize = 1,
+            NoResetOnClose = true
+        };
+        var dedicatedConnectionString = poolSettings.ConnectionString;
+        int backendPid;
+        await using (var baselineConnection = new NpgsqlConnection(dedicatedConnectionString))
+        {
+            await baselineConnection.OpenAsync();
+            await using var baseline = new NpgsqlCommand("SELECT pg_backend_pid()", baselineConnection);
+            backendPid = (int)(await baseline.ExecuteScalarAsync())!;
+        }
+        await using (var connection = new NpgsqlConnection(ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var arrange = new NpgsqlCommand("""
+                UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE strategy_id=@Strategy;
+                UPDATE paper_orders SET created_at_utc=@FirstCreated,confirmation_next_attempt_at_utc=@FirstDue WHERE id=@First;
+                UPDATE paper_orders SET created_at_utc=@Cutoff,confirmation_next_attempt_at_utc=@BoundaryDue WHERE id=@Boundary;
+                UPDATE paper_orders SET created_at_utc=@LaterCreated,confirmation_next_attempt_at_utc=@LaterDue WHERE id=@Later;
+                UPDATE paper_orders SET created_at_utc=@ArchiveCreated,confirmation_next_attempt_at_utc=@ArchiveDue WHERE id=@Archive;
+                UPDATE paper_orders SET created_at_utc=@LaterCreated,confirmation_next_attempt_at_utc=@FutureDue WHERE id=@Future;
+                UPDATE paper_orders SET confirmation_next_attempt_at_utc=@FirstDue WHERE id=@Other;
+                """, connection);
+            arrange.Parameters.AddWithValue("Strategy", HistoricalWorkerStrategyId);
+            arrange.Parameters.AddWithValue("First", first.Order.Id);
+            arrange.Parameters.AddWithValue("Boundary", boundary.Order.Id);
+            arrange.Parameters.AddWithValue("Later", later.Order.Id);
+            arrange.Parameters.AddWithValue("Archive", archive.Order.Id);
+            arrange.Parameters.AddWithValue("Future", future.Order.Id);
+            arrange.Parameters.AddWithValue("Other", otherStrategy.Order.Id);
+            arrange.Parameters.AddWithValue("FirstCreated", now.AddHours(-1).UtcDateTime);
+            arrange.Parameters.AddWithValue("LaterCreated", cutoff.AddMinutes(1).UtcDateTime);
+            arrange.Parameters.AddWithValue("ArchiveCreated", cutoff.AddMinutes(-1).UtcDateTime);
+            arrange.Parameters.AddWithValue("Cutoff", cutoff.UtcDateTime);
+            arrange.Parameters.AddWithValue("FirstDue", now.AddMinutes(-3).UtcDateTime);
+            arrange.Parameters.AddWithValue("BoundaryDue", now.AddMinutes(-3).UtcDateTime);
+            arrange.Parameters.AddWithValue("LaterDue", now.UtcDateTime);
+            arrange.Parameters.AddWithValue("ArchiveDue", now.AddMinutes(-4).UtcDateTime);
+            arrange.Parameters.AddWithValue("FutureDue", now.AddMinutes(1).UtcDateTime);
+            await arrange.ExecuteNonQueryAsync();
+        }
+
+        var dedicatedRepository = new PostgresAppRepository(new PostgresConnectionFactory(
+            new StorageOptions { ConnectionString = dedicatedConnectionString }));
+        var recent = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 1);
+        Assert.Equal(boundary.Order.Id, Assert.Single(recent).Id);
+        Assert.Equal(now.AddMinutes(1).UtcDateTime,
+            await ScalarAsync<DateTime>("SELECT confirmation_next_attempt_at_utc FROM paper_orders WHERE id=@Id", boundary.Order.Id));
+        var nextRecent = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 2);
+        Assert.Equal(new[] { first.Order.Id, later.Order.Id }.Order(), nextRecent.Select(x => x.Id).Order());
+        var old = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive, now, 24, 1);
+        Assert.Equal(archive.Order.Id, Assert.Single(old).Id);
+        Assert.Equal(now.AddMinutes(1).UtcDateTime,
+            await ScalarAsync<DateTime>("SELECT confirmation_next_attempt_at_utc FROM paper_orders WHERE id=@Id", future.Order.Id));
+        Assert.Equal(now.AddMinutes(-3).UtcDateTime,
+            await ScalarAsync<DateTime>("SELECT confirmation_next_attempt_at_utc FROM paper_orders WHERE id=@Id", otherStrategy.Order.Id));
+        await using var verifyConnection = new NpgsqlConnection(dedicatedConnectionString);
+        await verifyConnection.OpenAsync();
+        await using var verify = new NpgsqlCommand("SELECT pg_backend_pid(), current_setting('enable_indexscan')", verifyConnection);
+        await using var verifyReader = await verify.ExecuteReaderAsync();
+        Assert.True(await verifyReader.ReadAsync());
+        Assert.Equal(backendPid, verifyReader.GetInt32(0));
+        Assert.Equal("on", verifyReader.GetString(1));
+    }
+
+    [Fact]
+    public async Task FailedAndCancelledHistoricalClaimLeaveNoDurableUpdate()
+    {
+        var repository = await RepositoryAsync();
+        var seed = await SeedAsync(repository, true, 0, HistoricalWorkerStrategyId);
+        var now = DateTimeOffset.UtcNow;
+        await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE strategy_id=(SELECT strategy_id FROM paper_orders WHERE id=@Id); UPDATE paper_orders SET created_at_utc=now(),confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", seed.Order.Id);
+        var before = await ScalarAsync<string>("SELECT jsonb_build_object('due',confirmation_next_attempt_at_utc,'evidence',confirmation_evidence)::text FROM paper_orders WHERE id=@Id", seed.Order.Id);
+        var function = "pct_claim_failure_" + Guid.NewGuid().ToString("N");
+        await SqlAsync($"""
+            CREATE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW.id='{seed.Order.Id}'::uuid THEN RAISE EXCEPTION 'claim test failure'; END IF; RETURN NEW; END $$;
+            CREATE TRIGGER {function} BEFORE UPDATE ON paper_orders FOR EACH ROW EXECUTE FUNCTION {function}();
+            """, seed.Order.Id);
+        try
+        {
+            var failure = await Assert.ThrowsAsync<PostgresException>(() =>
+                repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 1));
+            Assert.Contains("claim test failure", failure.MessageText);
+            Assert.Equal(before, await ScalarAsync<string>("SELECT jsonb_build_object('due',confirmation_next_attempt_at_utc,'evidence',confirmation_evidence)::text FROM paper_orders WHERE id=@Id", seed.Order.Id));
+        }
+        finally { await SqlAsync($"DROP TRIGGER {function} ON paper_orders; DROP FUNCTION {function}();", seed.Order.Id); }
+
+        var sleepingFunction = "pct_claim_sleep_" + Guid.NewGuid().ToString("N");
+        await SqlAsync($"""
+            CREATE FUNCTION {sleepingFunction}() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN IF NEW.id='{seed.Order.Id}'::uuid THEN PERFORM pg_sleep(10); END IF; RETURN NEW; END $$;
+            CREATE TRIGGER {sleepingFunction} BEFORE UPDATE ON paper_orders FOR EACH ROW EXECUTE FUNCTION {sleepingFunction}();
+            """, seed.Order.Id);
+        using var cancelled = new CancellationTokenSource();
+        try
+        {
+            var claim = repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 1, cancelled.Token);
+            var sleeping = false;
+            for (var attempt = 0; attempt < 100 && !claim.IsCompleted; attempt++)
+            {
+                sleeping = await ScalarAsync<bool>("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event='PgSleep' AND query LIKE '%WITH candidates%')", seed.Order.Id);
+                if (sleeping) break;
+                await Task.Delay(20);
+            }
+            Assert.True(sleeping);
+            cancelled.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => claim.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            cancelled.Cancel();
+            await SqlAsync($"DROP TRIGGER {sleepingFunction} ON paper_orders; DROP FUNCTION {sleepingFunction}();", seed.Order.Id);
+        }
+        Assert.Equal(before, await ScalarAsync<string>("SELECT jsonb_build_object('due',confirmation_next_attempt_at_utc,'evidence',confirmation_evidence)::text FROM paper_orders WHERE id=@Id", seed.Order.Id));
+        Assert.Equal(seed.Order.Id, Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 1)).Id);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

@@ -14,27 +14,46 @@ public sealed partial class PostgresAppRepository
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recentHours);
         if (limit is < 1 or > 32) throw new ArgumentOutOfRangeException(nameof(limit));
         await using var connection = await OpenConnectionAsync(cancellationToken);
-        var comparison = lane == PaperConfirmationLane.Recent ? ">=" : "<";
-        await using var command = CreateCommand(connection, $"""
-            WITH candidates AS (
-                SELECT id FROM paper_orders
-                WHERE NOT confirmed AND strategy_id=@StrategyId AND confirmation_next_attempt_at_utc<=@Now
-                  AND created_at_utc {comparison} @Cutoff
-                ORDER BY confirmation_next_attempt_at_utc,created_at_utc,id LIMIT @Limit FOR UPDATE SKIP LOCKED
-            )
-            UPDATE paper_orders SET confirmation_next_attempt_at_utc=@Now+interval '1 minute',
-                confirmation_evidence=jsonb_build_object('last_attempt','lookup_started','attempted_at_utc',@Now::timestamptz)
-            WHERE id IN (SELECT id FROM candidates)
-            RETURNING {PaperOrderSelectColumns};
-            """);
-        command.Parameters.AddWithValue("Now", nowUtc.UtcDateTime);
-        command.Parameters.AddWithValue("StrategyId", Guid.Parse("b7c50005-0000-4000-8195-000000000022"));
-        command.Parameters.AddWithValue("Cutoff", nowUtc.AddHours(-recentHours).UtcDateTime);
-        command.Parameters.AddWithValue("Limit", limit);
-        var orders = new List<PaperOrder>();
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken)) orders.Add(ReadPaperOrder(reader));
-        return orders.OrderBy(x => x.ConditionId, StringComparer.Ordinal).ThenBy(x => x.Id).ToArray();
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await using (var planner = CreateCommand(connection, "SET LOCAL enable_indexscan=off"))
+            {
+                planner.Transaction = transaction;
+                await planner.ExecuteNonQueryAsync(cancellationToken);
+            }
+            var comparison = lane == PaperConfirmationLane.Recent ? ">=" : "<";
+            await using var command = CreateCommand(connection, $"""
+                WITH candidates AS (
+                    SELECT id FROM paper_orders
+                    WHERE NOT confirmed AND strategy_id=@StrategyId AND confirmation_next_attempt_at_utc<=@Now
+                      AND created_at_utc {comparison} @Cutoff
+                    ORDER BY confirmation_next_attempt_at_utc,created_at_utc,id LIMIT @Limit FOR UPDATE SKIP LOCKED
+                )
+                UPDATE paper_orders SET confirmation_next_attempt_at_utc=@Now+interval '1 minute',
+                    confirmation_evidence=jsonb_build_object('last_attempt','lookup_started','attempted_at_utc',@Now::timestamptz)
+                WHERE id IN (SELECT id FROM candidates)
+                RETURNING {PaperOrderSelectColumns};
+                """);
+            command.Transaction = transaction;
+            command.Parameters.AddWithValue("Now", nowUtc.UtcDateTime);
+            command.Parameters.AddWithValue("StrategyId", Guid.Parse("b7c50005-0000-4000-8195-000000000022"));
+            command.Parameters.AddWithValue("Cutoff", nowUtc.AddHours(-recentHours).UtcDateTime);
+            command.Parameters.AddWithValue("Limit", limit);
+            var orders = new List<PaperOrder>();
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken)) orders.Add(ReadPaperOrder(reader));
+            }
+            var result = orders.OrderBy(x => x.ConditionId, StringComparer.Ordinal).ThenBy(x => x.Id).ToArray();
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
     }
 
     public async Task<PaperConfirmationMarketEvidence?> GetPaperConfirmationMarketAsync(

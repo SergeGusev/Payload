@@ -85,6 +85,9 @@ alternate with one Archive portion; an empty lane lends its slot to the other.
 Recent means order `created_at_utc >= now UTC - 24 hours`, solely for scheduling.
 Within a lane, due retry time precedes creation time, so unresolved old records do
 not repeatedly displace never-attempted archive work.
+The historical Claim runs in a short transaction with `SET LOCAL enable_indexscan=off`
+so PostgreSQL can use the strategy bitmap index for its existing candidate query.
+The setting ends with the Claim transaction; selection, retry order and worker limits are unchanged.
 
 Pending queues growing over three successive one-second samples, or an increase
 in failed/rejected/overflow counters, pauses verification for 30 seconds. Timeouts

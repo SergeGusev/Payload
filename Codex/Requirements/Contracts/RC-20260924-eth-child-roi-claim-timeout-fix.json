@@ -3,7 +3,7 @@
   "contractId": "RC-20260924-eth-child-roi-claim-timeout-fix",
   "title": "Restore bounded historical Paper claim for ETH Child ROI 22",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -51,8 +51,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --logger trx",
           "expected": "Focused tests pass against a disposable 127.0.0.1 PostgreSQL database with no skipped tests; exact Claim behavior and transaction-local scope are verified.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "2026-09-24 isolated local PostgreSQL 17 at 127.0.0.1, database pct_codex_paper_confirmation_test: PaperOutcomeConfirmationPostgresIntegrationTests 25 passed, 0 failed, 0 skipped. New tests verify exact strategy, due and lane boundaries, same-backend transaction-local planner reset, and failed/cancelled Claim rollback."
         }
       ]
     },
@@ -74,16 +74,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~PaperOutcomeConfirmationWorkerTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests' --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --logger trx",
           "expected": "Worker and direct new-stake settlement regressions pass, with no selected PostgreSQL tests skipped.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "2026-09-24 same isolated local PostgreSQL: PaperOutcomeConfirmationWorkerTests and FinalOutcomeSettlementPostgresIntegrationTests 15 passed, 0 failed, 0 skipped."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <marked-run>/artifacts",
           "expected": "Service builds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "2026-09-24 dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <marked-run>/artifacts completed with 0 errors; final incremental verification had 0 warnings."
         }
       ]
     }
@@ -97,9 +97,9 @@
     "semanticDigest": "sha256:c4abda0fe5e591642f36532f0d6993b619581bd71a3e4aa112c0cf8e87d2ef6c"
   },
   "independentReview": {
-    "reviewer": "agent:/root/eth-child-roi-claim-review",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/eth_child_roi_claim_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }
