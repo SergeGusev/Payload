@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260924-eth-child-roi-claim-timeout-fix",
+  "title": "Restore bounded historical Paper claim for ETH Child ROI 22",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Повтори"
+    },
+    {
+      "source": "user",
+      "text": "Давай попробуем решить эту проблему"
+    }
+  ],
+  "scope": {
+    "goal": "Remove the repeatedly timed-out historical Paper Claim selection for ETH Up or Down 5m 22 Child ROI identified in the immediately preceding check.",
+    "inScope": [
+      "Only PaperOutcomeConfirmationWorker's ClaimPaperConfirmationBatchAsync path for strategy b7c50005-0000-4000-8195-000000000022, covering its existing Recent and Archive lanes.",
+      "Use a transaction-local PostgreSQL planner setting for that Claim statement so its existing strategy index can be selected; retain the exact candidate filter, retry order, LIMIT, FOR UPDATE SKIP LOCKED, update payload and RETURNING contract.",
+      "Focused isolated-PostgreSQL regression tests, service build, and a short README description of the Claim execution change."
+    ],
+    "outOfScope": [
+      "Other strategies, new-stake final settlement, trading or execution rules, historical result corrections, and changes to the worker's two-second timeout, batching or load-control policy.",
+      "Production database writes or schema changes, new indexes, service restart, deployment, and cleanup of older Paper positions.",
+      "Unrelated WebSocket, queue, and Dashboard projection warnings in the preceding health report."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "Exact strategy b7c50005-0000-4000-8195-000000000022 and both existing Claim lanes; the earlier one-hour observation window is diagnostic evidence, not the strategy's scheduling period.",
+    "firstVerification": "Already performed read-only production preview on 2026-09-24T05:34:15Z: exact target 2706 orders/1831 due, 4,133,536 estimated total paper orders, valid current indexes, no waiting locks; EXPLAIN of the unchanged Claim UPDATE uses the global unconfirmed index for LIMIT 1 and 2, while transaction-local enable_indexscan=off chooses the strategy bitmap index. An equivalent read-only SELECT completed in 219.896 ms with that local setting."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Make the exact ETH Child ROI 22 historical Claim use a bounded strategy-first plan without changing which eligible order is selected or what the Claim updates.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Давай попробуем решить эту проблему",
+      "acceptanceCriteria": [
+        "Claim opens one short database transaction, sets enable_indexscan=off with SET LOCAL only in that transaction, executes the existing selection/update, and commits only after successful result reading; cancellation or failure rolls the transaction back.",
+        "The strategy predicate, due cutoff, Recent/Archive created-time boundary, retry/creation/id ordering, LIMIT 1..32, FOR UPDATE SKIP LOCKED, claim timestamp and evidence payload are unchanged.",
+        "Isolated PostgreSQL tests cover target versus non-target selection, due/order boundaries, transaction-local setting reset, and canceled/failed Claim without a durable partial update."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperConfirmationBatch.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --logger trx",
+          "expected": "Focused tests pass against a disposable 127.0.0.1 PostgreSQL database with no skipped tests; exact Claim behavior and transaction-local scope are verified.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep normal new Paper settlement and the historical worker's existing load limits working while fixing Claim timeouts.",
+      "sourceRequestIndexes": [1],
+      "sourceQuote": "Давай попробуем решить эту проблему",
+      "acceptanceCriteria": [
+        "No change to PaperOutcomeConfirmationWorker admission, Recent/Archive cadence, two-second database budget, 30-second overload pause, batch resizing, final evidence rules or ordinary new-stake settlement dispatch.",
+        "Relevant worker and final-settlement regression tests pass; the service builds; README states the transaction-local Claim planner behavior and the unchanged operational limits."
+      ],
+      "implementationPaths": [
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~PaperOutcomeConfirmationWorkerTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests' --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results --logger trx",
+          "expected": "Worker and direct new-stake settlement regressions pass, with no selected PostgreSQL tests skipped.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <marked-run>/artifacts",
+          "expected": "Service builds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260924-eth-child-roi-claim-timeout-fix sha256:c4abda0fe5e591642f36532f0d6993b619581bd71a3e4aa112c0cf8e87d2ef6c",
+    "semanticDigest": "sha256:c4abda0fe5e591642f36532f0d6993b619581bd71a3e4aa112c0cf8e87d2ef6c"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/eth-child-roi-claim-review",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
