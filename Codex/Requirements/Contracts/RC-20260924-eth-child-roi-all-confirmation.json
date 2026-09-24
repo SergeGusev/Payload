@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "contractId": "RC-20260924-eth-child-roi-all-confirmation",
+  "title": "Confirm historical and future Paper outcomes for ETH Child ROI 1–24",
+  "author": "agent:/root",
+  "status": "approved",
+  "originalRequests": [
+    {
+      "source": "user",
+      "text": "Теперь скорректируй SErvice так, чтобы он сделал конфирмацию всех ETH Child ROI  стратегий"
+    },
+    {
+      "source": "user",
+      "text": "Только Child ROI 1–24"
+    },
+    {
+      "source": "user",
+      "text": "Историю и будущие ставки"
+    }
+  ],
+  "scope": {
+    "goal": "Change the existing Service Paper outcome confirmation worker so it confirms eligible historical and future Paper orders for exactly ETH Up or Down 5m Child ROI 1–24.",
+    "inScope": [
+      "Exactly the 24 catalog strategy IDs b7c50005-0000-4000-8195-{lookback 1..24, zero-padded to 12 digits}; both existing Recent and Archive claim lanes; all creation dates and future orders.",
+      "Select one exact strategy per bounded claim attempt and rotate through all 24 so the current two-second claim budget does not scan the full 106-thousand-order backlog on every portion. Preserve the existing due/retry, lane and within-strategy ordering rules.",
+      "Focused tests of all-24 inclusion, neighboring-strategy exclusion, future/recent and archive eligibility, rotation, rollback, and unchanged final-outcome correction; Service build and minimal README update."
+    ],
+    "outOfScope": [
+      "ETH Child Progress ROI, BTC or SOL Child ROI, other Child variants, and any other strategy.",
+      "New or changed confirmation evidence criteria, financial formulas, Paper or Live trade placement, new-stake final-settlement route, service admission, load-control budgets, batch size, retry interval, or schema/index changes.",
+      "Production deployment or restart, direct production database writes, backup, and manual confirmation jobs."
+    ],
+    "mode": "local-edit",
+    "periodOrFilter": "All existing and future unconfirmed Paper orders of the 24 exact ETH Child ROI strategy IDs; the existing 24-hour Recent/Archive boundary only schedules work and does not exclude older orders. Read-only production preview at 2026-09-24T19:56Z: 24 strategies, 116475 Paper orders, 10120 confirmed and 106355 unconfirmed/due (3 Recent, 106352 Archive). Counts will change as new orders arrive.",
+    "firstVerification": "Inspected the current catalog, Service-to-processor-to-repository claim path, existing retry and accounting flow, exact production candidates and indexes. A read-only 24-strategy combined candidate scan read 106352 old rows and took 1606.569 ms before any update under the Service's two-second claim budget; a bounded largest-single-strategy read selected among 10684 due old rows in 274.717 ms."
+  },
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "The existing Service confirms eligible Paper outcomes for exactly ETH Child ROI 1–24 across existing history and future orders.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "Только Child ROI 1–24",
+      "acceptanceCriteria": [
+        "Each of the 24 exact ETH Child ROI strategy IDs is reachable by the existing background confirmation flow in both Recent and Archive lanes when its Paper order is unconfirmed and due; neither lane imposes an all-history cutoff.",
+        "ETH Child Progress ROI and all other strategy IDs are never claimed by this worker, including similarly named or disabled strategies.",
+        "New Paper orders of the same 24 strategies remain eligible when due; already confirmed or not-yet-due orders remain ineligible."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperConfirmationBatch.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmationProjectionTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmationBenchmarkTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-001",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests|FullyQualifiedName~PaperConfirmationProjectionTests.DueOrderPreventsOldUnresolvedStarvation_AndLanesUseCreatedUtcBoundary' --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results",
+          "expected": "Focused isolated-PostgreSQL tests pass without skips; exact 24 IDs are claimable and neighboring strategies are excluded, with due/lane boundaries and correction rules intact.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    },
+    {
+      "id": "REQ-002",
+      "text": "Keep historical confirmation bounded while covering all 24 strategies, without changing existing accounting or load-control behavior.",
+      "sourceRequestIndexes": [0, 1, 2],
+      "sourceQuote": "сделал конфирмацию всех ETH Child ROI  стратегий",
+      "acceptanceCriteria": [
+        "Claim attempts rotate across the 24 exact strategy IDs, select candidates from only the selected ID, and retain the existing due/retry order, Recent/Archive cadence, LIMIT 1..32, FOR UPDATE SKIP LOCKED, atomic claim/retry update, and transaction-local planner setting.",
+        "Existing final-market proof checks, atomic correction accounting, independent direct final settlement, worker pauses and time budgets are unchanged.",
+        "Worker rotation and cancellation/rollback tests pass; the Service builds; README names the exact family, backlog behavior, and unchanged verification safeguards."
+      ],
+      "implementationPaths": [
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationWorker.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/IPaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Service/PaperTrading/PaperOutcomeConfirmationProcessor.cs",
+        "src/PolyCopyTrader.Storage/IAppRepository.cs",
+        "src/PolyCopyTrader.Storage/PostgresAppRepository.PaperConfirmationBatch.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationWorkerTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperOutcomeConfirmationPostgresIntegrationTests.cs",
+        "tests/PolyCopyTrader.Tests/PaperConfirmationBenchmarkTests.cs",
+        "README.md"
+      ],
+      "verification": [
+        {
+          "id": "VER-002",
+          "kind": "test",
+          "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~PaperOutcomeConfirmationWorkerTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests' --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results",
+          "expected": "Worker rotation, load/cancellation, and independent final-settlement regressions pass without skips.",
+          "result": "pending",
+          "evidence": "pending"
+        },
+        {
+          "id": "VER-003",
+          "kind": "build",
+          "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <marked-run>/artifacts",
+          "expected": "Service builds with zero errors.",
+          "result": "pending",
+          "evidence": "pending"
+        }
+      ]
+    }
+  ],
+  "assumptions": [],
+  "deviations": [],
+  "approval": {
+    "status": "approved",
+    "approvedBy": "user",
+    "evidenceText": "APPROVE RC-20260924-eth-child-roi-all-confirmation sha256:b6931bc532793abbe347837cd64b3a020e6ec5961aa8fe2e39f5496ad10104a4",
+    "semanticDigest": "sha256:b6931bc532793abbe347837cd64b3a020e6ec5961aa8fe2e39f5496ad10104a4"
+  },
+  "independentReview": {
+    "reviewer": "agent:/root/reviewer",
+    "comparedOriginalRequests": false,
+    "verdict": "pending",
+    "findings": []
+  }
+}
