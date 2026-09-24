@@ -18,9 +18,9 @@ public sealed class PaperOutcomeConfirmationProcessor(
     private readonly PaperConfirmationOptions settings = options ?? new();
     public Task<PaperConfirmationProgress?> GetProgressAsync(CancellationToken cancellationToken)
         => repository.GetPaperConfirmationProgressAsync(cancellationToken);
-    public Task<IReadOnlyList<PaperOrder>> ClaimBatchAsync(PaperConfirmationLane lane, int limit,
+    public Task<IReadOnlyList<PaperOrder>> ClaimBatchAsync(PaperConfirmationLane lane, Guid strategyId, int limit,
         CancellationToken cancellationToken) => repository.ClaimPaperConfirmationBatchAsync(
-            lane, DateTimeOffset.UtcNow, settings.RecentHours, limit, cancellationToken);
+            lane, strategyId, DateTimeOffset.UtcNow, settings.RecentHours, limit, cancellationToken);
     public Task<PaperOrder?> ClaimAsync(CancellationToken cancellationToken) =>
         repository.TryClaimPaperOutcomeConfirmationAsync(DateTimeOffset.UtcNow, cancellationToken);
 

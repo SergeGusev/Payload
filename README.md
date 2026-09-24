@@ -51,11 +51,13 @@ require their own allowlisted database and must run separately. Set
 
 ### Paper outcome confirmation
 
-Historical background verification is enabled only for
-`ETH Up or Down 5m 22 Child ROI` (`b7c50005-0000-4000-8195-000000000022`)
-under `RC-20260923-eth-child-roi-only-history-selection`. Both existing Recent
-and Archive lanes filter by that strategy ID. Other strategies' unconfirmed
-history remains unverified by this worker. Existing flags/evidence and coverage
+Historical background verification covers exactly `ETH Up or Down 5m Child ROI`
+strategies 1–24 (`b7c50005-0000-4000-8195-000000000001` through
+`b7c50005-0000-4000-8195-000000000024`). Each claim selects one strategy;
+the worker rotates through all 24 after each Recent–Recent–Archive cycle.
+Both lanes cover that strategy's existing backlog and future Paper orders when
+due. Other strategies' unconfirmed history remains unverified by this worker.
+Existing final-outcome evidence checks, correction accounting, flags and coverage
 reporting remain.
 
 Normal final settlement remains active for new and still-open stakes. It checks
@@ -86,8 +88,9 @@ Recent means order `created_at_utc >= now UTC - 24 hours`, solely for scheduling
 Within a lane, due retry time precedes creation time, so unresolved old records do
 not repeatedly displace never-attempted archive work.
 The historical Claim runs in a short transaction with `SET LOCAL enable_indexscan=off`
-so PostgreSQL can use the strategy bitmap index for its existing candidate query.
-The setting ends with the Claim transaction; selection, retry order and worker limits are unchanged.
+so PostgreSQL can use the selected strategy's bitmap index for its candidate query.
+The setting ends with the Claim transaction; due and retry order within each
+strategy, the Recent/Archive cadence and worker limits are unchanged.
 
 Pending queues growing over three successive one-second samples, or an increase
 in failed/rejected/overflow counters, pauses verification for 30 seconds. Timeouts

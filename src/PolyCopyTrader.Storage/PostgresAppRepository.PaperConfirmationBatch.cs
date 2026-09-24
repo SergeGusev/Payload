@@ -8,7 +8,7 @@ public sealed partial class PostgresAppRepository
     public Task<PaperConfirmationProgress?> GetPaperConfirmationProgressAsync(CancellationToken cancellationToken = default)
         => new PostgresDashboardSnapshotRepository(connectionFactory).GetPaperConfirmationProgressAsync(cancellationToken);
     public async Task<IReadOnlyList<PaperOrder>> ClaimPaperConfirmationBatchAsync(
-        PaperConfirmationLane lane, DateTimeOffset nowUtc, int recentHours, int limit,
+        PaperConfirmationLane lane, Guid strategyId, DateTimeOffset nowUtc, int recentHours, int limit,
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(recentHours);
@@ -37,7 +37,7 @@ public sealed partial class PostgresAppRepository
                 """);
             command.Transaction = transaction;
             command.Parameters.AddWithValue("Now", nowUtc.UtcDateTime);
-            command.Parameters.AddWithValue("StrategyId", Guid.Parse("b7c50005-0000-4000-8195-000000000022"));
+            command.Parameters.AddWithValue("StrategyId", strategyId);
             command.Parameters.AddWithValue("Cutoff", nowUtc.AddHours(-recentHours).UtcDateTime);
             command.Parameters.AddWithValue("Limit", limit);
             var orders = new List<PaperOrder>();

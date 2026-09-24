@@ -329,15 +329,15 @@ public sealed class PaperConfirmationProjectionTests
         var target=seed.Order with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),StrategyId=targetStrategyId,
             CreatedAtUtc=now.AddDays(-2)};
         await repository.AddPaperOrderAsync(target);
-        var first=Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive,now,24,1));
+        var first=Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive,targetStrategyId,now,24,1));
         Assert.Equal(target.Id,first.Id);
         await repository.DeferPaperOutcomeConfirmationAsync(first.Id,now.AddMinutes(1),"unresolved");
         // Even after the oldest retry is due again, never-attempted work is first.
         var later=target with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),CreatedAtUtc=now.AddHours(-25)};
         await repository.AddPaperOrderAsync(later);
-        Assert.Equal(later.Id,Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive,now.AddMinutes(2),24,1)).Id);
+        Assert.Equal(later.Id,Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive,targetStrategyId,now.AddMinutes(2),24,1)).Id);
         var recent=target with {Id=Guid.NewGuid(),SignalId=Guid.NewGuid(),CreatedAtUtc=now.AddHours(-23)};
         await repository.AddPaperOrderAsync(recent);
-        Assert.Equal(recent.Id,Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent,now,24,1)).Id);
+        Assert.Equal(recent.Id,Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent,targetStrategyId,now,24,1)).Id);
     }
 }

@@ -183,7 +183,7 @@ public sealed class PaperConfirmationBenchmarkTests(ITestOutputHelper output)
     private sealed class BaselineProcessor(SyntheticGamma gamma,PaperOutcomeConfirmationProcessor inner) : IPaperOutcomeConfirmationProcessor
     {
         public Task<PaperOrder?> ClaimAsync(CancellationToken token)=>inner.ClaimAsync(token);
-        public Task<IReadOnlyList<PaperOrder>> ClaimBatchAsync(PaperConfirmationLane lane,int limit,CancellationToken token)=>throw new NotSupportedException();
+        public Task<IReadOnlyList<PaperOrder>> ClaimBatchAsync(PaperConfirmationLane lane,Guid strategyId,int limit,CancellationToken token)=>throw new NotSupportedException();
         public async Task<PaperOutcomeConfirmation?> LookupAsync(PaperOrder order,PaperOutcomeConfirmationTrace trace,CancellationToken token)
             => PaperOutcomeConfirmationProcessor.Resolve(order,await gamma.GetTokenMetadataAsync(order.AssetId,true,token),DateTimeOffset.UtcNow);
         public Task<PaperOutcomeConfirmationResult> ApplyAsync(PaperOutcomeConfirmation value,PaperOutcomeConfirmationTrace trace,CancellationToken token)=>inner.ApplyAsync(value,trace,token);

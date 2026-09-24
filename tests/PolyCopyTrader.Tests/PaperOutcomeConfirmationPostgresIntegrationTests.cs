@@ -16,6 +16,7 @@ namespace PolyCopyTrader.Tests;
 public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutputHelper output)
 {
     private static readonly Guid HistoricalWorkerStrategyId = Guid.Parse("b7c50005-0000-4000-8195-000000000022");
+    private static readonly Guid FirstHistoricalWorkerStrategyId = Guid.Parse("b7c50005-0000-4000-8195-000000000001");
 
     internal static string ConnectionString => Environment.GetEnvironmentVariable("POLYCOPYTRADER_TEST_POSTGRES_CONNECTION")
         ?? throw new InvalidOperationException("An isolated test PostgreSQL connection is required; this test must not silently skip.");
@@ -334,6 +335,35 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
     }
 
     [Fact]
+    public async Task HistoricalClaimCanSelectFirstAndLastEthChildRoiWithoutNeighboringFamilies()
+    {
+        var repository = await RepositoryAsync();
+        var firstId = Guid.Parse("b7c50005-0000-4000-8195-000000000001");
+        var lastId = Guid.Parse("b7c50005-0000-4000-8195-000000000024");
+        var progressId = Guid.Parse("b7c50005-0000-4000-8198-000000000002");
+        var btcId = Guid.Parse("b7c50005-0000-4000-8194-000000000001");
+        var first = await SeedAsync(repository, true, 0, firstId);
+        var last = await SeedAsync(repository, true, 0, lastId);
+        var progress = await SeedAsync(repository, true, 0, progressId);
+        var btc = await SeedAsync(repository, true, 0, btcId);
+        await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE id<>@Id", first.Order.Id);
+        await SqlAsync("UPDATE paper_orders SET created_at_utc=now()-interval '1 hour',confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", first.Order.Id);
+        await SqlAsync("UPDATE paper_orders SET created_at_utc=now()-interval '2 days',confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", last.Order.Id);
+        await SqlAsync("UPDATE paper_orders SET created_at_utc=now()-interval '1 hour',confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", progress.Order.Id);
+        await SqlAsync("UPDATE paper_orders SET created_at_utc=now()-interval '2 days',confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", btc.Order.Id);
+        var now = DateTimeOffset.UtcNow;
+
+        Assert.Equal(first.Order.Id, Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(
+            PaperConfirmationLane.Recent, firstId, now, 24, 1)).Id);
+        Assert.Equal(last.Order.Id, Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(
+            PaperConfirmationLane.Archive, lastId, now, 24, 1)).Id);
+        Assert.Empty(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive, firstId, now, 24, 1));
+        Assert.Empty(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, lastId, now, 24, 1));
+        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM paper_orders WHERE id=@Id AND NOT confirmed AND confirmation_next_attempt_at_utc<=now()", progress.Order.Id));
+        Assert.Equal(1L, await ScalarAsync<long>("SELECT count(*) FROM paper_orders WHERE id=@Id AND NOT confirmed AND confirmation_next_attempt_at_utc<=now()", btc.Order.Id));
+    }
+
+    [Fact]
     public async Task HistoricalClaimKeepsStrategyDueAndLaneBoundaries_AndPlannerSettingIsLocal()
     {
         var repository = await RepositoryAsync();
@@ -393,13 +423,13 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
 
         var dedicatedRepository = new PostgresAppRepository(new PostgresConnectionFactory(
             new StorageOptions { ConnectionString = dedicatedConnectionString }));
-        var recent = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 1);
+        var recent = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, HistoricalWorkerStrategyId, now, 24, 1);
         Assert.Equal(boundary.Order.Id, Assert.Single(recent).Id);
         Assert.Equal(now.AddMinutes(1).UtcDateTime,
             await ScalarAsync<DateTime>("SELECT confirmation_next_attempt_at_utc FROM paper_orders WHERE id=@Id", boundary.Order.Id));
-        var nextRecent = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 2);
+        var nextRecent = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, HistoricalWorkerStrategyId, now, 24, 2);
         Assert.Equal(new[] { first.Order.Id, later.Order.Id }.Order(), nextRecent.Select(x => x.Id).Order());
-        var old = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive, now, 24, 1);
+        var old = await dedicatedRepository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Archive, HistoricalWorkerStrategyId, now, 24, 1);
         Assert.Equal(archive.Order.Id, Assert.Single(old).Id);
         Assert.Equal(now.AddMinutes(1).UtcDateTime,
             await ScalarAsync<DateTime>("SELECT confirmation_next_attempt_at_utc FROM paper_orders WHERE id=@Id", future.Order.Id));
@@ -431,7 +461,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
         try
         {
             var failure = await Assert.ThrowsAsync<PostgresException>(() =>
-                repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 1));
+                repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, HistoricalWorkerStrategyId, now, 24, 1));
             Assert.Contains("claim test failure", failure.MessageText);
             Assert.Equal(before, await ScalarAsync<string>("SELECT jsonb_build_object('due',confirmation_next_attempt_at_utc,'evidence',confirmation_evidence)::text FROM paper_orders WHERE id=@Id", seed.Order.Id));
         }
@@ -446,7 +476,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
         using var cancelled = new CancellationTokenSource();
         try
         {
-            var claim = repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 1, cancelled.Token);
+            var claim = repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, HistoricalWorkerStrategyId, now, 24, 1, cancelled.Token);
             var sleeping = false;
             for (var attempt = 0; attempt < 100 && !claim.IsCompleted; attempt++)
             {
@@ -464,7 +494,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
             await SqlAsync($"DROP TRIGGER {sleepingFunction} ON paper_orders; DROP FUNCTION {sleepingFunction}();", seed.Order.Id);
         }
         Assert.Equal(before, await ScalarAsync<string>("SELECT jsonb_build_object('due',confirmation_next_attempt_at_utc,'evidence',confirmation_evidence)::text FROM paper_orders WHERE id=@Id", seed.Order.Id));
-        Assert.Equal(seed.Order.Id, Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, now, 24, 1)).Id);
+        Assert.Equal(seed.Order.Id, Assert.Single(await repository.ClaimPaperConfirmationBatchAsync(PaperConfirmationLane.Recent, HistoricalWorkerStrategyId, now, 24, 1)).Id);
     }
 
     [Theory]
@@ -473,7 +503,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
     public async Task ProcessorDispatchConfirmsOne_OrPersistsApiFailureWithoutBlockingOtherCandidates(bool apiFailure)
     {
         var repository=await RepositoryAsync();
-        var seed=await SeedAsync(repository,true,0,HistoricalWorkerStrategyId);
+        var seed=await SeedAsync(repository,true,0,FirstHistoricalWorkerStrategyId);
         await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE id<>@Id; UPDATE paper_orders SET created_at_utc=now(),confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id",seed.Order.Id);
         var gamma=new ConfirmationGamma(seed.Order,apiFailure);
         var strategies=new StrategyStateProvider(NullLogger<StrategyStateProvider>.Instance,repository);
@@ -497,7 +527,7 @@ public sealed class PaperOutcomeConfirmationPostgresIntegrationTests(ITestOutput
     public async Task AdmittedCorrectionSurvivesQuote_StopRollsBackAndReleasesWriterLocks()
     {
         var repository = await RepositoryAsync();
-        var seed = await SeedAsync(repository, true, 0, HistoricalWorkerStrategyId);
+        var seed = await SeedAsync(repository, true, 0, FirstHistoricalWorkerStrategyId);
         await SqlAsync("UPDATE paper_orders SET confirmation_next_attempt_at_utc='infinity' WHERE id<>@Id; UPDATE paper_orders SET created_at_utc=now(),confirmation_next_attempt_at_utc='-infinity' WHERE id=@Id", seed.Order.Id);
         var activity = new ServiceActivityState();
         var processor = new PaperOutcomeConfirmationProcessor(NullLogger<PaperOutcomeConfirmationProcessor>.Instance,

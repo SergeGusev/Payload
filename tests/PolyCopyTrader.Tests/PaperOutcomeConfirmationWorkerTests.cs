@@ -30,6 +30,47 @@ public sealed class PaperOutcomeConfirmationWorkerTests
             PaperConfirmationLane.Recent,PaperConfirmationLane.Recent,PaperConfirmationLane.Archive],processor.Lanes);
     }
 
+    [Fact]
+    public async Task VisitsEachEthChildRoiStrategyWithBothLanesThenRepeats()
+    {
+        var processor = new Processor();
+        using var worker = new PaperOutcomeConfirmationWorker(NullLogger<PaperOutcomeConfirmationWorker>.Instance,
+            new ServiceActivityState(), new EntryQueue(), new MarketQueue(), processor);
+        for (var i = 0; i < 75; i++) await worker.ProcessIdleGapAsync(default);
+
+        var expected = Enumerable.Range(1, 24)
+            .Select(index => Guid.Parse($"b7c50005-0000-4000-8195-{index:000000000000}"))
+            .SelectMany(strategyId => new[]
+            {
+                (strategyId, PaperConfirmationLane.Recent),
+                (strategyId, PaperConfirmationLane.Recent),
+                (strategyId, PaperConfirmationLane.Archive)
+            })
+            .Concat(new[]
+            {
+                (Guid.Parse("b7c50005-0000-4000-8195-000000000001"), PaperConfirmationLane.Recent),
+                (Guid.Parse("b7c50005-0000-4000-8195-000000000001"), PaperConfirmationLane.Recent),
+                (Guid.Parse("b7c50005-0000-4000-8195-000000000001"), PaperConfirmationLane.Archive)
+            });
+        Assert.Equal(expected, processor.Claims);
+    }
+
+    [Fact]
+    public async Task EmptyRecentLaneFallsBackToArchiveForSameStrategy()
+    {
+        var processor = new Processor { EmptyRecent = true };
+        using var worker = new PaperOutcomeConfirmationWorker(NullLogger<PaperOutcomeConfirmationWorker>.Instance,
+            new ServiceActivityState(), new EntryQueue(), new MarketQueue(), processor);
+        await worker.ProcessIdleGapAsync(default);
+
+        var firstStrategyId = Guid.Parse("b7c50005-0000-4000-8195-000000000001");
+        Assert.Equal(new[]
+        {
+            (firstStrategyId, PaperConfirmationLane.Recent),
+            (firstStrategyId, PaperConfirmationLane.Archive)
+        }, processor.Claims);
+    }
+
     [Theory]
     [InlineData("Claim")]
     [InlineData("Lookup")]
@@ -67,9 +108,15 @@ public sealed class PaperOutcomeConfirmationWorkerTests
     private sealed class Processor : IPaperOutcomeConfirmationProcessor
     {
         public List<PaperConfirmationLane> Lanes { get; } = [];
+        public List<(Guid StrategyId, PaperConfirmationLane Lane)> Claims { get; } = [];
+        public bool EmptyRecent { get; set; }
         public List<string> Calls { get; } = [];
-        public async Task<IReadOnlyList<PaperOrder>> ClaimBatchAsync(PaperConfirmationLane lane, int limit, CancellationToken token)
-        { Lanes.Add(lane); return [(await ClaimAsync(token))!]; }
+        public async Task<IReadOnlyList<PaperOrder>> ClaimBatchAsync(PaperConfirmationLane lane, Guid strategyId, int limit, CancellationToken token)
+        {
+            Lanes.Add(lane);
+            Claims.Add((strategyId, lane));
+            return EmptyRecent && lane == PaperConfirmationLane.Recent ? [] : [(await ClaimAsync(token))!];
+        }
         public Task<PaperOutcomeConfirmationResult> ApplyGroupAsync(IReadOnlyList<PaperOutcomeConfirmation> confirmations,
             PaperOutcomeConfirmationTrace trace, CancellationToken token) => ApplyAsync(confirmations[0], trace, token);
         public Func<string, CancellationToken, Task> OnStep = (_, _) => Task.CompletedTask;

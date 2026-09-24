@@ -3,7 +3,7 @@
   "contractId": "RC-20260924-eth-child-roi-all-confirmation",
   "title": "Confirm historical and future Paper outcomes for ETH Child ROI 1–24",
   "author": "agent:/root",
-  "status": "approved",
+  "status": "completed",
   "originalRequests": [
     {
       "source": "user",
@@ -63,8 +63,8 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~PaperOutcomeConfirmationPostgresIntegrationTests|FullyQualifiedName~PaperConfirmationProjectionTests.DueOrderPreventsOldUnresolvedStarvation_AndLanesUseCreatedUtcBoundary' --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results",
           "expected": "Focused isolated-PostgreSQL tests pass without skips; exact 24 IDs are claimable and neighboring strategies are excluded, with due/lane boundaries and correction rules intact.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Isolated PostgreSQL 17 at 127.0.0.1:56571/pct_codex_paper_confirmation_test under the marked D: run: 27 passed, 0 failed, 0 skipped. The new first/last ETH Child ROI claim test, neighboring-family exclusion, existing due/lane/planner rollback and atomic correction cases passed. Final TRX SHA256 1BDE9267FFF90EA03C988D2CA3E9859945F9CD206D16F3EB6206174BC08BD06D."
         }
       ]
     },
@@ -95,16 +95,16 @@
           "kind": "test",
           "command": "dotnet test tests/PolyCopyTrader.Tests/PolyCopyTrader.Tests.csproj --filter 'FullyQualifiedName~PaperOutcomeConfirmationWorkerTests|FullyQualifiedName~FinalOutcomeSettlementPostgresIntegrationTests' --artifacts-path <marked-run>/artifacts --results-directory <marked-run>/results",
           "expected": "Worker rotation, load/cancellation, and independent final-settlement regressions pass without skips.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "Same isolated PostgreSQL test run: PaperOutcomeConfirmationWorkerTests and FinalOutcomeSettlementPostgresIntegrationTests 17 passed, 0 failed, 0 skipped. Worker test covers all 24 IDs with Recent–Recent–Archive per ID and same-ID empty-lane fallback. Final TRX SHA256 17D7E9B0EE86FAC7D20AAD0C188D9B5E3C4A689400C795585E21BE72EECD4E20."
         },
         {
           "id": "VER-003",
           "kind": "build",
           "command": "dotnet build src/PolyCopyTrader.Service/PolyCopyTrader.Service.csproj --artifacts-path <marked-run>/artifacts",
           "expected": "Service builds with zero errors.",
-          "result": "pending",
-          "evidence": "pending"
+          "result": "passed",
+          "evidence": "PolyCopyTrader.Service final incremental build succeeded with 0 warnings and 0 errors using the marked D: artifacts path. Initial full build had 0 errors and 121 existing warnings."
         }
       ]
     }
@@ -118,9 +118,9 @@
     "semanticDigest": "sha256:b6931bc532793abbe347837cd64b3a020e6ec5961aa8fe2e39f5496ad10104a4"
   },
   "independentReview": {
-    "reviewer": "agent:/root/reviewer",
-    "comparedOriginalRequests": false,
-    "verdict": "pending",
+    "reviewer": "agent:/root/eth_child_roi_semantic_review",
+    "comparedOriginalRequests": true,
+    "verdict": "pass",
     "findings": []
   }
 }

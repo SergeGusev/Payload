@@ -14,11 +14,17 @@ public sealed class PaperOutcomeConfirmationWorker(
     TimeProvider? timeProvider = null,
     PaperConfirmationOptions? options = null) : BackgroundService
 {
+    private static readonly Guid[] EthChildRoiStrategyIds = StrategyIds.UpDown5mStrategyVariants
+        .Where(variant => variant.ReferenceAssetSymbol == "ETH" &&
+            variant.Behavior == BtcUpDown5mStrategyBehavior.ChildRoiMirror)
+        .OrderBy(variant => variant.DecisionDepth)
+        .Select(variant => variant.Id)
+        .ToArray();
     private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
     private readonly PaperConfirmationOptions settings = options ?? new();
     private readonly PaperConfirmationLoadControl load = new(options ?? new());
     private readonly PaperOutcomeConfirmationDiagnostics diagnostics = new(logger, timeProvider);
-    private int processing, slot;
+    private int processing, slot, strategySlot;
     private PaperConfirmationProgress? previousProgress;
     private DateTimeOffset nextProgress;
 
@@ -41,12 +47,14 @@ public sealed class PaperOutcomeConfirmationWorker(
         try
         {
             var lane = slot == 2 ? PaperConfirmationLane.Archive : PaperConfirmationLane.Recent;
+            var strategyId = EthChildRoiStrategyIds[strategySlot];
             slot = (slot + 1) % 3;
-            var orders = await ClaimAsync(lane, token);
+            if (slot == 0) strategySlot = (strategySlot + 1) % EthChildRoiStrategyIds.Length;
+            var orders = await ClaimAsync(lane, strategyId, token);
             if (orders.Count == 0)
             {
                 lane = lane == PaperConfirmationLane.Recent ? PaperConfirmationLane.Archive : PaperConfirmationLane.Recent;
-                orders = await ClaimAsync(lane, token);
+                orders = await ClaimAsync(lane, strategyId, token);
             }
             var confirmed = 0; var corrected = 0; var deferred = 0; var cacheHits = 0; var httpCalls = 0;
             foreach (var group in orders.GroupBy(x => (x.ConditionId, x.AssetId, x.Outcome, x.StrategyId, x.CopiedTraderWallet)))
@@ -137,13 +145,13 @@ public sealed class PaperOutcomeConfirmationWorker(
         finally { Volatile.Write(ref processing, 0); }
     }
 
-    private async Task<IReadOnlyList<PaperOrder>> ClaimAsync(PaperConfirmationLane lane, CancellationToken token)
+    private async Task<IReadOnlyList<PaperOrder>> ClaimAsync(PaperConfirmationLane lane, Guid strategyId, CancellationToken token)
     {
         var trace = diagnostics.Begin(); trace.Enter(PaperConfirmationStage.Claim);
         using var budget = Budget(settings.DatabaseTimeoutSeconds, token);
         try
         {
-            var result = await processor.ClaimBatchAsync(lane, load.BatchSize, budget.Token);
+            var result = await processor.ClaimBatchAsync(lane, strategyId, load.BatchSize, budget.Token);
             trace.Complete("NoCandidate", "SelectionCompleted");
             diagnostics.End(trace, new("Unknown", null));
             return result;

@@ -478,7 +478,7 @@ public interface IAppRepository : IHistoricalGrossNetParityStore
     Task<PaperOrder?> TryClaimPaperOutcomeConfirmationAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken = default)
         => Task.FromResult<PaperOrder?>(null);
 
-    Task<IReadOnlyList<PaperOrder>> ClaimPaperConfirmationBatchAsync(PaperConfirmationLane lane,
+    Task<IReadOnlyList<PaperOrder>> ClaimPaperConfirmationBatchAsync(PaperConfirmationLane lane, Guid strategyId,
         DateTimeOffset nowUtc, int recentHours, int limit, CancellationToken cancellationToken = default)
         => Task.FromResult<IReadOnlyList<PaperOrder>>([]);
 
